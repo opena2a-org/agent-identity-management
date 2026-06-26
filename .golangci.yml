@@ -35,6 +35,12 @@ linters:
         - G115  # Integer overflow int->int32 (low risk, noisy)
         - G201  # SQL string formatting (pre-existing, uses parameterized queries)
         - G402  # TLS MinVersion (SMTP email service, tracked separately)
+        - G118  # context.Background in goroutines: our fire-and-forget background
+                # tasks (capability detection, anomaly detection, liveness, expiry)
+                # MUST outlive the request, so detaching from the request ctx is
+                # intentional. Style/observability rule, not a vuln class; excluded
+                # repo-wide because the pattern recurs. (G117 is suppressed per-site
+                # at the one legitimate token-bundle site; G204/G304 stay active.)
       severity: medium
       confidence: medium
     govet:
@@ -43,9 +49,13 @@ linters:
       locale: US
   exclusions:
     generated: lax
+    # NOTE: golangci-lint's `common-false-positives` preset disables gosec
+    # EXC0007 (G204, subprocess with variable) and EXC0010 (G304, file inclusion
+    # via variable) repo-wide. For a security gate that is intentionally omitted —
+    # those injection classes must stay enforced. Legitimate single sites are
+    # suppressed per-line with //nolint:gosec and a rationale instead.
     presets:
       - comments
-      - common-false-positives
       - legacy
       - std-error-handling
     rules:
@@ -58,6 +68,12 @@ linters:
           - bodyclose
           - gosec
         path: _test\.go
+      # Integration test helpers (e.g. tests/integration/test_helper.go) aren't
+      # named *_test.go but are test infra. The bodyclose hits here are false
+      # positives: the shared Request helper reads and closes the body itself.
+      - linters:
+          - bodyclose
+        path: tests/integration/
       # CLI entrypoints — interactive prompts, bootstrapping
       - linters:
           - gosec

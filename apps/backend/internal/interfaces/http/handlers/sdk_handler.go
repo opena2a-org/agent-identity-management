@@ -275,14 +275,14 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	// Read VERSION file to get SDK version
 	version := "1.0.0" // Default version
 	versionPath := filepath.Join(sdkRoot, "VERSION")
-	if versionData, err := os.ReadFile(versionPath); err == nil {
+	if versionData, err := os.ReadFile(versionPath); err == nil { //nolint:gosec // G304/G703: sdkType is allowlist-gated (python/java only, 400 otherwise) in DownloadSDK before this runs; no attacker-controlled path component
 		version = strings.TrimSpace(string(versionData))
 	}
 
 	zipPrefix := fmt.Sprintf("aim-sdk-%s", sdkType)
 
 	// Add SDK files to zip
-	err := filepath.Walk(sdkRoot, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(sdkRoot, func(path string, info os.FileInfo, err error) error { //nolint:gosec // G703: sdkRoot derives from allowlist-gated sdkType (see DownloadSDK); no attacker-controlled path component
 		if err != nil {
 			return err
 		}
@@ -329,7 +329,7 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 		}
 
 		// Read and write file content
-		fileData, err := os.ReadFile(path)
+		fileData, err := os.ReadFile(path) //nolint:gosec // G304: path comes from Walk over the allowlist-gated SDK tree; the server reads its own bundled files, not symlink-attacker input
 		if err != nil {
 			return err
 		}
@@ -343,7 +343,7 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	}
 
 	// Create credentials file in .aim directory
-	credentialsJSON, err := json.MarshalIndent(credentials, "", "  ")
+	credentialsJSON, err := json.MarshalIndent(credentials, "", "  ") //nolint:gosec // G117: the SDK credentials bundle intentionally includes the refresh token; it is delivered only to the authenticated owner in their downloaded .aim/sdk_credentials.json
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to marshal credentials: %w", err)
 	}

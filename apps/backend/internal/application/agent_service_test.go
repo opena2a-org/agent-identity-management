@@ -184,7 +184,7 @@ func TestAgentService_GetAgent_Success(t *testing.T) {
 	mockAlertRepo := new(MockAlertRepository)
 	mockCapabilityRepo := new(MockCapabilityRepository)
 	mockPolicyRepo := new(AgentServiceMockSecurityPolicyRepository)
-	
+
 	policyService := &SecurityPolicyService{
 		policyRepo: mockPolicyRepo,
 		alertRepo:  mockAlertRepo,
@@ -1304,12 +1304,29 @@ func TestNewAgentService_WithMockedDependencies(t *testing.T) {
 // parseClaudeDesktopConfig Tests
 // ===========================
 
-func TestParseClaudeDesktopConfig_ValidConfig(t *testing.T) {
-	// Create a temp file with valid Claude Desktop config
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "claude_desktop_config.json")
+// writeClaudeConfigUnderTempHome points HOME at a temp dir and writes content to
+// the standard Linux Claude Desktop config location under it, returning that
+// path. parseClaudeDesktopConfig now allowlists the path (see
+// validateClaudeDesktopConfigPath), so the parse tests must use the canonical
+// location rather than an arbitrary temp file — this writes it without touching
+// the developer's real home.
+func writeClaudeConfigUnderTempHome(t *testing.T, content string) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "Claude")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	path := filepath.Join(dir, "claude_desktop_config.json")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	return path
+}
 
-	configJSON := `{
+func TestParseClaudeDesktopConfig_ValidConfig(t *testing.T) {
+	configPath := writeClaudeConfigUnderTempHome(t, `{
 		"mcpServers": {
 			"memory": {
 				"command": "npx",
@@ -1323,10 +1340,7 @@ func TestParseClaudeDesktopConfig_ValidConfig(t *testing.T) {
 				}
 			}
 		}
-	}`
-
-	err := os.WriteFile(configPath, []byte(configJSON), 0644)
-	assert.NoError(t, err)
+	}`)
 
 	service := &AgentService{}
 	servers, err := service.parseClaudeDesktopConfig(configPath)
@@ -1346,15 +1360,9 @@ func TestParseClaudeDesktopConfig_ValidConfig(t *testing.T) {
 }
 
 func TestParseClaudeDesktopConfig_EmptyMCPServers(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "claude_desktop_config.json")
-
-	configJSON := `{
+	configPath := writeClaudeConfigUnderTempHome(t, `{
 		"mcpServers": {}
-	}`
-
-	err := os.WriteFile(configPath, []byte(configJSON), 0644)
-	assert.NoError(t, err)
+	}`)
 
 	service := &AgentService{}
 	servers, err := service.parseClaudeDesktopConfig(configPath)
@@ -1364,32 +1372,32 @@ func TestParseClaudeDesktopConfig_EmptyMCPServers(t *testing.T) {
 }
 
 func TestParseClaudeDesktopConfig_FileNotFound(t *testing.T) {
+	// An allowlisted location where no file exists still surfaces a read error
+	// (not a validation error). Arbitrary non-allowlisted paths are covered by
+	// TestValidateClaudeDesktopConfigPath_RejectsArbitraryPaths.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	allowedButMissing := filepath.Join(home, ".config", "Claude", "claude_desktop_config.json")
+
 	service := &AgentService{}
-	_, err := service.parseClaudeDesktopConfig("/nonexistent/path/config.json")
+	_, err := service.parseClaudeDesktopConfig(allowedButMissing)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read config file")
 }
 
 func TestParseClaudeDesktopConfig_InvalidJSON(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "invalid_config.json")
-
-	err := os.WriteFile(configPath, []byte("not valid json"), 0644)
-	assert.NoError(t, err)
+	configPath := writeClaudeConfigUnderTempHome(t, "not valid json")
 
 	service := &AgentService{}
-	_, err = service.parseClaudeDesktopConfig(configPath)
+	_, err := service.parseClaudeDesktopConfig(configPath)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to parse config JSON")
 }
 
 func TestParseClaudeDesktopConfig_WithEnvVars(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config_with_env.json")
-
-	configJSON := `{
+	configPath := writeClaudeConfigUnderTempHome(t, `{
 		"mcpServers": {
 			"database": {
 				"command": "python",
@@ -1401,10 +1409,7 @@ func TestParseClaudeDesktopConfig_WithEnvVars(t *testing.T) {
 				}
 			}
 		}
-	}`
-
-	err := os.WriteFile(configPath, []byte(configJSON), 0644)
-	assert.NoError(t, err)
+	}`)
 
 	service := &AgentService{}
 	servers, err := service.parseClaudeDesktopConfig(configPath)
@@ -1419,15 +1424,9 @@ func TestParseClaudeDesktopConfig_WithEnvVars(t *testing.T) {
 }
 
 func TestParseClaudeDesktopConfig_NoMCPServersKey(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "no_mcp_servers.json")
-
-	configJSON := `{
+	configPath := writeClaudeConfigUnderTempHome(t, `{
 		"someOtherKey": "value"
-	}`
-
-	err := os.WriteFile(configPath, []byte(configJSON), 0644)
-	assert.NoError(t, err)
+	}`)
 
 	service := &AgentService{}
 	servers, err := service.parseClaudeDesktopConfig(configPath)
@@ -1474,8 +1473,8 @@ func TestAgentService_CreateAgent_Success(t *testing.T) {
 	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
 
 	newTrustScore := &domain.TrustScore{
-		ID:      uuid.New(),
-		Score:   0.75,
+		ID:    uuid.New(),
+		Score: 0.75,
 	}
 	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(newTrustScore, nil)
 	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
@@ -1816,7 +1815,7 @@ func TestAgentService_CreateAgent_DuplicateName(t *testing.T) {
 		Name:        "duplicate-agent",
 		DisplayName: "Duplicate Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:    "test-key",
+		PublicKey:   "test-key",
 	}
 
 	// Simulate PostgreSQL unique constraint violation

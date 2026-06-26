@@ -532,7 +532,8 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		// After successful verification, automatically detect MCP server capabilities
 		if s.capabilityService != nil {
 			go func() {
-				// Run asynchronously to avoid blocking verification
+				// Run asynchronously to avoid blocking verification; detached
+				// context so the caller returning does not cancel detection.
 				bgCtx := context.Background()
 				if err := s.capabilityService.DetectCapabilities(bgCtx, id); err != nil {
 					fmt.Printf("⚠️  Failed to detect capabilities for MCP server %s: %v\n", server.Name, err)
