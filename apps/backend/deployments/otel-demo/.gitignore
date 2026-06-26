@@ -1,6 +1,11 @@
 # Operator-specific port overrides — never commit
 .env
 
+# Never commit credential material into the demo dir
+*.pem
+*.key
+secrets.json
+
 # smoke-backend.sh runtime artifacts (binary + logs)
 .smoke-backend.bin
 .smoke-backend.log

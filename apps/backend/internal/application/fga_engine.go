@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/util/sqlarray"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -405,13 +406,16 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 			span.SetStatus(codes.Error, result.DeniedReason)
 		}
 
-		// SemConv enrichment for the May 22 talk Slide 14 / 15 proposal:
-		// agent.public_key.algorithm, agent.trust_score, agent.scan_verdict
-		// land on the fga.authorize parent span. Both lookups are local
-		// indexed reads (agents PK, agent_security_contexts PK); failures
-		// are silent so a missing ASC row or a transient repo blip never
-		// blocks an authorize decision. Hybrid-keyed agents emit the
+		// SemConv enrichment for the fga.authorize parent span. The legacy
+		// agent.* keys (agent.public_key.algorithm, agent.trust_score,
+		// agent.scan_verdict, agent.drift_score) are emitted alongside the
+		// namespaced gen_ai.agent.* set ([CHIEF-CA] D1: dual-emit until the
+		// internal Slide-14 / Grafana dashboards repoint, then retire agent.*).
+		// Both lookups are local indexed reads (agents PK, agent_security_contexts
+		// PK); failures are silent so a missing ASC row or a transient repo blip
+		// never blocks an authorize decision. Hybrid-keyed agents emit the
 		// classical+PQC pair joined with "+" (e.g. "Ed25519+ML-DSA-65").
+		genaiSignals := telemetry.AgentAuthzSignals{Capability: req.Capability}
 		if e.agentSvc != nil {
 			if agent, agErr := e.agentSvc.GetAgent(ctx, req.AgentID); agErr == nil && agent != nil {
 				keyAlgo := agent.KeyAlgorithm
@@ -424,13 +428,17 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 				}
 				if keyAlgo != "" {
 					span.SetAttributes(attribute.String("agent.public_key.algorithm", keyAlgo))
+					genaiSignals.PublicKeyAlgo = keyAlgo
 				}
 				span.SetAttributes(attribute.Float64("agent.trust_score", agent.TrustScore))
+				trustScore := agent.TrustScore
+				genaiSignals.TrustScore = &trustScore
 			}
 		}
 		if summary := e.fetchASCRiskSummary(ctx, req.AgentID); summary != nil {
 			if summary.ScanVerdict != "" {
 				span.SetAttributes(attribute.String("agent.scan_verdict", summary.ScanVerdict))
+				genaiSignals.ScanVerdict = summary.ScanVerdict
 			}
 			// agent.drift_score also lives as a Prometheus gauge
 			// (DriftDetectionService.driftScore) for alerting; emitting it
@@ -438,7 +446,10 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 			// the span" claim while preserving the gauge shape for Prom.
 			span.SetAttributes(attribute.Float64("agent.drift_score", summary.DriftScore))
 			span.SetAttributes(attribute.Int("agent.active_alerts", summary.ActiveAlerts))
+			driftScore := summary.DriftScore
+			genaiSignals.DriftScore = &driftScore
 		}
+		telemetry.SetGenAIAgentAttributes(span, genaiSignals)
 
 		e.emitDecisionTelemetry(ctx, req, result)
 		span.End()
@@ -693,10 +704,17 @@ func (e *FGAEngine) EmitSDKVerificationSpan(
 	)
 	defer parent.End()
 
+	// Dual-emit legacy agent.* + namespaced gen_ai.agent.* ([CHIEF-CA] D1),
+	// sharing telemetry.SetGenAIAgentAttributes with the /authorize path so the
+	// two span sources cannot drift apart.
+	genaiSignals := telemetry.AgentAuthzSignals{Capability: capability}
 	if keyAlgorithm != "" {
 		parent.SetAttributes(attribute.String("agent.public_key.algorithm", keyAlgorithm))
+		genaiSignals.PublicKeyAlgo = keyAlgorithm
 	}
 	parent.SetAttributes(attribute.Float64("agent.trust_score", trustScore))
+	ts := trustScore
+	genaiSignals.TrustScore = &ts
 
 	// agent.scan_verdict + agent.drift_score + agent.active_alerts come from
 	// the local ASC summary (fail-open: if not present, those three attrs
@@ -704,10 +722,14 @@ func (e *FGAEngine) EmitSDKVerificationSpan(
 	if summary := e.fetchASCRiskSummary(ctx, agentID); summary != nil {
 		if summary.ScanVerdict != "" {
 			parent.SetAttributes(attribute.String("agent.scan_verdict", summary.ScanVerdict))
+			genaiSignals.ScanVerdict = summary.ScanVerdict
 		}
 		parent.SetAttributes(attribute.Float64("agent.drift_score", summary.DriftScore))
 		parent.SetAttributes(attribute.Int("agent.active_alerts", summary.ActiveAlerts))
+		ds := summary.DriftScore
+		genaiSignals.DriftScore = &ds
 	}
+	telemetry.SetGenAIAgentAttributes(parent, genaiSignals)
 
 	// The trace reflects the policy decision, not the SDK response.
 	// VerifyCapability returns a non-empty denialReason on both ALLOW and DENY
