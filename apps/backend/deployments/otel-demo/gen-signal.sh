@@ -93,11 +93,24 @@ func main() {
 	defer lp.Shutdown(ctx)
 
 	tracer := otel.Tracer("aim/smoke")
+	// The fga.authorize span carries the eight gen_ai.agent.* authorization
+	// attributes AIM emits at its decision point — the namespaced set proposed
+	// in open-telemetry/semantic-conventions-genai#291. This public example
+	// emits ONLY the gen_ai.agent.* namespace (no legacy agent.* signal keys);
+	// agent.id is identity and fga.* is AIM's own span shape.
 	parent, span := tracer.Start(ctx, "fga.authorize",
 		apitrace.WithAttributes(
 			attribute.String("agent.id", "00000000-0000-0000-0000-deadbeefcafe"),
-			attribute.String("agent.capability", "smoke:test"),
 			attribute.String("fga.outcome", "ALLOW"),
+			// gen_ai.agent.* — eight authorization-decision attributes.
+			attribute.String("gen_ai.agent.capability", "smoke:test"),
+			attribute.String("gen_ai.agent.public_key.algorithm", "Ed25519"),
+			attribute.Float64("gen_ai.agent.trust.score", 0.92),
+			attribute.String("gen_ai.agent.trust.method", "aim/trust-calculator"),
+			attribute.Float64("gen_ai.agent.drift.score", 0.0),
+			attribute.String("gen_ai.agent.drift.method", "aim/drift-capability-diff"),
+			attribute.String("gen_ai.agent.scan.verdict", "clean"),
+			attribute.String("gen_ai.agent.scan.method", "aim/registry-asc"),
 		),
 	)
 	traceID := span.SpanContext().TraceID()
