@@ -259,25 +259,31 @@ jobs:
   # built on go1.24 and refuses our go1.25 target); pin the linter explicitly so CI and
   # local runs use the identical build. Both jobs share one .golangci.yml; the linter set
   # is selected per job via --default=none --enable=... (security) vs the full config.
+  # NOTE: no job-level `if`. This job ALWAYS runs on a PR so it can be a required
+  # branch-protection check without wedging PRs that don't touch the backend — a
+  # required check that is skipped at the job level never reports a conclusion and
+  # blocks the PR forever. The lint steps below are gated on backend changes; when
+  # the backend is untouched every step skips and the job concludes success (a
+  # no-op), which is what makes it safe to require.
   go-lint-security:
     name: Go Lint (security)
     needs: changes
-    if: >-
-      github.event_name == 'schedule' ||
-      (github.event_name == 'pull_request' && needs.changes.outputs.backend == 'true')
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/backend
     steps:
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.backend == 'true'
 
       - uses: actions/setup-go@v5
+        if: needs.changes.outputs.backend == 'true'
         with:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
       - name: Run golangci-lint (security linters, blocking)
+        if: needs.changes.outputs.backend == 'true'
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.12.2
