@@ -1,80 +1,81 @@
-# golangci-lint configuration for AIM
+# golangci-lint configuration for AIM (v2 schema).
 # Security-focused linting with gosec in audit mode.
-
+# Migrated from v1 on 2026-06-26 (`golangci-lint migrate`); govet/staticcheck/unused are
+# enabled by default in v2 so they no longer need an explicit `enable` entry. gosimple was
+# folded into staticcheck and typecheck is no longer a togglable linter.
+version: "2"
 run:
-  timeout: 5m
   modules-download-mode: readonly
-
+output:
+  formats:
+    text:
+      path: stdout
+  sort-order:
+    - linter
+    - severity
+    - file
 linters:
   enable:
     # Security
     - gosec
     - bodyclose
     - sqlclosecheck
-
-    # Code quality
-    - govet
-    - staticcheck
-    - unused
-    - typecheck
-
   disable:
     - errcheck    # Widespread unchecked returns — enable incrementally
-    - gosimple    # Stylistic suggestions (S1009, S1039) — not security-relevant
     - ineffassign # Pre-existing ineffectual assignments — fix in code cleanup PR
     - misspell    # Pre-existing misspellings — fix in code cleanup PR
-
-linters-settings:
-  gosec:
-    # Audit mode: report all issues without filtering
-    config:
-      global:
-        audit: true
-    excludes:
-      - G101  # Hardcoded credentials in tests
-      - G115  # Integer overflow int->int32 (low risk, noisy)
-      - G201  # SQL string formatting (pre-existing, uses parameterized queries)
-      - G402  # TLS MinVersion (SMTP email service, tracked separately)
-    severity: medium
-    confidence: medium
-
-  govet:
-    enable-all: false
-
-  misspell:
-    locale: US
-
+  settings:
+    gosec:
+      # Audit mode: report all issues without filtering.
+      config:
+        global:
+          audit: true
+      excludes:
+        - G101  # Hardcoded credentials in tests
+        - G115  # Integer overflow int->int32 (low risk, noisy)
+        - G201  # SQL string formatting (pre-existing, uses parameterized queries)
+        - G402  # TLS MinVersion (SMTP email service, tracked separately)
+      severity: medium
+      confidence: medium
+    govet:
+      enable-all: false
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Allow unused params in interface implementations
+      - linters:
+          - unused
+        source: '^func \(.*\) '
+      # Relax security checks in test files
+      - linters:
+          - bodyclose
+          - gosec
+        path: _test\.go
+      # CLI entrypoints — interactive prompts, bootstrapping
+      - linters:
+          - gosec
+        path: cmd/
+    paths:
+      - vendor
+      - testdata
+      - node_modules
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-dirs:
-    - vendor
-    - testdata
-    - node_modules
-
-  exclude-rules:
-    # Allow unused params in interface implementations
-    - linters:
-        - unused
-      source: "^func \\(.*\\) "
-
-    # Relax security checks in test files
-    - path: _test\.go
-      linters:
-        - gosec
-        - bodyclose
-
-    # CLI entrypoints — interactive prompts, bootstrapping
-    - path: cmd/
-      linters:
-        - gosec
-
   max-issues-per-linter: 0
   max-same-issues: 0
-
-output:
-  formats:
-    - format: colored-line-number
-  sort-results: true
-  sort-order:
-    - linter
-    - severity
-    - file
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
