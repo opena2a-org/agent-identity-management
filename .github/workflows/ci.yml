@@ -12,6 +12,12 @@ concurrency:
 
 permissions:
   contents: read
+  # dorny/paths-filter lists PR files via the REST API on pull_request
+  # events (the checkout only serves push-event detection). That API call
+  # succeeds without this permission only because the repo is public; if
+  # visibility ever changes it 403s, the changes job fails, and the gate
+  # fails closed — wedging every PR. Keep the permission explicit.
+  pull-requests: read
 
 jobs:
   # Reject ${VAR:-fallback} patterns for secret-shaped env vars in any
@@ -58,11 +64,20 @@ jobs:
         id: filter
         with:
           filters: |
+            # ci.yml is in both filters: a PR that edits this workflow must
+            # run the full suite under the edited workflow, not skip it.
+            # Root package.json/package-lock.json feed apps/web via npm
+            # workspaces (apps/web has no lockfile of its own) — a root dep
+            # bump that skipped the frontend build would merge unvalidated.
             backend:
               - 'apps/backend/**'
               - '.golangci.yml'
+              - '.github/workflows/ci.yml'
             frontend:
               - 'apps/web/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/ci.yml'
 
   backend:
     name: Backend (Go)
@@ -183,6 +198,61 @@ jobs:
       - name: Build
         working-directory: apps/web
         run: npm run build
+
+  # Fan-in gate so branch protection can require ONE check that always
+  # reports. The path-filtered jobs (backend/frontend/e2e) legitimately skip
+  # when nothing relevant changed — a skip counts as a pass here — but a
+  # required check pointed directly at them would sit forever on
+  # "Expected — waiting for status" for PRs that don't touch code.
+  # Change-detection itself MUST succeed; otherwise the expensive jobs were
+  # skipped for the wrong reason and a code change could slip through
+  # untested — fail closed. New jobs added to this workflow must be added to
+  # `needs` below or the gate silently stops covering them. This job must
+  # keep `if: always()` and the workflow must never gain a top-level
+  # `paths:` filter — GitHub counts a skipped or never-reported required
+  # check as satisfied or wedges the PR, respectively.
+  ci-gate:
+    name: CI Gate
+    needs:
+      [
+        secrets-lint,
+        tenant-scoping-lint,
+        changes,
+        backend,
+        frontend,
+        e2e-empty-state,
+      ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify no required job failed
+        run: |
+          sl='${{ needs.secrets-lint.result }}'
+          tl='${{ needs.tenant-scoping-lint.result }}'
+          ch='${{ needs.changes.result }}'
+          be='${{ needs.backend.result }}'
+          fe='${{ needs.frontend.result }}'
+          ee='${{ needs.e2e-empty-state.result }}'
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl changes=$ch"
+          echo "backend=$be frontend=$fe e2e-empty-state=$ee"
+          fail=0
+          # Unconditional jobs must succeed outright.
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "changes:$ch"; do
+            if [ "${pair#*:}" != "success" ]; then
+              echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
+              fail=1
+            fi
+          done
+          # Path-filtered jobs pass on success or skip; failure/cancel fails.
+          for pair in "backend:$be" "frontend:$fe" "e2e-empty-state:$ee"; do
+            r="${pair#*:}"
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "::error::${pair%%:*} failed or was cancelled ($r)."
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+          echo "CI Gate: all jobs green (or legitimately skipped)."
 
   # End-to-end Playwright suite covering empty-state rendering on every
   # dashboard panel of the agent and MCP server detail pages — the binding

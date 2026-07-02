@@ -20,15 +20,30 @@ gh api -X PATCH "repos/$REPO" \
 
 echo "✓ Auto-delete head branches after merge: enabled"
 
-# Set branch protection on main
+# Set branch protection on main.
+#
+# This PUT replaces the entire protection object — the checks list below is
+# the single source of truth. If a required check is added via the API and
+# not mirrored here, re-running this script silently removes it.
+#
+# Checks are app-pinned (app_id 15368 = GitHub Actions) rather than
+# name-matched: with the deprecated bare-contexts form, ANY app or commit
+# status posting the same context name would satisfy the requirement.
+#
+# "CI Gate" is the fan-in job in ci.yml that fails closed unless every CI
+# job (backend tests + coverage, frontend, e2e, both repo lints,
+# change-detection) succeeded or was legitimately path-skipped.
 gh api -X PUT "repos/$REPO/branches/main/protection" \
   --input - <<'EOF'
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": [
-      "Secret Detection",
-      "Dependency Audit"
+    "checks": [
+      { "context": "Secret Detection", "app_id": 15368 },
+      { "context": "Dependency Audit", "app_id": 15368 },
+      { "context": "Claude Code Review", "app_id": 15368 },
+      { "context": "Go Lint (security)", "app_id": 15368 },
+      { "context": "CI Gate", "app_id": 15368 }
     ]
   },
   "enforce_admins": true,
@@ -49,12 +64,11 @@ echo "  - PRs required (no direct push)"
 echo "  - 1 approving review required"
 echo "  - Stale reviews dismissed on new push"
 echo "  - Last pusher cannot self-approve"
-echo "  - Required checks: Secret Detection, Dependency Audit"
+echo "  - Required checks: Secret Detection, Dependency Audit, Claude Code Review, Go Lint (security), CI Gate"
 echo "  - Strict status checks (branch must be up-to-date)"
 echo "  - Linear history enforced (squash merge)"
 echo "  - Force push and branch deletion blocked"
 echo "  - Admins included (no bypass)"
 echo ""
-echo "Done. To add more required checks later:"
-echo "  gh api -X PATCH repos/$REPO/branches/main/protection/required_status_checks \\"
-echo "    -f 'contexts[]=Secret Detection' -f 'contexts[]=Dependency Audit' -f 'contexts[]=Backend (Go)'"
+echo "Done. To add a required check later: add it to the checks array in this"
+echo "script (app-pinned, never the deprecated bare contexts[] form) and re-run."
