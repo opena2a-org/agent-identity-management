@@ -11,9 +11,7 @@ Cryptographic identity, capability authorization, and audit trails for AI agents
 [![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-[Website](https://opena2a.org) · [Demos](https://opena2a.org/demos) · [Discord](https://discord.gg/uRZa3KXgEn)
-
-> **AIM 1.0.** Every gate criterion in [HARDENING.md](HARDENING.md)'s "Roadmap to 1.0" is met as of 2026-05-28. Semver is honored from this release forward; security patches are triaged within 24 hours per [SECURITY.md](SECURITY.md). A paid third-party security review is appropriate when a regulated customer requires formal attestation but is not a binding gate (AIM is open source under Apache-2.0 and the codebase is publicly auditable).
+[Website](https://opena2a.org) · [AIM Cloud](https://aim.opena2a.org/get-started)  · [Discord](https://discord.gg/uRZa3KXgEn)
 
 ## Quick start
 
