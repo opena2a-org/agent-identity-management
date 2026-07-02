@@ -244,6 +244,49 @@ to control the sink/lifecycle), and `relay` (`RelayConfig`: `enabled`,
 `batchSize`, `intervalMs`, `timeoutMs`). The `CorrelatedRelay` class is also
 exported for standalone use (e.g. draining the local log from a CLI).
 
+## Runtime Protection (`@opena2a/aim-sdk/arp`)
+
+The SDK ships the ARP (Agent Runtime Protection) engine as a subpath module.
+It observes an agent process from the inside — monitors and interceptors for
+process, network, filesystem, prompt, MCP, and A2A activity; a rule-based
+event engine (L0); a behavioral anomaly twin (L1); and an intelligence
+coordinator (L2) — and produces the detection inputs shown in the telemetry
+section above.
+
+The boundary with the `hackmyagent` scanner: scan-time analysis (static
+scanning, hardening rules, artifact classification) lives in hackmyagent;
+runtime protection lives here, inside the agent process. This module is the
+canonical home of the ARP engine; hackmyagent's `./arp` export is being
+converted to a thin re-export of it.
+
+```typescript
+import { EventEngine, FilesystemMonitor, EnforcementEngine } from '@opena2a/aim-sdk/arp';
+
+const engine = new EventEngine(config);
+const monitor = new FilesystemMonitor(engine);
+await monitor.start();
+```
+
+**Interception scope.** The filesystem and process interceptors patch the CJS
+module registry (`require('fs')`, `require('child_process')`). Code that loads
+those builtins via `require` or an ESM namespace/default import
+(`import fs from 'fs'`) is observed. Code that captured **named** ESM bindings
+before the interceptor started (`import { readFileSync } from 'fs'`) bypasses
+them — ESM bindings are resolved at link time and cannot be patched. The
+monitors (which poll rather than intercept) are unaffected. Start interceptors
+as early as possible in the process, and treat them as one observation layer,
+not a sandbox.
+
+Classification of runtime events is supplied through the injectable
+`ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`
+talks to the local NanoMind-Guard daemon over a Unix socket and only accepts
+signed classification results; when the daemon is absent the annotator degrades
+to "no classification" — it never fabricates a label and never blocks.
+
+**Invariant:** the runtime-protection module is a telemetry producer. Its
+detection outputs flow through the `telemetry.detection` seam into the
+correlated record; they never enter `verifyAction`'s allow/deny decision.
+
 ## Configuration
 
 ### Environment Variables
