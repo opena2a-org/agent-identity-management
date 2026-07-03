@@ -714,10 +714,12 @@ func TestTrustCalculator_CalculateCompliance_NoViolations(t *testing.T) {
 		ID: uuid.New(),
 	}
 
-	compliance := calculator.calculateCompliance(agent)
+	compliance, reason := calculator.calculateCompliance(agent)
 
 	// Agent with no violations should have high compliance
 	assert.True(t, compliance >= 0.0 && compliance <= 1.0, "Compliance should be valid range")
+	// Un-wired snapshot repo excludes the factor from the composite (AIP §6.1)
+	assert.Equal(t, exclReasonNotWired, reason)
 }
 
 // ===========================
@@ -731,10 +733,12 @@ func TestTrustCalculator_CalculateDriftDetection_Default(t *testing.T) {
 		ID: uuid.New(),
 	}
 
-	drift := calculator.calculateDriftDetection(agent)
+	drift, reason := calculator.calculateDriftDetection(agent)
 
 	// Without drift repo, should return baseline
 	assert.True(t, drift >= 0.0 && drift <= 1.0, "Drift detection should be valid")
+	// Un-wired alert repo excludes the factor from the composite (AIP §6.1)
+	assert.Equal(t, exclReasonNotWired, reason)
 }
 
 // ===========================
@@ -748,10 +752,12 @@ func TestTrustCalculator_CalculateUserFeedback_Baseline(t *testing.T) {
 		ID: uuid.New(),
 	}
 
-	feedback := calculator.calculateUserFeedback(agent)
+	feedback, reason := calculator.calculateUserFeedback(agent)
 
-	// Should return neutral 0.5 when no feedback repository is wired
-	assert.Equal(t, 0.5, feedback, "User feedback should return neutral 0.5 when no feedback repo is configured")
+	// Placeholder value stays neutral; the factor itself is excluded from the
+	// composite when no feedback repository is wired (AIP §6.1)
+	assert.Equal(t, 0.5, feedback, "User feedback placeholder should be neutral 0.5 when no feedback repo is configured")
+	assert.Equal(t, exclReasonNotWired, reason)
 }
 
 // MockUserFeedbackRepository mocks domain.UserFeedbackRepository for trust calculator tests
@@ -789,7 +795,7 @@ func TestTrustCalculator_CalculateUserFeedback_Formula(t *testing.T) {
 		stats *domain.UserFeedbackStats
 		want  float64
 	}{
-		{"no feedback rows -> neutral", &domain.UserFeedbackStats{Total: 0}, 0.5},
+		// The Total==0 case is covered by _NoData_Excluded below (excluded, not scored).
 		{"sustained negatives (>5) -> 0.0", &domain.UserFeedbackStats{Total: 6, NegativeCount: 6}, 0.0},
 		{"some negatives (>2) -> 0.5", &domain.UserFeedbackStats{Total: 4, NegativeCount: 3}, 0.5},
 		{"strong positives (>10) -> 1.0", &domain.UserFeedbackStats{Total: 11, PositiveCount: 11}, 1.0},
@@ -806,13 +812,30 @@ func TestTrustCalculator_CalculateUserFeedback_Formula(t *testing.T) {
 			calc := &TrustCalculator{}
 			calc.SetUserFeedbackRepo(repo)
 
-			got := calc.calculateUserFeedback(agent)
+			got, reason := calc.calculateUserFeedback(agent)
 			assert.Equal(t, tc.want, got, tc.name)
+			assert.Empty(t, reason, "scored feedback must be included in the composite")
 		})
 	}
 }
 
-func TestTrustCalculator_CalculateUserFeedback_RepoError_Neutral(t *testing.T) {
+func TestTrustCalculator_CalculateUserFeedback_NoData_Excluded(t *testing.T) {
+	agentID := uuid.New()
+	agent := &domain.Agent{ID: agentID}
+
+	repo := new(MockUserFeedbackRepository)
+	repo.On("GetStats", agentID).Return(&domain.UserFeedbackStats{Total: 0}, nil)
+
+	calc := &TrustCalculator{}
+	calc.SetUserFeedbackRepo(repo)
+
+	// Zero feedback rows = no data: excluded from the composite (AIP §6.1).
+	got, reason := calc.calculateUserFeedback(agent)
+	assert.Equal(t, 0.5, got)
+	assert.Equal(t, exclReasonNoData, reason)
+}
+
+func TestTrustCalculator_CalculateUserFeedback_RepoError_Excluded(t *testing.T) {
 	agentID := uuid.New()
 	agent := &domain.Agent{ID: agentID}
 
@@ -822,8 +845,12 @@ func TestTrustCalculator_CalculateUserFeedback_RepoError_Neutral(t *testing.T) {
 	calc := &TrustCalculator{}
 	calc.SetUserFeedbackRepo(repo)
 
-	// A failed stats query must not penalize or reward the agent.
-	assert.Equal(t, 0.5, calc.calculateUserFeedback(agent))
+	// A failed stats query must not penalize or reward the agent: the factor
+	// is excluded from the composite rather than scored a fabricated neutral.
+	got, reason := calc.calculateUserFeedback(agent)
+	assert.Equal(t, 0.5, got)
+	assert.NotEmpty(t, reason)
+	assert.NotEqual(t, exclReasonNoData, reason, "query failure is a loud exclusion, not a quiet no-data state")
 }
 
 func TestTrustCalculator_RecordUserFeedback(t *testing.T) {
@@ -1249,9 +1276,11 @@ func TestTrustCalculator_ExecutionIsolation_NoRepo(t *testing.T) {
 	calculator := &TrustCalculator{}
 
 	agent := &domain.Agent{ID: uuid.New()}
-	isolation := calculator.calculateExecutionIsolation(agent)
+	isolation, reason := calculator.calculateExecutionIsolation(agent)
 
-	assert.Equal(t, 0.3, isolation, "Without isolation repo, should return 0.3 baseline")
+	assert.Equal(t, 0.3, isolation, "Without isolation repo, should return 0.3 placeholder")
+	// Un-wired isolation repo excludes the factor from the composite (AIP §6.1)
+	assert.Equal(t, exclReasonNotWired, reason)
 }
 
 func TestTrustCalculator_ExecutionIsolation_NoAttestation(t *testing.T) {
@@ -1264,9 +1293,12 @@ func TestTrustCalculator_ExecutionIsolation_NoAttestation(t *testing.T) {
 
 	mockIsolationRepo.On("GetLatest", agentID).Return(nil, nil)
 
-	isolation := calculator.calculateExecutionIsolation(agent)
+	isolation, reason := calculator.calculateExecutionIsolation(agent)
 
 	assert.Equal(t, 0.3, isolation, "Without attestation, should return 0.3 baseline")
+	// The 0.3 no-attestation baseline is a deliberate incentive score, so the
+	// factor stays IN the composite (unlike un-wired repos).
+	assert.Empty(t, reason)
 }
 
 func TestTrustCalculator_RecordIsolationAttestation_Success(t *testing.T) {
@@ -1336,9 +1368,10 @@ func TestTrustCalculator_ExecutionIsolation_WithAttestation(t *testing.T) {
 		Score:   0.72,
 	}, nil)
 
-	isolation := calculator.calculateExecutionIsolation(agent)
+	isolation, reason := calculator.calculateExecutionIsolation(agent)
 
 	assert.Equal(t, 0.72, isolation, "Should return the pre-computed attestation score")
+	assert.Empty(t, reason)
 }
 
 // Helper function for time pointer
@@ -1415,7 +1448,8 @@ func TestCalculateDriftDetection_ConnectedServerManifestDrift_ReducesScore(t *te
 		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{{MCPServerID: serverID}}},
 	}
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.InDelta(t, 0.85, score, 0.001, "a high-severity manifest drift on a connected server should subtract 0.15")
 }
 
@@ -1436,7 +1470,8 @@ func TestCalculateDriftDetection_ConnectedServerCapabilityDrift_Stacks(t *testin
 		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{{MCPServerID: serverID}}},
 	}
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.InDelta(t, 0.65, score, 0.001, "critical (-0.30) + warning (-0.05) on a connected server should subtract 0.35")
 }
 
@@ -1452,7 +1487,8 @@ func TestCalculateDriftDetection_UnconnectedServerDrift_NoEffect(t *testing.T) {
 		mcpConnRepo: &mockMCPConnLister{conns: nil}, // agent connected to nothing
 	}
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.Equal(t, 1.0, score, "drift on a server the agent is not connected to must not affect its score")
 }
 
@@ -1468,7 +1504,8 @@ func TestCalculateDriftDetection_NoConnectionRepo_FallsBackToAgentKeyed(t *testi
 
 	c := &TrustCalculator{alertRepo: mockAlert} // mcpConnRepo nil
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.InDelta(t, 0.95, score, 0.001, "agent-keyed configuration drift still counts (warning -0.05)")
 }
 
@@ -1487,7 +1524,8 @@ func TestCalculateDriftDetection_ConnectionLookupError_FallsBackGracefully(t *te
 		mcpConnRepo: &mockMCPConnLister{err: assert.AnError},
 	}
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.InDelta(t, 0.95, score, 0.001, "a connection lookup error degrades to agent-keyed alerts, not the 0.5 error sentinel")
 }
 
@@ -1507,7 +1545,8 @@ func TestCalculateDriftDetection_StaleServerDrift_Ignored(t *testing.T) {
 		mcpConnRepo: &mockMCPConnLister{conns: []*domain.AgentMCPConnection{{MCPServerID: serverID}}},
 	}
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.Equal(t, 1.0, score, "drift older than 30 days is outside the window and must not reduce the score")
 }
 
@@ -1530,6 +1569,155 @@ func TestCalculateDriftDetection_DuplicateServerConnections_CountedOnce(t *testi
 		}},
 	}
 
-	score := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	score, driftReason := c.calculateDriftDetection(&domain.Agent{ID: agentID})
+	assert.Empty(t, driftReason, "a measured drift factor must be included in the composite")
 	assert.InDelta(t, 0.85, score, 0.001, "the same alert reached via two connections must subtract only once")
+}
+
+// ============================================================================
+// TEST: AIP-SPEC §6.1 composition rule — factors with no data are excluded
+// and their weights redistributed proportionally
+// ============================================================================
+
+// stubSnapshotRepo is a minimal ComplianceSnapshotRepository for composition
+// tests; only GetLatest is exercised by the trust calculator.
+type stubSnapshotRepo struct {
+	snapshot *domain.ComplianceSnapshot
+	err      error
+}
+
+func (s *stubSnapshotRepo) Create(*domain.ComplianceSnapshot) error { return nil }
+func (s *stubSnapshotRepo) GetByID(uuid.UUID) (*domain.ComplianceSnapshot, error) {
+	return nil, nil
+}
+func (s *stubSnapshotRepo) GetByOrganization(uuid.UUID, int, int) ([]*domain.ComplianceSnapshot, error) {
+	return nil, nil
+}
+func (s *stubSnapshotRepo) GetByFramework(uuid.UUID, domain.ComplianceFramework, int) ([]*domain.ComplianceSnapshot, error) {
+	return nil, nil
+}
+func (s *stubSnapshotRepo) GetTrending(uuid.UUID, domain.ComplianceFramework, time.Time, time.Time) ([]*domain.ComplianceSnapshot, error) {
+	return nil, nil
+}
+func (s *stubSnapshotRepo) GetLatest(uuid.UUID, domain.ComplianceFramework) (*domain.ComplianceSnapshot, error) {
+	return s.snapshot, s.err
+}
+func (s *stubSnapshotRepo) DeleteOlderThan(uuid.UUID, time.Time) (int, error) { return 0, nil }
+
+// compositionTestAgent returns a verified agent plus base mocks producing
+// deterministic factor values: verification 1.0, uptime 0.98, success 0.95,
+// security alerts 1.0, age 1.0 (200 days), drift 1.0 (wired repo, no alerts).
+func compositionTestAgent(t *testing.T) (*TrustCalculator, *domain.Agent) {
+	t.Helper()
+	mockCapabilityRepo := new(MockCapabilityRepository)
+	mockAlertRepo := new(TrustCalcMockAlertRepository)
+
+	calculator := NewTrustCalculator(
+		new(AgentServiceMockTrustScoreRepository), new(MockAPIKeyRepository),
+		new(AgentServiceMockAuditLogRepository), mockCapabilityRepo,
+		new(TrustCalcMockAgentRepository), mockAlertRepo)
+
+	agent := &domain.Agent{
+		ID:             uuid.New(),
+		OrganizationID: uuid.New(),
+		Status:         domain.AgentStatusVerified,
+		UpdatedAt:      time.Now(),
+		CreatedAt:      time.Now().Add(-200 * 24 * time.Hour),
+	}
+
+	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
+	mockAlertRepo.On("GetUnacknowledgedByResourceID", agent.ID).Return([]*domain.Alert{}, nil).Maybe()
+	mockAlertRepo.On("GetByResourceID", agent.ID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
+
+	return calculator, agent
+}
+
+func TestTrustCalculator_Calculate_UnwiredFactors_ExcludedAndRenormalized(t *testing.T) {
+	// Compliance, user feedback, and execution isolation repos un-wired:
+	// their 0.10+0.02+0.10 weights must be redistributed, not scored 0.5/0.3.
+	calculator, agent := compositionTestAgent(t)
+
+	score, err := calculator.Calculate(agent)
+	assert.NoError(t, err)
+
+	assert.Equal(t,
+		[]string{"compliance", "execution_isolation", "user_feedback"},
+		score.ExcludedFactors, "un-wired factors must be reported excluded (sorted)")
+
+	f := score.Factors
+	includedWeight := 0.25 + 0.15 + 0.15 + 0.15 + 0.05 + 0.03
+	expected := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+		f.SecurityAlerts*0.15 + f.Age*0.05 + f.DriftDetection*0.03) / includedWeight
+	assert.InDelta(t, expected, score.Score, 1e-9,
+		"composite must be the weighted mean over INCLUDED factors only (AIP §6.1)")
+
+	// The old fabricated-neutral behavior would have produced a strictly lower
+	// score for this all-good agent (0.5*0.12 + 0.3*0.10 dragging the sum).
+	legacy := f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+		f.SecurityAlerts*0.15 + 0.5*0.10 + f.Age*0.05 + f.DriftDetection*0.03 +
+		0.5*0.02 + 0.3*0.10
+	assert.Greater(t, score.Score, legacy,
+		"renormalization must not let fabricated neutrals drag a fully-measured good agent")
+}
+
+func TestTrustCalculator_Calculate_WiredNoData_Excluded(t *testing.T) {
+	// Repos wired but empty: compliance (no snapshot) and feedback (zero rows)
+	// are no-data exclusions; isolation with no attestation stays INCLUDED at
+	// the deliberate 0.3 incentive baseline.
+	calculator, agent := compositionTestAgent(t)
+
+	calculator.SetSnapshotRepo(&stubSnapshotRepo{snapshot: nil})
+
+	feedbackRepo := new(MockUserFeedbackRepository)
+	feedbackRepo.On("GetStats", agent.ID).Return(&domain.UserFeedbackStats{Total: 0}, nil)
+	calculator.SetUserFeedbackRepo(feedbackRepo)
+
+	isolationRepo := new(MockIsolationAttestationRepository)
+	isolationRepo.On("GetLatest", agent.ID).Return(nil, nil)
+	calculator.SetIsolationRepo(isolationRepo)
+
+	score, err := calculator.Calculate(agent)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"compliance", "user_feedback"}, score.ExcludedFactors)
+
+	f := score.Factors
+	assert.Equal(t, 0.3, f.ExecutionIsolation)
+	includedWeight := 0.25 + 0.15 + 0.15 + 0.15 + 0.05 + 0.03 + 0.10
+	expected := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+		f.SecurityAlerts*0.15 + f.Age*0.05 + f.DriftDetection*0.03 +
+		f.ExecutionIsolation*0.10) / includedWeight
+	assert.InDelta(t, expected, score.Score, 1e-9)
+}
+
+func TestTrustCalculator_Calculate_FullyWiredWithData_NoExclusions(t *testing.T) {
+	// Every factor measured: no exclusions, weights sum to 1.0, no renormalization.
+	calculator, agent := compositionTestAgent(t)
+
+	calculator.SetSnapshotRepo(&stubSnapshotRepo{snapshot: &domain.ComplianceSnapshot{Score: 80}})
+
+	feedbackRepo := new(MockUserFeedbackRepository)
+	feedbackRepo.On("GetStats", agent.ID).Return(&domain.UserFeedbackStats{Total: 12, PositiveCount: 11}, nil)
+	calculator.SetUserFeedbackRepo(feedbackRepo)
+
+	isolationRepo := new(MockIsolationAttestationRepository)
+	isolationRepo.On("GetLatest", agent.ID).Return(&domain.IsolationAttestation{
+		ID: uuid.New(), AgentID: agent.ID, Score: 0.72,
+	}, nil)
+	calculator.SetIsolationRepo(isolationRepo)
+
+	score, err := calculator.Calculate(agent)
+	assert.NoError(t, err)
+
+	assert.Empty(t, score.ExcludedFactors, "fully measured agents must have no excluded factors")
+
+	f := score.Factors
+	assert.Equal(t, 0.8, f.Compliance)
+	assert.Equal(t, 1.0, f.UserFeedback)
+	assert.Equal(t, 0.72, f.ExecutionIsolation)
+	expected := f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+		f.SecurityAlerts*0.15 + f.Compliance*0.10 + f.Age*0.05 +
+		f.DriftDetection*0.03 + f.UserFeedback*0.02 + f.ExecutionIsolation*0.10
+	assert.InDelta(t, expected, score.Score, 1e-9,
+		"with all 9 factors measured the composite is the plain weighted sum")
 }

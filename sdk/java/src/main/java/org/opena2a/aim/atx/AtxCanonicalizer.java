@@ -55,9 +55,10 @@ public final class AtxCanonicalizer {
 
     /**
      * Project an ATX into the v1.1 TBS and return JCS(TBS) (RFC 8785). Covers
-     * capabilities, scanSummary, issuerChain, publisher, and behavioralProfile.
-     * The projection (canonical empties, always-full scanSummary, %.6f string
-     * trustScore, root-first issuerChain) matches the reference verifiers exactly.
+     * capabilities, scanSummary, issuerChain, publisher, declaredPurpose, and
+     * behavioralProfile. The projection (canonical empties, always-full
+     * scanSummary, %.6f string trustScore, root-first issuerChain) matches the
+     * reference verifiers exactly.
      */
     public static byte[] canonicalPayloadV11(Atx atx) {
         ObjectNode tbs = MAPPER.createObjectNode();
@@ -70,6 +71,10 @@ public final class AtxCanonicalizer {
         tbs.put("contentHash", atx.contentHash);
         tbs.put("buildAttestation", ns(atx.buildAttestation));
         tbs.set("capabilities", arrayOf(atx.capabilities));
+        com.fasterxml.jackson.databind.JsonNode declaredPurpose = projectDeclaredPurpose(atx.declaredPurpose);
+        if (declaredPurpose != null) {
+            tbs.set("declaredPurpose", declaredPurpose);
+        }
         tbs.set("behavioralProfile", projectBehavioralProfile(atx.behavioralProfile));
 
         Map<String, Object> scan = atx.scanSummary != null ? atx.scanSummary : Map.of();
@@ -106,6 +111,23 @@ public final class AtxCanonicalizer {
         } catch (Exception e) {
             throw new IllegalArgumentException("invalid RFC 3339 timestamp: " + s, e);
         }
+    }
+
+    /**
+     * Presence-based rule for the optional declaredPurpose member (atx-spec
+     * §1.3a.2 rule 5, mirroring the reference verifiers'
+     * projectDeclaredPurposeV11): an absent purpose — missing, null, or an
+     * empty object {} — is OMITTED from the TBS, keeping a no-purpose
+     * credential byte-identical to one issued before the field existed. A
+     * present, non-empty object passes through verbatim and JCS
+     * re-canonicalizes it.
+     */
+    private static com.fasterxml.jackson.databind.JsonNode projectDeclaredPurpose(
+            com.fasterxml.jackson.databind.JsonNode dp) {
+        if (dp == null || dp.isNull() || (dp.isObject() && dp.isEmpty())) {
+            return null;
+        }
+        return dp;
     }
 
     /**
