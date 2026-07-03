@@ -126,6 +126,15 @@ export {
   TARGET_CLASSES,
   TACTIC_IDS,
   OUTCOME_CLASSES,
+  // Sensor lifecycle tooling used by the arp-guard CLI (opt-out purge,
+  // enrollment, sensor identity) — exported so the CLI can run against this
+  // module's public surface instead of deep paths.
+  loadSensorId,
+  purgeRemoteSignatures,
+  manualPurgeCurl,
+  enrollSensor,
+  manualEnrollCurl,
+  readEnrollmentRecord,
 } from './telemetry/signature';
 export type {
   RedactedSignal,
