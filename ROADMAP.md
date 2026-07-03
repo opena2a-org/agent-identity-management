@@ -523,14 +523,13 @@ End-to-end UI testing:
 
 ### TypeScript/Node.js SDK
 **Priority**: High
-**Status**: Planned (Q2 2026)
+**Status**: Shipped (`sdk/typescript`; npm publish pending Trusted Publishing setup)
 
-TypeScript SDK for Node.js applications:
+TypeScript SDK for Node.js applications, implemented in `sdk/typescript`:
 - Full TypeScript support with type definitions
 - async/await API design
-- npm package distribution
-- Express/Fastify middleware integration
-- Feature parity with Python and Java SDKs
+- Local ATX credential verification (`LocalVerifier`)
+- npm package distribution (`@opena2a/aim-sdk` — first publish pending)
 
 **Use Case**: Node.js applications, serverless functions, TypeScript projects
 

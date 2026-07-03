@@ -58,6 +58,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      conformance: ${{ steps.filter.outputs.conformance }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -77,6 +78,13 @@ jobs:
               - 'apps/web/**'
               - 'package.json'
               - 'package-lock.json'
+              - '.github/workflows/ci.yml'
+            # ATX credential paths gated by the pinned atx-conformance suite:
+            # the Java LocalAtxVerifier (+ its vendored fixtures) and the Go
+            # issuance client whose Raw pass-through must stay byte-preserving.
+            conformance:
+              - 'sdk/java/**'
+              - 'apps/backend/internal/infrastructure/registry/**'
               - '.github/workflows/ci.yml'
 
   backend:
@@ -174,6 +182,94 @@ jobs:
           name: backend-coverage
           path: apps/backend/coverage.out
 
+  # Conformance gate: AIM's ATX credential paths must accept/reject exactly
+  # what the pinned opena2a-standards/atx-conformance fixtures say (the suite
+  # the Go/Python reference verifiers and @opena2a/atx-verify are gated on).
+  # Two paths are gated here:
+  #   1. sdk/java LocalAtxVerifier — runs the conformance fixture set (vendored
+  #      copies, byte-checked against the pinned suite below so they cannot
+  #      silently drift).
+  #   2. apps/backend Go issuance client — replays every pinned credential as
+  #      a Registry response and asserts the signed bytes survive AIM's
+  #      issuance path unmodified (Raw pass-through byte-match).
+  atx-conformance:
+    name: ATX conformance
+    needs: changes
+    if: needs.changes.outputs.conformance == 'true'
+    runs-on: ubuntu-latest
+    env:
+      # Pinned suite ref. Bump deliberately when the suite grows; the vendored
+      # Java fixture copies must be refreshed in the same PR or the drift gate
+      # below fails.
+      ATX_CONFORMANCE_REF: b2de78387e5b9e70af5efbef28f46e7732016c82
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone pinned atx-conformance suite
+        run: |
+          git clone --no-checkout https://github.com/opena2a-standards/atx-conformance.git /tmp/atx-conformance
+          git -C /tmp/atx-conformance checkout "$ATX_CONFORMANCE_REF"
+
+      - name: MANIFEST.sha256 integrity
+        working-directory: /tmp/atx-conformance
+        run: |
+          rc=0
+          while read -r sha file; do
+            [ -z "$sha" ] && continue
+            got=$(sha256sum "$file" | awk '{print $1}')
+            if [ "$got" != "$sha" ]; then
+              echo "::error::MANIFEST mismatch: $file"; rc=1
+            fi
+          done < MANIFEST.sha256
+          exit $rc
+
+      - name: Vendored Java fixtures byte-match the pinned suite
+        run: |
+          fail=0
+          for f in /tmp/atx-conformance/fixtures/*.json; do
+            b=$(basename "$f")
+            if ! cmp -s "$f" "sdk/java/src/test/resources/atx-fixtures/$b"; then
+              echo "::error::vendored fixture $b is missing or drifted from the pinned suite"
+              fail=1
+            fi
+          done
+          for f in sdk/java/src/test/resources/atx-fixtures/*.json; do
+            b=$(basename "$f")
+            if [ ! -f "/tmp/atx-conformance/fixtures/$b" ]; then
+              echo "::error::vendored fixture $b does not exist in the pinned suite"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+          cache: "maven"
+
+      # Scoped to the atx package: the SDK's Live/RealWorld integration tests
+      # need a live backend and credentials that CI does not have.
+      - name: Java LocalAtxVerifier vs pinned fixtures
+        working-directory: sdk/java
+        run: mvn -B test -Dtest='org.opena2a.aim.atx.*Test'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: apps/backend/go.sum
+
+      # The test t.Skips when ATX_CONFORMANCE_DIR is unset (so local
+      # `go test ./...` needs no suite checkout) — the grep guards against
+      # this step ever passing on a silent skip if the env line is dropped.
+      - name: Go issuance byte-match vs pinned fixtures
+        working-directory: apps/backend
+        env:
+          ATX_CONFORMANCE_DIR: /tmp/atx-conformance/fixtures
+        run: |
+          go test ./internal/infrastructure/registry/ -run TestATCIssuance_ConformanceByteMatch -v | tee /tmp/atc-conformance.out
+          grep -q -- "--- PASS: TestATCIssuance_ConformanceByteMatch/baseline-valid.json" /tmp/atc-conformance.out
+
   frontend:
     name: Frontend (Next.js)
     needs: changes
@@ -219,6 +315,7 @@ jobs:
         tenant-scoping-lint,
         changes,
         backend,
+        atx-conformance,
         frontend,
         e2e-empty-state,
       ]
@@ -231,10 +328,11 @@ jobs:
           tl='${{ needs.tenant-scoping-lint.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
+          ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
           echo "secrets-lint=$sl tenant-scoping-lint=$tl changes=$ch"
-          echo "backend=$be frontend=$fe e2e-empty-state=$ee"
+          echo "backend=$be atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
           for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "changes:$ch"; do
@@ -244,7 +342,7 @@ jobs:
             fi
           done
           # Path-filtered jobs pass on success or skip; failure/cancel fails.
-          for pair in "backend:$be" "frontend:$fe" "e2e-empty-state:$ee"; do
+          for pair in "backend:$be" "atx-conformance:$ax" "frontend:$fe" "e2e-empty-state:$ee"; do
             r="${pair#*:}"
             if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
               echo "::error::${pair%%:*} failed or was cancelled ($r)."

@@ -30,15 +30,21 @@ class LocalAtxVerifierConformanceTest {
 
     @ParameterizedTest(name = "{0} -> {1}{2}")
     @CsvSource({
-            "baseline-valid.json,              ACCEPT, ",
-            "baseline-valid-hybrid.json,       ACCEPT, ",
-            "threshold-2of3-cosignature.json,  ACCEPT, ",
-            "tampered-signature.json,          REJECT, SIGNATURE_INVALID",
-            "expired.json,                     REJECT, EXPIRED",
-            "revoked.json,                     REJECT, REVOKED",
-            "wrong-issuer.json,                REJECT, UNTRUSTED_ISSUER",
-            "malformed-schema.json,            REJECT, UNSUPPORTED_VERSION",
-            "cross-issuer-key.json,            REJECT, SIGNATURE_INVALID",
+            "baseline-valid.json,                  ACCEPT, ",
+            "baseline-valid-hybrid.json,           ACCEPT, ",
+            "threshold-2of3-cosignature.json,      ACCEPT, ",
+            "tampered-signature.json,              REJECT, SIGNATURE_INVALID",
+            "expired.json,                         REJECT, EXPIRED",
+            "revoked.json,                         REJECT, REVOKED",
+            "wrong-issuer.json,                    REJECT, UNTRUSTED_ISSUER",
+            "malformed-schema.json,                REJECT, UNSUPPORTED_VERSION",
+            "cross-issuer-key.json,                REJECT, SIGNATURE_INVALID",
+            "v1_1-baseline-valid.json,             ACCEPT, ",
+            "v1_1-baseline-valid-hybrid.json,      ACCEPT, ",
+            "v1_1-declared-purpose-valid.json,     ACCEPT, ",
+            "v1_1-tampered-capabilities.json,      REJECT, SIGNATURE_INVALID",
+            "v1_1-tampered-declared-purpose.json,  REJECT, SIGNATURE_INVALID",
+            "v1_1-cross-issuer-key.json,           REJECT, SIGNATURE_INVALID",
     })
     void fixture(String file, String expectedResult, String expectedRejectCategory) throws Exception {
         JsonNode fixture;

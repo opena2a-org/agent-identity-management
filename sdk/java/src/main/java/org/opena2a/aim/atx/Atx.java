@@ -1,6 +1,7 @@
 package org.opena2a.aim.atx;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.Map;
@@ -24,6 +25,12 @@ public class Atx {
     public String contentHash;
     public String buildAttestation;
     public List<String> capabilities;
+    /**
+     * Declared purpose (atx-spec §1.5); null when absent. Kept as a raw tree:
+     * the v1.1 TBS passes a present, non-empty object through verbatim for JCS
+     * to re-canonicalize (§1.3a.2 rule 5).
+     */
+    public JsonNode declaredPurpose;
     /** Observed-behavior summary; null when absent. Read field-by-field in the v1.1 TBS. */
     public Map<String, Object> behavioralProfile;
     public Map<String, Object> scanSummary;

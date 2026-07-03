@@ -39,13 +39,22 @@ type TrustScoreFactors struct {
 
 // TrustScore represents a calculated trust score for an agent
 type TrustScore struct {
-	ID             uuid.UUID         `json:"id"`
-	AgentID        uuid.UUID         `json:"agentId"`
-	Score          float64           `json:"score"` // 0-1
-	Factors        TrustScoreFactors `json:"factors"`
-	Confidence     float64           `json:"confidence"` // 0-1
-	LastCalculated time.Time         `json:"lastCalculated"`
-	CreatedAt      time.Time         `json:"createdAt"`
+	ID      uuid.UUID         `json:"id"`
+	AgentID uuid.UUID         `json:"agentId"`
+	Score   float64           `json:"score"` // 0-1
+	Factors TrustScoreFactors `json:"factors"`
+
+	// ExcludedFactors lists the factors excluded from the composite under the
+	// AIP-SPEC §6.1 composition rule (no data or un-wired source; their
+	// weights are redistributed proportionally across measured factors). The
+	// corresponding Factors fields carry neutral display placeholders, not
+	// measurements. Sorted; populated on fresh calculations only — the field
+	// is not persisted, so scores read back from storage omit it.
+	ExcludedFactors []string `json:"excludedFactors,omitempty"`
+
+	Confidence     float64   `json:"confidence"` // 0-1
+	LastCalculated time.Time `json:"lastCalculated"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 // TrustScoreRepository defines the interface for trust score persistence

@@ -546,22 +546,26 @@ Get current trust score for an agent.
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-**Response:**
+**Response** (factor values are 0-1 scores, not weighted contributions; factors
+with no data are excluded from the composite per AIP §6.1 — their placeholder
+values here are not measurements):
 ```json
 {
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
-  "trustScore": 75.5,
+  "agentName": "my-agent",
+  "score": 0.86,
   "factors": {
-    "verificationStatus": 25.0,
-    "uptime": 12.5,
-    "actionSuccessRate": 14.0,
-    "securityAlerts": 10.5,
-    "complianceScore": 8.0,
-    "ageAndHistory": 3.5,
-    "driftDetection": 1.5,
-    "userFeedback": 0.5
+    "verificationStatus": 1.0,
+    "uptime": 0.98,
+    "successRate": 0.95,
+    "securityAlerts": 1.0,
+    "compliance": 0.8,
+    "age": 0.75,
+    "driftDetection": 1.0,
+    "userFeedback": 0.75,
+    "executionIsolation": 0.52
   },
-  "lastCalculated": "2025-10-08T00:00:00Z"
+  "calculatedAt": "2026-07-02T00:00:00Z"
 }
 ```
 

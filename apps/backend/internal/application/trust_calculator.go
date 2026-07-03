@@ -3,11 +3,23 @@ package application
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+)
+
+// Factor exclusion reasons (AIP-SPEC §6.1: "Factors with no data are excluded
+// and their weights redistributed proportionally"). A factor excluded for
+// exclReasonNotWired or a query failure is a deployment defect and is logged;
+// exclReasonNoData is a normal lifecycle state (e.g. an agent whose org has no
+// compliance snapshot yet) and is not logged.
+const (
+	exclReasonNotWired = "repository not configured"
+	exclReasonNoData   = "no data"
 )
 
 // TrustCalculator implements domain.TrustScoreCalculator
@@ -117,7 +129,7 @@ func (c *TrustCalculator) SetTMEProvider(provider NanoMindTMEProvider) {
 // Calculate calculates trust score for an agent
 // Implements the 9-factor algorithm with weighted average
 func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, error) {
-	factors, err := c.CalculateFactors(agent)
+	factors, excluded, err := c.calculateFactorsDetailed(agent)
 	if err != nil {
 		return nil, err
 	}
@@ -149,36 +161,101 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		"execution_isolation": 0.10, // Factor 9 (new)
 	}
 
-	score := factors.VerificationStatus*weights["verification"] +
-		factors.Uptime*weights["uptime"] +
-		factors.SuccessRate*weights["success_rate"] +
-		factors.SecurityAlerts*weights["security_alerts"] +
-		factors.Compliance*weights["compliance"] +
-		factors.Age*weights["age"] +
-		factors.DriftDetection*weights["drift_detection"] +
-		factors.UserFeedback*weights["user_feedback"] +
-		factors.ExecutionIsolation*weights["execution_isolation"]
+	// AIP-SPEC §6.1 composition rule: factors with no data are excluded from
+	// the weighted sum and their weights redistributed proportionally across
+	// the factors that do have data. A factor whose repository is un-wired or
+	// whose query failed must not contribute a fabricated neutral value.
+	contributions := []struct {
+		key   string
+		value float64
+	}{
+		{"verification", factors.VerificationStatus},
+		{"uptime", factors.Uptime},
+		{"success_rate", factors.SuccessRate},
+		{"security_alerts", factors.SecurityAlerts},
+		{"compliance", factors.Compliance},
+		{"age", factors.Age},
+		{"drift_detection", factors.DriftDetection},
+		{"user_feedback", factors.UserFeedback},
+		{"execution_isolation", factors.ExecutionIsolation},
+	}
+
+	var weightedSum, includedWeight, imputedSum float64
+	for _, f := range contributions {
+		w, ok := weights[f.key]
+		if !ok {
+			// A key drift between contributions and weights would silently
+			// zero a factor; fail loudly instead.
+			return nil, fmt.Errorf("trust: factor %q has no weight entry", f.key)
+		}
+		// The neutral-imputed sum uses every factor at its struct value —
+		// for excluded factors that is the neutral display placeholder.
+		imputedSum += f.value * w
+		if reason, isExcluded := excluded[f.key]; isExcluded {
+			if reason != exclReasonNoData {
+				// Un-wired repository or query failure: a deployment defect in
+				// the reference implementation, not a data-lifecycle state.
+				log.Printf("WARN trust: factor %q excluded from composite for agent %s: %s", f.key, agent.ID, reason)
+			}
+			continue
+		}
+		weightedSum += f.value * w
+		includedWeight += w
+	}
+
+	// Factors 1-4 and 6 always produce data (status-based fallbacks are part
+	// of their scoring functions), so includedWeight is at least 0.75.
+	score := weightedSum / includedWeight
+
+	// Anti-gaming ceiling: renormalization alone would hand an excluded
+	// factor the agent's own included average, so an org could RAISE a good
+	// agent's score by withholding compliance snapshots or never collecting
+	// feedback (no-data would outscore a measured 0.9). Cap the published
+	// composite at the neutral-imputed sum — a factor with no data can never
+	// help more than a neutral measurement would. Bad agents keep the honest
+	// renormalized value (exclusion no longer props them up toward neutral).
+	// With no exclusions both sums are identical and the cap is a no-op.
+	score = math.Min(score, imputedSum)
 
 	// Ensure score is within bounds [0, 1]
 	score = math.Max(0.0, math.Min(1.0, score))
 
-	// Calculate confidence based on available data
-	confidence := c.calculateConfidence(agent, factors)
+	excludedNames := make([]string, 0, len(excluded))
+	for name := range excluded {
+		excludedNames = append(excludedNames, name)
+	}
+	sort.Strings(excludedNames)
+
+	// Calculate confidence based on available data; excluded factors count
+	// against it (an exclusion must not be confidence-free).
+	confidence := c.calculateConfidence(agent, factors, excluded)
 
 	return &domain.TrustScore{
-		ID:             uuid.New(),
-		AgentID:        agent.ID,
-		Score:          score,
-		Factors:        *factors,
-		Confidence:     confidence,
-		LastCalculated: time.Now(),
-		CreatedAt:      time.Now(),
+		ID:              uuid.New(),
+		AgentID:         agent.ID,
+		Score:           score,
+		Factors:         *factors,
+		ExcludedFactors: excludedNames,
+		Confidence:      confidence,
+		LastCalculated:  time.Now(),
+		CreatedAt:       time.Now(),
 	}, nil
 }
 
 // CalculateFactors calculates individual trust factors
 func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustScoreFactors, error) {
+	factors, _, err := c.calculateFactorsDetailed(agent)
+	return factors, err
+}
+
+// calculateFactorsDetailed computes the 9 factors plus the exclusion set: the
+// factors whose data source is un-wired, failed, or empty. An excluded factor
+// carries a neutral placeholder value in the returned struct (display
+// continuity for stored breakdowns) but MUST NOT contribute to the composite —
+// Calculate redistributes its weight per AIP-SPEC §6.1.
+func (c *TrustCalculator) calculateFactorsDetailed(agent *domain.Agent) (*domain.TrustScoreFactors, map[string]string, error) {
 	factors := &domain.TrustScoreFactors{}
+	excluded := make(map[string]string)
 
 	// Factor 1: Verification Status (25% weight)
 	// Ed25519 signature verification for all actions
@@ -198,7 +275,11 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 
 	// Factor 5: Compliance Score (10% weight)
 	// SOC 2, HIPAA, GDPR adherence
-	factors.Compliance = c.calculateCompliance(agent)
+	var reason string
+	factors.Compliance, reason = c.calculateCompliance(agent)
+	if reason != "" {
+		excluded["compliance"] = reason
+	}
 
 	// Factor 6: Age & History (5% weight)
 	// How long agent has been operating successfully
@@ -206,15 +287,24 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 
 	// Factor 7: Drift Detection (3% weight)
 	// Behavioral pattern changes
-	factors.DriftDetection = c.calculateDriftDetection(agent)
+	factors.DriftDetection, reason = c.calculateDriftDetection(agent)
+	if reason != "" {
+		excluded["drift_detection"] = reason
+	}
 
 	// Factor 8: User Feedback (2% weight)
 	// Explicit user ratings
-	factors.UserFeedback = c.calculateUserFeedback(agent)
+	factors.UserFeedback, reason = c.calculateUserFeedback(agent)
+	if reason != "" {
+		excluded["user_feedback"] = reason
+	}
 
 	// Factor 9: Execution Isolation (10% weight)
 	// Runtime isolation posture (sandbox, network, filesystem, process)
-	factors.ExecutionIsolation = c.calculateExecutionIsolation(agent)
+	factors.ExecutionIsolation, reason = c.calculateExecutionIsolation(agent)
+	if reason != "" {
+		excluded["execution_isolation"] = reason
+	}
 
 	// NanoMind TME enrichment: adjust security alerts factor based on threat model evaluation
 	if c.tmeProvider != nil {
@@ -229,7 +319,7 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 		}
 	}
 
-	return factors, nil
+	return factors, excluded, nil
 }
 
 // Factor 1: Verification Status (25% weight)
@@ -404,21 +494,25 @@ func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
 // Measures adherence to compliance policies (SOC 2, HIPAA, GDPR)
 // Queries the latest compliance snapshot for the agent's organization.
 // Snapshot score is 0-100, normalized to 0.0-1.0.
-// Returns 0.5 (neutral) when no snapshot data is available.
-func (c *TrustCalculator) calculateCompliance(agent *domain.Agent) float64 {
+// With no snapshot data the factor is EXCLUDED from the composite (AIP §6.1);
+// the returned 0.5 is a display placeholder only, never a contribution.
+func (c *TrustCalculator) calculateCompliance(agent *domain.Agent) (float64, string) {
 	if c.snapshotRepo == nil {
-		return 0.5 // Neutral when snapshot repo not configured
+		return 0.5, exclReasonNotWired
 	}
 
 	// Query the latest AIM compliance snapshot for the agent's organization
 	snapshot, err := c.snapshotRepo.GetLatest(agent.OrganizationID, domain.FrameworkAIM)
-	if err != nil || snapshot == nil {
-		return 0.5 // Neutral when no compliance data exists
+	if err != nil {
+		return 0.5, "compliance snapshot query failed: " + err.Error()
+	}
+	if snapshot == nil {
+		return 0.5, exclReasonNoData
 	}
 
 	// Snapshot score is 0-100, normalize to 0.0-1.0
 	normalized := snapshot.Score / 100.0
-	return math.Max(0.0, math.Min(1.0, normalized))
+	return math.Max(0.0, math.Min(1.0, normalized)), ""
 }
 
 // Factor 6: Age & History (5% weight)
@@ -443,11 +537,15 @@ func (c *TrustCalculator) calculateAge(agent *domain.Agent) float64 {
 
 // Factor 7: Drift Detection (3% weight)
 // Measures changes in agent behavior patterns by checking for
-// configuration drift alerts. No alerts = 1.0 (perfect).
+// configuration drift alerts. No alerts = 1.0 (perfect): a wired alert
+// repository returning zero alerts is a measurement, not missing data.
 // Each drift alert reduces the score proportionally by severity.
-func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
+// With no alert repository (or a failed agent-alert query) the factor is
+// EXCLUDED from the composite (AIP §6.1); the returned 0.5 is a display
+// placeholder only.
+func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) (float64, string) {
 	if c.alertRepo == nil {
-		return 0.5 // Neutral when alert repo not available
+		return 0.5, exclReasonNotWired
 	}
 
 	// Gather drift-relevant alerts from two key spaces:
@@ -471,7 +569,7 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 
 	agentAlerts, err := c.alertRepo.GetByResourceID(agent.ID, 100, 0)
 	if err != nil {
-		return 0.5 // Neutral on error
+		return 0.5, "agent alert query failed: " + err.Error()
 	}
 	collect(agentAlerts)
 
@@ -489,7 +587,7 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 	}
 
 	if len(alerts) == 0 {
-		return 1.0 // No alerts = no drift = perfect score
+		return 1.0, "" // No alerts = no drift = perfect score
 	}
 
 	// Filter for drift-related alerts from the last 30 days
@@ -521,14 +619,16 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 		}
 	}
 
-	return math.Max(0.0, score)
+	return math.Max(0.0, score), ""
 }
 
 // Factor 8: User Feedback (2% weight)
 // Measures explicit feedback from users, scored by sentiment-bucket counts.
 //
-// Returns 0.5 (neutral) when no feedback repository is wired or no feedback
-// exists, so agents are neither penalized nor rewarded without real data.
+// With no feedback repository wired, a failed query, or zero feedback rows,
+// the factor is EXCLUDED from the composite (AIP §6.1), so agents are neither
+// penalized nor rewarded without real data; the returned 0.5 is a display
+// placeholder only.
 //
 // Scoring formula (sentiment buckets from domain.FeedbackSentiment, rating 1-5):
 //
@@ -539,53 +639,74 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) float64 {
 //
 // Negative checks precede positive so that an agent with many positives AND
 // many negatives is not rewarded; sustained complaints dominate.
-func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) float64 {
+func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) (float64, string) {
 	if c.userFeedbackRepo == nil {
-		return 0.5 // Neutral when feedback collection not configured
+		return 0.5, exclReasonNotWired
 	}
 
 	stats, err := c.userFeedbackRepo.GetStats(agent.ID)
-	if err != nil || stats == nil || stats.Total == 0 {
-		return 0.5 // Neutral when no feedback data exists
+	if err != nil {
+		return 0.5, "feedback stats query failed: " + err.Error()
+	}
+	if stats == nil || stats.Total == 0 {
+		return 0.5, exclReasonNoData
 	}
 
 	if stats.NegativeCount > 5 {
-		return 0.0
+		return 0.0, ""
 	}
 	if stats.NegativeCount > 2 {
-		return 0.5
+		return 0.5, ""
 	}
 	if stats.PositiveCount > 10 {
-		return 1.0
+		return 1.0, ""
 	}
-	return 0.75
+	return 0.75, ""
 }
 
 // Factor 9: Execution Isolation (10% weight)
 // Measures the runtime isolation posture of the agent.
 // Agents self-report their isolation via SDK; the score is computed from
 // sandbox type, network isolation, filesystem isolation, and process isolation.
-// Returns 0.3 (low baseline) when no attestation exists, incentivizing agents
-// to report their isolation posture for a higher score.
-func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) float64 {
+// Returns 0.3 (low baseline) when no attestation exists: unlike the no-data
+// factors this is a deliberate per-factor scoring choice (permitted by AIP
+// §6.1) that incentivizes agents to report their posture, and issuance
+// surfaces it via IsolationSelfReported. Only an un-wired repository excludes
+// the factor from the composite.
+func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) (float64, string) {
 	if c.isolationRepo == nil {
-		return 0.3 // Low baseline when no isolation data available
+		return 0.3, exclReasonNotWired
 	}
 
 	attestation, err := c.isolationRepo.GetLatest(agent.ID)
 	if err != nil || attestation == nil {
-		return 0.3 // No attestation submitted yet
+		return 0.3, "" // No attestation submitted yet: scored low baseline by design
 	}
 
 	// Use the pre-computed score from the attestation
-	return attestation.Score
+	return attestation.Score, ""
 }
 
-// calculateConfidence determines confidence level based on available data
-func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors) float64 {
+// calculateConfidence determines confidence level based on available data.
+// excluded is the AIP §6.1 exclusion set from calculateFactorsDetailed: a
+// factor that was excluded for lack of data contributes no confidence, and a
+// measured compliance/feedback factor now does (previously neither was
+// counted at all, so exclusion was invisible to confidence).
+func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors, excluded map[string]string) float64 {
 	// Count available data points (each real data source adds confidence)
 	dataPoints := 0.0
 	total := 9.0 // 9 factors
+
+	if c.snapshotRepo != nil {
+		if _, isExcluded := excluded["compliance"]; !isExcluded {
+			dataPoints++ // Real compliance snapshot measured
+		}
+	}
+	if c.userFeedbackRepo != nil {
+		if _, isExcluded := excluded["user_feedback"]; !isExcluded {
+			dataPoints++ // Real user feedback measured
+		}
+	}
 
 	// Base data points from agent properties
 	if agent.Status != "" {
