@@ -118,12 +118,20 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 		},
 	)
 
-	return c.JSON(fiber.Map{
+	resp := fiber.Map{
 		"agentId":      agentID,
 		"score":        score.Score,
 		"factors":      score.Factors,
 		"calculatedAt": score.LastCalculated,
-	})
+	}
+	// Fresh calculations know which factors had no data and were excluded
+	// from the composite under AIP §6.1 (weights redistributed). Surface
+	// them so consumers never read the placeholder factor values as
+	// measurements. Omitted entirely when every factor was measured.
+	if len(score.ExcludedFactors) > 0 {
+		resp["excludedFactors"] = score.ExcludedFactors
+	}
+	return c.JSON(resp)
 }
 
 // GetTrustScore returns current trust score for an agent

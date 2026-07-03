@@ -41,26 +41,26 @@ Implemented in `apps/backend/internal/application/trust_calculator.go`.
 
 ## Liveness Status
 
-Not every factor is wired to a live signal source in current AIM. Some factors require optional repositories that may not be configured in every deployment; one factor is currently hardcoded pending a feedback collection mechanism. The honest matrix:
+Not every factor is wired to a live signal source in every AIM deployment. Per AIP-SPEC §6.1, a factor with no data is **excluded from the composite and its weight redistributed proportionally** across the measured factors — it never contributes a fabricated neutral value. The honest matrix:
 
-| # | Factor | Status today | Default when not live |
+| # | Factor | Status today | When not live |
 |---|---|---|---|
-| 1 | Verification Status | **Live** — `verificationEventRepo.GetAgentStatistics` last 30 days; falls back to `agent.Status` proxy when no events exist | Status-based 0.0-1.0 |
-| 2 | Uptime & Availability | **Live** — derived from the same verification-event success rate, with a recency boost/penalty | Status-based 0.50-0.98 |
-| 3 | Action Success Rate | **Live** — `verificationEventRepo.GetAgentStatistics` success rate | Status-based 0.70-0.95 |
+| 1 | Verification Status | **Live** — `verificationEventRepo.GetAgentStatistics` last 30 days; falls back to `agent.Status` proxy when no events exist | Status-based 0.0-1.0 (always measured) |
+| 2 | Uptime & Availability | **Live** — derived from the same verification-event success rate, with a recency boost/penalty | Status-based 0.50-0.98 (always measured) |
+| 3 | Action Success Rate | **Live** — `verificationEventRepo.GetAgentStatistics` success rate | Status-based 0.70-0.95 (always measured) |
 | 4 | Security Alerts | **Live** — `alertRepo.GetUnacknowledgedByResourceID` + `capabilityRepo.GetViolationsByAgentID` (90-day window). Optional NanoMind TME score blends in at 30% influence when wired. | 1.0 (no penalties applied) |
-| 5 | Compliance Score | **Conditional** — requires `ComplianceSnapshotRepository` to be wired AND an AIM-framework snapshot to exist for the agent's organization | 0.5 neutral |
-| 6 | Age & History | **Live** — bucketed from `agent.CreatedAt` (<7d: 0.30, <30d: 0.50, <90d: 0.75, 90+: 1.0) | N/A |
-| 7 | Drift Detection | **Conditional** — requires `alertRepo` AND drift-type alerts (`AlertTypeConfigurationDrift`, `AlertMCPCapabilityDrift`) in the last 30 days | 0.5 neutral (when `alertRepo` is nil OR query errors) |
-| 8 | User Feedback | **Not implemented** — `calculateUserFeedback` hardcoded to return `0.5` pending a `UserFeedbackRepository` and rating-collection UI. TODO at `trust_calculator.go:471-490`. | 0.5 neutral |
-| 9 | Execution Isolation | **Conditional** — requires `IsolationAttestationRepository` to be wired AND the agent to have submitted a runtime-isolation attestation via the SDK | 0.3 low baseline (incentivizes attestation submission) |
+| 5 | Compliance Score | **Conditional** — requires `ComplianceSnapshotRepository` to be wired AND an AIM-framework snapshot to exist for the agent's organization | **Excluded** from the composite (weight redistributed); reported in `excludedFactors` |
+| 6 | Age & History | **Live** — bucketed from `agent.CreatedAt` (<7d: 0.30, <30d: 0.50, <90d: 0.75, 90+: 1.0) | N/A (always measured) |
+| 7 | Drift Detection | **Conditional** — requires `alertRepo`; a wired repo with zero drift alerts scores 1.0 (measured absence of drift) | **Excluded** when `alertRepo` is nil OR the agent-alert query errors |
+| 8 | User Feedback | **Conditional** — requires `UserFeedbackRepository` (wired in production `main.go`) AND at least one feedback row (`POST /agents/:id/feedback`) | **Excluded** when un-wired, on query error, or with zero feedback rows |
+| 9 | Execution Isolation | **Conditional** — requires `IsolationAttestationRepository` to be wired; the agent submits a runtime-isolation attestation via the SDK | 0.3 low baseline when wired but no attestation (deliberate incentive, stays in the composite); **excluded** only when the repository is un-wired |
 
 Implications:
 
-- A fresh agent in a default deployment computes its score primarily off Factors 1, 2, 3, 4, and 6 (live with real signals), with Factors 5, 7, 8, 9 contributing neutral or low defaults. That accounts for roughly 75% of the weighted total being live (25 + 15 + 15 + 15 + 5 = 75%) and 25% riding on defaults until the optional repos and feedback path land.
+- The composite is always a weighted mean over **measured** factors only: `score = Σ(weight × value for included) / Σ(weight for included)`. An agent with no compliance snapshot is scored on what was actually measured, not padded with a 0.5 placeholder.
+- Fresh calculations report the excluded factor names in the `excludedFactors` field of the trust-score response; the per-factor values for excluded factors are display placeholders, not measurements.
+- Exclusions caused by an un-wired repository or a failed query are logged as warnings (they indicate a deployment defect — production `main.go` wires all repositories); exclusions from genuinely absent data (no snapshot yet, no feedback yet) are silent, normal lifecycle states.
 - Reaching the higher trust bands (>0.85) requires either real signal in the conditional factors OR strong showings across the live ones.
-- If you see a trust score that looks generous against intuition, check whether the live factors are masking neutral defaults in the optional ones. The `factors` JSONB column on `trust_scores` records each factor's contribution; the dashboard breakdown surfaces them.
-- Factor 8 (User Feedback) will always read `0.5` until the feedback collection mechanism ships. Its 2% weight bounds the impact of this gap at ±0.01 on the overall score.
 
 ### Factor 1: Verification Status (25% weight)
 
