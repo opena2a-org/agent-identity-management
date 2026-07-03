@@ -177,13 +177,19 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{
+	resp := fiber.Map{
 		"agentId":      agentID,
 		"agentName":    agent.Name,
 		"score":        score.Score,
 		"factors":      score.Factors,
 		"calculatedAt": score.LastCalculated,
-	})
+	}
+	// Present on the calculated-on-the-fly path; stored scores predate the
+	// exclusion tracking and omit it.
+	if len(score.ExcludedFactors) > 0 {
+		resp["excludedFactors"] = score.ExcludedFactors
+	}
+	return c.JSON(resp)
 }
 
 // GetTrustScoreBreakdown returns detailed trust score breakdown with weights and contributions
@@ -262,7 +268,7 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 		"executionIsolation": score.Factors.ExecutionIsolation * weights["executionIsolation"],
 	}
 
-	return c.JSON(fiber.Map{
+	resp := fiber.Map{
 		"agentId":   agentID,
 		"agentName": agent.Name,
 		"overall":   score.Score,
@@ -281,7 +287,16 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 		"contributions": contributions,
 		"confidence":    score.Confidence,
 		"calculatedAt":  score.LastCalculated,
-	})
+	}
+	// Factors excluded from the composite under AIP §6.1: their entries in
+	// factors/contributions above are neutral placeholders, not measurements,
+	// and the published overall is min(renormalized, Σ contributions) — so
+	// Σ contributions can exceed overall when exclusions are present. Only
+	// available on the calculated-on-the-fly path; stored scores omit it.
+	if len(score.ExcludedFactors) > 0 {
+		resp["excludedFactors"] = score.ExcludedFactors
+	}
+	return c.JSON(resp)
 }
 
 // SubmitUserFeedback records an explicit user rating (1-5) for an agent. This is

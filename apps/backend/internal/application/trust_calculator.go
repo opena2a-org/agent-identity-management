@@ -180,8 +180,17 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		{"execution_isolation", factors.ExecutionIsolation},
 	}
 
-	var weightedSum, includedWeight float64
+	var weightedSum, includedWeight, imputedSum float64
 	for _, f := range contributions {
+		w, ok := weights[f.key]
+		if !ok {
+			// A key drift between contributions and weights would silently
+			// zero a factor; fail loudly instead.
+			return nil, fmt.Errorf("trust: factor %q has no weight entry", f.key)
+		}
+		// The neutral-imputed sum uses every factor at its struct value —
+		// for excluded factors that is the neutral display placeholder.
+		imputedSum += f.value * w
 		if reason, isExcluded := excluded[f.key]; isExcluded {
 			if reason != exclReasonNoData {
 				// Un-wired repository or query failure: a deployment defect in
@@ -190,13 +199,23 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 			}
 			continue
 		}
-		weightedSum += f.value * weights[f.key]
-		includedWeight += weights[f.key]
+		weightedSum += f.value * w
+		includedWeight += w
 	}
 
 	// Factors 1-4 and 6 always produce data (status-based fallbacks are part
 	// of their scoring functions), so includedWeight is at least 0.75.
 	score := weightedSum / includedWeight
+
+	// Anti-gaming ceiling: renormalization alone would hand an excluded
+	// factor the agent's own included average, so an org could RAISE a good
+	// agent's score by withholding compliance snapshots or never collecting
+	// feedback (no-data would outscore a measured 0.9). Cap the published
+	// composite at the neutral-imputed sum — a factor with no data can never
+	// help more than a neutral measurement would. Bad agents keep the honest
+	// renormalized value (exclusion no longer props them up toward neutral).
+	// With no exclusions both sums are identical and the cap is a no-op.
+	score = math.Min(score, imputedSum)
 
 	// Ensure score is within bounds [0, 1]
 	score = math.Max(0.0, math.Min(1.0, score))
@@ -207,8 +226,9 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 	}
 	sort.Strings(excludedNames)
 
-	// Calculate confidence based on available data
-	confidence := c.calculateConfidence(agent, factors)
+	// Calculate confidence based on available data; excluded factors count
+	// against it (an exclusion must not be confidence-free).
+	confidence := c.calculateConfidence(agent, factors, excluded)
 
 	return &domain.TrustScore{
 		ID:              uuid.New(),
@@ -667,11 +687,26 @@ func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) (floa
 	return attestation.Score, ""
 }
 
-// calculateConfidence determines confidence level based on available data
-func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors) float64 {
+// calculateConfidence determines confidence level based on available data.
+// excluded is the AIP §6.1 exclusion set from calculateFactorsDetailed: a
+// factor that was excluded for lack of data contributes no confidence, and a
+// measured compliance/feedback factor now does (previously neither was
+// counted at all, so exclusion was invisible to confidence).
+func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *domain.TrustScoreFactors, excluded map[string]string) float64 {
 	// Count available data points (each real data source adds confidence)
 	dataPoints := 0.0
 	total := 9.0 // 9 factors
+
+	if c.snapshotRepo != nil {
+		if _, isExcluded := excluded["compliance"]; !isExcluded {
+			dataPoints++ // Real compliance snapshot measured
+		}
+	}
+	if c.userFeedbackRepo != nil {
+		if _, isExcluded := excluded["user_feedback"]; !isExcluded {
+			dataPoints++ // Real user feedback measured
+		}
+	}
 
 	// Base data points from agent properties
 	if agent.Status != "" {

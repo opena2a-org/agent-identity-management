@@ -116,6 +116,12 @@ func TestATCIssuance_ConformanceByteMatch(t *testing.T) {
 				t.Fatalf("decoded capabilities diverge from pinned credential %s: got %d want %d",
 					fixture.Name, len(cred.Capabilities), len(want.Capabilities))
 			}
+			for i := range want.Capabilities {
+				if cred.Capabilities[i] != want.Capabilities[i] {
+					t.Fatalf("decoded capability %d diverges from pinned credential %s: got %q want %q",
+						i, fixture.Name, cred.Capabilities[i], want.Capabilities[i])
+				}
+			}
 		})
 	}
 }

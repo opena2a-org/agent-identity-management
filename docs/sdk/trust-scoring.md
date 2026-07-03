@@ -57,10 +57,18 @@ Not every factor is wired to a live signal source in every AIM deployment. Per A
 
 Implications:
 
-- The composite is always a weighted mean over **measured** factors only: `score = Σ(weight × value for included) / Σ(weight for included)`. An agent with no compliance snapshot is scored on what was actually measured, not padded with a 0.5 placeholder.
-- Fresh calculations report the excluded factor names in the `excludedFactors` field of the trust-score response; the per-factor values for excluded factors are display placeholders, not measurements.
-- Exclusions caused by an un-wired repository or a failed query are logged as warnings (they indicate a deployment defect — production `main.go` wires all repositories); exclusions from genuinely absent data (no snapshot yet, no feedback yet) are silent, normal lifecycle states.
+- The composite is a weighted mean over **measured** factors only, with an
+  anti-gaming ceiling: `score = min( Σ(w×v included)/Σ(w included), Σ(w×v all 9) )`
+  where excluded factors enter the second sum at their neutral placeholders.
+  An agent with no compliance snapshot is scored on what was actually measured —
+  but withholding data can never RAISE a score above what a neutral measurement
+  would give (otherwise never submitting a snapshot would outscore a measured
+  0.9 compliance). Poor agents get the honest renormalized value; exclusion no
+  longer props them up toward 0.5.
+- Fresh calculations report the excluded factor names in the `excludedFactors` field of the trust-score, calculate, and breakdown responses; the per-factor values for excluded factors are display placeholders, not measurements. With exclusions present, the breakdown's Σ contributions can exceed `overall` (contributions use the placeholder values).
+- Exclusions caused by an un-wired repository or a failed query are logged as warnings (they indicate a deployment defect — production `main.go` wires all repositories); exclusions from genuinely absent data (no snapshot yet, no feedback yet) are silent, normal lifecycle states. Excluded compliance/feedback also withhold their confidence contribution.
 - Reaching the higher trust bands (>0.85) requires either real signal in the conditional factors OR strong showings across the live ones.
+- If a trust score looks generous against intuition, check `excludedFactors` first: the score may be riding on fewer measured factors than the breakdown suggests.
 
 ### Factor 1: Verification Status (25% weight)
 

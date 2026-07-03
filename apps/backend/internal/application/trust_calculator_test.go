@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"math"
 	"math/big"
 	"testing"
 	"time"
@@ -922,7 +923,7 @@ func TestTrustCalculator_CalculateConfidence_FullData(t *testing.T) {
 		Uptime:             0.95,
 	}
 
-	confidence := calculator.calculateConfidence(agent, factors)
+	confidence := calculator.calculateConfidence(agent, factors, nil)
 
 	// Confidence should be in valid range
 	assert.True(t, confidence >= 0.0, "Confidence should be non-negative")
@@ -939,7 +940,7 @@ func TestTrustCalculator_CalculateConfidence_MinimalData(t *testing.T) {
 
 	factors := &domain.TrustScoreFactors{}
 
-	confidence := calculator.calculateConfidence(agent, factors)
+	confidence := calculator.calculateConfidence(agent, factors, nil)
 
 	// Agent with minimal data should have lower confidence
 	assert.True(t, confidence >= 0.0, "Confidence should be non-negative")
@@ -1625,16 +1626,22 @@ func compositionTestAgent(t *testing.T) (*TrustCalculator, *domain.Agent) {
 		CreatedAt:      time.Now().Add(-200 * 24 * time.Hour),
 	}
 
-	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
-	mockAlertRepo.On("GetUnacknowledgedByResourceID", agent.ID).Return([]*domain.Alert{}, nil).Maybe()
-	mockAlertRepo.On("GetByResourceID", agent.ID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
+	// Keyed on mock.Anything so a test can run the same agent through two
+	// independently-constructed calculators (measured vs withheld).
+	mockCapabilityRepo.On("GetViolationsByAgentID", mock.Anything, 500, 0).Return([]*domain.CapabilityViolation{}, 0, nil).Maybe()
+	mockAlertRepo.On("GetUnacknowledgedByResourceID", mock.Anything).Return([]*domain.Alert{}, nil).Maybe()
+	mockAlertRepo.On("GetByResourceID", mock.Anything, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
 
 	return calculator, agent
 }
 
-func TestTrustCalculator_Calculate_UnwiredFactors_ExcludedAndRenormalized(t *testing.T) {
-	// Compliance, user feedback, and execution isolation repos un-wired:
-	// their 0.10+0.02+0.10 weights must be redistributed, not scored 0.5/0.3.
+func TestTrustCalculator_Calculate_UnwiredFactors_ExcludedAndCapped(t *testing.T) {
+	// Compliance, user feedback, and execution isolation repos un-wired: their
+	// 0.10+0.02+0.10 weights are redistributed (AIP §6.1) — but for a GOOD
+	// agent pure renormalization would hand each excluded factor the agent's
+	// own high average, so withholding data would RAISE the score. The
+	// anti-gaming ceiling caps the published composite at the neutral-imputed
+	// sum: missing data can never help more than a neutral measurement would.
 	calculator, agent := compositionTestAgent(t)
 
 	score, err := calculator.Calculate(agent)
@@ -1646,18 +1653,60 @@ func TestTrustCalculator_Calculate_UnwiredFactors_ExcludedAndRenormalized(t *tes
 
 	f := score.Factors
 	includedWeight := 0.25 + 0.15 + 0.15 + 0.15 + 0.05 + 0.03
-	expected := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+	renormalized := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
 		f.SecurityAlerts*0.15 + f.Age*0.05 + f.DriftDetection*0.03) / includedWeight
-	assert.InDelta(t, expected, score.Score, 1e-9,
-		"composite must be the weighted mean over INCLUDED factors only (AIP §6.1)")
-
-	// The old fabricated-neutral behavior would have produced a strictly lower
-	// score for this all-good agent (0.5*0.12 + 0.3*0.10 dragging the sum).
-	legacy := f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+	imputed := f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
 		f.SecurityAlerts*0.15 + 0.5*0.10 + f.Age*0.05 + f.DriftDetection*0.03 +
 		0.5*0.02 + 0.3*0.10
-	assert.Greater(t, score.Score, legacy,
-		"renormalization must not let fabricated neutrals drag a fully-measured good agent")
+	assert.Greater(t, renormalized, imputed,
+		"precondition: for this all-good agent renormalization exceeds the neutral-imputed sum")
+	assert.InDelta(t, imputed, score.Score, 1e-9,
+		"the ceiling must bind: published composite = neutral-imputed sum, so withholding data cannot inflate the score")
+}
+
+func TestTrustCalculator_Calculate_BadAgentExclusions_NotProppedToNeutral(t *testing.T) {
+	// For a POOR agent the renormalized composite is BELOW the neutral-imputed
+	// sum, so the honest renormalized value is published — exclusion no longer
+	// props a bad agent up toward 0.5 the way the fabricated neutrals did.
+	mockCapabilityRepo := new(MockCapabilityRepository)
+	mockAlertRepo := new(TrustCalcMockAlertRepository)
+
+	calculator := NewTrustCalculator(
+		new(AgentServiceMockTrustScoreRepository), new(MockAPIKeyRepository),
+		new(AgentServiceMockAuditLogRepository), mockCapabilityRepo,
+		new(TrustCalcMockAgentRepository), mockAlertRepo)
+
+	// Revoked, brand-new agent: verification 0.0, uptime 0.5, success 0.7,
+	// age 0.3; drift measured 1.0; alerts factor dragged by violations. Its
+	// included average sits BELOW the neutral mix, so the renormalized
+	// composite is the smaller of the two and must be the one published.
+	agent := &domain.Agent{
+		ID:             uuid.New(),
+		OrganizationID: uuid.New(),
+		Status:         domain.AgentStatusRevoked,
+		UpdatedAt:      time.Now(),
+		CreatedAt:      time.Now(),
+	}
+
+	mockCapabilityRepo.On("GetViolationsByAgentID", agent.ID, 500, 0).Return([]*domain.CapabilityViolation{
+		{Severity: domain.ViolationSeverityCritical, CreatedAt: time.Now()},
+		{Severity: domain.ViolationSeverityCritical, CreatedAt: time.Now()},
+	}, 2, nil).Maybe()
+	mockAlertRepo.On("GetUnacknowledgedByResourceID", agent.ID).Return([]*domain.Alert{}, nil).Maybe()
+	mockAlertRepo.On("GetByResourceID", agent.ID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
+
+	score, err := calculator.Calculate(agent)
+	assert.NoError(t, err)
+
+	f := score.Factors
+	includedWeight := 0.25 + 0.15 + 0.15 + 0.15 + 0.05 + 0.03
+	renormalized := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+		f.SecurityAlerts*0.15 + f.Age*0.05 + f.DriftDetection*0.03) / includedWeight
+	imputed := renormalized*includedWeight + 0.5*0.10 + 0.5*0.02 + 0.3*0.10
+	assert.Less(t, renormalized, imputed,
+		"precondition: for this poor agent the neutral-imputed sum exceeds renormalization")
+	assert.InDelta(t, renormalized, score.Score, 1e-9,
+		"the honest renormalized composite must be published — neutrals no longer prop up a bad agent")
 }
 
 func TestTrustCalculator_Calculate_WiredNoData_Excluded(t *testing.T) {
@@ -1684,10 +1733,34 @@ func TestTrustCalculator_Calculate_WiredNoData_Excluded(t *testing.T) {
 	f := score.Factors
 	assert.Equal(t, 0.3, f.ExecutionIsolation)
 	includedWeight := 0.25 + 0.15 + 0.15 + 0.15 + 0.05 + 0.03 + 0.10
-	expected := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
+	renormalized := (f.VerificationStatus*0.25 + f.Uptime*0.15 + f.SuccessRate*0.15 +
 		f.SecurityAlerts*0.15 + f.Age*0.05 + f.DriftDetection*0.03 +
 		f.ExecutionIsolation*0.10) / includedWeight
-	assert.InDelta(t, expected, score.Score, 1e-9)
+	imputed := renormalized*includedWeight + 0.5*0.10 + 0.5*0.02
+	assert.InDelta(t, math.Min(renormalized, imputed), score.Score, 1e-9,
+		"published composite is min(renormalized, neutral-imputed)")
+}
+
+func TestTrustCalculator_Calculate_WithholdingCannotBeatMeasuredGood(t *testing.T) {
+	// The gaming vector the ceiling exists for: an org that never submits a
+	// compliance snapshot must not outscore the same agent with a MEASURED
+	// good (0.9) compliance snapshot.
+	calcMeasured, agent := compositionTestAgent(t)
+	calcMeasured.SetSnapshotRepo(&stubSnapshotRepo{snapshot: &domain.ComplianceSnapshot{Score: 90}})
+
+	calcWithheld, _ := compositionTestAgent(t)
+	calcWithheld.SetSnapshotRepo(&stubSnapshotRepo{snapshot: nil})
+	// Same agent identity through both calculators.
+	measured, err := calcMeasured.Calculate(agent)
+	assert.NoError(t, err)
+	withheld, err := calcWithheld.Calculate(agent)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"execution_isolation", "user_feedback"}, measured.ExcludedFactors,
+		"compliance must be measured (included) on the snapshot-submitting side")
+	assert.Contains(t, withheld.ExcludedFactors, "compliance")
+	assert.Greater(t, measured.Score, withheld.Score,
+		"a measured 0.9 compliance must outscore withheld compliance data")
 }
 
 func TestTrustCalculator_Calculate_FullyWiredWithData_NoExclusions(t *testing.T) {

@@ -259,11 +259,16 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
+      # The test t.Skips when ATX_CONFORMANCE_DIR is unset (so local
+      # `go test ./...` needs no suite checkout) — the grep guards against
+      # this step ever passing on a silent skip if the env line is dropped.
       - name: Go issuance byte-match vs pinned fixtures
         working-directory: apps/backend
         env:
           ATX_CONFORMANCE_DIR: /tmp/atx-conformance/fixtures
-        run: go test ./internal/infrastructure/registry/ -run TestATCIssuance_ConformanceByteMatch -v
+        run: |
+          go test ./internal/infrastructure/registry/ -run TestATCIssuance_ConformanceByteMatch -v | tee /tmp/atc-conformance.out
+          grep -q -- "--- PASS: TestATCIssuance_ConformanceByteMatch/baseline-valid.json" /tmp/atc-conformance.out
 
   frontend:
     name: Frontend (Next.js)

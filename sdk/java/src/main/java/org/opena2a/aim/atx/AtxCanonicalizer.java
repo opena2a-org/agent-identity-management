@@ -115,12 +115,18 @@ public final class AtxCanonicalizer {
 
     /**
      * Presence-based rule for the optional declaredPurpose member (atx-spec
-     * §1.3a.2 rule 5, mirroring the reference verifiers'
-     * projectDeclaredPurposeV11): an absent purpose — missing, null, or an
-     * empty object {} — is OMITTED from the TBS, keeping a no-purpose
-     * credential byte-identical to one issued before the field existed. A
-     * present, non-empty object passes through verbatim and JCS
-     * re-canonicalizes it.
+     * §1.3a.2 rule 5): an absent purpose — missing, null, or an empty object
+     * {} — is OMITTED from the TBS, keeping a no-purpose credential
+     * byte-identical to one issued before the field existed. A present,
+     * non-empty value passes through verbatim and JCS re-canonicalizes it.
+     *
+     * <p>Known cross-implementation edge (no pinned fixture yet): this
+     * tree-level check treats a whitespace-padded empty object like {@code
+     * "{ }"} as empty (omitted), while the Go reference verifier's raw-string
+     * check passes it through as {@code {}}; the Python reference omits any
+     * non-dict value that Go and this implementation include. Alignment and
+     * fixtures for these inputs are tracked in the atx-conformance suite —
+     * this implementation matches all 15 pinned fixtures.
      */
     private static com.fasterxml.jackson.databind.JsonNode projectDeclaredPurpose(
             com.fasterxml.jackson.databind.JsonNode dp) {
