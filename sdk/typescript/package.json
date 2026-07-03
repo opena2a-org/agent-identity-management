@@ -11,6 +11,11 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
+    "./arp": {
+      "types": "./dist/arp/index.d.ts",
+      "import": "./dist/arp/index.mjs",
+      "require": "./dist/arp/index.js"
+    },
     "./express": {
       "types": "./dist/integrations/express.d.ts",
       "import": "./dist/integrations/express.mjs",
@@ -24,6 +29,7 @@
   },
   "files": [
     "dist",
+    "arp",
     "README.md",
     "LICENSE"
   ],
@@ -65,13 +71,13 @@
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
-    "@opena2a/atx-verify": "0.2.0"
-  },
-  "optionalDependencies": {
-    "@noble/post-quantum": "^0.2.1"
+    "@noble/post-quantum": "^0.2.1",
+    "@opena2a/atx-verify": "0.2.0",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",

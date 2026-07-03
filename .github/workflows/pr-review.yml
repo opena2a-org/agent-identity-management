@@ -30,10 +30,18 @@ jobs:
         id: context
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          # PR metadata
-          gh pr diff "$PR_NUMBER" > /tmp/pr_diff.txt
-          gh pr diff "$PR_NUMBER" --name-only > /tmp/changed_files.txt
+          # PR metadata. GitHub's diff API rejects PRs over 20,000 changed
+          # lines (HTTP 406 "diff exceeded the maximum number of lines"), so
+          # fall back to building the same diff locally — the checkout is
+          # full-history and HEAD is the PR merge ref.
+          if ! gh pr diff "$PR_NUMBER" > /tmp/pr_diff.txt; then
+            git diff "origin/${BASE_REF}...HEAD" > /tmp/pr_diff.txt
+          fi
+          if ! gh pr diff "$PR_NUMBER" --name-only > /tmp/changed_files.txt; then
+            git diff --name-only "origin/${BASE_REF}...HEAD" > /tmp/changed_files.txt
+          fi
           gh pr view "$PR_NUMBER" --json title -q '.title' > /tmp/pr_title.txt
           gh pr view "$PR_NUMBER" --json body -q '.body' | head -c 2000 > /tmp/pr_body.txt
 

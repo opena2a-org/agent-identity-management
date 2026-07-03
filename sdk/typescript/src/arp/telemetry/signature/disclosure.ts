@@ -1,0 +1,83 @@
+/**
+ * Install-time disclosure (G7).
+ *
+ * A default-on / opt-out posture is only ethical if the customer is told plainly,
+ * at first run, exactly what is shared, why, and how to turn it off. This text is
+ * intentionally plain and non-marketing (CPO/legal voice). It is shown once (a
+ * marker is written after the first show) and is always available on demand via
+ * `arp telemetry disclosure`.
+ */
+
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { opena2aHome, homePath, DISCLOSURE_MARKER_FILE } from './paths';
+import { auditLogPath } from './audit-log';
+import { isOptedOut, type SignatureTelemetryConfig } from './config';
+
+/** Build the disclosure text. Reflects the CURRENT opt-out state for honesty. */
+export function disclosureText(config?: SignatureTelemetryConfig): string {
+  const optedOut = isOptedOut(config);
+  const status = optedOut
+    ? 'Status: OFF. You have opted out; nothing is shared.'
+    : 'Status: ON by default. Structural signatures are shared (see below).';
+
+  return [
+    'OpenA2A community threat intelligence',
+    '----------------------------------------',
+    status,
+    '',
+    'What is shared: only the STRUCTURAL SHAPE of an anomalous behavior the',
+    'runtime observed — a technique class, an action/target category, an outcome,',
+    'a severity, and a one-way hash of those tokens. Reports are signed so the',
+    'registry can recognize the same attack shape seen across deployments.',
+    '',
+    'What is NEVER shared: prompts, model responses, tool arguments, file',
+    'contents or paths, command lines, environment values, secrets, IP addresses,',
+    'hostnames, account ids, or the names of your tools, agents, or models.',
+    '',
+    'Why: shared structural signatures let an attack first seen at one deployment',
+    'protect every other deployment. Collection is off until you have visibility:',
+    'every payload is written to a local audit log BEFORE it is sent, so you can',
+    'verify exactly what left your machine.',
+    '',
+    `Audit log:  ${auditLogPath()}`,
+    'Review it:  arp telemetry log',
+    'Status:     arp telemetry status',
+    '',
+    'How to turn it off (any one):',
+    '  - arp telemetry opt-out',
+    '  - set OPENA2A_TELEMETRY_OPTOUT=1',
+    '  - signatureTelemetry.enabled: false in your ARP config',
+    'Opting out disables ALL OpenA2A telemetry and purges shared signatures',
+    'on the registry (right-to-delete).',
+  ].join('\n');
+}
+
+/** Whether the one-time disclosure marker has been written. */
+export function hasShownDisclosure(): boolean {
+  return existsSync(homePath(DISCLOSURE_MARKER_FILE));
+}
+
+/** Persist the one-time disclosure marker. */
+export function markDisclosureShown(): void {
+  const home = opena2aHome();
+  if (!existsSync(home)) mkdirSync(home, { recursive: true });
+  writeFileSync(homePath(DISCLOSURE_MARKER_FILE), new Date().toISOString() + '\n', { mode: 0o600 });
+}
+
+/**
+ * Show the disclosure once (on first run). Returns true if it was shown this
+ * call. Always safe to call; never throws.
+ */
+export function maybeShowDisclosure(
+  print: (msg: string) => void = (m) => console.log(m),
+  config?: SignatureTelemetryConfig,
+): boolean {
+  try {
+    if (hasShownDisclosure()) return false;
+    print('\n' + disclosureText(config) + '\n');
+    markDisclosureShown();
+    return true;
+  } catch {
+    return false;
+  }
+}

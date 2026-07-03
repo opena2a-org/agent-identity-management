@@ -3,10 +3,15 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    'arp/index': 'src/arp/index.ts',
     'integrations/express': 'src/integrations/express.ts',
     'integrations/fastify': 'src/integrations/fastify.ts',
   },
   format: ['cjs', 'esm'],
+  // The arp module resolves its dual-format `require` via
+  // createRequire(import.meta.url); shims provide import.meta.url in the CJS
+  // build (and are inert for source that never references them).
+  shims: true,
   dts: true,
   splitting: false,
   sourcemap: true,

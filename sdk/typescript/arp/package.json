@@ -1,0 +1,7 @@
+{
+  "//": "Folder stub so tooling using legacy node10 module resolution (which ignores the exports map) can resolve '@opena2a/aim-sdk/arp'. Node itself resolves the subpath through the root exports map.",
+  "main": "../dist/arp/index.js",
+  "module": "../dist/arp/index.mjs",
+  "types": "../dist/arp/index.d.ts",
+  "sideEffects": false
+}
