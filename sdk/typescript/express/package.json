@@ -1,0 +1,7 @@
+{
+  "//": "Folder stub so tooling using legacy node10 module resolution (which ignores the exports map) can resolve '@opena2a/aim-sdk/express'. Node itself resolves the subpath through the root exports map.",
+  "main": "../dist/integrations/express.js",
+  "module": "../dist/integrations/express.mjs",
+  "types": "../dist/integrations/express.d.ts",
+  "sideEffects": false
+}

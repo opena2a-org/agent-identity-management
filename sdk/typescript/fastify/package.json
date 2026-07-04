@@ -1,0 +1,7 @@
+{
+  "//": "Folder stub so tooling using legacy node10 module resolution (which ignores the exports map) can resolve '@opena2a/aim-sdk/fastify'. Node itself resolves the subpath through the root exports map.",
+  "main": "../dist/integrations/fastify.js",
+  "module": "../dist/integrations/fastify.mjs",
+  "types": "../dist/integrations/fastify.d.ts",
+  "sideEffects": false
+}

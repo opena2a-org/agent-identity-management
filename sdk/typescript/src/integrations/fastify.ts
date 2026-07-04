@@ -9,6 +9,7 @@ import type {
   FastifyPluginCallback,
   preHandlerAsyncHookHandler,
 } from 'fastify';
+import fp from 'fastify-plugin';
 import { AIMClient } from '../client/AIMClient';
 import type { AIMClientConfig, VerifyActionOptions } from '../types';
 import { ActionDeniedError, AuthenticationError } from '../exceptions';
@@ -35,23 +36,7 @@ export interface AIMPluginOptions extends AIMClientConfig {
   skipPaths?: string[];
 }
 
-/**
- * AIM Fastify Plugin
- *
- * @example
- * ```typescript
- * import Fastify from 'fastify';
- * import { aimPlugin } from '@opena2a/aim-sdk/fastify';
- *
- * const fastify = Fastify();
- *
- * await fastify.register(aimPlugin, {
- *   baseUrl: 'https://aim.example.com',
- *   apiKey: 'your-api-key',
- * });
- * ```
- */
-export const aimPlugin: FastifyPluginCallback<AIMPluginOptions> = (
+const aimPluginCallback: FastifyPluginCallback<AIMPluginOptions> = (
   fastify: FastifyInstance,
   options: AIMPluginOptions,
   done: (err?: Error) => void
@@ -109,6 +94,38 @@ export const aimPlugin: FastifyPluginCallback<AIMPluginOptions> = (
 
   done();
 };
+
+/**
+ * AIM Fastify Plugin
+ *
+ * Wrapped with fastify-plugin: without the skip-override wrap, everything the
+ * plugin registers (decorateRequest, the onRequest hook, the error handler)
+ * stays inside the plugin's own encapsulation context and never applies to
+ * routes the user defines — verifyAction then fails every request with
+ * "AIM plugin not initialized".
+ *
+ * @example
+ * ```typescript
+ * import Fastify from 'fastify';
+ * import { aimPlugin } from '@opena2a/aim-sdk/fastify';
+ *
+ * const fastify = Fastify();
+ *
+ * await fastify.register(aimPlugin, {
+ *   baseUrl: 'https://aim.example.com',
+ *   apiKey: 'your-api-key',
+ * });
+ * ```
+ */
+export const aimPlugin = fp(aimPluginCallback, {
+  // This range is metadata that fastify itself validates against its own
+  // version at register time; it is NOT a fastify-plugin version constraint.
+  // fastify-plugin@6 is dependency-free and declares no peerDependencies, so
+  // it imposes nothing on which fastify major the consumer runs. Both peer
+  // majors are covered by the register-matrix tests in fastify.test.ts.
+  fastify: '4.x || 5.x',
+  name: '@opena2a/aim-sdk',
+});
 
 /**
  * Create a preHandler hook for action verification
