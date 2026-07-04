@@ -432,9 +432,23 @@ describe('Fastify exports', () => {
 // being trapped in the plugin's own child context. These register the plugin
 // through a REAL Fastify instance and exercise routes defined on the root
 // instance — the way the README tells users to wire it.
-describe('aimPlugin through fastify.register (real instance)', () => {
+//
+// Both peer majors are exercised: 'fastify' resolves the v5 devDependency,
+// 'fastify4' is an npm alias for fastify@^4. fastify-plugin@6 declares no
+// peerDependencies — the '4.x || 5.x' range passed to fp() is validated by
+// fastify itself at register time, so this matrix is what actually proves
+// the peer range in package.json.
+describe.each([
+  ['fastify 5', 'fastify'],
+  ['fastify 4', 'fastify4'],
+])('aimPlugin through %s register (real instance)', (_label, fastifyModule) => {
+  // Non-literal specifier: resolved at runtime (both aliases are installed),
+  // and TypeScript does not demand declarations for the alias.
+  const loadFastify = async () =>
+    ((await import(fastifyModule)) as { default: typeof import('fastify').default }).default;
+
   it('populates request.aim on routes registered outside the plugin', async () => {
-    const { default: Fastify } = await import('fastify');
+    const Fastify = await loadFastify();
     const app = Fastify();
     await app.register(aimPlugin, { baseUrl: 'http://localhost:9' });
     app.get('/whoami', async (request) => ({
@@ -450,7 +464,7 @@ describe('aimPlugin through fastify.register (real instance)', () => {
   });
 
   it('verifyAction preHandler works on a root-instance route (was 500 "AIM plugin not initialized")', async () => {
-    const { default: Fastify } = await import('fastify');
+    const Fastify = await loadFastify();
     const app = Fastify();
     await app.register(aimPlugin, { baseUrl: 'http://localhost:9' });
     app.post(
@@ -467,7 +481,7 @@ describe('aimPlugin through fastify.register (real instance)', () => {
   });
 
   it('maps ActionDeniedError thrown by a root-instance handler to 403', async () => {
-    const { default: Fastify } = await import('fastify');
+    const Fastify = await loadFastify();
     const app = Fastify();
     await app.register(aimPlugin, { baseUrl: 'http://localhost:9' });
     app.get('/deny', async () => {

@@ -118,6 +118,11 @@ const aimPluginCallback: FastifyPluginCallback<AIMPluginOptions> = (
  * ```
  */
 export const aimPlugin = fp(aimPluginCallback, {
+  // This range is metadata that fastify itself validates against its own
+  // version at register time; it is NOT a fastify-plugin version constraint.
+  // fastify-plugin@6 is dependency-free and declares no peerDependencies, so
+  // it imposes nothing on which fastify major the consumer runs. Both peer
+  // majors are covered by the register-matrix tests in fastify.test.ts.
   fastify: '4.x || 5.x',
   name: '@opena2a/aim-sdk',
 });
