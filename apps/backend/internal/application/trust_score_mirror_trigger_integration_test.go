@@ -42,27 +42,35 @@ func TestTrustScoreMirrorTrigger_InsertSyncsAgentCache(t *testing.T) {
 	})
 
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "trust-score-mirror-test-org-"+agentID.String()[:8])
+		`INSERT INTO organizations (id, name, domain, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW())`,
+		orgID, "trust-score-mirror-test-org-"+agentID.String()[:8],
+		"trust-score-mirror-test-"+agentID.String()[:8]+".test")
+	require.NoError(t, err)
+	userID := uuid.New()
+	t.Cleanup(func() { _, _ = db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID) })
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO users (id, organization_id, email, name, provider, provider_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, 'trust-score-mirror-test-user', 'test', $4, NOW(), NOW())`,
+		userID, orgID, "trust-score-mirror-test-"+agentID.String()[:8]+"@test.invalid",
+		"trust-score-mirror-test-"+userID.String()[:8])
 	require.NoError(t, err)
 
 	// Agent starts with a stale cache value of 0.500.
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.500, NOW(), NOW())`,
-		agentID, orgID, "trust-score-mirror-test-agent-"+agentID.String()[:8])
+		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $3, 'ai_agent', 'verified', 0.500, $4, NOW(), NOW())`,
+		agentID, orgID, "trust-score-mirror-test-agent-"+agentID.String()[:8], userID)
 	require.NoError(t, err)
 
 	// INSERT a new score row. The trigger must mirror to agents.trust_score.
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO trust_scores
 		   (id, agent_id, score,
-		    verification_status, certificate_validity, repository_quality,
-		    documentation_score, community_trust, security_audit,
-		    update_frequency, age_score, confidence,
-		    last_calculated, created_at)
-		 VALUES (gen_random_uuid(), $1, 0.823,
+		    verification_status, uptime, success_rate, security_alerts,
+		    compliance, age, drift_detection, user_feedback,
+		    confidence, last_calculated, created_at)
+		 VALUES (gen_random_uuid(), $1, 0.820,
 		         0.9, 0.8, 0.7, 0.6, 0.85, 0.9, 0.7, 0.8, 0.95,
 		         NOW(), NOW())`,
 		agentID)
@@ -73,7 +81,9 @@ func TestTrustScoreMirrorTrigger_InsertSyncsAgentCache(t *testing.T) {
 		`SELECT trust_score FROM agents WHERE id = $1`, agentID,
 	).Scan(&agentScore)
 	require.NoError(t, err)
-	require.InDelta(t, 0.823, agentScore, 0.001,
+	// agents.trust_score carries two fractional digits; keep the fixture
+	// representable so the mirrored value compares exactly.
+	require.InDelta(t, 0.820, agentScore, 0.001,
 		"trigger must mirror trust_scores.score onto agents.trust_score on INSERT")
 }
 
@@ -101,14 +111,23 @@ func TestTrustScoreMirrorTrigger_UpdateSyncsLatestOnly(t *testing.T) {
 	})
 
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "trust-score-update-test-org-"+agentID.String()[:8])
+		`INSERT INTO organizations (id, name, domain, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW())`,
+		orgID, "trust-score-update-test-org-"+agentID.String()[:8],
+		"trust-score-update-test-"+agentID.String()[:8]+".test")
+	require.NoError(t, err)
+	userID := uuid.New()
+	t.Cleanup(func() { _, _ = db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID) })
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO users (id, organization_id, email, name, provider, provider_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, 'trust-score-update-test-user', 'test', $4, NOW(), NOW())`,
+		userID, orgID, "trust-score-update-test-"+agentID.String()[:8]+"@test.invalid",
+		"trust-score-update-test-"+userID.String()[:8])
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.500, NOW(), NOW())`,
-		agentID, orgID, "trust-score-update-test-agent-"+agentID.String()[:8])
+		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $3, 'ai_agent', 'verified', 0.500, $4, NOW(), NOW())`,
+		agentID, orgID, "trust-score-update-test-agent-"+agentID.String()[:8], userID)
 	require.NoError(t, err)
 
 	// Seed two trust_scores rows: an older one and a newer one.
@@ -117,8 +136,8 @@ func TestTrustScoreMirrorTrigger_UpdateSyncsLatestOnly(t *testing.T) {
 	olderCreatedAt := time.Now().UTC().Add(-1 * time.Hour)
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO trust_scores
-		   (id, agent_id, score, verification_status, certificate_validity, repository_quality,
-		    documentation_score, community_trust, security_audit, update_frequency, age_score,
+		   (id, agent_id, score, verification_status, uptime, success_rate,
+		    security_alerts, compliance, age, drift_detection, user_feedback,
 		    confidence, last_calculated, created_at)
 		 VALUES ($1, $2, 0.600, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.9, $3, $3)`,
 		olderID, agentID, olderCreatedAt)
@@ -127,8 +146,8 @@ func TestTrustScoreMirrorTrigger_UpdateSyncsLatestOnly(t *testing.T) {
 	// Newer row inserts; trigger fires; cache moves to 0.900.
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO trust_scores
-		   (id, agent_id, score, verification_status, certificate_validity, repository_quality,
-		    documentation_score, community_trust, security_audit, update_frequency, age_score,
+		   (id, agent_id, score, verification_status, uptime, success_rate,
+		    security_alerts, compliance, age, drift_detection, user_feedback,
 		    confidence, last_calculated, created_at)
 		 VALUES ($1, $2, 0.900, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.95, NOW(), NOW())`,
 		newerID, agentID)

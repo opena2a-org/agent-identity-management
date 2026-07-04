@@ -2,9 +2,11 @@ package repository
 
 import (
 	"database/sql"
-	"github.com/google/uuid"
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 type TrustScoreRepository struct {
@@ -16,15 +18,17 @@ func NewTrustScoreRepository(db *sql.DB) *TrustScoreRepository {
 }
 
 func (r *TrustScoreRepository) Create(score *domain.TrustScore) error {
-	// 8-factor trust scoring system
+	// 9-factor trust scoring system (execution_isolation column: migration 090;
+	// excluded_factors column: migration 103)
 	query := `
 		INSERT INTO trust_scores (
 			id, agent_id, score,
 			verification_status, uptime, success_rate, security_alerts,
 			compliance, age, drift_detection, user_feedback,
+			execution_isolation, excluded_factors,
 			confidence, last_calculated, created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 
 	if score.ID == uuid.Nil {
@@ -49,6 +53,8 @@ func (r *TrustScoreRepository) Create(score *domain.TrustScore) error {
 		score.Factors.Age,
 		score.Factors.DriftDetection,
 		score.Factors.UserFeedback,
+		score.Factors.ExecutionIsolation,
+		pq.Array(excludedOrEmpty(score.ExcludedFactors)),
 		score.Confidence,
 		score.LastCalculated,
 		score.CreatedAt,
@@ -56,17 +62,27 @@ func (r *TrustScoreRepository) Create(score *domain.TrustScore) error {
 	return err
 }
 
+// excludedOrEmpty keeps the NOT NULL excluded_factors column honest: a nil
+// slice means "all nine factors measured" and is stored as the empty array.
+func excludedOrEmpty(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
+}
+
 func (r *TrustScoreRepository) GetByAgent(agentID uuid.UUID) (*domain.TrustScore, error) {
 	return r.GetLatest(agentID)
 }
 
 func (r *TrustScoreRepository) GetLatest(agentID uuid.UUID) (*domain.TrustScore, error) {
-	// 8-factor trust scoring system
+	// 9-factor trust scoring system
 	query := `
 		SELECT
 			id, agent_id, score,
 			verification_status, uptime, success_rate, security_alerts,
 			compliance, age, drift_detection, user_feedback,
+			execution_isolation, excluded_factors,
 			confidence, last_calculated, created_at
 		FROM trust_scores
 		WHERE agent_id = $1
@@ -87,6 +103,8 @@ func (r *TrustScoreRepository) GetLatest(agentID uuid.UUID) (*domain.TrustScore,
 		&score.Factors.Age,
 		&score.Factors.DriftDetection,
 		&score.Factors.UserFeedback,
+		&score.Factors.ExecutionIsolation,
+		pq.Array(&score.ExcludedFactors),
 		&score.Confidence,
 		&score.LastCalculated,
 		&score.CreatedAt,
@@ -99,12 +117,13 @@ func (r *TrustScoreRepository) GetLatest(agentID uuid.UUID) (*domain.TrustScore,
 }
 
 func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*domain.TrustScore, error) {
-	// 8-factor trust scoring system
+	// 9-factor trust scoring system
 	query := `
 		SELECT
 			id, agent_id, score,
 			verification_status, uptime, success_rate, security_alerts,
 			compliance, age, drift_detection, user_feedback,
+			execution_isolation, excluded_factors,
 			confidence, last_calculated, created_at
 		FROM trust_scores
 		WHERE agent_id = $1
@@ -133,6 +152,8 @@ func (r *TrustScoreRepository) GetHistory(agentID uuid.UUID, limit int) ([]*doma
 			&score.Factors.Age,
 			&score.Factors.DriftDetection,
 			&score.Factors.UserFeedback,
+			&score.Factors.ExecutionIsolation,
+			pq.Array(&score.ExcludedFactors),
 			&score.Confidence,
 			&score.LastCalculated,
 			&score.CreatedAt,

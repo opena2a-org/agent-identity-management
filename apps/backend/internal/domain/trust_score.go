@@ -48,8 +48,10 @@ type TrustScore struct {
 	// AIP-SPEC §6.1 composition rule (no data or un-wired source; their
 	// weights are redistributed proportionally across measured factors). The
 	// corresponding Factors fields carry neutral display placeholders, not
-	// measurements. Sorted; populated on fresh calculations only — the field
-	// is not persisted, so scores read back from storage omit it.
+	// measurements. Sorted. Persisted in trust_scores.excluded_factors
+	// (migration 103) so a stored capped or renormalized composite is
+	// reproducible from its row; rows predating the migration read back as
+	// empty (all factors treated as measured).
 	ExcludedFactors []string `json:"excludedFactors,omitempty"`
 
 	Confidence     float64   `json:"confidence"` // 0-1
