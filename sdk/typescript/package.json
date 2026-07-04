@@ -30,6 +30,8 @@
   "files": [
     "dist",
     "arp",
+    "express",
+    "fastify",
     "README.md",
     "LICENSE"
   ],
@@ -73,6 +75,7 @@
     "@noble/ed25519": "^2.1.0",
     "@noble/post-quantum": "^0.2.1",
     "@opena2a/atx-verify": "0.2.0",
+    "fastify-plugin": "^6.0.0",
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {

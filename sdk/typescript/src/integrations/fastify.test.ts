@@ -426,3 +426,62 @@ describe('Fastify exports', () => {
     expect(AIMClient).toBeDefined();
   });
 });
+
+// Regression tests for the encapsulation defect: the mocked-instance tests
+// above invoke the plugin function directly, which cannot catch decorations
+// being trapped in the plugin's own child context. These register the plugin
+// through a REAL Fastify instance and exercise routes defined on the root
+// instance — the way the README tells users to wire it.
+describe('aimPlugin through fastify.register (real instance)', () => {
+  it('populates request.aim on routes registered outside the plugin', async () => {
+    const { default: Fastify } = await import('fastify');
+    const app = Fastify();
+    await app.register(aimPlugin, { baseUrl: 'http://localhost:9' });
+    app.get('/whoami', async (request) => ({
+      hasClient: Boolean(request.aim?.client),
+      verified: request.aim?.verified ?? null,
+    }));
+
+    const res = await app.inject({ method: 'GET', url: '/whoami' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ hasClient: true, verified: false });
+    await app.close();
+  });
+
+  it('verifyAction preHandler works on a root-instance route (was 500 "AIM plugin not initialized")', async () => {
+    const { default: Fastify } = await import('fastify');
+    const app = Fastify();
+    await app.register(aimPlugin, { baseUrl: 'http://localhost:9' });
+    app.post(
+      '/api/data',
+      { preHandler: verifyAction('data:write') },
+      async () => ({ success: true })
+    );
+
+    const res = await app.inject({ method: 'POST', url: '/api/data' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ success: true });
+    await app.close();
+  });
+
+  it('maps ActionDeniedError thrown by a root-instance handler to 403', async () => {
+    const { default: Fastify } = await import('fastify');
+    const app = Fastify();
+    await app.register(aimPlugin, { baseUrl: 'http://localhost:9' });
+    app.get('/deny', async () => {
+      throw new ActionDeniedError('file:delete', 'trust score below threshold', 0.2);
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/deny' });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({
+      error: 'Action denied',
+      action: 'file:delete',
+      reason: 'trust score below threshold',
+    });
+    await app.close();
+  });
+});

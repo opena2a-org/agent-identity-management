@@ -57,7 +57,7 @@ console.log(`Trust score: ${result.trustScore}`);
 
 ```typescript
 import express from 'express';
-import { createAIMMiddleware, verifyAction } from '@opena2a/aim-sdk/express';
+import { createAIMMiddleware, verifyAction, aimErrorHandler } from '@opena2a/aim-sdk/express';
 
 const app = express();
 
@@ -81,6 +81,11 @@ app.get('/api/profile', (req, res) => {
   const { agentId, trustScore } = req.aim ?? {};
   res.json({ agentId, trustScore });
 });
+
+// Optional: map SDK errors thrown in later handlers to HTTP responses
+// (ActionDeniedError -> 403, AuthenticationError -> 401). aimErrorHandler IS
+// the four-argument handler — pass it to app.use, do not call it.
+app.use(aimErrorHandler);
 ```
 
 ## Fastify Integration
@@ -173,9 +178,13 @@ The SDK can correlate *why* a blocked agent action happened by joining three
 signals around one verified action: the authorization outcome (an observed
 fact), the classified intent, and the injection cause (both inferences). The
 full **correlated record** is authoritative and stays on the machine; only an
-anonymized **shared indicator** is ever uploaded.
+anonymized **shared indicator** is ever uploaded. This section covers the
+causal-denial channel only — the runtime-protection module ships a separate
+structural-signature channel that is **on by default**; see the Runtime
+Protection section for its scope and opt-out.
 
-Telemetry is **off by default** and gated by two independent opt-ins:
+The causal-denial channel is **off by default** and gated by two independent
+opt-ins:
 
 1. **Capture** (`telemetry.enabled`) — mints a correlation ID per `verifyAction`,
    assembles records, and appends them to a local log at
@@ -287,6 +296,33 @@ to "no classification" — it never fabricates a label and never blocks.
 detection outputs flow through the `telemetry.detection` seam into the
 correlated record; they never enter `verifyAction`'s allow/deny decision.
 
+**Structural signature telemetry (on by default, opt-out).** Unlike the
+opt-in causal-denial channel above, the ARP engine shares **structural attack
+signatures** by default: when a detection fires, the structural shape of the
+event sequence — technique identifier, event-type sequence, severity, and a
+one-way hash of structural tokens — is signed and reported to the OpenA2A
+registry (`https://api.oa2a.org`), so an attack shape first seen at one
+deployment can protect others. Prompts, model responses, tool arguments, file
+contents or paths, command lines, environment values, secrets, IP addresses,
+hostnames, and account, tool, agent, and model names are never shared. A
+one-time disclosure is printed before first collection, and every payload is
+appended to a local audit log (`~/.opena2a/telemetry-audit.log`, JSONL) before
+it is sent. Opt out with any one of:
+
+- `OPENA2A_TELEMETRY_OPTOUT=1` (or `ARP_TELEMETRY_DISABLED=1`) in the
+  environment,
+- `signatureTelemetry: { enabled: false }` in your ARP config, or
+- `writeOptOutMarker()` from `@opena2a/aim-sdk/arp`, which persists
+  `~/.opena2a/telemetry-optout` across processes.
+
+Any one of these is the runtime-protection module's master switch: it disables
+every telemetry channel the module can produce (structural signatures and the
+opt-in legacy GTIN runtime channel). The causal-denial channel above is
+controlled solely by its own `telemetry` client config and is off unless you
+enabled it. To also delete signatures this sensor already shared, call
+`purgeRemoteSignatures()` (right-to-delete; best-effort, never blocks the
+local opt-out).
+
 ## Configuration
 
 ### Environment Variables
@@ -360,6 +396,14 @@ try {
 }
 ```
 
+> **Class identity is per entry point.** Each entry point (`.`, `/arp`,
+> `/express`, `/fastify`) bundles its own copy of the error classes, so
+> `instanceof` only matches errors raised by the same entry point you imported
+> from. When you use an integration, import the error classes from that same
+> integration (`@opena2a/aim-sdk/express` and `/fastify` re-export the full
+> error family); for checks that must work across entry points, match on
+> `error.code` (e.g. `'ACTION_DENIED'`) instead.
+
 ## Credential Management
 
 ```typescript
@@ -395,7 +439,10 @@ client.setCredentials(saved);
 
 ### Types
 
-See [src/types/index.ts](./src/types/index.ts) for complete type definitions.
+See
+[src/types/index.ts](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/typescript/src/types/index.ts)
+for complete type definitions (source is not shipped in the npm package; the
+bundled `.d.ts` files carry the same types).
 
 ## License
 
@@ -403,4 +450,6 @@ Apache-2.0
 
 ## Contributing
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
+See
+[CONTRIBUTING.md](https://github.com/opena2a-org/agent-identity-management/blob/main/CONTRIBUTING.md)
+for guidelines.
