@@ -45,6 +45,9 @@ class LocalAtxVerifierConformanceTest {
             "v1_1-tampered-capabilities.json,      REJECT, SIGNATURE_INVALID",
             "v1_1-tampered-declared-purpose.json,  REJECT, SIGNATURE_INVALID",
             "v1_1-cross-issuer-key.json,           REJECT, SIGNATURE_INVALID",
+            "v1_1-declared-purpose-empty-whitespace.json, ACCEPT, ",
+            "v1_1-declared-purpose-array-injected.json,   REJECT, SIGNATURE_INVALID",
+            "v1_1-declared-purpose-string-injected.json,  REJECT, SIGNATURE_INVALID",
     })
     void fixture(String file, String expectedResult, String expectedRejectCategory) throws Exception {
         JsonNode fixture;
