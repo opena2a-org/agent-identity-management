@@ -1,5 +1,11 @@
 package org.opena2a.aim.atx;
 
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.Signature;
@@ -30,10 +36,68 @@ public final class LocalAtxVerifier {
     private static final String SUPPORTED_V11 = "1.1";
     private static final byte[] ED25519_SPKI_PREFIX = hexToBytes("302a300506032b6570032100");
 
+    /**
+     * Credential deserializer with strict duplicate detection enabled as
+     * defense-in-depth. {@link AtxStrictParse#firstDuplicateMember} already
+     * rejects exact AND fold-colliding duplicates ahead of this parse; this
+     * feature additionally fails an exact-name duplicate at the databind layer,
+     * so a bug in the pre-scan could not let one through.
+     */
+    private static final ObjectMapper CREDENTIAL_MAPPER = JsonMapper.builder()
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .build();
+
     private final AtxTrustAnchors anchors;
 
     public LocalAtxVerifier(AtxTrustAnchors anchors) {
         this.anchors = anchors;
+    }
+
+    /**
+     * Verifies a credential from its raw JSON bytes, applying the strict parse
+     * (reject a duplicate object member at any depth, folded — see
+     * {@link AtxStrictParse}) before interpreting any field, then delegating to
+     * {@link #verify(Atx)}. This is the entry point wire consumers should use:
+     * the object-taking overload cannot see duplicate members a lenient
+     * databind parse has already collapsed. A duplicate or otherwise unparseable
+     * credential rejects as {@link RejectCategory#MALFORMED} (the SDK's
+     * structural-parse category; the reference verifiers call it PARSE_ERROR),
+     * with a reason naming the duplicate member.
+     */
+    public AtxVerificationResult verify(byte[] credentialJson) {
+        if (credentialJson == null) {
+            return AtxVerificationResult.reject(RejectCategory.MALFORMED, "credential is null");
+        }
+        Atx atx;
+        try {
+            String dup = AtxStrictParse.firstDuplicateMember(credentialJson);
+            if (dup != null) {
+                return AtxVerificationResult.reject(
+                        RejectCategory.MALFORMED,
+                        "credential contains duplicate member \"" + dup
+                                + "\" (strict parse: the ATX credential is a signed body; "
+                                + "RFC 8259 §4 duplicate names are parser-divergent)");
+            }
+            atx = CREDENTIAL_MAPPER.readValue(credentialJson, Atx.class);
+        } catch (IOException e) {
+            return AtxVerificationResult.reject(
+                    RejectCategory.MALFORMED, "credential is not valid ATX JSON: " + e.getMessage());
+        }
+        // A bare JSON `null` (or any document Jackson maps to a null Atx) is not a
+        // credential — reject rather than NPE in verify(Atx).
+        if (atx == null) {
+            return AtxVerificationResult.reject(
+                    RejectCategory.MALFORMED, "credential is not valid ATX JSON: document is JSON null");
+        }
+        return verify(atx);
+    }
+
+    /** Verifies a credential from its raw JSON string. See {@link #verify(byte[])}. */
+    public AtxVerificationResult verify(String credentialJson) {
+        if (credentialJson == null) {
+            return AtxVerificationResult.reject(RejectCategory.MALFORMED, "credential is null");
+        }
+        return verify(credentialJson.getBytes(StandardCharsets.UTF_8));
     }
 
     public AtxVerificationResult verify(Atx atx) {
