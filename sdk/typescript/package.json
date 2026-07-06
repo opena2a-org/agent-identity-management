@@ -1,6 +1,6 @@
 {
   "name": "@opena2a/aim-sdk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Agent Identity Management SDK for TypeScript/Node.js",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -76,7 +76,7 @@
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
     "@noble/post-quantum": "^0.2.1",
-    "@opena2a/atx-verify": "0.2.0",
+    "@opena2a/atx-verify": "0.3.0",
     "fastify-plugin": "^6.0.0",
     "js-yaml": "^4.1.1"
   },
