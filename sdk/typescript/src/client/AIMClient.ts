@@ -100,15 +100,19 @@ export class AIMClient {
   // so the relay always reads exactly where the joiner writes.
   private readonly telemetryDir: string;
   // True when baseUrl fell through to the localhost default (neither the
-  // `baseUrl` option nor AIM_BASE_URL was set). Used to add an actionable hint
-  // to the first connection failure instead of a bare ECONNREFUSED.
+  // `baseUrl` option nor a usable AIM_BASE_URL was provided). Used to add an
+  // actionable hint to connection failures instead of a bare ECONNREFUSED.
   private readonly usedDefaultBaseUrl: boolean;
 
   constructor(config: AIMClientConfig = {}) {
-    this.usedDefaultBaseUrl =
-      config.baseUrl === undefined && (process.env.AIM_BASE_URL ?? '') === '';
+    // Treat an empty/whitespace AIM_BASE_URL as unset so the flag and the
+    // resolved baseUrl below agree: an empty env var must fall through to the
+    // localhost default (not become a relative URL that fails to parse), and
+    // the hint must reflect that.
+    const envBaseUrl = process.env.AIM_BASE_URL?.trim() || undefined;
+    this.usedDefaultBaseUrl = config.baseUrl == null && envBaseUrl === undefined;
     this.config = {
-      baseUrl: config.baseUrl ?? process.env.AIM_BASE_URL ?? DEFAULT_BASE_URL,
+      baseUrl: config.baseUrl ?? envBaseUrl ?? DEFAULT_BASE_URL,
       organizationId: config.organizationId ?? process.env.AIM_ORGANIZATION_ID ?? '',
       apiKey: config.apiKey ?? process.env.AIM_API_KEY ?? '',
       autoRegister: config.autoRegister ?? true,

@@ -81,6 +81,23 @@ describe('AIMClient', () => {
       await expect(client.registerAgent({ name: 'a' })).rejects.not.toThrow(/baseUrl defaulted/);
     });
 
+    it('treats an empty/whitespace AIM_BASE_URL as unset (defaults to localhost, hint accurate)', async () => {
+      // Regression: an empty env var used to resolve to a relative URL ('' is
+      // not nullish) that failed to parse, while the hint claimed localhost —
+      // both halves wrong. It must now default to localhost with an honest hint.
+      process.env.AIM_BASE_URL = '   ';
+      vi.stubGlobal('fetch', mockFetch);
+      mockFetch.mockRejectedValue(new Error('connect ECONNREFUSED'));
+      const client = new AIMClient();
+      // The request URL must be the localhost default, not a relative path.
+      await expect(client.registerAgent({ name: 'a' })).rejects.toThrow(/baseUrl defaulted to http:\/\/localhost:8080/);
+      await client.registerAgent({ name: 'a' }).catch(() => {});
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/^http:\/\/localhost:8080\/api\/v1\/agents$/),
+        expect.any(Object),
+      );
+    });
+
     it('should use environment variables when no config provided', () => {
       process.env.AIM_BASE_URL = 'https://env.aim.example.com';
       process.env.AIM_ORGANIZATION_ID = 'env-org-123';
