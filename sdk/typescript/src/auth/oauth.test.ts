@@ -283,6 +283,35 @@ describe('Credential file operations', () => {
       const { loadCredentialsFromFile } = await import('./oauth');
       expect(typeof loadCredentialsFromFile).toBe('function');
     });
+
+    it('throws a typed ConfigurationError (not raw ENOENT) for a missing file', async () => {
+      const { loadCredentialsFromFile } = await import('./oauth');
+      const { ConfigurationError } = await import('../exceptions');
+      const missing = '/nonexistent/does-not-exist-aim-creds.json';
+      await expect(loadCredentialsFromFile(missing)).rejects.toBeInstanceOf(ConfigurationError);
+      await expect(loadCredentialsFromFile(missing)).rejects.toMatchObject({
+        code: 'CONFIGURATION_ERROR',
+        message: expect.stringContaining('not found'),
+      });
+    });
+
+    it('throws a typed ConfigurationError for a file that is not valid JSON', async () => {
+      const fs = await import('fs/promises');
+      const os = await import('os');
+      const path = await import('path');
+      const { loadCredentialsFromFile } = await import('./oauth');
+      const { ConfigurationError } = await import('../exceptions');
+      const tmp = path.join(os.tmpdir(), `aim-creds-bad-${process.pid}-${Date.now()}.json`);
+      await fs.writeFile(tmp, 'not-json{');
+      try {
+        await expect(loadCredentialsFromFile(tmp)).rejects.toBeInstanceOf(ConfigurationError);
+        await expect(loadCredentialsFromFile(tmp)).rejects.toMatchObject({
+          message: expect.stringContaining('not valid JSON'),
+        });
+      } finally {
+        await fs.rm(tmp, { force: true });
+      }
+    });
   });
 
   describe('saveCredentialsToFile', () => {

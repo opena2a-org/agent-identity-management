@@ -291,5 +291,5 @@ export {
   type FlushResult,
 } from './telemetry';
 
-// Version
-export const VERSION = '1.0.0';
+// Version (single source of truth: src/version.ts)
+export { SDK_VERSION as VERSION } from './version';

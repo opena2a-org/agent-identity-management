@@ -58,7 +58,7 @@ function hasDetection(patternId: string): boolean {
 }
 
 describe('HMA Attack Coverage Matrix', () => {
-  describe('Prompt Injection -> LegacyBot :3003', () => {
+  describe('Prompt Injection -> LegacyBot :7003', () => {
     it('PI-001: instruction override', () => {
       clearDetections();
       promptInterceptor.scanInput(
@@ -84,7 +84,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('Jailbreak -> CodeBot :3004', () => {
+  describe('Jailbreak -> CodeBot :7004', () => {
     it('JB-001: DAN mode', () => {
       clearDetections();
       promptInterceptor.scanInput(
@@ -102,7 +102,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('System Prompt Extraction -> LegacyBot :3003', () => {
+  describe('System Prompt Extraction -> LegacyBot :7003', () => {
     it('DE-001: system prompt extraction attempt', () => {
       clearDetections();
       promptInterceptor.scanInput(
@@ -120,7 +120,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('Credential Leak -> LegacyBot :3003', () => {
+  describe('Credential Leak -> LegacyBot :7003', () => {
     it('DE-002: credential extraction attempt', () => {
       clearDetections();
       promptInterceptor.scanInput(
@@ -138,7 +138,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('MCP Path Traversal -> ToolBot :3010', () => {
+  describe('MCP Path Traversal -> ToolBot :7010', () => {
     it('MCP-001: path traversal', () => {
       clearDetections();
       mcpInterceptor.scanToolCall('readFile', {
@@ -148,7 +148,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('MCP Command Injection -> ToolBot :3010', () => {
+  describe('MCP Command Injection -> ToolBot :7010', () => {
     it('MCP-002: command injection via tool parameter', () => {
       clearDetections();
       mcpInterceptor.scanToolCall('execute', {
@@ -166,7 +166,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('MCP SSRF -> ToolBot :3010', () => {
+  describe('MCP SSRF -> ToolBot :7010', () => {
     it('MCP-003: SSRF to cloud metadata', () => {
       clearDetections();
       mcpInterceptor.scanToolCall('fetch', {
@@ -184,7 +184,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('A2A Identity Spoofing -> Orchestrator :3020', () => {
+  describe('A2A Identity Spoofing -> Orchestrator :7020', () => {
     it('A2A-001: identity spoofing', () => {
       clearDetections();
       a2aInterceptor.scanMessage(
@@ -196,7 +196,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('A2A Delegation Abuse -> Worker :3021', () => {
+  describe('A2A Delegation Abuse -> Worker :7021', () => {
     it('A2A-002: delegation abuse', () => {
       clearDetections();
       a2aInterceptor.scanMessage(
@@ -208,7 +208,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('Context Manipulation -> HelperBot :3002', () => {
+  describe('Context Manipulation -> HelperBot :7002', () => {
     it('CM-001: false memory injection', () => {
       clearDetections();
       promptInterceptor.scanInput(
@@ -226,7 +226,7 @@ describe('HMA Attack Coverage Matrix', () => {
     });
   });
 
-  describe('RAG Poisoning -> RAGBot :3005', () => {
+  describe('RAG Poisoning -> RAGBot :7005', () => {
     it('PI-001: injection via retrieval content', () => {
       clearDetections();
       // RAG poisoning works by embedding injection in retrieved documents

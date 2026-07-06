@@ -6,10 +6,10 @@
  * Validates that every HMA attack category produces at least one ARP detection.
  *
  * Prerequisites:
- *   DVAA running: docker run -p 3000-3006:3000-3006 -p 3010-3011:3010-3011 \
- *                   -p 3020-3021:3020-3021 -p 9000:9000 opena2a/dvaa:0.4.0
+ *   DVAA running: docker run -p 9000:9000 -p 7001-7021:7001-7021 opena2a/dvaa:0.9.2
  *
- * Run: npx vitest run test/harness/live-dvaa.ts
+ * Run: npm run test:harness (or npx vitest run --config vitest.harness.config.ts
+ *      tests/arp/harness/live-dvaa.ts)
  *
  * This test is skipped by default if DVAA is not reachable.
  */
@@ -23,11 +23,11 @@ import { A2AProtocolInterceptor } from '../../../src/arp/interceptors/a2a-protoc
 import { ARPProxy } from '../../../src/arp/proxy/server';
 import type { ARPEvent } from '../../../src/arp/types';
 
-// DVAA ports
-const DVAA_API = 'http://localhost:3003';   // LegacyBot (CRITICAL)
-const DVAA_MCP = 'http://localhost:3010';   // ToolBot (VULNERABLE)
-const DVAA_A2A_ORCH = 'http://localhost:3020'; // Orchestrator
-const DVAA_A2A_WORKER = 'http://localhost:3021'; // Worker
+// DVAA ports (v0.8.0+ moved agents from 3000-base to 7000-base)
+const DVAA_API = 'http://localhost:7003';   // LegacyBot (CRITICAL)
+const DVAA_MCP = 'http://localhost:7010';   // ToolBot (VULNERABLE)
+const DVAA_A2A_ORCH = 'http://localhost:7020'; // Orchestrator
+const DVAA_A2A_WORKER = 'http://localhost:7021'; // Worker
 
 // ARP proxy
 let proxy: ARPProxy;
@@ -37,7 +37,6 @@ let promptInterceptor: PromptInterceptor;
 let mcpInterceptor: MCPProtocolInterceptor;
 let a2aInterceptor: A2AProtocolInterceptor;
 const detections: ARPEvent[] = [];
-let dvaaAvailable = false;
 
 // Check if DVAA is running
 async function checkDVAA(): Promise<boolean> {
@@ -49,6 +48,12 @@ async function checkDVAA(): Promise<boolean> {
     req.on('timeout', () => { req.destroy(); resolve(false); });
   });
 }
+
+// Probe DVAA at module load. `it.skipIf(...)` is evaluated at collection time,
+// so this MUST resolve before the describe() blocks below define their tests --
+// a beforeAll() probe would run too late and every test would skip even when
+// DVAA is up. Top-level await is supported in vitest test modules.
+const dvaaAvailable = await checkDVAA();
 
 // Send HTTP request through proxy
 function sendRequest(
@@ -100,7 +105,6 @@ function detectionIds(): string[] {
 }
 
 beforeAll(async () => {
-  dvaaAvailable = await checkDVAA();
   if (!dvaaAvailable) return;
 
   engine = new EventEngine({ agentName: 'live-dvaa-test' });
@@ -150,11 +154,11 @@ describe('Live ARP + DVAA Integration', () => {
   beforeAll(() => {
     if (!dvaaAvailable) {
       console.log('DVAA not available -- skipping live integration tests.');
-      console.log('Start DVAA with: docker run -p 3000-3006:3000-3006 -p 3010-3011:3010-3011 -p 3020-3021:3020-3021 -p 9000:9000 opena2a/dvaa:0.4.0');
+      console.log('Start DVAA with: docker run -p 9000:9000 -p 7001-7021:7001-7021 opena2a/dvaa:0.9.2');
     }
   });
 
-  describe('OpenAI API Protocol (LegacyBot :3003)', () => {
+  describe('OpenAI API Protocol (LegacyBot :7003)', () => {
     it.skipIf(!dvaaAvailable)('detects prompt injection (PI-001)', async () => {
       clearDetections();
       const res = await sendRequest('/api/v1/chat/completions', {
@@ -240,7 +244,7 @@ describe('Live ARP + DVAA Integration', () => {
     });
   });
 
-  describe('MCP JSON-RPC Protocol (ToolBot :3010)', () => {
+  describe('MCP JSON-RPC Protocol (ToolBot :7010)', () => {
     it.skipIf(!dvaaAvailable)('detects path traversal (MCP-001)', async () => {
       clearDetections();
       const res = await sendRequest('/mcp/', {

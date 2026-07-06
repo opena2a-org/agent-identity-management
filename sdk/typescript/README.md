@@ -139,6 +139,8 @@ const client = new AIMClient({
 });
 
 // Resolve the agent's ATX once (the AAP broker / network step), then cache it.
+// `resolvedAtx` is the signed ATX credential returned by that broker/network step.
+const resolvedAtx = await fetchAtxForAgent(); // your resolution step
 client.setLocalCredential(resolvedAtx);
 
 // Per action: verified offline, sub-millisecond, no network.
