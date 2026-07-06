@@ -48,6 +48,22 @@ export class EventEngine {
 
   /** Emit an event from a monitor — evaluates rules and triggers actions */
   async emit(event: Omit<ARPEvent, 'id' | 'timestamp' | 'classifiedBy'>): Promise<ARPEvent> {
+    // Shallow validation for untyped (JS) callers. Without this, an event that
+    // omits `data` crashes deep in the pipeline with an opaque
+    // "Cannot read properties of undefined (reading 'correlationKey')".
+    if (event === null || typeof event !== 'object') {
+      throw new TypeError(
+        'EventEngine.emit(event): event must be an object with { source, category, severity, description, data }',
+      );
+    }
+    if (event.data === null || typeof event.data !== 'object') {
+      throw new TypeError(
+        `EventEngine.emit(event): event.data must be an object (received ${
+          event.data === undefined ? 'undefined' : typeof event.data
+        })`,
+      );
+    }
+
     const fullEvent: ARPEvent = {
       ...event,
       id: crypto.randomUUID(),

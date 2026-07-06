@@ -1,3 +1,9 @@
+/**
+ * ARP engine version. This tracks the ARP protocol/engine lineage and is
+ * INTENTIONALLY independent of the `@opena2a/aim-sdk` package version (the
+ * package may be 1.x while the engine is 0.2.x). Read the package version from
+ * `require('@opena2a/aim-sdk/package.json').version` if you need that instead.
+ */
 export const VERSION = '0.2.0';
 
 // Re-export types

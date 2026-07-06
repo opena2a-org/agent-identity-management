@@ -11,6 +11,7 @@ import type {
   VerifyActionOptions,
 } from '../types';
 import { RiskLevel } from '../types';
+import { SDK_VERSION } from '../version';
 import { OAuthTokenManager, loadCredentialsFromEnv } from '../auth/oauth';
 import { generateKeyPair, toBase64, createRequestSignature, fromBase64 } from '../crypto/ed25519';
 import {
@@ -98,8 +99,14 @@ export class AIMClient {
   // Single resolved telemetry dir shared by the auto-joiner sink and the relay,
   // so the relay always reads exactly where the joiner writes.
   private readonly telemetryDir: string;
+  // True when baseUrl fell through to the localhost default (neither the
+  // `baseUrl` option nor AIM_BASE_URL was set). Used to add an actionable hint
+  // to the first connection failure instead of a bare ECONNREFUSED.
+  private readonly usedDefaultBaseUrl: boolean;
 
   constructor(config: AIMClientConfig = {}) {
+    this.usedDefaultBaseUrl =
+      config.baseUrl === undefined && (process.env.AIM_BASE_URL ?? '') === '';
     this.config = {
       baseUrl: config.baseUrl ?? process.env.AIM_BASE_URL ?? DEFAULT_BASE_URL,
       organizationId: config.organizationId ?? process.env.AIM_ORGANIZATION_ID ?? '',
@@ -173,7 +180,7 @@ export class AIMClient {
     const url = `${this.config.baseUrl}${path}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'User-Agent': 'AIM-SDK-TypeScript/1.0.0',
+      'User-Agent': `AIM-SDK-TypeScript/${SDK_VERSION}`,
       ...this.config.headers,
       // Best-effort, non-auth extras (e.g. the correlation ID). Listed before
       // auth/signature headers below so they can never override them.
@@ -242,7 +249,10 @@ export class AIMClient {
         if (error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
         }
-        throw new NetworkError(`Network error: ${error.message}`, error);
+        const hint = this.usedDefaultBaseUrl
+          ? ` (baseUrl defaulted to ${DEFAULT_BASE_URL} — no baseUrl option or AIM_BASE_URL env var was set)`
+          : '';
+        throw new NetworkError(`Network error: ${error.message}${hint}`, error);
       }
 
       throw new NetworkError('Unknown network error');

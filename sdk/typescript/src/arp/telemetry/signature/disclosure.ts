@@ -5,7 +5,7 @@
  * at first run, exactly what is shared, why, and how to turn it off. This text is
  * intentionally plain and non-marketing (CPO/legal voice). It is shown once (a
  * marker is written after the first show) and is always available on demand via
- * `arp telemetry disclosure`.
+ * `disclosureText()` (or `arp telemetry disclosure` for hackmyagent CLI users).
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -40,13 +40,13 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'verify exactly what left your machine.',
     '',
     `Audit log:  ${auditLogPath()}`,
-    'Review it:  arp telemetry log',
-    'Status:     arp telemetry status',
+    'Review it:  read the audit log file above. If you installed the hackmyagent',
+    '            CLI you can also run `arp telemetry log` / `arp telemetry status`.',
     '',
     'How to turn it off (any one):',
-    '  - arp telemetry opt-out',
-    '  - set OPENA2A_TELEMETRY_OPTOUT=1',
+    '  - set OPENA2A_TELEMETRY_OPTOUT=1 (or ARP_TELEMETRY_DISABLED=1)',
     '  - signatureTelemetry.enabled: false in your ARP config',
+    '  - run `arp telemetry opt-out` (hackmyagent CLI)',
     'Opting out disables ALL OpenA2A telemetry and purges shared signatures',
     'on the registry (right-to-delete).',
   ].join('\n');

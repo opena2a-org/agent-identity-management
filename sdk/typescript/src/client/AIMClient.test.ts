@@ -65,6 +65,22 @@ describe('AIMClient', () => {
       expect(client).toBeInstanceOf(AIMClient);
     });
 
+    it('adds a localhost-default hint to the network error when baseUrl was not set', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      mockFetch.mockRejectedValue(new Error('connect ECONNREFUSED'));
+      const client = new AIMClient();
+      await expect(client.registerAgent({ name: 'a' })).rejects.toThrow(NetworkError);
+      await expect(client.registerAgent({ name: 'a' })).rejects.toThrow(/baseUrl defaulted to http:\/\/localhost:8080/);
+    });
+
+    it('does NOT add the localhost-default hint when baseUrl is explicit', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      mockFetch.mockRejectedValue(new Error('connect ECONNREFUSED'));
+      const client = new AIMClient({ baseUrl: 'https://custom.aim.example.com' });
+      await expect(client.registerAgent({ name: 'a' })).rejects.toThrow(/Network error/);
+      await expect(client.registerAgent({ name: 'a' })).rejects.not.toThrow(/baseUrl defaulted/);
+    });
+
     it('should use environment variables when no config provided', () => {
       process.env.AIM_BASE_URL = 'https://env.aim.example.com';
       process.env.AIM_ORGANIZATION_ID = 'env-org-123';

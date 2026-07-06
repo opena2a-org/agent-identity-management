@@ -102,6 +102,17 @@ describe('EventEngine', () => {
     expect(processOnly.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('rejects a malformed event (missing data) with a clear TypeError', async () => {
+    const engine = new EventEngine(makeConfig());
+    // JS callers can omit `data`; without validation this crashed deep in the
+    // pipeline with "Cannot read properties of undefined (reading 'correlationKey')".
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await expect(engine.emit({ source: 'process', category: 'normal', severity: 'info', description: 'no data' } as any))
+      .rejects.toThrow(/event\.data must be an object/);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await expect(engine.emit(null as any)).rejects.toThrow(/event must be an object/);
+  });
+
   it('reclassifies events', async () => {
     const engine = new EventEngine(makeConfig());
 

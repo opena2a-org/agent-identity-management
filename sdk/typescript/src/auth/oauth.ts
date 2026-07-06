@@ -4,6 +4,7 @@
 
 import type { TokenResponse, AgentCredentials } from '../types';
 import { createRequestSignature, toBase64, fromBase64 } from '../crypto/ed25519';
+import { ConfigurationError } from '../exceptions';
 
 /**
  * Token cache entry
@@ -157,8 +158,29 @@ export function loadCredentialsFromEnv(): AgentCredentials | null {
  */
 export async function loadCredentialsFromFile(filePath: string): Promise<AgentCredentials> {
   const fs = await import('fs/promises');
-  const content = await fs.readFile(filePath, 'utf-8');
-  return JSON.parse(content) as AgentCredentials;
+
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === 'ENOENT') {
+      throw new ConfigurationError(`Credential file not found: ${filePath}`, { filePath, cause: code });
+    }
+    throw new ConfigurationError(
+      `Could not read credential file ${filePath}: ${(err as Error)?.message ?? 'unknown error'}`,
+      { filePath, cause: code },
+    );
+  }
+
+  try {
+    return JSON.parse(content) as AgentCredentials;
+  } catch (err) {
+    throw new ConfigurationError(
+      `Credential file ${filePath} is not valid JSON: ${(err as Error)?.message ?? 'parse error'}`,
+      { filePath },
+    );
+  }
 }
 
 /**

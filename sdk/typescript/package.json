@@ -25,7 +25,8 @@
       "types": "./dist/integrations/fastify.d.ts",
       "import": "./dist/integrations/fastify.mjs",
       "require": "./dist/integrations/fastify.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -39,6 +40,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
+    "test:harness": "vitest run --config vitest.harness.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts",
