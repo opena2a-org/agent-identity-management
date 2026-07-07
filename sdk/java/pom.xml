@@ -41,7 +41,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Dependency versions -->
-        <jackson.version>2.16.1</jackson.version>
+        <jackson.version>2.18.8</jackson.version>
         <okhttp.version>4.12.0</okhttp.version>
         <slf4j.version>2.0.11</slf4j.version>
         <bouncycastle.version>1.84</bouncycastle.version>
