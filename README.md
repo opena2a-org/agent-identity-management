@@ -314,7 +314,7 @@ Full index: [docs/USE-CASES.md](docs/USE-CASES.md).
 
 Apache 2.0. PRs from outside the org welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the dev loop, test conventions, and pre-push review gates.
 
-Security issues: `security@opena2a.org` (coordinated disclosure, response within 24 hours).
+Security issues: `info@opena2a.org` (coordinated disclosure, response within 24 hours).
 
 ## Links
 

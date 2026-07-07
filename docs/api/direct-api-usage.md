@@ -751,7 +751,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 ## Need Help?
 
 - 💬 **Discord**: https://discord.gg/uRZa3KXgEn
-- 📧 **Email**: support@opena2a.org
+- 📧 **Email**: info@opena2a.org
 - 🐛 **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 - 📚 **API Docs**: https://docs.opena2a.org/api
 

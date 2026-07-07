@@ -659,7 +659,7 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 // Platform admins are AIM Cloud operators (e.g., the OpenA2A team), distinct from
 // customer org admins. The allowlist is a comma-separated env var, e.g.:
 //
-//	AIM_PLATFORM_ADMINS=info@opena2a.org,ops@opena2a.org
+//	AIM_PLATFORM_ADMINS=info@opena2a.org,abdel@opena2a.org
 //
 // Email comparison is case-insensitive and trims whitespace. Empty env var means
 // no platform admins exist (safe default — only approved-by-existing-admin users
