@@ -311,8 +311,17 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	// Check if this is an SDK registration (set by SDKTokenTrackingMiddleware)
 	isSDKRegistration, _ := c.Locals("is_sdk_registration").(bool)
 
-	if !isSDKRegistration && sdkTokenID == nil {
-		// Non-SDK registration: auto-create API key for convenience
+	// A machine API-key caller already holds a durable credential. Do NOT auto-mint
+	// another long-lived (1-year) key for it: that would turn every registration into
+	// a persistence vector where a short-lived key bootstraps a long-lived one. Such
+	// callers can mint keys explicitly via the JWT-gated /api-keys route if needed.
+	isAPIKeyAuth := false
+	if m, _ := c.Locals("auth_method").(string); m == "api_key" {
+		isAPIKeyAuth = true
+	}
+
+	if !isSDKRegistration && sdkTokenID == nil && !isAPIKeyAuth {
+		// Non-SDK, non-machine-key registration: auto-create API key for convenience
 		apiKeyName := fmt.Sprintf("%s-default-key", agent.Name)
 		fullAPIKey, apiKeyRecord, apiKeyErr = h.apiKeyService.GenerateAPIKey(
 			c.Context(),

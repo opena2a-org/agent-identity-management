@@ -243,3 +243,112 @@ func TestMemberMiddleware_IsMember(t *testing.T) {
 		})
 	}
 }
+
+// ===========================================================================
+// MemberOrAPIKeyMiddleware — the narrow agent-registration gate.
+// A machine API key (auth_method=api_key) may register agents; a member+ JWT
+// may too; viewers and unauthenticated are rejected; agent-signature auth
+// (ed25519/atc, no role) cannot register agents. The final test locks the
+// invariant that a machine key must STILL be blocked by plain MemberMiddleware,
+// so no other role-gated route (credential rotation, key replacement, pqc-key)
+// opens to bearer API keys.
+// ===========================================================================
+
+// withLocals sets arbitrary Fiber locals before the middleware under test.
+func withLocals(kv map[string]string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		for k, v := range kv {
+			c.Locals(k, v)
+		}
+		return c.Next()
+	}
+}
+
+func TestMemberOrAPIKey_APIKeyPasses(t *testing.T) {
+	app := fiber.New()
+	app.Use(withLocals(map[string]string{"auth_method": "api_key"})) // no role, like OptionalAPIKeyMiddleware
+	app.Use(MemberOrAPIKeyMiddleware())
+	app.Post("/agents", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusCreated) })
+
+	req := httptest.NewRequest("POST", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusCreated, resp.StatusCode, "a valid API key must be allowed to register agents")
+}
+
+func TestMemberOrAPIKey_MemberJWTPasses(t *testing.T) {
+	app := fiber.New()
+	app.Use(withLocals(map[string]string{"role": string(domain.RoleMember)}))
+	app.Use(MemberOrAPIKeyMiddleware())
+	app.Post("/agents", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusCreated) })
+
+	req := httptest.NewRequest("POST", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+}
+
+func TestMemberOrAPIKey_ViewerBlocked(t *testing.T) {
+	app := fiber.New()
+	app.Use(withLocals(map[string]string{"role": string(domain.RoleViewer)}))
+	app.Use(MemberOrAPIKeyMiddleware())
+	app.Post("/agents", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusCreated) })
+
+	req := httptest.NewRequest("POST", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
+func TestMemberOrAPIKey_UnauthenticatedBlocked(t *testing.T) {
+	app := fiber.New()
+	app.Use(MemberOrAPIKeyMiddleware()) // nothing set
+	app.Post("/agents", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusCreated) })
+
+	req := httptest.NewRequest("POST", "/agents", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+}
+
+// Agent-signature auth (ed25519/mldsa/hybrid/atc) sets auth_method but no role
+// and is not "api_key" — an already-registered agent must not be able to register
+// agents. All such auth methods must be rejected by the gate.
+func TestMemberOrAPIKey_AgentSignatureBlocked(t *testing.T) {
+	for _, method := range []string{"ed25519", "mldsa", "hybrid", "atc"} {
+		t.Run(method, func(t *testing.T) {
+			app := fiber.New()
+			app.Use(withLocals(map[string]string{"auth_method": method}))
+			app.Use(MemberOrAPIKeyMiddleware())
+			app.Post("/agents", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusCreated) })
+
+			req := httptest.NewRequest("POST", "/agents", nil)
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode, "agent-signature auth must not register agents")
+		})
+	}
+}
+
+// INVARIANT LOCK: a machine API key (auth_method=api_key, no role) must STILL be
+// rejected by plain MemberMiddleware. This proves the fix opens ONLY the
+// agent-registration route and no other role-gated route (rotate-credentials,
+// key replacement, pqc-key) becomes reachable by a bearer API key.
+func TestMemberMiddleware_StillBlocksAPIKey(t *testing.T) {
+	app := fiber.New()
+	app.Use(withLocals(map[string]string{"auth_method": "api_key"})) // key authed, but no role
+	app.Use(MemberMiddleware())
+	app.Post("/agents/x/rotate-credentials", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+
+	req := httptest.NewRequest("POST", "/agents/x/rotate-credentials", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode,
+		"API keys must NOT pass plain MemberMiddleware — key-material routes stay JWT-only")
+}
