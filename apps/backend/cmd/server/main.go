@@ -1434,7 +1434,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus) // Bulk agent status lookup
-	agents.Post("/", middleware.MemberMiddleware(), h.Agent.CreateAgent)
+	agents.Post("/", middleware.MemberOrAPIKeyMiddleware(), h.Agent.CreateAgent) // machine API keys (org-scoped) OR member+ JWT; other routes stay MemberMiddleware (JWT-only)
 	agents.Get("/:id", h.Agent.GetAgent)
 	agents.Put("/:id", middleware.MemberMiddleware(), h.Agent.UpdateAgent)
 	agents.Delete("/:id", middleware.ManagerMiddleware(), h.Agent.DeleteAgent)
