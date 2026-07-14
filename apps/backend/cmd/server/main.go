@@ -1453,10 +1453,13 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Agent Trust Credential issuance - computes the behavioral score and delegates
 	// signing + transparency-log recording to the Registry (Certificate Authority)
 	agents.Post("/:id/atc", middleware.ManagerMiddleware(), h.ATCIssuance.IssueATC)
-	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials
-	agents.Get("/:id/sdk", h.Agent.DownloadSDK)
-	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration
-	agents.Get("/:id/credentials", h.Agent.GetCredentials)
+	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials.
+	// Returns agent private key material, so it is member+ (JWT) only — consistent with
+	// rotate-credentials / keys / pqc-key. MemberMiddleware rejects bare API keys (no role).
+	agents.Get("/:id/sdk", middleware.MemberMiddleware(), h.Agent.DownloadSDK)
+	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration.
+	// Returns the decrypted private key, so it is member+ (JWT) only — same rationale as above.
+	agents.Get("/:id/credentials", middleware.MemberMiddleware(), h.Agent.GetCredentials)
 	// MCP Server relationship management - "talks_to" endpoints
 	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                  // ✅ Dashboard: Get MCP servers from talks_to field
 	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                // Add MCP servers (bulk)

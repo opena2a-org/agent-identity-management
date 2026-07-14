@@ -969,7 +969,9 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	c.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Set("Content-Length", fmt.Sprintf("%d", len(sdkBytes)))
 
-	// Log audit (userID is optional for SDK download - could be API key auth)
+	// Log audit. This route is MemberMiddleware()-gated (member+ JWT only; see the
+	// agents route table), so userID is always present here; the optional read stays
+	// defensive. Bare API keys can no longer reach this handler.
 	userID, _ := GetUserID(c)
 	h.auditService.LogAction(
 		c.Context(),
