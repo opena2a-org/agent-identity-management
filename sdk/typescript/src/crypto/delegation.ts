@@ -236,9 +236,16 @@ export async function createDelegation(params: {
 }
 
 /**
- * Verify a single delegation's Ed25519 signature.
+ * Verify a single delegation's Ed25519 signature only.
+ *
+ * This is the raw cryptographic check: it proves the delegation was signed by
+ * the holder of `publicKey` and has not been tampered with. It deliberately
+ * ignores temporal validity — an authentic but expired delegation returns true.
+ * Prefer {@link verifyDelegation}, which also enforces the signed `expiresAt`
+ * window. Use this only when you need signature authenticity independent of
+ * time (e.g. archival/audit inspection).
  */
-export async function verifyDelegation(delegation: Delegation): Promise<boolean> {
+export async function verifyDelegationSignature(delegation: Delegation): Promise<boolean> {
   try {
     const publicKeyBytes = fromBase64url(delegation.publicKey);
     const signatureBytes = fromBase64url(delegation.signature);
@@ -247,6 +254,83 @@ export async function verifyDelegation(delegation: Delegation): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+/**
+ * Options controlling temporal (expiry) evaluation.
+ */
+export interface DelegationTemporalOptions {
+  /**
+   * The instant to evaluate temporal validity against. Accepts a Date or an
+   * ISO-8601 string; defaults to the current time. Supply it to keep tests
+   * deterministic and to support offline / as-of verification. If provided but
+   * unparseable, verification fails closed.
+   */
+  verifyAt?: Date | string;
+}
+
+export interface DelegationTemporalResult {
+  valid: boolean;
+  error?: string;
+}
+
+/**
+ * Resolve a verifyAt option to epoch milliseconds. Returns NaN when the caller
+ * supplied a value that cannot be parsed, so callers can fail closed.
+ */
+function resolveVerifyAtMs(verifyAt?: Date | string): number {
+  if (verifyAt === undefined) return Date.now();
+  if (verifyAt instanceof Date) return verifyAt.getTime();
+  return Date.parse(verifyAt);
+}
+
+/**
+ * Evaluate a delegation's signed temporal window (`createdAt`/`expiresAt`)
+ * against an evaluation time. Fails closed: a missing or unparseable timestamp,
+ * an inverted window (createdAt after expiresAt), or an unparseable evaluation
+ * time all return `{ valid: false }`. The expiry bound is exclusive — a
+ * delegation is valid strictly before `expiresAt`.
+ */
+export function checkDelegationTemporalValidity(
+  delegation: Pick<Delegation, 'createdAt' | 'expiresAt'>,
+  verifyAt?: Date | string,
+): DelegationTemporalResult {
+  const atMs = resolveVerifyAtMs(verifyAt);
+  if (Number.isNaN(atMs)) return { valid: false, error: 'Unparseable verifyAt evaluation time' };
+  return temporalAtMs(delegation, atMs);
+}
+
+/**
+ * Core temporal check against a resolved epoch-ms evaluation time. Kept private
+ * so a chain can evaluate every hop against one shared instant.
+ */
+function temporalAtMs(
+  delegation: Pick<Delegation, 'createdAt' | 'expiresAt'>,
+  atMs: number,
+): DelegationTemporalResult {
+  const createdMs = delegation.createdAt === undefined ? NaN : Date.parse(delegation.createdAt);
+  const expiresMs = delegation.expiresAt === undefined ? NaN : Date.parse(delegation.expiresAt);
+  if (Number.isNaN(createdMs)) return { valid: false, error: 'Missing or unparseable createdAt timestamp' };
+  if (Number.isNaN(expiresMs)) return { valid: false, error: 'Missing or unparseable expiresAt timestamp' };
+  if (createdMs > expiresMs) return { valid: false, error: 'Invalid window: createdAt is after expiresAt' };
+  if (atMs >= expiresMs) return { valid: false, error: 'Delegation has expired' };
+  return { valid: true };
+}
+
+/**
+ * Verify a single delegation: Ed25519 signature AND temporal validity.
+ *
+ * Returns true only when the signature is authentic and the delegation is
+ * within its signed `createdAt`/`expiresAt` window at the evaluation time
+ * (default: now). Expired, not-yet-parseable, or malformed-window delegations
+ * return false. Pass `options.verifyAt` for deterministic or offline checks.
+ */
+export async function verifyDelegation(
+  delegation: Delegation,
+  options?: DelegationTemporalOptions,
+): Promise<boolean> {
+  if (!(await verifyDelegationSignature(delegation))) return false;
+  return checkDelegationTemporalValidity(delegation, options?.verifyAt).valid;
 }
 
 /**
@@ -269,7 +353,7 @@ export function verifyScopeNarrowing(parent: Delegation, child: Delegation): boo
   return child.scopes.every((scope) => parent.scopes.includes(scope));
 }
 
-export interface DelegationChainVerificationOptions {
+export interface DelegationChainVerificationOptions extends DelegationTemporalOptions {
   rootTrustScore?: number; // Trust score of the root delegator (default 1.0)
 }
 
@@ -279,6 +363,7 @@ export interface DelegationChainResult {
   signatureValid: boolean;
   identityValid: boolean;
   scopeValid: boolean;
+  temporalValid: boolean;
   effectiveTrust: number;
   error?: string;
 }
@@ -290,7 +375,9 @@ export interface DelegationChainResult {
  * 2. Each delegator's publicKey matches their DID
  * 3. Each sub-delegation's delegator matches the parent's delegate
  * 4. Scope narrowing is enforced
- * 5. Trust attenuation: effective trust decays per hop and must stay above minimum
+ * 5. Temporal validity: every hop must be within its signed createdAt/expiresAt
+ *    window, evaluated against one shared instant for the whole chain
+ * 6. Trust attenuation: effective trust decays per hop and must stay above minimum
  */
 export async function verifyDelegationChain(
   chain: Delegation[],
@@ -300,7 +387,14 @@ export async function verifyDelegationChain(
   results: DelegationChainResult[];
 }> {
   if (chain.length === 0) {
-    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, effectiveTrust: 0, error: 'Empty delegation chain' }] };
+    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'Empty delegation chain' }] };
+  }
+
+  // Capture ONE evaluation instant for the whole chain so every hop is judged
+  // against the same clock. Fail closed if a supplied verifyAt is unparseable.
+  const evalAtMs = resolveVerifyAtMs(options?.verifyAt);
+  if (Number.isNaN(evalAtMs)) {
+    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'Unparseable verifyAt evaluation time' }] };
   }
 
   const results: DelegationChainResult[] = [];
@@ -310,15 +404,17 @@ export async function verifyDelegationChain(
     const delegation = chain[i];
     const label = i === 0 ? 'root' : `subdelegation-${i}`;
 
-    const signatureValid = await verifyDelegation(delegation);
+    const signatureValid = await verifyDelegationSignature(delegation);
     const identityValid = verifyDelegatorIdentity(delegation);
+    const temporal = temporalAtMs(delegation, evalAtMs);
+    const temporalValid = temporal.valid;
 
     let scopeValid = true;
     if (i > 0) {
       scopeValid = verifyScopeNarrowing(chain[i - 1], delegation);
       // Also verify chain linkage: this delegator should be the parent's delegate
       if (delegation.delegator !== chain[i - 1].delegate) {
-        results.push({ index: i, label, signatureValid, identityValid, scopeValid: false, effectiveTrust, error: 'Chain broken: delegator does not match parent delegate' });
+        results.push({ index: i, label, signatureValid, identityValid, scopeValid: false, temporalValid, effectiveTrust, error: 'Chain broken: delegator does not match parent delegate' });
         continue;
       }
 
@@ -335,6 +431,7 @@ export async function verifyDelegationChain(
           signatureValid,
           identityValid,
           scopeValid,
+          temporalValid,
           effectiveTrust,
           error: `Effective trust ${effectiveTrust.toFixed(4)} is below minimum threshold ${minTrust}`,
         });
@@ -342,11 +439,13 @@ export async function verifyDelegationChain(
       }
     }
 
-    results.push({ index: i, label, signatureValid, identityValid, scopeValid, effectiveTrust });
+    // Surface an expiry/window failure as the hop error when nothing worse fired.
+    const error = temporalValid ? undefined : temporal.error;
+    results.push({ index: i, label, signatureValid, identityValid, scopeValid, temporalValid, effectiveTrust, error });
   }
 
   return {
-    valid: results.every((r) => r.signatureValid && r.identityValid && r.scopeValid && !r.error),
+    valid: results.every((r) => r.signatureValid && r.identityValid && r.scopeValid && r.temporalValid && !r.error),
     results,
   };
 }
