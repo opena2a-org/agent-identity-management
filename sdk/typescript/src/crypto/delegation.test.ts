@@ -6,9 +6,11 @@ import {
   canonicalJSONDeep,
   createDelegation,
   verifyDelegation,
+  verifyDelegationSignature,
   verifyDelegatorIdentity,
   verifyScopeNarrowing,
   verifyDelegationChain,
+  checkDelegationTemporalValidity,
   exportDelegationChain,
   delegationSignablePayload,
   toBase64url,
@@ -312,6 +314,198 @@ describe('Delegation chain verification', () => {
     const result = await verifyDelegationChain([d1, d2]);
     expect(result.valid).toBe(false);
     expect(result.results[1].scopeValid).toBe(false);
+  });
+});
+
+describe('Temporal validity (expiry enforcement)', () => {
+  // A delegation whose window is entirely in the past.
+  async function makeExpired() {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    return createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-01-08T00:00:00.000Z',
+    });
+  }
+
+  it('checkDelegationTemporalValidity rejects an expired delegation', async () => {
+    const d = await makeExpired();
+    const res = checkDelegationTemporalValidity(d, '2026-02-01T00:00:00.000Z');
+    expect(res.valid).toBe(false);
+    expect(res.error).toMatch(/expired/i);
+  });
+
+  it('checkDelegationTemporalValidity accepts a delegation live at the eval time', async () => {
+    const d = await makeExpired();
+    expect(checkDelegationTemporalValidity(d, '2026-01-05T00:00:00.000Z').valid).toBe(true);
+  });
+
+  it('checkDelegationTemporalValidity fails closed on unparseable timestamps', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const d = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: 'not-a-date',
+      expiresAt: 'also-not-a-date',
+    });
+    expect(checkDelegationTemporalValidity(d).valid).toBe(false);
+  });
+
+  it('checkDelegationTemporalValidity rejects createdAt after expiresAt', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const d = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2030-01-01T00:00:00.000Z',
+      expiresAt: '2026-01-01T00:00:00.000Z',
+    });
+    const res = checkDelegationTemporalValidity(d, '2027-01-01T00:00:00.000Z');
+    expect(res.valid).toBe(false);
+    expect(res.error).toMatch(/createdAt/i);
+  });
+
+  it('checkDelegationTemporalValidity fails closed when verifyAt itself is unparseable', async () => {
+    const d = await makeExpired();
+    expect(checkDelegationTemporalValidity(d, 'garbage-time').valid).toBe(false);
+  });
+
+  it('verifyDelegation rejects an expired delegation (default: now)', async () => {
+    const d = await makeExpired();
+    expect(await verifyDelegation(d)).toBe(false);
+  });
+
+  it('verifyDelegation accepts an expired delegation when verifyAt is pinned inside its window', async () => {
+    const d = await makeExpired();
+    expect(await verifyDelegation(d, { verifyAt: '2026-01-05T00:00:00.000Z' })).toBe(true);
+  });
+
+  it('verifyDelegation still rejects a tampered-but-in-window delegation', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const d = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2030-01-01T00:00:00.000Z',
+    });
+    d.scopes = ['search', 'admin'];
+    expect(await verifyDelegation(d, { verifyAt: '2027-01-01T00:00:00.000Z' })).toBe(false);
+  });
+
+  it('verifyDelegationSignature ignores expiry (pure crypto check)', async () => {
+    const d = await makeExpired();
+    // Signature is authentic even though the delegation is expired.
+    expect(await verifyDelegationSignature(d)).toBe(true);
+    expect(await verifyDelegation(d)).toBe(false);
+  });
+
+  it('verifyDelegationChain rejects a chain whose sole delegation is expired', async () => {
+    const d = await makeExpired();
+    const result = await verifyDelegationChain([d]);
+    expect(result.valid).toBe(false);
+    expect(result.results[0].temporalValid).toBe(false);
+  });
+
+  it('verifyDelegationChain rejects a child that outlives an expired parent (reporter case 2)', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search', 'memory.read'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-07-15T00:00:00.000Z',
+    });
+    const child = await createDelegation({
+      delegatorKeyPair: agent,
+      delegatePublicKey: leaf.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-02T00:00:00.000Z',
+      expiresAt: '2036-01-01T00:00:00.000Z',
+    });
+
+    // Evaluate after the parent has expired.
+    const result = await verifyDelegationChain([parent, child], { verifyAt: '2026-08-01T00:00:00.000Z' });
+    expect(result.valid).toBe(false);
+    expect(result.results[0].temporalValid).toBe(false); // parent expired
+    expect(result.results[1].temporalValid).toBe(true); // child still live, but chain fails on parent
+  });
+
+  it('verifyDelegationChain accepts the same chain while the parent is still live', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search', 'memory.read'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-07-15T00:00:00.000Z',
+    });
+    const child = await createDelegation({
+      delegatorKeyPair: agent,
+      delegatePublicKey: leaf.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-02T00:00:00.000Z',
+      expiresAt: '2026-06-01T00:00:00.000Z',
+      parentDelegation: 'del-1',
+    });
+
+    const result = await verifyDelegationChain([parent, child], { verifyAt: '2026-05-01T00:00:00.000Z' });
+    expect(result.valid).toBe(true);
+    expect(result.results.every((r) => r.temporalValid)).toBe(true);
+  });
+
+  it('verifyDelegationChain uses a single evaluation time across all hops', async () => {
+    // Both delegations expire at the same instant; evaluating exactly after it
+    // must fail every hop, not race between per-hop clock reads.
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+
+    const d = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-02-01T00:00:00.000Z',
+    });
+    const atExpiry = await verifyDelegationChain([d], { verifyAt: '2026-02-01T00:00:00.000Z' });
+    expect(atExpiry.valid).toBe(false); // expiry is exclusive: valid strictly before expiresAt
+  });
+
+  it('verifyDelegationChain fails closed when verifyAt is unparseable', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const d = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+    });
+    const result = await verifyDelegationChain([d], { verifyAt: 'not-a-time' });
+    expect(result.valid).toBe(false);
+  });
+
+  it('freshly created delegations still verify (no regression)', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const d = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+    });
+    expect(await verifyDelegation(d)).toBe(true);
+    expect((await verifyDelegationChain([d])).valid).toBe(true);
   });
 });
 

@@ -129,14 +129,20 @@ export {
   canonicalJSONDeep,
   createDelegation,
   verifyDelegation,
+  verifyDelegationSignature,
   verifyDelegatorIdentity,
   verifyScopeNarrowing,
   verifyDelegationChain,
+  checkDelegationTemporalValidity,
   exportDelegationChain,
   delegationSignablePayload,
   type Delegation,
   type DelegationChainEntry,
   type DelegationChainExport,
+  type DelegationTemporalOptions,
+  type DelegationTemporalResult,
+  type DelegationChainResult,
+  type DelegationChainVerificationOptions,
 } from './crypto/delegation';
 
 // A2A Protocol
