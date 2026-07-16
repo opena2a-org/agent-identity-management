@@ -52,6 +52,7 @@ console.log(`Trust score: ${result.trustScore}`);
 - **Fastify Plugin**: First-class support for Fastify applications
 - **Automatic Retries**: Built-in retry logic with exponential backoff
 - **Local Credential Verification**: Verify signed ATX credentials offline against cached trust anchors, no per-action call to a central service
+- **Delegation Chains**: Create and verify Ed25519 delegation chains (cross-engine interop), with signature, identity, scope-narrowing, and expiry all enforced at verification time
 
 ## Express Integration
 
@@ -173,6 +174,73 @@ const { valid, context, rejectCategory } = await verifier!.verifyCredential(atx)
 
 > Network is reserved for credential *resolution* (the AAP broker hands the agent
 > its ATX) and the periodic CRL refresh — never for a per-action decision.
+
+## Delegation Chains
+
+A delegation is a signed statement that one key (the delegator) grants a set of
+scopes to another key (the delegate), optionally chained so authority passes from
+a root through intermediaries to a leaf. Delegations use `did:key` (Ed25519) and a
+canonical signing form for cross-engine interop.
+
+```typescript
+import {
+  generateKeyPair,
+  createDelegation,
+  verifyDelegation,
+  verifyDelegationChain,
+} from '@opena2a/aim-sdk';
+
+const root = await generateKeyPair();
+const coordinator = await generateKeyPair();
+const worker = await generateKeyPair();
+
+// Root delegates to a coordinator, which sub-delegates a narrower scope set.
+const d1 = await createDelegation({
+  delegatorKeyPair: root,
+  delegatePublicKey: coordinator.publicKey,
+  scopes: ['search', 'memory.read', 'memory.write'],
+  // expiresAt defaults to 7 days from now; pass an ISO-8601 string to set it.
+});
+
+const d2 = await createDelegation({
+  delegatorKeyPair: coordinator,
+  delegatePublicKey: worker.publicKey,
+  scopes: ['search', 'memory.read'], // must be a subset of the parent's scopes
+  parentDelegation: 'd1',
+});
+
+const { valid, results } = await verifyDelegationChain([d1, d2]);
+// valid === true only if every hop passes: signature, delegator identity,
+// scope narrowing, chain linkage, trust attenuation, AND temporal validity.
+```
+
+`verifyDelegation` and `verifyDelegationChain` enforce the delegation's signed
+`createdAt`/`expiresAt` window. An expired delegation — or a child that outlives an
+expired parent — is rejected, and verification fails closed on a missing,
+unparseable, or inverted (`createdAt` after `expiresAt`) timestamp. A chain is
+evaluated against a single instant so every hop is judged by the same clock.
+
+Pass an explicit evaluation time for deterministic tests or offline / as-of
+verification:
+
+```typescript
+// Verify as the chain would have stood at a specific instant.
+await verifyDelegation(d1, { verifyAt: '2026-07-15T00:00:00.000Z' });
+await verifyDelegationChain([d1, d2], { verifyAt: new Date('2026-07-15T00:00:00Z') });
+```
+
+For the raw signature check without temporal evaluation (archival or audit
+inspection where authenticity matters independent of time), use
+`verifyDelegationSignature`; for the standalone temporal check and its reason
+string, use `checkDelegationTemporalValidity`:
+
+```typescript
+import { verifyDelegationSignature, checkDelegationTemporalValidity } from '@opena2a/aim-sdk';
+
+await verifyDelegationSignature(d1);                       // true if the signature is authentic
+checkDelegationTemporalValidity(d1);                       // { valid, error? } at the current time
+checkDelegationTemporalValidity(d1, '2026-07-15T00:00:00.000Z');
+```
 
 ## Causal-Denial Telemetry (opt-in)
 
