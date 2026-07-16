@@ -1,6 +1,6 @@
 {
   "name": "@opena2a/aim-sdk",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Agent Identity Management SDK for TypeScript/Node.js",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

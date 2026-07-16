@@ -6,4 +6,4 @@
  * the same commit). It is a standalone leaf module so any part of the SDK can
  * import it without a circular dependency on the barrel `index.ts`.
  */
-export const SDK_VERSION = '1.0.3';
+export const SDK_VERSION = '1.1.0';

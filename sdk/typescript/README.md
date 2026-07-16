@@ -207,6 +207,7 @@ const d2 = await createDelegation({
   delegatePublicKey: worker.publicKey,
   scopes: ['search', 'memory.read'], // must be a subset of the parent's scopes
   parentDelegation: 'd1',
+  parentExpiresAt: d1.expiresAt,     // a child must not outlive its parent
 });
 
 const { valid, results } = await verifyDelegationChain([d1, d2]);
@@ -215,10 +216,14 @@ const { valid, results } = await verifyDelegationChain([d1, d2]);
 ```
 
 `verifyDelegation` and `verifyDelegationChain` enforce the delegation's signed
-`createdAt`/`expiresAt` window. An expired delegation — or a child that outlives an
-expired parent — is rejected, and verification fails closed on a missing,
-unparseable, or inverted (`createdAt` after `expiresAt`) timestamp. A chain is
-evaluated against a single instant so every hop is judged by the same clock.
+`createdAt`/`expiresAt` window. An expired delegation is rejected, and verification
+fails closed on a missing, unparseable, or inverted (`createdAt` after `expiresAt`)
+timestamp. A chain is evaluated against a single instant so every hop is judged by
+the same clock, and a child that outlives its parent is rejected even while the
+parent is still live (a delegate cannot hold authority in time beyond its
+delegator). When creating a sub-delegation, pass `parentExpiresAt` so the child's
+default expiry is capped at the parent's and an over-long child expiry is refused
+at creation.
 
 Pass an explicit evaluation time for deterministic tests or offline / as-of
 verification:

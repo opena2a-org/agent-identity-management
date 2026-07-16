@@ -260,6 +260,7 @@ describe('Delegation chain verification', () => {
       delegatePublicKey: researcher.publicKey,
       scopes: ['search', 'memory.read'],
       parentDelegation: 'del-1',
+      parentExpiresAt: d1.expiresAt,
     });
 
     const result = await verifyDelegationChain([d1, d2]);
@@ -287,6 +288,7 @@ describe('Delegation chain verification', () => {
       delegatorKeyPair: unrelated,
       delegatePublicKey: researcher.publicKey,
       scopes: ['search'],
+      parentExpiresAt: d1.expiresAt,
     });
 
     const result = await verifyDelegationChain([d1, d2]);
@@ -309,6 +311,7 @@ describe('Delegation chain verification', () => {
       delegatorKeyPair: coordinator,
       delegatePublicKey: researcher.publicKey,
       scopes: ['search', 'memory.write'],
+      parentExpiresAt: d1.expiresAt,
     });
 
     const result = await verifyDelegationChain([d1, d2]);
@@ -438,7 +441,10 @@ describe('Temporal validity (expiry enforcement)', () => {
     const result = await verifyDelegationChain([parent, child], { verifyAt: '2026-08-01T00:00:00.000Z' });
     expect(result.valid).toBe(false);
     expect(result.results[0].temporalValid).toBe(false); // parent expired
-    expect(result.results[1].temporalValid).toBe(true); // child still live, but chain fails on parent
+    // The child is within its own 2026-2036 window, but it outlives its parent,
+    // so temporal narrowing rejects it too (independent of the parent's expiry).
+    expect(result.results[1].temporalValid).toBe(false);
+    expect(result.results[1].error).toMatch(/narrowing/i);
   });
 
   it('verifyDelegationChain accepts the same chain while the parent is still live', async () => {
@@ -506,6 +512,117 @@ describe('Temporal validity (expiry enforcement)', () => {
     });
     expect(await verifyDelegation(d)).toBe(true);
     expect((await verifyDelegationChain([d])).valid).toBe(true);
+  });
+});
+
+describe('Temporal narrowing (child must not outlive parent)', () => {
+  it('rejects a child that outlives a still-live parent', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-06-01T00:00:00.000Z',
+    });
+    // Child expires AFTER the parent, though both are live at the eval time.
+    const child = await createDelegation({
+      delegatorKeyPair: agent,
+      delegatePublicKey: leaf.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-02T00:00:00.000Z',
+      expiresAt: '2026-09-01T00:00:00.000Z',
+    });
+
+    const result = await verifyDelegationChain([parent, child], { verifyAt: '2026-03-01T00:00:00.000Z' });
+    expect(result.valid).toBe(false);
+    expect(result.results[0].temporalValid).toBe(true); // parent is fine
+    expect(result.results[1].temporalValid).toBe(false); // child outlives parent
+    expect(result.results[1].error).toMatch(/narrowing/i);
+  });
+
+  it('accepts a child whose expiry equals its parent', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-06-01T00:00:00.000Z',
+    });
+    const child = await createDelegation({
+      delegatorKeyPair: agent,
+      delegatePublicKey: leaf.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-02T00:00:00.000Z',
+      expiresAt: '2026-06-01T00:00:00.000Z', // exactly equal is allowed
+    });
+
+    const result = await verifyDelegationChain([parent, child], { verifyAt: '2026-03-01T00:00:00.000Z' });
+    expect(result.valid).toBe(true);
+    expect(result.results.every((r) => r.temporalValid)).toBe(true);
+  });
+
+  it('createDelegation caps a default child expiry at the parent', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      expiresAt: '2026-01-02T00:00:00.000Z', // parent expires very soon
+    });
+    // Child uses the default 7-day expiry, but is capped at the parent's.
+    const child = await createDelegation({
+      delegatorKeyPair: agent,
+      delegatePublicKey: leaf.publicKey,
+      scopes: ['search'],
+      parentExpiresAt: parent.expiresAt,
+    });
+    expect(child.expiresAt).toBe(parent.expiresAt);
+  });
+
+  it('createDelegation rejects an explicit child expiry beyond the parent', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      expiresAt: '2026-06-01T00:00:00.000Z',
+    });
+    await expect(
+      createDelegation({
+        delegatorKeyPair: agent,
+        delegatePublicKey: leaf.publicKey,
+        scopes: ['search'],
+        expiresAt: '2027-01-01T00:00:00.000Z', // beyond the parent
+        parentExpiresAt: parent.expiresAt,
+      }),
+    ).rejects.toThrow(/outlive its delegator/i);
+  });
+
+  it('createDelegation fails closed on an unparseable parentExpiresAt', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    await expect(
+      createDelegation({
+        delegatorKeyPair: root,
+        delegatePublicKey: agent.publicKey,
+        scopes: ['search'],
+        parentExpiresAt: 'not-a-date',
+      }),
+    ).rejects.toThrow(/parentExpiresAt/i);
   });
 });
 
@@ -652,6 +769,7 @@ describe('Trust attenuation through delegation hops', () => {
       delegatorKeyPair: coordinator,
       delegatePublicKey: researcher.publicKey,
       scopes: ['search'],
+      parentExpiresAt: d1.expiresAt,
     });
 
     const result = await verifyDelegationChain([d1, d2], { rootTrustScore: 1.0 });
@@ -679,6 +797,7 @@ describe('Trust attenuation through delegation hops', () => {
       delegatorKeyPair: b,
       delegatePublicKey: c.publicKey,
       scopes: ['search', 'read'],
+      parentExpiresAt: d1.expiresAt,
     });
     d2.trustAttenuation = 0.5;
     d2.minDelegatedTrust = 0.3;
@@ -687,6 +806,7 @@ describe('Trust attenuation through delegation hops', () => {
       delegatorKeyPair: c,
       delegatePublicKey: d.publicKey,
       scopes: ['search'],
+      parentExpiresAt: d2.expiresAt,
     });
 
     // Trust: 1.0 -> 0.5 -> 0.25 (below 0.3 minimum)

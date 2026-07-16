@@ -209,16 +209,47 @@ export async function createDelegation(params: {
   createdAt?: string;
   expiresAt?: string;
   parentDelegation?: string;
+  /**
+   * The parent delegation's `expiresAt`, supplied when creating a
+   * sub-delegation. A child must not outlive its delegator: when this is set,
+   * the default child expiry is capped at the parent's, and an explicit
+   * `expiresAt` beyond the parent's is rejected. Enforced symmetrically by
+   * {@link verifyDelegationChain}.
+   */
+  parentExpiresAt?: string;
 }): Promise<Delegation> {
   const now = new Date();
   const oneWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  // A child must not outlive its parent. When the parent's expiry is known,
+  // cap the default and reject an explicit expiry that exceeds it.
+  let expiresAt = params.expiresAt ?? oneWeek.toISOString();
+  if (params.parentExpiresAt !== undefined) {
+    const parentMs = Date.parse(params.parentExpiresAt);
+    if (Number.isNaN(parentMs)) {
+      throw new Error('createDelegation: parentExpiresAt is not a valid timestamp');
+    }
+    const childMs = Date.parse(expiresAt);
+    if (Number.isNaN(childMs)) {
+      throw new Error('createDelegation: expiresAt is not a valid timestamp');
+    }
+    if (params.expiresAt === undefined) {
+      // Default path: cap the child at the parent's expiry.
+      if (parentMs < childMs) expiresAt = params.parentExpiresAt;
+    } else if (childMs > parentMs) {
+      // Explicit path: a child cannot be asked to outlive its parent.
+      throw new Error(
+        'createDelegation: expiresAt exceeds parentExpiresAt (a delegation cannot outlive its delegator)',
+      );
+    }
+  }
 
   const delegation: Omit<Delegation, 'signature' | 'publicKey'> & { publicKey?: string; signature?: string } = {
     delegator: publicKeyToDidKey(params.delegatorKeyPair.publicKey),
     delegate: publicKeyToDidKey(params.delegatePublicKey),
     scopes: params.scopes,
     createdAt: params.createdAt ?? now.toISOString(),
-    expiresAt: params.expiresAt ?? oneWeek.toISOString(),
+    expiresAt,
   };
 
   if (params.parentDelegation) {
@@ -376,7 +407,9 @@ export interface DelegationChainResult {
  * 3. Each sub-delegation's delegator matches the parent's delegate
  * 4. Scope narrowing is enforced
  * 5. Temporal validity: every hop must be within its signed createdAt/expiresAt
- *    window, evaluated against one shared instant for the whole chain
+ *    window, evaluated against one shared instant for the whole chain, AND each
+ *    child's expiresAt must not exceed its parent's (a child cannot outlive its
+ *    delegator, even before the parent expires)
  * 6. Trust attenuation: effective trust decays per hop and must stay above minimum
  */
 export async function verifyDelegationChain(
@@ -407,7 +440,24 @@ export async function verifyDelegationChain(
     const signatureValid = await verifyDelegationSignature(delegation);
     const identityValid = verifyDelegatorIdentity(delegation);
     const temporal = temporalAtMs(delegation, evalAtMs);
-    const temporalValid = temporal.valid;
+    let temporalValid = temporal.valid;
+    let temporalError = temporal.error;
+
+    // Temporal narrowing: a child must not outlive its parent. Enforced even
+    // while the parent is still live, so a child cannot claim authority in time
+    // beyond its delegator's. (The per-hop expiry check above already fails the
+    // chain once the parent has actually expired; this closes the window before
+    // that.) The own-window error, if any, takes precedence in the message.
+    if (i > 0) {
+      const parentExpMs = Date.parse(chain[i - 1].expiresAt);
+      const childExpMs = Date.parse(delegation.expiresAt);
+      if (!Number.isNaN(parentExpMs) && !Number.isNaN(childExpMs) && childExpMs > parentExpMs) {
+        temporalValid = false;
+        if (temporalError === undefined) {
+          temporalError = 'Temporal narrowing violated: expiresAt exceeds parent expiresAt';
+        }
+      }
+    }
 
     let scopeValid = true;
     if (i > 0) {
@@ -439,8 +489,8 @@ export async function verifyDelegationChain(
       }
     }
 
-    // Surface an expiry/window failure as the hop error when nothing worse fired.
-    const error = temporalValid ? undefined : temporal.error;
+    // Surface an expiry/window/narrowing failure as the hop error when nothing worse fired.
+    const error = temporalValid ? undefined : temporalError;
     results.push({ index: i, label, signatureValid, identityValid, scopeValid, temporalValid, effectiveTrust, error });
   }
 
