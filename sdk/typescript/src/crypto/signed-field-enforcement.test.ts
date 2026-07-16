@@ -185,6 +185,34 @@ describe('Signed-field enforcement — delegation chain', () => {
     // After the parent expires, the chain must fail even though the child is live.
     expect((await verifyDelegationChain([parent, child], { verifyAt: '2026-05-01T00:00:00.000Z' })).valid).toBe(false);
   });
+
+  it('rejects a child that outlives its parent even while the parent is still live (temporal narrowing)', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const leaf = await generateKeyPair();
+
+    const parent = await createDelegation({
+      delegatorKeyPair: root,
+      delegatePublicKey: agent.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      expiresAt: '2026-06-01T00:00:00.000Z',
+    });
+    const child = await createDelegation({
+      delegatorKeyPair: agent,
+      delegatePublicKey: leaf.publicKey,
+      scopes: ['search'],
+      createdAt: '2026-01-02T00:00:00.000Z',
+      expiresAt: '2036-01-01T00:00:00.000Z', // outlives the parent
+      parentDelegation: 'del-root',
+    });
+
+    // Both are live at NOW (2026-03-01), but the child claims authority in time
+    // beyond its delegator — the invariant a child must not outlive its parent.
+    const result = await verifyDelegationChain([parent, child], { verifyAt: NOW });
+    expect(result.valid).toBe(false);
+    expect(result.results[1].temporalValid).toBe(false);
+  });
 });
 
 describe('Signed-field enforcement — fail-closed on malformed input', () => {

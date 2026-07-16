@@ -5,6 +5,34 @@ All notable changes to `@opena2a/aim-sdk` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-07-16
+
+### Security
+
+- **Delegation chains now enforce temporal narrowing: a child may not outlive its
+  parent.** `verifyDelegationChain` rejects any chain in which a child's
+  `expiresAt` is later than its parent's, evaluated independently of the current
+  time (the per-hop expiry check added in 1.0.3 already fails the chain once a
+  parent has actually expired; this closes the window before that and covers
+  partial / as-of verification). This completes the delegation-expiry hardening
+  from 1.0.3.
+
+### Added
+
+- `createDelegation` accepts an optional `parentExpiresAt`. When creating a
+  sub-delegation, pass the parent's `expiresAt`: the child's default expiry is
+  capped at the parent's, and an explicit `expiresAt` beyond the parent's is
+  rejected (fails closed on an unparseable value). This prevents the default
+  seven-day expiry from silently producing a child that outlives its parent.
+
+### Note
+
+- Stricter verification: a chain whose child outlives its parent — previously
+  accepted — is now rejected. Chains built with `createDelegation` (using
+  `parentExpiresAt` for sub-delegations) are unaffected. Cross-engine parity for
+  this rule (Go / Java verifiers, kanoniv interop spec) is tracked as a follow-up;
+  the TypeScript verifier being stricter is fail-closed-safe in the interim.
+
 ## [1.0.3] - 2026-07-15
 
 ### Security
