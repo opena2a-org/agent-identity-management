@@ -26,6 +26,13 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			return c.Next()
 		}
 
+		// Check if already authenticated by the service-principal middleware
+		if authMethod == "service" {
+			// Already authenticated as a machine principal - skip JWT validation.
+			// No "role" was set, so human role gates still fail closed.
+			return c.Next()
+		}
+
 		// Check if already authenticated by ATC middleware
 		if authMethod == "atc" {
 			// Already authenticated via ATC - skip JWT validation
@@ -72,6 +79,17 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		if claims.Issuer == auth.IssuerSDK {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "SDK tokens cannot be used for API access; exchange it at /auth/refresh",
+			})
+		}
+
+		// SECURITY: service tokens (OAuth RFC 7523 jwt-bearer, minted to an agent)
+		// are machine principals, not users. They must never traverse a human
+		// auth path — this middleware populates "role", which the role gates read.
+		// Service principals are authenticated by ServicePrincipalMiddleware
+		// instead, which pins them to their own agent ID.
+		if claims.Issuer == auth.IssuerService {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Service tokens cannot be used on user-authenticated routes",
 			})
 		}
 
