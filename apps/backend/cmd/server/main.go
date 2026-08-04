@@ -28,14 +28,14 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
-	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/registry"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
@@ -187,9 +187,14 @@ func main() {
 		StreamRequestBody: false,
 	})
 
-	// Prometheus metrics endpoint (no auth required)
+	// Prometheus metrics endpoint. Optionally gated by a bearer token
+	// (METRICS_AUTH_TOKEN); when unset it stays open and a warning is logged
+	// below. See issue #348.
 	// CRITICAL: Must be registered BEFORE Prometheus middleware to avoid circular recording
-	app.Get("/metrics", metrics.PrometheusHandler())
+	app.Get("/metrics", metrics.MetricsAuthMiddleware(cfg.Server.MetricsAuthToken), metrics.PrometheusHandler())
+	if cfg.Server.MetricsAuthToken == "" {
+		log.Printf("WARNING: /metrics is served without authentication; set METRICS_AUTH_TOKEN to require a bearer token (issue #348)")
+	}
 
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
@@ -329,8 +334,8 @@ func main() {
 	// These routes use Ed25519 agent authentication for SDK/programmatic access
 	// Allows both Ed25519 (agent signatures) and JWT (user tokens) authentication
 	sdkAPI := app.Group("/api/v1/sdk-api")
-	sdkAPI.Use(middleware.PQCAgentMiddleware(services.Agent)) // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
-	sdkAPI.Use(middleware.AuthMiddleware(jwtService))             // Fallback to JWT if Ed25519 not present
+	sdkAPI.Use(middleware.PQCAgentMiddleware(services.Agent))           // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
+	sdkAPI.Use(middleware.AuthMiddleware(jwtService))                   // Fallback to JWT if Ed25519 not present
 	sdkAPI.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	sdkAPI.Use(middleware.RateLimitMiddleware())
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
@@ -338,14 +343,14 @@ func main() {
 	sdkAPI.Post("/agents/:id/capabilities/register", h.Capability.RegisterCapability)              // SDK capability registration (respects enforcement mode)
 	sdkAPI.Get("/agents/:id/capability-requests", h.CapabilityRequest.ListAgentCapabilityRequests) // SDK list agent's capability requests
 	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest)    // SDK capability request creation
-	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                               // SDK MCP registration (create new MCP server)
-	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                 // SDK list MCP servers for agent's org
-	sdkAPI.Get("/agents/:id/mcp-servers/by-name", h.MCP.GetMCPServerByName)                    // SDK get MCP by name (capability caching)
-	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)            // SDK record agent-MCP connection (use_mcp_tool)
-	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)         // SDK MCP supply chain usage analytics
-	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                    // SDK MCP detection and integration reporting
-	sdkAPI.Post("/agents/:id/heartbeat", h.Lifecycle.Heartbeat)                                  // SDK agent heartbeat (liveness)
-	sdkAPI.Post("/agents/:id/isolation", h.TrustScore.SubmitIsolationAttestation)               // SDK self-report of runtime isolation posture (trust factor 9)
+	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                                  // SDK MCP registration (create new MCP server)
+	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                    // SDK list MCP servers for agent's org
+	sdkAPI.Get("/agents/:id/mcp-servers/by-name", h.MCP.GetMCPServerByName)                        // SDK get MCP by name (capability caching)
+	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)               // SDK record agent-MCP connection (use_mcp_tool)
+	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)             // SDK MCP supply chain usage analytics
+	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                       // SDK MCP detection and integration reporting
+	sdkAPI.Post("/agents/:id/heartbeat", h.Lifecycle.Heartbeat)                                    // SDK agent heartbeat (liveness)
+	sdkAPI.Post("/agents/:id/isolation", h.TrustScore.SubmitIsolationAttestation)                  // SDK self-report of runtime isolation posture (trust factor 9)
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
@@ -494,21 +499,21 @@ type Repositories struct {
 	AuthFailure        *repository.AuthFailureRepository  // ✅ For failed authentication monitoring
 	DataTransfer       *repository.DataTransferRepository // ✅ For data exfiltration detection
 	// A2A (Agent-to-Agent) protocol repositories
-	A2AAgentCard    *repository.A2AAgentCardRepository
-	A2ASkill        *repository.A2ASkillRepository
-	A2ATask         *repository.A2ATaskRepository
-	A2APeerTrust    *repository.A2APeerTrustRepository
-	A2AConsent      *repository.A2AConsentRepository
-	A2ATrustScore   *repository.A2ATrustScoreRepository
-	A2ARequestNonce   *repository.A2ARequestNonceRepository
-	A2APolicy         *repository.A2APolicyRepository
+	A2AAgentCard          *repository.A2AAgentCardRepository
+	A2ASkill              *repository.A2ASkillRepository
+	A2ATask               *repository.A2ATaskRepository
+	A2APeerTrust          *repository.A2APeerTrustRepository
+	A2AConsent            *repository.A2AConsentRepository
+	A2ATrustScore         *repository.A2ATrustScoreRepository
+	A2ARequestNonce       *repository.A2ARequestNonceRepository
+	A2APolicy             *repository.A2APolicyRepository
 	A2AAttestation        *repository.A2AAgentAttestationRepository
 	A2ARevokedAgent       *repository.A2ARevokedAgentRepository
 	A2ASecuritySettings   *repository.A2ASecuritySettingsRepository
 	A2ASecurityViolation  *repository.A2ASecurityViolationRepository
-	DeviceCode              *repository.DeviceCodeRepository
-	CommunityIntelligence   *repository.CommunityIntelligenceRepository // For community intelligence opt-in telemetry
-	Remediation             *repository.RemediationRepository            // For remediation tracking (agentpwn + HMA)
+	DeviceCode            *repository.DeviceCodeRepository
+	CommunityIntelligence *repository.CommunityIntelligenceRepository // For community intelligence opt-in telemetry
+	Remediation           *repository.RemediationRepository           // For remediation tracking (agentpwn + HMA)
 	// Secrets management repositories
 	SecretNamespace     *repository.SecretNamespaceRepository
 	SecretCredential    *repository.SecretCredentialRepository
@@ -554,14 +559,14 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		AuthFailure:        repository.NewAuthFailureRepository(db),        // ✅ For failed authentication monitoring
 		DataTransfer:       repository.NewDataTransferRepository(db),       // ✅ For data exfiltration detection
 		// A2A (Agent-to-Agent) protocol repositories
-		A2AAgentCard:    repository.NewA2AAgentCardRepository(db),
-		A2ASkill:        repository.NewA2ASkillRepository(db),
-		A2ATask:         repository.NewA2ATaskRepository(db),
-		A2APeerTrust:    repository.NewA2APeerTrustRepository(db),
-		A2AConsent:      repository.NewA2AConsentRepository(db),
-		A2ATrustScore:   repository.NewA2ATrustScoreRepository(db),
-		A2ARequestNonce:   repository.NewA2ARequestNonceRepository(db),
-		A2APolicy:         repository.NewA2APolicyRepository(db),
+		A2AAgentCard:          repository.NewA2AAgentCardRepository(db),
+		A2ASkill:              repository.NewA2ASkillRepository(db),
+		A2ATask:               repository.NewA2ATaskRepository(db),
+		A2APeerTrust:          repository.NewA2APeerTrustRepository(db),
+		A2AConsent:            repository.NewA2AConsentRepository(db),
+		A2ATrustScore:         repository.NewA2ATrustScoreRepository(db),
+		A2ARequestNonce:       repository.NewA2ARequestNonceRepository(db),
+		A2APolicy:             repository.NewA2APolicyRepository(db),
 		A2AAttestation:        repository.NewA2AAgentAttestationRepository(db),
 		A2ARevokedAgent:       repository.NewA2ARevokedAgentRepository(db),
 		A2ASecuritySettings:   repository.NewA2ASecuritySettingsRepository(db),
@@ -584,36 +589,36 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 }
 
 type Services struct {
-	Auth              *application.AuthService
-	Admin             *application.AdminService
-	Agent             *application.AgentService
-	APIKey            *application.APIKeyService
-	Trust             *application.TrustCalculator
-	Audit             *application.AuditService
-	Alert             *application.AlertService
-	Compliance        *application.ComplianceService
-	MCP               *application.MCPService
-	MCPCapability     *application.MCPCapabilityService     // ✅ For MCP server capability management
-	MCPAttestation    *application.MCPAttestationService    // ✅ For agent attestation of MCPs
-	Security          *application.SecurityService
-	SecurityPolicy    *application.SecurityPolicyService    // ✅ For policy-based enforcement
-	BehaviorAnalysis  *application.BehaviorAnalysisService  // ✅ For intelligent behavioral anomaly detection
-	Webhook           *application.WebhookService
-	VerificationEvent *application.VerificationEventService
-	Registration      *application.RegistrationService // ✅ Email/password registration workflow (replaced OAuth)
-	Tag               *application.TagService
-	SDKToken          *application.SDKTokenService
-	Capability        *application.CapabilityService
-	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
-	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
-	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
-	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
-	RegistryBridge          *application.RegistryBridgeService          // For OpenA2A Registry attestation contribution
-	CommunityIntelligence   *application.CommunityIntelligenceService   // For community intelligence opt-in telemetry
-	Remediation             *application.RemediationService             // For remediation tracking (agentpwn + HMA)
-	Secrets                 *application.SecretsService                 // For identity-native secrets management
-	FGA                     *application.FGAEngine                      // Fine-Grained Authorization engine (5-step decision flow)
-	ATCIssuance             *application.ATCIssuanceService             // Issues Registry-signed ATCs carrying AIM's behavioral score
+	Auth                  *application.AuthService
+	Admin                 *application.AdminService
+	Agent                 *application.AgentService
+	APIKey                *application.APIKeyService
+	Trust                 *application.TrustCalculator
+	Audit                 *application.AuditService
+	Alert                 *application.AlertService
+	Compliance            *application.ComplianceService
+	MCP                   *application.MCPService
+	MCPCapability         *application.MCPCapabilityService  // ✅ For MCP server capability management
+	MCPAttestation        *application.MCPAttestationService // ✅ For agent attestation of MCPs
+	Security              *application.SecurityService
+	SecurityPolicy        *application.SecurityPolicyService   // ✅ For policy-based enforcement
+	BehaviorAnalysis      *application.BehaviorAnalysisService // ✅ For intelligent behavioral anomaly detection
+	Webhook               *application.WebhookService
+	VerificationEvent     *application.VerificationEventService
+	Registration          *application.RegistrationService // ✅ Email/password registration workflow (replaced OAuth)
+	Tag                   *application.TagService
+	SDKToken              *application.SDKTokenService
+	Capability            *application.CapabilityService
+	CapabilityRequest     *application.CapabilityRequestService     // ✅ For capability expansion approval workflow
+	Detection             *application.DetectionService             // ✅ For MCP auto-detection (SDK + Direct API)
+	A2A                   *application.A2AService                   // ✅ For A2A (Agent-to-Agent) protocol
+	DeviceAuth            *application.DeviceAuthService            // For OAuth Device Authorization Grant (RFC 8628)
+	RegistryBridge        *application.RegistryBridgeService        // For OpenA2A Registry attestation contribution
+	CommunityIntelligence *application.CommunityIntelligenceService // For community intelligence opt-in telemetry
+	Remediation           *application.RemediationService           // For remediation tracking (agentpwn + HMA)
+	Secrets               *application.SecretsService               // For identity-native secrets management
+	FGA                   *application.FGAEngine                    // Fine-Grained Authorization engine (5-step decision flow)
+	ATCIssuance           *application.ATCIssuanceService           // Issues Registry-signed ATCs carrying AIM's behavioral score
 }
 
 func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -976,7 +981,6 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		}
 	}
 
-
 	// Azure Key Vault: enabled when AZURE_KEYVAULT_URL is set.
 	if azureVaultURL := os.Getenv("AZURE_KEYVAULT_URL"); azureVaultURL != "" {
 		azureCfg := &infrasecrets.AzureKeyVaultConfig{
@@ -1043,78 +1047,78 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 	}
 
 	return &Services{
-		Auth:              authService,
-		Admin:             adminService,
-		Agent:             agentService,
-		APIKey:            apiKeyService,
-		Trust:             trustCalculator,
-		Audit:             auditService,
-		Alert:             alertService,
-		Compliance:        complianceService,
-		MCP:               mcpService,
-		MCPCapability:     mcpCapabilityService,     // ✅ For MCP server capability management
-		MCPAttestation:    mcpAttestationService,    // ✅ For agent attestation of MCPs
-		Security:          securityService,
-		SecurityPolicy:    securityPolicyService,    // ✅ For policy-based enforcement
-		BehaviorAnalysis:  behaviorAnalysisService,  // ✅ For intelligent behavioral anomaly detection
-		Webhook:           webhookService,
-		VerificationEvent: verificationEventService,
-		Registration:      registrationService, // ✅ Email/password registration workflow (replaced OAuth)
-		Tag:               tagService,
-		SDKToken:          sdkTokenService,
-		Capability:        capabilityService,
-		CapabilityRequest: capabilityRequestService, // ✅ For capability expansion approval workflow
-		Detection:         detectionService,         // ✅ For MCP auto-detection (SDK + Direct API)
-		A2A:               a2aService,               // ✅ For A2A (Agent-to-Agent) protocol
-		DeviceAuth:        deviceAuthService,        // For OAuth Device Authorization Grant (RFC 8628)
-		RegistryBridge:          registryBridgeService,    // For OpenA2A Registry attestation contribution
-		CommunityIntelligence:   ciService,                 // For community intelligence opt-in telemetry
-		Remediation:             application.NewRemediationService(repos.Remediation), // For remediation tracking
-		Secrets:                 secretsService,                                       // For identity-native secrets management
-		FGA:                     fgaEngine,                                            // Fine-Grained Authorization engine
-		ATCIssuance:             atcIssuanceService,                                   // Registry-delegated ATC issuance
+		Auth:                  authService,
+		Admin:                 adminService,
+		Agent:                 agentService,
+		APIKey:                apiKeyService,
+		Trust:                 trustCalculator,
+		Audit:                 auditService,
+		Alert:                 alertService,
+		Compliance:            complianceService,
+		MCP:                   mcpService,
+		MCPCapability:         mcpCapabilityService,  // ✅ For MCP server capability management
+		MCPAttestation:        mcpAttestationService, // ✅ For agent attestation of MCPs
+		Security:              securityService,
+		SecurityPolicy:        securityPolicyService,   // ✅ For policy-based enforcement
+		BehaviorAnalysis:      behaviorAnalysisService, // ✅ For intelligent behavioral anomaly detection
+		Webhook:               webhookService,
+		VerificationEvent:     verificationEventService,
+		Registration:          registrationService, // ✅ Email/password registration workflow (replaced OAuth)
+		Tag:                   tagService,
+		SDKToken:              sdkTokenService,
+		Capability:            capabilityService,
+		CapabilityRequest:     capabilityRequestService,                             // ✅ For capability expansion approval workflow
+		Detection:             detectionService,                                     // ✅ For MCP auto-detection (SDK + Direct API)
+		A2A:                   a2aService,                                           // ✅ For A2A (Agent-to-Agent) protocol
+		DeviceAuth:            deviceAuthService,                                    // For OAuth Device Authorization Grant (RFC 8628)
+		RegistryBridge:        registryBridgeService,                                // For OpenA2A Registry attestation contribution
+		CommunityIntelligence: ciService,                                            // For community intelligence opt-in telemetry
+		Remediation:           application.NewRemediationService(repos.Remediation), // For remediation tracking
+		Secrets:               secretsService,                                       // For identity-native secrets management
+		FGA:                   fgaEngine,                                            // Fine-Grained Authorization engine
+		ATCIssuance:           atcIssuanceService,                                   // Registry-delegated ATC issuance
 	}, keyVault
 }
 
 type Handlers struct {
-	Auth               *handlers.AuthHandler
-	Agent              *handlers.AgentHandler
-	APIKey             *handlers.APIKeyHandler
-	TrustScore         *handlers.TrustScoreHandler
-	Admin              *handlers.AdminHandler
-	Compliance         *handlers.ComplianceHandler
-	MCP                *handlers.MCPHandler
-	MCPAttestation     *handlers.MCPAttestationHandler // ✅ For agent attestation of MCPs
-	Security           *handlers.SecurityHandler
-	SecurityPolicy     *handlers.SecurityPolicyHandler // ✅ For policy management
-	Analytics          *handlers.AnalyticsHandler
-	Webhook            *handlers.WebhookHandler
-	Verification       *handlers.VerificationHandler // ✅ For POST /verifications endpoint
-	VerificationEvent  *handlers.VerificationEventHandler
-	PublicAgent        *handlers.PublicAgentHandler
-	PublicRegistration *handlers.PublicRegistrationHandler
-	Tag                *handlers.TagHandler
-	SDK                *handlers.SDKHandler
-	SDKToken           *handlers.SDKTokenHandler
-	AuthRefresh        *handlers.AuthRefreshHandler
-	SDKTokenRecovery   *handlers.SDKTokenRecoveryHandler
-	Capability         *handlers.CapabilityHandler
-	Detection          *handlers.DetectionHandler          // ✅ For MCP auto-detection (SDK + Direct API)
-	CapabilityRequest  *handlers.CapabilityRequestHandlers // ✅ For capability request approval
-	MCPGraph           *handlers.MCPGraphHandler           // ✅ For MCP-Agent connection graph visualization
-	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
-	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
-	A2A                *handlers.A2AHandler                // For A2A (Agent-to-Agent) protocol
-	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
-	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
-	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
-	RegistryBridge          *handlers.RegistryBridgeHandler          // For OpenA2A Registry attestation contribution
-	CommunityIntelligence   *handlers.CommunityIntelligenceHandler   // For community intelligence opt-in telemetry
-	AIP                     *handlers.AIPHandler                     // For AIP discovery and DID resolution
-	Remediation             *handlers.RemediationHandler             // For remediation tracking (agentpwn + HMA)
-	Secrets                 *handlers.SecretsHandler                 // For identity-native secrets management
-	Authorize               *handlers.AuthorizeHandler               // POST /agents/:id/authorize -- FGA decision endpoint
-	ATCIssuance             *handlers.ATCIssuanceHandler             // POST /agents/:id/atc -- Registry-delegated ATC issuance
+	Auth                  *handlers.AuthHandler
+	Agent                 *handlers.AgentHandler
+	APIKey                *handlers.APIKeyHandler
+	TrustScore            *handlers.TrustScoreHandler
+	Admin                 *handlers.AdminHandler
+	Compliance            *handlers.ComplianceHandler
+	MCP                   *handlers.MCPHandler
+	MCPAttestation        *handlers.MCPAttestationHandler // ✅ For agent attestation of MCPs
+	Security              *handlers.SecurityHandler
+	SecurityPolicy        *handlers.SecurityPolicyHandler // ✅ For policy management
+	Analytics             *handlers.AnalyticsHandler
+	Webhook               *handlers.WebhookHandler
+	Verification          *handlers.VerificationHandler // ✅ For POST /verifications endpoint
+	VerificationEvent     *handlers.VerificationEventHandler
+	PublicAgent           *handlers.PublicAgentHandler
+	PublicRegistration    *handlers.PublicRegistrationHandler
+	Tag                   *handlers.TagHandler
+	SDK                   *handlers.SDKHandler
+	SDKToken              *handlers.SDKTokenHandler
+	AuthRefresh           *handlers.AuthRefreshHandler
+	SDKTokenRecovery      *handlers.SDKTokenRecoveryHandler
+	Capability            *handlers.CapabilityHandler
+	Detection             *handlers.DetectionHandler             // ✅ For MCP auto-detection (SDK + Direct API)
+	CapabilityRequest     *handlers.CapabilityRequestHandlers    // ✅ For capability request approval
+	MCPGraph              *handlers.MCPGraphHandler              // ✅ For MCP-Agent connection graph visualization
+	MCPDiscovery          *handlers.MCPDiscoveryHandler          // ✅ For MCP discovery dashboard
+	SupplyChain           *handlers.SupplyChainHandler           // ✅ For MCP supply chain analytics
+	A2A                   *handlers.A2AHandler                   // For A2A (Agent-to-Agent) protocol
+	OAuthToken            *handlers.OAuthTokenHandler            // For OAuth 2.0 token endpoint (RFC 6749)
+	Lifecycle             *handlers.LifecycleHandler             // For agent lifecycle (heartbeat, revocations, bulk status)
+	DeviceAuth            *handlers.DeviceAuthHandler            // For OAuth Device Authorization Grant (RFC 8628)
+	RegistryBridge        *handlers.RegistryBridgeHandler        // For OpenA2A Registry attestation contribution
+	CommunityIntelligence *handlers.CommunityIntelligenceHandler // For community intelligence opt-in telemetry
+	AIP                   *handlers.AIPHandler                   // For AIP discovery and DID resolution
+	Remediation           *handlers.RemediationHandler           // For remediation tracking (agentpwn + HMA)
+	Secrets               *handlers.SecretsHandler               // For identity-native secrets management
+	Authorize             *handlers.AuthorizeHandler             // POST /agents/:id/authorize -- FGA decision endpoint
+	ATCIssuance           *handlers.ATCIssuanceHandler           // POST /agents/:id/atc -- Registry-delegated ATC issuance
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -1134,9 +1138,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Alert,             // ✅ For creating security alerts on capability violations
 			services.VerificationEvent, // ✅ For recording action verification attempts in Security Dashboard
 			services.Capability,
-			services.Tag,              // ✅ For fetching agent tags in responses
-			repos.Organization,        // ✅ For enforcement mode lookup in verify-capability
-			services.MCPAttestation,   // ✅ For getting MCP connections via attestations
+			services.Tag,            // ✅ For fetching agent tags in responses
+			repos.Organization,      // ✅ For enforcement mode lookup in verify-capability
+			services.MCPAttestation, // ✅ For getting MCP connections via attestations
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
@@ -1165,7 +1169,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		MCP: handlers.NewMCPHandler(
 			services.MCP,
-			services.MCPCapability,  // ✅ For capability endpoint
+			services.MCPCapability, // ✅ For capability endpoint
 			services.Audit,
 			repos.Agent,             // ✅ For agent relationships ("Talks To")
 			repos.VerificationEvent, // ✅ For verification events endpoint
@@ -1348,7 +1352,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Public routes (NO authentication required) - Self-registration API
 	public := v1.Group("/public")
-	public.Use(middleware.StrictRateLimitMiddleware())                                       // SECURITY: Strict rate limiting on public endpoints
+	public.Use(middleware.StrictRateLimitMiddleware())                                      // SECURITY: Strict rate limiting on public endpoints
 	public.Use(middleware.OptionalAuthMiddleware(jwtService))                               // Try to extract user from JWT if present
 	public.Post("/agents/register", h.PublicAgent.Register)                                 // 🚀 ONE-LINE agent registration
 	public.Post("/register", h.PublicRegistration.RegisterUser)                             // 🚀 User registration
@@ -1379,9 +1383,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Auth routes (no authentication required, strict rate limiting)
 	auth := v1.Group("/auth")
 	auth.Use(middleware.StrictRateLimitMiddleware()) // SECURITY: Strict rate limiting on auth endpoints
-	auth.Post("/login/local", h.Auth.LocalLogin) // Local email/password login
+	auth.Post("/login/local", h.Auth.LocalLogin)     // Local email/password login
 	auth.Post("/logout", h.Auth.Logout)
-	auth.Post("/refresh", h.AuthRefresh.RefreshToken)                 // Refresh access token (with token rotation)
+	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
 
 	// Authenticated auth routes (authentication required)
 	authProtected := v1.Group("/auth")
@@ -1414,8 +1418,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Path: /api/v1/detection/agents/:id/report (instead of /api/v1/agents/:id/detection/report)
 	// ✅ FIX: Use JWT authentication for web UI access, API key for SDK programmatic access
 	detection := v1.Group("/detection")
-	detection.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Try Ed25519/ML-DSA/hybrid first (for SDK agents)
-	detection.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
+	detection.Use(middleware.PQCAgentMiddleware(services.Agent))           // ✅ Try Ed25519/ML-DSA/hybrid first (for SDK agents)
+	detection.Use(middleware.AuthMiddleware(jwtService))                   // ✅ Fallback to JWT (for web UI)
 	detection.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	detection.Use(middleware.RateLimitMiddleware())
 	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
@@ -1427,14 +1431,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Agents routes - All other agent endpoints with quad authentication (ATC, API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
 	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier())) // ✅ ATC first (for DECIMA agents, Phase 7)
-	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key (for dashboard-generated keys)
-	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
-	agents.Use(middleware.ServicePrincipalMiddleware(jwtService)) // ✅ Then OAuth (RFC 7523) service tokens; sets no role
-	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
-	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
+	agents.Use(middleware.OptionalAPIKeyMiddleware(db))                      // ✅ Try API key (for dashboard-generated keys)
+	agents.Use(middleware.PQCAgentMiddleware(services.Agent))                // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
+	agents.Use(middleware.ServicePrincipalMiddleware(jwtService))            // ✅ Then OAuth (RFC 7523) service tokens; sets no role
+	agents.Use(middleware.AuthMiddleware(jwtService))                        // ✅ Fallback to JWT (for web UI)
+	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent))      // Touches agents.last_active on agent-authed responses (#167)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
-	agents.Post("/bulk-status", h.Lifecycle.BulkStatus) // Bulk agent status lookup
+	agents.Post("/bulk-status", h.Lifecycle.BulkStatus)                          // Bulk agent status lookup
 	agents.Post("/", middleware.MemberOrAPIKeyMiddleware(), h.Agent.CreateAgent) // machine API keys (org-scoped) OR member+ JWT; other routes stay MemberMiddleware (JWT-only)
 	agents.Get("/:id", h.Agent.GetAgent)
 	// Member+ JWT, OR a service principal acting on ITSELF. The TypeScript SDK's
@@ -1467,12 +1471,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Returns the decrypted private key, so it is member+ (JWT) only — same rationale as above.
 	agents.Get("/:id/credentials", middleware.MemberMiddleware(), h.Agent.GetCredentials)
 	// MCP Server relationship management - "talks_to" endpoints
-	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                  // ✅ Dashboard: Get MCP servers from talks_to field
+	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                 // ✅ Dashboard: Get MCP servers from talks_to field
 	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                // Add MCP servers (bulk)
 	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent) // Remove single MCP
 	// Attestation revocation for supply chain security (when agent key is compromised)
 	agents.Post("/:id/attestations/revoke-all", middleware.ManagerMiddleware(), h.MCPAttestation.RevokeAllAttestationsByAgent) // 🔴 Revoke ALL attestations by this agent
-	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)      // Auto-detect MCPs from config
+	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)                      // Auto-detect MCPs from config
 	// Trust Score management - RESTful endpoints under /agents/:id/trust-score/*
 	agents.Get("/:id/trust-score", h.Agent.GetAgentTrustScore)                                                      // Get current trust score
 	agents.Get("/:id/trust-score/history", h.Agent.GetAgentTrustScoreHistory)                                       // Get trust score history
@@ -1485,9 +1489,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs) // Get audit logs for specific agent (with pagination)
 	agents.Get("/:id/activity", h.Agent.GetAgentActivity)    // Get actions PERFORMED BY the agent (attestations, verifications)
 	// Post-Quantum Cryptography (PQC) endpoints
-	agents.Get("/:id/pqc-key", h.Agent.GetPQCKeyVault)                                  // Get agent's PQC key vault info
-	agents.Post("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RegisterPQCKey)  // Register PQC public key
-	agents.Put("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RotatePQCKey)     // Rotate PQC key
+	agents.Get("/:id/pqc-key", h.Agent.GetPQCKeyVault)                                    // Get agent's PQC key vault info
+	agents.Post("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RegisterPQCKey)    // Register PQC public key
+	agents.Put("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RotatePQCKey)       // Rotate PQC key
 	agents.Post("/:id/hybrid-mode", middleware.MemberMiddleware(), h.Agent.SetHybridMode) // Enable/disable hybrid mode
 
 	// Cryptographic algorithms info (public)
@@ -1631,8 +1635,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	compliance.Post("/check", h.Compliance.RunComplianceCheck)
 	compliance.Get("/export", h.Compliance.ExportComplianceReport) // Export compliance report (CSV/JSON)
 	// Compliance score trending - track scores over time
-	compliance.Get("/trending", h.Compliance.GetComplianceTrending)       // Get compliance score history
-	compliance.Post("/snapshot", h.Compliance.RecordComplianceSnapshot)   // Record point-in-time compliance score
+	compliance.Get("/trending", h.Compliance.GetComplianceTrending)     // Get compliance score history
+	compliance.Post("/snapshot", h.Compliance.RecordComplianceSnapshot) // Record point-in-time compliance score
 	// Evidence collection for auditors
 	compliance.Get("/evidence", h.Compliance.ListEvidence)                         // List collected evidence
 	compliance.Post("/evidence/collect", h.Compliance.CollectEvidence)             // Collect evidence for a check
@@ -1643,12 +1647,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// CRITICAL: These MUST be registered BEFORE JWT-protected routes to avoid middleware conflicts
 	// These endpoints use Ed25519 authentication (agent-to-backend) instead of JWT (user-to-backend)
 	mcpServersAgentAuth := v1.Group("/mcp-servers")
-	mcpServersAgentAuth.Use(middleware.PQCAgentMiddleware(services.Agent)) // PQC signature verification (Ed25519, ML-DSA, or hybrid)
+	mcpServersAgentAuth.Use(middleware.PQCAgentMiddleware(services.Agent))           // PQC signature verification (Ed25519, ML-DSA, or hybrid)
 	mcpServersAgentAuth.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
-	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge)  // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
-	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                  // ✅ Submit agent attestation (Ed25519 signed, with challenge)
-	mcpServersAgentAuth.Get("/:id/attestations", h.MCPAttestation.GetMCPAttestations)    // ✅ Get all attestations for this MCP
+	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge) // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
+	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                 // ✅ Submit agent attestation (Ed25519 signed, with challenge)
+	mcpServersAgentAuth.Get("/:id/attestations", h.MCPAttestation.GetMCPAttestations)   // ✅ Get all attestations for this MCP
 	// NOTE: /:id/agents moved to JWT-authenticated mcpServers group to fix route conflict
 	// The Ed25519 middleware's c.Next() was forwarding JWT requests to wrong handler
 
@@ -1668,11 +1672,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Post("/:id/keys", middleware.MemberMiddleware(), h.MCP.AddPublicKey)
 	mcpServers.Get("/:id/verification-status", h.MCP.GetVerificationStatus)
 	mcpServers.Get("/:id/capabilities", h.MCP.GetMCPServerCapabilities)                                    // ✅ Get detected capabilities
-	mcpServers.Post("/:id/detect-capabilities", middleware.MemberMiddleware(), h.MCP.DetectCapabilities) // ✅ Manually trigger capability detection
+	mcpServers.Post("/:id/detect-capabilities", middleware.MemberMiddleware(), h.MCP.DetectCapabilities)   // ✅ Manually trigger capability detection
 	mcpServers.Get("/:id/verification-events", h.MCP.GetMCPVerificationEvents)                             // ✅ Get verification events for MCP server
 	mcpServers.Get("/:id/consensus-status", h.MCPAttestation.GetConsensusStatus)                           // 🔐 Multi-agent consensus status for verification
 	mcpServers.Post("/:id/manual-attest", middleware.MemberMiddleware(), h.MCPAttestation.ManualAttestMCP) // ✅ Manual attestation (non-SDK users)
-	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)  // ✅ Dashboard: Get agents with this MCP in talks_to field
+	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)                                                // ✅ Dashboard: Get agents with this MCP in talks_to field
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-capability", h.MCP.VerifyMCPCapability)
 	mcpServers.Get("/:id/connections", h.MCPGraph.GetMCPServerConnections) // ✅ Get connection graph for specific MCP server
@@ -1690,8 +1694,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	supplyChain := v1.Group("/supply-chain")
 	supplyChain.Use(middleware.AuthMiddleware(jwtService))
 	supplyChain.Use(middleware.RateLimitMiddleware())
-	supplyChain.Get("/analytics", h.SupplyChain.GetSupplyChainAnalytics)       // 📊 Full supply chain dashboard data
-	supplyChain.Get("/drift-alerts", h.SupplyChain.GetCapabilityDriftAlerts)   // 🔔 Capability drift detection alerts
+	supplyChain.Get("/analytics", h.SupplyChain.GetSupplyChainAnalytics)     // 📊 Full supply chain dashboard data
+	supplyChain.Get("/drift-alerts", h.SupplyChain.GetCapabilityDriftAlerts) // 🔔 Capability drift detection alerts
 
 	// Security routes (admin/manager)
 	security := v1.Group("/security")
@@ -1860,10 +1864,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// SDK Compatibility Routes (alternative paths that SDKs expect)
 	a2a.Post("/sign", h.A2A.SignRequestAlt)
-	a2a.Post("/verify", h.A2A.VerifyRequest)                                   // SDK verify request endpoint
+	a2a.Post("/verify", h.A2A.VerifyRequest) // SDK verify request endpoint
 	a2a.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
-	a2a.Put("/trust/:id", h.A2A.UpdateTrustScore)                              // SDK update trust score
-	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction)                // SDK record interaction
+	a2a.Put("/trust/:id", h.A2A.UpdateTrustScore)               // SDK update trust score
+	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction) // SDK record interaction
 	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
 	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                        // Java SDK expects POST
 	a2a.Get("/cards", h.A2A.ListAgentCards)                                    // SDK list agent cards
