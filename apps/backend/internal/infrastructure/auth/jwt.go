@@ -20,6 +20,13 @@ const (
 	// IssuerSDK is the issuer for the long-lived (90-day) SDK refresh token,
 	// which is only valid at the /auth/refresh endpoint — never as a bearer.
 	IssuerSDK = "agent-identity-management-sdk"
+	// IssuerService is the issuer for tokens minted by the OAuth token endpoint
+	// (RFC 7523 jwt-bearer) to an authenticated *agent*. These are machine
+	// principals, not humans: they carry no user role and must never traverse a
+	// human role gate. SECURITY: the access-auth middleware rejects this issuer,
+	// so a service token is only usable behind ServicePrincipalMiddleware, which
+	// additionally pins the token to its own agent ID.
+	IssuerService = "agent-identity-management-service"
 )
 
 // Token types. The `typ` claim separates access tokens (valid as a bearer) from
@@ -197,6 +204,42 @@ func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (str
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    IssuerUser,
 			Subject:   userID,
+			ID:        uuid.New().String(),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(s.secret)
+}
+
+// GenerateServiceToken mints an access token for a machine principal — an agent
+// that authenticated at the OAuth token endpoint via RFC 7523 jwt-bearer.
+//
+// SECURITY: deliberately different from GenerateAccessToken in two ways.
+//   - Issuer is IssuerService, which AuthMiddleware rejects. A service token
+//     therefore cannot be presented on any human-authenticated route, even one
+//     that forgets to add a gate.
+//   - Role is left EMPTY. Previously this path minted role="service", a string
+//     absent from the domain.UserRole enum. MemberMiddleware rejected only
+//     "viewer", so "service" traversed it and reached 35 routes including
+//     GET /agents/:id/credentials — letting one compromised agent read every
+//     sibling agent's private key in the same organization. An empty role now
+//     fails every role gate's type assertion as well as its allow-list.
+//
+// Subject is the agent's own ID; ServicePrincipalMiddleware pins route access to
+// it so a service principal can only ever act on itself.
+func (s *JWTService) GenerateServiceToken(agentID, orgID string) (string, error) {
+	now := time.Now()
+	claims := JWTClaims{
+		UserID:         agentID,
+		OrganizationID: orgID,
+		TokenType:      TokenTypeAccess,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now),
+			Issuer:    IssuerService,
+			Subject:   agentID,
 			ID:        uuid.New().String(),
 		},
 	}

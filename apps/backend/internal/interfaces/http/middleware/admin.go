@@ -58,7 +58,18 @@ func MemberMiddleware() fiber.Handler {
 			})
 		}
 
-		if role == string(domain.RoleViewer) {
+		// SECURITY: allow-list, not deny-list. This gate previously rejected only
+		// RoleViewer and admitted every other non-empty role string. The OAuth
+		// token endpoint mints role="service" — absent from the UserRole enum — so
+		// an agent-authenticated token traversed this gate and reached all 35
+		// member routes, including GET /agents/:id/credentials, which returns a
+		// decrypted Ed25519 private key. One compromised agent could therefore
+		// read every sibling agent's key in the same organization. Enumerating
+		// what is allowed means an unrecognised role fails closed.
+		// Regression: service_token_escalation_test.go.
+		if role != string(domain.RoleAdmin) &&
+			role != string(domain.RoleManager) &&
+			role != string(domain.RoleMember) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "Member access required (viewers cannot perform this action)",
 			})
@@ -94,7 +105,11 @@ func MemberOrAPIKeyMiddleware() fiber.Handler {
 			})
 		}
 
-		if role == string(domain.RoleViewer) {
+		// SECURITY: allow-list, for the same reason as MemberMiddleware above —
+		// an unrecognised role must fail closed, not fall through.
+		if role != string(domain.RoleAdmin) &&
+			role != string(domain.RoleManager) &&
+			role != string(domain.RoleMember) {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "Member access required (viewers cannot perform this action)",
 			})

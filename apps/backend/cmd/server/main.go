@@ -1429,6 +1429,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier())) // ✅ ATC first (for DECIMA agents, Phase 7)
 	agents.Use(middleware.OptionalAPIKeyMiddleware(db))            // ✅ Try API key (for dashboard-generated keys)
 	agents.Use(middleware.PQCAgentMiddleware(services.Agent)) // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
+	agents.Use(middleware.ServicePrincipalMiddleware(jwtService)) // ✅ Then OAuth (RFC 7523) service tokens; sets no role
 	agents.Use(middleware.AuthMiddleware(jwtService))             // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	agents.Use(middleware.RateLimitMiddleware())
@@ -1436,7 +1437,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus) // Bulk agent status lookup
 	agents.Post("/", middleware.MemberOrAPIKeyMiddleware(), h.Agent.CreateAgent) // machine API keys (org-scoped) OR member+ JWT; other routes stay MemberMiddleware (JWT-only)
 	agents.Get("/:id", h.Agent.GetAgent)
-	agents.Put("/:id", middleware.MemberMiddleware(), h.Agent.UpdateAgent)
+	// Member+ JWT, OR a service principal acting on ITSELF. The TypeScript SDK's
+	// updateAgent() calls this with its OAuth token; before the service-token fix
+	// that worked only because MemberMiddleware admitted role="service". The
+	// self-scope check keeps the SDK working while making a sibling agent
+	// unreachable by construction. See middleware/service_principal.go.
+	agents.Put("/:id", middleware.MemberOrSelfServiceMiddleware(), h.Agent.UpdateAgent)
 	agents.Delete("/:id", middleware.ManagerMiddleware(), h.Agent.DeleteAgent)
 	agents.Post("/:id/verify", middleware.ManagerMiddleware(), h.Agent.VerifyAgent)
 	// Agent lifecycle management endpoints

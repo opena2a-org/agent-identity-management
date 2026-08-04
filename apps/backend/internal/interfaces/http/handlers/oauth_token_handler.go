@@ -195,8 +195,12 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		})
 	}
 
-	// Generate an access token for the authenticated agent
-	accessToken, err := h.jwtService.GenerateAccessToken(clientID, agent.OrganizationID.String(), clientID, "service")
+	// Generate a service token for the authenticated agent. This is a machine
+	// principal: GenerateServiceToken stamps IssuerService and leaves the role
+	// empty, so the token cannot traverse a human role gate. It previously used
+	// GenerateAccessToken with role="service", which passed the member gate and
+	// exposed sibling agents' private keys — see GenerateServiceToken's comment.
+	accessToken, err := h.jwtService.GenerateServiceToken(clientID, agent.OrganizationID.String())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":             "server_error",
