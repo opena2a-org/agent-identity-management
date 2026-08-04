@@ -1,11 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"io"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,6 +193,107 @@ func TestServiceTokenIsRefusedOnRoutesWithoutTheServiceGate(t *testing.T) {
 	status, body := callMemberGated(t, svc, token)
 	require.Equal(t, fiber.StatusUnauthorized, status,
 		"service token was not refused by AuthMiddleware on an un-opted-in route (body: %q)", body)
+}
+
+// --- Enforcement matrix for the service-token verifier -----------------------
+//
+// ServicePrincipalMiddleware reads five fields off a service token. Signature,
+// expiry and malformed-token handling are enforced inside ValidateToken and are
+// already proven there (auth/jwt_test.go: WrongSecret, Expired, Malformed). The
+// three below are enforced in THIS middleware, so they need rejection cases here
+// or the enforcement is unproven.
+//
+// | Field                | Enforced at            | Negative test                            |
+// |----------------------|------------------------|------------------------------------------|
+// | signature / alg      | ValidateToken          | auth/jwt_test.go WrongSecret             |
+// | exp                  | ValidateToken          | auth/jwt_test.go Expired                 |
+// | issuer == service    | ServicePrincipal       | TestServiceTokenIsRefusedOnRoutes...      |
+// | typ == access        | ServicePrincipal       | TestServiceTokenWithNonAccessTypeIsRejected |
+// | revocation (jti)     | ServicePrincipal       | TestRevokedServiceTokenIsRejected        |
+// | sub parses as UUID   | ServicePrincipal       | TestServiceTokenWithMalformedSubjectIsRejected |
+// | :id == sub           | MemberOrSelfService    | TestServicePrincipalIsPinnedToItsOwnAgent |
+
+const testJWTSecret = "test-secret-at-least-32-characters-long!"
+
+// craftServiceToken signs an arbitrary claim set with the test secret, so a case
+// GenerateServiceToken would never produce (wrong typ, unparseable subject) can
+// still be presented to the middleware.
+func craftServiceToken(t *testing.T, claims auth.JWTClaims) string {
+	t.Helper()
+	if claims.RegisteredClaims.ExpiresAt == nil {
+		claims.RegisteredClaims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
+	}
+	claims.RegisteredClaims.IssuedAt = jwt.NewNumericDate(time.Now())
+	claims.RegisteredClaims.Issuer = auth.IssuerService
+	if claims.RegisteredClaims.ID == "" {
+		claims.RegisteredClaims.ID = uuid.NewString()
+	}
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(testJWTSecret))
+	require.NoError(t, err)
+	return signed
+}
+
+// A service token whose typ is not "access" must be refused. Without the typ
+// check the token would proceed to the handler, so this fails on a verifier that
+// skips it.
+func TestServiceTokenWithNonAccessTypeIsRejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", testJWTSecret)
+	svc := auth.NewJWTService()
+
+	agentID := uuid.NewString()
+	token := craftServiceToken(t, auth.JWTClaims{
+		UserID:           agentID,
+		OrganizationID:   uuid.NewString(),
+		TokenType:        auth.TokenTypeRefresh,
+		RegisteredClaims: jwt.RegisteredClaims{Subject: agentID},
+	})
+
+	status, body := callSelfScoped(t, svc, token, agentID)
+	require.Equal(t, fiber.StatusUnauthorized, status,
+		"a refresh-typed service token reached the handler (body: %q)", body)
+}
+
+// A revoked service token must be refused. IsRevoked is called but nothing
+// exercised it before this test.
+func TestRevokedServiceTokenIsRejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", testJWTSecret)
+	svc := auth.NewJWTService()
+	svc.SetRevoker(auth.NewTokenRevoker(&inMemRevocationStore{m: map[string]bool{}}, false))
+
+	agentID := uuid.NewString()
+	token, err := svc.GenerateServiceToken(agentID, uuid.NewString())
+	require.NoError(t, err)
+
+	// CONTROL: it works before revocation, so the assertion below is about
+	// revocation and not about some unrelated rejection.
+	status, _ := callSelfScoped(t, svc, token, agentID)
+	require.Equal(t, fiber.StatusOK, status, "service token must work before it is revoked")
+
+	require.NoError(t, svc.RevokeToken(context.Background(), token))
+
+	status, body := callSelfScoped(t, svc, token, agentID)
+	require.Equal(t, fiber.StatusUnauthorized, status,
+		"revoked service token still reached the handler (body: %q)", body)
+}
+
+// An unparseable subject must be refused by THIS middleware, not merely bounced
+// later. Asserting the specific error body is what gives this teeth: a fall-
+// through would also produce 401, from AuthMiddleware's issuer check.
+func TestServiceTokenWithMalformedSubjectIsRejected(t *testing.T) {
+	t.Setenv("JWT_SECRET", testJWTSecret)
+	svc := auth.NewJWTService()
+
+	token := craftServiceToken(t, auth.JWTClaims{
+		UserID:           "not-a-uuid",
+		OrganizationID:   uuid.NewString(),
+		TokenType:        auth.TokenTypeAccess,
+		RegisteredClaims: jwt.RegisteredClaims{Subject: "not-a-uuid"},
+	})
+
+	status, body := callSelfScoped(t, svc, token, uuid.NewString())
+	require.Equal(t, fiber.StatusUnauthorized, status)
+	require.Contains(t, body, "Invalid agent ID in token",
+		"expected the service-principal middleware to reject the subject itself, got %q", body)
 }
 
 // Unknown role strings must fail closed. This is the class fix, not the instance:
