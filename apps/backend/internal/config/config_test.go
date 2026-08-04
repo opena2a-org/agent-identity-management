@@ -95,8 +95,8 @@ func TestValidate_RejectsKnownDevKeyvaultMasterKey(t *testing.T) {
 func TestValidate_RejectsKnownDevSecrets_WithWhitespacePadding(t *testing.T) {
 	t.Parallel()
 	paddings := []struct {
-		name   string
-		wrap   func(string) string
+		name string
+		wrap func(string) string
 	}{
 		{"trailing-newline", func(s string) string { return s + "\n" }},
 		{"leading-space", func(s string) string { return " " + s }},
@@ -220,4 +220,34 @@ func TestConfigSource_HasNoPlaintextDevSecrets(t *testing.T) {
 		}
 		return true
 	})
+}
+
+// TestLoad_MetricsAuthToken pins the METRICS_AUTH_TOKEN contract for issue #348:
+// the env var operators set must be the one Load() reads, and it must default to
+// empty (open, backward-compatible). A typo in the var name would silently leave
+// /metrics unauthenticated despite a configured token.
+func TestLoad_MetricsAuthToken(t *testing.T) {
+	// Load() runs Validate(); satisfy the required env with a known-valid set.
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_USER", "aim")
+	t.Setenv("POSTGRES_DB", "aim")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 64))
+
+	t.Setenv("METRICS_AUTH_TOKEN", "scrape-token-xyz")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() with token set: %v", err)
+	}
+	if got := cfg.Server.MetricsAuthToken; got != "scrape-token-xyz" {
+		t.Fatalf("MetricsAuthToken with METRICS_AUTH_TOKEN set: got %q, want %q", got, "scrape-token-xyz")
+	}
+
+	os.Unsetenv("METRICS_AUTH_TOKEN")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() with token unset: %v", err)
+	}
+	if got := cfg.Server.MetricsAuthToken; got != "" {
+		t.Fatalf("MetricsAuthToken with METRICS_AUTH_TOKEN unset: got %q, want empty", got)
+	}
 }

@@ -64,6 +64,11 @@ type ServerConfig struct {
 	Environment string
 	LogLevel    string
 	FrontendURL string
+	// MetricsAuthToken, when non-empty, gates GET /metrics behind a
+	// `Authorization: Bearer <token>` check. Empty (the default) leaves the
+	// endpoint open for backward compatibility; the server logs a startup
+	// warning in that case. See issue #348.
+	MetricsAuthToken string
 }
 
 // DatabaseConfig holds database configuration
@@ -120,21 +125,22 @@ type OktaProvider struct {
 func Load() (*Config, error) {
 	config := &Config{
 		Server: ServerConfig{
-			Port:        getEnv("APP_PORT", "8080"),
-			Environment: getEnv("ENVIRONMENT", "development"),
-			LogLevel:    getEnv("LOG_LEVEL", "info"),
-			FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
+			Port:             getEnv("APP_PORT", "8080"),
+			Environment:      getEnv("ENVIRONMENT", "development"),
+			LogLevel:         getEnv("LOG_LEVEL", "info"),
+			FrontendURL:      getEnv("FRONTEND_URL", "http://localhost:3000"),
+			MetricsAuthToken: getEnv("METRICS_AUTH_TOKEN", ""),
 		},
-	Database: DatabaseConfig{
-		Host:            getEnvRequired("POSTGRES_HOST"),
-		Port:            getEnvAsInt("POSTGRES_PORT", 5432),
-		User:            getEnvRequired("POSTGRES_USER"),
-		Password:        getEnv("POSTGRES_PASSWORD", ""), // Optional for local dev with no password
-		Database:        getEnvRequired("POSTGRES_DB"),
-		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
-		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
-		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
-	},
+		Database: DatabaseConfig{
+			Host:            getEnvRequired("POSTGRES_HOST"),
+			Port:            getEnvAsInt("POSTGRES_PORT", 5432),
+			User:            getEnvRequired("POSTGRES_USER"),
+			Password:        getEnv("POSTGRES_PASSWORD", ""), // Optional for local dev with no password
+			Database:        getEnvRequired("POSTGRES_DB"),
+			SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
+			MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
+			ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
+		},
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
@@ -142,11 +148,11 @@ func Load() (*Config, error) {
 			DB:       getEnvAsInt("REDIS_DB", 0),
 			UseTLS:   getEnv("REDIS_USE_TLS", "false") == "true",
 		},
-	JWT: JWTConfig{
-		Secret:          getEnvRequired("JWT_SECRET"),
-		AccessTokenTTL:  getEnvAsDuration("JWT_ACCESS_TTL", 24*time.Hour),
-		RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
-	},
+		JWT: JWTConfig{
+			Secret:          getEnvRequired("JWT_SECRET"),
+			AccessTokenTTL:  getEnvAsDuration("JWT_ACCESS_TTL", 24*time.Hour),
+			RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+		},
 		OAuth: OAuthConfig{
 			Google: OAuthProvider{
 				ClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
