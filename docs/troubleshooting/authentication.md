@@ -356,6 +356,71 @@ else:
 
 ---
 
+### Error 5: "Agent is not permitted to authenticate" (Status: 401)
+
+**Full Error**:
+```
+❌ Authentication Failed: Agent is not permitted to authenticate (status: revoked)
+```
+
+**Root Cause**: The signature or API key is valid, but the agent itself is no
+longer allowed to authenticate. Only agents in `pending` or `verified` status may
+authenticate; `suspended` and `revoked` are refused, as is any other status value.
+
+This applies to every agent auth path — Ed25519, ML-DSA, hybrid, and API keys.
+Rotating the key or re-signing the request will not help, because the key is not
+what was rejected.
+
+**Possible Causes**:
+
+#### 1. The agent was revoked
+
+Someone called `DELETE /api/v1/agents/{id}`, or revoked it from the dashboard.
+
+```bash
+# Check the agent's current status
+curl -s http://localhost:8080/api/v1/agents/YOUR_AGENT_ID \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" | jq '.status'
+```
+
+Revoked agents are retained for 30 days before cleanup and can be reinstated in
+that window. Reinstating is a privileged action — ask an organization admin.
+
+#### 2. The agent was suspended by key expiry
+
+Agents whose signing key passed its expiry and its rotation grace period are
+suspended automatically. This is the common cause when nobody remembers revoking
+anything.
+
+```bash
+# Was it a key-expiry suspension? A keyExpiresAt in the past alongside
+# status "suspended" is the signature of this case.
+curl -s http://localhost:8080/api/v1/agents/YOUR_AGENT_ID \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  | jq '{status, keyExpiresAt, keyCreatedAt, rotationCount}'
+```
+
+**Fix**: rotate the signing key, then have an admin reinstate the agent. Rotating
+on a schedule ahead of `keyExpiresAt` avoids the suspension entirely.
+
+#### 3. An API key still works but its agent does not
+
+An API key carries its own `is_active` flag, but it authenticates *as an agent*.
+If that agent is revoked or suspended, the key is refused even while it is active
+and unexpired — the key is not the thing being denied.
+
+```bash
+# The key's own state and its agent's state are two different questions
+curl -s http://localhost:8080/api/v1/api-keys \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  | jq '.apiKeys[] | {name, isActive, expiresAt, agentId, agentName}'
+```
+
+Then check that `agentId` against Cause 1. A key showing `isActive: true` with a
+future `expiresAt` still fails if its agent is suspended or revoked.
+
+---
+
 ## Advanced Diagnostics
 
 ### Check Token Status in Database

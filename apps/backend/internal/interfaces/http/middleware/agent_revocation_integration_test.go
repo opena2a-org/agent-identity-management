@@ -305,6 +305,77 @@ func TestAgentRevocation_APIKeyMiddleware(t *testing.T) {
 	}
 }
 
+// The other two fields APIKeyMiddleware is responsible for. `is_active` had only a
+// sqlmock-backed negative test and `expires_at` had none at all, so the enforcement
+// matrix for this middleware was one-third proven. Asserted here against real rows,
+// alongside a positive control, so a middleware that dropped either check would fail.
+func TestAgentRevocation_APIKeyMiddlewareEnforcesKeyFields(t *testing.T) {
+	db := revocationTestDB(t)
+	ctx := context.Background()
+
+	// .UTC() is load-bearing, and its absence found a real defect worth naming here.
+	// `api_keys.expires_at` is TIMESTAMP, not TIMESTAMPTZ. lib/pq sends a local-zone
+	// time.Time as its wall clock, Postgres drops the offset, and the value reads back
+	// labelled UTC — so a time written from a UTC-6 process comes back six hours early,
+	// and one written from UTC+2 comes back two hours LATE, i.e. the key outlives its
+	// stated expiry. `time.Now().Add(time.Hour)` here failed the positive control for
+	// exactly that reason. Writing UTC sidesteps it; the column is still wrong, and
+	// api_key_service.CreateAPIKey writes a local time. Tracked separately — fixing it
+	// is a migration on a production table, not part of a revocation change.
+	past := time.Now().UTC().Add(-1 * time.Hour)
+	future := time.Now().UTC().Add(1 * time.Hour)
+
+	for _, tc := range []struct {
+		name       string
+		active     bool
+		expiresAt  *time.Time
+		wantStatus int
+		wantErr    string
+	}{
+		{"control-active-unexpired", true, nil, fiber.StatusOK, ""},
+		{"control-active-future-expiry", true, &future, fiber.StatusOK, ""},
+		{"inactive", false, nil, fiber.StatusUnauthorized, "inactive"},
+		{"expired", true, &past, fiber.StatusUnauthorized, "expired"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			agentID := seedAgentWithStatus(t, db, ctx, "verified", "")
+			orgID, userID := agentOwners(t, db, ctx, agentID)
+			key := seedAPIKey(t, db, ctx, agentID, orgID, userID)
+
+			_, err := db.ExecContext(ctx,
+				`UPDATE api_keys SET is_active = $1, expires_at = $2 WHERE agent_id = $3`,
+				tc.active, tc.expiresAt, agentID)
+			require.NoError(t, err)
+
+			app := fiber.New()
+			app.Use(APIKeyMiddleware(db))
+			app.Get("/protected", func(c fiber.Ctx) error {
+				return c.JSON(fiber.Map{"reached": true})
+			})
+
+			req := httptest.NewRequest("GET", "/protected", nil)
+			req.Header.Set("X-API-Key", key)
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.wantStatus, resp.StatusCode, "body: %s", body)
+			if tc.wantErr == "" {
+				assert.Contains(t, string(body), "reached")
+				return
+			}
+			assert.NotContains(t, string(body), "reached")
+			// The reason is asserted, not just the code: the agent here is
+			// `verified`, so a 401 naming a status would mean the wrong check fired.
+			assert.Contains(t, string(body), tc.wantErr,
+				"denied, but not for being %s", tc.wantErr)
+		})
+	}
+}
+
 // OptionalAPIKeyMiddleware is optional-auth: a denied agent must continue WITHOUT
 // auth context rather than 401, matching how it already handles an inactive key.
 // The assertion is on the context it sets, not on the status code — a 200 here
