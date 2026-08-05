@@ -10,6 +10,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockTagRepository for tag service tests
@@ -1052,16 +1053,21 @@ func TestTagService_suggestTagsForTrustScore(t *testing.T) {
 
 	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
 
+	// These scores were 9.0 / 8.0 / 6.0 / 5.0 / 3.0 / 0.0 — a 0-10 scale
+	// copied from the implementation's thresholds rather than derived from
+	// the domain contract, which is why the test passed while the function
+	// was unreachable for every real agent. Trust scores are [0,1]; a score
+	// of 9.0 cannot occur.
 	tests := []struct {
-		score            float64
-		expectedTrust    string
-		expectedEnv      string
+		score         float64
+		expectedTrust string
+		expectedEnv   string
 	}{
-		{9.0, "high", "production"},
-		{8.0, "high", "production"},
-		{6.0, "medium", "staging"},
-		{5.0, "medium", "staging"},
-		{3.0, "low", "development"},
+		{0.9, "high", "production"},
+		{0.8, "high", "production"},
+		{0.6, "medium", "staging"},
+		{0.5, "medium", "staging"},
+		{0.3, "low", "development"},
 		{0.0, "low", "development"},
 	}
 
@@ -1609,10 +1615,10 @@ func TestTagService_suggestTagsForMCPConnections(t *testing.T) {
 	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
 
 	tests := []struct {
-		name          string
-		talksTo       []string
-		expectedKeys  []string
-		expectedVals  []string
+		name         string
+		talksTo      []string
+		expectedKeys []string
+		expectedVals []string
 	}{
 		{
 			name:         "github connection",
@@ -1838,12 +1844,12 @@ func TestTagService_suggestTagsForMCPStatus(t *testing.T) {
 	service := NewTagService(mockTagRepo, mockAgentRepo, mockMCPRepo)
 
 	tests := []struct {
-		name            string
-		status          domain.MCPServerStatus
-		isVerified      bool
-		expectedStatus  string
-		expectedAvail   string
-		hasAlert        bool
+		name           string
+		status         domain.MCPServerStatus
+		isVerified     bool
+		expectedStatus string
+		expectedAvail  string
+		hasAlert       bool
 	}{
 		{
 			name:           "verified and active",
@@ -2235,4 +2241,95 @@ func (m *MockTagRepoForTags) GetMCPServerTagsByServerIDs(ctx context.Context, mc
 		}
 	}
 	return result, nil
+}
+
+// TestSuggestTagsForTrustScore_UsesCanonicalScale is the red-proof for the
+// third trust-score scale found in the 2026-08-04 audit.
+//
+// The thresholds here were 8.0 and 5.0 — a 0-10 scale that exists nowhere
+// else in the system. Agent trust scores are [0,1] (`agents.trust_score`
+// CHECK 0..1, migration 031), so no agent could ever reach 8.0 or 5.0 and
+// this function returned "low"/"development" for every agent regardless of
+// how trusted it was. MCP servers, carrying the hardcoded 75.0 literal, took
+// the top branch every time and were tagged `trust-level=high` +
+// `environment=production` on registration.
+func TestSuggestTagsForTrustScore_UsesCanonicalScale(t *testing.T) {
+	service := &TagService{}
+
+	tagValue := func(tags []*domain.Tag, key string) string {
+		for _, tag := range tags {
+			if tag.Key == key {
+				return tag.Value
+			}
+		}
+		return ""
+	}
+
+	tests := []struct {
+		name        string
+		trustScore  float64
+		trustLevel  string
+		environment string
+	}{
+		{"top of the range", 1.0, "high", "production"},
+		{"high band", 0.85, "high", "production"},
+		{"high band lower bound", 0.8, "high", "production"},
+		{"medium band upper", 0.79, "medium", "staging"},
+		{"medium band", 0.6, "medium", "staging"},
+		{"medium band lower bound", 0.5, "medium", "staging"},
+		{"low band upper", 0.49, "low", "development"},
+		{"bottom of the range", 0.0, "low", "development"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tags := service.suggestTagsForTrustScore(tt.trustScore)
+
+			assert.Equal(t, tt.trustLevel, tagValue(tags, "trust-level"))
+			assert.Equal(t, tt.environment, tagValue(tags, "environment"))
+		})
+	}
+}
+
+// TestSuggestTagsForTrustScore_HighBandIsReachable guards the class rather
+// than the constants. A threshold above the maximum a trust score can take
+// makes a branch unreachable — silently, since nothing fails. Pinning the
+// relationship between the calculator's output range and these thresholds
+// means the next person to change either one has to change both.
+func TestSuggestTagsForTrustScore_HighBandIsReachable(t *testing.T) {
+	service := &TagService{}
+	calculator := &MCPTrustCalculator{}
+
+	// The most trustworthy server the calculator can describe.
+	best := &domain.MCPServer{
+		ID:                   uuid.New(),
+		URL:                  "https://mcp.example.com",
+		PublicKey:            "dGVzdC1wdWJsaWMta2V5",
+		Description:          "a maximally established server",
+		Status:               domain.MCPServerStatusVerified,
+		IsVerified:           true,
+		CreatedBy:            uuid.New(),
+		CreatedAt:            time.Now().Add(-3 * 365 * 24 * time.Hour),
+		AttestationCount:     50,
+		ConfidenceScore:      100.0,
+		ConnectedAgentsCount: 25,
+		Capabilities:         []string{"a", "b", "c", "d", "e"},
+	}
+
+	score, err := calculator.Calculate(best)
+	require.NoError(t, err)
+
+	tags := service.suggestTagsForTrustScore(score.Score)
+
+	var trustLevel string
+	for _, tag := range tags {
+		if tag.Key == "trust-level" {
+			trustLevel = tag.Value
+		}
+	}
+
+	assert.Equal(t, "high", trustLevel,
+		"the best score the calculator can produce (%.4f) must reach the "+
+			"high band; if it cannot, the thresholds are on a different "+
+			"scale than the scores they judge", score.Score)
 }

@@ -178,8 +178,11 @@ func (e *MCPPolicyEvaluator) evaluateAllowlist(
 		if rules.MinTrustScore > 0 && mcpServer.TrustScore < rules.MinTrustScore {
 			result.Triggered = true
 			result.ViolatedRules = append(result.ViolatedRules, "Trust score below minimum")
+			// Both values are on the canonical [0,1] scale, so both are scaled
+			// for display. The threshold used to be printed unscaled, which
+			// rendered a 0.7 floor as "below minimum 0.7%".
 			result.Reason = fmt.Sprintf("Trust score %.1f%% is below minimum %.1f%%",
-				mcpServer.TrustScore*100, rules.MinTrustScore)
+				mcpServer.TrustScore*100, rules.MinTrustScore*100)
 			result.Recommendations = append(result.Recommendations, "Improve MCP server trust score through attestations")
 			return
 		}

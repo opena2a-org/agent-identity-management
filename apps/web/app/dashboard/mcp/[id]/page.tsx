@@ -115,11 +115,12 @@ export default function MCPServerDetailsPage({
 }) {
   const router = useRouter();
 
-  // Helper to normalize trust score (handles both 0-1 and 0-100 formats)
-  const normalizeTrustScore = (score: number | undefined): number => {
-    const s = score ?? 0;
-    return s <= 1 ? s * 100 : s;
-  };
+  // MCP trust scores are on the canonical [0,1] scale, enforced by the
+  // mcp_servers_trust_score_range_check constraint (migration 104). This used
+  // to guess the scale with `s <= 1 ? s * 100 : s` to tolerate the 0-100
+  // literals the backend wrote; the guess is what let three incompatible
+  // scales coexist unnoticed, so it is deliberately not kept as a fallback.
+  const trustScorePercent = (score: number | undefined): number => (score ?? 0) * 100;
 
   const [serverId, setServerId] = useState<string | null>(null);
   const [server, setServer] = useState<MCPServer | null>(null);
@@ -449,12 +450,12 @@ export default function MCPServerDetailsPage({
                     className={
                       server.verificationMethod === "agent_attestation"
                         ? getConfidenceColor(server.confidenceScore ?? 0)
-                        : getTrustColor(normalizeTrustScore(server.trustScore))
+                        : getTrustColor(trustScorePercent(server.trustScore))
                     }
                   >
                     {server.verificationMethod === "agent_attestation"
                       ? `Confidence: ${(server.confidenceScore ?? 0).toFixed(1)}%`
-                      : `Trust: ${normalizeTrustScore(server.trustScore).toFixed(1)}%`}
+                      : `Trust: ${trustScorePercent(server.trustScore).toFixed(1)}%`}
                   </Badge>
                 </div>
               </div>
@@ -600,15 +601,15 @@ export default function MCPServerDetailsPage({
                 <div className="text-right">
                   <div
                     className={`text-4xl font-bold ${
-                      getTrustColor(normalizeTrustScore(server.trustScore)).split(" ")[0]
+                      getTrustColor(trustScorePercent(server.trustScore)).split(" ")[0]
                     }`}
                   >
-                    {normalizeTrustScore(server.trustScore).toFixed(1)}%
+                    {trustScorePercent(server.trustScore).toFixed(1)}%
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {normalizeTrustScore(server.trustScore) >= 80
+                    {trustScorePercent(server.trustScore) >= 80
                       ? "High trust"
-                      : normalizeTrustScore(server.trustScore) >= 60
+                      : trustScorePercent(server.trustScore) >= 60
                         ? "Medium trust"
                         : "Low trust"}
                   </p>
@@ -1381,12 +1382,12 @@ export default function MCPServerDetailsPage({
                         className={
                           server.verificationMethod === "agent_attestation"
                             ? getConfidenceColor(server.confidenceScore ?? 0)
-                            : getTrustColor(normalizeTrustScore(server.trustScore))
+                            : getTrustColor(trustScorePercent(server.trustScore))
                         }
                       >
                         {server.verificationMethod === "agent_attestation"
                           ? (server.confidenceScore ?? 0).toFixed(1)
-                          : normalizeTrustScore(server.trustScore).toFixed(1)}%
+                          : trustScorePercent(server.trustScore).toFixed(1)}%
                       </Badge>
                     </span>
                   </div>

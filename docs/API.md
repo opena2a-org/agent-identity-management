@@ -201,7 +201,7 @@ Content-Type: application/json
   "publicKey": "base64-encoded-ed25519-public-key",
   "version": "1.0.0",
   "status": "pending_verification",
-  "trustScore": 50.0,
+  "trustScore": 0.50,
   "createdAt": "2025-10-08T00:00:00Z",
   "updatedAt": "2025-10-08T00:00:00Z"
 }
@@ -235,7 +235,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
       "displayName": "My Awesome Agent",
       "agentType": "ai_agent",
       "status": "verified",
-      "trustScore": 75.5,
+      "trustScore": 0.755,
       "capabilities": ["file:read"],
       "tags": [],
       "createdAt": "2025-10-07T00:00:00Z"
@@ -270,7 +270,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "publicKey": "base64-encoded-ed25519-public-key",
   "version": "1.0.0",
   "status": "active",
-  "trustScore": 75.5,
+  "trustScore": 0.755,
   "capabilities": ["read_database", "modify_user"],
   "metadata": {
     "totalActions": 1234,
@@ -322,7 +322,7 @@ POST /api/v1/agents/{id}/verify/response
 {
   "verified": true,
   "verificationId": "770e8400-e29b-41d4-a716-446655440000",
-  "trustScore": 75.5,
+  "trustScore": 0.755,
   "verifiedAt": "2025-10-08T00:00:00Z"
 }
 ```
@@ -416,7 +416,7 @@ Content-Type: application/json
   "displayName": "My MCP Server",
   "endpoint": "https://mcp.example.com",
   "status": "pending_verification",
-  "trustScore": 50.0,
+  "trustScore": 0.50,
   "createdAt": "2025-10-08T00:00:00Z"
 }
 ```
@@ -442,7 +442,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
       "displayName": "My MCP Server",
       "endpoint": "https://mcp.example.com",
       "status": "active",
-      "trustScore": 85.0,
+      "trustScore": 0.85,
       "lastVerifiedAt": "2025-10-08T00:00:00Z"
     }
   ]
@@ -591,11 +591,11 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
   "history": [
     {
-      "trustScore": 75.5,
+      "trustScore": 0.755,
       "timestamp": "2025-10-08T00:00:00Z"
     },
     {
-      "trustScore": 74.2,
+      "trustScore": 0.742,
       "timestamp": "2025-10-07T00:00:00Z"
     }
   ]
@@ -876,7 +876,7 @@ Create a webhook.
   "timestamp": "2025-10-08T00:00:00Z",
   "data": {
     "agentId": "550e8400-e29b-41d4-a716-446655440000",
-    "trustScore": 75.5,
+    "trustScore": 0.755,
     "verifiedAt": "2025-10-08T00:00:00Z"
   }
 }

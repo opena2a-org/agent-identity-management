@@ -105,7 +105,10 @@ type MCPAllowlistRules struct {
 	// RequireVerified requires MCP servers to be verified before use
 	RequireVerified bool `json:"requireVerified"`
 
-	// MinTrustScore is the minimum trust score required (0-100)
+	// MinTrustScore is the minimum trust score required, on the canonical
+	// [0,1] trust scale (e.g. 0.7, not 70). This comment previously said
+	// 0-100, which disagreed with every value actually assigned to the field
+	// and with `mcp_servers.trust_score` (CHECK 0..1, migration 104).
 	MinTrustScore float64 `json:"minTrustScore"`
 
 	// MinConfidenceScore is the minimum confidence score required (0-100)
