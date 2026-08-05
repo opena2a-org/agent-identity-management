@@ -123,5 +123,8 @@ CHECK (previous_score IS NULL OR (previous_score >= 0.0 AND previous_score <= 1.
 --    does not have to reconstruct it from three disagreeing call sites.
 COMMENT ON COLUMN mcp_servers.trust_score IS
     'Denormalized cache of the latest mcp_trust_scores.score. Scale [0,1], '
-    'enforced by mcp_servers_trust_score_range_check. Written only by the '
-    '8-factor calculator via the mig 094 mirror trigger — never by a literal.';
+    'enforced by mcp_servers_trust_score_range_check. Every value originates '
+    'from MCPTrustCalculator, which clamps to [0,1]; it reaches this column '
+    'both via the migration 094 mirror trigger and via the calculator''s own '
+    'UPDATE. Other writers (MCPServerRepository Create/Update) only carry a '
+    'value already set from that source. Never assign a literal here.';

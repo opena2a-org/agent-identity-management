@@ -30,10 +30,12 @@ type MCPService struct {
 	httpClient            *http.Client           // ✅ For real MCP server communication
 	agentRepo             *repository.AgentRepository // ✅ For querying connected agents
 	tagRepo               *repository.TagRepository   // ✅ For tagging MCP servers during registration
-	// trustCalculator is the ONLY writer of a trust score for an MCP server.
-	// Required, not optional: a nil calculator would leave every server at the
-	// DB default of 0.0, which reads as "measured and maximally untrusted"
-	// rather than "not scored". See the [CHIEF-CDS] decision of 2026-08-04.
+	// trustCalculator is the only source of an MCP server's trust score. This
+	// service assigns no score of its own; it asks the calculator and stores
+	// what it returns. Required, not optional: a nil calculator leaves every
+	// server at the DB default of 0.0, which reads as "measured and maximally
+	// untrusted" rather than "not scored", and fails every MinTrustScore
+	// policy gate. See the [CHIEF-CDS] decision of 2026-08-04.
 	trustCalculator *MCPTrustCalculator
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData

@@ -284,3 +284,101 @@ func TestMCPPolicy_FabricatedScoreWouldDefeatTheGate(t *testing.T) {
 			"CHECK constraint is what makes this value unstorable; this test "+
 			"records why the constraint is load-bearing rather than cosmetic.")
 }
+
+// TestMCPPolicy_AllowlistEnforcementMatrix covers the remaining verdict
+// surface of `evaluateAllowlist`. Each case violates exactly one field and
+// asserts the verdict flips to rejected; the baseline case violates none and
+// asserts it does not.
+//
+// Before this, the only tests in this file exercised the domain-matching
+// helpers — `evaluateAllowlist` itself, which decides whether an MCP server
+// is allowed, had no test at all. Enforcement that no test can distinguish
+// from its absence is unproven.
+func TestMCPPolicy_AllowlistEnforcementMatrix(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	// A server that satisfies every requirement below.
+	compliant := func() *domain.MCPServer {
+		return &domain.MCPServer{
+			ID:               uuid.New(),
+			Name:             "example-mcp",
+			URL:              "https://mcp.example.com/sse",
+			Status:           domain.MCPServerStatusVerified,
+			IsVerified:       true,
+			TrustScore:       0.85,
+			ConfidenceScore:  90.0,
+			AttestationCount: 5,
+		}
+	}
+
+	rules := map[string]interface{}{
+		"allowedDomains":     []string{"mcp.example.com"},
+		"requireVerified":    true,
+		"minTrustScore":      0.7,
+		"minConfidenceScore": 80.0,
+		"minAttestations":    3,
+	}
+
+	policy := &domain.SecurityPolicy{
+		ID:         uuid.New(),
+		PolicyType: domain.PolicyTypeMCPAllowlist,
+		Rules:      rules,
+	}
+
+	tests := []struct {
+		name           string
+		violate        func(*domain.MCPServer)
+		expectViolated string // "" means the request must be allowed
+	}{
+		{
+			name:    "baseline: nothing violated",
+			violate: func(*domain.MCPServer) {},
+		},
+		{
+			name:           "domain not in allowlist",
+			violate:        func(s *domain.MCPServer) { s.URL = "https://evil.example.net/sse" },
+			expectViolated: "Not in allowlist",
+		},
+		{
+			name:           "unverified while requireVerified is set",
+			violate:        func(s *domain.MCPServer) { s.Status = domain.MCPServerStatusPending },
+			expectViolated: "MCP server not verified",
+		},
+		{
+			name:           "trust score below the floor",
+			violate:        func(s *domain.MCPServer) { s.TrustScore = 0.2 },
+			expectViolated: "Trust score below minimum",
+		},
+		{
+			name:           "confidence score below the floor",
+			violate:        func(s *domain.MCPServer) { s.ConfidenceScore = 10.0 },
+			expectViolated: "Confidence score below minimum",
+		},
+		{
+			name:           "too few attestations",
+			violate:        func(s *domain.MCPServer) { s.AttestationCount = 1 },
+			expectViolated: "Insufficient attestations",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := compliant()
+			tt.violate(server)
+
+			result := &domain.MCPPolicyEvaluationResult{}
+			evaluator.evaluateAllowlist(server, policy, result)
+
+			if tt.expectViolated == "" {
+				assert.False(t, result.Triggered,
+					"a fully compliant server must be allowed; if this fails the "+
+						"other cases prove nothing, since they could be tripping "+
+						"on the baseline rather than on the field they violate")
+				return
+			}
+
+			assert.True(t, result.Triggered, "violating %q must trigger the policy", tt.name)
+			assert.Contains(t, result.ViolatedRules, tt.expectViolated)
+		})
+	}
+}
