@@ -307,6 +307,73 @@ jobs:
   # keep `if: always()` and the workflow must never gain a top-level
   # `paths:` filter — GitHub counts a skipped or never-reported required
   # check as satisfied or wedges the PR, respectively.
+  # Go integration tests. The `backend` job runs `go test ./...`, which compiles
+  # OUT everything behind `//go:build integration` and sets no TEST_DATABASE_URL,
+  # so the trigger, constraint and migration tests have never run in CI. They
+  # rotted undetected because of it: by 2026-08-05 all eleven failed against a
+  # correctly-migrated database, on NOT NULL columns the schema had grown
+  # underneath them (repaired in #351). `e2e-empty-state` applies migrations, so
+  # a migration that cannot apply is caught — but nothing asserts what the
+  # triggers and CHECK constraints actually do.
+  integration:
+    name: Integration Tests (Postgres)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aim
+          POSTGRES_PASSWORD: aim
+          POSTGRES_DB: aim_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aim -d aim_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://aim:aim@localhost:5432/aim_test?sslmode=disable
+      TEST_DATABASE_URL: postgres://aim:aim@localhost:5432/aim_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache-dependency-path: apps/backend/go.sum
+
+      # Same runner cmd/server uses at startup, so a migration that cannot
+      # apply fails here rather than on a production container boot.
+      - name: Apply migrations
+        run: go run ./cmd/migrate
+
+      - name: Run integration tests
+        run: go test -tags=integration -race ./...
+
+      # These tests call t.Skip when TEST_DATABASE_URL is unset, so a broken env
+      # would leave the job green having asserted nothing — the same silent
+      # no-op that let the fixtures rot. Fail loudly instead.
+      - name: Assert integration tests were not skipped
+        run: |
+          set -o pipefail
+          go test -tags=integration -v -run 'Trigger|Backfill|OutOfScale' \
+            ./internal/application/... 2>&1 | tee /tmp/integration.log
+          if grep -q '^--- SKIP' /tmp/integration.log; then
+            echo "::error::Integration tests were SKIPPED — TEST_DATABASE_URL is not reaching them."
+            grep '^--- SKIP' /tmp/integration.log
+            exit 1
+          fi
+          if ! grep -q '^--- PASS' /tmp/integration.log; then
+            echo "::error::No integration test reported PASS — the selector matched nothing."
+            exit 1
+          fi
+
   ci-gate:
     name: CI Gate
     needs:
@@ -315,6 +382,7 @@ jobs:
         tenant-scoping-lint,
         changes,
         backend,
+        integration,
         atx-conformance,
         frontend,
         e2e-empty-state,
@@ -328,11 +396,12 @@ jobs:
           tl='${{ needs.tenant-scoping-lint.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
+          it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
           echo "secrets-lint=$sl tenant-scoping-lint=$tl changes=$ch"
-          echo "backend=$be atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
+          echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
           for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "changes:$ch"; do
@@ -342,7 +411,7 @@ jobs:
             fi
           done
           # Path-filtered jobs pass on success or skip; failure/cancel fails.
-          for pair in "backend:$be" "atx-conformance:$ax" "frontend:$fe" "e2e-empty-state:$ee"; do
+          for pair in "backend:$be" "integration:$it" "atx-conformance:$ax" "frontend:$fe" "e2e-empty-state:$ee"; do
             r="${pair#*:}"
             if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
               echo "::error::${pair%%:*} failed or was cancelled ($r)."
