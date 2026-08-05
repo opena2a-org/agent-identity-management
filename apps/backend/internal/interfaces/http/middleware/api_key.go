@@ -9,6 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // APIKeyMiddleware validates API keys from Authorization header or X-API-Key header
@@ -59,11 +61,23 @@ func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 		Name           string     `db:"name"`
 		IsActive       bool       `db:"is_active"`
 		ExpiresAt      *time.Time `db:"expires_at"`
+		AgentStatus    string     `db:"agent_status"`
 	}
 
+	// SECURITY: joins `agents` so agent revocation is enforced on this path too.
+	// `is_active` revokes the KEY (APIKeyRepository.Revoke sets it); it says nothing
+	// about the AGENT the key authenticates as, and RevokeAgent does not touch the
+	// agent's keys. Without this join a revoked agent kept working through any API key
+	// issued before the revocation.
+	//
+	// INNER JOIN is deliberate and fail-closed: `api_keys.agent_id` is
+	// NOT NULL REFERENCES agents(id), so a row always exists for a legitimate key. If
+	// it somehow does not, the query returns no row and lands on the "Invalid API key"
+	// 401 below rather than authenticating without a status to check.
 	query := `
-		SELECT ak.id, ak.organization_id, ak.agent_id, ak.created_by as user_id, ak.name, ak.is_active, ak.expires_at
+		SELECT ak.id, ak.organization_id, ak.agent_id, ak.created_by as user_id, ak.name, ak.is_active, ak.expires_at, a.status
 		FROM api_keys ak
+		JOIN agents a ON a.id = ak.agent_id
 		WHERE ak.key_hash = $1
 		LIMIT 1
 	`
@@ -76,6 +90,7 @@ func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 		&keyData.Name,
 		&keyData.IsActive,
 		&keyData.ExpiresAt,
+		&keyData.AgentStatus,
 	)
 
 		if err != nil {
@@ -95,6 +110,13 @@ func APIKeyMiddleware(db *sql.DB) fiber.Handler {
 		if keyData.ExpiresAt != nil && keyData.ExpiresAt.Before(time.Now()) {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "API key has expired",
+			})
+		}
+
+		// Check that the agent this key authenticates as may still authenticate
+		if agentStatus := domain.AgentStatus(keyData.AgentStatus); !agentStatusPermitsAuth(agentStatus) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": agentStatusDeniedMessage(agentStatus),
 			})
 		}
 
@@ -151,11 +173,14 @@ func OptionalAPIKeyMiddleware(db *sql.DB) fiber.Handler {
 		Name           string     `db:"name"`
 		IsActive       bool       `db:"is_active"`
 		ExpiresAt      *time.Time `db:"expires_at"`
+		AgentStatus    string     `db:"agent_status"`
 	}
 
+	// SECURITY: same agent-status join as APIKeyMiddleware — see the comment there.
 	query := `
-		SELECT ak.id, ak.organization_id, ak.agent_id, ak.created_by as user_id, ak.name, ak.is_active, ak.expires_at
+		SELECT ak.id, ak.organization_id, ak.agent_id, ak.created_by as user_id, ak.name, ak.is_active, ak.expires_at, a.status
 		FROM api_keys ak
+		JOIN agents a ON a.id = ak.agent_id
 		WHERE ak.key_hash = $1
 		LIMIT 1
 	`
@@ -168,6 +193,7 @@ func OptionalAPIKeyMiddleware(db *sql.DB) fiber.Handler {
 		&keyData.Name,
 		&keyData.IsActive,
 		&keyData.ExpiresAt,
+		&keyData.AgentStatus,
 	)
 
 		// If key not found or invalid, continue without auth
@@ -177,6 +203,14 @@ func OptionalAPIKeyMiddleware(db *sql.DB) fiber.Handler {
 
 		// Check if key is active and not expired
 		if !keyData.IsActive || (keyData.ExpiresAt != nil && keyData.ExpiresAt.Before(time.Now())) {
+			return c.Next()
+		}
+
+		// Check that the agent this key authenticates as may still authenticate.
+		// This middleware is optional-auth, so a denied agent continues WITHOUT auth
+		// context rather than 401ing — the same shape as the inactive-key branch above.
+		// Downstream handlers see no organization_id / agent_id and reject on their own.
+		if !agentStatusPermitsAuth(domain.AgentStatus(keyData.AgentStatus)) {
 			return c.Next()
 		}
 
