@@ -132,6 +132,16 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 			})
 		}
 
+		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
+		// that sets the status. RevokeAgent and EnforceKeyExpiry both express denial purely
+		// as `agents.status`, so an agent that keeps its key material after being revoked
+		// or suspended authenticated successfully until this check existed.
+		if !agentStatusPermitsAuth(agent.Status) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": agentStatusDeniedMessage(agent.Status),
+			})
+		}
+
 		// SECURITY: Agent MUST have a registered public key
 		// Reject requests from agents without registered keys to prevent TOFU bypass attacks
 		// where an attacker supplies their own key via X-Public-Key header.

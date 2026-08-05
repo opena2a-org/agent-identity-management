@@ -18,12 +18,19 @@ import (
 // agent-anchored key (the shape of the Cartographer's machine key). active controls
 // whether the key is usable — an inactive key must NOT authenticate, which is how the
 // control below is kept honest.
+//
+// The trailing agent_status column mirrors the JOIN on `agents` that the api-key
+// middlewares perform to enforce agent revocation. It is "verified" here because this
+// test is about the credential-routes gate, not revocation: the key must be a fully
+// valid principal so a 401 on a gated route can only be the gate. Revocation itself is
+// covered against a real database in agent_revocation_integration_test.go — a sqlmock
+// cannot prove a JOIN reads the column it claims to.
 func newAPIKeyDB(t *testing.T, active bool) *sql.DB {
 	t.Helper()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	rows := sqlmock.NewRows([]string{"id", "organization_id", "agent_id", "user_id", "name", "is_active", "expires_at"}).
-		AddRow(uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), "honeymap-cartographer-machine-key", active, nil)
+	rows := sqlmock.NewRows([]string{"id", "organization_id", "agent_id", "user_id", "name", "is_active", "expires_at", "agent_status"}).
+		AddRow(uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), "honeymap-cartographer-machine-key", active, nil, "verified")
 	mock.ExpectQuery("api_keys").WithArgs(sqlmock.AnyArg()).WillReturnRows(rows)
 	// The UPDATE last_used_at only runs when the key is active (middleware returns early otherwise).
 	if active {
