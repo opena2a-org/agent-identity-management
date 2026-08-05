@@ -43,28 +43,21 @@ func TestCapabilityViolationTrigger_BumpsCounter(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Setup: create a throwaway organization + agent so the test does
+	// Setup: create a throwaway organization + user + agent so the test does
 	// not depend on any seeded row and cleans up after itself.
-	orgID := uuid.New()
 	agentID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "capviolation-trigger")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM capability_violations WHERE agent_id = $1`, agentID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, agentID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
 
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "trigger-test-org-"+agentID.String()[:8],
-	)
-	require.NoError(t, err)
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score,
-		                     capability_violation_count, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.9, 0, NOW(), NOW())`,
+		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score,
+		                     capability_violation_count, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.9, 0, $5, NOW(), NOW())`,
 		agentID, orgID, "trigger-test-agent-"+agentID.String()[:8],
+		"Trigger Test Agent", userID,
 	)
 	require.NoError(t, err)
 
@@ -124,27 +117,22 @@ func TestCapabilityViolationTrigger_BackfillReconcilesDrift(t *testing.T) {
 
 	ctx := context.Background()
 
-	orgID := uuid.New()
 	agentID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "capviolation-backfill")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM capability_violations WHERE agent_id = $1`, agentID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, agentID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "backfill-test-org-"+agentID.String()[:8])
-	require.NoError(t, err)
 
 	// Seed an agent whose counter is INTENTIONALLY drifted: 7 actual
 	// rows, but the counter says 2 (simulating pre-trigger state where
 	// 5 violations were inserted without an accompanying increment).
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score,
-		                     capability_violation_count, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.5, 2, NOW(), NOW())`,
-		agentID, orgID, "backfill-test-agent-"+agentID.String()[:8])
+		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score,
+		                     capability_violation_count, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.5, 2, $5, NOW(), NOW())`,
+		agentID, orgID, "backfill-test-agent-"+agentID.String()[:8],
+		"Backfill Test Agent", userID)
 	require.NoError(t, err)
 
 	// Disable the trigger for the next inserts to simulate pre-091

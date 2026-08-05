@@ -42,29 +42,23 @@ func TestMCPCapabilitiesCacheTrigger_DerivesFromDetailTable(t *testing.T) {
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	serverID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "mcp-caps")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM mcp_server_capabilities WHERE mcp_server_id = $1`, serverID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1`, serverID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "mcp-caps-test-org-"+serverID.String()[:8])
-	require.NoError(t, err)
 
 	// Seed MCP server with the registering agent's claim of all
 	// three capability types.
 	claimed := `["resources", "prompts", "tools"]`
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO mcp_servers (id, organization_id, name, url, version, capabilities, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, '1.0.0', $5::jsonb, NOW(), NOW())`,
+		`INSERT INTO mcp_servers (id, organization_id, name, url, version, capabilities, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, '1.0.0', $5::jsonb, $6, NOW(), NOW())`,
 		serverID, orgID,
 		"mcp-caps-test-server-"+serverID.String()[:8],
 		"https://mcp-caps-test-"+serverID.String()[:8]+".example.com",
-		claimed)
+		claimed, userID)
 	require.NoError(t, err)
 
 	// Insert detail rows of TWO types only ('tool' and 'resource').
@@ -106,27 +100,21 @@ func TestMCPCapabilitiesCacheTrigger_PreservesClaimWhenDetailEmpty(t *testing.T)
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	serverID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "mcp-caps-preserve")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM mcp_server_capabilities WHERE mcp_server_id = $1`, serverID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1`, serverID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "mcp-caps-preserve-test-org-"+serverID.String()[:8])
-	require.NoError(t, err)
 
 	claimed := `["tools", "prompts"]`
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO mcp_servers (id, organization_id, name, url, version, capabilities, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, '1.0.0', $5::jsonb, NOW(), NOW())`,
+		`INSERT INTO mcp_servers (id, organization_id, name, url, version, capabilities, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, '1.0.0', $5::jsonb, $6, NOW(), NOW())`,
 		serverID, orgID,
 		"mcp-caps-preserve-test-server-"+serverID.String()[:8],
 		"https://mcp-caps-preserve-test-"+serverID.String()[:8]+".example.com",
-		claimed)
+		claimed, userID)
 	require.NoError(t, err)
 
 	// Insert a row then delete it. After DELETE the detail table
@@ -172,26 +160,20 @@ func TestMCPCapabilitiesCacheTrigger_PreservesClaimOnFreshServer(t *testing.T) {
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	serverID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "mcp-caps-fresh")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1`, serverID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "mcp-caps-fresh-test-org-"+serverID.String()[:8])
-	require.NoError(t, err)
 
 	claimed := `["tools", "resources"]`
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO mcp_servers (id, organization_id, name, url, version, capabilities, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, '1.0.0', $5::jsonb, NOW(), NOW())`,
+		`INSERT INTO mcp_servers (id, organization_id, name, url, version, capabilities, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, '1.0.0', $5::jsonb, $6, NOW(), NOW())`,
 		serverID, orgID,
 		"mcp-caps-fresh-test-server-"+serverID.String()[:8],
 		"https://mcp-caps-fresh-test-"+serverID.String()[:8]+".example.com",
-		claimed)
+		claimed, userID)
 	require.NoError(t, err)
 
 	// No detail rows ever inserted. The cache should still be the

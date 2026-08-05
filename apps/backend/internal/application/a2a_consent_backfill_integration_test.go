@@ -35,9 +35,13 @@ func TestA2AConsentBackfill_ConstraintEnforced(t *testing.T) {
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	grantorID := uuid.New()
 	recipientID := uuid.New()
+
+	// Seeded before the cleanup below is registered, so that cleanup (agents,
+	// consent records) runs first under t.Cleanup's LIFO order and the org/user
+	// rows it depends on are removed last.
+	orgID, userID := seedOrgAndUser(t, db, ctx, "consent-backfill")
 
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx,
@@ -45,20 +49,14 @@ func TestA2AConsentBackfill_ConstraintEnforced(t *testing.T) {
 			grantorID, recipientID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id IN ($1, $2)`,
 			grantorID, recipientID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "consent-backfill-test-org-"+grantorID.String()[:8])
-	require.NoError(t, err)
 
 	for _, id := range []uuid.UUID{grantorID, recipientID} {
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score, created_at, updated_at)
-			 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.5, NOW(), NOW())`,
-			id, orgID, "consent-backfill-agent-"+id.String()[:8])
+			`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.5, $5, NOW(), NOW())`,
+			id, orgID, "consent-backfill-agent-"+id.String()[:8],
+			"Consent Backfill Agent", userID)
 		require.NoError(t, err)
 	}
 
@@ -104,28 +102,24 @@ func TestA2AConsentBackfill_OrgIDDerivesFromGrantor(t *testing.T) {
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	grantorID := uuid.New()
 	recipientID := uuid.New()
 	consentID := uuid.New()
+
+	orgID, userID := seedOrgAndUser(t, db, ctx, "consent-derive")
 
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM a2a_consent_records WHERE id = $1`, consentID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id IN ($1, $2)`,
 			grantorID, recipientID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
 
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "consent-derive-test-org-"+grantorID.String()[:8])
-	require.NoError(t, err)
 	for _, id := range []uuid.UUID{grantorID, recipientID} {
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score, created_at, updated_at)
-			 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.5, NOW(), NOW())`,
-			id, orgID, "consent-derive-agent-"+id.String()[:8])
+			`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.5, $5, NOW(), NOW())`,
+			id, orgID, "consent-derive-agent-"+id.String()[:8],
+			"Consent Derive Agent", userID)
 		require.NoError(t, err)
 	}
 
