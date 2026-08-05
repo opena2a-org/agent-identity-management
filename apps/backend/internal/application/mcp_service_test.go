@@ -8,6 +8,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -363,7 +364,7 @@ func TestSanitizeTalksToEntries_MultipleCommas(t *testing.T) {
 
 func TestNewMCPService_NilDependencies(t *testing.T) {
 	// Test that constructor handles nil dependencies gracefully
-	service := NewMCPService(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewMCPService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	assert.NotNil(t, service)
 	assert.Nil(t, service.mcpRepo)
@@ -375,13 +376,14 @@ func TestNewMCPService_NilDependencies(t *testing.T) {
 	assert.Nil(t, service.connectionRepo)
 	assert.Nil(t, service.agentRepo)
 	assert.Nil(t, service.tagRepo)
+	assert.Nil(t, service.trustCalculator)
 	assert.NotNil(t, service.cryptoService)
 	assert.NotNil(t, service.httpClient)
 	assert.NotNil(t, service.challenges)
 }
 
 func TestNewMCPService_HttpClientTimeout(t *testing.T) {
-	service := NewMCPService(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewMCPService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// Verify HTTP client has 30 second timeout
 	assert.NotNil(t, service.httpClient)
@@ -389,7 +391,7 @@ func TestNewMCPService_HttpClientTimeout(t *testing.T) {
 }
 
 func TestNewMCPService_ChallengesMapInitialized(t *testing.T) {
-	service := NewMCPService(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewMCPService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	// Verify challenges map is initialized
 	assert.NotNil(t, service.challenges)
@@ -415,37 +417,136 @@ func TestMCPService_ChallengeExpirationDuration(t *testing.T) {
 // Trust Score Logic Tests
 // ========================================
 
-func TestMCPService_TrustScoreValues(t *testing.T) {
-	// Document expected trust score values
-	tests := []struct {
-		name     string
-		score    float64
-		scenario string
-	}{
-		{
-			name:     "SDK registration",
-			score:    75.0,
-			scenario: "Initial trust score for SDK-verified servers",
+// The test this replaces declared three literal scores (75.0 / 0.0 / 75.0) and
+// then asserted only that each was between 0 and 100. It passed for any value
+// in that range, including the fabricated 75.0 it existed to document, and it
+// would have passed unchanged after the literal was removed. It measured
+// nothing.
+//
+// What follows pins the actual invariant: an MCP trust score is produced by
+// the 8-factor calculator, on the canonical [0,1] scale, and no code path
+// assigns a literal.
+
+// TestMCPTrustScore_CalculatorOutputIsCanonicalScale pins the range contract
+// that `mcp_servers_trust_score_range_check` (migration 104) enforces in the
+// database. A score outside [0,1] is unstorable; if the calculator could
+// produce one, registration would fail at the constraint.
+func TestMCPTrustScore_CalculatorOutputIsCanonicalScale(t *testing.T) {
+	calculator := &MCPTrustCalculator{}
+
+	servers := map[string]*domain.MCPServer{
+		"freshly registered, no signal": {
+			ID:        uuid.New(),
+			URL:       "https://mcp.example.com",
+			Status:    domain.MCPServerStatusPending,
+			CreatedAt: time.Now(),
 		},
-		{
-			name:     "Manual pending",
-			score:    0.0,
-			scenario: "Unverified servers have zero trust",
+		"verified, well established": {
+			ID:                   uuid.New(),
+			URL:                  "https://mcp.example.com",
+			PublicKey:            "dGVzdC1wdWJsaWMta2V5",
+			Description:          "an established server",
+			Status:               domain.MCPServerStatusVerified,
+			IsVerified:           true,
+			CreatedBy:            uuid.New(),
+			CreatedAt:            time.Now().Add(-365 * 24 * time.Hour),
+			AttestationCount:     12,
+			ConfidenceScore:      95.0,
+			ConnectedAgentsCount: 9,
+			Capabilities:         []string{"read_file", "write_file", "list_directory"},
 		},
-		{
-			name:     "Verified server",
-			score:    75.0,
-			scenario: "Verified servers start at 75.0",
+		"revoked": {
+			ID:         uuid.New(),
+			URL:        "http://mcp.example.com",
+			Status:     domain.MCPServerStatusRevoked,
+			IsVerified: false,
+			CreatedAt:  time.Now().Add(-90 * 24 * time.Hour),
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Document expected values
-			assert.True(t, tt.score >= 0.0)
-			assert.True(t, tt.score <= 100.0)
+	for name, server := range servers {
+		t.Run(name, func(t *testing.T) {
+			score, err := calculator.Calculate(server)
+			require.NoError(t, err)
+			require.NotNil(t, score)
+
+			assert.GreaterOrEqual(t, score.Score, 0.0,
+				"score must be within the [0,1] range the DB constraint allows")
+			assert.LessOrEqual(t, score.Score, 1.0,
+				"score must be within the [0,1] range the DB constraint allows")
+
+			// The specific value the service used to hardcode. On the
+			// canonical scale it is not merely wrong, it is unrepresentable.
+			assert.NotEqual(t, 75.0, score.Score,
+				"75.0 was the fabricated literal; it cannot be a calculated score")
 		})
 	}
+}
+
+// TestMCPTrustScore_CalculatedScoresDiscriminate is the red-proof for the
+// fabrication itself. Under the old code every SDK-registered and every
+// verified server carried the same 75.0 regardless of its inputs, so the
+// number could not distinguish a brand-new server from an established one.
+// A calculated score must.
+func TestMCPTrustScore_CalculatedScoresDiscriminate(t *testing.T) {
+	calculator := &MCPTrustCalculator{}
+
+	fresh := &domain.MCPServer{
+		ID:         uuid.New(),
+		URL:        "https://mcp.example.com",
+		PublicKey:  "dGVzdC1wdWJsaWMta2V5",
+		Status:     domain.MCPServerStatusVerified,
+		IsVerified: true,
+		CreatedBy:  uuid.New(),
+		CreatedAt:  time.Now(),
+	}
+
+	established := &domain.MCPServer{
+		ID:                   uuid.New(),
+		URL:                  "https://mcp.example.com",
+		PublicKey:            "dGVzdC1wdWJsaWMta2V5",
+		Description:          "an established server",
+		Status:               domain.MCPServerStatusVerified,
+		IsVerified:           true,
+		CreatedBy:            uuid.New(),
+		CreatedAt:            time.Now().Add(-365 * 24 * time.Hour),
+		AttestationCount:     12,
+		ConfidenceScore:      95.0,
+		ConnectedAgentsCount: 9,
+		Capabilities:         []string{"read_file", "write_file", "list_directory"},
+	}
+
+	freshScore, err := calculator.Calculate(fresh)
+	require.NoError(t, err)
+	establishedScore, err := calculator.Calculate(established)
+	require.NoError(t, err)
+
+	assert.Greater(t, establishedScore.Score, freshScore.Score,
+		"a server with attestations, connections and a year of history must "+
+			"outscore one registered seconds ago; a constant cannot do this")
+
+	// Both were "verified", which is exactly the pair the 75.0 literal
+	// collapsed into one value.
+	assert.NotEqual(t, freshScore.Score, establishedScore.Score)
+}
+
+// TestMCPTrustScore_AgeFactorRequiresRealCreatedAt guards the failure mode
+// named in the decision's pre-mortem. `Calculate` buckets by
+// `time.Since(server.CreatedAt)`, so a zero `time.Time` — which is what an
+// in-memory struct carries before the database supplies the column — reads as
+// "90+ days old" and awards the maximum age factor to a server that does not
+// exist yet. This is why scoring happens after the row is persisted.
+func TestMCPTrustScore_AgeFactorRequiresRealCreatedAt(t *testing.T) {
+	calculator := &MCPTrustCalculator{}
+
+	unset := &domain.MCPServer{ID: uuid.New(), URL: "https://mcp.example.com"}
+	justCreated := &domain.MCPServer{ID: uuid.New(), URL: "https://mcp.example.com", CreatedAt: time.Now()}
+
+	assert.Equal(t, 1.0, calculator.calculateAge(unset),
+		"a zero CreatedAt scores as maximally aged — the reason scoring must "+
+			"run against the persisted row, not the in-memory struct")
+	assert.Equal(t, 0.30, calculator.calculateAge(justCreated),
+		"a server created now belongs in the under-7-days bucket")
 }
 
 // ========================================

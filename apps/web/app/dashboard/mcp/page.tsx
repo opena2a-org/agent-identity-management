@@ -396,9 +396,13 @@ export default function MCPServersPage() {
     },
     {
       name: "Avg Trust Score",
-      value: stats.avgTrustScore.toFixed(1),
-      // change: stats.avgTrustScore >= 75 ? "+5.2%" : "-2.1%",
-      // changeType: stats.avgTrustScore >= 75 ? "positive" : "negative",
+      // Trust scores are on the canonical [0,1] scale, so the average is
+      // rendered as a percentage. It used to print the raw value, which read
+      // as "75.0" only because the backend was writing the literal 75.0 into
+      // a field the calculator defines on [0,1].
+      value: mcpServers.length > 0
+        ? `${(stats.avgTrustScore * 100).toFixed(1)}%`
+        : "—",
       icon: Shield,
     },
     {

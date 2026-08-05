@@ -428,14 +428,23 @@ func (s *TagService) suggestTagsForCapabilities(capabilities []string) []*domain
 	return suggestions
 }
 
-// suggestTagsForTrustScore suggests tags based on trust score level
+// suggestTagsForTrustScore suggests tags based on trust score level.
+//
+// Trust scores are on the canonical [0,1] scale — `agents.trust_score`
+// (CHECK 0..1, migration 031) and `mcp_servers.trust_score` (CHECK 0..1,
+// migration 104). The thresholds below used to be 8.0 and 5.0, a 0-10 scale
+// that exists nowhere else in the system. The effect was that this function
+// never suggested anything but "low"/"development" for agents, whose scores
+// cannot exceed 1.0, while MCP servers carrying the old hardcoded 75.0
+// literal always took the top branch and were tagged
+// `trust-level=high` + `environment=production` on registration.
 func (s *TagService) suggestTagsForTrustScore(trustScore float64) []*domain.Tag {
 	suggestions := make([]*domain.Tag, 0)
 
-	if trustScore >= 8.0 {
+	if trustScore >= 0.8 {
 		suggestions = append(suggestions, &domain.Tag{Key: "trust-level", Value: "high", Category: domain.TagCategoryDataClassification})
 		suggestions = append(suggestions, &domain.Tag{Key: "environment", Value: "production", Category: domain.TagCategoryEnvironment})
-	} else if trustScore >= 5.0 {
+	} else if trustScore >= 0.5 {
 		suggestions = append(suggestions, &domain.Tag{Key: "trust-level", Value: "medium", Category: domain.TagCategoryDataClassification})
 		suggestions = append(suggestions, &domain.Tag{Key: "environment", Value: "staging", Category: domain.TagCategoryEnvironment})
 	} else {

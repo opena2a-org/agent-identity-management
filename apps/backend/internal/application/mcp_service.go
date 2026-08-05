@@ -30,6 +30,11 @@ type MCPService struct {
 	httpClient            *http.Client           // ✅ For real MCP server communication
 	agentRepo             *repository.AgentRepository // ✅ For querying connected agents
 	tagRepo               *repository.TagRepository   // ✅ For tagging MCP servers during registration
+	// trustCalculator is the ONLY writer of a trust score for an MCP server.
+	// Required, not optional: a nil calculator would leave every server at the
+	// DB default of 0.0, which reads as "measured and maximally untrusted"
+	// rather than "not scored". See the [CHIEF-CDS] decision of 2026-08-04.
+	trustCalculator *MCPTrustCalculator
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData
 }
@@ -42,7 +47,7 @@ type ChallengeData struct {
 	ExpiresAt time.Time
 }
 
-func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, capabilityRepo *repository.MCPServerCapabilityRepository, connectionRepo *repository.AgentMCPConnectionRepository, agentRepo *repository.AgentRepository, tagRepo *repository.TagRepository) *MCPService {
+func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRepo domain.VerificationEventRepository, userRepo *repository.UserRepository, keyVault *crypto.KeyVault, capabilityService *MCPCapabilityService, capabilityRepo *repository.MCPServerCapabilityRepository, connectionRepo *repository.AgentMCPConnectionRepository, agentRepo *repository.AgentRepository, tagRepo *repository.TagRepository, trustCalculator *MCPTrustCalculator) *MCPService {
 	return &MCPService{
 		mcpRepo:               mcpRepo,
 		verificationEventRepo: verificationEventRepo,
@@ -55,10 +60,42 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second, // 30 second timeout for MCP server communication
 		},
-		challenges: make(map[string]ChallengeData),
-		agentRepo:  agentRepo,
-		tagRepo:    tagRepo,
+		challenges:      make(map[string]ChallengeData),
+		agentRepo:       agentRepo,
+		tagRepo:         tagRepo,
+		trustCalculator: trustCalculator,
 	}
+}
+
+// scoreServer runs the 8-factor trust calculation for a persisted MCP server
+// and stores the result. `mcp_trust_scores` is the source of truth; the
+// migration 094 trigger mirrors the score into `mcp_servers.trust_score`.
+//
+// The server row must already exist — the calculator re-reads it so that
+// database-supplied columns (notably `created_at`, which Factor 6 buckets by
+// age) hold their real values rather than Go zero values. A zero `time.Time`
+// would score as "90+ days old" and hand a brand-new server the maximum age
+// factor.
+//
+// The in-memory server is updated with the stored score, so the value this
+// service returns to its caller is the value that was persisted rather than
+// the zero the struct was constructed with.
+//
+// Scoring failure never fails the caller's operation: registration and
+// verification are the user's action, the score is a derived value, and a
+// server with no score yet is a state the system already represents. It is
+// logged rather than swallowed so an unscored server is traceable.
+func (s *MCPService) scoreServer(ctx context.Context, server *domain.MCPServer, occasion string) {
+	if s.trustCalculator == nil {
+		fmt.Printf("⚠️  No trust calculator configured; MCP server %s left unscored after %s\n", server.ID, occasion)
+		return
+	}
+	score, err := s.trustCalculator.CalculateTrustScore(ctx, server.ID)
+	if err != nil {
+		fmt.Printf("⚠️  Failed to calculate trust score for MCP server %s after %s: %v\n", server.ID, occasion, err)
+		return
+	}
+	server.TrustScore = score.Score
 }
 
 // CreateMCPServerRequest represents the request to create an MCP server
@@ -206,7 +243,6 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	isSDKRegistration := agentID != nil
 	var status domain.MCPServerStatus
 	var isVerified bool
-	var trustScore float64
 	var verificationMethod string
 	var lastVerifiedAt *time.Time
 
@@ -214,7 +250,6 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		// SDK registration: auto-verify since agent is authenticated
 		status = domain.MCPServerStatusVerified
 		isVerified = true
-		trustScore = 75.0 // Initial trust score for SDK-verified servers
 		verificationMethod = "sdk_registration"
 		now := time.Now()
 		lastVerifiedAt = &now
@@ -223,9 +258,16 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		// Manual registration: requires admin verification
 		status = domain.MCPServerStatusPending
 		isVerified = false
-		trustScore = 0.0
 		verificationMethod = "manual"
 	}
+
+	// The trust score is NOT set here. It is calculated from the server's real
+	// inputs by the 8-factor calculator once the row exists (see scoreServer
+	// below). Assigning a literal here — this line used to read
+	// `trustScore = 75.0` for SDK registrations — published a number that
+	// implied measurement without measuring anything, and, being on a 0-100
+	// scale, sat above every [0,1] `MinTrustScore` policy threshold, so an
+	// SDK-registered server passed any organization trust floor unconditionally.
 
 	server := &domain.MCPServer{
 		ID:                  uuid.New(),
@@ -240,7 +282,6 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		LastVerifiedAt:      lastVerifiedAt,
 		VerificationURL:     strings.TrimSpace(req.VerificationURL), // ✅ Trim spaces
 		Capabilities:        req.Capabilities,
-		TrustScore:          trustScore,
 		VerificationMethod:  verificationMethod,
 		RegisteredByAgent:   agentID,         // ✅ Track which agent registered this MCP (for SDK registrations)
 		CreatedBy:           userID,
@@ -350,6 +391,16 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 			}
 		}
 	}
+
+	// Score the server from its real inputs. This runs last, after the
+	// capability rows and the agent-MCP connection have been written, because
+	// Factor 3 (capability stability) reads `mcp_server_capabilities` and
+	// Factor 7 (usage patterns) reads the connection count. Scoring before
+	// those writes would measure a server that looks emptier than it is.
+	//
+	// A freshly registered server legitimately scores low — no attestations,
+	// age bucket under 7 days — and that is the honest value, not a defect.
+	s.scoreServer(ctx, server, "registration")
 
 	return server, nil
 }
@@ -522,11 +573,18 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		server.IsVerified = true
 		server.Status = domain.MCPServerStatusVerified
 		server.LastVerifiedAt = &now
-		server.TrustScore = 75.0 // Initial trust score for verified servers
 
 		if err := s.mcpRepo.Update(server); err != nil {
 			return err
 		}
+
+		// Recalculate from real inputs now that the server is verified.
+		// Verification genuinely moves two factors — Security Posture credits
+		// `IsVerified`, and Attestation Consensus stops applying the 0.5
+		// pending-status multiplier — so the score rises on its own. It used
+		// to be pinned here to the literal 75.0 regardless of what the server
+		// actually looked like.
+		s.scoreServer(ctx, server, "verification")
 
 		// ✅ AUTOMATIC CAPABILITY DETECTION
 		// After successful verification, automatically detect MCP server capabilities

@@ -486,6 +486,7 @@ type Repositories struct {
 	MCPCapability      *repository.MCPServerCapabilityRepository // ✅ For MCP server capabilities
 	MCPManifest        *repository.MCPManifestRepository         // ✅ For MCP manifest baseline + drift detection
 	MCPAttestation     *repository.MCPAttestationRepository      // ✅ For agent attestation of MCPs
+	MCPTrustScore      *repository.MCPTrustScoreRepository       // ✅ Source of truth for 8-factor MCP trust scores
 	AgentMCPConnection *repository.AgentMCPConnectionRepository  // ✅ For agent-MCP connections
 	Security           *repository.SecurityRepository
 	SecurityPolicy     *repository.SecurityPolicyRepository   // ✅ For configurable security policies
@@ -546,6 +547,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		MCPCapability:      repository.NewMCPServerCapabilityRepository(db), // ✅ For MCP server capabilities
 		MCPManifest:        repository.NewMCPManifestRepository(db),         // ✅ For MCP manifest baseline + drift detection
 		MCPAttestation:     repository.NewMCPAttestationRepository(db),      // ✅ For agent attestation of MCPs
+		MCPTrustScore:      repository.NewMCPTrustScoreRepository(db),       // ✅ Source of truth for 8-factor MCP trust scores
 		AgentMCPConnection: repository.NewAgentMCPConnectionRepository(dbx), // ✅ For agent-MCP connections
 		Security:           repository.NewSecurityRepository(db),
 		SecurityPolicy:     repository.NewSecurityPolicyRepository(db),   // ✅ For configurable security policies
@@ -764,6 +766,18 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.MCPServer,
 	)
 
+	// ✅ 8-factor MCP trust calculator — the only writer of an MCP trust score.
+	// Scores are stored in `mcp_trust_scores` (source of truth, with the full
+	// factor breakdown and confidence); the migration 094 trigger mirrors the
+	// value into the `mcp_servers.trust_score` cache.
+	mcpTrustCalculator := application.NewMCPTrustCalculatorWithRepo(
+		repos.MCPServer,
+		repos.MCPAttestation,
+		repos.MCPCapability,
+		repos.Alert,
+		repos.MCPTrustScore,
+	)
+
 	mcpService := application.NewMCPService(
 		repos.MCPServer,
 		repos.VerificationEvent,
@@ -774,6 +788,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.AgentMCPConnection, // ✅ For tracking agent-MCP connections
 		repos.Agent,              // ✅ For connected agents tracking
 		repos.Tag,                // ✅ For tagging MCP servers during registration
+		mcpTrustCalculator,       // ✅ For scoring servers at registration and verification
 	)
 
 	// ✅ Initialize MCP Attestation Service for agent attestation of MCPs

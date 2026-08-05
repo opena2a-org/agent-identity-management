@@ -3,6 +3,7 @@ package application
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
@@ -171,4 +172,115 @@ func TestNewMCPPolicyEvaluator(t *testing.T) {
 	assert.NotNil(t, evaluator)
 	assert.Nil(t, evaluator.policyRepo)
 	assert.Nil(t, evaluator.mcpRepo)
+}
+
+// TestMCPPolicy_MinTrustScoreGateRejectsLowScoringServer is the security
+// red-proof for the trust-score fabrication.
+//
+// `evaluateAllowlist` compares `mcpServer.TrustScore` against
+// `rules.MinTrustScore`, and `MinTrustScore` is on the canonical [0,1] scale.
+// While `mcp_service.go` stamped SDK-registered and verified servers with the
+// literal 75.0, that comparison could never fail: 75.0 sits above every
+// representable threshold, so an SDK-registered MCP server passed any
+// organization's trust floor unconditionally, and only a genuinely-measured
+// server could ever be rejected.
+//
+// With scores on one scale, the gate discriminates again.
+func TestMCPPolicy_MinTrustScoreGateRejectsLowScoringServer(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	policy := &domain.SecurityPolicy{
+		ID:         uuid.New(),
+		PolicyType: domain.PolicyTypeMCPAllowlist,
+		Rules: map[string]interface{}{
+			"allowedDomains": []string{"mcp.example.com"},
+			"minTrustScore":  0.7,
+		},
+	}
+
+	tests := []struct {
+		name            string
+		trustScore      float64
+		expectTriggered bool
+		why             string
+	}{
+		{
+			name:            "score below the floor is rejected",
+			trustScore:      0.42,
+			expectTriggered: true,
+			why:             "0.42 is below the 0.7 floor",
+		},
+		{
+			name:            "score above the floor is allowed",
+			trustScore:      0.85,
+			expectTriggered: false,
+			why:             "0.85 clears the 0.7 floor",
+		},
+		{
+			name:            "score exactly at the floor is allowed",
+			trustScore:      0.7,
+			expectTriggered: false,
+			why:             "the comparison is strictly less-than",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &domain.MCPServer{
+				ID:         uuid.New(),
+				Name:       "example-mcp",
+				URL:        "https://mcp.example.com/sse",
+				Status:     domain.MCPServerStatusVerified,
+				IsVerified: true,
+				TrustScore: tt.trustScore,
+			}
+
+			result := &domain.MCPPolicyEvaluationResult{}
+			evaluator.evaluateAllowlist(server, policy, result)
+
+			assert.Equal(t, tt.expectTriggered, result.Triggered, tt.why)
+			if tt.expectTriggered {
+				assert.Contains(t, result.ViolatedRules, "Trust score below minimum")
+				// The threshold is rendered as a percentage alongside the
+				// score. It used to be printed unscaled, turning a 0.7 floor
+				// into "below minimum 0.7%".
+				assert.Contains(t, result.Reason, "below minimum 70.0%")
+			}
+		})
+	}
+}
+
+// TestMCPPolicy_FabricatedScoreWouldDefeatTheGate pins the failure directly:
+// the exact literal the service used to write passes a floor that no
+// calculated score could clear, because the calculator's maximum output is
+// 1.0. If this ever passes with `triggered == false` for a value above 1.0,
+// an out-of-scale writer has reappeared.
+func TestMCPPolicy_FabricatedScoreWouldDefeatTheGate(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	policy := &domain.SecurityPolicy{
+		ID:         uuid.New(),
+		PolicyType: domain.PolicyTypeMCPAllowlist,
+		Rules: map[string]interface{}{
+			"allowedDomains": []string{"mcp.example.com"},
+			"minTrustScore":  1.0, // the strictest representable floor
+		},
+	}
+
+	server := &domain.MCPServer{
+		ID:         uuid.New(),
+		Name:       "example-mcp",
+		URL:        "https://mcp.example.com/sse",
+		Status:     domain.MCPServerStatusVerified,
+		IsVerified: true,
+		TrustScore: 75.0, // the removed literal
+	}
+
+	result := &domain.MCPPolicyEvaluationResult{}
+	evaluator.evaluateAllowlist(server, policy, result)
+
+	assert.False(t, result.Triggered,
+		"documents the defect: 75.0 clears even a 1.0 floor. Migration 104's "+
+			"CHECK constraint is what makes this value unstorable; this test "+
+			"records why the constraint is load-bearing rather than cosmetic.")
 }
