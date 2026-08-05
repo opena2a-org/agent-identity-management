@@ -406,6 +406,24 @@ func (r *MCPServerRepository) GetByName(orgID uuid.UUID, name string) (*domain.M
 	return server, nil
 }
 
+// Update writes the caller-editable fields of an MCP server.
+//
+// `trust_score` is deliberately NOT in the SET list, and must not be added back.
+// It is a denormalized cache of `mcp_trust_scores.score`. `Create` seeds it once
+// at row creation; from then on the only thing that CHANGES it is the migration
+// 094 trigger `mirror_mcp_trust_score_to_server`, which fires when the 8-factor
+// calculator inserts a new score row. Callers of Update patch an
+// unrelated field (a description, a version, a capability list) from an in-memory
+// snapshot they fetched earlier; including `trust_score` here made every one of
+// them write back whatever value that snapshot happened to hold. When the snapshot
+// was stale, that reverted the calculated cache AND fired
+// `mcp_trust_score_change_trigger` (migration 051), inserting a
+// `mcp_trust_score_history` row labelled `automated_recalculation` — an audit
+// record of a security event that never happened. Migration 104's own header names
+// that fabrication as worse than the defect it was fixing.
+//
+// A server's score is changed by calculating one, never by saving a row.
+// Regression test: `mcp_update_trust_score_integration_test.go`.
 func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 	query := `
 		UPDATE mcp_servers
@@ -420,9 +438,8 @@ func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 			last_verified_at = $8,
 			verification_url = $9,
 			capabilities = $10,
-			trust_score = $11,
-			updated_at = $12
-		WHERE id = $13
+			updated_at = $11
+		WHERE id = $12
 		RETURNING updated_at
 	`
 
@@ -444,7 +461,6 @@ func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 		server.LastVerifiedAt,
 		server.VerificationURL,
 		capabilitiesJSON, // Use JSON bytes
-		server.TrustScore,
 		time.Now().UTC(),
 		server.ID,
 	).Scan(&server.UpdatedAt)
