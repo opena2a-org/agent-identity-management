@@ -42,26 +42,20 @@ func TestVerifiedAtTrigger_SetsOnStatusTransition(t *testing.T) {
 
 	ctx := context.Background()
 
-	orgID := uuid.New()
 	agentID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "verified-at-trigger")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, agentID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "verified-at-trigger-test-org-"+agentID.String()[:8])
-	require.NoError(t, err)
 
 	// Seed an agent in 'pending' state with NULL verified_at — the
 	// pre-flip state.
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score,
-		                     verified_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'ai_agent', 'pending', 0.5, NULL, NOW(), NOW())`,
-		agentID, orgID, "verified-at-trigger-test-agent-"+agentID.String()[:8])
+		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score,
+		                     verified_at, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'ai_agent', 'pending', 0.5, NULL, $5, NOW(), NOW())`,
+		agentID, orgID, "verified-at-trigger-test-agent-"+agentID.String()[:8],
+		"Verified At Trigger Agent", userID)
 	require.NoError(t, err)
 
 	// Direct-SQL status flip: this is the path the audit observed
@@ -102,28 +96,21 @@ func TestVerifiedAtTrigger_DoesNotOverwriteExisting(t *testing.T) {
 
 	ctx := context.Background()
 
-	orgID := uuid.New()
 	agentID := uuid.New()
+	orgID, userID := seedOrgAndUser(t, db, ctx, "verified-at-noclobber")
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, agentID)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at)
-		 VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "verified-at-noclobber-test-org-"+agentID.String()[:8])
-	require.NoError(t, err)
 
 	// Seed an agent already in 'verified' state with a known
 	// verified_at three days ago.
 	originalVerifiedAt := time.Now().UTC().Add(-72 * time.Hour).Truncate(time.Second)
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score,
-		                     verified_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.8, $4, NOW(), NOW())`,
+		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score,
+		                     verified_at, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.8, $5, $6, NOW(), NOW())`,
 		agentID, orgID, "verified-at-noclobber-test-agent-"+agentID.String()[:8],
-		originalVerifiedAt)
+		"Verified At Noclobber Agent", originalVerifiedAt, userID)
 	require.NoError(t, err)
 
 	// UPDATE that does NOT touch status. The trigger fires (BEFORE

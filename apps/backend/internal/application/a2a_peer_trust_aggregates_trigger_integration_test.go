@@ -35,11 +35,12 @@ func TestA2APeerTrustAggregatesTrigger_RecomputesOnInsert(t *testing.T) {
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	agentID := uuid.New()
 	peerA := uuid.New()
 	peerB := uuid.New()
 	peerC := uuid.New()
+
+	orgID, userID := seedOrgAndUser(t, db, ctx, "a2a-aggr")
 
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM a2a_peer_trust WHERE agent_id = $1 OR peer_agent_id IN ($2, $3, $4)`,
@@ -47,19 +48,13 @@ func TestA2APeerTrustAggregatesTrigger_RecomputesOnInsert(t *testing.T) {
 		_, _ = db.ExecContext(ctx, `DELETE FROM a2a_trust_scores WHERE agent_id = $1`, agentID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id IN ($1, $2, $3, $4)`,
 			agentID, peerA, peerB, peerC)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "a2a-aggr-test-org-"+agentID.String()[:8])
-	require.NoError(t, err)
 
 	for _, id := range []uuid.UUID{agentID, peerA, peerB, peerC} {
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score, created_at, updated_at)
-			 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.5, NOW(), NOW())`,
-			id, orgID, "a2a-aggr-agent-"+id.String()[:8])
+			`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.5, $5, NOW(), NOW())`,
+			id, orgID, "a2a-aggr-agent-"+id.String()[:8], "A2A Aggr Agent", userID)
 		require.NoError(t, err)
 	}
 
@@ -102,28 +97,24 @@ func TestA2APeerTrustAggregatesTrigger_DeleteShrinksAggregates(t *testing.T) {
 	require.NoError(t, db.Ping())
 
 	ctx := context.Background()
-	orgID := uuid.New()
 	agentID := uuid.New()
 	peerA := uuid.New()
 	peerB := uuid.New()
+
+	orgID, userID := seedOrgAndUser(t, db, ctx, "a2a-del")
 
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM a2a_peer_trust WHERE agent_id = $1 OR peer_agent_id IN ($2, $3)`,
 			agentID, peerA, peerB)
 		_, _ = db.ExecContext(ctx, `DELETE FROM a2a_trust_scores WHERE agent_id = $1`, agentID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id IN ($1, $2, $3)`, agentID, peerA, peerB)
-		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
 	})
 
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`,
-		orgID, "a2a-del-test-org-"+agentID.String()[:8])
-	require.NoError(t, err)
 	for _, id := range []uuid.UUID{agentID, peerA, peerB} {
 		_, err = db.ExecContext(ctx,
-			`INSERT INTO agents (id, organization_id, name, agent_type, status, trust_score, created_at, updated_at)
-			 VALUES ($1, $2, $3, 'ai_agent', 'verified', 0.5, NOW(), NOW())`,
-			id, orgID, "a2a-del-agent-"+id.String()[:8])
+			`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, 'ai_agent', 'verified', 0.5, $5, NOW(), NOW())`,
+			id, orgID, "a2a-del-agent-"+id.String()[:8], "A2A Del Agent", userID)
 		require.NoError(t, err)
 	}
 

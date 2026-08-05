@@ -14,34 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// seedOrgAndUser creates the organization and user rows that `mcp_servers`
-// requires via NOT NULL / foreign key. Returns both IDs and registers cleanup.
-func seedOrgAndUser(t *testing.T, db *sql.DB, ctx context.Context, prefix string) (uuid.UUID, uuid.UUID) {
-	t.Helper()
-	orgID := uuid.New()
-	userID := uuid.New()
-	suffix := orgID.String()[:8]
-
-	t.Cleanup(func() {
-		_, _ = db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID)
-	})
-
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO organizations (id, name, domain, created_at, updated_at)
-		 VALUES ($1, $2, $3, NOW(), NOW())`,
-		orgID, prefix+"-org-"+suffix, prefix+"-"+suffix+".example.com")
-	require.NoError(t, err)
-
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO users
-		   (id, organization_id, email, name, password_hash, role, provider,
-		    provider_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, 'x', 'admin', 'local', $5, NOW(), NOW())`,
-		userID, orgID, prefix+"-"+suffix+"@example.com", prefix+"-user", "local-"+suffix)
-	require.NoError(t, err)
-
-	return orgID, userID
-}
+// seedOrgAndUser now lives in integration_seed_test.go, shared with the other
+// integration tests in this package.
 
 // TestMCPTrustScoreMirrorTrigger_InsertSyncsServerCache is the
 // regression test for issue #170. Migration 094 installs an
