@@ -482,17 +482,28 @@ func (c *MCPTrustCalculator) CalculateTrustScore(ctx context.Context, mcpServerI
 		return nil, fmt.Errorf("failed to calculate trust score: %w", err)
 	}
 
-	// Store the score if repository is available
+	// Store the score if repository is available.
+	//
+	// This insert is also what updates the `mcp_servers.trust_score` cache: the
+	// migration 094 trigger `mirror_mcp_trust_score_to_server` fires AFTER INSERT
+	// on `mcp_trust_scores` and mirrors NEW.score onto the server row, in the same
+	// transaction. There is deliberately no second write here.
+	//
+	// There used to be one — `server.TrustScore = score.Score` followed by
+	// `mcpServerRepo.Update(server)`. It was redundant once 094 landed, and it was
+	// the reason `Update` carried `trust_score` in its SET list at all, which made
+	// every unrelated caller of `Update` a silent writer of the cache. See
+	// `MCPServerRepository.Update` for why that column is now absent there.
+	//
+	// When `mcpTrustScoreRepo` is nil this function calculates without persisting
+	// anything, which is what "optionally stores" means: no score row, and
+	// therefore no cache update. Production always wires the repository
+	// (`NewMCPTrustCalculatorWithRepo` in `cmd/server/main.go`); the nil-repo
+	// constructor has no non-test callers.
 	if c.mcpTrustScoreRepo != nil {
 		if err := c.mcpTrustScoreRepo.Create(score); err != nil {
 			return nil, fmt.Errorf("failed to store trust score: %w", err)
 		}
-	}
-
-	// Update the server's trust_score field
-	server.TrustScore = score.Score
-	if err := c.mcpServerRepo.Update(server); err != nil {
-		return nil, fmt.Errorf("failed to update MCP server trust score: %w", err)
 	}
 
 	return score, nil
