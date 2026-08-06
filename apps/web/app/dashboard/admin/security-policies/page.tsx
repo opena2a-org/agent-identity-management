@@ -92,6 +92,9 @@ const MCP_POLICY_TYPES = [
   "mcp_unverified",
 ];
 
+// Descriptions state what a policy RECORDS, not what it does. No MCP policy type is evaluated by
+// any running code path today, so active-voice enforcement wording ("Block specific MCP servers")
+// would describe behavior that does not happen. See MCPNotEnforcedNotice below.
 const MCP_POLICY_TYPE_CONFIGS = [
   {
     type: "mcp_allowlist",
@@ -99,7 +102,7 @@ const MCP_POLICY_TYPE_CONFIGS = [
     icon: CheckCircle,
     color: "text-green-600",
     bgColor: "bg-green-100 dark:bg-green-900/30",
-    description: "Only allow listed MCP servers",
+    description: "Records which MCP servers are intended to be allowed",
   },
   {
     type: "mcp_blocklist",
@@ -107,7 +110,7 @@ const MCP_POLICY_TYPE_CONFIGS = [
     icon: Ban,
     color: "text-red-600",
     bgColor: "bg-red-100 dark:bg-red-900/30",
-    description: "Block specific MCP servers",
+    description: "Records which MCP servers are intended to be blocked",
   },
   {
     type: "mcp_capabilities",
@@ -115,7 +118,7 @@ const MCP_POLICY_TYPE_CONFIGS = [
     icon: Shield,
     color: "text-blue-600",
     bgColor: "bg-blue-100 dark:bg-blue-900/30",
-    description: "Require or forbid specific capabilities",
+    description: "Records required and forbidden capabilities",
   },
   {
     type: "mcp_unverified",
@@ -123,9 +126,28 @@ const MCP_POLICY_TYPE_CONFIGS = [
     icon: FileWarning,
     color: "text-yellow-600",
     bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
-    description: "Handle unverified MCP servers",
+    description: "Records how unverified MCP servers should be handled",
   },
 ];
+
+// MCP policies are stored and editable, but no running code path evaluates them: the policy
+// evaluator has no call site, so nothing reads these rules at connection or registration time.
+// Saying so plainly is the point. An administrator who configures a blocking policy and is not
+// told it does not run has been given a control that only looks like one.
+function MCPNotEnforcedNotice({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/40 ${className}`}
+    >
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-500" />
+      <div className="text-amber-900 dark:text-amber-200">
+        <span className="font-medium">MCP policies are not enforced yet.</span> These rules are
+        saved and can be edited, but nothing evaluates them, so no MCP server is currently allowed,
+        blocked, or alerted on by them. Agent policies are unaffected and continue to be enforced.
+      </div>
+    </div>
+  );
+}
 
 const enforcementColors = {
   alert_only: "bg-yellow-100 text-yellow-800 border-yellow-300",
@@ -331,8 +353,19 @@ export default function SecurityPoliciesPage() {
   const agentPolicies = policies.filter(isAgentPolicy);
   const mcpPolicies = policies.filter(isMCPPolicy);
   const enabledCount = policies.filter(p => p.isEnabled).length;
-  const blockingCount = policies.filter(p => p.isEnabled && p.enforcementAction === "block_and_alert").length;
-  const monitoringCount = policies.filter(p => p.isEnabled && p.enforcementAction === "alert_only").length;
+  // The blocking and monitoring tiles describe what is actually happening, so they count only
+  // policies that something evaluates. MCP policies are stored but never evaluated, so counting
+  // them here would report enforcement that does not occur -- "Blocking: 1" beside a policy the
+  // system has never once acted on.
+  const blockingCount = agentPolicies.filter(p => p.isEnabled && p.enforcementAction === "block_and_alert").length;
+  const monitoringCount = agentPolicies.filter(p => p.isEnabled && p.enforcementAction === "alert_only").length;
+
+  // The blocking-mode confirmation dialog is shared by agent and MCP policies, but its warning
+  // ("blocks in real-time", "403 Forbidden") is only true for agent policies. Resolve which kind
+  // is being changed so the dialog does not promise an effect that will not happen.
+  const pendingPolicyId = pendingEnforcementChange?.policyId || pendingPolicyToggle?.policyId;
+  const pendingIsMCPPolicy = !!pendingPolicyId
+    && policies.some(p => p.id === pendingPolicyId && isMCPPolicy(p));
 
   // Policy toggle with blocking warning
   const togglePolicy = async (policyId: string, currentlyEnabled: boolean) => {
@@ -977,6 +1010,11 @@ export default function SecurityPoliciesPage() {
                     <EnforcementIcon className="h-3 w-3 mr-1" />
                     {enforcementLabels[policy.enforcementAction] || policy.enforcementAction}
                   </Badge>
+                  {/* The enforcement badge above states an intent, not a behavior: nothing
+                      evaluates MCP policies, so it must not be the only thing an admin reads. */}
+                  <Badge className="border border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    Not enforced
+                  </Badge>
                   <Badge variant="outline" className="text-xs">
                     Priority: {policy.priority}
                   </Badge>
@@ -1035,10 +1073,14 @@ export default function SecurityPoliciesPage() {
             </div>
 
             {isBlocking && policy.isEnabled && (
-              <div className="flex items-center gap-2 pl-14 p-3 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200 dark:border-red-800">
-                <AlertOctagon className="h-4 w-4 text-red-600" />
-                <p className="text-xs text-red-800 dark:text-red-200 font-medium">
-                  BLOCKING MODE ACTIVE: This policy will block MCP server connections in real-time
+              // Deliberately not the red "BLOCKING MODE ACTIVE" banner the agent card uses. That
+              // banner states a present-tense behavior, and for MCP policies no such behavior
+              // occurs -- printing it beside the "Not enforced" badge would contradict it.
+              <div className="flex items-center gap-2 pl-14 p-3 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+                <AlertOctagon className="h-4 w-4 text-gray-500" />
+                <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                  Set to block, but not blocking: this policy takes effect only once MCP policy
+                  enforcement ships. No connection is being blocked by it today.
                 </p>
               </div>
             )}
@@ -1143,7 +1185,7 @@ export default function SecurityPoliciesPage() {
               Security Policies
             </h1>
             <p className="text-muted-foreground mt-1">
-              Manage security enforcement for agents and MCP servers
+              Manage security policies for agents and MCP servers
             </p>
           </div>
           {mainFilter === "mcp" && (
@@ -1276,7 +1318,8 @@ export default function SecurityPoliciesPage() {
                 </p>
                 <p className="text-blue-800 dark:text-blue-200">
                   Manage both agent and MCP server security policies in one place. Agent policies protect against capability violations,
-                  trust score issues, and unusual activity. MCP policies control server allowlists, blocklists, and verification requirements.
+                  trust score issues, and unusual activity, and are enforced today. MCP policies record intended server allowlists,
+                  blocklists, and verification requirements, and are not yet enforced.
                 </p>
                 <ul className="space-y-1 text-blue-800 dark:text-blue-200 mt-2">
                   <li className="flex items-center gap-2">
@@ -1338,6 +1381,7 @@ export default function SecurityPoliciesPage() {
                     Create MCP Policy
                   </Button>
                 </div>
+                <MCPNotEnforcedNotice />
                 <div className="space-y-4">
                   {mcpPolicies.map(renderMCPPolicyCard)}
                 </div>
@@ -1384,9 +1428,9 @@ export default function SecurityPoliciesPage() {
               <CardHeader>
                 <CardTitle>MCP Server Policies ({mcpPolicies.length})</CardTitle>
                 <CardDescription>
-                  Policies that control MCP server allowlists, blocklists, and verification requirements.
-                  Toggle policies on/off or adjust enforcement actions.
+                  Allowlist, blocklist, capability, and verification rules for MCP servers.
                 </CardDescription>
+                <MCPNotEnforcedNotice className="mt-3" />
               </CardHeader>
               <CardContent>
                 {/* MCP Sub-tabs */}
@@ -1444,6 +1488,18 @@ export default function SecurityPoliciesPage() {
                   </strong>{" "}
                   {pendingEnforcementChange ? "to" : "in"} blocking mode.
                 </div>
+                {pendingIsMCPPolicy ? (
+                  <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 p-4 rounded-md space-y-2">
+                    <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                      This will not block anything yet
+                    </div>
+                    <ul className="text-sm text-amber-800 dark:text-amber-300 space-y-1 list-disc list-inside">
+                      <li>MCP policies are <strong>not evaluated</strong> by any running code path</li>
+                      <li>The setting is saved, but <strong>no connection will be blocked</strong></li>
+                      <li>It takes effect only once MCP policy enforcement ships</li>
+                    </ul>
+                  </div>
+                ) : (
                 <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4 rounded-md space-y-2">
                   <div className="text-sm font-semibold text-red-800 dark:text-red-200">
                     Warning: Production Impact
@@ -1455,6 +1511,7 @@ export default function SecurityPoliciesPage() {
                     <li>Consider testing in "Alert Only" mode first</li>
                   </ul>
                 </div>
+                )}
                 <div className="text-sm">
                   Are you sure you want to {pendingEnforcementChange ? "switch to" : "enable"} blocking mode for this policy?
                 </div>
@@ -1536,6 +1593,7 @@ export default function SecurityPoliciesPage() {
                 Define rules for MCP server access and compliance
               </DialogDescription>
             </DialogHeader>
+            <MCPNotEnforcedNotice />
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1641,6 +1699,7 @@ export default function SecurityPoliciesPage() {
                 Update the policy rules and settings
               </DialogDescription>
             </DialogHeader>
+            <MCPNotEnforcedNotice />
             <div className="space-y-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
