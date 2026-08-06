@@ -2009,7 +2009,7 @@ func createMigrationsTable(db *sql.DB) error {
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			id SERIAL PRIMARY KEY,
 			version VARCHAR(255) NOT NULL UNIQUE,
-			applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)
 	`
 	_, err := db.Exec(query)

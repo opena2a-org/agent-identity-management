@@ -1,0 +1,64 @@
+# timestamptz-lint baseline — declarations that predate migration 106.
+#
+# These are the naked TIMESTAMP declarations that existed when the lint was written.
+# They are NOT unfixed defects: migration 106 converted every column they produce to
+# TIMESTAMPTZ, and TestNakedTimestampSchemaHasNoNakedTimestampColumns asserts the applied
+# schema holds zero naked columns.
+#
+# They stay listed because 106 converts the DATABASE, not these files. Editing an already
+# applied migration would make the history describe something other than what production ran,
+# so the text stays as it was and the result is corrected forward.
+#
+# Entries are <basename>:<line> — never a path prefix, because CI scans `migrations` from
+# apps/backend while the package test scans `../../migrations`, and a prefixed key would stop
+# matching under one of them. They are COUNTED, not merely matched: a location listed once
+# suppresses exactly one finding there, so a baselined line that grows a SECOND naked
+# declaration is still reported. TestHistoricalBaselineMatchesTheTreeExactly asserts this file
+# and the tree agree exactly in both directions, so a stale entry cannot sit here absorbing a
+# future defect.
+#
+# This file must never grow. A new entry means a new naked column was added after 106, which
+# is the exact regression the lint exists to prevent. Fix the column; do not extend this list.
+001_initial_schema.sql:104
+001_initial_schema.sql:105
+001_initial_schema.sql:123
+001_initial_schema.sql:13
+001_initial_schema.sql:14
+001_initial_schema.sql:144
+001_initial_schema.sql:145
+001_initial_schema.sql:30
+001_initial_schema.sql:31
+001_initial_schema.sql:32
+001_initial_schema.sql:56
+001_initial_schema.sql:57
+001_initial_schema.sql:58
+001_initial_schema.sql:77
+001_initial_schema.sql:78
+001_initial_schema.sql:80
+012_create_user_registration_requests_table.sql:12
+012_create_user_registration_requests_table.sql:13
+012_create_user_registration_requests_table.sql:19
+012_create_user_registration_requests_table.sql:20
+014_fix_alerts_schema.sql:33
+016_create_agent_capabilities_table.sql:10
+016_create_agent_capabilities_table.sql:11
+016_create_agent_capabilities_table.sql:12
+016_create_agent_capabilities_table.sql:13
+017_create_capability_violations_table.sql:14
+018_create_operational_metrics_tables.sql:12
+018_create_operational_metrics_tables.sql:30
+018_create_operational_metrics_tables.sql:48
+018_create_operational_metrics_tables.sql:49
+018_create_operational_metrics_tables.sql:50
+018_create_operational_metrics_tables.sql:51
+018_create_operational_metrics_tables.sql:72
+018_create_operational_metrics_tables.sql:8
+018_create_operational_metrics_tables.sql:91
+037_add_last_active_to_agents.sql:7
+065_add_pqc_support.sql:8
+065_add_pqc_support.sql:9
+090_add_execution_isolation.sql:13
+090_add_execution_isolation.sql:14
+090_add_execution_isolation.sql:30
+090_add_execution_isolation.sql:31
+101_create_user_feedback.sql:12
