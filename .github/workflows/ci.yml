@@ -119,6 +119,18 @@ jobs:
             internal/infrastructure/repository \
             internal/application
 
+      # A `timestamp without time zone` column silently shifts the stored instant by the
+      # writing process's UTC offset — and, for DEFAULT NOW(), by the PostgreSQL session's.
+      # The baseline holds the declarations that predate migration 106 and must never grow.
+      - name: timestamptz-lint (naked TIMESTAMP guard)
+        run: |
+          LINT_TMP=$(mktemp -d -t timestamptz-lint.XXXXXX)
+          trap 'rm -rf "$LINT_TMP"' EXIT
+          go build -o "$LINT_TMP/timestamptz-lint" ./cmd/timestamptz-lint/
+          "$LINT_TMP/timestamptz-lint" \
+            --baseline cmd/timestamptz-lint/historical-baseline.txt \
+            migrations
+
       - name: Test with coverage
         run: |
           go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -365,12 +377,12 @@ jobs:
       # stops applying to it. AgentRevocation + the middleware package were
       # added for exactly that reason; UpdateDoesNotWriteTrustScore + RoundTrip
       # and the repository package were added for the same reason after the MCP
-      # trust-score write-path fix.
+      # trust-score write-path fix; NakedTimestamp was added with migration 106.
       - name: Assert integration tests were not skipped
         run: |
           set -o pipefail
           go test -tags=integration -v \
-            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled' \
+            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|NakedTimestamp' \
             ./internal/application/... ./internal/interfaces/http/middleware/... \
             ./internal/infrastructure/repository/... 2>&1 | tee /tmp/integration.log
           if grep -q '^--- SKIP' /tmp/integration.log; then
