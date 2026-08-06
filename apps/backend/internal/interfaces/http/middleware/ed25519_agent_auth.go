@@ -31,8 +31,8 @@ func sortedJSONMarshal(v interface{}) []byte {
 	// Convert compact JSON to Python's default format with spaces
 	// Python uses: (', ', ': ') = space after comma, space after colon
 	result := string(compactBytes)
-	result = strings.ReplaceAll(result, "\":", "\": ")  // Add space after colon
-	result = strings.ReplaceAll(result, ",\"", ", \"")  // Add space after comma before quote
+	result = strings.ReplaceAll(result, "\":", "\": ") // Add space after colon
+	result = strings.ReplaceAll(result, ",\"", ", \"") // Add space after comma before quote
 	result = strings.ReplaceAll(result, ",[", ", [")   // Add space after comma before bracket
 	result = strings.ReplaceAll(result, ",{", ", {")   // Add space after comma before brace
 
@@ -133,7 +133,7 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		}
 
 		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
-		// that sets the status. RevokeAgent and EnforceKeyExpiry both express denial purely
+		// that sets the status. RevokeAgent expresses denial purely
 		// as `agents.status`, so an agent that keeps its key material after being revoked
 		// or suspended authenticated successfully until this check existed.
 		if !agentStatusPermitsAuth(agent.Status) {

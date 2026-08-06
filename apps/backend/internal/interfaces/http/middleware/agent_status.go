@@ -17,8 +17,13 @@ import (
 // honestly registered agent, not an earned one. Denying it would break enrollment for
 // every new agent while blocking nothing an attacker holds.
 //
-// Denial states are the ones a human or EnforceKeyExpiry assigns on purpose:
-// `revoked` (AgentService.RevokeAgent) and `suspended` (SuspendAgent, EnforceKeyExpiry).
+// Denial states are the ones assigned on purpose: `revoked` (AgentService.RevokeAgent)
+// and `suspended` (AgentService.SuspendAgent).
+//
+// `EnforceKeyExpiry` was named here as a second writer of `suspended`. It is not one —
+// it returns ErrKeyExpiryEnforcementUnavailable and has no caller (see #359). Nothing
+// suspends an agent for an expired key today. The allow-list below is unaffected either
+// way, because it gates on the value in the column rather than on who wrote it.
 // Before this check existed, both wrote a status that no signature or API-key path read,
 // so revoking an agent did not stop it authenticating with key material it already held.
 func agentStatusPermitsAuth(status domain.AgentStatus) bool {

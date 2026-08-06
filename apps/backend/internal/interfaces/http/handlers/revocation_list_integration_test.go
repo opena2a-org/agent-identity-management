@@ -231,7 +231,11 @@ func TestRevocationListCarriesNoAgentNameOrTimestamp(t *testing.T) {
 
 // The response must NOT carry an `entries` key, and this is deliberate.
 //
-// `revocations` is what ATP-SPEC §8.1 specifies. Both SDK CRL types decode `entries`
+// `revocations` is what ATP-SPEC v1.0.0-rc1 §8.1 specifies — a document that is not in
+// this repository, so the pointer is given in full:
+// https://github.com/opena2a-standards/agent-trust-protocol (ATP-SPEC.md §8.1) with its
+// schema at https://specs.opena2a.org/schemas/atp/revocation-list-v1.schema.json.
+// Both SDK CRL types decode `entries`
 // instead, so a fetcher wired naively against this body does not get a usable list.
 //
 // Serving both keys is the tempting tidy-up and it must stay a deliberate act with a
@@ -351,9 +355,17 @@ func seedBulkRevokedAgents(t *testing.T, db *sql.DB, ctx context.Context, n int)
 		userID, orgID, "revbulk-"+suffix+"@example.com", "revbulk-user", "local-"+suffix)
 	require.NoError(t, err)
 
-	// created_at is deliberately identical across every row. That makes `created_at DESC`
-	// alone a non-total order, so if the tie-breaker on the paginated query were dropped
-	// the offset walk would skip or repeat rows and this fixture would catch it.
+	// created_at is deliberately identical across every row, which makes `created_at DESC`
+	// alone a non-total order — the condition the query's `, id` tie-breaker exists for.
+	//
+	// It does NOT follow that this fixture catches a dropped tie-breaker, and an earlier
+	// version of this comment claimed it did. Removing `, id` leaves all of these tests
+	// green: PostgreSQL happens to return the same permutation of tied rows across
+	// consecutive page queries, so the defect is real but invisible from here. Proving it
+	// needs a plan that genuinely reorders between pages, which this fixture does not force.
+	//
+	// The fixture is still worth its cost — it is what exercises multi-page assembly at all
+	// — but do not read a green run as evidence the ordering is safe.
 	rows, err := db.QueryContext(ctx,
 		`INSERT INTO agents (id, organization_id, name, display_name, description, agent_type,
 		                     status, public_key, trust_score, created_by, created_at, updated_at)

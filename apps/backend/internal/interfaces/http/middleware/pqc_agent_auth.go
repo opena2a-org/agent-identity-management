@@ -98,7 +98,7 @@ func PQCAgentMiddleware(agentService *application.AgentService) fiber.Handler {
 		}
 
 		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
-		// that sets the status. RevokeAgent and EnforceKeyExpiry both express denial purely
+		// that sets the status. RevokeAgent expresses denial purely
 		// as `agents.status`, so an agent that keeps its key material after being revoked
 		// or suspended authenticated successfully until this check existed. Checked before
 		// any signature work so a denied agent costs no ML-DSA verification.

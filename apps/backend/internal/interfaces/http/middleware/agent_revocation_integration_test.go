@@ -28,7 +28,8 @@ import (
 
 // Revocation enforcement on the agent auth middlewares.
 //
-// Before this suite existed, `AgentService.RevokeAgent` and `EnforceKeyExpiry`
+// Before this suite existed, `AgentService.RevokeAgent` (and `EnforceKeyExpiry`, which
+// has since been found unimplementable as written — #359)
 // expressed denial ONLY as a write to `agents.status`, and three of the six auth
 // middlewares never read that column. A revoked or suspended agent that still held
 // its key material authenticated successfully — on `secrets resolve` among other
@@ -63,7 +64,7 @@ var revocationCases = []struct {
 	{"verified", true, "the ordinary case — also proves the request is otherwise well-formed"},
 	{"pending", true, "registration default; denying it would break enrollment"},
 	{"revoked", false, "RevokeAgent writes this and nothing else denied the request"},
-	{"suspended", false, "SuspendAgent and EnforceKeyExpiry write this"},
+	{"suspended", false, "SuspendAgent writes this; EnforceKeyExpiry does not (unimplemented, #359)"},
 	{"deactivated", false, "unrecognised value must fail closed, not fall through"},
 }
 

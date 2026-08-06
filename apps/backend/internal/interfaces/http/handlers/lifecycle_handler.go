@@ -142,7 +142,15 @@ func (h *LifecycleHandler) GetRevocationList(c fiber.Ctx) error {
 	c.Set("Cache-Control", "max-age=300")
 	c.Set("ETag", fmt.Sprintf(`"%s"`, hex.EncodeToString(digest.Sum(nil))))
 
-	// The key stays `revocations`, which is what ATP-SPEC §8.1 specifies. Both SDK CRL
+	// The key stays `revocations`, which is what ATP-SPEC v1.0.0-rc1 §8.1 specifies. That
+	// document is not in this repository — it lives at
+	// https://github.com/opena2a-standards/agent-trust-protocol (ATP-SPEC.md, §8.1
+	// "Trust Proof Revocation") and its response schema is published at
+	// https://specs.opena2a.org/schemas/atp/revocation-list-v1.schema.json — so the
+	// citation is given in full rather than as a bare section number nobody here can
+	// resolve. Note this endpoint's path is NOT the one §8.1 specifies
+	// (`/api/v1/trust/revocations`, served by the Registry) and AIM claims no conformance
+	// to it; the key name is where the two agree. Both SDK CRL
 	// types decode `entries` instead, so a fetcher wired naively against this body does
 	// not get a usable list.
 	//

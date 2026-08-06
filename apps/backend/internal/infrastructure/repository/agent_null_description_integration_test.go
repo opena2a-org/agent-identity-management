@@ -73,14 +73,18 @@ func seedNullDescriptionAgent(t *testing.T, db *sql.DB, ctx context.Context) (or
 	// GetByMCPServer and GetByMCPServerName match on with the @> containment operator.
 	talksTo := fmt.Sprintf(`["%s", "%s"]`, mcpServerID.String(), mcpServerName)
 
-	// description is NULL. That is the entire point of the fixture, so it is written
-	// explicitly rather than omitted, and a future NOT NULL constraint fails here loudly
-	// instead of quietly making this suite vacuous.
+	// description AND trust_score are NULL. Both are the point of the fixture, so both are
+	// written explicitly rather than omitted, and a future NOT NULL constraint fails here
+	// loudly instead of quietly making this suite vacuous.
+	//
+	// trust_score can only reach NULL through an INSERT: a trigger writing to
+	// trust_score_history rejects an UPDATE to NULL, which is why an earlier sweep
+	// concluded the column was unreachable and stopped. It is not — this is that insert.
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO agents (id, organization_id, name, display_name, description, agent_type,
 		                     status, public_key, trust_score, talks_to, created_by,
 		                     created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, NULL, 'ai_agent', 'active', 'unused', 0.5, $5::jsonb, $6,
+		 VALUES ($1, $2, $3, $4, NULL, 'ai_agent', 'active', 'unused', NULL, $5::jsonb, $6,
 		         NOW(), NOW())`,
 		agentID, orgID, agentName, "NullDesc Agent", talksTo, userID)
 	require.NoError(t, err,

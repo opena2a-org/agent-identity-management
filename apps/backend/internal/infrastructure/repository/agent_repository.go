@@ -161,7 +161,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		       trust_score, verified_at, talks_to, capabilities, metadata, created_at, updated_at, created_by, last_active,
+		       COALESCE(trust_score, 0), verified_at, talks_to, capabilities, metadata, created_at, updated_at, created_by, last_active,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       pqc_public_key, pqc_key_algorithm, COALESCE(hybrid_mode_enabled, false), pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
@@ -374,7 +374,7 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 func (r *AgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
@@ -655,7 +655,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
@@ -799,7 +799,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	// We need to check for both formats
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
@@ -919,7 +919,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	// We need to check for both formats
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
@@ -1033,7 +1033,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
-		       public_key, certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       public_key, certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       talks_to, capabilities, metadata,
@@ -1202,7 +1202,7 @@ func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID
 // GetStaleAgents returns agents whose heartbeat is older than the given time
 func (r *AgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	query := `
-		SELECT id, organization_id, name, display_name, status, agent_type, trust_score,
+		SELECT id, organization_id, name, display_name, status, agent_type, COALESCE(trust_score, 0),
 		       last_heartbeat, last_active, created_at, updated_at
 		FROM agents
 		WHERE last_heartbeat IS NOT NULL
@@ -1248,7 +1248,7 @@ func (r *AgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*dom
 		args[i] = id
 	}
 	query := fmt.Sprintf(`
-		SELECT id, organization_id, name, display_name, status, agent_type, trust_score,
+		SELECT id, organization_id, name, display_name, status, agent_type, COALESCE(trust_score, 0),
 		       last_heartbeat, last_active, created_at, updated_at
 		FROM agents WHERE id IN (%s)`, strings.Join(placeholders, ","))
 	rows, err := r.db.QueryContext(ctx, query, args...)

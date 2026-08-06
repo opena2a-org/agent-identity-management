@@ -2478,17 +2478,28 @@ var ErrKeyExpiryEnforcementUnavailable = errors.New(
 //
 //  1. It walked `List(0, 0)`, which reached Postgres as `LIMIT 0` and returned no rows,
 //     so it suspended nothing. That one is fixed — List now rejects a non-positive limit.
+//
 //  2. `AgentRepository.List` does not SELECT `key_expires_at` or
 //     `key_rotation_grace_until`. Both are therefore always nil on every agent this
 //     function can see, so `agent.KeyExpiresAt != nil` is never true and the body is
 //     unreachable regardless of pagination.
+//
 //  3. The obvious repair for (2) — add the columns to List's SELECT — is a trap. This
-//     function suspends by calling `AgentRepository.Update`, which writes 29 columns
-//     while List populates a subset. Measured on a real row, that round trip clears
-//     encrypted_private_key, key_algorithm, key_created_at, key_expires_at,
-//     previous_public_key, pqc_public_key, pqc_key_algorithm, hybrid_mode_enabled,
-//     capabilities, and resets rotation_count to 0. Enforcing key expiry would destroy
-//     the key material it exists to protect.
+//     function suspends by calling `AgentRepository.Update`, which writes 29 columns from
+//     a struct that List only partially populates. Every column Update writes and List
+//     does not select is destroyed on the round trip: key material (encrypted_private_key,
+//     the key_* timestamps, previous_public_key), the whole PQC set, capabilities, and
+//     rotation_count. Enforcing key expiry would destroy the key material it exists to
+//     protect.
+//
+//     The exact column set is deliberately not enumerated here. An earlier version of this
+//     comment listed ten and was four short — a hand-maintained list in a comment is not
+//     checkable and drifts against the code it describes. Derive it instead:
+//
+//     comm -13 <(sed -n '/func (r \*AgentRepository) List(/,/FROM agents/p' \
+//     ../infrastructure/repository/agent_repository.go | grep -oE '\b[a-z_]+\b' | sort -u) \
+//     <(sed -n '/func (r \*AgentRepository) Update(/,/WHERE id/p' \
+//     ../infrastructure/repository/agent_repository.go | grep -oE '\b[a-z_]+\b' | sort -u)
 //
 // It also has no caller anywhere, including tests, so nothing regresses by refusing.
 //
