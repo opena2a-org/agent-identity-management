@@ -372,7 +372,7 @@ jobs:
         run: |
           set -o pipefail
           go test -tags=integration -v \
-            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList' \
+            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription' \
             ./internal/application/... ./internal/interfaces/http/middleware/... \
             ./internal/infrastructure/repository/... \
             ./internal/interfaces/http/handlers/... 2>&1 | tee /tmp/integration.log

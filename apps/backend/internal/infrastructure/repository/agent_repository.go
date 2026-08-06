@@ -196,13 +196,17 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var createdBySDKTokenID sql.NullString
 	var createdByAPIKeyID sql.NullString
 	var updatedBy sql.NullString
+	// `description` is nullable. Scanning it into a plain string fails the entire row,
+	// and GetByID is what the agent auth middlewares call — a failed read there is
+	// reported as "Agent not found", which is indistinguishable from a revocation denial.
+	var description sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&agent.ID,
 		&agent.OrganizationID,
 		&agent.Name,
 		&agent.DisplayName,
-		&agent.Description,
+		&description,
 		&agent.AgentType,
 		&agent.Status,
 		&version,
@@ -252,6 +256,9 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 
 	// Convert nullable fields
+	if description.Valid {
+		agent.Description = description.String
+	}
 	if version.Valid {
 		agent.Version = version.String
 	}
@@ -765,6 +772,8 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
+		// `description` is nullable; scanning it into a plain string fails the whole row.
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -778,7 +787,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -802,6 +811,9 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}
@@ -880,6 +892,8 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
+		// `description` is nullable; scanning it into a plain string fails the whole row.
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -893,7 +907,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -917,6 +931,9 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}
@@ -988,6 +1005,8 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	var keyRotationGraceUntil sql.NullTime
 	var previousPublicKey sql.NullString
 	var rotationCount sql.NullInt32
+	// `description` is nullable; scanning it into a plain string fails the whole row.
+	var description sql.NullString
 	talksToJSON := make([]byte, 0)
 	capabilitiesJSON := make([]byte, 0)
 	metadataJSON := make([]byte, 0)
@@ -998,7 +1017,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		&agent.OrganizationID,
 		&agent.Name,
 		&agent.DisplayName,
-		&agent.Description,
+		&description,
 		&agent.AgentType,
 		&agent.Status,
 		&version,
@@ -1034,6 +1053,9 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	}
 
 	// Convert nullable fields
+	if description.Valid {
+		agent.Description = description.String
+	}
 	if version.Valid {
 		agent.Version = version.String
 	}
