@@ -2444,32 +2444,51 @@ func (s *AgentService) CreateCapabilityViolation(
 	return nil
 }
 
-// EnforceKeyExpiry suspends agents with expired keys past grace period
+// enforceKeyExpiryPageSize bounds each repository read in EnforceKeyExpiry.
+const enforceKeyExpiryPageSize = 500
+
+// EnforceKeyExpiry suspends agents with expired keys past grace period.
+//
+// This walked `List(0, 0)` under the comment "Get all agents", which reached Postgres as
+// `LIMIT 0` and returned no rows — so it suspended nothing, unconditionally. It is also
+// not currently invoked from anywhere outside tests, so it had two independent reasons
+// never to enforce anything. Paginating fixes the first; the second is a separate call.
+//
+// Paging by offset is safe here even though the loop writes: suspending an agent changes
+// `status` and `updated_at`, and the sort key is `created_at, id`, so a row cannot move
+// across a page boundary underneath the walk.
 func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
 	now := time.Now()
-	agents, err := s.agentRepo.List(0, 0) // Get all agents
-	if err != nil {
-		return 0, fmt.Errorf("failed to list agents: %w", err)
-	}
 
 	suspended := 0
-	for _, agent := range agents {
-		if agent.Status == domain.AgentStatusRevoked || agent.Status == domain.AgentStatusSuspended {
-			continue
+	for offset := 0; ; offset += enforceKeyExpiryPageSize {
+		agents, err := s.agentRepo.List(enforceKeyExpiryPageSize, offset)
+		if err != nil {
+			return suspended, fmt.Errorf("failed to list agents: %w", err)
 		}
-		// Check if key is expired and past grace period
-		if agent.KeyExpiresAt != nil && agent.KeyExpiresAt.Before(now) {
-			// If there's a grace period, check if we're past it
-			if agent.KeyRotationGraceUntil != nil && agent.KeyRotationGraceUntil.After(now) {
-				continue // Still in grace period
+
+		for _, agent := range agents {
+			if agent.Status == domain.AgentStatusRevoked || agent.Status == domain.AgentStatusSuspended {
+				continue
 			}
-			// Suspend the agent
-			agent.Status = domain.AgentStatusSuspended
-			agent.UpdatedAt = now
-			if err := s.agentRepo.Update(agent); err != nil {
-				continue // Log but don't fail the whole batch
+			// Check if key is expired and past grace period
+			if agent.KeyExpiresAt != nil && agent.KeyExpiresAt.Before(now) {
+				// If there's a grace period, check if we're past it
+				if agent.KeyRotationGraceUntil != nil && agent.KeyRotationGraceUntil.After(now) {
+					continue // Still in grace period
+				}
+				// Suspend the agent
+				agent.Status = domain.AgentStatusSuspended
+				agent.UpdatedAt = now
+				if err := s.agentRepo.Update(agent); err != nil {
+					continue // Log but don't fail the whole batch
+				}
+				suspended++
 			}
-			suspended++
+		}
+
+		if len(agents) < enforceKeyExpiryPageSize {
+			break
 		}
 	}
 

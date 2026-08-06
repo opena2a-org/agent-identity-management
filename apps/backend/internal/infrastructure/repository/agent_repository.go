@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -569,8 +570,29 @@ func (r *AgentRepository) Delete(id uuid.UUID) error {
 	return err
 }
 
-// List lists all agents with pagination
+// ErrNonPositiveLimit is returned by List when it is asked for a page of zero or
+// fewer rows. See List for why this is an error rather than an interpretation.
+var ErrNonPositiveLimit = errors.New("agent repository: limit must be positive; pass an explicit page size")
+
+// List returns one page of agents. limit MUST be positive.
+//
+// This method previously appended `LIMIT $1 OFFSET $2` unconditionally, so a zero limit
+// reached Postgres as `LIMIT 0` and returned no rows at all. Both callers passed (0, 0)
+// meaning "all" — one of them says so in a comment — because the sibling method
+// GetByOrganizationPaged above documents exactly that convention. The two conventions
+// collided here, and the revocation endpoint that reads this method served an empty list
+// to every caller as a result.
+//
+// Adopting the sibling's "non-positive means all" convention would have fixed that and is
+// the obvious repair, but it trades a silent-empty bug for a silent-everything one: an
+// unbounded full-table scan behind whichever caller next passes a zero, including an
+// unauthenticated route. Both failure directions are silent. Erroring is the only option
+// that is neither, and it fails visibly, which is the property the empty list lacked.
 func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
+	if limit <= 0 {
+		return nil, ErrNonPositiveLimit
+	}
+
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
@@ -578,10 +600,14 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id
 		LIMIT $1 OFFSET $2
 	`
 
+	// `id` breaks ties in the sort. Without it `created_at DESC` alone is not a total
+	// order, and rows sharing a timestamp can land on both sides of a page boundary or
+	// on neither — a caller walking offsets silently skips or repeats them. That matters
+	// now that the revocation list pages through this method.
 	rows, err := r.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, err
@@ -591,6 +617,13 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
+		// `description` is nullable and has to be scanned through a NullString, exactly as
+		// GetByOrganizationPaged does above. Scanning it straight into a string fails the
+		// entire row with "converting NULL to string is unsupported". That could not fire
+		// while the LIMIT bug held, because no row was ever scanned — fixing the limit
+		// without this turns the empty list into a 500 for any deployment holding a single
+		// agent with no description.
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -604,7 +637,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -630,6 +663,9 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}

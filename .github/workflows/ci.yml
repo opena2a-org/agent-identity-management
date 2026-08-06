@@ -365,14 +365,17 @@ jobs:
       # stops applying to it. AgentRevocation + the middleware package were
       # added for exactly that reason; UpdateDoesNotWriteTrustScore + RoundTrip
       # and the repository package were added for the same reason after the MCP
-      # trust-score write-path fix.
+      # trust-score write-path fix; RevocationList + the handlers package were
+      # added after the revocation list was found returning an empty list for
+      # every caller, which no test had ever asserted against.
       - name: Assert integration tests were not skipped
         run: |
           set -o pipefail
           go test -tags=integration -v \
-            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled' \
+            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList' \
             ./internal/application/... ./internal/interfaces/http/middleware/... \
-            ./internal/infrastructure/repository/... 2>&1 | tee /tmp/integration.log
+            ./internal/infrastructure/repository/... \
+            ./internal/interfaces/http/handlers/... 2>&1 | tee /tmp/integration.log
           if grep -q '^--- SKIP' /tmp/integration.log; then
             echo "::error::Integration tests were SKIPPED — TEST_DATABASE_URL is not reaching them."
             grep '^--- SKIP' /tmp/integration.log
