@@ -12,7 +12,28 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// MCPPolicyEvaluator evaluates MCP servers against security policies
+// MCPPolicyEvaluator evaluates MCP servers against security policies.
+//
+// NOT WIRED. Nothing outside _test.go constructs this type, so no request is gated by it and no
+// mcp_* policy is enforced anywhere in the running system. SecurityPolicyService, the service
+// built in cmd/server/main.go, reaches only the six non-MCP policy types through
+// policyRepo.GetByType. The type is kept rather than deleted because the rest of the feature did
+// ship -- the admin security-policy routes are mounted, the admin page creates and toggles all
+// four mcp_* types, and migration 052 seeded six such policies -- so deleting the engine would
+// leave every promise in place with no implementation left to honour it.
+//
+// Migration 105 disables the seeded policies so the surface stops presenting enforcement that
+// does not happen. Three things must be fixed before this can be wired, or it will reject every
+// MCP server:
+//
+//  1. security_policies.rules.minTrustScore is seeded and stored 0-100, while evaluateAllowlist
+//     compares it against MCPServer.TrustScore, which migration 104 made canonical [0,1].
+//  2. matchDomainPattern does not treat a bare "*" as a wildcard -- only the "*." prefix is
+//     special-cased -- so the seeded 'allowedDomains': ['*'] matches no host at all.
+//  3. MCPAllowlistRules.AllowedCapabilities is declared and read by nothing, so an organization
+//     that configures it gets silent non-enforcement.
+//
+// Tracked in https://github.com/opena2a-org/agent-identity-management/issues/355.
 type MCPPolicyEvaluator struct {
 	policyRepo domain.SecurityPolicyRepository
 	mcpRepo    domain.MCPServerRepository
