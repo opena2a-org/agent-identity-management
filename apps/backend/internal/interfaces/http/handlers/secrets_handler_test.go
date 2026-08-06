@@ -170,3 +170,6 @@ func TestSecretsHandler_NamespaceScoped_CrossOrgReturns404(t *testing.T) {
 	}
 }
 
+func (r *secretsTestAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}

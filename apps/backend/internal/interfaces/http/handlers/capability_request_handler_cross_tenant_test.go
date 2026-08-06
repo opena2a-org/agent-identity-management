@@ -229,3 +229,7 @@ func TestCapabilityRequestHandlers_RejectCapabilityRequest_CrossOrgReturns404(t 
 		// expected: gate fired, no mutation
 	}
 }
+
+func (r *capRequestTestAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}

@@ -105,29 +105,26 @@ func (h *LifecycleHandler) GetRevocationList(c fiber.Ctx) error {
 	// deliberately NOT truncated: a CRL that silently drops entries tells a verifier a
 	// revoked agent is good, which is the same fail-open this endpoint was fixed for.
 	//
-	// The cost of that honesty is that this reads every agent row to emit a subset, on an
-	// unauthenticated route. Pushing `status = 'revoked'` into SQL removes it, but that
-	// wants a purpose-built repository method and the `revoked_at` column the schema does
-	// not have yet — tracked as the ATP conformance work, not smuggled in here.
+	// The `status = 'revoked'` predicate runs in SQL. Filtering List's results in Go
+	// instead made every request to this unauthenticated route read every agent row —
+	// ~320ms of server work at 20,000 agents, at a cost the caller controls.
 	revoked := make([]RevokedEntry, 0)
 	for offset := 0; ; offset += revocationListPageSize {
-		agents, err := h.agentRepo.List(revocationListPageSize, offset)
+		ids, err := h.agentRepo.ListRevokedIDs(revocationListPageSize, offset)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to fetch agents",
+				"error": "Failed to fetch revocations",
 			})
 		}
 
-		for _, agent := range agents {
-			if agent.Status == domain.AgentStatusRevoked {
-				revoked = append(revoked, RevokedEntry{
-					AgentID: agent.ID,
-					Reason:  revocationReasonRevoked,
-				})
-			}
+		for _, id := range ids {
+			revoked = append(revoked, RevokedEntry{
+				AgentID: id,
+				Reason:  revocationReasonRevoked,
+			})
 		}
 
-		if len(agents) < revocationListPageSize {
+		if len(ids) < revocationListPageSize {
 			break
 		}
 	}
@@ -145,11 +142,18 @@ func (h *LifecycleHandler) GetRevocationList(c fiber.Ctx) error {
 	c.Set("Cache-Control", "max-age=300")
 	c.Set("ETag", fmt.Sprintf(`"%s"`, hex.EncodeToString(digest.Sum(nil))))
 
-	// The key stays `revocations`. Both SDK CRL types currently decode `entries` instead,
-	// so a naive fetcher against this body fails loudly — and that mismatch is doing real
-	// work right now: it is what stops a caller from quietly accepting a CRL as fresh.
-	// Aligning the two is correct eventually, but it must not be done as a standalone
-	// rename on either side. Whichever end moves first removes the interlock.
+	// The key stays `revocations`, which is what ATP-SPEC §8.1 specifies. Both SDK CRL
+	// types decode `entries` instead, so a fetcher wired naively against this body does
+	// not get a usable list.
+	//
+	// Do NOT "fix" that by emitting both keys, and do not rename it in the SDKs either,
+	// until the SDK side is verified to fail closed on a shape it cannot read. The
+	// TypeScript cache throws on a bad shape; the Java cache accepted a decoded
+	// `Crl(entries=null)` as a valid list, cached it FRESH, and the verifier read null
+	// entries as "nothing is revoked" — a silent fail-open. Both are fixed now
+	// (CrlCache.refreshNow rejects null entries, LocalAtxVerifier rejects a malformed
+	// CRL rather than treating it as empty), but the ordering rule stands: whichever end
+	// moves first must not be the one that turns a loud failure into a quiet one.
 	return c.JSON(fiber.Map{
 		"revocations": revoked,
 		"total":       len(revoked),

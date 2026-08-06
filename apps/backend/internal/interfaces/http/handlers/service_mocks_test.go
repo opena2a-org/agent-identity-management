@@ -1737,3 +1737,7 @@ func (m *MockAgentServiceImpl) ListAgentsPaged(ctx context.Context, orgID uuid.U
 	}
 	return agents, total, nil
 }
+
+func (m *MockAgentRepositoryerImpl) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}

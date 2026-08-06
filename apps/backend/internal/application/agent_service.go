@@ -44,7 +44,7 @@ type AgentService struct {
 	userRepo                 domain.UserRepository         // ✅ For looking up user details (audit trail)
 	orgRepo                  domain.OrganizationRepository // ✅ For checking enforcement mode
 	capabilityRequestService *CapabilityRequestService     // For routing re-registration capability adds through the mode-aware approval workflow (monitoring auto-approves, strict creates pending request)
-	auditRepo                domain.AuditLogRepository      // Optional (issue #293): records the audit event on a honeytoken verification hit; injected via SetHoneytokenAuditing
+	auditRepo                domain.AuditLogRepository     // Optional (issue #293): records the audit event on a honeytoken verification hit; injected via SetHoneytokenAuditing
 }
 
 // SetHoneytokenAuditing wires an audit-log repository so a honeytoken verification
@@ -278,10 +278,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		DeclaredPurpose:     req.DeclaredPurpose,
 		Status:              domain.AgentStatusPending, // Agents start as pending, verification is earned
 		CreatedBy:           userID,
-		CreatedByName:       createdByName,   // ✅ Denormalized for audit trail
-		CreatedByEmail:      createdByEmail,  // ✅ Denormalized for audit trail
-		CreatedBySDKTokenID: sdkTokenID,      // ✅ Track SDK token for easy revocation if compromised
-		CreatedByAPIKeyID:   apiKeyID,        // ✅ Track API key for easy revocation if compromised
+		CreatedByName:       createdByName,  // ✅ Denormalized for audit trail
+		CreatedByEmail:      createdByEmail, // ✅ Denormalized for audit trail
+		CreatedBySDKTokenID: sdkTokenID,     // ✅ Track SDK token for easy revocation if compromised
+		CreatedByAPIKeyID:   apiKeyID,       // ✅ Track API key for easy revocation if compromised
 	}
 
 	// Only set encrypted private key if we generated it server-side
@@ -1013,8 +1013,13 @@ func (s *AgentService) VerifyCapability(
 				Severity:         "medium",
 				TrustScoreImpact: -2,
 				IsBlocked:        false,
-				SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
-				RequestMetadata:  metadata,
+				SourceIP: func() *string {
+					if sourceIP != "" {
+						return &sourceIP
+					}
+					return nil
+				}(),
+				RequestMetadata: metadata,
 			}
 			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
 				fmt.Printf("⚠️  Warning: failed to create monitoring violation record: %v\n", err)
@@ -1141,8 +1146,13 @@ func (s *AgentService) VerifyCapability(
 				Severity:         "medium", // Lower severity in monitoring mode
 				TrustScoreImpact: -2,       // Minimal impact in monitoring mode
 				IsBlocked:        false,    // NOT blocked
-				SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
-				RequestMetadata:  metadata,
+				SourceIP: func() *string {
+					if sourceIP != "" {
+						return &sourceIP
+					}
+					return nil
+				}(),
+				RequestMetadata: metadata,
 			}
 
 			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
@@ -1197,8 +1207,13 @@ func (s *AgentService) VerifyCapability(
 			Severity:         "high", // No capabilities = serious issue
 			TrustScoreImpact: -10,    // Standard violation impact
 			IsBlocked:        true,
-			SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
-			RequestMetadata:  metadata,
+			SourceIP: func() *string {
+				if sourceIP != "" {
+					return &sourceIP
+				}
+				return nil
+			}(),
+			RequestMetadata: metadata,
 		}
 
 		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
@@ -1293,15 +1308,20 @@ func (s *AgentService) VerifyCapability(
 			AgentID:             agentID,
 			AttemptedCapability: capability,
 			RegisteredCapabilities: map[string]interface{}{
-				"allowedCapabilities":  capabilityTypes,
-				"attemptedCapability":  capability,
-				"resource":             resource,
+				"allowedCapabilities": capabilityTypes,
+				"attemptedCapability": capability,
+				"resource":            resource,
 			},
 			Severity:         s.calculateViolationSeverity(agent, shouldBlock),
 			TrustScoreImpact: s.calculateTrustScoreImpact(shouldBlock),
 			IsBlocked:        shouldBlock,
-			SourceIP:         func() *string { if sourceIP != "" { return &sourceIP }; return nil }(),
-			RequestMetadata:  metadata,
+			SourceIP: func() *string {
+				if sourceIP != "" {
+					return &sourceIP
+				}
+				return nil
+			}(),
+			RequestMetadata: metadata,
 		}
 
 		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
@@ -1343,8 +1363,8 @@ func (s *AgentService) VerifyCapability(
 		// increment needed.
 
 		// Evaluate trust score policy enforcement (alerts and suspension)
-		previousScore := agent.TrustScore  // Store before updating
-		agent.TrustScore = newScore        // Update agent object for policy evaluation
+		previousScore := agent.TrustScore // Store before updating
+		agent.TrustScore = newScore       // Update agent object for policy evaluation
 		if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, newScore); err != nil {
 			fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
 		}
@@ -1638,10 +1658,10 @@ func (s *AgentService) GetAgentCredentials(ctx context.Context, agentID uuid.UUI
 
 // AddMCPServersRequest represents request to add MCP servers to agent's talks_to list
 type AddMCPServersRequest struct {
-	MCPServerIDs   []string               `json:"mcpServerIds"`    // MCP server IDs or names
-	DetectedMethod string                 `json:"detectedMethod"`  // "manual", "auto_sdk", "auto_config", "cli"
-	Confidence     float64                `json:"confidence"`      // Detection confidence (0-100)
-	Metadata       map[string]interface{} `json:"metadata"`        // Additional context
+	MCPServerIDs   []string               `json:"mcpServerIds"`   // MCP server IDs or names
+	DetectedMethod string                 `json:"detectedMethod"` // "manual", "auto_sdk", "auto_config", "cli"
+	Confidence     float64                `json:"confidence"`     // Detection confidence (0-100)
+	Metadata       map[string]interface{} `json:"metadata"`       // Additional context
 }
 
 // MCPServerDetail represents detailed MCP server information
@@ -2444,55 +2464,39 @@ func (s *AgentService) CreateCapabilityViolation(
 	return nil
 }
 
-// enforceKeyExpiryPageSize bounds each repository read in EnforceKeyExpiry.
-const enforceKeyExpiryPageSize = 500
+// ErrKeyExpiryEnforcementUnavailable is returned by EnforceKeyExpiry. See its doc
+// comment: the function cannot do what its name says, and returning (0, nil) would
+// report success for work that did not happen.
+var ErrKeyExpiryEnforcementUnavailable = errors.New(
+	"key-expiry enforcement is not implemented: AgentRepository.List does not select key_expires_at, " +
+		"and AgentRepository.Update would clear the agent's key material")
 
-// EnforceKeyExpiry suspends agents with expired keys past grace period.
+// EnforceKeyExpiry is NOT implemented and returns an error. Do not wire it.
 //
-// This walked `List(0, 0)` under the comment "Get all agents", which reached Postgres as
-// `LIMIT 0` and returned no rows — so it suspended nothing, unconditionally. It is also
-// not currently invoked from anywhere outside tests, so it had two independent reasons
-// never to enforce anything. Paginating fixes the first; the second is a separate call.
+// It reads as a working control and is not one. Three independent defects, none of which
+// is fixed by the others:
 //
-// Paging by offset is safe here even though the loop writes: suspending an agent changes
-// `status` and `updated_at`, and the sort key is `created_at, id`, so a row cannot move
-// across a page boundary underneath the walk.
+//  1. It walked `List(0, 0)`, which reached Postgres as `LIMIT 0` and returned no rows,
+//     so it suspended nothing. That one is fixed — List now rejects a non-positive limit.
+//  2. `AgentRepository.List` does not SELECT `key_expires_at` or
+//     `key_rotation_grace_until`. Both are therefore always nil on every agent this
+//     function can see, so `agent.KeyExpiresAt != nil` is never true and the body is
+//     unreachable regardless of pagination.
+//  3. The obvious repair for (2) — add the columns to List's SELECT — is a trap. This
+//     function suspends by calling `AgentRepository.Update`, which writes 29 columns
+//     while List populates a subset. Measured on a real row, that round trip clears
+//     encrypted_private_key, key_algorithm, key_created_at, key_expires_at,
+//     previous_public_key, pqc_public_key, pqc_key_algorithm, hybrid_mode_enabled,
+//     capabilities, and resets rotation_count to 0. Enforcing key expiry would destroy
+//     the key material it exists to protect.
+//
+// It also has no caller anywhere, including tests, so nothing regresses by refusing.
+//
+// Implementing it properly needs a narrow `UPDATE agents SET status, updated_at WHERE id`
+// rather than Update, and a repository read that carries the key-expiry columns. Tracked
+// in issue #359.
 func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
-	now := time.Now()
-
-	suspended := 0
-	for offset := 0; ; offset += enforceKeyExpiryPageSize {
-		agents, err := s.agentRepo.List(enforceKeyExpiryPageSize, offset)
-		if err != nil {
-			return suspended, fmt.Errorf("failed to list agents: %w", err)
-		}
-
-		for _, agent := range agents {
-			if agent.Status == domain.AgentStatusRevoked || agent.Status == domain.AgentStatusSuspended {
-				continue
-			}
-			// Check if key is expired and past grace period
-			if agent.KeyExpiresAt != nil && agent.KeyExpiresAt.Before(now) {
-				// If there's a grace period, check if we're past it
-				if agent.KeyRotationGraceUntil != nil && agent.KeyRotationGraceUntil.After(now) {
-					continue // Still in grace period
-				}
-				// Suspend the agent
-				agent.Status = domain.AgentStatusSuspended
-				agent.UpdatedAt = now
-				if err := s.agentRepo.Update(agent); err != nil {
-					continue // Log but don't fail the whole batch
-				}
-				suspended++
-			}
-		}
-
-		if len(agents) < enforceKeyExpiryPageSize {
-			break
-		}
-	}
-
-	return suspended, nil
+	return 0, ErrKeyExpiryEnforcementUnavailable
 }
 
 // RecordHeartbeat updates the heartbeat timestamp for an agent

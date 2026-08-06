@@ -3,6 +3,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"testing"
@@ -63,12 +64,20 @@ func TestAgentRepositoryListRejectsNonPositiveLimit(t *testing.T) {
 
 // The control. A positive limit still returns rows, so the test above is rejecting the
 // input rather than the method being broken outright.
+//
+// It seeds a row first. Asserting only `len(agents) <= 1` would pass against an empty
+// table, and therefore against a method that returns nothing at all — the defect under
+// repair.
 func TestAgentRepositoryListAcceptsPositiveLimit(t *testing.T) {
-	repo := NewAgentRepository(agentListTestDB(t))
+	ctx := context.Background()
+	db := agentListTestDB(t)
+	repo := NewAgentRepository(db)
+
+	seedNullDescriptionAgent(t, db, ctx)
 
 	agents, err := repo.List(1, 0)
 
 	require.NoError(t, err)
-	assert.NotNil(t, agents)
-	assert.LessOrEqual(t, len(agents), 1, "List(1, 0) returned more than one row")
+	require.NotEmpty(t, agents, "List(1, 0) returned no rows despite a seeded agent")
+	assert.Len(t, agents, 1, "List(1, 0) did not honour the limit")
 }

@@ -14,11 +14,11 @@ import (
 
 // MockCapabilityRequestRepository implements CapabilityRequestRepository
 type MockCapabilityRequestRepository struct {
-	requests          map[uuid.UUID]*domain.CapabilityRequestWithDetails
-	createErr         error
-	getByIDErr        error
-	listErr           error
-	updateStatusErr   error
+	requests        map[uuid.UUID]*domain.CapabilityRequestWithDetails
+	createErr       error
+	getByIDErr      error
+	listErr         error
+	updateStatusErr error
 }
 
 func NewMockCapabilityRequestRepository() *MockCapabilityRequestRepository {
@@ -97,9 +97,9 @@ func (m *MockCapabilityRequestRepository) Delete(id uuid.UUID) error {
 
 // MockCapabilityRepoForCapReq implements CapabilityRepository for capability request tests
 type MockCapabilityRepoForCapReq struct {
-	capabilities          map[uuid.UUID]*domain.AgentCapability
-	capabilitiesByAgent   map[uuid.UUID][]*domain.AgentCapability
-	createErr             error
+	capabilities        map[uuid.UUID]*domain.AgentCapability
+	capabilitiesByAgent map[uuid.UUID][]*domain.AgentCapability
+	createErr           error
 }
 
 func NewMockCapabilityRepoForCapReq() *MockCapabilityRepoForCapReq {
@@ -206,7 +206,7 @@ func (m *MockCapabilityRepoForCapReq) UpdateCapabilityDefinition(def *domain.Cap
 
 // MockAgentRepositoryForCapReq implements AgentRepository for capability request tests
 type MockAgentRepositoryForCapReq struct {
-	agents    map[uuid.UUID]*domain.Agent
+	agents     map[uuid.UUID]*domain.Agent
 	getByIDErr error
 }
 
@@ -234,20 +234,38 @@ func (m *MockAgentRepositoryForCapReq) GetByID(id uuid.UUID) (*domain.Agent, err
 // Implement remaining AgentRepository methods as no-ops
 func (m *MockAgentRepositoryForCapReq) Create(agent *domain.Agent) error { return nil }
 func (m *MockAgentRepositoryForCapReq) Update(agent *domain.Agent) error { return nil }
-func (m *MockAgentRepositoryForCapReq) Delete(id uuid.UUID) error { return nil }
-func (m *MockAgentRepositoryForCapReq) List(limit, offset int) ([]*domain.Agent, error) { return nil, nil }
-func (m *MockAgentRepositoryForCapReq) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) { return nil, nil }
-func (m *MockAgentRepositoryForCapReq) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, error) { return nil, nil }
-func (m *MockAgentRepositoryForCapReq) UpdateTrustScore(id uuid.UUID, newScore float64) error { return nil }
+func (m *MockAgentRepositoryForCapReq) Delete(id uuid.UUID) error        { return nil }
+func (m *MockAgentRepositoryForCapReq) List(limit, offset int) ([]*domain.Agent, error) {
+	return nil, nil
+}
+
+func (m *MockAgentRepositoryForCapReq) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
+func (m *MockAgentRepositoryForCapReq) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {
+	return nil, nil
+}
+func (m *MockAgentRepositoryForCapReq) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, error) {
+	return nil, nil
+}
+func (m *MockAgentRepositoryForCapReq) UpdateTrustScore(id uuid.UUID, newScore float64) error {
+	return nil
+}
 func (m *MockAgentRepositoryForCapReq) IncrementViolationCount(id uuid.UUID) error { return nil }
-func (m *MockAgentRepositoryForCapReq) MarkAsCompromised(id uuid.UUID) error { return nil }
-func (m *MockAgentRepositoryForCapReq) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error { return nil }
-func (m *MockAgentRepositoryForCapReq) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) { return nil, nil }
-func (m *MockAgentRepositoryForCapReq) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) { return nil, nil }
+func (m *MockAgentRepositoryForCapReq) MarkAsCompromised(id uuid.UUID) error       { return nil }
+func (m *MockAgentRepositoryForCapReq) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
+	return nil
+}
+func (m *MockAgentRepositoryForCapReq) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
+	return nil, nil
+}
+func (m *MockAgentRepositoryForCapReq) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+	return nil, nil
+}
 
 // MockOrganizationRepositoryForCapReq implements OrganizationRepository for capability request tests
 type MockOrganizationRepositoryForCapReq struct {
-	orgs      map[uuid.UUID]*domain.Organization
+	orgs       map[uuid.UUID]*domain.Organization
 	getByIDErr error
 }
 
@@ -275,10 +293,16 @@ func (m *MockOrganizationRepositoryForCapReq) GetByID(id uuid.UUID) (*domain.Org
 // Implement remaining OrganizationRepository methods as no-ops
 func (m *MockOrganizationRepositoryForCapReq) Create(org *domain.Organization) error { return nil }
 func (m *MockOrganizationRepositoryForCapReq) Update(org *domain.Organization) error { return nil }
-func (m *MockOrganizationRepositoryForCapReq) Delete(id uuid.UUID) error { return nil }
-func (m *MockOrganizationRepositoryForCapReq) List(limit, offset int) ([]*domain.Organization, error) { return nil, nil }
-func (m *MockOrganizationRepositoryForCapReq) ListAll() ([]*domain.Organization, error) { return nil, nil }
-func (m *MockOrganizationRepositoryForCapReq) GetByDomain(domain string) (*domain.Organization, error) { return nil, nil }
+func (m *MockOrganizationRepositoryForCapReq) Delete(id uuid.UUID) error             { return nil }
+func (m *MockOrganizationRepositoryForCapReq) List(limit, offset int) ([]*domain.Organization, error) {
+	return nil, nil
+}
+func (m *MockOrganizationRepositoryForCapReq) ListAll() ([]*domain.Organization, error) {
+	return nil, nil
+}
+func (m *MockOrganizationRepositoryForCapReq) GetByDomain(domain string) (*domain.Organization, error) {
+	return nil, nil
+}
 
 // Test cases
 

@@ -114,18 +114,22 @@ func (m *mockAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
 }
 
 // Implement remaining interface methods as no-ops
-func (m *mockAgentRepo) Create(_ *domain.Agent) error                              { return nil }
-func (m *mockAgentRepo) GetByName(_ uuid.UUID, _ string) (*domain.Agent, error)    { return nil, nil }
-func (m *mockAgentRepo) GetByOrganization(_ uuid.UUID) ([]*domain.Agent, error)    { return nil, nil }
-func (m *mockAgentRepo) Update(_ *domain.Agent) error                              { return nil }
-func (m *mockAgentRepo) Delete(_ uuid.UUID) error                                  { return nil }
-func (m *mockAgentRepo) List(_, _ int) ([]*domain.Agent, error)                    { return nil, nil }
-func (m *mockAgentRepo) UpdateTrustScore(_ uuid.UUID, _ float64) error             { return nil }
-func (m *mockAgentRepo) IncrementViolationCount(_ uuid.UUID) error                 { return nil }
-func (m *mockAgentRepo) MarkAsCompromised(_ uuid.UUID) error                       { return nil }
-func (m *mockAgentRepo) UpdateLastActive(_ context.Context, _ uuid.UUID) error       { return nil }
-func (m *mockAgentRepo) GetStaleAgents(_ context.Context, _ time.Time) ([]*domain.Agent, error) { return nil, nil }
-func (m *mockAgentRepo) GetByIDs(_ context.Context, _ []uuid.UUID) ([]*domain.Agent, error) { return nil, nil }
+func (m *mockAgentRepo) Create(_ *domain.Agent) error                           { return nil }
+func (m *mockAgentRepo) GetByName(_ uuid.UUID, _ string) (*domain.Agent, error) { return nil, nil }
+func (m *mockAgentRepo) GetByOrganization(_ uuid.UUID) ([]*domain.Agent, error) { return nil, nil }
+func (m *mockAgentRepo) Update(_ *domain.Agent) error                           { return nil }
+func (m *mockAgentRepo) Delete(_ uuid.UUID) error                               { return nil }
+func (m *mockAgentRepo) List(_, _ int) ([]*domain.Agent, error)                 { return nil, nil }
+func (m *mockAgentRepo) UpdateTrustScore(_ uuid.UUID, _ float64) error          { return nil }
+func (m *mockAgentRepo) IncrementViolationCount(_ uuid.UUID) error              { return nil }
+func (m *mockAgentRepo) MarkAsCompromised(_ uuid.UUID) error                    { return nil }
+func (m *mockAgentRepo) UpdateLastActive(_ context.Context, _ uuid.UUID) error  { return nil }
+func (m *mockAgentRepo) GetStaleAgents(_ context.Context, _ time.Time) ([]*domain.Agent, error) {
+	return nil, nil
+}
+func (m *mockAgentRepo) GetByIDs(_ context.Context, _ []uuid.UUID) ([]*domain.Agent, error) {
+	return nil, nil
+}
 
 type mockCapabilityRepo struct {
 	capabilities map[uuid.UUID][]*domain.AgentCapability
@@ -140,21 +144,41 @@ func (m *mockCapabilityRepo) GetActiveCapabilitiesByAgentID(agentID uuid.UUID) (
 }
 
 // No-op implementations for remaining interface methods
-func (m *mockCapabilityRepo) CreateCapability(_ *domain.AgentCapability) error                     { return nil }
-func (m *mockCapabilityRepo) GetCapabilityByID(_ uuid.UUID) (*domain.AgentCapability, error)       { return nil, nil }
-func (m *mockCapabilityRepo) GetCapabilitiesByAgentID(_ uuid.UUID) ([]*domain.AgentCapability, error) { return nil, nil }
-func (m *mockCapabilityRepo) RevokeCapability(_ uuid.UUID, _ time.Time) error                      { return nil }
-func (m *mockCapabilityRepo) SetHoneytoken(_ uuid.UUID, _ bool) error                              { return nil }
-func (m *mockCapabilityRepo) DeleteCapability(_ uuid.UUID) error                                   { return nil }
-func (m *mockCapabilityRepo) CreateViolation(_ *domain.CapabilityViolation) error                  { return nil }
-func (m *mockCapabilityRepo) GetViolationByID(_ uuid.UUID) (*domain.CapabilityViolation, error)    { return nil, nil }
-func (m *mockCapabilityRepo) GetViolationsByAgentID(_ uuid.UUID, _, _ int) ([]*domain.CapabilityViolation, int, error) { return nil, 0, nil }
-func (m *mockCapabilityRepo) GetRecentViolations(_ uuid.UUID, _ int) ([]*domain.CapabilityViolation, error) { return nil, nil }
-func (m *mockCapabilityRepo) GetViolationsByOrganization(_ uuid.UUID, _, _ int) ([]*domain.CapabilityViolation, int, error) { return nil, 0, nil }
-func (m *mockCapabilityRepo) ListCapabilityDefinitions(_ *uuid.UUID) ([]*domain.CapabilityDefinition, error) { return nil, nil }
-func (m *mockCapabilityRepo) GetCapabilityDefinition(_, _ string, _ *uuid.UUID) (*domain.CapabilityDefinition, error) { return nil, nil }
-func (m *mockCapabilityRepo) CreateCapabilityDefinition(_ *domain.CapabilityDefinition) error                         { return nil }
-func (m *mockCapabilityRepo) UpdateCapabilityDefinition(_ *domain.CapabilityDefinition) error                         { return nil }
+func (m *mockCapabilityRepo) CreateCapability(_ *domain.AgentCapability) error { return nil }
+func (m *mockCapabilityRepo) GetCapabilityByID(_ uuid.UUID) (*domain.AgentCapability, error) {
+	return nil, nil
+}
+func (m *mockCapabilityRepo) GetCapabilitiesByAgentID(_ uuid.UUID) ([]*domain.AgentCapability, error) {
+	return nil, nil
+}
+func (m *mockCapabilityRepo) RevokeCapability(_ uuid.UUID, _ time.Time) error     { return nil }
+func (m *mockCapabilityRepo) SetHoneytoken(_ uuid.UUID, _ bool) error             { return nil }
+func (m *mockCapabilityRepo) DeleteCapability(_ uuid.UUID) error                  { return nil }
+func (m *mockCapabilityRepo) CreateViolation(_ *domain.CapabilityViolation) error { return nil }
+func (m *mockCapabilityRepo) GetViolationByID(_ uuid.UUID) (*domain.CapabilityViolation, error) {
+	return nil, nil
+}
+func (m *mockCapabilityRepo) GetViolationsByAgentID(_ uuid.UUID, _, _ int) ([]*domain.CapabilityViolation, int, error) {
+	return nil, 0, nil
+}
+func (m *mockCapabilityRepo) GetRecentViolations(_ uuid.UUID, _ int) ([]*domain.CapabilityViolation, error) {
+	return nil, nil
+}
+func (m *mockCapabilityRepo) GetViolationsByOrganization(_ uuid.UUID, _, _ int) ([]*domain.CapabilityViolation, int, error) {
+	return nil, 0, nil
+}
+func (m *mockCapabilityRepo) ListCapabilityDefinitions(_ *uuid.UUID) ([]*domain.CapabilityDefinition, error) {
+	return nil, nil
+}
+func (m *mockCapabilityRepo) GetCapabilityDefinition(_, _ string, _ *uuid.UUID) (*domain.CapabilityDefinition, error) {
+	return nil, nil
+}
+func (m *mockCapabilityRepo) CreateCapabilityDefinition(_ *domain.CapabilityDefinition) error {
+	return nil
+}
+func (m *mockCapabilityRepo) UpdateCapabilityDefinition(_ *domain.CapabilityDefinition) error {
+	return nil
+}
 
 type mockATCVerifier struct {
 	shouldFail   bool
@@ -650,4 +674,8 @@ func (m *mockCapabilityRepo) GetCapabilitiesByAgentIDs(agentIDs []uuid.UUID, act
 		}
 	}
 	return result, nil
+}
+
+func (m *mockAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
 }

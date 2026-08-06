@@ -194,6 +194,14 @@ func (m *MockAgentRepoForAlerts) List(limit, offset int) ([]*domain.Agent, error
 	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
 
+func (m *MockAgentRepoForAlerts) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
+}
+
 func (m *MockAgentRepoForAlerts) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	args := m.Called(id, newScore)
 	return args.Error(0)
@@ -369,7 +377,7 @@ func TestAlertService_CountUnacknowledged_Success(t *testing.T) {
 	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, 10, allCount)
-	assert.Equal(t, 7, ackCount)  // 10 - 3
+	assert.Equal(t, 7, ackCount) // 10 - 3
 	assert.Equal(t, 3, unackCount)
 
 	mockAlertRepo.AssertExpectations(t)

@@ -454,10 +454,10 @@ func TestCapabilityService_VerifySignature_DifferentKeys(t *testing.T) {
 
 func TestTrustScoreDecreaseLogic(t *testing.T) {
 	tests := []struct {
-		name              string
-		currentScore      float64
-		decrease          float64
-		expectedNewScore  float64
+		name             string
+		currentScore     float64
+		decrease         float64
+		expectedNewScore float64
 	}{
 		{"normal decrease", 0.75, 0.10, 0.65},
 		{"decrease to zero", 0.05, 0.10, 0.0},
@@ -788,6 +788,14 @@ func (m *MockAgentRepoForCapability) List(limit, offset int) ([]*domain.Agent, e
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*domain.Agent), args.Error(1)
+}
+
+func (m *MockAgentRepoForCapability) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
 }
 
 func (m *MockAgentRepoForCapability) UpdateTrustScore(id uuid.UUID, score float64) error {

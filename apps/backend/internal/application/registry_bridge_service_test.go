@@ -56,7 +56,7 @@ type mockAgentRepoForBridge struct {
 	mock.Mock
 }
 
-func (m *mockAgentRepoForBridge) Create(a *domain.Agent) error      { return nil }
+func (m *mockAgentRepoForBridge) Create(a *domain.Agent) error { return nil }
 func (m *mockAgentRepoForBridge) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
@@ -74,12 +74,16 @@ func (m *mockAgentRepoForBridge) GetByOrganization(orgID uuid.UUID) ([]*domain.A
 	}
 	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
-func (m *mockAgentRepoForBridge) Update(a *domain.Agent) error                { return nil }
-func (m *mockAgentRepoForBridge) Delete(id uuid.UUID) error                   { return nil }
+func (m *mockAgentRepoForBridge) Update(a *domain.Agent) error                    { return nil }
+func (m *mockAgentRepoForBridge) Delete(id uuid.UUID) error                       { return nil }
 func (m *mockAgentRepoForBridge) List(limit, offset int) ([]*domain.Agent, error) { return nil, nil }
-func (m *mockAgentRepoForBridge) UpdateTrustScore(id uuid.UUID, s float64) error  { return nil }
-func (m *mockAgentRepoForBridge) IncrementViolationCount(id uuid.UUID) error      { return nil }
-func (m *mockAgentRepoForBridge) MarkAsCompromised(id uuid.UUID) error            { return nil }
+
+func (m *mockAgentRepoForBridge) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
+func (m *mockAgentRepoForBridge) UpdateTrustScore(id uuid.UUID, s float64) error { return nil }
+func (m *mockAgentRepoForBridge) IncrementViolationCount(id uuid.UUID) error     { return nil }
+func (m *mockAgentRepoForBridge) MarkAsCompromised(id uuid.UUID) error           { return nil }
 func (m *mockAgentRepoForBridge) UpdateLastActive(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
@@ -157,8 +161,8 @@ func (m *mockMCPServerRepoForBridge) GetByOrganization(orgID uuid.UUID) ([]*doma
 func (m *mockMCPServerRepoForBridge) GetByURL(url string, orgID uuid.UUID) (*domain.MCPServer, error) {
 	return nil, nil
 }
-func (m *mockMCPServerRepoForBridge) Update(s *domain.MCPServer) error  { return nil }
-func (m *mockMCPServerRepoForBridge) Delete(id uuid.UUID) error         { return nil }
+func (m *mockMCPServerRepoForBridge) Update(s *domain.MCPServer) error { return nil }
+func (m *mockMCPServerRepoForBridge) Delete(id uuid.UUID) error        { return nil }
 func (m *mockMCPServerRepoForBridge) List(limit, offset int) ([]*domain.MCPServer, error) {
 	return nil, nil
 }
@@ -300,10 +304,10 @@ func TestAggregateAndPush_FullFlow(t *testing.T) {
 	agentRepo := &mockAgentRepoForBridge{}
 	agentRepo.On("GetByOrganization", orgID).Return([]*domain.Agent{
 		{
-			ID:             agentID,
-			OrganizationID: orgID,
-			Name:           "test-agent",
-			TrustScore:     0.85,
+			ID:                       agentID,
+			OrganizationID:           orgID,
+			Name:                     "test-agent",
+			TrustScore:               0.85,
 			CapabilityViolationCount: 2,
 		},
 	}, nil)

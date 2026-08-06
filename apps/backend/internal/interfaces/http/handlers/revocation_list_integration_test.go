@@ -231,15 +231,15 @@ func TestRevocationListCarriesNoAgentNameOrTimestamp(t *testing.T) {
 
 // The response must NOT carry an `entries` key, and this is deliberate.
 //
-// Both SDK CRL types decode `entries`, so a fetcher pointed straight at this body fails
-// loudly today — the TypeScript cache throws rather than caching. That mismatch is doing
-// real work: it is the only thing stopping a client from accepting this list as fresh and
-// authoritative. Serving `entries` as well would make a naive fetcher succeed quietly,
-// which is the exact silent fail-open the empty-list defect produced.
+// `revocations` is what ATP-SPEC §8.1 specifies. Both SDK CRL types decode `entries`
+// instead, so a fetcher wired naively against this body does not get a usable list.
 //
-// Aligning server and SDK is correct eventually, but not as a standalone rename on either
-// side, and not before a client can act on what it receives. This test is here so that
-// adding the alias is a deliberate act with a failing test attached, rather than a tidy-up.
+// Serving both keys is the tempting tidy-up and it must stay a deliberate act with a
+// failing test attached, because the SDK side has already been caught failing OPEN on a
+// shape it could not read: the Java cache accepted a decoded `Crl(entries=null)` as
+// valid, cached it FRESH, and the verifier read null entries as "nothing is revoked".
+// Both SDKs are fixed now, but the ordering rule this test enforces is that neither end
+// moves until the other is known to fail closed.
 func TestRevocationListDoesNotServeTheSdkKey(t *testing.T) {
 	ctx := context.Background()
 	db := revocationTestDB(t)
@@ -287,13 +287,154 @@ func TestRevocationListTotalMatchesEntries(t *testing.T) {
 	ctx := context.Background()
 	db := revocationTestDB(t)
 
-	seedAgentForRevocationList(t, db, ctx, "revoked")
+	revokedID, _ := seedAgentForRevocationList(t, db, ctx, "revoked")
 
 	status, body := fetchRevocationList(t, db)
 	require.Equal(t, fiber.StatusOK, status)
 
+	ids := revokedAgentIDs(t, body)
+
+	// Control. Without it this test asserts 0 == 0 and passes against an endpoint that
+	// returns an empty list to everyone — which is the defect this file exists for. It
+	// did exactly that: it was the one test in this file that stayed green on the
+	// unfixed code.
+	require.Contains(t, ids, revokedID.String(),
+		"control: the seeded revoked agent must be listed, or the count below is vacuous")
+
 	total, ok := body["total"].(float64)
 	require.True(t, ok, "response carried no numeric total: %v", body)
-	assert.Equal(t, len(revokedAgentIDs(t, body)), int(total),
+	assert.Equal(t, len(ids), int(total),
 		"reported total disagreed with the number of entries returned")
+}
+
+// fetchRevocationETag returns the ETag header the handler sets.
+func fetchRevocationETag(t *testing.T, db *sql.DB) string {
+	t.Helper()
+
+	handler := NewLifecycleHandler(nil, repository.NewAgentRepository(db))
+	app := fiber.New()
+	app.Get("/api/v1/revocations", handler.GetRevocationList)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/revocations", nil), fiber.TestConfig{Timeout: 0})
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	return resp.Header.Get("ETag")
+}
+
+// seedBulkRevokedAgents inserts n revoked agents in one organization and returns the org
+// id and the set of agent ids, so a caller can assert on exactly its own rows rather than
+// on whatever else the table holds.
+func seedBulkRevokedAgents(t *testing.T, db *sql.DB, ctx context.Context, n int) (uuid.UUID, map[string]bool) {
+	t.Helper()
+
+	orgID, userID := uuid.New(), uuid.New()
+	suffix := orgID.String()[:8]
+
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE organization_id = $1`, orgID)
+		_, _ = db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, userID)
+		_, _ = db.ExecContext(ctx, `DELETE FROM organizations WHERE id = $1`, orgID)
+	})
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO organizations (id, name, domain, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW())`,
+		orgID, "revbulk-org-"+suffix, "revbulk-"+suffix+".example.com")
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO users (id, organization_id, email, name, password_hash, role,
+		                    provider, provider_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'x', 'admin', 'local', $5, NOW(), NOW())`,
+		userID, orgID, "revbulk-"+suffix+"@example.com", "revbulk-user", "local-"+suffix)
+	require.NoError(t, err)
+
+	// created_at is deliberately identical across every row. That makes `created_at DESC`
+	// alone a non-total order, so if the tie-breaker on the paginated query were dropped
+	// the offset walk would skip or repeat rows and this fixture would catch it.
+	rows, err := db.QueryContext(ctx,
+		`INSERT INTO agents (id, organization_id, name, display_name, description, agent_type,
+		                     status, public_key, trust_score, created_by, created_at, updated_at)
+		 SELECT gen_random_uuid(), $1, 'revbulk-' || $2 || '-' || g, 'Bulk Agent', NULL,
+		        'ai_agent', 'revoked', 'unused', 0.5, $3, NOW(), NOW()
+		 FROM generate_series(1, $4) AS g
+		 RETURNING id`,
+		orgID, suffix, userID, n)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+
+	ids := make(map[string]bool, n)
+	for rows.Next() {
+		var id uuid.UUID
+		require.NoError(t, rows.Scan(&id))
+		ids[id.String()] = true
+	}
+	require.NoError(t, rows.Err())
+	require.Len(t, ids, n, "bulk seed did not insert the requested number of agents")
+
+	return orgID, ids
+}
+
+// The ETag must identify the revocation SET, and nothing else.
+//
+// It decides whether a caching verifier refreshes its CRL, so a validator that fails to
+// change on a real change tells the verifier a stale list is current. The previous one was
+// built from the entry count and a five-minute wall-clock bucket, so it changed when
+// nothing had, and collided whenever one agent was revoked and another left the list
+// inside the same bucket.
+func TestRevocationListETagTracksTheSetAndNotTheClock(t *testing.T) {
+	ctx := context.Background()
+	db := revocationTestDB(t)
+
+	first, _ := seedAgentForRevocationList(t, db, ctx, "revoked")
+
+	_, body := fetchRevocationList(t, db)
+	require.Contains(t, revokedAgentIDs(t, body), first.String(),
+		"control: the seeded agent must be listed, or these ETags describe an empty set")
+
+	etagA := fetchRevocationETag(t, db)
+	require.NotEmpty(t, etagA, "handler set no ETag")
+
+	// Same content, later wall clock: the validator must not move.
+	assert.Equal(t, etagA, fetchRevocationETag(t, db),
+		"the ETag changed while the revocation set did not; a caching verifier refetches for nothing")
+
+	// One more revocation: the validator must move.
+	second, _ := seedAgentForRevocationList(t, db, ctx, "revoked")
+	assert.NotEqual(t, etagA, fetchRevocationETag(t, db),
+		"the ETag did not change after %s was revoked; a caching verifier would keep serving a list that omits it", second)
+}
+
+// The paging loop must assemble a list that crosses the page boundary.
+//
+// revocationListPageSize is 500 and every other test in this file runs against a handful
+// of rows, so the loop executes exactly once and breaks — the offset arithmetic, the break
+// condition and multi-page assembly are otherwise never exercised.
+func TestRevocationListAssemblesAcrossPageBoundaries(t *testing.T) {
+	ctx := context.Background()
+	db := revocationTestDB(t)
+
+	want := revocationListPageSize + 37
+	_, seeded := seedBulkRevokedAgents(t, db, ctx, want)
+
+	status, body := fetchRevocationList(t, db)
+	require.Equal(t, fiber.StatusOK, status)
+
+	returned := revokedAgentIDs(t, body)
+
+	seen := make(map[string]bool, len(returned))
+	found := 0
+	for _, id := range returned {
+		assert.False(t, seen[id], "agent %s appeared twice; the offset walk double-counted", id)
+		seen[id] = true
+		if seeded[id] {
+			found++
+		}
+	}
+
+	assert.Equal(t, want, found,
+		"the revocation list dropped %d of the %d seeded revoked agents across the page boundary",
+		want-found, want)
 }

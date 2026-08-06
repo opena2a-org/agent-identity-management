@@ -114,11 +114,15 @@ func seedAgentWithStatus(t *testing.T, db *sql.DB, ctx context.Context, status, 
 		userID, orgID, "revocation-"+suffix+"@example.com", "revocation-user", "local-"+suffix)
 	require.NoError(t, err)
 
-	// `description` is nullable with no default, but AgentRepository.GetByID scans it
-	// into a plain string — a NULL there fails the whole lookup, and the middleware
-	// reports it as "Agent not found", which reads exactly like a revocation denial.
-	// Set it explicitly so a green run means the status check ran, not that the row
-	// was unreadable.
+	// `description` is set explicitly so a green run means the status check ran, rather
+	// than the row being unreadable for an unrelated reason.
+	//
+	// It used to be load-bearing: GetByID scanned this nullable column into a plain
+	// string, so a NULL failed the whole lookup and the middleware reported it as
+	// "Agent not found" — indistinguishable from a revocation denial. That is fixed
+	// (GetByID now scans it through a NullString, covered by
+	// TestNullDescriptionIsReadableByEveryAgentReadPath in the repository package), and
+	// working around it here is what kept any test from catching it for so long.
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO agents (id, organization_id, name, display_name, description, agent_type,
 		                     status, public_key, trust_score, created_by, created_at, updated_at)

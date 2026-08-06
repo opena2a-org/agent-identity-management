@@ -246,3 +246,7 @@ func TestAuthorize_EngineErrorWithNilResult_Returns500WithErrorResponse(t *testi
 
 	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
 }
+
+func (r *permissiveAuthorizeAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
