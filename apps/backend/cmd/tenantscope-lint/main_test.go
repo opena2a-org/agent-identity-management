@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -158,5 +159,61 @@ func TestClassifyServiceDirRouting(t *testing.T) {
 		if got := classifyServiceDir(c.path); got != c.want {
 			t.Errorf("classifyServiceDir(%q) = %v, want %v", c.path, got, c.want)
 		}
+	}
+}
+
+// Every allowlist key must name a method that actually exists.
+//
+// An entry that resolves to nothing exempts nothing, and it is worse than a missing
+// entry: it reads as a reviewed, justified exemption while the handler it was meant to
+// cover is either unexempted or named something else. Fourteen of the then-32 entries
+// were in that state — `AuthHandler.Login` (the type has `LocalLogin`; the real `Login`
+// is on `PublicRegistrationHandler`), `RegistryBridgeHandler.Verify` (the type has only
+// `TriggerPush`), `OAuthTokenHandler.Token` (it is `HandleTokenRequest`), and eleven
+// more. All fourteen were removed and the lint still passes, which is the evidence that
+// none of the real handlers needed exempting.
+//
+// This runs the real scan over the real handlers package rather than a fixture, because
+// the property under test is agreement between the allowlist and the shipped code — a
+// fixture cannot express that.
+func TestAllowlistKeysAllResolveToRealHandlers(t *testing.T) {
+	const handlersDir = "../../internal/interfaces/http/handlers"
+
+	if _, err := os.Stat(handlersDir); err != nil {
+		t.Fatalf("handlers package not found at %s: %v", handlersDir, err)
+	}
+
+	// Populates discoveredHandlers as a side effect.
+	if _, err := scanDirectory(handlersDir); err != nil {
+		t.Fatalf("scanDirectory: %v", err)
+	}
+	if len(discoveredHandlers) == 0 {
+		t.Fatal("scan discovered no handlers at all; this test would pass vacuously")
+	}
+
+	if unresolved := checkAllowlistResolves(); len(unresolved) > 0 {
+		t.Errorf("%d allowlist entr(ies) name a method that does not exist: %v\n"+
+			"Each exempts nothing. Correct the key to the real Receiver.Method and keep "+
+			"the justification, or delete the entry.", len(unresolved), unresolved)
+	}
+}
+
+// The check above must be capable of failing. Without this, a bug that left
+// discoveredHandlers over-populated would make it pass for every possible allowlist.
+func TestAllowlistResolutionCheckDetectsAMissingMethod(t *testing.T) {
+	discoveredHandlers = map[string]bool{"RealHandler.RealMethod": true}
+	t.Cleanup(func() { discoveredHandlers = map[string]bool{} })
+
+	original := allowlist
+	allowlist = map[string]string{
+		"RealHandler.RealMethod":     "exists",
+		"GhostHandler.VanishedThing": "does not exist",
+	}
+	t.Cleanup(func() { allowlist = original })
+
+	unresolved := checkAllowlistResolves()
+
+	if len(unresolved) != 1 || unresolved[0] != "GhostHandler.VanishedThing" {
+		t.Errorf("expected exactly the nonexistent key to be reported, got %v", unresolved)
 	}
 }

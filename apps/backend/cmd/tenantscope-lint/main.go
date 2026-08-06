@@ -35,65 +35,54 @@ import (
 // organizations and therefore do not need to invoke LoadOwned. Each entry
 // must include a one-line justification.
 var allowlist = map[string]string{
-	// Public agent discovery — intentionally cross-org for the public registry.
-	// Returns only redacted fields; full resource never crosses the boundary.
-	"PublicAgentHandler.GetPublicAgent":             "public registry endpoint; returns only redacted fields",
-	"PublicAgentHandler.ListPublicAgents":           "public registry endpoint; returns only redacted fields",
-	"PublicMCPHandler.GetPublicMCPServer":           "public MCP registry endpoint; returns only redacted fields",
-	"PublicMCPHandler.ListPublicMCPServers":         "public MCP registry endpoint; returns only redacted fields",
-	"PublicRegistrationHandler.GetRegistrationByID": "public registration status check before login",
-
-	// Lifecycle endpoints that operate on the calling agent's own ID by
-	// design — the SDK auth middleware has already verified the caller IS
-	// this agent, so additional org check would be redundant.
-	"LifecycleHandler.GetRevocationList": "system endpoint; iterates all agents for revocation list",
-
-	// Authentication endpoints — operate on credentials, not org-scoped resources.
-	"AuthRefreshHandler.Refresh":           "token refresh; not a resource read",
-	"AuthHandler.Login":                    "login flow; org assignment is the OUTPUT, not the gate",
-	"SDKTokenRecoveryHandler.RecoverToken": "token recovery; not a resource read",
-	"OAuthTokenHandler.Token":              "OAuth token issuance; not a resource read",
-	"DeviceAuthHandler.RequestDevice":      "device auth flow; not a resource read",
-	"DeviceAuthHandler.PollDevice":         "device auth flow; not a resource read",
-
-	// Detection / community intelligence — read-only system endpoints that
-	// aggregate cross-org telemetry (no per-org resource being returned).
-	"DetectionHandler.GetThreatLevel":       "aggregated threat telemetry; no per-org resource",
-	"CommunityIntelligenceHandler.GetIntel": "aggregated community intel; no per-org resource",
-
-	// Registry bridge — federation endpoint that operates on bridge identity.
-	"RegistryBridgeHandler.Verify": "registry federation; bridge identity is the resource",
-
-	// ---------------------------------------------------------------
-	// AUDIT-BASELINE: 71 pre-existing handlers that read c.Params("id"|
-	// "agent_id") without any visible OrganizationID reference. These
-	// PREDATE the LoadOwned helper introduced in this PR. They are not
-	// known-safe — they require manual review. The lint allowlists them
-	// here so this PR can ship the structural fix for the 8 cited defects
-	// (#18-25) without blocking on a 71-handler manual audit. Each entry
-	// must be removed from this section as it is reviewed; the reviewer
-	// either confirms the handler is intentionally cross-tenant and moves
-	// it to the section above with a per-entry justification, or wires
-	// LoadOwned into the handler.
+	// The federated revocation list. Unauthenticated and cross-organization by
+	// design: a verifier must be able to check revocation WITHOUT holding a
+	// credential, which is what makes offline verification possible. The control
+	// is minimization, not scoping — the payload carries an agent id and a closed
+	// reason code and nothing else.
 	//
-	// Tracking: ~/workspace/opena2a-org/todo/2026-05-18-aim-defect-audit-
-	// from-lf-demo-prep.md (defect #18-25 follow-up section to be added).
+	// This entry previously justified itself with "the SDK auth middleware has
+	// already verified the caller IS this agent" and "iterates all agents". Both
+	// were wrong: the route is registered on the v1 group with a rate limiter and
+	// no auth, and the handler iterated nothing because it asked the repository
+	// for LIMIT 0. It was the only place this endpoint's cross-org nature was ever
+	// reasoned about, and it was wrong about the code in both directions.
+	"LifecycleHandler.GetRevocationList": "unauthenticated federated CRL; cross-org by design, minimized to agentId + closed-set reason (see GetRevocationList doc comment)",
+
 	// ---------------------------------------------------------------
-	"A2AHandler.DeleteSkill": "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
-	"AdminHandler.AcknowledgeAlert": "service-layer scoping: AlertService.AcknowledgeAlert performs Load → caller-org check → ErrAlertNotFound (collapses cross-tenant + not-found + uuid.Nil mismatch) and the handler maps the sentinel to a fixed 404 body (A3d-v R7 closed in PR #190).",
-	"AdminHandler.ResolveAlert":     "service-layer scoping: AlertService.ResolveAlert mirrors AcknowledgeAlert — Load → caller-org check → ErrAlertNotFound → fixed 404 handler mapping (A3d-v R7 closed in PR #190).",
-	"DetectionHandler.GetDetectionStatus":                   "audit-baseline: needs review",
-	"DetectionHandler.GetLatestCapabilityReport":            "audit-baseline: needs review",
-	"DetectionHandler.ReportCapabilities":                   "audit-baseline: needs review",
-	"DetectionHandler.ReportDetection":                      "audit-baseline: needs review",
-	"MCPGraphHandler.GetMCPServerConnections":               "audit-baseline: needs review",
-	"MCPHandler.GetConnectedAgents":                         "audit-baseline: needs review",
-	"MCPHandler.VerifyMCPCapability":                        "audit-baseline: needs review",
-	"PublicMCPHandler.VerifyMCPAction":                      "audit-baseline: needs review",
-	"SDKTokenHandler.RevokeToken": "service-layer scoping: SDKTokenService.RevokeToken collapses both not-found and cross-user mismatch into ErrSDKTokenNotFound; the handler maps the sentinel to a fixed 404. SDK tokens are user-scoped (not org-scoped), so the gate lives at the service layer.",
-	"TagHandler.UpdateTag": "audit-baseline: needs review (service-layer scoping exists but has existence side channel via error string; A3d-ii follow-up — see todo/2026-05-21-a3d-ii-tag-mcp-scoping.md)",
-	"VerificationHandler.SubmitVerificationResult":          "audit-baseline: needs review",
-	"VerificationHandler.UpdateExecutionStatus":             "audit-baseline: needs review",
+	// AUDIT-BASELINE: pre-existing handlers that read c.Params("id"|
+	// "agent_id") without any visible OrganizationID reference. These
+	// PREDATE the LoadOwned helper. They are not known-safe — they require
+	// manual review. The lint allowlists them here so the structural fix for
+	// the 8 cited defects (#18-25) could ship without blocking on the audit.
+	// Each entry must be removed from this section as it is reviewed; the
+	// reviewer either confirms the handler is intentionally cross-tenant and
+	// moves it to the section above with a per-entry justification, or wires
+	// LoadOwned into the handler. "needs review" is not an end state.
+	//
+	// An earlier version of this comment claimed 71 handlers. This map has
+	// never held that many — verify the real number rather than restating
+	// one, since a count in a comment cannot be checked by anything:
+	//
+	//	grep -c "audit-baseline: needs review" cmd/tenantscope-lint/main.go
+	//
+	// Tracking: opena2a-org/agent-identity-management#358.
+	// ---------------------------------------------------------------
+	"A2AHandler.DeleteSkill":                       "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
+	"AdminHandler.AcknowledgeAlert":                "service-layer scoping: AlertService.AcknowledgeAlert performs Load → caller-org check → ErrAlertNotFound (collapses cross-tenant + not-found + uuid.Nil mismatch) and the handler maps the sentinel to a fixed 404 body (A3d-v R7 closed in PR #190).",
+	"AdminHandler.ResolveAlert":                    "service-layer scoping: AlertService.ResolveAlert mirrors AcknowledgeAlert — Load → caller-org check → ErrAlertNotFound → fixed 404 handler mapping (A3d-v R7 closed in PR #190).",
+	"DetectionHandler.GetDetectionStatus":          "audit-baseline: needs review",
+	"DetectionHandler.GetLatestCapabilityReport":   "audit-baseline: needs review",
+	"DetectionHandler.ReportCapabilities":          "audit-baseline: needs review",
+	"DetectionHandler.ReportDetection":             "audit-baseline: needs review",
+	"MCPGraphHandler.GetMCPServerConnections":      "audit-baseline: needs review",
+	"MCPHandler.GetConnectedAgents":                "audit-baseline: needs review",
+	"MCPHandler.VerifyMCPCapability":               "audit-baseline: needs review",
+	"PublicMCPHandler.VerifyMCPAction":             "audit-baseline: needs review",
+	"SDKTokenHandler.RevokeToken":                  "service-layer scoping: SDKTokenService.RevokeToken collapses both not-found and cross-user mismatch into ErrSDKTokenNotFound; the handler maps the sentinel to a fixed 404. SDK tokens are user-scoped (not org-scoped), so the gate lives at the service layer.",
+	"TagHandler.UpdateTag":                         "audit-baseline: needs review (service-layer scoping exists but has existence side channel via error string; A3d-ii follow-up — see todo/2026-05-21-a3d-ii-tag-mcp-scoping.md)",
+	"VerificationHandler.SubmitVerificationResult": "audit-baseline: needs review",
+	"VerificationHandler.UpdateExecutionStatus":    "audit-baseline: needs review",
 
 	// ---------------------------------------------------------------
 	// Service-layer-enforced tenant scoping. The lint's AST scan cannot
@@ -274,6 +263,26 @@ the helper documentation and the SECURITY rationale for 404-not-403.`)
 		} else {
 			fmt.Printf("tenantscope-lint: ok (%d allowlist entries; scanned %s)\n", len(allowlist), handlersDir)
 		}
+
+		// An allowlist entry that resolves to no real method is a silent hole: it
+		// presents as a reviewed exemption while covering nothing. Checked after the
+		// scan so discoveredHandlers is fully populated.
+		if unresolved := checkAllowlistResolves(); len(unresolved) > 0 {
+			failed = true
+			fmt.Fprintf(os.Stderr, "\ntenantscope-lint: %d allowlist entr(ies) name a method that does not exist:\n\n", len(unresolved))
+			for _, key := range unresolved {
+				fmt.Fprintf(os.Stderr, "  %s\n", key)
+			}
+			fmt.Fprintln(os.Stderr, `
+Each of these exempts nothing. Either the method was renamed, or it lives on a
+different receiver, or it never existed. Fix by finding the real handler:
+
+  grep -rn "func (.* \*<ReceiverType>) " ./internal/interfaces/http/handlers
+
+Then either correct the key to the real Receiver.Method and keep the
+justification, or delete the entry if the handler is gone. Do not silence this
+by deleting the check.`)
+		}
 	}
 
 	if servicesDir != "" {
@@ -349,6 +358,30 @@ func scanDirectory(dir string) ([]violation, error) {
 	return violations, nil
 }
 
+// discoveredHandlers collects every Receiver.Method seen while scanning, so the
+// allowlist can be checked against reality rather than trusted.
+//
+// An allowlist key that matches no real method exempts nothing. It is worse than a
+// missing entry: it reads as a reviewed, justified exemption while the handler it was
+// meant to cover is either unexempted or named something else entirely. Fourteen of the
+// entries here were in that state — `AuthHandler.Login` (the type has `LocalLogin`; the
+// real `Login` is on `PublicRegistrationHandler`), `RegistryBridgeHandler.Verify` (the
+// type has only `TriggerPush`), `OAuthTokenHandler.Token` (it is `HandleTokenRequest`),
+// and eleven more.
+var discoveredHandlers = map[string]bool{}
+
+// checkAllowlistResolves reports allowlist keys that name no method the scan found.
+func checkAllowlistResolves() []string {
+	var unresolved []string
+	for key := range allowlist {
+		if !discoveredHandlers[key] {
+			unresolved = append(unresolved, key)
+		}
+	}
+	sort.Strings(unresolved)
+	return unresolved
+}
+
 func scanFile(fset *token.FileSet, file *ast.File, path string) []violation {
 	var out []violation
 	for _, decl := range file.Decls {
@@ -357,6 +390,7 @@ func scanFile(fset *token.FileSet, file *ast.File, path string) []violation {
 			continue
 		}
 		handlerName := receiverTypeName(fn) + "." + fn.Name.Name
+		discoveredHandlers[handlerName] = true
 		if _, allowed := allowlist[handlerName]; allowed {
 			continue
 		}
