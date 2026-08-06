@@ -589,8 +589,11 @@ func (r *AgentRepository) Delete(id uuid.UUID) error {
 // The revocation list is served on an unauthenticated route, so the `status = 'revoked'`
 // predicate has to run in SQL. Filtering List's results in Go instead means every request
 // reads and materialises every agent row — twenty-four columns including three JSONB
-// ones — to emit the revoked subset. Measured at 20,000 agents that was ~320ms of server
-// work per request, which an unauthenticated caller controls the cost of.
+// ones — to emit the revoked subset. At 20,000 agents that was hundreds of milliseconds
+// per request (~320ms and ~630ms in two measurements of differently-shaped rows), which
+// an unauthenticated caller controls the cost of. The cost scales with the table rather
+// than with the number of revocations, which is the property that matters; the exact
+// figure is row-shape dependent and is not pinned here because nothing can check it.
 //
 // Only the id is selected. Nothing else on the row belongs on a public CRL, and selecting
 // less also means this method cannot be broken by a nullable column it does not read.

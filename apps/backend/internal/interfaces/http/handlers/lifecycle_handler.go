@@ -107,7 +107,10 @@ func (h *LifecycleHandler) GetRevocationList(c fiber.Ctx) error {
 	//
 	// The `status = 'revoked'` predicate runs in SQL. Filtering List's results in Go
 	// instead made every request to this unauthenticated route read every agent row —
-	// ~320ms of server work at 20,000 agents, at a cost the caller controls.
+	// hundreds of milliseconds of server work at 20,000 agents, at a cost the caller
+	// controls. Two independent measurements at that size landed at ~320ms and ~630ms
+	// depending on row width, which is the point: it scales with the table, not with the
+	// answer. The exact figure is not pinned here because nothing can check it.
 	revoked := make([]RevokedEntry, 0)
 	for offset := 0; ; offset += revocationListPageSize {
 		ids, err := h.agentRepo.ListRevokedIDs(revocationListPageSize, offset)
