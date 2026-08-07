@@ -11,6 +11,53 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security
+
+- `GET /api/v1/revocations` returned an empty revocation list to every caller,
+  always. `GetRevocationList` asked the repository for `List(0, 0)`, which reaches
+  PostgreSQL as `LIMIT 0` — zero rows, not "unbounded". The route is mounted and
+  unauthenticated here, so a verifier polling it was told that nothing had ever
+  been revoked, and a caching client treats that as a successful fetch and holds
+  it as fresh. No 4xx, no 5xx, no log line: the control reported healthy while
+  enforcing nothing.
+- The revocation list no longer exposes `name`. It emitted every revoked agent's
+  organization-internal name across all organizations on an unauthenticated
+  endpoint. This was inert only because the list was always empty, so fixing the
+  limit without removing the field would have shipped the disclosure in the same
+  deploy. `revokedAt` is also gone: it was read from `agents.updated_at`, which
+  any later write to the row rewrites, and there is no `revoked_at` column to
+  source it from.
+- Java SDK: `CrlCache` accepted a decoded `Crl(entries=null)` as a valid list and
+  cached it as fresh, and `LocalAtxVerifier` read null entries as "nothing is
+  revoked". A CRL feed whose JSON carries its list under a different key therefore
+  produced a silent fail-open — every revoked credential verifying, with no error
+  and a healthy-looking `status()`. Both now reject a malformed list; a genuinely
+  empty one still verifies normally.
+- A NULL in a nullable column failed the entire row rather than the field on most
+  agent read paths (`description` on five of six, `rotation_count` and
+  `trust_score` more widely). `GetByID` is the one that matters: the agent auth
+  middlewares call it, and a failed read there is reported as "Agent not found",
+  which is indistinguishable from a revocation denial. An agent created without a
+  description could not authenticate and the operator was told it did not exist.
+
+### Changed
+
+- `AgentRepository.List` now returns an error for a non-positive limit instead of
+  reinterpreting it. Returning everything would have traded a silent-empty bug for
+  a silent-unbounded one; an error is the only outcome that fails visibly. Callers
+  pass an explicit page size. Adds `ListRevokedIDs`, which filters in SQL so the
+  unauthenticated revocation endpoint no longer reads every agent row to emit a
+  subset.
+- `AgentService.EnforceKeyExpiry` returns `ErrKeyExpiryEnforcementUnavailable`
+  rather than reporting success for work it cannot do. It is unimplementable as
+  written — `List` does not select `key_expires_at`, and suspending via `Update`
+  would clear the agent's key material — and it has no caller. See #359.
+- The tenant-scoping lint fails when an allowlist key names a method that does not
+  exist. Fourteen of thirty-two entries resolved to nothing, presenting as reviewed
+  exemptions while covering nothing. All fourteen were removed and the lint still
+  passes, which is the evidence that none of the real handlers needed exempting.
+  Remaining `needs review` entries are tracked in #358.
+
 ### Fixed
 
 - Agent registration now returns `400 Bad Request` (was `500 Internal Server

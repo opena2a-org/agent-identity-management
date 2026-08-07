@@ -223,3 +223,7 @@ func TestIssueForAgent_ScoreErrorPropagates(t *testing.T) {
 		t.Fatal("expected score error to propagate")
 	}
 }
+
+func (f *fakeAgentReader) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}

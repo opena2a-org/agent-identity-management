@@ -23,7 +23,7 @@ func TestAgentStatusPermitsAuth_DeniesRevokedAndSuspended(t *testing.T) {
 	assert.False(t, agentStatusPermitsAuth(domain.AgentStatus("revoked")),
 		"RevokeAgent writes this status and nothing else denies the request")
 	assert.False(t, agentStatusPermitsAuth(domain.AgentStatus("suspended")),
-		"SuspendAgent and EnforceKeyExpiry write this status")
+		"SuspendAgent writes this status; EnforceKeyExpiry does not — it is unimplemented, see #359")
 }
 
 // agents.status is VARCHAR(50) with no CHECK constraint (migration 001), so a

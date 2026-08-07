@@ -91,6 +91,17 @@ public final class CrlCache {
             if (next == null) {
                 throw new IllegalStateException("CRL source returned null");
             }
+            // A Crl whose entry list is null is malformed, not empty, and the difference
+            // is the whole control. Caching it marks the cache FRESH and makes
+            // LocalAtxVerifier skip the revocation loop, so every revoked credential
+            // verifies with no error, no log line and a healthy-looking status() — the
+            // exact silent fail-open the stale policy exists to prevent. It arises from a
+            // shape mismatch rather than a network fault: a JSON body that carries the
+            // list under a different key decodes into entries == null.
+            if (next.entries() == null) {
+                throw new IllegalStateException(
+                        "CRL source returned a list with null entries (malformed, not empty) — refusing to cache it");
+            }
             this.data = next;
             this.fetchedAtMillis = nowMillis.getAsLong();
             this.lastError = null;

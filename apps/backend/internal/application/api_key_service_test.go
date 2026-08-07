@@ -106,6 +106,14 @@ func (m *MockAgentRepoForAPIKey) List(limit, offset int) ([]*domain.Agent, error
 	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
 
+func (m *MockAgentRepoForAPIKey) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
+}
+
 func (m *MockAgentRepoForAPIKey) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	args := m.Called(id, newScore)
 	return args.Error(0)

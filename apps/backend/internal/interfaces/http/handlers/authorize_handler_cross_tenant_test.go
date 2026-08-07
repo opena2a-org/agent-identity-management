@@ -137,3 +137,7 @@ func TestAuthorizeHandler_SameOrgPassesThroughToFGA(t *testing.T) {
 		"FGAEngine must be reached on the legitimate same-org path")
 	assert.Equal(t, agentID, fake.gotRequest.AgentID)
 }
+
+func (r *authorizeForeignOrgAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}

@@ -53,6 +53,14 @@ func (m *MockAgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
 
+func (m *MockAgentRepository) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	args := m.Called(limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
+}
+
 func (m *MockAgentRepository) Update(agent *domain.Agent) error {
 	args := m.Called(agent)
 	return args.Error(0)
@@ -241,12 +249,12 @@ func TestDetectDrift_MCPServerDrift(t *testing.T) {
 
 	// Agent with registered MCP servers (first violation)
 	agent := &domain.Agent{
-		ID:                        agentID,
-		OrganizationID:            orgID,
-		Name:                      "test-agent",
-		TalksTo:                   []string{"filesystem-mcp"},
-		TrustScore:                85.0,
-		CapabilityViolationCount:  0, // First violation
+		ID:                       agentID,
+		OrganizationID:           orgID,
+		Name:                     "test-agent",
+		TalksTo:                  []string{"filesystem-mcp"},
+		TrustScore:               85.0,
+		CapabilityViolationCount: 0, // First violation
 	}
 
 	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)

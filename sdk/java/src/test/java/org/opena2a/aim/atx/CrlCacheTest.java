@@ -135,4 +135,72 @@ class CrlCacheTest {
         cache.stop();
         cache.stop(); // no throw
     }
+
+    // A Crl whose entry list is null is MALFORMED, not empty, and the cache must refuse it.
+    //
+    // This is the shape a decoder produces when the feed carries its list under a different
+    // key — which is exactly what the AIM server does: it serves `revocations`, and this
+    // record binds `entries`. Caching it marks the cache FRESH, and LocalAtxVerifier then
+    // reads null entries as "nothing is revoked", so every revoked credential verifies with
+    // no error, no log line, and a healthy-looking status(). That is the silent fail-open
+    // the stale policy exists to prevent, arriving through a shape mismatch rather than a
+    // network fault.
+    @Test
+    void refusesToCacheACrlWithNullEntries() {
+        AtomicLong clock = new AtomicLong(0);
+        AtomicReference<AtxTrustAnchors.Crl> next = new AtomicReference<>(new AtxTrustAnchors.Crl(null));
+
+        CrlCache cache = CrlCache.builder(next::get)
+                .ttl(Duration.ofMinutes(5))
+                .nowMillis(clock::get)
+                .build();
+
+        cache.refreshNow();
+
+        assertNull(cache.current(), "a malformed CRL must not become the served list");
+        assertFalse(cache.isFresh(), "a malformed CRL must not mark the cache fresh");
+        assertNotNull(cache.status().lastError(), "refusing a malformed CRL must surface an error");
+        assertTrue(cache.status().lastError().getMessage().contains("null entries"));
+    }
+
+    // The control, and the line the guard must not cross: an EMPTY list is a legitimate
+    // answer meaning "nothing is revoked right now", and it must still be cached and served.
+    @Test
+    void stillAcceptsAGenuinelyEmptyCrl() {
+        AtomicLong clock = new AtomicLong(0);
+
+        CrlCache cache = CrlCache.builder(() -> new AtxTrustAnchors.Crl(List.of()))
+                .ttl(Duration.ofMinutes(5))
+                .nowMillis(clock::get)
+                .build();
+
+        cache.refreshNow();
+
+        assertNotNull(cache.current(), "an empty CRL is a valid answer and must be served");
+        assertTrue(cache.isFresh());
+        assertNull(cache.status().lastError());
+        assertEquals(0, cache.current().entries().size());
+    }
+
+    // A malformed refresh must not destroy a good list that is still within its TTL.
+    @Test
+    void retainsThePreviousGoodListWhenARefreshIsMalformed() {
+        AtomicLong clock = new AtomicLong(0);
+        AtomicReference<AtxTrustAnchors.Crl> next = new AtomicReference<>(list("agent-1"));
+
+        CrlCache cache = CrlCache.builder(next::get)
+                .ttl(Duration.ofMinutes(5))
+                .nowMillis(clock::get)
+                .build();
+
+        cache.refreshNow();
+        assertNotNull(cache.current());
+
+        next.set(new AtxTrustAnchors.Crl(null));
+        cache.refreshNow();
+
+        assertNotNull(cache.current(), "a malformed refresh must not discard a still-fresh good list");
+        assertEquals(1, cache.current().entries().size());
+        assertNotNull(cache.status().lastError(), "the malformed refresh must still be recorded");
+    }
 }

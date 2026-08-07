@@ -127,7 +127,17 @@ public final class LocalAtxVerifier {
         if (atx.revoked) {
             return AtxVerificationResult.reject(RejectCategory.REVOKED, "credential revoked field is true");
         }
-        if (anchors.crl() != null && anchors.crl().entries() != null) {
+        // A CRL that is present but whose entry list is null is MALFORMED, not empty.
+        // Reading it as "nothing is revoked" is a silent fail-open: it is the shape a
+        // decoder produces when the feed's JSON carries the list under a different key,
+        // so the one case that most needs rejecting looks identical to a clean list.
+        // Absent (null) CRL is a different thing — that is the stale-cache path, and the
+        // caller's StalePolicy has already decided it before reaching here.
+        if (anchors.crl() != null && anchors.crl().entries() == null) {
+            return AtxVerificationResult.reject(
+                    RejectCategory.REVOKED, "revocation list is malformed (null entries); refusing to treat as empty");
+        }
+        if (anchors.crl() != null) {
             for (AtxTrustAnchors.Crl.Entry entry : anchors.crl().entries()) {
                 if (entry.agentId() != null && entry.agentId().equals(atx.agentId)) {
                     return AtxVerificationResult.reject(

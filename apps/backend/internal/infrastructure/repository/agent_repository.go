@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -160,7 +161,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
 		       public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		       trust_score, verified_at, talks_to, capabilities, metadata, created_at, updated_at, created_by, last_active,
+		       COALESCE(trust_score, 0), verified_at, talks_to, capabilities, metadata, created_at, updated_at, created_by, last_active,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       pqc_public_key, pqc_key_algorithm, COALESCE(hybrid_mode_enabled, false), pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''), created_by_sdk_token_id, created_by_api_key_id,
@@ -195,13 +196,21 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	var createdBySDKTokenID sql.NullString
 	var createdByAPIKeyID sql.NullString
 	var updatedBy sql.NullString
+	// `rotation_count` is nullable. GetByName already scans it through a NullInt32; this
+	// method did not, so a NULL there failed the whole row on the auth path — the same
+	// sibling-does-it-right divergence as `description` below, in the same method.
+	var rotationCount sql.NullInt32
+	// `description` is nullable. Scanning it into a plain string fails the entire row,
+	// and GetByID is what the agent auth middlewares call — a failed read there is
+	// reported as "Agent not found", which is indistinguishable from a revocation denial.
+	var description sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&agent.ID,
 		&agent.OrganizationID,
 		&agent.Name,
 		&agent.DisplayName,
-		&agent.Description,
+		&description,
 		&agent.AgentType,
 		&agent.Status,
 		&version,
@@ -224,7 +233,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 		&keyExpiresAt,
 		&keyRotationGraceUntil,
 		&previousPublicKey,
-		&agent.RotationCount,
+		&rotationCount,
 		&pqcPublicKey,
 		&pqcKeyAlgorithm,
 		&agent.HybridModeEnabled,
@@ -251,6 +260,12 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	}
 
 	// Convert nullable fields
+	if description.Valid {
+		agent.Description = description.String
+	}
+	if rotationCount.Valid {
+		agent.RotationCount = int(rotationCount.Int32)
+	}
 	if version.Valid {
 		agent.Version = version.String
 	}
@@ -359,13 +374,13 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 func (r *AgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
 		WHERE organization_id = $1
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id
 	`
 	args := []interface{}{orgID}
 	if limit > 0 {
@@ -569,19 +584,93 @@ func (r *AgentRepository) Delete(id uuid.UUID) error {
 	return err
 }
 
-// List lists all agents with pagination
+// ListRevokedIDs returns one page of revoked agent ids, newest first.
+//
+// The revocation list is served on an unauthenticated route, so the `status = 'revoked'`
+// predicate has to run in SQL. Filtering List's results in Go instead means every request
+// reads and materialises every agent row — twenty-four columns including three JSONB
+// ones — to emit the revoked subset. At 20,000 agents that was hundreds of milliseconds
+// per request (~320ms and ~630ms in two measurements of differently-shaped rows), which
+// an unauthenticated caller controls the cost of. The cost scales with the table rather
+// than with the number of revocations, which is the property that matters; the exact
+// figure is row-shape dependent and is not pinned here because nothing can check it.
+//
+// Only the id is selected. Nothing else on the row belongs on a public CRL, and selecting
+// less also means this method cannot be broken by a nullable column it does not read.
+func (r *AgentRepository) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	if limit <= 0 {
+		return nil, ErrNonPositiveLimit
+	}
+
+	// (created_at, id) is a total order, so an offset walk cannot skip or repeat rows
+	// that share a timestamp.
+	const query = `
+		SELECT id
+		FROM agents
+		WHERE status = $1
+		ORDER BY created_at DESC, id
+		LIMIT $2 OFFSET $3
+	`
+
+	rows, err := r.db.Query(query, string(domain.AgentStatusRevoked), limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0, limit)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
+}
+
+// ErrNonPositiveLimit is returned by List when it is asked for a page of zero or
+// fewer rows. See List for why this is an error rather than an interpretation.
+var ErrNonPositiveLimit = errors.New("agent repository: limit must be positive; pass an explicit page size")
+
+// List returns one page of agents. limit MUST be positive.
+//
+// This method previously appended `LIMIT $1 OFFSET $2` unconditionally, so a zero limit
+// reached Postgres as `LIMIT 0` and returned no rows at all. Both callers passed (0, 0)
+// meaning "all" — one of them says so in a comment — because the sibling method
+// GetByOrganizationPaged above documents exactly that convention. The two conventions
+// collided here, and the revocation endpoint that reads this method served an empty list
+// to every caller as a result.
+//
+// Adopting the sibling's "non-positive means all" convention would have fixed that and is
+// the obvious repair, but it trades a silent-empty bug for a silent-everything one: an
+// unbounded full-table scan behind whichever caller next passes a zero, including an
+// unauthenticated route. Both failure directions are silent. Erroring is the only option
+// that is neither, and it fails visibly, which is the property the empty list lacked.
 func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
+	if limit <= 0 {
+		return nil, ErrNonPositiveLimit
+	}
+
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id
 		LIMIT $1 OFFSET $2
 	`
 
+	// `id` breaks ties in the sort. Without it `created_at DESC` alone is not a total
+	// order, and rows sharing a timestamp can land on both sides of a page boundary or
+	// on neither — a caller walking offsets silently skips or repeats them. That matters
+	// now that the revocation list pages through this method.
 	rows, err := r.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, err
@@ -591,6 +680,13 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
+		// `description` is nullable and has to be scanned through a NullString, exactly as
+		// GetByOrganizationPaged does above. Scanning it straight into a string fails the
+		// entire row with "converting NULL to string is unsupported". That could not fire
+		// while the LIMIT bug held, because no row was ever scanned — fixing the limit
+		// without this turns the empty list into a 500 for any deployment holding a single
+		// agent with no description.
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -604,7 +700,7 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -630,6 +726,9 @@ func (r *AgentRepository) List(limit, offset int) ([]*domain.Agent, error) {
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}
@@ -703,7 +802,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	// We need to check for both formats
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
@@ -712,7 +811,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		    talks_to @> $2::jsonb
 		    OR talks_to @> $3::jsonb
 		  )
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id
 	`
 
 	// Format 1: Simple string array ["uuid"]
@@ -729,6 +828,8 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
+		// `description` is nullable; scanning it into a plain string fails the whole row.
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -742,7 +843,7 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -766,6 +867,9 @@ func (r *AgentRepository) GetByMCPServer(mcpServerID uuid.UUID, orgID uuid.UUID)
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}
@@ -818,7 +922,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	// We need to check for both formats
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
-		       certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       talks_to, metadata, created_at, updated_at, created_by,
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
@@ -827,7 +931,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		    talks_to @> $2::jsonb
 		    OR talks_to @> $3::jsonb
 		  )
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id
 	`
 
 	// Format 1: Simple string array ["name"]
@@ -844,6 +948,8 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	agents := make([]*domain.Agent, 0)
 	for rows.Next() {
 		agent := &domain.Agent{}
+		// `description` is nullable; scanning it into a plain string fails the whole row.
+		var description sql.NullString
 		var version sql.NullString
 		var publicKey sql.NullString
 		var certificateURL sql.NullString
@@ -857,7 +963,7 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 			&agent.OrganizationID,
 			&agent.Name,
 			&agent.DisplayName,
-			&agent.Description,
+			&description,
 			&agent.AgentType,
 			&agent.Status,
 			&version,
@@ -881,6 +987,9 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 		}
 
 		// Convert nullable fields
+		if description.Valid {
+			agent.Description = description.String
+		}
 		if version.Valid {
 			agent.Version = version.String
 		}
@@ -923,12 +1032,11 @@ func (r *AgentRepository) GetByMCPServerName(mcpServerName string, orgID uuid.UU
 	return agents, nil
 }
 
-
 // GetByName gets an agent by name within an organization
 func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
-		       public_key, certificate_url, repository_url, documentation_url, trust_score, verified_at,
+		       public_key, certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
 		       created_at, updated_at, created_by, encrypted_private_key, key_algorithm,
 		       key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
 		       talks_to, capabilities, metadata,
@@ -952,6 +1060,8 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	var keyRotationGraceUntil sql.NullTime
 	var previousPublicKey sql.NullString
 	var rotationCount sql.NullInt32
+	// `description` is nullable; scanning it into a plain string fails the whole row.
+	var description sql.NullString
 	talksToJSON := make([]byte, 0)
 	capabilitiesJSON := make([]byte, 0)
 	metadataJSON := make([]byte, 0)
@@ -962,7 +1072,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 		&agent.OrganizationID,
 		&agent.Name,
 		&agent.DisplayName,
-		&agent.Description,
+		&description,
 		&agent.AgentType,
 		&agent.Status,
 		&version,
@@ -998,6 +1108,9 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	}
 
 	// Convert nullable fields
+	if description.Valid {
+		agent.Description = description.String
+	}
 	if version.Valid {
 		agent.Version = version.String
 	}
@@ -1066,7 +1179,6 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	return agent, nil
 }
 
-
 // UpdateLastActive updates the last_active timestamp for an agent
 func (r *AgentRepository) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
 	query := `
@@ -1093,7 +1205,7 @@ func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID
 // GetStaleAgents returns agents whose heartbeat is older than the given time
 func (r *AgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	query := `
-		SELECT id, organization_id, name, display_name, status, agent_type, trust_score,
+		SELECT id, organization_id, name, display_name, status, agent_type, COALESCE(trust_score, 0),
 		       last_heartbeat, last_active, created_at, updated_at
 		FROM agents
 		WHERE last_heartbeat IS NOT NULL
@@ -1139,7 +1251,7 @@ func (r *AgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*dom
 		args[i] = id
 	}
 	query := fmt.Sprintf(`
-		SELECT id, organization_id, name, display_name, status, agent_type, trust_score,
+		SELECT id, organization_id, name, display_name, status, agent_type, COALESCE(trust_score, 0),
 		       last_heartbeat, last_active, created_at, updated_at
 		FROM agents WHERE id IN (%s)`, strings.Join(placeholders, ","))
 	rows, err := r.db.QueryContext(ctx, query, args...)

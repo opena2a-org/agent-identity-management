@@ -20,12 +20,12 @@ const (
 	AgentTypeCohere  AgentType = "cohere"
 
 	// Framework-based agents
-	AgentTypeLangChain   AgentType = "langchain"
-	AgentTypeLlamaIndex  AgentType = "llamaindex"
-	AgentTypeAutoGen     AgentType = "autogen"
-	AgentTypeCrewAI      AgentType = "crewai"
-	AgentTypeLangGraph   AgentType = "langgraph"
-	AgentTypeHaystack    AgentType = "haystack"
+	AgentTypeLangChain      AgentType = "langchain"
+	AgentTypeLlamaIndex     AgentType = "llamaindex"
+	AgentTypeAutoGen        AgentType = "autogen"
+	AgentTypeCrewAI         AgentType = "crewai"
+	AgentTypeLangGraph      AgentType = "langgraph"
+	AgentTypeHaystack       AgentType = "haystack"
 	AgentTypeSemanticKernel AgentType = "semantic_kernel"
 
 	// Copilot/Assistant types
@@ -76,39 +76,39 @@ type Agent struct {
 	CapabilityViolationCount int         `json:"capabilityViolationCount"`
 	IsCompromised            bool        `json:"isCompromised"`
 	// Capability-based access control (simple MVP)
-	TalksTo                  []string    `json:"talksTo"` // List of MCP server names/IDs this agent can communicate with
-	Capabilities             []string    `json:"capabilities"` // Agent capabilities (e.g., ["file:read", "api:call"])
+	TalksTo      []string `json:"talksTo"`      // List of MCP server names/IDs this agent can communicate with
+	Capabilities []string `json:"capabilities"` // Agent capabilities (e.g., ["file:read", "api:call"])
 	// Key rotation support
-	KeyCreatedAt             *time.Time  `json:"keyCreatedAt"`
-	KeyExpiresAt             *time.Time  `json:"keyExpiresAt"`
-	KeyRotationGraceUntil    *time.Time  `json:"keyRotationGraceUntil,omitempty"`
-	PreviousPublicKey        *string     `json:"-"` // Not exposed in API, used for grace period verification
-	RotationCount            int         `json:"rotationCount"`
+	KeyCreatedAt          *time.Time `json:"keyCreatedAt"`
+	KeyExpiresAt          *time.Time `json:"keyExpiresAt"`
+	KeyRotationGraceUntil *time.Time `json:"keyRotationGraceUntil,omitempty"`
+	PreviousPublicKey     *string    `json:"-"` // Not exposed in API, used for grace period verification
+	RotationCount         int        `json:"rotationCount"`
 	// Post-Quantum Cryptography (PQC) support
-	PQCPublicKey             *string     `json:"pqcPublicKey,omitempty"`
-	PQCKeyAlgorithm          *string     `json:"pqcKeyAlgorithm,omitempty"` // ML-DSA-44, ML-DSA-65, ML-DSA-87
-	HybridModeEnabled        bool        `json:"hybridModeEnabled"`
-	PQCKeyCreatedAt          *time.Time  `json:"pqcKeyCreatedAt,omitempty"`
-	PQCKeyExpiresAt          *time.Time  `json:"pqcKeyExpiresAt,omitempty"`
-	PreviousPQCPublicKey     *string     `json:"-"` // Not exposed in API, used for grace period verification
-	CreatedAt                time.Time   `json:"createdAt"`
-	UpdatedAt                time.Time   `json:"updatedAt"`
-	CreatedBy                uuid.UUID   `json:"createdBy"`
-	CreatedByName            string      `json:"createdByName"`            // Denormalized for display
-	CreatedByEmail           string      `json:"createdByEmail"`           // Denormalized for display
-	CreatedBySDKTokenID      *uuid.UUID  `json:"createdBySdkTokenId,omitempty"` // SDK token used to create this agent
-	CreatedByAPIKeyID        *uuid.UUID  `json:"createdByApiKeyId,omitempty"`   // API key used to create this agent
-	UpdatedBy                *uuid.UUID  `json:"updatedBy,omitempty"`      // User who last updated this agent
-	UpdatedByName            string      `json:"updatedByName,omitempty"`  // Denormalized for display
-	UpdatedByEmail           string      `json:"updatedByEmail,omitempty"` // Denormalized for display
+	PQCPublicKey         *string    `json:"pqcPublicKey,omitempty"`
+	PQCKeyAlgorithm      *string    `json:"pqcKeyAlgorithm,omitempty"` // ML-DSA-44, ML-DSA-65, ML-DSA-87
+	HybridModeEnabled    bool       `json:"hybridModeEnabled"`
+	PQCKeyCreatedAt      *time.Time `json:"pqcKeyCreatedAt,omitempty"`
+	PQCKeyExpiresAt      *time.Time `json:"pqcKeyExpiresAt,omitempty"`
+	PreviousPQCPublicKey *string    `json:"-"` // Not exposed in API, used for grace period verification
+	CreatedAt            time.Time  `json:"createdAt"`
+	UpdatedAt            time.Time  `json:"updatedAt"`
+	CreatedBy            uuid.UUID  `json:"createdBy"`
+	CreatedByName        string     `json:"createdByName"`                 // Denormalized for display
+	CreatedByEmail       string     `json:"createdByEmail"`                // Denormalized for display
+	CreatedBySDKTokenID  *uuid.UUID `json:"createdBySdkTokenId,omitempty"` // SDK token used to create this agent
+	CreatedByAPIKeyID    *uuid.UUID `json:"createdByApiKeyId,omitempty"`   // API key used to create this agent
+	UpdatedBy            *uuid.UUID `json:"updatedBy,omitempty"`           // User who last updated this agent
+	UpdatedByName        string     `json:"updatedByName,omitempty"`       // Denormalized for display
+	UpdatedByEmail       string     `json:"updatedByEmail,omitempty"`      // Denormalized for display
 	// Tags applied to this agent (populated by join)
-	Tags                     []Tag                  `json:"tags"`
+	Tags []Tag `json:"tags"`
 	// Track when agent last performed an action (updated on every verify-action call)
-	LastActive               *time.Time             `json:"lastActive"`
+	LastActive *time.Time `json:"lastActive"`
 	// Track heartbeat for liveness monitoring
-	LastHeartbeat            *time.Time             `json:"lastHeartbeat"`
+	LastHeartbeat *time.Time `json:"lastHeartbeat"`
 	// Custom metadata for the agent (model, department, owner, etc.)
-	Metadata                 map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	// DeclaredPurpose is the publisher's optional structured declaration of what
 	// the agent is for (atx-spec core.md §1.5). Identity/attestation + offline
 	// detection signal only; never an authorization input. Nil = not declared.
@@ -125,6 +125,12 @@ type AgentRepository interface {
 	Update(agent *Agent) error
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*Agent, error)
+	// ListRevokedIDs returns one page of revoked agent ids, newest first.
+	//
+	// Separate from List because the revocation list is served on an unauthenticated
+	// route: filtering in Go means every request reads every agent row, including the
+	// JSONB columns, to emit the revoked subset. The predicate belongs in SQL.
+	ListRevokedIDs(limit, offset int) ([]uuid.UUID, error)
 	UpdateTrustScore(id uuid.UUID, newScore float64) error
 	MarkAsCompromised(id uuid.UUID) error
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
