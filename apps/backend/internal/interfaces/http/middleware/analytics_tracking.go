@@ -130,7 +130,7 @@ func logAPICall(db *sql.DB, log APICallLog) {
 	// It cost us a real answer: the 2026 verification-event exposure ran on an
 	// unauthenticated route, so the question "was it ever exploited" is permanently
 	// unanswerable, while the same table held 69,029 rows for other endpoints across the
-	// same window. Migration 106 makes the column nullable. Every unauthenticated route in
+	// same window. Migration 107 makes the column nullable. Every unauthenticated route in
 	// this service was in that position until it landed.
 	//
 	// Do not reinstate this early return. If org-less rows become a volume problem, sample
