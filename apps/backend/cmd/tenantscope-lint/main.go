@@ -181,6 +181,16 @@ type violation struct {
 // Each entry must include a one-line justification. The allowlist must
 // stay small; the goal is to refactor or remove the unused parameter
 // rather than to add entries.
+// collectionScopeAllowlist names service methods that legitimately return a
+// collection across every organization. Each entry must carry a one-line
+// justification naming what makes the cross-tenant read safe — minimization,
+// an admin-only route gate, or a genuinely public dataset. "It is an admin
+// endpoint" is only a justification if a role middleware actually enforces it;
+// both of the methods that motivated this check were documented as admin
+// endpoints in their doc comments and were mounted with no role middleware at
+// all.
+var collectionScopeAllowlist = map[string]string{}
+
 var serviceParamAllowlist = map[string]string{
 	// AUDIT-BASELINE: pre-existing methods discovered when the
 	// class-#3 scan first landed. Each entry MUST cite the rationale
@@ -320,6 +330,37 @@ the broader taxonomy. False-negative class: orgID referenced only in
 logging without flowing to the repo call still passes this check.`)
 		} else {
 			fmt.Printf("serviceparam-lint: ok (%d allowlist entries; scanned %s)\n", len(serviceParamAllowlist), servicesDir)
+		}
+
+		collectionViolations, err := scanCollectionDirectory(servicesDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "tenantscope-lint: %v\n", err)
+			os.Exit(2)
+		}
+		if len(collectionViolations) > 0 {
+			failed = true
+			sort.Slice(collectionViolations, func(i, j int) bool {
+				if collectionViolations[i].File != collectionViolations[j].File {
+					return collectionViolations[i].File < collectionViolations[j].File
+				}
+				return collectionViolations[i].Line < collectionViolations[j].Line
+			})
+			fmt.Fprintf(os.Stderr, "\ncollectionscope-lint: %d service method(s) return a collection with no organization parameter to scope it by:\n\n", len(collectionViolations))
+			for _, v := range collectionViolations {
+				fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.File, v.Line, v.Handler)
+			}
+			fmt.Fprintln(os.Stderr, `
+A ListAll* method that takes no organization returns every tenant's rows to
+whoever calls it. Fix by adding an orgID uuid.UUID parameter, threading it to
+the repository, and putting the predicate in the SQL — including the COUNT,
+since an unscoped total discloses other tenants' cardinality on its own.
+
+If the method is genuinely global, add it to collectionScopeAllowlist in
+cmd/tenantscope-lint/main.go with a one-line justification naming the control
+that makes it safe. A doc comment calling it an "admin endpoint" is not that
+control; verify a role middleware is actually mounted on the route.`)
+		} else {
+			fmt.Printf("collectionscope-lint: ok (%d allowlist entries; scanned %s)\n", len(collectionScopeAllowlist), servicesDir)
 		}
 	}
 
@@ -579,6 +620,34 @@ func scanServiceDirectory(dir string) ([]violation, error) {
 	return violations, nil
 }
 
+// scanCollectionDirectory walks the service package for unscoped collection
+// readers. Kept separate from scanServiceDirectory so the two failure modes
+// report distinct remediation text; they scan the same files.
+func scanCollectionDirectory(dir string) ([]violation, error) {
+	var violations []violation
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", dir, err)
+	}
+	fset := token.NewFileSet()
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") {
+			continue
+		}
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+		violations = append(violations, scanCollectionFile(fset, file, path)...)
+	}
+	return violations, nil
+}
+
 // scanServiceFile walks one parsed Go file for class-#3 service-method
 // violations. A method qualifies for inspection when:
 //   - It has a receiver (i.e. it's a method, not a free function).
@@ -587,6 +656,60 @@ func scanServiceDirectory(dir string) ([]violation, error) {
 //
 // For each qualifying parameter, the body is searched for any *ast.Ident
 // matching the parameter name. Zero matches → violation.
+// scanCollectionFile catches the class that both of the other two checks are
+// structurally blind to: a service method that returns a WHOLE COLLECTION and
+// never takes an organization to scope it by.
+//
+// The handler check triggers on reading a tenant-scoped c.Params(...) key, and
+// the service check triggers on accepting an orgID and not using it. A method
+// that asks for no identifier at all and returns everything trips neither. That
+// is exactly how A2AService.ListAllConsents and ListAllTrustScores served every
+// tenant's rows to any authenticated caller for seven months while this lint
+// reported ok on every run.
+//
+// The predicate is deliberately mechanical: a method whose name begins with
+// "ListAll" must accept a uuid.UUID parameter with an organization-ish name. A
+// genuinely global lister goes on collectionScopeAllowlist with a written
+// justification, the same as every other exemption here.
+func scanCollectionFile(fset *token.FileSet, file *ast.File, path string) []violation {
+	var out []violation
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil || fn.Recv == nil {
+			continue
+		}
+		if !strings.HasPrefix(fn.Name.Name, "ListAll") {
+			continue
+		}
+		methodName := receiverTypeName(fn) + "." + fn.Name.Name
+		if _, allowed := collectionScopeAllowlist[methodName]; allowed {
+			continue
+		}
+		if fn.Type == nil || fn.Type.Params == nil {
+			continue
+		}
+		scoped := false
+		for _, field := range fn.Type.Params.List {
+			if !isUUIDType(field.Type) {
+				continue
+			}
+			for _, name := range field.Names {
+				if orgParamNames[name.Name] {
+					scoped = true
+				}
+			}
+		}
+		if !scoped {
+			out = append(out, violation{
+				File:    path,
+				Line:    fset.Position(fn.Pos()).Line,
+				Handler: methodName,
+			})
+		}
+	}
+	return out
+}
+
 func scanServiceFile(fset *token.FileSet, file *ast.File, path string) []violation {
 	var out []violation
 	for _, decl := range file.Decls {
