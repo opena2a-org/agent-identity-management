@@ -116,7 +116,7 @@ func TestServiceTokenCannotReachMemberGatedCredentialRoute(t *testing.T) {
 func callSelfScoped(t *testing.T, svc *auth.JWTService, token, targetAgentID string) (int, string) {
 	t.Helper()
 	app := fiber.New()
-	app.Use(ServicePrincipalMiddleware(svc))
+	app.Use(ServicePrincipalMiddleware(svc, anyVerifiedAgentReader{}))
 	app.Use(AuthMiddleware(svc))
 	// Registered as a ROUTE handler, not via app.Use — matching main.go. The gate
 	// reads c.Params("id"), which is only populated after route matching, so

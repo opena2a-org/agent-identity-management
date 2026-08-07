@@ -102,15 +102,40 @@ type APICallLog struct {
 
 // logAPICall inserts API call record into database
 func logAPICall(db *sql.DB, log APICallLog) {
+	// No database, nothing to record. Analytics is observability, never a request gate, so
+	// this returns quietly rather than failing the caller's request.
+	//
+	// This guard used to be provided by accident: the org-less early return below shielded
+	// every nil-db path, because a nil db only ever arrived in tests that also sent no
+	// organization. Recording org-less requests removed that accident and turned it into a
+	// nil-pointer panic in the request goroutine — caught by
+	// TestAnalyticsTracking_CapturesRequestDetails. Make the guard explicit rather than
+	// depend on another condition happening to cover it.
+	if db == nil {
+		return
+	}
+
 	// Skip logging for health check endpoints to reduce noise
 	if log.Endpoint == "/health" || log.Endpoint == "/api/v1/status" {
 		return
 	}
 
-	// Skip logging if no organization ID (public endpoints)
-	if log.OrganizationID == nil {
-		return
-	}
+	// An org-less request IS recorded, with organization_id NULL.
+	//
+	// This used to return early, and `api_calls.organization_id` was NOT NULL, so between
+	// them no request to an unauthenticated route was recorded — or could be. That is not
+	// an absence of evidence, it is the absence of a place to put evidence, and it is the
+	// difference between "we looked and found nothing" and "no record could exist".
+	//
+	// It cost us a real answer: the 2026 verification-event exposure ran on an
+	// unauthenticated route, so the question "was it ever exploited" is permanently
+	// unanswerable, while the same table held 69,029 rows for other endpoints across the
+	// same window. Migration 106 makes the column nullable. Every unauthenticated route in
+	// this service was in that position until it landed.
+	//
+	// Do not reinstate this early return. If org-less rows become a volume problem, sample
+	// or retain them differently — but a route that cannot be seen is a route that cannot
+	// be investigated.
 
 	query := `
 		INSERT INTO api_calls (

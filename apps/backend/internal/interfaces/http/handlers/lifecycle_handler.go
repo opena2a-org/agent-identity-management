@@ -209,7 +209,17 @@ func (h *LifecycleHandler) BulkStatus(c fiber.Ctx) error {
 		ids = append(ids, id)
 	}
 
-	agents, err := h.agentService.GetAgentsByIDs(c.Context(), ids)
+	// SECURITY: scope the lookup to the caller's organization. The agent ids arrive in the
+	// REQUEST BODY, so without this any authenticated user could read status, trust score
+	// and last-active for any agent in any organization by naming its UUID. Ids outside the
+	// caller's org are absent from the result rather than rejected, so the response does not
+	// reveal whether they exist.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	agents, err := h.agentService.GetAgentsByIDs(c.Context(), orgID, ids)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents",

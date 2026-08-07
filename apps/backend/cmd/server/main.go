@@ -1445,12 +1445,12 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// Agents routes - All other agent endpoints with quad authentication (ATC, API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
-	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier())) // ✅ ATC first (for DECIMA agents, Phase 7)
-	agents.Use(middleware.OptionalAPIKeyMiddleware(db))                      // ✅ Try API key (for dashboard-generated keys)
-	agents.Use(middleware.PQCAgentMiddleware(services.Agent))                // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
-	agents.Use(middleware.ServicePrincipalMiddleware(jwtService))            // ✅ Then OAuth (RFC 7523) service tokens; sets no role
-	agents.Use(middleware.AuthMiddleware(jwtService))                        // ✅ Fallback to JWT (for web UI)
-	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent))      // Touches agents.last_active on agent-authed responses (#167)
+	agents.Use(middleware.ATCAuthMiddleware(services.Secrets.ATCVerifier()))                         // ✅ ATC first (for DECIMA agents, Phase 7)
+	agents.Use(middleware.OptionalAPIKeyMiddleware(db))                                              // ✅ Try API key (for dashboard-generated keys)
+	agents.Use(middleware.PQCAgentMiddleware(services.Agent))                                        // ✅ Then try Ed25519/ML-DSA/hybrid (for SDK agents)
+	agents.Use(middleware.ServicePrincipalMiddleware(jwtService, repository.NewAgentRepository(db))) // ✅ Then OAuth (RFC 7523) service tokens; sets no role, gates on agents.status
+	agents.Use(middleware.AuthMiddleware(jwtService))                                                // ✅ Fallback to JWT (for web UI)
+	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent))                              // Touches agents.last_active on agent-authed responses (#167)
 	agents.Use(middleware.RateLimitMiddleware())
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus)                          // Bulk agent status lookup

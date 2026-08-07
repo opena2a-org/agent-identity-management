@@ -127,7 +127,7 @@ func (m *mockAgentRepo) UpdateLastActive(_ context.Context, _ uuid.UUID) error  
 func (m *mockAgentRepo) GetStaleAgents(_ context.Context, _ time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }
-func (m *mockAgentRepo) GetByIDs(_ context.Context, _ []uuid.UUID) ([]*domain.Agent, error) {
+func (m *mockAgentRepo) GetByIDs(_ context.Context, _ uuid.UUID, _ []uuid.UUID) ([]*domain.Agent, error) {
 	return nil, nil
 }
 

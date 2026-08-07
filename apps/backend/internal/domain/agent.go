@@ -135,5 +135,40 @@ type AgentRepository interface {
 	MarkAsCompromised(id uuid.UUID) error
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
 	GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*Agent, error)
-	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*Agent, error)
+	// GetByIDs returns the agents among ids that belong to callerOrgID. The
+	// organization predicate is REQUIRED and runs in SQL — see the implementation.
+	GetByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*Agent, error)
+}
+
+// AgentStatusPermitsAuth reports whether an agent in this status may authenticate.
+//
+// SECURITY: allow-list, deliberately. `agents.status` is a plain VARCHAR(50) with no
+// CHECK constraint (migration 001), so a value outside the four domain constants is
+// storable, and a deny-list on {revoked, suspended} would authenticate every such value.
+// An unrecognised status must fail closed.
+//
+// `pending` PASSES deliberately. AgentService.RegisterAgent sets it at registration, so
+// it is the default state of an honestly registered agent, not an earned one. Denying it
+// would break enrollment for every new agent while blocking nothing an attacker holds.
+//
+// This lives in domain because it is a property of AgentStatus, and because more than one
+// package has to enforce it: the auth middlewares gate signature and API-key requests on
+// it, and the OAuth token endpoint gates token ISSUANCE on it. Those two enforce it at
+// different moments — issuance and use — and a second copy of the allow-list would be a
+// second thing to keep in step.
+func AgentStatusPermitsAuth(status AgentStatus) bool {
+	switch status {
+	case AgentStatusVerified, AgentStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// AgentStatusDeniedMessage is the denial body for a status-denied request. It names the
+// status so an operator whose agent stopped working can see why without opening a support
+// ticket; the request is only reached by a caller already holding valid credentials for
+// that specific agent.
+func AgentStatusDeniedMessage(status AgentStatus) string {
+	return "Agent is not permitted to authenticate (status: " + string(status) + ")"
 }

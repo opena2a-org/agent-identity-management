@@ -770,10 +770,37 @@ func (r *A2ATaskRepository) Update(ctx context.Context, task *domain.A2ATask) er
 	return nil
 }
 
-func (r *A2ATaskRepository) ListTasks(ctx context.Context, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+// ListTasks returns one page of A2A tasks visible to callerOrgID.
+//
+// SECURITY: callerOrgID is REQUIRED and is not optional-with-a-nil-escape. This query was
+// `FROM a2a_tasks WHERE 1=1` with no organization predicate anywhere in the handler,
+// service or repository, and GET /api/v1/a2a/tasks is mounted behind authentication but no
+// org scoping — so any authenticated user of any organization could page through every A2A
+// task in the system, without even naming a target id.
+//
+// a2a_tasks carries no organization_id; it references two agents. A task is visible when
+// EITHER end belongs to the caller's organization, which is the honest reading of a
+// bilateral record: your agent took part in it, so you may see it. That deliberately does
+// include tasks whose other end is a different organization's agent — that is what an A2A
+// task IS — but it never discloses a task both of whose ends are foreign.
+func (r *A2ATaskRepository) ListTasks(ctx context.Context, callerOrgID uuid.UUID, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+	// Fail closed: a uuid.Nil caller org means the auth chain did not populate it and the
+	// handler proceeded anyway. Matching Nil against real rows would disclose them.
+	if callerOrgID == uuid.Nil {
+		return nil, 0, fmt.Errorf("a2a task listing requires a caller organization")
+	}
+
 	baseQuery := `FROM a2a_tasks WHERE 1=1`
 	args := []interface{}{}
 	argIdx := 1
+
+	baseQuery += fmt.Sprintf(`
+		AND (
+		  EXISTS (SELECT 1 FROM agents a WHERE a.id = a2a_tasks.client_agent_id AND a.organization_id = $%d)
+		  OR EXISTS (SELECT 1 FROM agents a WHERE a.id = a2a_tasks.remote_agent_id AND a.organization_id = $%d)
+		)`, argIdx, argIdx)
+	args = append(args, callerOrgID)
+	argIdx++
 
 	if agentID != nil {
 		baseQuery += fmt.Sprintf(" AND (client_agent_id = $%d OR remote_agent_id = $%d)", argIdx, argIdx)

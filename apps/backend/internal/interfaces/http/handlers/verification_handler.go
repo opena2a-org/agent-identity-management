@@ -135,7 +135,7 @@ type VerificationResponse struct {
 	ExpiresAt        time.Time `json:"expiresAt,omitempty"`
 	DenialReason     string    `json:"denialReason,omitempty"`
 	TrustScore       float64   `json:"trustScore"`
-	EnforcementMode  string    `json:"enforcementMode"` // "strict" or "monitoring" - tells SDK what to do on denial
+	EnforcementMode  string    `json:"enforcementMode"`  // "strict" or "monitoring" - tells SDK what to do on denial
 	RiskLevel        string    `json:"riskLevel"`        // Detected or provided risk level
 	RiskAutoDetected bool      `json:"riskAutoDetected"` // Whether risk was auto-detected from capability
 }
@@ -762,13 +762,13 @@ func isLowRiskCapability(capability string) bool {
 		"user:read":       true, // Medium in demo but really just a read
 		"orders:read":     true, // Medium in demo but really just a read
 		// General read operations
-		"data:fetch":   true,
-		"items:list":   true,
-		"status:get":   true,
-		"search":       true,
-		"lookup":       true,
-		"view":         true,
-		"read":         true,
+		"data:fetch": true,
+		"items:list": true,
+		"status:get": true,
+		"search":     true,
+		"lookup":     true,
+		"view":       true,
+		"read":       true,
 		// Legacy format support
 		"read_database": true,
 		"read_file":     true,
@@ -1460,7 +1460,9 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 	if len(missingNameIDs) > 0 {
 		// Log error but don't fail - names degrade to empty, same as the
 		// old per-event lookup which left the name blank on error.
-		if agents, err := h.getAgentService().GetAgentsByIDs(c.Context(), missingNameIDs); err == nil {
+		// orgID is the caller's, already resolved above and used to scope the search that
+		// produced these events, so the name lookup is scoped to the same organization.
+		if agents, err := h.getAgentService().GetAgentsByIDs(c.Context(), orgID, missingNameIDs); err == nil {
 			for _, agent := range agents {
 				name := agent.DisplayName
 				if name == "" {

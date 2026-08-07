@@ -156,6 +156,22 @@ func (h *SecretsHandler) CreateNamespace(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing required fields: agentId, namespace"})
 	}
 
+	// SECURITY: agentId arrives in the REQUEST BODY and was previously used without
+	// checking who owns it, so any authenticated user of any organization could attach a
+	// secrets namespace to another organization's agent by naming its UUID. Registration
+	// is open, so the only prerequisite was an account and a target agent id.
+	//
+	// GetNamespace in this same file already scopes via the agent; this is the same check
+	// applied to the write path. LoadOwned answers 404 for a cross-tenant or unknown id,
+	// so it does not disclose whether the agent exists.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, req.AgentID, orgID, agentOrgID) == nil {
+		return nil
+	}
+
 	ns := &secrets.SecretNamespace{
 		AgentID:     req.AgentID,
 		Namespace:   req.Namespace,
@@ -192,6 +208,21 @@ func (h *SecretsHandler) ListNamespaces(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(agentIDStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid agentId format"})
+	}
+
+	// SECURITY: agentId arrives as a QUERY PARAMETER and was previously used without any
+	// org check — this handler did not even read the caller's organization. Any
+	// authenticated user could list another organization's agent's secret namespaces by
+	// naming its UUID.
+	//
+	// The tenant-scope lint watches c.Params, not c.Query, which is why this route did not
+	// trip it. That is selection bias in the lint, not evidence the handler was safe.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	namespaces, err := h.secretsService.ListNamespaces(agentID)
@@ -372,6 +403,17 @@ func (h *SecretsHandler) GetAuditLog(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(agentIDStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid agentId format"})
+	}
+
+	// SECURITY: same defect as ListNamespaces — agentId from a query parameter, used with
+	// no org check. This one returns the secrets AUDIT LOG for that agent, so it disclosed
+	// another organization's credential-access history.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if LoadOwned(c, h.agentRepo.GetByID, agentID, orgID, agentOrgID) == nil {
+		return nil
 	}
 
 	var since *time.Time

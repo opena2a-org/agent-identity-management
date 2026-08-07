@@ -131,9 +131,9 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentId":   agentID,
-			"cardUrl":   req.CardURL,
-			"skills":    resp.Skills,
+			"agentId": agentID,
+			"cardUrl": req.CardURL,
+			"skills":  resp.Skills,
 		},
 	)
 
@@ -216,16 +216,16 @@ func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentId":           agentID,
+			"agentId":            agentID,
 			"attestationExpires": card.AttestationExpiresAt,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"cardId":              card.ID,
-		"agentId":             card.AgentID,
+		"cardId":             card.ID,
+		"agentId":            card.AgentID,
 		"attestationExpires": card.AttestationExpiresAt,
-		"message":             "Attestation refreshed successfully",
+		"message":            "Attestation refreshed successfully",
 	})
 }
 
@@ -307,17 +307,17 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 
 	if !result.Valid {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"valid":  false,
-			"error":  result.Error,
+			"valid": false,
+			"error": result.Error,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"valid":             true,
-		"agentId":           result.AgentID,
-		"agentName":         result.AgentName,
-		"trustScore":        result.TrustScore,
-		"capabilities":      result.Capabilities,
+		"valid":            true,
+		"agentId":          result.AgentID,
+		"agentName":        result.AgentName,
+		"trustScore":       result.TrustScore,
+		"capabilities":     result.Capabilities,
 		"attestationValid": result.AttestationValid,
 	})
 }
@@ -492,7 +492,16 @@ func (h *A2AHandler) ListTasks(c fiber.Ctx) error {
 	}
 	state := c.Query("state")
 
-	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), agentID, state, limit, offset)
+	// SECURITY: scope the listing to the caller's organization. Without this the handler
+	// listed every A2A task in the system to any authenticated user — no target id needed,
+	// paginated, whole-table. The a2a group authenticates but does not org-scope, and the
+	// repository query carried no organization predicate.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), orgID, agentID, state, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -514,12 +523,12 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 	// Accept SDK format with field name variations
 	var sdkReq struct {
 		// SDK format
-		TargetAgentID   string `json:"targetAgentId"`
-		TaskID          string `json:"taskId"`
-		TaskType        string `json:"taskType"`
-		Status          string `json:"status"`
-		SkillID         string `json:"skillId"`
-		SdkClientAgent  string `json:"clientAgentId"` // SDK can also send clientAgentId as string
+		TargetAgentID  string `json:"targetAgentId"`
+		TaskID         string `json:"taskId"`
+		TaskType       string `json:"taskType"`
+		Status         string `json:"status"`
+		SkillID        string `json:"skillId"`
+		SdkClientAgent string `json:"clientAgentId"` // SDK can also send clientAgentId as string
 		// Internal format
 		ExternalTaskID string    `json:"externalTaskId"`
 		ContextID      string    `json:"contextId"`
@@ -773,9 +782,9 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"query":   query,
-		"skills":  skills,
-		"count":   len(skills),
+		"query":  query,
+		"skills": skills,
+		"count":  len(skills),
 	})
 }
 
@@ -942,6 +951,25 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid recipient agent ID",
 		})
+	}
+
+	// SECURITY: the grantor agent must belong to the caller's organization.
+	//
+	// Every input to this handler arrives as a query parameter and none of them was
+	// checked: userId, grantorAgentId, recipientAgentId and scope went straight to the
+	// repository. Any authenticated user could therefore probe whether a given user had
+	// granted a given consent between any two agents in any organization — a cross-tenant
+	// consent oracle, answerable one guess at a time.
+	//
+	// The grantor is the agent whose consent is being asserted, so it is the one that has
+	// to be ours. The recipient may legitimately be another organization's agent; that is
+	// what an A2A consent grant is for.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, grantorUUID, orgID) == nil {
+		return nil
 	}
 
 	hasConsent, err := h.a2aService.CheckConsent(c.Context(), userID, grantorUUID, recipientUUID, scope)
@@ -1198,9 +1226,9 @@ func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"message":         "Nonces cleaned up",
-		"deletedCount":   count,
-		"timestamp":       time.Now().UTC(),
+		"message":      "Nonces cleaned up",
+		"deletedCount": count,
+		"timestamp":    time.Now().UTC(),
 	})
 }
 

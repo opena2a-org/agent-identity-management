@@ -61,7 +61,7 @@ func (m *MockAgentServiceImpl) GetAgent(ctx context.Context, id uuid.UUID) (*dom
 	return nil, nil
 }
 
-func (m *MockAgentServiceImpl) GetAgentsByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+func (m *MockAgentServiceImpl) GetAgentsByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
 	if m.GetAgentsByIDsFunc != nil {
 		return m.GetAgentsByIDsFunc(ctx, ids)
 	}

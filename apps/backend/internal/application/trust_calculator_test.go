@@ -330,7 +330,7 @@ func (m *TrustCalcMockAgentRepository) GetStaleAgents(ctx context.Context, stale
 	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
 
-func (m *TrustCalcMockAgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+func (m *TrustCalcMockAgentRepository) GetByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
 	args := m.Called(ctx, ids)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)

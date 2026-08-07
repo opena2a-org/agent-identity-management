@@ -104,7 +104,7 @@ func (m *MockAgentRepository) GetStaleAgents(ctx context.Context, staleSince tim
 	return args.Get(0).([]*domain.Agent), args.Error(1)
 }
 
-func (m *MockAgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+func (m *MockAgentRepository) GetByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
 	args := m.Called(ctx, ids)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
