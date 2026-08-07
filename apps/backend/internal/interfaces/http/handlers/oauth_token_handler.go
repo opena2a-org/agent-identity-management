@@ -17,11 +17,15 @@ import (
 // OAuthTokenHandler handles the OAuth 2.0 token endpoint (RFC 6749)
 type OAuthTokenHandler struct {
 	jwtService *auth.JWTService
-	agentRepo  domain.AgentRepository
+	// agentRepo is the narrow read interface, not the whole domain.AgentRepository: this
+	// handler uses GetByID and nothing else, and a fourteen-method dependency is fourteen
+	// methods a test double must stub to exercise one branch. domain.AgentRepository
+	// satisfies it structurally, so production wiring is unchanged.
+	agentRepo AgentRepositoryer
 }
 
 // NewOAuthTokenHandler creates a new OAuth token handler
-func NewOAuthTokenHandler(jwtService *auth.JWTService, agentRepo domain.AgentRepository) *OAuthTokenHandler {
+func NewOAuthTokenHandler(jwtService *auth.JWTService, agentRepo AgentRepositoryer) *OAuthTokenHandler {
 	return &OAuthTokenHandler{
 		jwtService: jwtService,
 		agentRepo:  agentRepo,
