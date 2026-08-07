@@ -119,6 +119,18 @@ jobs:
             internal/infrastructure/repository \
             internal/application
 
+      # A `timestamp without time zone` column silently shifts the stored instant by the
+      # writing process's UTC offset — and, for DEFAULT NOW(), by the PostgreSQL session's.
+      # The baseline holds the declarations that predate migration 106 and must never grow.
+      - name: timestamptz-lint (naked TIMESTAMP guard)
+        run: |
+          LINT_TMP=$(mktemp -d -t timestamptz-lint.XXXXXX)
+          trap 'rm -rf "$LINT_TMP"' EXIT
+          go build -o "$LINT_TMP/timestamptz-lint" ./cmd/timestamptz-lint/
+          "$LINT_TMP/timestamptz-lint" \
+            --baseline cmd/timestamptz-lint/historical-baseline.txt \
+            migrations
+
       - name: Test with coverage
         run: |
           go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -367,12 +379,13 @@ jobs:
       # and the repository package were added for the same reason after the MCP
       # trust-score write-path fix; RevocationList + the handlers package were
       # added after the revocation list was found returning an empty list for
-      # every caller, which no test had ever asserted against.
+      # every caller, which no test had ever asserted against; NakedTimestamp
+      # was added with migration 106.
       - name: Assert integration tests were not skipped
         run: |
           set -o pipefail
           go test -tags=integration -v \
-            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription' \
+            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription|NakedTimestamp' \
             ./internal/application/... ./internal/interfaces/http/middleware/... \
             ./internal/infrastructure/repository/... \
             ./internal/interfaces/http/handlers/... 2>&1 | tee /tmp/integration.log
