@@ -67,21 +67,21 @@ func getNonceExpiryMinutes() int {
 
 // A2AService handles A2A (Agent-to-Agent) protocol operations
 type A2AService struct {
-	cardRepo          *repository.A2AAgentCardRepository
-	skillRepo         *repository.A2ASkillRepository
-	taskRepo          *repository.A2ATaskRepository
-	peerTrustRepo     *repository.A2APeerTrustRepository
-	consentRepo       *repository.A2AConsentRepository
-	trustScoreRepo    *repository.A2ATrustScoreRepository
-	nonceRepo         *repository.A2ARequestNonceRepository
-	policyRepo        *repository.A2APolicyRepository
-	attestationRepo   *repository.A2AAgentAttestationRepository
-	revokedRepo       *repository.A2ARevokedAgentRepository
-	securityRepo      *repository.A2ASecuritySettingsRepository
-	violationRepo     *repository.A2ASecurityViolationRepository
-	agentRepo         *repository.AgentRepository
-	keyVault          *crypto.KeyVault
-	httpClient        *http.Client
+	cardRepo        *repository.A2AAgentCardRepository
+	skillRepo       *repository.A2ASkillRepository
+	taskRepo        *repository.A2ATaskRepository
+	peerTrustRepo   *repository.A2APeerTrustRepository
+	consentRepo     *repository.A2AConsentRepository
+	trustScoreRepo  *repository.A2ATrustScoreRepository
+	nonceRepo       *repository.A2ARequestNonceRepository
+	policyRepo      *repository.A2APolicyRepository
+	attestationRepo *repository.A2AAgentAttestationRepository
+	revokedRepo     *repository.A2ARevokedAgentRepository
+	securityRepo    *repository.A2ASecuritySettingsRepository
+	violationRepo   *repository.A2ASecurityViolationRepository
+	agentRepo       *repository.AgentRepository
+	keyVault        *crypto.KeyVault
+	httpClient      *http.Client
 }
 
 // NewA2AService creates a new A2A service
@@ -141,11 +141,11 @@ type RegisterAgentCardRequest struct {
 
 // RegisterAgentCardResponse is the response after registering an agent card
 type RegisterAgentCardResponse struct {
-	CardID             uuid.UUID  `json:"cardId"`
-	AgentID            uuid.UUID  `json:"agentId"`
-	CardURL            string     `json:"cardUrl"`
-	AttestationExpires time.Time  `json:"attestationExpires"`
-	Skills             []string   `json:"skills"`
+	CardID             uuid.UUID `json:"cardId"`
+	AgentID            uuid.UUID `json:"agentId"`
+	CardURL            string    `json:"cardUrl"`
+	AttestationExpires time.Time `json:"attestationExpires"`
+	Skills             []string  `json:"skills"`
 }
 
 // RegisterAgentCard registers an A2A agent card and creates AIM attestation
@@ -661,11 +661,11 @@ func (s *A2AService) ListA2ATasks(ctx context.Context, agentID *uuid.UUID, state
 
 // LogA2ATaskRequest is the request to log an A2A task
 type LogA2ATaskRequest struct {
-	ExternalTaskID string       `json:"externalTaskId"`
-	ContextID      string       `json:"contextId"`
-	ClientAgentID  uuid.UUID    `json:"clientAgentId"`
-	RemoteAgentID  uuid.UUID    `json:"remoteAgentId"`
-	SkillID        string       `json:"skillId"`
+	ExternalTaskID string    `json:"externalTaskId"`
+	ContextID      string    `json:"contextId"`
+	ClientAgentID  uuid.UUID `json:"clientAgentId"`
+	RemoteAgentID  uuid.UUID `json:"remoteAgentId"`
+	SkillID        string    `json:"skillId"`
 }
 
 // LogA2ATask logs an A2A task for audit trail
@@ -756,18 +756,18 @@ func (s *A2AService) UpdateA2ATaskState(
 
 // RecordConsentRequest is the request to record user consent
 type RecordConsentRequest struct {
-	UserID           string    `json:"userId"`
+	UserID           string     `json:"userId"`
 	OrganizationID   *uuid.UUID `json:"organizationId"`
-	GrantorAgentID   uuid.UUID `json:"grantorAgentId"`
-	RecipientAgentID uuid.UUID `json:"recipientAgentId"`
-	Scope            []string  `json:"scope"`
-	Purpose          string    `json:"purpose"`
-	DataTypes        []string  `json:"dataTypes"`
-	ExpiresInHours   int       `json:"expiresInHours"`
-	ConsentMethod    string    `json:"consentMethod"`
-	Evidence         string    `json:"evidence"`
-	IPAddress        string    `json:"ipAddress"`
-	UserAgent        string    `json:"userAgent"`
+	GrantorAgentID   uuid.UUID  `json:"grantorAgentId"`
+	RecipientAgentID uuid.UUID  `json:"recipientAgentId"`
+	Scope            []string   `json:"scope"`
+	Purpose          string     `json:"purpose"`
+	DataTypes        []string   `json:"dataTypes"`
+	ExpiresInHours   int        `json:"expiresInHours"`
+	ConsentMethod    string     `json:"consentMethod"`
+	Evidence         string     `json:"evidence"`
+	IPAddress        string     `json:"ipAddress"`
+	UserAgent        string     `json:"userAgent"`
 }
 
 // RecordConsent records user consent for cross-agent data sharing
@@ -835,13 +835,18 @@ func (s *A2AService) ListUserConsents(ctx context.Context, userID string, orgID 
 }
 
 // ListAllConsents lists all consent records with pagination
-func (s *A2AService) ListAllConsents(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
-	return s.consentRepo.ListAll(ctx, limit, offset)
+// ListAllConsents lists consent records belonging to orgID. SECURITY: orgID is
+// required; without it any authenticated caller could page every tenant's
+// consent records off GET /api/v1/a2a/consents.
+func (s *A2AService) ListAllConsents(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
+	return s.consentRepo.ListAll(ctx, orgID, limit, offset)
 }
 
 // ListAllTrustScores lists all A2A trust scores with pagination
-func (s *A2AService) ListAllTrustScores(ctx context.Context, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
-	return s.trustScoreRepo.ListAll(ctx, limit, offset)
+// ListAllTrustScores lists A2A trust scores for agents in orgID. SECURITY:
+// orgID is required; see ListAllConsents.
+func (s *A2AService) ListAllTrustScores(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
+	return s.trustScoreRepo.ListAll(ctx, orgID, limit, offset)
 }
 
 // ============================================================================
