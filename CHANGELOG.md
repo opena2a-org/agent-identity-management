@@ -13,6 +13,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Security
 
+- `GET /api/v1/a2a/consents` and `GET /api/v1/a2a/trust-scores` returned every
+  organization's rows to any authenticated caller. Neither query carried an
+  `organization_id` predicate and neither route carried a role middleware, unlike
+  its neighbours on the same group, so one tenant's token read every tenant's
+  consent records — `userId`, `purpose`, `dataTypes`, both agent IDs, `userAgent`
+  — and every tenant's agent IDs and behavioural metrics. `limit` was
+  caller-controlled with no upper bound, so a single request could page the whole
+  table. Both queries are now scoped to the caller's organization; the trust-score
+  query reaches the boundary by joining `agents`, since `a2a_trust_scores` has no
+  organization column of its own. Present since the A2A routes were introduced.
+- The row COUNT on both endpoints is scoped as well, not just the rows. An
+  unscoped total tells a caller how much data every other tenant holds without
+  returning a single row, so scoping the rows alone would have left a cardinality
+  disclosure behind.
 - `GET /api/v1/a2a/consent/check` was a cross-tenant consent oracle. The query
   matched on `user_id`, `grantor_agent_id`, `recipient_agent_id` and `scope` and
   carried no organization predicate, so its answer described any row in the
