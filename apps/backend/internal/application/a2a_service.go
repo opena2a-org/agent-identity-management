@@ -834,7 +834,6 @@ func (s *A2AService) ListUserConsents(ctx context.Context, userID string, orgID 
 	return s.consentRepo.ListByUser(ctx, userID, orgID, includeRevoked)
 }
 
-// ListAllConsents lists all consent records with pagination
 // ListAllConsents lists consent records belonging to orgID. SECURITY: orgID is
 // required; without it any authenticated caller could page every tenant's
 // consent records off GET /api/v1/a2a/consents.
@@ -842,7 +841,6 @@ func (s *A2AService) ListAllConsents(ctx context.Context, orgID uuid.UUID, limit
 	return s.consentRepo.ListAll(ctx, orgID, limit, offset)
 }
 
-// ListAllTrustScores lists all A2A trust scores with pagination
 // ListAllTrustScores lists A2A trust scores for agents in orgID. SECURITY:
 // orgID is required; see ListAllConsents.
 func (s *A2AService) ListAllTrustScores(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
