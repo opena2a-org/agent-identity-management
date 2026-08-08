@@ -574,7 +574,7 @@ type A2AConsentRepository interface {
 	Create(ctx context.Context, consent *A2AConsentRecord) error
 	GetByID(ctx context.Context, id uuid.UUID) (*A2AConsentRecord, error)
 	CheckConsent(ctx context.Context, userID string, grantorID, recipientID uuid.UUID, scope string) (bool, error)
-	ListByUser(ctx context.Context, userID string, includeRevoked bool) ([]*A2AConsentRecord, error)
+	ListByUser(ctx context.Context, userID string, orgID uuid.UUID, includeRevoked bool) ([]*A2AConsentRecord, error)
 	// ListAll is org-scoped despite the name. orgID is required; see the
 	// implementation comment for why an unscoped variant must not exist.
 	ListAll(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2AConsentRecord, int, error)

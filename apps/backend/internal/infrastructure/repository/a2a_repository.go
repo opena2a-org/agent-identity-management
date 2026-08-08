@@ -1268,6 +1268,13 @@ type A2AConsentRepository struct {
 	db *sql.DB
 }
 
+// The interface carries the org-scoping contract in its doc comments, so bind
+// it to the implementation. Without this assertion nothing referenced the
+// interface as a type and it had already drifted -- it declared ListByUser
+// without the orgID the implementation has taken since PR #149, so a comment
+// promising a required organization parameter was enforcing nothing.
+var _ domain.A2AConsentRepository = (*A2AConsentRepository)(nil)
+
 // NewA2AConsentRepository creates a new A2AConsentRepository
 func NewA2AConsentRepository(db *sql.DB) *A2AConsentRepository {
 	return &A2AConsentRepository{db: db}
@@ -1706,6 +1713,10 @@ func parseIP(s string) net.IP {
 type A2ATrustScoreRepository struct {
 	db *sql.DB
 }
+
+// See the note on A2AConsentRepository: the assertion is what makes the
+// interface's org-scoping comment binding.
+var _ domain.A2ATrustScoreRepository = (*A2ATrustScoreRepository)(nil)
 
 // NewA2ATrustScoreRepository creates a new A2ATrustScoreRepository
 func NewA2ATrustScoreRepository(db *sql.DB) *A2ATrustScoreRepository {

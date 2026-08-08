@@ -671,6 +671,19 @@ func scanCollectionDirectory(dir string) ([]violation, error) {
 // "ListAll" must accept a uuid.UUID parameter with an organization-ish name. A
 // genuinely global lister goes on collectionScopeAllowlist with a written
 // justification, the same as every other exemption here.
+//
+// KNOWN LIMIT, stated so nobody reads a green run as more than it is. The
+// "ListAll" prefix is a NAMING convention, not the shape of the defect, so this
+// check is a regression guard for the two methods above and not yet a guard for
+// the class. Every same-shape method that happens to be named differently is
+// invisible to it -- A2AService.ListAgentCards and A2AService.ListA2ATasks are
+// both on this very service, both return a whole collection with no
+// organization parameter, and both pass this check today.
+//
+// The predicate that would cover the class is "returns a slice or map AND takes
+// no organization parameter". It is not enabled here because it fires across
+// the package and every hit needs triage into either a fix or an allowlist
+// entry -- that is its own change, not a rider on this one.
 func scanCollectionFile(fset *token.FileSet, file *ast.File, path string) []violation {
 	var out []violation
 	for _, decl := range file.Decls {
