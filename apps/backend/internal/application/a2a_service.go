@@ -255,9 +255,11 @@ func (s *A2AService) GetAgentCard(ctx context.Context, agentID uuid.UUID) (*doma
 	return s.cardRepo.GetByAgentID(ctx, agentID)
 }
 
-// ListAgentCards returns all valid agent cards with pagination
-func (s *A2AService) ListAgentCards(ctx context.Context, limit, offset int) ([]*domain.A2AAgentCard, error) {
-	return s.cardRepo.GetValidCards(ctx, limit, offset)
+// ListAgentCards returns valid agent cards belonging to orgID. SECURITY: orgID
+// is required; without it any authenticated caller could page every tenant's
+// agent cards off GET /api/v1/a2a/cards.
+func (s *A2AService) ListAgentCards(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2AAgentCard, error) {
+	return s.cardRepo.GetValidCards(ctx, orgID, limit, offset)
 }
 
 // GetEnhancedAgentCard returns the agent card with AIM extensions

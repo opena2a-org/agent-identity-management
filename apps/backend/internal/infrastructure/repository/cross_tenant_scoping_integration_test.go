@@ -275,3 +275,112 @@ func seedA2AConsent(t *testing.T, db *sql.DB, ctx context.Context, orgID, granto
 		userID, orgID, grantor, recipient)
 	require.NoError(t, err)
 }
+
+// GET /api/v1/a2a/cards returned every tenant's agent cards. The only predicate
+// was is_valid = TRUE, so card_url, the full card_data document, agent_id and
+// attestation_signature crossed the organization boundary to any authenticated
+// caller. a2a_agent_cards has no organization_id of its own, so the boundary is
+// reached by joining agents -- this test is what proves that join is present and
+// filters on the right side.
+func TestCrossTenantAgentCardsAreScopedToTheCallersOrg(t *testing.T) {
+	ctx := context.Background()
+	db := agentListTestDB(t)
+	repo := NewA2AAgentCardRepository(db)
+
+	mine := seedTenant(t, db, ctx, "mine")
+	theirs := seedTenant(t, db, ctx, "theirs")
+
+	// Asymmetric on purpose: one card for my org, two for theirs. Equal counts
+	// would let a wrong-but-plausible implementation look right by coincidence.
+	theirsSecondAgent := seedExtraAgent(t, db, ctx, theirs)
+	mineCard := seedAgentCard(t, db, ctx, mine.agentID, true)
+	theirsCard := seedAgentCard(t, db, ctx, theirs.agentID, true)
+	theirsCard2 := seedAgentCard(t, db, ctx, theirsSecondAgent, true)
+
+	cards, err := repo.GetValidCards(ctx, mine.orgID, 100, 0)
+	require.NoError(t, err)
+
+	got := make(map[uuid.UUID]bool, len(cards))
+	for _, c := range cards {
+		got[c.ID] = true
+	}
+
+	assert.True(t, got[mineCard], "control: my own agent card must be listed")
+	assert.False(t, got[theirsCard],
+		"another organization's agent card was returned to a caller who asked for nothing but a page")
+	assert.False(t, got[theirsCard2],
+		"another organization's second agent card was returned")
+	assert.Len(t, cards, 1, "org mine owns exactly one valid card")
+
+	// The boundary must hold from the other side too, so the test cannot pass on
+	// an implementation that hardcodes or mixes up the parameter.
+	theirCards, err := repo.GetValidCards(ctx, theirs.orgID, 100, 0)
+	require.NoError(t, err)
+	assert.Len(t, theirCards, 2, "org theirs owns exactly two valid cards")
+
+	// An organization with no cards sees nothing.
+	none, err := repo.GetValidCards(ctx, uuid.New(), 100, 0)
+	require.NoError(t, err)
+	assert.Empty(t, none)
+}
+
+// The org predicate must not have displaced the is_valid filter it was added
+// alongside. A fix that scoped by organization and quietly started returning
+// invalid cards would pass every assertion above.
+func TestCrossTenantAgentCardsStillExcludeInvalidOnes(t *testing.T) {
+	ctx := context.Background()
+	db := agentListTestDB(t)
+	repo := NewA2AAgentCardRepository(db)
+
+	mine := seedTenant(t, db, ctx, "mine")
+	secondAgent := seedExtraAgent(t, db, ctx, mine)
+
+	validCard := seedAgentCard(t, db, ctx, mine.agentID, true)
+	invalidCard := seedAgentCard(t, db, ctx, secondAgent, false)
+
+	cards, err := repo.GetValidCards(ctx, mine.orgID, 100, 0)
+	require.NoError(t, err)
+
+	got := make(map[uuid.UUID]bool, len(cards))
+	for _, c := range cards {
+		got[c.ID] = true
+	}
+	assert.True(t, got[validCard], "control: the valid card must be listed")
+	assert.False(t, got[invalidCard], "an invalid card was listed; the is_valid filter was lost")
+}
+
+// seedExtraAgent adds a second agent to an existing tenant and returns its id.
+func seedExtraAgent(t *testing.T, db *sql.DB, ctx context.Context, f tenantFixture) uuid.UUID {
+	t.Helper()
+
+	id := uuid.New()
+	t.Cleanup(func() { _, _ = db.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, id) })
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO agents (id, name, display_name, agent_type, created_by, organization_id)
+		 VALUES ($1, $2, $2, 'service', $3, $4)`,
+		id, "extra-agent-"+id.String()[:8], f.userID, f.orgID)
+	require.NoError(t, err)
+
+	return id
+}
+
+// seedAgentCard inserts one agent card for an agent and returns its id.
+func seedAgentCard(t *testing.T, db *sql.DB, ctx context.Context, agentID uuid.UUID, valid bool) uuid.UUID {
+	t.Helper()
+
+	id := uuid.New()
+	t.Cleanup(func() { _, _ = db.ExecContext(ctx, `DELETE FROM a2a_agent_cards WHERE id = $1`, id) })
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO a2a_agent_cards
+		   (id, agent_id, card_url, card_data, card_hash, is_valid, attestation_signature)
+		 VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)`,
+		id, agentID,
+		"https://cards.example.invalid/"+id.String()[:8],
+		`{"name":"scoping-test","url":"https://example.invalid"}`,
+		id.String()[:16], valid, "sig-"+id.String()[:16])
+	require.NoError(t, err)
+
+	return id
+}
