@@ -91,23 +91,61 @@ jobs:
           gh label create "$LABEL" --color B60205 \
             --description "Sync to aim-cloud is skipping; commits are not reaching the hosted product" 2>/dev/null || true
 
-          # One line, so a multi-line commit message cannot break the markdown
-          # list or inject headings into the issue body. head_commit is absent on
-          # workflow_dispatch, so fall back rather than emitting a bare dash.
-          SUBJECT=$(printf '%s' "${COMMIT_TITLE}" | head -1)
-          [ -z "$SUBJECT" ] && SUBJECT="(manual run; no commit message)"
+          # The commit message is attacker-controllable, so it is treated as untrusted text
+          # on the one surface it actually reaches: a markdown issue body we publish.
+          #
+          # It is NOT a shell-injection vector, and the sanitising below is not what makes
+          # it safe. The message reaches this script only as the COMMIT_TITLE env var
+          # declared above, never as a `${{ }}` interpolation into the script body, so the
+          # shell never re-parses its value -- parameter expansion of a value is not
+          # rescanned for command substitution. Do not relabel the line below as an
+          # injection fix; a false security claim is itself a defect.
+          #
+          # head -1 keeps a multi-line message from breaking the markdown list or injecting
+          # headings; head_commit is absent on workflow_dispatch. The `tr -d` drops the
+          # bytes that would corrupt the rendered body or manufacture a notification:
+          # backtick and $ (code spans), @ (user and team mentions), <> (raw HTML), []
+          # and () (links). Deleting an explicit set of ASCII bytes is UTF-8-safe; a
+          # complement class (tr -c) is NOT -- it would shred multi-byte characters into
+          # invalid sequences and the API would reject the body. The 200-char cap keeps the
+          # body inside the API limit; ${SOURCE_SHA} sits next to it and is the
+          # authoritative identifier, so lossiness in the subject costs nothing.
+          SUBJECT=$(printf '%s' "${COMMIT_TITLE}" | head -1 | tr -d '`$@<>[]()')
+          SUBJECT=${SUBJECT:0:200}
+          if [ -z "$SUBJECT" ]; then
+            if [ -z "${COMMIT_TITLE}" ]; then
+              SUBJECT="(manual run; no commit message)"
+            else
+              # Distinguish these: reporting a real push as a manual run would misdescribe
+              # which commit is unsynced.
+              SUBJECT="(commit subject omitted; no renderable characters)"
+            fi
+          fi
 
-          existing=$(gh issue list --label "$LABEL" --state open \
-                       --json number -q '.[0].number' 2>/dev/null || true)
+          # A failed query must not read as "no open issue". That routes to the create path
+          # and files a duplicate on every run. Unknown is not the same as absent.
+          if ! existing=$(gh issue list --label "$LABEL" --state open \
+                            --json number -q '.[0].number'); then
+            echo "::error title=Sync alert not filed::could not query existing alert issues on ${GH_REPO}; the skipped sync is now UNRECORDED"
+            exit 1
+          fi
 
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body \
-              "Still skipping as of $(date -u '+%Y-%m-%d %H:%M UTC'). Also not synced: \`${SOURCE_SHA}\` — ${SUBJECT}. Run: ${RUN_URL}"
+            # `set -uo pipefail` carries no -e, so an unchecked gh failure here would print
+            # the success line below and exit 0 -- the alert channel failing silently, which
+            # is the exact defect this step exists to close. Check it explicitly.
+            if ! gh issue comment "$existing" --body \
+              "Still skipping as of $(date -u '+%Y-%m-%d %H:%M UTC'). Also not synced: \`${SOURCE_SHA}\` — ${SUBJECT}. Run: ${RUN_URL}"; then
+              echo "::error title=Sync alert not filed::could not append ${SOURCE_SHA} to alert issue #${existing}; the skipped sync is now UNRECORDED"
+              exit 1
+            fi
             echo "appended ${SOURCE_SHA} to existing alert #${existing}"
             exit 0
           fi
 
-          gh issue create --label "$LABEL" \
+          # Same reason as the comment path: an unchecked failure here would print
+          # "filed a new alert issue" and exit 0 with nothing filed.
+          if ! gh issue create --label "$LABEL" \
             --title "Sync to aim-cloud is skipping; commits are not reaching the hosted product" \
             --body "$(printf '%s\n' \
               "The sync to \`opena2a-org/aim-cloud\` skipped its preflight, so this commit was" \
@@ -136,7 +174,10 @@ jobs:
               "\`\`\`" \
               "" \
               "Each further skipped commit is appended as a comment, so this issue is the backlog." \
-              "Close it once the token works AND the listed commits have reached cloud.")"
+              "Close it once the token works AND the listed commits have reached cloud.")"; then
+            echo "::error title=Sync alert not filed::could not create the alert issue on ${GH_REPO} for ${SOURCE_SHA}; the skipped sync is now UNRECORDED"
+            exit 1
+          fi
           echo "filed a new alert issue for ${SOURCE_SHA}"
 
       - name: Checkout target (aim-cloud)
