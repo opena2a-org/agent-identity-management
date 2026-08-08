@@ -207,3 +207,71 @@ func seedA2ATask(t *testing.T, db *sql.DB, ctx context.Context, clientAgent, rem
 
 	return id
 }
+
+// CheckConsent must answer only about the caller's own organization.
+//
+// The query matched on user_id, grantor_agent_id, recipient_agent_id and scope
+// and nothing else, so its boolean described any row in the table whatever org
+// owned it. user_id is what makes that sharp: an unvalidated VARCHAR(200) with
+// no ownership relation to anything, filtered on directly, so a caller who
+// guesses one gets a yes/no about another tenant's consent state.
+func TestCrossTenantConsentCheckIsScopedToTheCallersOrg(t *testing.T) {
+	ctx := context.Background()
+	db := agentListTestDB(t)
+	repo := NewA2AConsentRepository(db)
+
+	mine := seedTenant(t, db, ctx, "mine")
+	theirs := seedTenant(t, db, ctx, "theirs")
+
+	const userID = "consent-oracle-subject"
+	seedA2AConsent(t, db, ctx, theirs.orgID, theirs.agentID, theirs.agentID, userID)
+
+	// The caller knows every matching value except the organization. Before the
+	// predicate that was enough.
+	got, err := repo.CheckConsent(ctx, mine.orgID, userID, theirs.agentID, theirs.agentID, "pii")
+	require.NoError(t, err)
+	assert.False(t, got,
+		"CheckConsent answered true about another organization's consent record; the boolean is a cross-tenant oracle")
+
+	// Control, so the test cannot pass by always returning false.
+	got, err = repo.CheckConsent(ctx, theirs.orgID, userID, theirs.agentID, theirs.agentID, "pii")
+	require.NoError(t, err)
+	assert.True(t, got, "control: the owning organization must still see its own consent")
+}
+
+// Over-scoping guard: the RECIPIENT may be another organization's agent. That
+// is the entire purpose of cross-agent consent, so a fix that scoped the
+// recipient too would break the feature. This test fails if someone adds it.
+func TestCrossTenantConsentCheckAllowsCrossOrgRecipient(t *testing.T) {
+	ctx := context.Background()
+	db := agentListTestDB(t)
+	repo := NewA2AConsentRepository(db)
+
+	mine := seedTenant(t, db, ctx, "mine")
+	theirs := seedTenant(t, db, ctx, "theirs")
+
+	const userID = "cross-org-consent-subject"
+	seedA2AConsent(t, db, ctx, mine.orgID, mine.agentID, theirs.agentID, userID)
+
+	got, err := repo.CheckConsent(ctx, mine.orgID, userID, mine.agentID, theirs.agentID, "pii")
+	require.NoError(t, err)
+	assert.True(t, got,
+		"a consent grant naming another organization's agent as recipient was not found by its owner; the scoping is too tight")
+}
+
+// seedA2AConsent inserts one live consent record owned by orgID.
+func seedA2AConsent(t *testing.T, db *sql.DB, ctx context.Context, orgID, grantor, recipient uuid.UUID, userID string) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM a2a_consent_records WHERE organization_id = $1`, orgID)
+	})
+
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO a2a_consent_records
+		   (user_id, organization_id, grantor_agent_id, recipient_agent_id,
+		    scope, purpose, data_types, consent_method)
+		 VALUES ($1, $2, $3, $4, '["pii"]'::jsonb, 'scoping test', '["email"]'::jsonb, 'api')`,
+		userID, orgID, grantor, recipient)
+	require.NoError(t, err)
+}

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -899,6 +900,16 @@ func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
 
 	consent, err := h.a2aService.RecordConsent(c.Context(), req)
 	if err != nil {
+		// A grantor the caller does not own is a client error, not a backend
+		// fault. 404 rather than 403 because the service collapses "no such
+		// agent" and "not yours" into one sentinel on purpose — a 403 would
+		// confirm the id exists somewhere, which is the enumeration oracle the
+		// check exists to close.
+		if errors.Is(err, application.ErrConsentGrantorNotOwned) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Grantor agent not found",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -972,7 +983,13 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 		return nil
 	}
 
-	hasConsent, err := h.a2aService.CheckConsent(c.Context(), userID, grantorUUID, recipientUUID, scope)
+	// orgID also goes to the query, which is what actually bounds the read. The
+	// ownership check above is defence in depth: it guards this route, while the
+	// predicate guards the repository method against its next caller. It is also
+	// the weaker of the two on its own, because it constrains the grantor while
+	// leaving userId — an unvalidated string with no ownership relation to
+	// anything — free to range across organizations.
+	hasConsent, err := h.a2aService.CheckConsent(c.Context(), orgID, userID, grantorUUID, recipientUUID, scope)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

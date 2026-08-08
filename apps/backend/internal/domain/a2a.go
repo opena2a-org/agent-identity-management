@@ -573,7 +573,9 @@ type A2APeerTrustRepository interface {
 type A2AConsentRepository interface {
 	Create(ctx context.Context, consent *A2AConsentRecord) error
 	GetByID(ctx context.Context, id uuid.UUID) (*A2AConsentRecord, error)
-	CheckConsent(ctx context.Context, userID string, grantorID, recipientID uuid.UUID, scope string) (bool, error)
+	// CheckConsent is org-scoped: callerOrgID is required, and the recipient is
+	// deliberately not constrained to it (cross-org consent is the feature).
+	CheckConsent(ctx context.Context, callerOrgID uuid.UUID, userID string, grantorID, recipientID uuid.UUID, scope string) (bool, error)
 	ListByUser(ctx context.Context, userID string, includeRevoked bool) ([]*A2AConsentRecord, error)
 	ListAll(ctx context.Context, limit, offset int) ([]*A2AConsentRecord, int, error)
 	Revoke(ctx context.Context, id uuid.UUID, reason string) error
