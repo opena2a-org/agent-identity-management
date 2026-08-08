@@ -273,7 +273,7 @@ type SecurityServicerForAnalytics interface {
 type AgentServicerForVerification interface {
 	AgentServicer
 	CreateSecurityAlert(ctx context.Context, alert *domain.Alert) error
-	GetAgentsByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error)
+	GetAgentsByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error)
 }
 
 // AuditServicerForVerification extends AuditServicer with Log method for VerificationHandler

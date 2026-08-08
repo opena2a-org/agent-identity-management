@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -492,7 +493,16 @@ func (h *A2AHandler) ListTasks(c fiber.Ctx) error {
 	}
 	state := c.Query("state")
 
-	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), agentID, state, limit, offset)
+	// SECURITY: scope the listing to the caller's organization. Without this the handler
+	// listed every A2A task in the system to any authenticated user — no target id needed,
+	// paginated, whole-table. The a2a group authenticates but does not org-scope, and the
+	// repository query carried no organization predicate.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
+	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), orgID, agentID, state, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -890,6 +900,16 @@ func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
 
 	consent, err := h.a2aService.RecordConsent(c.Context(), req)
 	if err != nil {
+		// A grantor the caller does not own is a client error, not a backend
+		// fault. 404 rather than 403 because the service collapses "no such
+		// agent" and "not yours" into one sentinel on purpose — a 403 would
+		// confirm the id exists somewhere, which is the enumeration oracle the
+		// check exists to close.
+		if errors.Is(err, application.ErrConsentGrantorNotOwned) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "Grantor agent not found",
+			})
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -944,7 +964,32 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 		})
 	}
 
-	hasConsent, err := h.a2aService.CheckConsent(c.Context(), userID, grantorUUID, recipientUUID, scope)
+	// SECURITY: the grantor agent must belong to the caller's organization.
+	//
+	// Every input to this handler arrives as a query parameter and none of them was
+	// checked: userId, grantorAgentId, recipientAgentId and scope went straight to the
+	// repository. Any authenticated user could therefore probe whether a given user had
+	// granted a given consent between any two agents in any organization — a cross-tenant
+	// consent oracle, answerable one guess at a time.
+	//
+	// The grantor is the agent whose consent is being asserted, so it is the one that has
+	// to be ours. The recipient may legitimately be another organization's agent; that is
+	// what an A2A consent grant is for.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, grantorUUID, orgID) == nil {
+		return nil
+	}
+
+	// orgID also goes to the query, which is what actually bounds the read. The
+	// ownership check above is defence in depth: it guards this route, while the
+	// predicate guards the repository method against its next caller. It is also
+	// the weaker of the two on its own, because it constrains the grantor while
+	// leaving userId — an unvalidated string with no ownership relation to
+	// anything — free to range across organizations.
+	hasConsent, err := h.a2aService.CheckConsent(c.Context(), orgID, userID, grantorUUID, recipientUUID, scope)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

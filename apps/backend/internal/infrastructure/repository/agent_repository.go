@@ -1239,21 +1239,42 @@ func (r *AgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Ti
 }
 
 // GetByIDs returns agents matching the given IDs
-func (r *AgentRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+// GetByIDs returns the agents among ids that belong to callerOrgID.
+//
+// SECURITY: callerOrgID is REQUIRED and the predicate runs in SQL. This query was
+// `FROM agents WHERE id IN (...)` with no organization filter while selecting
+// organization_id, and its only caller — POST /api/v1/agents/bulk-status — returned status,
+// trust score and last-active for whatever ids the CALLER put in the request body. Any
+// authenticated user could read those fields for any agent in any organization by naming
+// its UUID.
+//
+// Filtering after the load would be worse than useless here: it would still pull other
+// organizations' rows into this process, and the next caller to forget the filter gets the
+// unfiltered set. Ids belonging to another organization are simply absent from the result,
+// which is also the correct answer for an id that does not exist — a caller cannot tell the
+// two apart, so this does not become an existence oracle.
+func (r *AgentRepository) GetByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
+	// Fail closed: a uuid.Nil caller org means the auth chain did not populate it and the
+	// handler proceeded anyway. Matching Nil against real rows would disclose them.
+	if callerOrgID == uuid.Nil {
+		return nil, fmt.Errorf("agent lookup requires a caller organization")
+	}
 	// Build query with proper placeholders
 	placeholders := make([]string, len(ids))
-	args := make([]interface{}, len(ids))
+	args := make([]interface{}, 0, len(ids)+1)
 	for i, id := range ids {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
-		args[i] = id
+		args = append(args, id)
 	}
+	args = append(args, callerOrgID)
 	query := fmt.Sprintf(`
 		SELECT id, organization_id, name, display_name, status, agent_type, COALESCE(trust_score, 0),
 		       last_heartbeat, last_active, created_at, updated_at
-		FROM agents WHERE id IN (%s)`, strings.Join(placeholders, ","))
+		FROM agents WHERE id IN (%s) AND organization_id = $%d`,
+		strings.Join(placeholders, ","), len(ids)+1)
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

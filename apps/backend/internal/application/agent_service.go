@@ -2527,7 +2527,10 @@ func (s *AgentService) RecordHeartbeat(ctx context.Context, agentID uuid.UUID) (
 	return agent, nil
 }
 
-// GetAgentsByIDs returns agents matching the given IDs with status and trust info
-func (s *AgentService) GetAgentsByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
-	return s.agentRepo.GetByIDs(ctx, ids)
+// GetAgentsByIDs returns the agents among ids that belong to callerOrgID.
+//
+// SECURITY: callerOrgID is threaded through to the repository, where the predicate runs in
+// SQL. It is a required parameter rather than an optional filter so a caller cannot omit it.
+func (s *AgentService) GetAgentsByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
+	return s.agentRepo.GetByIDs(ctx, callerOrgID, ids)
 }

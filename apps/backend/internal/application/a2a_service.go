@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,13 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
+
+// ErrConsentGrantorNotOwned is returned when a consent record names a grantor
+// the caller's organization does not own. It deliberately covers both "no such
+// agent" and "that agent belongs to someone else": telling those apart would
+// answer whether an arbitrary agent id exists, for agents the caller cannot
+// otherwise see.
+var ErrConsentGrantorNotOwned = errors.New("grantor agent not found in this organization")
 
 // A2A Configuration Constants
 const (
@@ -655,8 +663,8 @@ func (s *A2AService) ComputeA2ATrustScore(ctx context.Context, agentID uuid.UUID
 // ============================================================================
 
 // ListA2ATasks returns paginated A2A tasks with optional filters
-func (s *A2AService) ListA2ATasks(ctx context.Context, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
-	return s.taskRepo.ListTasks(ctx, agentID, state, limit, offset)
+func (s *A2AService) ListA2ATasks(ctx context.Context, callerOrgID uuid.UUID, agentID *uuid.UUID, state string, limit, offset int) ([]*domain.A2ATask, int, error) {
+	return s.taskRepo.ListTasks(ctx, callerOrgID, agentID, state, limit, offset)
 }
 
 // LogA2ATaskRequest is the request to log an A2A task
@@ -772,6 +780,41 @@ type RecordConsentRequest struct {
 
 // RecordConsent records user consent for cross-agent data sharing
 func (s *A2AService) RecordConsent(ctx context.Context, req RecordConsentRequest) (*domain.A2AConsentRecord, error) {
+	// SECURITY: the caller must own the grantor. This is the check that makes
+	// organization_id mean anything.
+	//
+	// The handler stamps organization_id from the caller's authenticated org,
+	// but both agent IDs come straight off the request body and the only
+	// constraint on them is a foreign key to agents(id) — which requires a real
+	// agent, not one of yours. So without this check a caller could name any
+	// organization's agent as grantor and have the row stamped with their own
+	// org, and organization_id would diverge from the grantor's org on every
+	// such write. Migration 097 asserts that ownership model when it backfills
+	// organization_id from the grantor's agent, but that is a one-time backfill
+	// of legacy NULL rows, not an enforced invariant. This is the enforcement.
+	//
+	// It lives at the service layer rather than the handler so the next caller
+	// of RecordConsent inherits it. A handler-only check protects one route.
+	if req.OrganizationID == nil || *req.OrganizationID == uuid.Nil {
+		return nil, ErrConsentGrantorNotOwned
+	}
+	// GetByIDs rather than GetByID, because the org predicate belongs in the
+	// query. GetByID would need the caller to compare organization_id after the
+	// fact, and it reports a missing agent as an untyped "agent not found"
+	// error — so a nonexistent grantor and a foreign one would come back
+	// distinguishable, which is the enumeration oracle this check exists to
+	// close. Here both are simply an empty result.
+	owned, err := s.agentRepo.GetByIDs(ctx, *req.OrganizationID, []uuid.UUID{req.GrantorAgentID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify consent grantor: %w", err)
+	}
+	if len(owned) == 0 {
+		return nil, ErrConsentGrantorNotOwned
+	}
+
+	// The RECIPIENT is deliberately not checked. Naming another organization's
+	// agent as recipient is what cross-agent consent is for.
+
 	var expiresAt *time.Time
 	if req.ExpiresInHours > 0 {
 		t := time.Now().UTC().Add(time.Duration(req.ExpiresInHours) * time.Hour)
@@ -803,14 +846,17 @@ func (s *A2AService) RecordConsent(ctx context.Context, req RecordConsentRequest
 	return consent, nil
 }
 
-// CheckConsent checks if consent exists for a specific scope
+// CheckConsent reports whether callerOrgID holds consent for a specific scope.
+// SECURITY: callerOrgID is required; see the repository method for why the
+// unscoped form was a cross-tenant oracle over user_id.
 func (s *A2AService) CheckConsent(
 	ctx context.Context,
+	callerOrgID uuid.UUID,
 	userID string,
 	grantorAgentID, recipientAgentID uuid.UUID,
 	scope string,
 ) (bool, error) {
-	return s.consentRepo.CheckConsent(ctx, userID, grantorAgentID, recipientAgentID, scope)
+	return s.consentRepo.CheckConsent(ctx, callerOrgID, userID, grantorAgentID, recipientAgentID, scope)
 }
 
 // RevokeConsent revokes a consent record

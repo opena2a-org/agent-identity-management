@@ -383,12 +383,15 @@ jobs:
       # was added with migration 106; A2AListAllTenantScope was added with the
       # A2A consent and trust-score org scoping, whose whole assertion is that
       # one tenant cannot see another's rows -- a silent skip there restores the
-      # defect green.
+      # defect green; ConsentGrantorOwnership was added with the RecordConsent
+      # grantor check, where one of the four asserts two rejection responses are
+      # indistinguishable, so a skip hides an enumeration oracle rather than a
+      # missing feature.
       - name: Assert integration tests were not skipped
         run: |
           set -o pipefail
           go test -tags=integration -v \
-            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription|NakedTimestamp|A2AListAllTenantScope' \
+            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription|NakedTimestamp|CrossTenant|ConsentGrantorOwnership|A2AListAllTenantScope' \
             ./internal/application/... ./internal/interfaces/http/middleware/... \
             ./internal/infrastructure/repository/... \
             ./internal/interfaces/http/handlers/... 2>&1 | tee /tmp/integration.log

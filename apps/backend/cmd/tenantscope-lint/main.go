@@ -49,6 +49,12 @@ var allowlist = map[string]string{
 	// reasoned about, and it was wrong about the code in both directions.
 	"LifecycleHandler.GetRevocationList": "unauthenticated federated CRL; cross-org by design, minimized to agentId + closed-set reason (see GetRevocationList doc comment)",
 
+	// Scoped, but not through LoadOwned — each verified individually. The lint recognises
+	// one mechanism; these use others, and "does not call the helper" is not "unscoped".
+	"A2AHandler.ListTasks":          "org-scoped in SQL: the handler passes RequireOrganizationID(c) to ListA2ATasks, and the repository query requires a row whose client or remote agent belongs to that org (a2a_tasks has no organization_id to filter on directly)",
+	"A2AHandler.GetPublicAgentCard": "intentionally public: serves /.well-known/agent.json, whose whole purpose is to be readable without credentials",
+	"APIKeyHandler.ListAPIKeys":     "org-scoped at the service layer: orgID comes from Locals and is passed to ListAPIKeys(ctx, orgID); the agent_id query parameter only filters that already-scoped result set in Go, so a foreign id yields an empty filter rather than a foreign key",
+
 	// ---------------------------------------------------------------
 	// AUDIT-BASELINE: pre-existing handlers that read c.Params("id"|
 	// "agent_id") without any visible OrganizationID reference. These
@@ -539,7 +545,21 @@ func bodyReadsTenantParam(fset *token.FileSet, body *ast.BlockStmt) (bool, int) 
 		if !ok {
 			return true
 		}
-		if sel.Sel == nil || sel.Sel.Name != "Params" {
+		// Watch Query as well as Params.
+		//
+		// The lint only ever looked at c.Params, and that was selection bias rather than a
+		// scoping decision: every cross-tenant handler found in the 2026 audit read its
+		// tenant identifier from somewhere else. SecretsHandler.ListNamespaces and
+		// GetAuditLog took `agentId` from c.Query; A2AHandler.ListTasks took it from
+		// c.Query and had no organization predicate anywhere in the stack;
+		// SecretsHandler.CreateNamespace and LifecycleHandler.BulkStatus took it from the
+		// request body. The lint reported green on all of them, for years, because it was
+		// looking at the one channel none of them used.
+		//
+		// A guard that watches the channel the defects do not use is not a weak guard, it
+		// is a guard that reports on something else. Body-bound fields are a third channel
+		// and are not covered here — see bodyBindsTenantField below.
+		if sel.Sel == nil || (sel.Sel.Name != "Params" && sel.Sel.Name != "Query") {
 			return true
 		}
 		if len(call.Args) == 0 {

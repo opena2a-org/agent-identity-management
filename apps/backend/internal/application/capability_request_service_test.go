@@ -259,7 +259,7 @@ func (m *MockAgentRepositoryForCapReq) UpdateLastActive(ctx context.Context, age
 func (m *MockAgentRepositoryForCapReq) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }
-func (m *MockAgentRepositoryForCapReq) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+func (m *MockAgentRepositoryForCapReq) GetByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
 	return nil, nil
 }
 

@@ -9,6 +9,16 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
+// AgentStatusReader is the single capability ServicePrincipalMiddleware needs: read an
+// agent so its status can be checked. Declared here, narrow, rather than taking the whole
+// domain.AgentRepository — the middleware uses one of its fourteen methods, and a
+// fourteen-method dependency is fourteen methods a test double has to stub to exercise one
+// branch. domain.AgentRepository satisfies this structurally, so production wiring is
+// unchanged.
+type AgentStatusReader interface {
+	GetByID(id uuid.UUID) (*domain.Agent, error)
+}
+
 // ServicePrincipalMiddleware authenticates a machine principal — an agent that
 // obtained a token from the OAuth token endpoint (RFC 7523 jwt-bearer).
 //
@@ -23,7 +33,13 @@ import (
 //
 // Must be registered BEFORE AuthMiddleware, which skips when auth_method is
 // already "service".
-func ServicePrincipalMiddleware(jwtService *auth.JWTService) fiber.Handler {
+//
+// SECURITY: takes an AgentStatusReader so it can gate on agents.status. The OAuth token endpoint
+// refuses to MINT a token for a revoked agent, but a token minted a moment before the
+// revocation stays cryptographically valid for its full hour. Revocation that only takes
+// effect at the next issuance is not revocation. A nil reader fails closed rather than
+// skipping the check, because the alternative is a wiring mistake that silently disables it.
+func ServicePrincipalMiddleware(jwtService *auth.JWTService, agents AgentStatusReader) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Leave already-authenticated requests alone.
 		if c.Locals("auth_method") != nil || c.Locals("authenticated_via") != nil {
@@ -75,6 +91,29 @@ func ServicePrincipalMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid organization ID in token",
+			})
+		}
+
+		// SECURITY: the agent must still be permitted to authenticate RIGHT NOW.
+		//
+		// Without this, revoking an agent left every service token it had already been
+		// issued working until it expired — up to an hour of continued access to the
+		// account you just revoked. The token endpoint's own check only governs new
+		// tokens, so it cannot close this.
+		if agents == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Service principal authentication is unavailable",
+			})
+		}
+		agent, err := agents.GetByID(agentID)
+		if err != nil || agent == nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Agent not found",
+			})
+		}
+		if !domain.AgentStatusPermitsAuth(agent.Status) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": domain.AgentStatusDeniedMessage(agent.Status),
 			})
 		}
 

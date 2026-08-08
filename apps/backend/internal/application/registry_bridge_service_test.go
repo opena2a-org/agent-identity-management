@@ -90,7 +90,7 @@ func (m *mockAgentRepoForBridge) UpdateLastActive(ctx context.Context, id uuid.U
 func (m *mockAgentRepoForBridge) GetStaleAgents(ctx context.Context, since time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }
-func (m *mockAgentRepoForBridge) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]*domain.Agent, error) {
+func (m *mockAgentRepoForBridge) GetByIDs(ctx context.Context, callerOrgID uuid.UUID, ids []uuid.UUID) ([]*domain.Agent, error) {
 	return nil, nil
 }
 

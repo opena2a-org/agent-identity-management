@@ -4,7 +4,13 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// agentStatusPermitsAuth reports whether an agent in this status may authenticate.
+// agentStatusPermitsAuth forwards to domain.AgentStatusPermitsAuth.
+//
+// The rule lives in domain because the OAuth token endpoint enforces it too, at issuance
+// rather than at use, and two copies of an allow-list are two things to keep in step.
+// This forwarder exists so the middleware call sites and their tests keep one name.
+//
+// Original rationale, still the reason the allow-list is shaped this way:
 //
 // SECURITY: allow-list, for the same reason as MemberOrAPIKeyMiddleware's role check —
 // an unrecognised status must fail closed, not fall through. `agents.status` is a plain
@@ -27,12 +33,7 @@ import (
 // Before this check existed, both wrote a status that no signature or API-key path read,
 // so revoking an agent did not stop it authenticating with key material it already held.
 func agentStatusPermitsAuth(status domain.AgentStatus) bool {
-	switch status {
-	case domain.AgentStatusVerified, domain.AgentStatusPending:
-		return true
-	default:
-		return false
-	}
+	return domain.AgentStatusPermitsAuth(status)
 }
 
 // agentStatusDeniedMessage is the 401 body for a status-denied request. It names the
@@ -41,5 +42,5 @@ func agentStatusPermitsAuth(status domain.AgentStatus) bool {
 // revoked"), and the request is only reached by a caller holding valid key material for
 // that specific agent.
 func agentStatusDeniedMessage(status domain.AgentStatus) string {
-	return "Agent is not permitted to authenticate (status: " + string(status) + ")"
+	return domain.AgentStatusDeniedMessage(status)
 }

@@ -27,6 +27,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   unscoped total tells a caller how much data every other tenant holds without
   returning a single row, so scoping the rows alone would have left a cardinality
   disclosure behind.
+- `GET /api/v1/a2a/consent/check` was a cross-tenant consent oracle. The query
+  matched on `user_id`, `grantor_agent_id`, `recipient_agent_id` and `scope` and
+  carried no organization predicate, so its answer described any row in the
+  table whatever organization owned it. `user_id` is what made that reachable:
+  an unvalidated string with no ownership relation to anything, filtered on
+  directly, so an authenticated caller who guessed one learned whether a given
+  user had granted a given consent in someone else's organization. The query is
+  now scoped to the caller's organization.
+- `POST /api/v1/a2a/consent` accepted a consent record naming an agent the
+  caller does not own as the grantor. Both agent IDs arrive in the request body
+  and the only constraint on them was a foreign key to `agents(id)`, which
+  requires a real agent rather than one of yours, while `organization_id` was
+  stamped from the caller's own org. The stored owner and the grantor's owner
+  could therefore diverge on every such write, which is what made an
+  organization predicate on the read side worth having in the first place. The
+  grantor is now verified against the caller's organization, and a grantor that
+  does not exist is refused with the same error as one that belongs to someone
+  else, so the response does not confirm which.
+  **Cross-organization consent is unchanged**: the recipient may still be
+  another organization's agent, which is the entire purpose of the feature.
 - `GET /api/v1/revocations` returned an empty revocation list to every caller,
   always. `GetRevocationList` asked the repository for `List(0, 0)`, which reaches
   PostgreSQL as `LIMIT 0` — zero rows, not "unbounded". The route is mounted and
