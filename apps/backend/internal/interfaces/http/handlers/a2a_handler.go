@@ -1948,20 +1948,23 @@ func (h *A2AHandler) CapableOfPost(c fiber.Ctx) error {
 // ListAgentCards returns a list of registered agent cards
 // GET /api/v1/a2a/cards
 func (h *A2AHandler) ListAgentCards(c fiber.Ctx) error {
-	limit := 100
-	offset := 0
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
-			limit = l
-		}
+	// SECURITY: this route returned every tenant's agent cards -- card_url, the
+	// full card_data document, agent_id and attestation_signature -- to any
+	// authenticated caller. It had no organization predicate and no role
+	// middleware.
+	//
+	// Pagination now goes through the shared helper. The hand-rolled parsing it
+	// replaces had no bound at all, not even the `l > 0` the two endpoints fixed
+	// in #364 had: ?limit=-1 reached PostgreSQL as a negative LIMIT and came back
+	// as a 500 echoing the driver error, and ?limit=100000000 was unbounded.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
 	}
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
-			offset = o
-		}
-	}
+	p := ParsePaginationWithDefaults(c, 100, 100)
+	limit, offset := p.Limit, p.Offset
 
-	cards, err := h.a2aService.ListAgentCards(c.Context(), limit, offset)
+	cards, err := h.a2aService.ListAgentCards(c.Context(), orgID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),

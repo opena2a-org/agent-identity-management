@@ -21,6 +21,11 @@ type A2AAgentCardRepository struct {
 	db *sql.DB
 }
 
+// The interface carries the org-scoping contract in its doc comment, so bind it
+// to the implementation. See the note on A2AConsentRepository for why an
+// unasserted interface drifts silently.
+var _ domain.A2AAgentCardRepository = (*A2AAgentCardRepository)(nil)
+
 // NewA2AAgentCardRepository creates a new A2AAgentCardRepository
 func NewA2AAgentCardRepository(db *sql.DB) *A2AAgentCardRepository {
 	return &A2AAgentCardRepository{db: db}
@@ -188,18 +193,45 @@ func (r *A2AAgentCardRepository) Delete(ctx context.Context, id uuid.UUID) error
 	return nil
 }
 
-func (r *A2AAgentCardRepository) GetValidCards(ctx context.Context, limit, offset int) ([]*domain.A2AAgentCard, error) {
+// GetValidCards returns valid agent cards belonging to orgID.
+//
+// SECURITY: orgID is required. Before this fix the only predicate was
+// is_valid = TRUE, so GET /api/v1/a2a/cards returned every tenant's card_url,
+// full card_data agent-card JSON, agent_id and attestation_signature to any
+// authenticated caller. This is the third instance of the same class, after the
+// consent and trust-score lists (#364) and the consent oracle (#363).
+//
+// a2a_agent_cards carries no organization_id of its own -- it is keyed on
+// agent_id -- so the tenant boundary is reached by joining agents, the same way
+// the trust-score list does. The join cannot inflate or drop rows: agent_id is
+// NOT NULL REFERENCES agents(id) ON DELETE CASCADE with a UNIQUE constraint, and
+// agents.organization_id is NOT NULL.
+//
+// There is no COUNT here to scope, unlike the two list endpoints in #364. This
+// route reports no total, so there is no cardinality to disclose; adding one
+// would change the response shape for no security benefit.
+//
+// Cross-organization discovery is NOT what this route is for and is not broken
+// by scoping it. The public per-agent card is /.well-known/agent.json
+// (GetPublicAgentCard, deliberately unauthenticated), and cross-org search
+// lives on the /discovery/* routes. This is an SDK-compatibility list whose
+// siblings -- POST /cards, GET/PUT /cards/:id -- are all single-resource
+// operations on the caller's own cards.
+func (r *A2AAgentCardRepository) GetValidCards(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2AAgentCard, error) {
 	query := `
 		SELECT
-			id, agent_id, card_url, card_data, card_hash, protocol_version,
-			attestation_signature, attestation_issued_at, attestation_expires_at,
-			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at
-		FROM a2a_agent_cards
-		WHERE is_valid = TRUE
-		ORDER BY updated_at DESC
-		LIMIT $1 OFFSET $2
+			c.id, c.agent_id, c.card_url, c.card_data, c.card_hash, c.protocol_version,
+			c.attestation_signature, c.attestation_issued_at, c.attestation_expires_at,
+			c.is_valid, c.validation_error, c.last_fetched_at, c.fetch_count,
+			c.created_at, c.updated_at
+		FROM a2a_agent_cards c
+		JOIN agents a ON a.id = c.agent_id
+		WHERE c.is_valid = TRUE
+			AND a.organization_id = $1
+		ORDER BY c.updated_at DESC
+		LIMIT $2 OFFSET $3
 	`
-	return r.queryCards(ctx, query, limit, offset)
+	return r.queryCards(ctx, query, orgID, limit, offset)
 }
 
 func (r *A2AAgentCardRepository) GetExpiredCards(ctx context.Context) ([]*domain.A2AAgentCard, error) {

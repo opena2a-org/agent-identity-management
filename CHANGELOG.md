@@ -13,6 +13,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Security
 
+- `GET /api/v1/a2a/cards` returned every organization's agent cards to any
+  authenticated caller: `cardUrl`, the full `cardData` agent-card document,
+  `agentId` and `attestationSignature`. The only predicate was `is_valid = TRUE`,
+  and the route carries no role middleware. Its pagination was weaker than the
+  endpoints fixed alongside it — the limit was parsed with no bound at all, not
+  even a positive check, so `?limit=-1` reached PostgreSQL as a negative `LIMIT`
+  and surfaced as a 500, and a large limit was unbounded. The query is now scoped
+  to the caller's organization by joining `agents` (`a2a_agent_cards` has no
+  organization column of its own) and the limit is capped.
+  **Cross-organization discovery is unaffected**: the public per-agent card is
+  still `/.well-known/agent.json`, and cross-organization search still lives on
+  the `/discovery/*` routes. This endpoint is an SDK-compatibility list whose
+  sibling routes all operate on a single card the caller owns.
+
 - `GET /api/v1/a2a/consents` and `GET /api/v1/a2a/trust-scores` returned every
   organization's rows to any authenticated caller. Neither query carried an
   `organization_id` predicate and neither route carried a role middleware, unlike

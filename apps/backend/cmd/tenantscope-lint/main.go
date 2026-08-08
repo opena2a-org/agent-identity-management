@@ -696,9 +696,24 @@ func scanCollectionDirectory(dir string) ([]violation, error) {
 // "ListAll" prefix is a NAMING convention, not the shape of the defect, so this
 // check is a regression guard for the two methods above and not yet a guard for
 // the class. Every same-shape method that happens to be named differently is
-// invisible to it -- A2AService.ListAgentCards and A2AService.ListA2ATasks are
-// both on this very service, both return a whole collection with no
-// organization parameter, and both pass this check today.
+// invisible to it.
+//
+// Measured over ./internal/application, not estimated: 88 exported methods
+// return a slice or map, 47 take an organization parameter and 41 do not, and
+// ZERO of those 41 are named ListAll* -- so this check sees none of them.
+// Examples that pass it today: AdminService.GetAllUsers, AuditService.SearchLogs,
+// CapabilityRequestService.ListRequests. Whether each of the 41 is a defect
+// needs triage -- several are scoped at another layer or are legitimately
+// global -- but none of them is guarded HERE.
+//
+// An earlier version of this comment cited A2AService.ListAgentCards and
+// A2AService.ListA2ATasks as the examples. Both were fixed within days, which
+// falsified the comment while the check itself was unchanged. Cite the
+// measurement and re-run it rather than trusting the names:
+//
+//	go run ./cmd/tenantscope-lint  # this check
+//	# and to re-derive the 41, walk the package for methods returning a
+//	# slice/map with no orgParamNames uuid.UUID parameter.
 //
 // The predicate that would cover the class is "returns a slice or map AND takes
 // no organization parameter". It is not enabled here because it fires across

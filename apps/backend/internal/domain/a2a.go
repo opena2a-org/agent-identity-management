@@ -522,7 +522,9 @@ type A2AAgentCardRepository interface {
 	GetByAgentID(ctx context.Context, agentID uuid.UUID) (*A2AAgentCard, error)
 	Update(ctx context.Context, card *A2AAgentCard) error
 	Delete(ctx context.Context, id uuid.UUID) error
-	GetValidCards(ctx context.Context, limit, offset int) ([]*A2AAgentCard, error)
+	// GetValidCards is org-scoped; it reaches the tenant boundary by joining
+	// agents, since a2a_agent_cards has no organization_id of its own.
+	GetValidCards(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2AAgentCard, error)
 	GetExpiredCards(ctx context.Context) ([]*A2AAgentCard, error)
 }
 
