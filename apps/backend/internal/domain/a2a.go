@@ -76,14 +76,14 @@ type A2AAgentCard struct {
 
 // A2AAgentCardParsed represents the parsed content of an A2A Agent Card
 type A2AAgentCardParsed struct {
-	Name            string                 `json:"name"`
-	Description     string                 `json:"description"`
-	URL             string                 `json:"url"`
-	Version         string                 `json:"version"`
-	Skills          []A2ASkillDefinition   `json:"skills"`
-	SecuritySchemes map[string]interface{} `json:"securitySchemes,omitempty"`
-	DefaultInputModes  []string            `json:"defaultInputModes,omitempty"`
-	DefaultOutputModes []string            `json:"defaultOutputModes,omitempty"`
+	Name               string                 `json:"name"`
+	Description        string                 `json:"description"`
+	URL                string                 `json:"url"`
+	Version            string                 `json:"version"`
+	Skills             []A2ASkillDefinition   `json:"skills"`
+	SecuritySchemes    map[string]interface{} `json:"securitySchemes,omitempty"`
+	DefaultInputModes  []string               `json:"defaultInputModes,omitempty"`
+	DefaultOutputModes []string               `json:"defaultOutputModes,omitempty"`
 
 	// AIM extension
 	AIM *A2AAIMExtension `json:"aim,omitempty"`
@@ -208,9 +208,9 @@ type A2ATask struct {
 
 // A2AMessage represents a message within an A2A task
 type A2AMessage struct {
-	ID                uuid.UUID      `json:"id"`
-	TaskID            uuid.UUID      `json:"taskId"`
-	ExternalMessageID string         `json:"externalMessageId,omitempty"`
+	ID                uuid.UUID `json:"id"`
+	TaskID            uuid.UUID `json:"taskId"`
+	ExternalMessageID string    `json:"externalMessageId,omitempty"`
 
 	// Message info
 	Role          A2AMessageRole `json:"role"`
@@ -222,8 +222,8 @@ type A2AMessage struct {
 	PIITypes     []string        `json:"piiTypes,omitempty"`
 
 	// Signature verification
-	AIMSignature       string     `json:"aimSignature,omitempty"`
-	SignatureValid     *bool      `json:"signatureValid,omitempty"`
+	AIMSignature        string     `json:"aimSignature,omitempty"`
+	SignatureValid      *bool      `json:"signatureValid,omitempty"`
 	SignatureVerifiedAt *time.Time `json:"signatureVerifiedAt,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
@@ -257,9 +257,9 @@ type A2APeerTrust struct {
 	TasksReceivedFailed    int `json:"tasksReceivedFailed"`
 
 	// Performance metrics
-	SuccessRate        *float64 `json:"successRate,omitempty"`
-	AvgResponseTimeMs  *int     `json:"avgResponseTimeMs,omitempty"`
-	P95ResponseTimeMs  *int     `json:"p95ResponseTimeMs,omitempty"`
+	SuccessRate       *float64 `json:"successRate,omitempty"`
+	AvgResponseTimeMs *int     `json:"avgResponseTimeMs,omitempty"`
+	P95ResponseTimeMs *int     `json:"p95ResponseTimeMs,omitempty"`
 
 	// Trust metrics
 	PeerTrustScore  *float64   `json:"peerTrustScore,omitempty"`
@@ -326,9 +326,9 @@ type A2ATrustScore struct {
 	TasksCancelled     int `json:"tasksCancelled"`
 
 	// Performance metrics
-	AvgResponseTimeMs  *int `json:"avgResponseTimeMs,omitempty"`
-	P95ResponseTimeMs  *int `json:"p95ResponseTimeMs,omitempty"`
-	AvgTaskDurationMs  *int `json:"avgTaskDurationMs,omitempty"`
+	AvgResponseTimeMs *int `json:"avgResponseTimeMs,omitempty"`
+	P95ResponseTimeMs *int `json:"p95ResponseTimeMs,omitempty"`
+	AvgTaskDurationMs *int `json:"avgTaskDurationMs,omitempty"`
 
 	// Trust components
 	A2ATrustScore    *float64 `json:"a2aTrustScore,omitempty"`
@@ -403,13 +403,13 @@ type A2ARequestSignature struct {
 
 // A2ASignatureVerificationResult represents the result of signature verification
 type A2ASignatureVerificationResult struct {
-	Valid       bool       `json:"valid"`
-	AgentID     uuid.UUID  `json:"agentId,omitempty"`
-	AgentName   string     `json:"agentName,omitempty"`
-	TrustScore  float64    `json:"trustScore,omitempty"`
-	Capabilities []string  `json:"capabilities,omitempty"`
-	AttestationValid bool  `json:"attestationValid"`
-	Error       string     `json:"error,omitempty"`
+	Valid            bool      `json:"valid"`
+	AgentID          uuid.UUID `json:"agentId,omitempty"`
+	AgentName        string    `json:"agentName,omitempty"`
+	TrustScore       float64   `json:"trustScore,omitempty"`
+	Capabilities     []string  `json:"capabilities,omitempty"`
+	AttestationValid bool      `json:"attestationValid"`
+	Error            string    `json:"error,omitempty"`
 }
 
 // ============================================================================
@@ -418,9 +418,9 @@ type A2ASignatureVerificationResult struct {
 
 // A2APolicyDecision represents the result of policy evaluation
 type A2APolicyDecision struct {
-	Decision          string   `json:"decision"` // ALLOW, DENY
-	PoliciesEvaluated []string `json:"policiesEvaluated"`
-	Reason            string   `json:"reason,omitempty"`
+	Decision          string    `json:"decision"` // ALLOW, DENY
+	PoliciesEvaluated []string  `json:"policiesEvaluated"`
+	Reason            string    `json:"reason,omitempty"`
 	EvaluatedAt       time.Time `json:"evaluatedAt"`
 }
 
@@ -574,8 +574,10 @@ type A2AConsentRepository interface {
 	Create(ctx context.Context, consent *A2AConsentRecord) error
 	GetByID(ctx context.Context, id uuid.UUID) (*A2AConsentRecord, error)
 	CheckConsent(ctx context.Context, userID string, grantorID, recipientID uuid.UUID, scope string) (bool, error)
-	ListByUser(ctx context.Context, userID string, includeRevoked bool) ([]*A2AConsentRecord, error)
-	ListAll(ctx context.Context, limit, offset int) ([]*A2AConsentRecord, int, error)
+	ListByUser(ctx context.Context, userID string, orgID uuid.UUID, includeRevoked bool) ([]*A2AConsentRecord, error)
+	// ListAll is org-scoped despite the name. orgID is required; see the
+	// implementation comment for why an unscoped variant must not exist.
+	ListAll(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2AConsentRecord, int, error)
 	Revoke(ctx context.Context, id uuid.UUID, reason string) error
 }
 
@@ -583,7 +585,9 @@ type A2AConsentRepository interface {
 type A2ATrustScoreRepository interface {
 	Upsert(ctx context.Context, score *A2ATrustScore) error
 	GetByAgentID(ctx context.Context, agentID uuid.UUID) (*A2ATrustScore, error)
-	ListAll(ctx context.Context, limit, offset int) ([]*A2ATrustScore, int, error)
+	// ListAll is org-scoped despite the name; it reaches the tenant boundary
+	// by joining agents, since a2a_trust_scores has no organization_id.
+	ListAll(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2ATrustScore, int, error)
 	IncrementTaskStats(ctx context.Context, agentID uuid.UUID, asClient bool, completed bool) error
 	UpdatePerformanceMetrics(ctx context.Context, agentID uuid.UUID, responseTimeMs, durationMs int) error
 }
@@ -714,9 +718,9 @@ type A2ASecurityViolation struct {
 	ActionTaken A2ASecurityAction `json:"actionTaken"`
 
 	// Request context
-	RequestSignature  string     `json:"requestSignature,omitempty"`
-	RequestNonce      string     `json:"requestNonce,omitempty"`
-	RequestTimestamp  *time.Time `json:"requestTimestamp,omitempty"`
+	RequestSignature string     `json:"requestSignature,omitempty"`
+	RequestNonce     string     `json:"requestNonce,omitempty"`
+	RequestTimestamp *time.Time `json:"requestTimestamp,omitempty"`
 
 	// Metadata
 	CreatedAt time.Time `json:"createdAt"`
@@ -775,9 +779,9 @@ const (
 
 // A2ACallChain represents a single call in an agent-to-agent chain
 type A2ACallChain struct {
-	ID             uuid.UUID `json:"id"`
-	ChainID        uuid.UUID `json:"chainId"`
-	SequenceNumber int       `json:"sequenceNumber"`
+	ID             uuid.UUID  `json:"id"`
+	ChainID        uuid.UUID  `json:"chainId"`
+	SequenceNumber int        `json:"sequenceNumber"`
 	ParentCallID   *uuid.UUID `json:"parentCallId,omitempty"`
 
 	// Participants
@@ -851,8 +855,8 @@ const (
 
 // A2AAgentDependency represents a dependency between agents
 type A2AAgentDependency struct {
-	ID              uuid.UUID `json:"id"`
-	AgentID         uuid.UUID `json:"agentId"`
+	ID               uuid.UUID `json:"id"`
+	AgentID          uuid.UUID `json:"agentId"`
 	DependsOnAgentID uuid.UUID `json:"dependsOnAgentId"`
 
 	// Dependency details
@@ -872,17 +876,17 @@ type A2AAgentDependency struct {
 
 // A2AChainSummary provides an overview of an agent call chain
 type A2AChainSummary struct {
-	ChainID         uuid.UUID   `json:"chainId"`
-	TotalCalls      int         `json:"totalCalls"`
-	MaxDepth        int         `json:"maxDepth"`
-	UniqueAgents    int         `json:"uniqueAgents"`
-	AgentIDs        []uuid.UUID `json:"agentIds"`
-	IsHumanInitiated bool       `json:"isHumanInitiated"`
-	OriginUserID    *uuid.UUID  `json:"originUserId,omitempty"`
-	StartedAt       time.Time   `json:"startedAt"`
-	CompletedAt     *time.Time  `json:"completedAt,omitempty"`
-	Status          A2ACallChainStatus `json:"status"`
-	HasPII          bool        `json:"hasPii"`
+	ChainID          uuid.UUID          `json:"chainId"`
+	TotalCalls       int                `json:"totalCalls"`
+	MaxDepth         int                `json:"maxDepth"`
+	UniqueAgents     int                `json:"uniqueAgents"`
+	AgentIDs         []uuid.UUID        `json:"agentIds"`
+	IsHumanInitiated bool               `json:"isHumanInitiated"`
+	OriginUserID     *uuid.UUID         `json:"originUserId,omitempty"`
+	StartedAt        time.Time          `json:"startedAt"`
+	CompletedAt      *time.Time         `json:"completedAt,omitempty"`
+	Status           A2ACallChainStatus `json:"status"`
+	HasPII           bool               `json:"hasPii"`
 }
 
 // A2ACallChainRepository defines operations for call chain tracking

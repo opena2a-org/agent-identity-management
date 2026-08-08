@@ -131,9 +131,9 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentId":   agentID,
-			"cardUrl":   req.CardURL,
-			"skills":    resp.Skills,
+			"agentId": agentID,
+			"cardUrl": req.CardURL,
+			"skills":  resp.Skills,
 		},
 	)
 
@@ -216,16 +216,16 @@ func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentId":           agentID,
+			"agentId":            agentID,
 			"attestationExpires": card.AttestationExpiresAt,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"cardId":              card.ID,
-		"agentId":             card.AgentID,
+		"cardId":             card.ID,
+		"agentId":            card.AgentID,
 		"attestationExpires": card.AttestationExpiresAt,
-		"message":             "Attestation refreshed successfully",
+		"message":            "Attestation refreshed successfully",
 	})
 }
 
@@ -307,17 +307,17 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 
 	if !result.Valid {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"valid":  false,
-			"error":  result.Error,
+			"valid": false,
+			"error": result.Error,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"valid":             true,
-		"agentId":           result.AgentID,
-		"agentName":         result.AgentName,
-		"trustScore":        result.TrustScore,
-		"capabilities":      result.Capabilities,
+		"valid":            true,
+		"agentId":          result.AgentID,
+		"agentName":        result.AgentName,
+		"trustScore":       result.TrustScore,
+		"capabilities":     result.Capabilities,
 		"attestationValid": result.AttestationValid,
 	})
 }
@@ -514,12 +514,12 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 	// Accept SDK format with field name variations
 	var sdkReq struct {
 		// SDK format
-		TargetAgentID   string `json:"targetAgentId"`
-		TaskID          string `json:"taskId"`
-		TaskType        string `json:"taskType"`
-		Status          string `json:"status"`
-		SkillID         string `json:"skillId"`
-		SdkClientAgent  string `json:"clientAgentId"` // SDK can also send clientAgentId as string
+		TargetAgentID  string `json:"targetAgentId"`
+		TaskID         string `json:"taskId"`
+		TaskType       string `json:"taskType"`
+		Status         string `json:"status"`
+		SkillID        string `json:"skillId"`
+		SdkClientAgent string `json:"clientAgentId"` // SDK can also send clientAgentId as string
 		// Internal format
 		ExternalTaskID string    `json:"externalTaskId"`
 		ContextID      string    `json:"contextId"`
@@ -773,9 +773,9 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"query":   query,
-		"skills":  skills,
-		"count":   len(skills),
+		"query":  query,
+		"skills": skills,
+		"count":  len(skills),
 	})
 }
 
@@ -1061,18 +1061,26 @@ func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
 	})
 }
 
-// ListAllConsents lists all consent records with pagination (admin endpoint)
+// ListAllConsents lists the calling organization's consent records, paginated.
+// Not an admin endpoint: the route carries no role middleware, so the org
+// predicate below is the only tenant boundary this handler has.
 func (h *A2AHandler) ListAllConsents(c fiber.Ctx) error {
-	limit := 100
-	offset := 0
-	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
-		limit = l
+	// SECURITY: this route returned every tenant's consent records — user_id,
+	// purpose, data_types, both agent IDs and user_agent — to any
+	// authenticated caller. It had no organization predicate and no role
+	// middleware, unlike its neighbours on the same route group.
+	//
+	// Pagination now goes through the shared helper, which caps limit and
+	// offset. The hand-rolled parsing it replaces accepted any positive limit,
+	// so ?limit=100000 paged the whole table in one request.
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
 	}
-	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o >= 0 {
-		offset = o
-	}
+	p := ParsePaginationWithDefaults(c, 100, 100)
+	limit, offset := p.Limit, p.Offset
 
-	consents, total, err := h.a2aService.ListAllConsents(c.Context(), limit, offset)
+	consents, total, err := h.a2aService.ListAllConsents(c.Context(), orgID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1087,18 +1095,21 @@ func (h *A2AHandler) ListAllConsents(c fiber.Ctx) error {
 	})
 }
 
-// ListAllTrustScores lists all A2A trust scores with pagination (admin endpoint)
+// ListAllTrustScores lists A2A trust scores for the calling organization's
+// agents, paginated. Not an admin endpoint, for the same reason as
+// ListAllConsents.
 func (h *A2AHandler) ListAllTrustScores(c fiber.Ctx) error {
-	limit := 100
-	offset := 0
-	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
-		limit = l
+	// SECURITY: same defect as ListAllConsents — no organization predicate and
+	// an uncapped limit. This one exposed every tenant's agent IDs and
+	// behavioural metrics (task counts, response times, trust score).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
 	}
-	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o >= 0 {
-		offset = o
-	}
+	p := ParsePaginationWithDefaults(c, 100, 100)
+	limit, offset := p.Limit, p.Offset
 
-	scores, total, err := h.a2aService.ListAllTrustScores(c.Context(), limit, offset)
+	scores, total, err := h.a2aService.ListAllTrustScores(c.Context(), orgID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
@@ -1198,9 +1209,9 @@ func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"message":         "Nonces cleaned up",
-		"deletedCount":   count,
-		"timestamp":       time.Now().UTC(),
+		"message":      "Nonces cleaned up",
+		"deletedCount": count,
+		"timestamp":    time.Now().UTC(),
 	})
 }
 

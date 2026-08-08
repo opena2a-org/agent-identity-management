@@ -1268,6 +1268,13 @@ type A2AConsentRepository struct {
 	db *sql.DB
 }
 
+// The interface carries the org-scoping contract in its doc comments, so bind
+// it to the implementation. Without this assertion nothing referenced the
+// interface as a type and it had already drifted -- it declared ListByUser
+// without the orgID the implementation has taken since PR #149, so a comment
+// promising a required organization parameter was enforcing nothing.
+var _ domain.A2AConsentRepository = (*A2AConsentRepository)(nil)
+
 // NewA2AConsentRepository creates a new A2AConsentRepository
 func NewA2AConsentRepository(db *sql.DB) *A2AConsentRepository {
 	return &A2AConsentRepository{db: db}
@@ -1401,10 +1408,25 @@ func (r *A2AConsentRepository) ListByUser(ctx context.Context, userID string, or
 	return r.queryConsents(ctx, query, userID, orgID)
 }
 
-func (r *A2AConsentRepository) ListAll(ctx context.Context, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
-	countQuery := `SELECT COUNT(*) FROM a2a_consent_records`
+// ListAll lists consent records belonging to one organization.
+//
+// SECURITY: the org predicate is required, and the name is a misnomer kept
+// only for continuity — this never listed "all" safely. Before this fix the
+// query had no organization_id predicate at all, so GET /api/v1/a2a/consents
+// returned every tenant's consent rows (user_id, purpose, data_types, both
+// agent IDs, user_agent) to any authenticated caller.
+//
+// The COUNT is scoped too, deliberately. An unscoped count returns the global
+// row total, which is a cross-tenant cardinality disclosure on its own — the
+// caller learns how much consent data every other tenant holds without reading
+// a single row.
+//
+// organization_id is the ownership column for a consent record (migration 097)
+// and is NOT NULL, so the predicate excludes no legitimately-owned row.
+func (r *A2AConsentRepository) ListAll(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2AConsentRecord, int, error) {
+	countQuery := `SELECT COUNT(*) FROM a2a_consent_records WHERE organization_id = $1`
 	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, countQuery, orgID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count consents: %w", err)
 	}
 
@@ -1415,10 +1437,11 @@ func (r *A2AConsentRepository) ListAll(ctx context.Context, limit, offset int) (
 			revoked, revoked_at, revoked_reason, consent_method, evidence,
 			ip_address, user_agent, created_at, updated_at
 		FROM a2a_consent_records
+		WHERE organization_id = $1
 		ORDER BY granted_at DESC
-		LIMIT $1 OFFSET $2
+		LIMIT $2 OFFSET $3
 	`
-	consents, err := r.queryConsents(ctx, query, limit, offset)
+	consents, err := r.queryConsents(ctx, query, orgID, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1691,6 +1714,10 @@ type A2ATrustScoreRepository struct {
 	db *sql.DB
 }
 
+// See the note on A2AConsentRepository: the assertion is what makes the
+// interface's org-scoping comment binding.
+var _ domain.A2ATrustScoreRepository = (*A2ATrustScoreRepository)(nil)
+
 // NewA2ATrustScoreRepository creates a new A2ATrustScoreRepository
 func NewA2ATrustScoreRepository(db *sql.DB) *A2ATrustScoreRepository {
 	return &A2ATrustScoreRepository{db: db}
@@ -1827,27 +1854,44 @@ func (r *A2ATrustScoreRepository) GetByAgentID(ctx context.Context, agentID uuid
 	return score, nil
 }
 
-func (r *A2ATrustScoreRepository) ListAll(ctx context.Context, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
-	countQuery := `SELECT COUNT(*) FROM a2a_trust_scores`
+// ListAll lists A2A trust scores for agents belonging to one organization.
+//
+// SECURITY: a2a_trust_scores carries no organization_id of its own — it is
+// keyed on agent_id — so the tenant boundary is reached by joining agents and
+// filtering on agents.organization_id. Before this fix the query had no
+// predicate, so GET /api/v1/a2a/trust-scores returned every tenant's agent IDs
+// and behavioural metrics to any authenticated caller.
+//
+// The COUNT is scoped for the same reason as in A2AConsentRepository.ListAll:
+// an unscoped total is a cross-tenant cardinality disclosure by itself.
+func (r *A2ATrustScoreRepository) ListAll(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
+	countQuery := `
+		SELECT COUNT(*)
+		FROM a2a_trust_scores ts
+		JOIN agents a ON a.id = ts.agent_id
+		WHERE a.organization_id = $1
+	`
 	var total int
-	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, countQuery, orgID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count trust scores: %w", err)
 	}
 
 	query := `
 		SELECT
-			agent_id, total_tasks_as_client, total_tasks_as_remote,
-			tasks_completed, tasks_failed, tasks_cancelled,
-			avg_response_time_ms, p95_response_time_ms, avg_task_duration_ms,
-			a2a_trust_score, peer_trust_average, unique_peers_count,
-			positive_feedback_count, negative_feedback_count,
-			computed_at, data_points, created_at, updated_at
-		FROM a2a_trust_scores
-		ORDER BY a2a_trust_score DESC NULLS LAST
-		LIMIT $1 OFFSET $2
+			ts.agent_id, ts.total_tasks_as_client, ts.total_tasks_as_remote,
+			ts.tasks_completed, ts.tasks_failed, ts.tasks_cancelled,
+			ts.avg_response_time_ms, ts.p95_response_time_ms, ts.avg_task_duration_ms,
+			ts.a2a_trust_score, ts.peer_trust_average, ts.unique_peers_count,
+			ts.positive_feedback_count, ts.negative_feedback_count,
+			ts.computed_at, ts.data_points, ts.created_at, ts.updated_at
+		FROM a2a_trust_scores ts
+		JOIN agents a ON a.id = ts.agent_id
+		WHERE a.organization_id = $1
+		ORDER BY ts.a2a_trust_score DESC NULLS LAST
+		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, limit, offset)
+	rows, err := r.db.QueryContext(ctx, query, orgID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list trust scores: %w", err)
 	}
