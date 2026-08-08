@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Needed to file/append the alert issue when the sync is skipped. Note
+      # this uses the default GITHUB_TOKEN, deliberately: the condition being
+      # reported IS that AIM_CLOUD_SYNC_TOKEN does not work, so the alert must
+      # not depend on it.
+      issues: write
 
     steps:
       - name: Checkout source (agent-identity-management)
@@ -31,6 +36,21 @@ jobs:
       # token instead emits a warning annotation and the job ends green, so the
       # workflow can live on main and auto-activates the moment a valid token is
       # provisioned (no code change needed to "turn it back on").
+      #
+      # That trade cost five days. Between 2026-08-04 and 2026-08-08 the token
+      # was expired, twelve consecutive runs reported SUCCESS having synced
+      # nothing, and a warning annotation on a green run is not something anyone
+      # reads. Three merged cross-tenant-read fixes plus migrations 106 and 107
+      # never reached the hosted product; it was found by comparing the deployed
+      # image tag against aim-cloud HEAD, not by this workflow.
+      #
+      # Staying green is still right -- a wall of red is what #203 removed and it
+      # trains people to ignore the run. What was missing is a signal a human
+      # actually receives. The skip now files a deduplicated issue and appends
+      # each unsynced commit to it, so the issue doubles as the backlog of what
+      # still has to reach cloud. Same pattern as cert-expiry-monitor.yml in
+      # aim-cloud, which exists for the same reason: a control that failed
+      # quietly for long enough to matter.
       - name: Preflight - verify sync token can reach aim-cloud
         id: preflight
         env:
@@ -49,6 +69,116 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+      # The signal that was missing. A warning annotation on a green run is
+      # invisible; an open issue is not, and appending each skipped commit turns
+      # it into the list of what still owes cloud a sync.
+      #
+      # Uses the default GITHUB_TOKEN, not AIM_CLOUD_SYNC_TOKEN -- the thing
+      # being reported is that the sync token does not work, so an alert that
+      # depended on it would be silent in exactly the case it exists for.
+      - name: Alert on skipped sync
+        if: steps.preflight.outputs.ok != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+          COMMIT_TITLE: ${{ github.event.head_commit.message }}
+        run: |
+          set -uo pipefail
+          LABEL="cloud-sync-broken"
+          gh label create "$LABEL" --color B60205 \
+            --description "Sync to aim-cloud is skipping; commits are not reaching the hosted product" 2>/dev/null || true
+
+          # The commit message is attacker-controllable, so it is treated as untrusted text
+          # on the one surface it actually reaches: a markdown issue body we publish.
+          #
+          # It is NOT a shell-injection vector, and the sanitising below is not what makes
+          # it safe. The message reaches this script only as the COMMIT_TITLE env var
+          # declared above, never as a `${{ }}` interpolation into the script body, so the
+          # shell never re-parses its value -- parameter expansion of a value is not
+          # rescanned for command substitution. Do not relabel the line below as an
+          # injection fix; a false security claim is itself a defect.
+          #
+          # head -1 keeps a multi-line message from breaking the markdown list or injecting
+          # headings; head_commit is absent on workflow_dispatch. The `tr -d` drops the
+          # bytes that would corrupt the rendered body or manufacture a notification:
+          # backtick and $ (code spans), @ (user and team mentions), <> (raw HTML), []
+          # and () (links). Deleting an explicit set of ASCII bytes is UTF-8-safe; a
+          # complement class (tr -c) is NOT -- it would shred multi-byte characters into
+          # invalid sequences and the API would reject the body. The 200-char cap keeps the
+          # body inside the API limit; ${SOURCE_SHA} sits next to it and is the
+          # authoritative identifier, so lossiness in the subject costs nothing.
+          SUBJECT=$(printf '%s' "${COMMIT_TITLE}" | head -1 | tr -d '`$@<>[]()')
+          SUBJECT=${SUBJECT:0:200}
+          if [ -z "$SUBJECT" ]; then
+            if [ -z "${COMMIT_TITLE}" ]; then
+              SUBJECT="(manual run; no commit message)"
+            else
+              # Distinguish these: reporting a real push as a manual run would misdescribe
+              # which commit is unsynced.
+              SUBJECT="(commit subject omitted; no renderable characters)"
+            fi
+          fi
+
+          # A failed query must not read as "no open issue". That routes to the create path
+          # and files a duplicate on every run. Unknown is not the same as absent.
+          if ! existing=$(gh issue list --label "$LABEL" --state open \
+                            --json number -q '.[0].number'); then
+            echo "::error title=Sync alert not filed::could not query existing alert issues on ${GH_REPO}; the skipped sync is now UNRECORDED"
+            exit 1
+          fi
+
+          if [ -n "$existing" ]; then
+            # `set -uo pipefail` carries no -e, so an unchecked gh failure here would print
+            # the success line below and exit 0 -- the alert channel failing silently, which
+            # is the exact defect this step exists to close. Check it explicitly.
+            if ! gh issue comment "$existing" --body \
+              "Still skipping as of $(date -u '+%Y-%m-%d %H:%M UTC'). Also not synced: \`${SOURCE_SHA}\` — ${SUBJECT}. Run: ${RUN_URL}"; then
+              echo "::error title=Sync alert not filed::could not append ${SOURCE_SHA} to alert issue #${existing}; the skipped sync is now UNRECORDED"
+              exit 1
+            fi
+            echo "appended ${SOURCE_SHA} to existing alert #${existing}"
+            exit 0
+          fi
+
+          # Same reason as the comment path: an unchecked failure here would print
+          # "filed a new alert issue" and exit 0 with nothing filed.
+          if ! gh issue create --label "$LABEL" \
+            --title "Sync to aim-cloud is skipping; commits are not reaching the hosted product" \
+            --body "$(printf '%s\n' \
+              "The sync to \`opena2a-org/aim-cloud\` skipped its preflight, so this commit was" \
+              "NOT applied to the hosted product. The workflow still reports success by design" \
+              "(see the comment on the preflight step), which is why this issue exists." \
+              "" \
+              "**Not synced:** \`${SOURCE_SHA}\` — ${SUBJECT}" \
+              "" \
+              "Run: ${RUN_URL}" \
+              "" \
+              "**Why this matters.** The public repo is where fixes merge; aim-cloud is what real" \
+              "tenants run. While this is broken the two diverge silently, and a merged security" \
+              "fix is not a deployed one. In August 2026 this went unnoticed for five days and" \
+              "twelve commits, including three cross-tenant-read fixes and two migrations." \
+              "" \
+              "**Fix:** refresh the \`AIM_CLOUD_SYNC_TOKEN\` secret on this repo with a token" \
+              "carrying \`contents:write\` + \`pull-requests:write\` on \`opena2a-org/aim-cloud\`," \
+              "then re-run this workflow (\`workflow_dispatch\`) for each commit listed below." \
+              "" \
+              "**Verify the fix reached production, not just the repo:** compare the deployed" \
+              "image tag against aim-cloud HEAD —" \
+              "" \
+              "\`\`\`" \
+              "az containerapp show -g rg-aim-community-prod -n ca-aim-backend-prod \\\\" \
+              "  --query 'properties.template.containers[0].image' -o tsv" \
+              "\`\`\`" \
+              "" \
+              "Each further skipped commit is appended as a comment, so this issue is the backlog." \
+              "Close it once the token works AND the listed commits have reached cloud.")"; then
+            echo "::error title=Sync alert not filed::could not create the alert issue on ${GH_REPO} for ${SOURCE_SHA}; the skipped sync is now UNRECORDED"
+            exit 1
+          fi
+          echo "filed a new alert issue for ${SOURCE_SHA}"
 
       - name: Checkout target (aim-cloud)
         if: steps.preflight.outputs.ok == 'true'
