@@ -519,36 +519,53 @@ export function AlertDetailPanel({
                           </p>
                         )}
 
-                        {/* Execution Status - Shows what actually happened after verification */}
+                        {/*
+                          Execution status: what the AGENT SAID happened after verification.
+
+                          These fields (executed, strictMode, executedAt, executionError)
+                          have exactly one writer in the backend — the agent's own SDK, via
+                          POST /sdk-api/verifications/:id/execution-status. AIM holds no
+                          independent record of whether the action ran, so this block must
+                          be attributed to its source and must never assert that AIM
+                          enforced anything.
+
+                          It previously rendered "Action BLOCKED (strict mode enforced)",
+                          which read as a claim about our control while being derived
+                          entirely from the self-report of the party being audited. strictMode
+                          is now server-derived from the organization's enforcement mode, so
+                          the mode shown here is ours; `executed` is still the agent's word.
+                          Labelling these columns by provenance belongs to the
+                          execution-outcome follow-up.
+                        */}
                         {event.executed !== undefined && (
                           <div className={`mt-2 p-2 rounded text-xs ${
                             event.executed
-                              ? event.strictMode
-                                ? "bg-green-50 border border-green-200 text-green-700"
-                                : isDenied
-                                  ? "bg-yellow-50 border border-yellow-200 text-yellow-700"
-                                  : "bg-green-50 border border-green-200 text-green-700"
-                              : "bg-red-50 border border-red-200 text-red-700"
+                              ? isDenied
+                                ? "bg-yellow-50 border border-yellow-200 text-yellow-700"
+                                : "bg-green-50 border border-green-200 text-green-700"
+                              : "bg-gray-50 border border-gray-200 text-gray-700"
                           }`}>
                             <span className="font-medium">
                               {event.executed ? (
-                                event.strictMode ? (
-                                  "✓ Action executed (strict mode)"
-                                ) : isDenied ? (
-                                  "⚠ Action executed despite denial (monitoring mode)"
+                                isDenied ? (
+                                  "Agent reported: action executed despite denial"
                                 ) : (
-                                  "✓ Action executed successfully"
+                                  "Agent reported: action executed"
                                 )
                               ) : (
-                                event.strictMode ? (
-                                  "✗ Action BLOCKED (strict mode enforced)"
-                                ) : (
-                                  "✗ Action not executed"
-                                )
+                                "Agent reported: action not executed"
                               )}
                             </span>
+                            <p className="mt-1 text-gray-500">
+                              Self-reported by the agent. AIM does not independently observe
+                              execution, so this is not a record of enforcement.
+                              {event.strictMode !== undefined && (
+                                <> Organization enforcement mode at report time:{" "}
+                                  {event.strictMode ? "strict" : "monitoring"}.</>
+                              )}
+                            </p>
                             {event.executionError && (
-                              <p className="mt-1 text-red-600">Error: {event.executionError}</p>
+                              <p className="mt-1 text-red-600">Reported error: {event.executionError}</p>
                             )}
                           </div>
                         )}

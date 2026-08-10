@@ -320,15 +320,23 @@ func main() {
 	// NOTE: Revocation list route moved into setupRoutes() to avoid Fiber v3 beta
 	// route shadowing when the /api/v1 group is registered with middleware.
 
-	// Action verification for SDK (signature-based auth, NO API key required)
-	// IMPORTANT: Register directly on app (not through group) to avoid API key middleware
-	// These endpoints verify Ed25519 signatures instead of requiring API keys
+	// SECURITY: only routes that establish their own caller identity may be
+	// registered here, above the sdkAPI group. Fiber matches in registration
+	// order, so a route registered on this line is not reached by the group's
+	// middleware below — that is exactly how the two write routes below stayed
+	// unauthenticated from 2025-11-06 until this change. Both remaining entries
+	// verify a signature inside the handler:
+	//   CreateVerification  — verifySignature + agent.Status gate
+	//   GetVerificationSDK  — three X-AIM-* headers, an Ed25519 signature, and
+	//                         event ownership (404, not 403, on mismatch)
+	// Anything else belongs in the group. routes_gate_test.go requires every
+	// app-level /api/v1/sdk-api/verifications registration to be listed there
+	// with the control that justifies it, and asserts the group's middleware is
+	// registered before the routes it is supposed to guard.
 	app.Post("/api/v1/sdk-api/verifications", middleware.RateLimitMiddleware(), h.Verification.CreateVerification)
 	// Defect #160: SDK GET is now signature-authed (Ed25519 headers) and
 	// agent-scoped inside the handler. JWT GET continues at /api/v1/verifications/:id.
 	app.Get("/api/v1/sdk-api/verifications/:id", middleware.RateLimitMiddleware(), h.Verification.GetVerificationSDK)
-	app.Post("/api/v1/sdk-api/verifications/:id/result", middleware.RateLimitMiddleware(), h.Verification.SubmitVerificationResult)
-	app.Post("/api/v1/sdk-api/verifications/:id/execution-status", middleware.RateLimitMiddleware(), h.Verification.UpdateExecutionStatus)
 
 	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
 	// These routes use Ed25519 agent authentication for SDK/programmatic access
@@ -338,6 +346,14 @@ func main() {
 	sdkAPI.Use(middleware.AuthMiddleware(jwtService))                   // Fallback to JWT if Ed25519 not present
 	sdkAPI.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	sdkAPI.Use(middleware.RateLimitMiddleware())
+	// Verification WRITE routes. Moved off the bare app registration above: they
+	// authenticated nothing there — a rate limiter was their only middleware, and
+	// neither handler read c.Locals. The group supplies a body-bound canonical
+	// message, a ±30s window and revocation enforcement; the handlers add the
+	// agent-ownership check, because the group authenticates *an* agent and also
+	// falls through to JWT for human callers (pqc_agent_auth.go:39-41, :50-52).
+	sdkAPI.Post("/verifications/:id/result", h.Verification.SubmitVerificationResult)        // Withdrawn: 403 for every caller
+	sdkAPI.Post("/verifications/:id/execution-status", h.Verification.UpdateExecutionStatus) // Agent-owned execution report
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                          // SDK capability reporting (legacy)
 	sdkAPI.Post("/agents/:id/capabilities/register", h.Capability.RegisterCapability)              // SDK capability registration (respects enforcement mode)
@@ -1752,7 +1768,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	verifications.Use(middleware.RateLimitMiddleware())
 	verifications.Post("/", h.Verification.CreateVerification)                 // Request verification for agent action
 	verifications.Get("/:id", h.Verification.GetVerification)                  // Get verification status by ID
-	verifications.Post("/:id/result", h.Verification.SubmitVerificationResult) // Submit verification result
+	// REMOVED: `verifications.Post("/:id/result", ...)`. This mount authenticated a
+	// JWT user but the handler had no ownership check, so any authenticated user of
+	// any organization could rewrite any verification by UUID. It is deleted rather
+	// than org-scoped: SubmitVerificationResult now refuses every caller, so an
+	// org-scoped mount would authenticate a manager in order to refuse them. It had
+	// no caller — apps/web referenced it only in lib/api-documentation.ts, which
+	// published a `roleRequired: "manager"` contract the handler never implemented;
+	// that entry is removed with it. The live approval path is the admin group.
 
 	// Verification Event routes (authentication required) - Real-time monitoring
 	verificationEvents := v1.Group("/verification-events")

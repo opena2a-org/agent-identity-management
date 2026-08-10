@@ -87,8 +87,14 @@ var allowlist = map[string]string{
 	"PublicMCPHandler.VerifyMCPAction":             "audit-baseline: needs review",
 	"SDKTokenHandler.RevokeToken":                  "service-layer scoping: SDKTokenService.RevokeToken collapses both not-found and cross-user mismatch into ErrSDKTokenNotFound; the handler maps the sentinel to a fixed 404. SDK tokens are user-scoped (not org-scoped), so the gate lives at the service layer.",
 	"TagHandler.UpdateTag":                         "audit-baseline: needs review (service-layer scoping exists but has existence side channel via error string; A3d-ii follow-up — see todo/2026-05-21-a3d-ii-tag-mcp-scoping.md)",
-	"VerificationHandler.SubmitVerificationResult": "audit-baseline: needs review",
-	"VerificationHandler.UpdateExecutionStatus":    "audit-baseline: needs review",
+	// VerificationHandler.SubmitVerificationResult and .UpdateExecutionStatus were
+	// carried here as "audit-baseline: needs review" from 2025 until 2026-08-10,
+	// when the review they were waiting for found both routes reachable with no
+	// authentication at all and one of them writing the authorization decision.
+	// The lint detected them; the finding was deferred and not returned to. Both
+	// entries are REMOVED rather than re-justified: SubmitVerificationResult now
+	// reads no path param and touches no store, and UpdateExecutionStatus scopes
+	// through the recognized LoadOwnedByAgent helper. Do not add either back.
 
 	// ---------------------------------------------------------------
 	// Service-layer-enforced tenant scoping. The lint's AST scan cannot
@@ -124,9 +130,16 @@ var allowlist = map[string]string{
 // lint recognizes it the same as LoadOwned because the unwrapping is
 // a one-line forwarder; treating it as a recognized helper avoids
 // every A2A handler having to repeat the closure inline.
+//
+// `LoadOwnedByAgent` scopes to the calling AGENT rather than the calling
+// organization, for sdkAPI-group routes where the group authenticates an agent
+// (and falls through to JWT) but ownership of the specific row still has to be
+// established in the handler. It refuses a uuid.Nil caller before the loader
+// runs, so a non-agent principal cannot reach the lookup.
 var recognizedHelpers = map[string]bool{
 	"LoadOwned":         true,
 	"LoadOwnedViaAgent": true,
+	"LoadOwnedByAgent":  true,
 	"loadOwnedAgent":    true,
 }
 

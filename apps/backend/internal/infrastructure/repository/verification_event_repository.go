@@ -842,7 +842,19 @@ func (r *VerificationEventRepositorySimple) UpdateResult(id uuid.UUID, result do
 	return nil
 }
 
-// UpdateExecutionStatus updates the execution status reported by the SDK
+// UpdateExecutionStatus records the SDK's execution report. Append-once.
+//
+// SECURITY: `AND executed IS NULL` makes the report immutable after the first
+// write. These four columns have exactly one writer in the backend — the
+// reporting agent's own SDK — and they are the inputs the dashboard's
+// enforcement text is derived from, so an agent must not be able to revise its
+// own record of what happened after the fact. (They are write-only today: no
+// SELECT in this file lists them, so nothing reads them back yet. The
+// immutability is for when something does.) Migration 053 declares all four nullable
+// with no default, so IS NULL is a well-defined "not yet reported" and this
+// needs no schema change. A second report affects zero rows and surfaces as the
+// same 404 as an unknown ID; the Python decorator's eight call sites sit in
+// mutually exclusive branches, so at most one report fires per invocation.
 func (r *VerificationEventRepositorySimple) UpdateExecutionStatus(id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
 	query := `
     UPDATE verification_events
@@ -851,7 +863,7 @@ func (r *VerificationEventRepositorySimple) UpdateExecutionStatus(id uuid.UUID, 
         strict_mode = $2,
         executed_at = $3,
         execution_error = $4
-    WHERE id = $5`
+    WHERE id = $5 AND executed IS NULL`
 
 	execResult, err := r.db.Exec(query, executed, strictMode, executedAt, executionError, id)
 	if err != nil {
