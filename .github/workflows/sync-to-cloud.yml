@@ -96,10 +96,20 @@ jobs:
           #
           # It is NOT a shell-injection vector, and the sanitising below is not what makes
           # it safe. The message reaches this script only as the COMMIT_TITLE env var
-          # declared above, never as a `${{ }}` interpolation into the script body, so the
-          # shell never re-parses its value -- parameter expansion of a value is not
-          # rescanned for command substitution. Do not relabel the line below as an
+          # declared above, never through workflow expression interpolation into the script
+          # body, so the shell never re-parses its value -- parameter expansion of a value
+          # is not rescanned for command substitution. Do not relabel the line below as an
           # injection fix; a false security claim is itself a defect.
+          #
+          # Do NOT write a literal expression-interpolation token in this comment to
+          # illustrate the point. Actions substitutes those inside a run: block before any
+          # shell exists, so a `#` does not protect one, and an empty pair is an invalid
+          # expression that makes GitHub reject the whole workflow file. That is not
+          # hypothetical: the first version of this comment did exactly that, and every
+          # sync run from 8d79696 (2026-08-08) to 8ea0ceb (2026-08-11) failed with "this
+          # run likely failed because of a workflow file issue" -- which meant the alert
+          # step below never executed and the backlog issue it exists to file was never
+          # filed. `actionlint` catches it; the repo's other lints and CI do not.
           #
           # head -1 keeps a multi-line message from breaking the markdown list or injecting
           # headings; head_commit is absent on workflow_dispatch. The `tr -d` drops the
