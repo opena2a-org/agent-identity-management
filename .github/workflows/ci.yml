@@ -330,6 +330,13 @@ jobs:
         working-directory: apps/web
         run: npm run lint
 
+      # Unit tests were never run in CI. `npm run test` (vitest) existed, and the one
+      # spec in the tree ran nowhere that could block a merge -- so a regression test
+      # added here would have gated nothing.
+      - name: Unit tests (vitest)
+        working-directory: apps/web
+        run: npm run test -- --run
+
       - name: Build
         working-directory: apps/web
         run: npm run build

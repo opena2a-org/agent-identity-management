@@ -179,7 +179,9 @@ function DashboardContent() {
   const fetchAllDashboardData = useCallback(async () => {
     const token = searchParams.get("token");
     if (token) {
-      api.setToken(token);
+      // A token arriving in the URL is a sign-in handoff, so it starts a new
+      // session window rather than extending whatever was left in localStorage.
+      api.setToken(token, undefined, "new-session");
       window.history.replaceState({}, "", "/dashboard");
     }
 
