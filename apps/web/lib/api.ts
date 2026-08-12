@@ -519,13 +519,31 @@ class APIClient {
     return this._baseURL;
   }
 
-  setToken(token: string, refreshToken?: string) {
-    // Detect a fresh login (logged-out -> logged-in) vs a token refresh, so the
-    // absolute session-timeout window is started on login but NOT reset on every
-    // refresh (which would defeat the 8h cap).
-    const isFreshLogin =
-      !this.token &&
-      (typeof window === "undefined" || !localStorage.getItem("auth_token"));
+  /**
+   * Stores the access token, and starts the absolute session window when this is a
+   * new session rather than a token refresh.
+   *
+   * `sessionKind` is EXPLICIT and must stay explicit. It was previously inferred:
+   *
+   *     const isFreshLogin = !this.token && !localStorage.getItem("auth_token")
+   *
+   * which conflated "this is a refresh" with "a login happened while a stale token
+   * was still in localStorage" — and the second case is routine, because the 8h cap
+   * is only enforced by a timer on a mounted dashboard. Close the tab, come back a
+   * day later, and `auth_token` plus a day-old `session_start` are both still there.
+   * The login then took the refresh path, left `session_start` untouched, and
+   * use-idle-timeout logged the user straight back out with "Your 8-hour session
+   * ended." That logout cleared the keys, so the SECOND login worked — the reported
+   * symptom was having to sign in twice, every time.
+   *
+   * A caller knows which operation it is performing; this function cannot know. Do
+   * not reintroduce an inference here.
+   */
+  setToken(
+    token: string,
+    refreshToken?: string,
+    sessionKind: "new-session" | "token-refresh" = "new-session"
+  ) {
     this.token = token;
     if (typeof window !== "undefined") {
       localStorage.setItem("auth_token", token);
@@ -533,7 +551,11 @@ class APIClient {
         this.refreshToken = refreshToken;
         localStorage.setItem("refresh_token", refreshToken);
       }
-      if (isFreshLogin) {
+      // Default is "new-session": a caller that forgets to say gets a usable
+      // session rather than a login loop. The cap is a client-side convenience
+      // boundary (see use-idle-timeout.ts) — the real boundaries are the access
+      // token exp and the refresh-token expiry, which this does not touch.
+      if (sessionKind === "new-session") {
         const t = String(Date.now());
         localStorage.setItem("session_start", t);
         localStorage.setItem("last_activity", t);
@@ -598,7 +620,9 @@ class APIClient {
 
       const data = await response.json();
       // Store new tokens (token rotation - old refresh token is now invalid)
-      this.setToken(data?.accessToken, data?.refreshToken);
+      // "token-refresh": must NOT restart the absolute session window, or the 8h
+      // cap would never be reached because every refresh would push it out.
+      this.setToken(data?.accessToken, data?.refreshToken, "token-refresh");
       return data;
     } catch (error) {
       // Network error or other issue
@@ -743,7 +767,8 @@ class APIClient {
 
     // Store tokens if password change was successful
     if (data_response.success && data_response.accessToken) {
-      this.setToken(data_response.accessToken, data_response.refreshToken);
+      // "new-session": the credential changed and the old tokens were invalidated.
+      this.setToken(data_response.accessToken, data_response.refreshToken, "new-session");
     }
 
     return data_response;
@@ -801,7 +826,7 @@ class APIClient {
 
     // If login successful and user is approved, store tokens
     if (response.success && response.isApproved && response.accessToken) {
-      this.setToken(response.accessToken, response.refreshToken);
+      this.setToken(response.accessToken, response.refreshToken, "new-session");
     }
 
     return response;
