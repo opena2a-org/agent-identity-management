@@ -33,6 +33,33 @@ jobs:
       - name: No ${VAR:-fallback} for secret-shaped env vars
         run: ./scripts/lint-no-secret-fallbacks.sh
 
+  # Validate the workflow files themselves. Nothing did, and it cost five days of a
+  # dead sync: a comment in sync-to-cloud.yml contained a literal expression-interpolation
+  # token to illustrate a point, Actions substitutes those inside a run: block before any
+  # shell exists so `#` did not protect it, and an empty pair is an invalid expression.
+  # GitHub rejected the whole file with "this run likely failed because of a workflow file
+  # issue" on every push from 8d79696 to 8ea0ceb -- which meant the alert step that exists
+  # to file the sync backlog never executed.
+  #
+  # The file parsed as valid YAML the whole time, and every other check on the PR was
+  # green, so nothing in this repo could see it. An invalid workflow file also bypasses
+  # `on.push.paths`, so it fails on pushes that do not even touch the filtered paths.
+  workflow-lint:
+    name: Workflow lint (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Workflow files must be valid to GitHub, not merely valid YAML
+        run: |
+          set -euo pipefail
+          ver=1.7.12
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ver}/actionlint_${ver}_linux_amd64.tar.gz" \
+            | tar -xz actionlint
+          # shellcheck is absent on the runner image path actionlint probes; -shellcheck=
+          # disables that integration so this job fails on workflow-level defects only and
+          # does not become a shell-style gate by accident.
+          ./actionlint -shellcheck= -color
+
   # AST lint that catches HTTP handlers reading c.Params("id"|"agent_id")
   # without invoking the tenant-scoping helper (LoadOwned or
   # LoadOwnedViaAgent). The structural guarantee for the defect #18-25
@@ -411,6 +438,7 @@ jobs:
       [
         secrets-lint,
         tenant-scoping-lint,
+        workflow-lint,
         changes,
         backend,
         integration,
@@ -425,17 +453,18 @@ jobs:
         run: |
           sl='${{ needs.secrets-lint.result }}'
           tl='${{ needs.tenant-scoping-lint.result }}'
+          wl='${{ needs.workflow-lint.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
           it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
