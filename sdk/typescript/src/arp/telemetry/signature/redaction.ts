@@ -4,7 +4,7 @@
  * This is the privacy chokepoint of the producer. It reduces a runtime ARP
  * observation to a CLOSED SET of allowlisted structural tokens — the SHAPE of a
  * behavior — and nothing else. It is deliberately small and readable so that a
- * customer can audit it before trusting the default-on channel.
+ * customer can audit it before trusting the channel.
  *
  * Hard invariants (see opena2a-registry/docs/telemetry-behavioral-hash-spec.md):
  *   - Every output token comes from a fixed enum in THIS file. No value is ever

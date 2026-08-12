@@ -1,11 +1,11 @@
 /**
- * Local customer audit log (G2) — the trust counterweight for default-on.
+ * Local customer audit log (G2) — the trust counterweight for any sending at all.
  *
  * BEFORE any payload is transmitted, the producer appends to this local,
  * append-only JSONL log EXACTLY the bytes it will send. A customer can therefore
  * verify with their own eyes (via `arp telemetry log`) that no payload, prompt,
- * argument, path, secret, or PII ever leaves the device — which is what makes a
- * default-on / opt-out posture defensible.
+ * argument, path, secret, or PII ever leaves the device — the evidence behind
+ * the claim, rather than a promise to be taken on trust.
  *
  * The log write is best-effort and FAILS OPEN: a logging failure never blocks or
  * crashes the agent. Writes happen on the emitter's flush path, off the agent's

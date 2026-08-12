@@ -1,24 +1,28 @@
 /**
- * Install-time disclosure (G7).
+ * First-run disclosure (G7).
  *
- * A default-on / opt-out posture is only ethical if the customer is told plainly,
- * at first run, exactly what is shared, why, and how to turn it off. This text is
- * intentionally plain and non-marketing (CPO/legal voice). It is shown once (a
- * marker is written after the first show) and is always available on demand via
- * `disclosureText()` (or `arp telemetry disclosure` for hackmyagent CLI users).
+ * The channel is opt-in, so this text is shown to someone who has already turned
+ * it on: it confirms plainly what that choice shares, what it never shares, and
+ * how to reverse it. Intentionally plain and non-marketing (CPO/legal voice).
+ * Shown once (a marker is written after the first show) and always available on
+ * demand via `disclosureText()` (or `arp telemetry disclosure` for hackmyagent
+ * CLI users).
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { opena2aHome, homePath, DISCLOSURE_MARKER_FILE } from './paths';
 import { auditLogPath } from './audit-log';
-import { isOptedOut, type SignatureTelemetryConfig } from './config';
+import { isOptedOut, signatureTelemetryEnabled, type SignatureTelemetryConfig } from './config';
 
-/** Build the disclosure text. Reflects the CURRENT opt-out state for honesty. */
+/** Build the disclosure text. Reflects the CURRENT channel state for honesty. */
 export function disclosureText(config?: SignatureTelemetryConfig): string {
   const optedOut = isOptedOut(config);
+  const enabled = signatureTelemetryEnabled(config);
   const status = optedOut
     ? 'Status: OFF. You have opted out; nothing is shared.'
-    : 'Status: ON by default. Structural signatures are shared (see below).';
+    : enabled
+      ? 'Status: ON. You turned this on; structural signatures are shared (see below).'
+      : 'Status: OFF. This channel is off unless you turn it on; nothing is shared.';
 
   return [
     'OpenA2A community threat intelligence',
@@ -35,7 +39,7 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'hostnames, account ids, or the names of your tools, agents, or models.',
     '',
     'Why: shared structural signatures let an attack first seen at one deployment',
-    'protect every other deployment. Collection is off until you have visibility:',
+    'protect every other deployment. Nothing is sent until you have visibility:',
     'every payload is written to a local audit log BEFORE it is sent, so you can',
     'verify exactly what left your machine.',
     '',
@@ -43,12 +47,16 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'Review it:  read the audit log file above. If you installed the hackmyagent',
     '            CLI you can also run `arp telemetry log` / `arp telemetry status`.',
     '',
-    'How to turn it off (any one):',
+    'This channel is OFF unless you turn it on (either one):',
+    '  - set AIM_TELEMETRY=1',
+    '  - signatureTelemetry.enabled: true in your ARP config',
+    '',
+    'How to turn it off again (any one):',
     '  - set OPENA2A_TELEMETRY_OPTOUT=1 (or ARP_TELEMETRY_DISABLED=1)',
     '  - signatureTelemetry.enabled: false in your ARP config',
     '  - run `arp telemetry opt-out` (hackmyagent CLI)',
-    'Opting out disables ALL OpenA2A telemetry and purges shared signatures',
-    'on the registry (right-to-delete).',
+    'An opt-out always wins over an opt-in. Opting out disables ALL OpenA2A',
+    'telemetry and purges shared signatures on the registry (right-to-delete).',
   ].join('\n');
 }
 

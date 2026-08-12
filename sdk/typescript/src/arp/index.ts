@@ -212,7 +212,7 @@ export class AgentRuntimeProtection {
   private readonly monitors: Monitor[] = [];
   private gtinForwarder: GTINForwarder | null = null;
   /**
-   * Structural signature producer (G2/G4/G5/G7). DEFAULT-ON, opt-out — distinct
+   * Structural signature producer (G2/G4/G5/G7). OFF by default, opt-in — distinct
    * from the legacy opt-in GTIN runtime channel. Null only when the customer has
    * opted out (the single master opt-out, which also gates GTIN below).
    */
@@ -346,7 +346,8 @@ export class AgentRuntimeProtection {
       });
     }
 
-    // Create the structural signature emitter unless opted out (DEFAULT-ON).
+    // Create the structural signature emitter only if explicitly opted in
+    // (OFF by default; see telemetry/signature/config.ts).
     if (signatureTelemetryEnabled(this.config.signatureTelemetry)) {
       this.signatureEmitter = new SignatureEmitter({
         registryUrl: resolveRegistryUrl(this.config.signatureTelemetry),
@@ -381,7 +382,7 @@ export class AgentRuntimeProtection {
     }
 
     // Start the structural signature emitter and, on first run only, print the
-    // plain install-time disclosure (G7) so a default-on customer knows exactly
+    // plain first-run disclosure (G7) so a customer who turned this on knows exactly
     // what is shared and how to opt out.
     if (this.signatureEmitter) {
       maybeShowDisclosure(undefined, this.config.signatureTelemetry);

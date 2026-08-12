@@ -255,8 +255,8 @@ fact), the classified intent, and the injection cause (both inferences). The
 full **correlated record** is authoritative and stays on the machine; only an
 anonymized **shared indicator** is ever uploaded. This section covers the
 causal-denial channel only — the runtime-protection module ships a separate
-structural-signature channel that is **on by default**; see the Runtime
-Protection section for its scope and opt-out.
+structural-signature channel that is also **off by default**; see the Runtime
+Protection section for its scope and how to turn it on.
 
 The causal-denial channel is **off by default** and gated by two independent
 opt-ins:
@@ -371,9 +371,9 @@ to "no classification" — it never fabricates a label and never blocks.
 detection outputs flow through the `telemetry.detection` seam into the
 correlated record; they never enter `verifyAction`'s allow/deny decision.
 
-**Structural signature telemetry (on by default, opt-out).** Unlike the
-opt-in causal-denial channel above, the ARP engine shares **structural attack
-signatures** by default: when a detection fires, the structural shape of the
+**Structural signature telemetry (off by default, opt-in).** Like the
+causal-denial channel above, the ARP engine shares nothing unless you turn it
+on. When enabled, and when a detection fires, the structural shape of the
 event sequence — technique identifier, event-type sequence, severity, and a
 one-way hash of structural tokens — is signed and reported to the OpenA2A
 registry (`https://api.oa2a.org`), so an attack shape first seen at one
@@ -382,7 +382,14 @@ contents or paths, command lines, environment values, secrets, IP addresses,
 hostnames, and account, tool, agent, and model names are never shared. A
 one-time disclosure is printed before first collection, and every payload is
 appended to a local audit log (`~/.opena2a/telemetry-audit.log`, JSONL) before
-it is sent. Opt out with any one of:
+it is sent.
+
+Turn it on with either of:
+
+- `AIM_TELEMETRY=1` in the environment, or
+- `signatureTelemetry: { enabled: true }` in your ARP config.
+
+Turn it off again — an opt-out always wins over an opt-in — with any one of:
 
 - `OPENA2A_TELEMETRY_OPTOUT=1` (or `ARP_TELEMETRY_DISABLED=1`) in the
   environment,
