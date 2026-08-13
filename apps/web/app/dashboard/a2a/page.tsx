@@ -379,15 +379,15 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
             </h3>
             <p className="mt-2 text-sm text-blue-800 dark:text-blue-200">
               The Agent-to-Agent (A2A) protocol enables secure communication between AI agents.
-              AIM enhances A2A with cryptographic attestation, trust scoring, and GDPR/PSD2 compliant
-              consent management for enterprise-grade agent interoperability.
+              AIM enhances A2A with cryptographic attestation, trust scoring, and recorded, revocable
+              consent for agent-to-agent data sharing.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200">
                 <Shield className="h-3 w-3" /> Ed25519 Signatures
               </span>
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">
-                <ShieldCheck className="h-3 w-3" /> GDPR Compliant
+                <ShieldCheck className="h-3 w-3" /> Consent Records
               </span>
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">
                 <TrendingUp className="h-3 w-3" /> Trust Scoring

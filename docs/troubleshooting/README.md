@@ -53,7 +53,7 @@ Your SDK credentials have expired due to token rotation (security policy).
    ```
 
 **Why This Happens**:
-- AIM uses **token rotation** for security (SOC 2 / HIPAA compliant)
+- AIM uses **token rotation** for security
 - When you use a refresh token → backend issues NEW token
 - OLD token is revoked → prevents token theft
 - This is **correct behavior**, not a bug

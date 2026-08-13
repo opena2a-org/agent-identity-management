@@ -678,7 +678,7 @@ curl -X POST http://localhost:8080/api/v1/admin/force-password-reset \
 **Why Short TTL**:
 - Limits damage if token stolen
 - Forces regular re-authentication
-- Meets compliance requirements (SOC 2, HIPAA)
+- Produces the credential-rotation evidence SOC 2 and HIPAA programs ask for
 
 **If You Need Longer**:
 - Use API keys (no expiration, different security model)

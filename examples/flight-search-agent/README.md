@@ -234,7 +234,7 @@ cp -r ./fresh-sdk/aim-sdk-python/.aim ~/.aim
 AIM uses **token rotation** for security:
 - When you use a refresh token → backend issues NEW token
 - OLD token is immediately revoked → prevents reuse attacks
-- This is SOC 2 / HIPAA compliant behavior
+- Rotating short-lived credentials is a control SOC 2 and HIPAA programs commonly expect
 
 See `NEXT_STEPS.md` for detailed explanation.
 

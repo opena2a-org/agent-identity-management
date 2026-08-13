@@ -2,7 +2,7 @@
 
 ## Overview
 
-AIM uses **token rotation** to protect your organization from token theft and unauthorized access. This is a security feature that is **required for SOC 2, HIPAA, and GDPR compliance**.
+AIM uses **token rotation** to protect your organization from token theft and unauthorized access. Rotating short-lived credentials is a control SOC 2, HIPAA and GDPR programs commonly expect.
 
 ## What is Token Rotation?
 
@@ -292,7 +292,7 @@ The SDK handles rotation automatically:
 
 ### Q: Can I disable token rotation?
 
-**A:** No. Token rotation is **required for security** and compliance (SOC 2, HIPAA, GDPR).
+**A:** No. Token rotation is **required for security**, and it is a control SOC 2, HIPAA and GDPR programs commonly expect.
 
 If you need long-lived credentials:
 - Use **API keys** instead (different security model)
@@ -468,7 +468,7 @@ CREATE INDEX idx_sdk_tokens_revoked
 
 ✅ **You only need to download fresh SDK when you see errors**
 
-✅ **This is required for compliance (SOC 2, HIPAA, GDPR)**
+✅ **This is a control SOC 2, HIPAA and GDPR programs commonly expect**
 
 **Bottom line**: Token rotation makes AIM more secure. The minor inconvenience of occasionally downloading fresh credentials is far outweighed by the security benefits.
 
