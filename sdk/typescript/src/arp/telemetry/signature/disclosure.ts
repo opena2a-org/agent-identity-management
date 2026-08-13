@@ -55,8 +55,13 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     '  - set OPENA2A_TELEMETRY_OPTOUT=1 (or ARP_TELEMETRY_DISABLED=1)',
     '  - signatureTelemetry.enabled: false in your ARP config',
     '  - run `arp telemetry opt-out` (hackmyagent CLI)',
-    'An opt-out always wins over an opt-in. Opting out disables ALL OpenA2A',
-    'telemetry and purges shared signatures on the registry (right-to-delete).',
+    'An opt-out always wins over an opt-in. It disables every channel this',
+    'runtime-protection module produces: structural signatures, the legacy GTIN',
+    'channel, and fleet behavioral gradients. It also purges signatures this',
+    'sensor already shared with the registry (right-to-delete). Fleet gradients',
+    'carry no identifier, so there is nothing about them to purge.',
+    'The AIM client has a separate causal-denial relay with its own switch,',
+    'off unless you enabled it; this opt-out does not govern it.',
   ].join('\n');
 }
 

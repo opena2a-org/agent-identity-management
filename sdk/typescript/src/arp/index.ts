@@ -324,11 +324,16 @@ export class AgentRuntimeProtection {
       this.monitors.push(new A2AProtocolInterceptor(this.engine, al.a2a.trustedAgents));
     }
 
-    // The single master opt-out (env / marker file / config) disables ALL
-    // OpenA2A telemetry, so a customer who opts out is never surprised by
-    // another channel. Resolved once here and applied to both channels below;
-    // the third channel (fleet gradients) applies it in RuntimeTwin itself,
-    // both at construction and again before each send.
+    // The master opt-out (env / marker file / config) disables every channel
+    // THIS module produces, so a customer who opts out is not surprised by a
+    // second one. Resolved once here and applied to both channels below; the
+    // third (fleet gradients) applies it in RuntimeTwin itself, at construction
+    // and again before each send.
+    //
+    // It does NOT govern src/telemetry/relay.ts, which is the AIM client's
+    // causal-denial channel with its own switch, default off. That exclusion is
+    // deliberate and documented in README.md; telemetry-egress-census.test.ts
+    // pins the whole set so a new channel cannot join it silently.
     const optedOut = isOptedOut(this.config.signatureTelemetry);
 
     // Create GTIN forwarder if opted in AND not globally opted out. GTIN remains
