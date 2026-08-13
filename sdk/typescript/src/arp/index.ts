@@ -325,8 +325,10 @@ export class AgentRuntimeProtection {
     }
 
     // The single master opt-out (env / marker file / config) disables ALL
-    // OpenA2A telemetry, so a customer who opts out is never surprised by a
-    // second channel. Resolved once here and applied to both channels below.
+    // OpenA2A telemetry, so a customer who opts out is never surprised by
+    // another channel. Resolved once here and applied to both channels below;
+    // the third channel (fleet gradients) applies it in RuntimeTwin itself,
+    // both at construction and again before each send.
     const optedOut = isOptedOut(this.config.signatureTelemetry);
 
     // Create GTIN forwarder if opted in AND not globally opted out. GTIN remains

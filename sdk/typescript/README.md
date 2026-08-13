@@ -398,8 +398,8 @@ Turn it off again — an opt-out always wins over an opt-in — with any one of:
   `~/.opena2a/telemetry-optout` across processes.
 
 Any one of these is the runtime-protection module's master switch: it disables
-every telemetry channel the module can produce (structural signatures and the
-opt-in legacy GTIN runtime channel). The causal-denial channel above is
+every telemetry channel the module can produce - structural signatures, the
+opt-in legacy GTIN runtime channel, and fleet behavioral gradients. The causal-denial channel above is
 controlled solely by its own `telemetry` client config and is off unless you
 enabled it. To also delete signatures this sensor already shared, call
 `purgeRemoteSignatures()` (right-to-delete; best-effort, never blocks the

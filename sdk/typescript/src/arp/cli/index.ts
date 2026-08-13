@@ -287,7 +287,7 @@ async function telemetryCommand(): Promise<void> {
       // remote purge below is best-effort cleanup of already-sent data and must
       // never block or undo the opt-out (fail OPEN).
       const p = writeOptOutMarker();
-      console.log('\n  OpenA2A telemetry DISABLED (both signature and GTIN channels).');
+      console.log('\n  OpenA2A telemetry DISABLED (signature, GTIN and fleet-gradient channels).');
       console.log(`  Marker: ${p}`);
 
       if (args.includes('--no-purge')) {

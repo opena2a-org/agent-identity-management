@@ -2,11 +2,10 @@
  * Signature telemetry configuration, the explicit opt-in, and the master opt-out.
  *
  * Posture: OPT-IN. The channel is disabled by default and starts only when the
- * operator turns it on explicitly. This supersedes the earlier default-on,
- * opt-out ratification (`project_telemetry_consent_design`) for this SDK
- * surface, per the 2026-08-11 ruling in `todo/COUNCIL_LEDGER.md`: AIM telemetry
- * is opt-in by explicit configuration only, is never prompted for, and is
- * disabled by default in every distribution channel.
+ * operator turns it on explicitly. This reverses an earlier default-on,
+ * opt-out posture for this SDK surface. Telemetry here is opt-in by explicit
+ * configuration only, is never prompted for, and is disabled by default in
+ * every distribution channel.
  *
  * Why the reversal: this SDK ships as a library inside other people's
  * production processes, and AIM's product claim is that identity and audit stay

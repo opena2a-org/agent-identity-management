@@ -33,6 +33,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { isOptedOut } from '../telemetry/signature/config';
 import type { ARPEvent } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 
@@ -117,7 +118,10 @@ export class RuntimeTwin {
     this.agentId = agentId;
     this.sessionId = crypto.randomUUID();
     this.enabled = config?.enabled ?? true;
-    this.fleetEnabled = config?.fleetEnabled ?? false; // opt-in only
+    // Opt-in only, and an opt-out beats the opt-in. Resolved once here so the
+    // per-event accumulation path costs no syscall; flushGradient re-checks
+    // before sending so an opt-out written after startup is still honored.
+    this.fleetEnabled = (config?.fleetEnabled ?? false) && !isOptedOut();
     this.agentCategory = config?.agentCategory ?? 'general';
     this.eventLogPath = path.join(os.homedir(), '.opena2a', 'arp', 'events.jsonl');
 
@@ -450,6 +454,17 @@ export class RuntimeTwin {
    */
   private async flushGradient(): Promise<void> {
     if (this.gradientEventCount === 0) return;
+
+    // Pre-send re-check of the master opt-out. This is the only point at which
+    // fleet gradients leave the process, so it is the point that has to honor
+    // "opting out disables all OpenA2A telemetry". Accumulators are reset on the
+    // way out so a refusal does not turn this into a per-event check.
+    if (isOptedOut()) {
+      this.gradientAccumulator = new Array(GRADIENT_DIMS).fill(0);
+      this.gradientEventCount = 0;
+      this.gradientLossSum = 0;
+      return;
+    }
 
     // Normalize gradient by event count
     const normalized = this.gradientAccumulator.map(
