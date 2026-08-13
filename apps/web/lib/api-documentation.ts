@@ -3378,53 +3378,6 @@ export const apiDocumentation: EndpointCategory[] = [
         },
         example: "No request body required",
       },
-      {
-        method: "POST",
-        path: "/api/v1/verifications/:id/result",
-        description: "Submit verification result (approve or reject). Called by authorized users to approve/reject agent action verification requests.",
-        summary: "Submit verification result",
-        auth: "Bearer Token (JWT)",
-        requiresAuth: true,
-        roleRequired: "manager",
-        tags: ["verifications", "security"],
-        requestSchema: {
-          type: "object",
-          properties: {
-            status: {
-              type: "string",
-              description: "Verification result: 'approved' or 'rejected'",
-              required: true,
-            },
-            comments: {
-              type: "string",
-              description: "Optional comments about the decision",
-              required: false,
-            },
-            conditions: {
-              type: "array",
-              description: "Optional conditions for approval (e.g., time windows, monitoring requirements)",
-              required: false,
-            },
-          },
-        },
-        responseSchema: {
-          type: "object",
-          properties: {
-            verification_id: { type: "string", description: "Verification ID" },
-            status: { type: "string", description: "Updated status" },
-            reviewed_at: { type: "string", description: "Review timestamp" },
-            reviewed_by: { type: "string", description: "Reviewer user ID" },
-          },
-        },
-        example: `{
-  "status": "approved",
-  "comments": "Approved with monitoring",
-  "conditions": [
-    "rollback_plan_required",
-    "monitoring_enabled"
-  ]
-}`,
-      },
     ],
   },
 ];

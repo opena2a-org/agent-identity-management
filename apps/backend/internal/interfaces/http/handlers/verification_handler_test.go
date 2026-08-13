@@ -142,6 +142,12 @@ func TestVerificationHandler_GetVerification_InvalidID(t *testing.T) {
 // VerificationHandler.SubmitVerificationResult Tests
 // ===========================
 
+// These three named the inputs the handler used to branch on. It no longer
+// branches: every caller and every body gets the same refusal. Keeping the names
+// and asserting the identical outcome is the point — it documents that no
+// input-dependent path survived, which is what makes the endpoint useless as a
+// probe.
+
 func TestVerificationHandler_SubmitVerificationResult_InvalidID(t *testing.T) {
 	handler := &VerificationHandler{}
 	app := fiber.New()
@@ -155,7 +161,7 @@ func TestVerificationHandler_SubmitVerificationResult_InvalidID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 func TestVerificationHandler_SubmitVerificationResult_InvalidJSON(t *testing.T) {
@@ -170,7 +176,7 @@ func TestVerificationHandler_SubmitVerificationResult_InvalidJSON(t *testing.T) 
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 func TestVerificationHandler_SubmitVerificationResult_InvalidResult(t *testing.T) {
@@ -186,7 +192,25 @@ func TestVerificationHandler_SubmitVerificationResult_InvalidResult(t *testing.T
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+}
+
+// A nil-service handler proves the refusal needs no dependencies: if any code
+// path here touched a store, this would panic rather than fail.
+func TestVerificationHandler_SubmitVerificationResult_TouchesNoDependencies(t *testing.T) {
+	handler := &VerificationHandler{}
+	app := fiber.New()
+	app.Post("/verifications/:id/result", handler.SubmitVerificationResult)
+
+	req := httptest.NewRequest("POST", "/verifications/"+uuid.New().String()+"/result",
+		strings.NewReader(`{"result":"success"}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 // ===========================
@@ -280,6 +304,12 @@ func TestVerificationHandler_DenyVerification_EmptyReason(t *testing.T) {
 // VerificationHandler.UpdateExecutionStatus Tests
 // ===========================
 
+// UpdateExecutionStatus now refuses before it parses, when the caller is not an
+// agent. These mount with NO agent principal, which is exactly what the sdkAPI
+// group produces for a JWT or cookie caller, so 404 — not 400 — is the correct
+// assertion. The 400-on-malformed-id path is still covered, for an authenticated
+// agent, by TestVerificationHandler_UpdateExecutionStatus_InvalidIDWithMocks.
+
 func TestVerificationHandler_UpdateExecutionStatus_InvalidID(t *testing.T) {
 	handler := &VerificationHandler{}
 	app := fiber.New()
@@ -293,7 +323,8 @@ func TestVerificationHandler_UpdateExecutionStatus_InvalidID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+		"no agent principal: refused before the id is even parsed, so a non-agent learns nothing about the id")
 }
 
 func TestVerificationHandler_UpdateExecutionStatus_InvalidJSON(t *testing.T) {
@@ -308,7 +339,8 @@ func TestVerificationHandler_UpdateExecutionStatus_InvalidJSON(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+		"no agent principal: refused before the body is bound")
 }
 
 // ===========================
@@ -536,7 +568,8 @@ func TestVerificationHandler_SubmitVerificationResult_EmptyID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode,
+		"an absent id is refused like every other shape: the endpoint is withdrawn, not validating")
 }
 
 // ===========================
@@ -557,7 +590,8 @@ func TestVerificationHandler_UpdateExecutionStatus_EmptyID(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode,
+		"no agent principal: the principal gate fires before the id check")
 }
 
 // ===========================
@@ -703,17 +737,21 @@ func TestDenyVerificationRequest_Struct(t *testing.T) {
 	assert.Equal(t, "Agent not authorized for this action", req.Reason)
 }
 
+// StrictMode was removed from this struct: it is derived server-side from the
+// event's organization, because the reporting agent is the party being audited
+// and must not be able to assert what our enforcement configuration was. See
+// TestUpdateExecutionStatus_StrictModeIsServerDerived and
+// TestUpdateExecutionStatusRequest_HasNoStrictModeField in
+// verification_sdk_write_auth_test.go for the behaviour that replaced it.
 func TestUpdateExecutionStatusRequest_Struct(t *testing.T) {
 	errorMsg := "Connection timeout"
 	req := UpdateExecutionStatusRequest{
 		Executed:       false,
-		StrictMode:     true,
 		ExecutedAt:     "2024-01-01T12:00:00Z",
 		ExecutionError: &errorMsg,
 	}
 
 	assert.False(t, req.Executed)
-	assert.True(t, req.StrictMode)
 	assert.Equal(t, "2024-01-01T12:00:00Z", req.ExecutedAt)
 	assert.NotNil(t, req.ExecutionError)
 	assert.Equal(t, "Connection timeout", *req.ExecutionError)
@@ -722,13 +760,11 @@ func TestUpdateExecutionStatusRequest_Struct(t *testing.T) {
 func TestUpdateExecutionStatusRequest_Successful(t *testing.T) {
 	req := UpdateExecutionStatusRequest{
 		Executed:       true,
-		StrictMode:     false,
 		ExecutedAt:     "2024-01-01T12:00:00Z",
 		ExecutionError: nil,
 	}
 
 	assert.True(t, req.Executed)
-	assert.False(t, req.StrictMode)
 	assert.Nil(t, req.ExecutionError)
 }
 

@@ -26,6 +26,13 @@ import (
 // value for their mock event.OrganizationID.
 var testJWTOrgID = uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
+// testSDKAgentID is the agent principal injected by setupVerificationTestApp on
+// the sdkAPI write routes, standing in for Ed25519AgentMiddleware's
+// c.Locals("agent_id"). Tests that expect UpdateExecutionStatus to succeed must
+// give their mock event this AgentID, because the handler now refuses any event
+// the calling agent does not own.
+var testSDKAgentID = uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
 // ===========================
 // VerificationHandler Integration Tests
 // ===========================
@@ -40,11 +47,29 @@ func setupVerificationTestApp(handler *VerificationHandler) *fiber.App {
 		return c.Next()
 	})
 	jwtGroup.Get("/:id", handler.GetVerification)
-	jwtGroup.Post("/:id/result", handler.SubmitVerificationResult)
+	// NOTE: `jwtGroup.Post("/:id/result", ...)` is deliberately absent. That mount
+	// was removed from cmd/server/main.go — it authenticated a JWT user but the
+	// handler had no ownership check, so any user of any organization could
+	// rewrite any verification by UUID. Mirroring production here is the point:
+	// a harness that keeps a deleted route alive is how a test suite stays green
+	// over a route nobody serves.
 
-	// SDK API routes (signature-authed)
+	// SDK API routes (signature-authed). GetVerificationSDK verifies its own
+	// X-AIM-* headers and reads no locals, so it stays on the bare mount.
 	app.Get("/api/v1/sdk-api/verifications/:id", handler.GetVerificationSDK)
-	app.Post("/api/v1/sdk-api/verifications/:id/execution-status", handler.UpdateExecutionStatus)
+
+	// The two write routes now live behind the sdkAPI group. testSDKAgentID
+	// stands in for what Ed25519AgentMiddleware leaves in Locals; tests that need
+	// a different principal build their own app (see verification_sdk_write_auth_test.go).
+	sdkGroup := app.Group("/api/v1/sdk-api")
+	sdkGroup.Use(func(c fiber.Ctx) error {
+		c.Locals("agent_id", testSDKAgentID)
+		c.Locals("organization_id", testJWTOrgID)
+		c.Locals("authenticated_via", "ed25519")
+		return c.Next()
+	})
+	sdkGroup.Post("/verifications/:id/result", handler.SubmitVerificationResult)
+	sdkGroup.Post("/verifications/:id/execution-status", handler.UpdateExecutionStatus)
 
 	// Admin routes - require organization context
 	adminGroup := app.Group("/api/v1/admin")
@@ -596,12 +621,23 @@ func TestVerificationHandler_GetVerificationSDK_Valid_200(t *testing.T) {
 // SubmitVerificationResult Tests
 // ===========================
 
+// The four tests below previously asserted that POST .../result recorded a
+// result: 200 {"status":"result_recorded"} for "success", 400 for a malformed
+// body, 404 when the row was missing. They were green for the entire life of the
+// defect, because they asserted the contract the defect implemented.
+//
+// The endpoint is withdrawn. They now assert the
+// contract that replaced it, and each keeps its original name so that anyone
+// searching for "does /result record a success?" lands on the answer rather than
+// on a test of a route that no longer behaves that way.
+
 func TestVerificationHandler_SubmitVerificationResult_Success(t *testing.T) {
-	// Arrange
 	verificationID := uuid.New()
 
+	writes := 0
 	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
 		UpdateVerificationResultFunc: func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
+			writes++
 			return nil
 		},
 	}
@@ -616,38 +652,34 @@ func TestVerificationHandler_SubmitVerificationResult_Success(t *testing.T) {
 
 	app := setupVerificationTestApp(handler)
 
-	reqBody := map[string]interface{}{
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"result":   "success",
 		"reason":   "Action completed",
 		"metadata": map[string]interface{}{"key": "value"},
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	})
 
-	// Act
-	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode,
+		"a well-formed success report is refused: result/status are the authorization-decision channel")
 
 	var response map[string]interface{}
 	body, _ := io.ReadAll(resp.Body)
-	err = json.Unmarshal(body, &response)
-	require.NoError(t, err)
-
-	assert.Equal(t, verificationID.String(), response["id"])
-	assert.Equal(t, "result_recorded", response["status"])
-	assert.Equal(t, "success", response["result"])
+	require.NoError(t, json.Unmarshal(body, &response))
+	assert.Equal(t, "executionOutcomeNotAccepted", response["code"])
+	assert.Zero(t, writes, "no store write may occur on the withdrawn endpoint")
 }
 
 func TestVerificationHandler_SubmitVerificationResult_Failure(t *testing.T) {
-	// Arrange
 	verificationID := uuid.New()
 
+	writes := 0
 	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
 		UpdateVerificationResultFunc: func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
+			writes++
 			return nil
 		},
 	}
@@ -662,24 +694,22 @@ func TestVerificationHandler_SubmitVerificationResult_Failure(t *testing.T) {
 
 	app := setupVerificationTestApp(handler)
 
-	reqBody := map[string]interface{}{
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"result": "failure",
-		"reason": "Action failed due to error",
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+		"reason": "Action failed",
+	})
 
-	// Act
-	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode,
+		"a failure report is refused too: it wrote result='denied', which is equally the decision channel")
+	assert.Zero(t, writes)
 }
 
 func TestVerificationHandler_SubmitVerificationResult_InvalidResultWithMocks(t *testing.T) {
-	// Arrange
 	verificationID := uuid.New()
 
 	handler := NewVerificationHandlerWithInterfaces(
@@ -692,28 +722,29 @@ func TestVerificationHandler_SubmitVerificationResult_InvalidResultWithMocks(t *
 
 	app := setupVerificationTestApp(handler)
 
-	reqBody := map[string]interface{}{
-		"result": "invalid",
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	bodyBytes, _ := json.Marshal(map[string]interface{}{"result": "invalid"})
 
-	// Act
-	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode,
+		"a malformed body gets the SAME refusal as a well-formed one: no input-dependent branch survives, "+
+			"so the response cannot be used to probe what the endpoint would have accepted")
 }
 
 func TestVerificationHandler_SubmitVerificationResult_NotFound(t *testing.T) {
-	// Arrange
 	verificationID := uuid.New()
 
 	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
+		GetVerificationEventFunc: func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+			t.Fatal("the withdrawn endpoint must not look the event up; a lookup is an existence oracle")
+			return nil, nil
+		},
 		UpdateVerificationResultFunc: func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error {
-			return fmt.Errorf("not found")
+			t.Fatal("the withdrawn endpoint must not write")
+			return nil
 		},
 	}
 
@@ -727,19 +758,15 @@ func TestVerificationHandler_SubmitVerificationResult_NotFound(t *testing.T) {
 
 	app := setupVerificationTestApp(handler)
 
-	reqBody := map[string]interface{}{
-		"result": "success",
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	bodyBytes, _ := json.Marshal(map[string]interface{}{"result": "success"})
 
-	// Act
-	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/result", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode,
+		"an unknown id is refused identically to a known one, and is never looked up")
 }
 
 // ===========================
@@ -1134,135 +1161,149 @@ func TestVerificationHandler_DenyVerification_NotFound(t *testing.T) {
 // UpdateExecutionStatus Tests
 // ===========================
 
-func TestVerificationHandler_UpdateExecutionStatus_Success(t *testing.T) {
-	// Arrange
-	verificationID := uuid.New()
+// ownedEventFor builds an event the injected sdkAPI principal actually owns, so
+// these tests exercise the success path rather than the ownership refusal. An
+// event whose AgentID is not testSDKAgentID now 404s, which is what
+// verification_sdk_write_auth_test.go pins.
+func ownedEventFor(id uuid.UUID) *domain.VerificationEvent {
+	agentID := testSDKAgentID
+	return &domain.VerificationEvent{
+		ID:             id,
+		OrganizationID: testJWTOrgID,
+		AgentID:        &agentID,
+		Status:         domain.VerificationEventStatusPending,
+		CreatedAt:      time.Now().Add(-time.Minute),
+	}
+}
 
-	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
+func execStatusServiceFor(event *domain.VerificationEvent, onWrite func(executed, strictMode bool, executedAt time.Time)) *MockVerificationEventServiceForVerificationImpl {
+	return &MockVerificationEventServiceForVerificationImpl{
+		GetVerificationEventFunc: func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+			if event == nil || event.ID != id {
+				return nil, fmt.Errorf("verification event not found")
+			}
+			return event, nil
+		},
 		UpdateExecutionStatusFunc: func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
-			assert.Equal(t, verificationID, id)
-			assert.True(t, executed)
-			assert.True(t, strictMode)
+			if onWrite != nil {
+				onWrite(executed, strictMode, executedAt)
+			}
 			return nil
 		},
 	}
+}
 
+func TestVerificationHandler_UpdateExecutionStatus_Success(t *testing.T) {
+	verificationID := uuid.New()
+	event := ownedEventFor(verificationID)
+
+	var gotExecuted, gotStrict bool
 	handler := NewVerificationHandlerWithInterfaces(
 		&MockAgentServiceForVerificationImpl{},
 		&MockAuditServiceForVerificationImpl{},
 		&MockAlertServiceForVerificationImpl{},
-		mockVerifEventService,
+		execStatusServiceFor(event, func(executed, strictMode bool, _ time.Time) {
+			gotExecuted, gotStrict = executed, strictMode
+		}),
+		// Default mock organization is EnforcementModeMonitoring.
 		&MockOrganizationRepositoryerImpl{},
 	)
 
 	app := setupVerificationTestApp(handler)
 
 	now := time.Now().Format(time.RFC3339)
-	reqBody := map[string]interface{}{
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"executed":   true,
-		"strictMode": true,
+		"strictMode": true, // ignored: strict mode is server-derived
 		"executedAt": now,
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	})
 
-	// Act
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/execution-status", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
 
 	var response map[string]interface{}
 	body, _ := io.ReadAll(resp.Body)
-	err = json.Unmarshal(body, &response)
-	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(body, &response))
 
 	assert.Equal(t, verificationID.String(), response["id"])
 	assert.Equal(t, "execution_status_recorded", response["status"])
 	assert.Equal(t, true, response["executed"])
-	assert.Equal(t, true, response["strictMode"])
+	assert.True(t, gotExecuted)
+	assert.False(t, gotStrict,
+		"the organization is in monitoring mode, so strict_mode is false however the agent labelled its report")
+	assert.Equal(t, false, response["strictMode"])
 }
 
 func TestVerificationHandler_UpdateExecutionStatus_NotExecuted(t *testing.T) {
-	// Arrange
 	verificationID := uuid.New()
+	event := ownedEventFor(verificationID)
 
-	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
-		UpdateExecutionStatusFunc: func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
-			assert.False(t, executed)
-			assert.NotNil(t, executionError)
-			return nil
-		},
-	}
-
+	var gotExecuted bool
 	handler := NewVerificationHandlerWithInterfaces(
 		&MockAgentServiceForVerificationImpl{},
 		&MockAuditServiceForVerificationImpl{},
 		&MockAlertServiceForVerificationImpl{},
-		mockVerifEventService,
+		execStatusServiceFor(event, func(executed, _ bool, _ time.Time) { gotExecuted = executed }),
 		&MockOrganizationRepositoryerImpl{},
 	)
 
 	app := setupVerificationTestApp(handler)
 
-	execError := "Permission denied"
-	reqBody := map[string]interface{}{
-		"executed":       false,
-		"strictMode":     true,
-		"executionError": execError,
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	bodyBytes, _ := json.Marshal(map[string]interface{}{"executed": false})
 
-	// Act
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/execution-status", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.False(t, gotExecuted)
 }
 
+// TestVerificationHandler_UpdateExecutionStatus_NotFound pins the not-found path
+// specifically. It must fail for the reason its name says: the event does not
+// exist. Ownership refusal also returns 404, so the mock here OWNS nothing at
+// all and the assertion below checks the write was never attempted, which
+// distinguishes "no such row" from "row belongs to someone else" at the seam
+// rather than at the status code.
 func TestVerificationHandler_UpdateExecutionStatus_NotFound(t *testing.T) {
-	// Arrange
 	verificationID := uuid.New()
 
-	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
-		UpdateExecutionStatusFunc: func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
-			return fmt.Errorf("not found")
-		},
-	}
-
+	writes := 0
 	handler := NewVerificationHandlerWithInterfaces(
 		&MockAgentServiceForVerificationImpl{},
 		&MockAuditServiceForVerificationImpl{},
 		&MockAlertServiceForVerificationImpl{},
-		mockVerifEventService,
+		&MockVerificationEventServiceForVerificationImpl{
+			GetVerificationEventFunc: func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error) {
+				return nil, fmt.Errorf("verification event not found")
+			},
+			UpdateExecutionStatusFunc: func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error {
+				writes++
+				return nil
+			},
+		},
 		&MockOrganizationRepositoryerImpl{},
 	)
 
 	app := setupVerificationTestApp(handler)
 
-	reqBody := map[string]interface{}{
-		"executed":   true,
-		"strictMode": true,
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	bodyBytes, _ := json.Marshal(map[string]interface{}{"executed": true})
 
-	// Act
 	req := httptest.NewRequest("POST", fmt.Sprintf("/api/v1/sdk-api/verifications/%s/execution-status", verificationID.String()), bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+	assert.Zero(t, writes, "an unresolvable event must not reach the write")
 }
 
 func TestVerificationHandler_UpdateExecutionStatus_InvalidIDWithMocks(t *testing.T) {
-	// Arrange
 	handler := NewVerificationHandlerWithInterfaces(
 		&MockAgentServiceForVerificationImpl{},
 		&MockAuditServiceForVerificationImpl{},
@@ -1273,20 +1314,16 @@ func TestVerificationHandler_UpdateExecutionStatus_InvalidIDWithMocks(t *testing
 
 	app := setupVerificationTestApp(handler)
 
-	reqBody := map[string]interface{}{
-		"executed":   true,
-		"strictMode": true,
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
+	bodyBytes, _ := json.Marshal(map[string]interface{}{"executed": true})
 
-	// Act
 	req := httptest.NewRequest("POST", "/api/v1/sdk-api/verifications/invalid-uuid/execution-status", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req)
 
-	// Assert
 	require.NoError(t, err)
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode,
+		"a malformed id is still a 400 for an authenticated agent; the principal gate runs first, so this "+
+			"also proves the gate admitted the agent rather than short-circuiting everything to 404")
 }
 
 // ===========================

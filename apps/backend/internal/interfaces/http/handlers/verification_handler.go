@@ -1149,83 +1149,54 @@ func (h *VerificationHandler) writeVerificationResponse(c fiber.Ctx, event *doma
 	return c.Status(fiber.StatusOK).JSON(response)
 }
 
-// SubmitVerificationResult handles verification result submission
-// @Summary Submit verification result
-// @Description Submit the result of a verification request (success/failure)
+// SubmitVerificationResult refuses every caller.
+//
+// SECURITY: `result` and
+// `status` are the authorization-decision channel. Their only legitimate writers
+// are CreateVerification, ApproveVerification, DenyVerification and the expiry
+// job. This endpoint was the execution-outcome channel writing into that column
+// pair, so an agent reporting its own action as "success" set result='verified',
+// which writeVerificationResponse projects to the SDK as status:"approved",
+// approvedBy:"system" (:1126-1131) and the SDK executes on. The party whose
+// action is pending approval is handed the verification ID by CreateVerification
+// itself, so this was self-approval.
+//
+// Authentication does not fix that: in the primary scenario the attacker IS the
+// owning agent and holds its own signing key, so a correctly-signed request from
+// the legitimate owner must still be refused. Both chiefs independently ruled
+// that the guarantee must hold BY CONSTRUCTION rather than by evaluation — the
+// call to UpdateVerificationResult is deleted from this handler, not guarded, so
+// `grep -n 'UpdateVerificationResult(' verification_handler.go` proves it in one
+// command instead of a reviewer having to reason about guard coverage across two
+// authentication middlewares and a future mount.
+//
+// The execution outcome gets its own CHECK-constrained columns in Stage 2
+// (the execution-outcome follow-up, which adds them by migration).
+// Until then this endpoint accepts nothing from anyone. Losing the telemetry is
+// a net improvement, not a regression: every caller reaches this route after the
+// authorization decision and after execution, and what it currently records is
+// an overwrite of that decision.
+//
+// 403 with a distinct machine-readable code, deliberately NOT 404: 404 collides
+// with the "Verification not found or update failed" body this handler used to
+// emit, which would make a refusal indistinguishable from the pre-fix behaviour
+// and hide the degradation. There is no existence oracle to protect because no
+// lookup happens. CISO argued for 410; the divergence and both positions are
+// recorded with the change. 403 is used because the follow-up restores a write
+// channel here, and 410 asserts a condition "likely to be permanent".
+//
+// @Summary Submit verification result (withdrawn)
+// @Description Withdrawn in Stage 1. Returns 403 for every caller; the execution-outcome channel moves to its own columns in Stage 2.
 // @Tags verifications
-// @Accept json
 // @Produce json
 // @Param id path string true "Verification ID (UUID)"
-// @Param result body object true "Verification result"
-// @Success 200 {object} map[string]interface{} "Result recorded"
-// @Failure 400 {object} ErrorResponse "Invalid request"
-// @Failure 404 {object} ErrorResponse "Verification not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
-// @Router /api/v1/verifications/{id}/result [post]
+// @Failure 403 {object} ErrorResponse "Endpoint withdrawn"
+// @Router /api/v1/sdk-api/verifications/{id}/result [post]
 func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
-	// 📍 LOG 2: HANDLER ENTRY
-	// requestID := c.Locals("request_id")
-	verificationID := c.Params("id")
-	if verificationID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verificationId is required",
-		})
-	}
-
-	var req struct {
-		Result   string                 `json:"result"` // "success", "failure"
-		Reason   string                 `json:"reason,omitempty"`
-		Metadata map[string]interface{} `json:"metadata,omitempty"`
-	}
-
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	// Parse UUID
-	vid, err := uuid.Parse(verificationID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verificationId format",
-		})
-	}
-
-	// Validate result value
-	if req.Result != "success" && req.Result != "failure" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "result must be either 'success' or 'failure'",
-		})
-	}
-
-	// Map result string to VerificationResult type
-	var result domain.VerificationResult
-	if req.Result == "success" {
-		result = domain.VerificationResultVerified
-	} else {
-		result = domain.VerificationResultDenied
-	}
-
-	// Prepare reason pointer
-	var reasonPtr *string
-	if req.Reason != "" {
-		reasonPtr = &req.Reason
-	}
-
-	// Update verification event in database
-	err = h.getVerificationEventService().UpdateVerificationResult(c.Context(), vid, result, reasonPtr, req.Metadata)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Verification not found or update failed",
-		})
-	}
-
-	// Return success response
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"id":     vid.String(),
-		"status": "result_recorded",
-		"result": req.Result,
+	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+		"error": "verification result reporting is not accepted on this endpoint; " +
+			"result and status are the authorization-decision channel",
+		"code": "executionOutcomeNotAccepted",
 	})
 }
 
@@ -1766,10 +1737,38 @@ func (h *VerificationHandler) DenyVerification(c fiber.Ctx) error {
 // Allows the SDK to report whether a function was actually executed after verification
 // ============================================================================
 
-// UpdateExecutionStatusRequest represents the request body for reporting execution status
+// UpdateExecutionStatusRequest represents the request body for reporting execution status.
+//
+// SECURITY: there is deliberately no StrictMode field. Strict mode is OUR
+// configuration, not the reporting agent's to assert. An agent supplying
+// {"executed":false,"strictMode":true} stored the inputs from which
+// apps/web/components/alerts/alert-detail-panel.tsx derives its enforcement
+// text, including the string "Action BLOCKED (strict mode enforced)".
+//
+// Measured, so the record is accurate rather than dramatic: those four columns
+// are WRITE-ONLY in this backend today. No SELECT in
+// verification_event_repository.go lists them and nothing populates
+// domain.VerificationEvent.Executed, so the panel's `executed !== undefined`
+// guard never passes and the forged text does not currently reach an operator.
+// The forgery is stored and latent, not rendered: it renders the moment anyone
+// adds these columns to a read query, which is a one-line change with no reason
+// to look dangerous. That is why this is fixed at the write rather than left to
+// the reader.
+//
+// It is now derived server-side from the event's organization. Do not
+// reintroduce the field; UpdateExecutionStatus ignores anything sent under that
+// name and a guard test pins its absence.
+//
+// CAVEAT, recorded rather than silently absorbed: migration 053 documents
+// strict_mode as "whether the SDK was in strict mode when verification was
+// requested". This now stores the ORGANIZATION's mode at report time. Those can
+// differ — sdk/python/aim_sdk/decorators.py lets AIM_STRICT_MODE override the
+// backend mode locally — and rows written before this change carry the old,
+// agent-asserted meaning with no discriminator column to tell them apart.
+// Reconciling the column comment and labelling rows by provenance belongs to the
+// execution-outcome unit that adds the dedicated columns.
 type UpdateExecutionStatusRequest struct {
 	Executed       bool    `json:"executed"`                 // Whether the function was executed
-	StrictMode     bool    `json:"strictMode"`               // Whether SDK was in strict mode
 	ExecutedAt     string  `json:"executedAt"`               // Timestamp of execution (RFC3339)
 	ExecutionError *string `json:"executionError,omitempty"` // Error message if execution failed
 }
@@ -1788,19 +1787,34 @@ type UpdateExecutionStatusRequest struct {
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/sdk-api/verifications/{id}/execution-status [post]
 func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
-	verificationID := c.Params("id")
-	if verificationID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "verificationId is required",
-		})
+	// SECURITY: the sdkAPI group authenticates *an* agent — and, through its JWT
+	// fall-through (pqc_agent_auth.go:39-41, :50-52), a human user of any
+	// organization. Neither establishes that this caller owns this event. The
+	// principal gate fires before any database read so a non-agent caller gets no
+	// existence signal for an ID it guessed.
+	callerAgentID := CallerAgentID(c)
+	if callerAgentID == uuid.Nil {
+		respondResourceNotFound(c)
+		return nil
 	}
 
-	// Parse UUID
-	vid, err := uuid.Parse(verificationID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid verificationId format",
-		})
+	vid, ok := parseVerificationIDParam(c)
+	if !ok {
+		return nil // helper already wrote the 400
+	}
+
+	// Ownership: mirrors GetVerificationSDK:1050-1053. 404 on every failure path,
+	// never 403, so "exists but not yours" is indistinguishable from "does not
+	// exist" and the route cannot be used to enumerate other agents' events.
+	event := LoadOwnedByAgent(c,
+		func(id uuid.UUID) (*domain.VerificationEvent, error) {
+			return h.getVerificationEventService().GetVerificationEvent(c.Context(), id)
+		},
+		vid, callerAgentID,
+		func(e *domain.VerificationEvent) *uuid.UUID { return e.AgentID },
+	)
+	if event == nil {
+		return nil // helper already wrote the 404
 	}
 
 	// Parse request body
@@ -1811,9 +1825,42 @@ func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY: strict mode is derived from the event's organization, never from
+	// the request body. The reporting agent is the party being audited; letting it
+	// assert what our enforcement configuration was let it forge the operator-facing
+	// "Action BLOCKED (strict mode enforced)" string. Same lookup as
+	// writeVerificationResponse:1083-1088. Caveat: this reflects the organization's
+	// mode at report time, not at decision time.
+	//
+	// If the mode cannot be established we record NOTHING, rather than defaulting.
+	// strict_mode is rendered to an operator as a statement about OUR configuration,
+	// so an unknown must not be coerced into one of the two labels: writing `false`
+	// on a lookup failure would print "enforcement mode: monitoring" for what may
+	// have been a strict organization, which is the same class of false claim this
+	// change exists to remove — merely in the quieter direction. Losing one
+	// post-execution telemetry row is the cheaper error. writeVerificationResponse
+	// defaults to "monitoring" on the same failure, but that value is transient
+	// response data, not a persisted record an incident is later reconstructed from.
+	orgRepo := h.getOrgRepo()
+	if orgRepo == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "cannot determine organization enforcement mode; execution status not recorded",
+			"code":  "enforcementModeUnavailable",
+		})
+	}
+	org, err := orgRepo.GetByID(event.OrganizationID)
+	if err != nil || org == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": "cannot determine organization enforcement mode; execution status not recorded",
+			"code":  "enforcementModeUnavailable",
+		})
+	}
+	strictMode := org.EnforcementMode == domain.EnforcementModeStrict
+
 	// Parse execution timestamp
 	var executedAt time.Time
 	if req.ExecutedAt != "" {
+		var err error
 		executedAt, err = time.Parse(time.RFC3339, req.ExecutedAt)
 		if err != nil {
 			// Try parsing without timezone
@@ -1826,12 +1873,13 @@ func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
 		executedAt = time.Now()
 	}
 
-	// Update execution status in database
+	// Update execution status in database. The repository write is append-once
+	// (AND executed IS NULL), so a report cannot be overwritten by a later one.
 	err = h.getVerificationEventService().UpdateExecutionStatus(
 		c.Context(),
 		vid,
 		req.Executed,
-		req.StrictMode,
+		strictMode,
 		executedAt,
 		req.ExecutionError,
 	)
@@ -1845,7 +1893,7 @@ func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
 		"id":         vid.String(),
 		"status":     "execution_status_recorded",
 		"executed":   req.Executed,
-		"strictMode": req.StrictMode,
+		"strictMode": strictMode,
 		"executedAt": executedAt.Format(time.RFC3339),
 	})
 }

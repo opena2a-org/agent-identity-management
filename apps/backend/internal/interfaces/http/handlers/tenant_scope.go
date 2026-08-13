@@ -172,6 +172,100 @@ func LoadOwnedViaAgent[T any](
 	return resource
 }
 
+// CallerAgentID returns the agent UUID established by an agent-authenticating
+// middleware. A principal that set no "agent_id" local, or set it as some other
+// type, yields uuid.Nil.
+//
+// SCOPE, and read this before mounting a handler that uses it on another group:
+// several middlewares in this package set a uuid.UUID under "agent_id" —
+// pqc_agent_auth.go:162, ed25519_agent_auth.go:215, api_key.go:130 and :224,
+// atc_auth.go:97, service_principal.go:121. This helper does NOT distinguish
+// between them. It is safe on the sdkAPI group specifically because that chain
+// is PQC → JWT → activity-touch → rate limit (cmd/server/main.go), so the only
+// principal that can set agent_id there is the signature-authenticated one.
+// Mount a handler that relies on this under an API-key, ATC or service-principal
+// group and the ownership check silently begins accepting those principals as
+// the agent.
+//
+// NOTE for anyone diffing this against aim-cloud: the two trees mount DIFFERENT
+// middleware on this group — public runs PQCAgentMiddleware, cloud runs
+// Ed25519AgentMiddleware. Both set agent_id as a uuid.UUID and both fall through
+// to JWT, so the reasoning holds in both, but the file to read differs.
+//
+// SECURITY: this exists so the ownership check cannot be written as
+//
+//	if id, ok := c.Locals("agent_id").(uuid.UUID); ok && id != want { reject }
+//
+// which is the idiom two files away at trust_score_handler.go:415. That shape
+// PERMITS when the assertion fails, and on the sdkAPI group the assertion fails
+// for every human caller: PQCAgentMiddleware hands off to the JWT middleware
+// whenever an Authorization header is present (pqc_agent_auth.go:39-41) or the
+// signature headers are absent (:50-52), and AuthMiddleware sets user_id /
+// organization_id / email / role and never agent_id (auth.go:132-135). Absence
+// of an agent principal is a rejection, not a reason to skip the check.
+//
+// Returning uuid.Nil rather than an ok flag is deliberate: LoadOwnedByAgent
+// refuses uuid.Nil before it touches the loader, so the fail-closed behaviour is
+// a property of the pair rather than of the caller remembering to check.
+func CallerAgentID(c fiber.Ctx) uuid.UUID {
+	if agentID, ok := c.Locals("agent_id").(uuid.UUID); ok {
+		return agentID
+	}
+	return uuid.Nil
+}
+
+// LoadOwnedByAgent is the agent-principal variant of LoadOwned: ownership is
+// established against the calling AGENT, not the calling organization.
+//
+// The sdkAPI group authenticates *an* agent; it does not establish that this
+// agent owns *this* resource. Organization scoping is not a substitute — two
+// agents in one organization are distinct principals, and the verification
+// events this guards are per-agent authorization records.
+//
+// Every failure path THIS HELPER takes — non-agent caller, loader error, missing
+// resource, row with no agent, different agent — writes the same 404 body and
+// returns nil, so the response cannot be used to test for the existence of
+// another agent's row. Same 404-not-403 rationale as LoadOwned; the caller must
+// `return nil`.
+//
+// Note the qualifier: a caller may emit a DIFFERENT 404 body later, after this
+// helper has already returned the resource (UpdateExecutionStatus does, when the
+// write itself affects no row). That is not an oracle — by then the caller has
+// been proven to own the row — but it does mean "every 404 from this route is
+// byte-identical" is false, and no code should rely on it.
+//
+// agentIDOf returns a *uuid.UUID because the owning column is nullable on the
+// domain types that need this (domain.VerificationEvent.AgentID is *uuid.UUID —
+// an event may target an MCP server instead of an agent). A nil owner is
+// refused rather than treated as a wildcard.
+func LoadOwnedByAgent[T any](
+	c fiber.Ctx,
+	loader func(uuid.UUID) (*T, error),
+	resourceID uuid.UUID,
+	callerAgentID uuid.UUID,
+	agentIDOf func(*T) *uuid.UUID,
+) *T {
+	// Defense-in-depth: a uuid.Nil caller is a non-agent principal (see
+	// CallerAgentID) or a middleware-chain bug. Refuse before the loader runs
+	// so no existence signal is produced. Matching uuid.Nil to uuid.Nil would
+	// let either case surface as ownership.
+	if callerAgentID == uuid.Nil || agentIDOf == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	resource, err := loader(resourceID)
+	if err != nil || resource == nil {
+		respondResourceNotFound(c)
+		return nil
+	}
+	ownerAgentID := agentIDOf(resource)
+	if ownerAgentID == nil || *ownerAgentID == uuid.Nil || *ownerAgentID != callerAgentID {
+		respondResourceNotFound(c)
+		return nil
+	}
+	return resource
+}
+
 func respondResourceNotFound(c fiber.Ctx) {
 	_ = c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 		"error": "not found",
