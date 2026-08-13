@@ -54,12 +54,18 @@ func seedVerificationEvent(t *testing.T, db *sql.DB) uuid.UUID {
 	orgID, agentID, eventID := uuid.New(), uuid.New(), uuid.New()
 	userID := uuid.New()
 
+	// NOTE: no max_mcp_servers here. That column is aim-cloud-only — it comes from
+	// cloud's migration 020_create_platform_admin_tables (a SaaS quota field) and
+	// does not exist in this tree's organizations table. This test was ported from
+	// cloud and carried the column with it, which CI caught as
+	// `pq: column "max_mcp_servers" of relation "organizations" does not exist`.
+	// Every other column below is present in both trees.
 	_, err := db.Exec(`
         INSERT INTO organizations
             (id, name, domain, plan_type, max_agents, max_users, is_active,
-             created_at, updated_at, max_mcp_servers, enforcement_mode,
+             created_at, updated_at, enforcement_mode,
              community_intelligence_enabled)
-        VALUES ($1, $2, $3, 'free', 100, 100, true, NOW(), NOW(), 100, 'monitoring', false)`,
+        VALUES ($1, $2, $3, 'free', 100, 100, true, NOW(), NOW(), 'monitoring', false)`,
 		orgID, "append-once-"+orgID.String()[:8], "append-once-"+orgID.String()[:8]+".invalid")
 	require.NoError(t, err, "seed organization")
 
