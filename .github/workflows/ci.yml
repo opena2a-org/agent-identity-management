@@ -78,6 +78,20 @@ jobs:
       - name: No handler reads :id without LoadOwned
         run: ./scripts/lint-tenant-scoping.sh
 
+  # sync-to-cloud.sh mirrors five directories with `rsync --delete`. Those
+  # mirrors did not consult .sync-protect, so an entry under them was silently
+  # ineffective and cloud-only files there were deleted outright. Runs
+  # unconditionally rather than behind the `changes` filter: the thing being
+  # guarded is the script's behaviour on aim-cloud's tree, and a regression
+  # there is invisible from this repo's own test results.
+  sync-protect-guard:
+    name: Sync protect guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: .sync-protect is honoured by every sync path
+        run: ./scripts/test-sync-protect.sh
+
   # Detect which parts of the monorepo changed
   changes:
     name: Detect Changes
@@ -446,6 +460,7 @@ jobs:
         secrets-lint,
         tenant-scoping-lint,
         workflow-lint,
+        sync-protect-guard,
         changes,
         backend,
         integration,
@@ -461,17 +476,18 @@ jobs:
           sl='${{ needs.secrets-lint.result }}'
           tl='${{ needs.tenant-scoping-lint.result }}'
           wl='${{ needs.workflow-lint.result }}'
+          sp='${{ needs.sync-protect-guard.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
           it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
