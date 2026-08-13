@@ -92,6 +92,23 @@ jobs:
         #                          deletion landed.
         run: npx hackmyagent@latest secure . --ci --scan-depth quick --static-only --fail-below 90
 
+  # ADVISORY ONLY — this job cannot fail, by construction. Both Trivy steps pass
+  # `exit-code: 0` and the npm audit ends in `|| true`, so a green "Dependency Audit"
+  # on a pull request means "the job ran", NOT "no advisories were found". Read the
+  # step logs; do not read the check mark.
+  #
+  # This is not hypothetical. It reported SUCCESS on every PR for the whole period in
+  # which sdk/typescript shipped js-yaml 4.3.0 (GHSA-5p4m-2wfm-xmqj, HIGH) — which it
+  # would not have caught in any case, because it only scans apps/web and never reads
+  # sdk/. The advisory was eventually found downstream by aim-cloud's Trivy on a sync
+  # pull request, after the vulnerable floor was already being carried into the hosted
+  # product.
+  #
+  # The BLOCKING counterpart is `sdk-dependency-audit` in ci.yml, wired into CI Gate.
+  # Leaving this job advisory is deliberate — making its steps blocking today would
+  # turn main red on 4 pre-existing production highs in the root tree (next, sharp,
+  # postcss, nanoid) plus dev-only findings in apps/web. Resolve those, then promote
+  # these steps rather than adding more advisory ones.
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
