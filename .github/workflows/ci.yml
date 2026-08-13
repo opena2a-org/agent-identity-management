@@ -92,6 +92,46 @@ jobs:
       - name: .sync-protect is honoured by every sync path
         run: ./scripts/test-sync-protect.sh
 
+  # A BLOCKING audit of the SDK's shipped dependency tree.
+  #
+  # Why this exists, and why it is separate from security.yml's "Dependency Audit":
+  # that job cannot fail. Both of its Trivy steps pass `exit-code: 0`, its npm audit
+  # ends in `|| true`, and it only looks at apps/web. It reported SUCCESS on every PR
+  # while sdk/typescript shipped js-yaml 4.3.0 (GHSA-5p4m-2wfm-xmqj, HIGH) — a green
+  # check that was structurally incapable of going red, over a directory it never read.
+  #
+  # The defect was eventually caught downstream, by aim-cloud's Trivy on a sync PR,
+  # which is the wrong place: by then the vulnerable floor was already being carried
+  # into the hosted product. This gate moves that catch to the source.
+  #
+  # Scope is deliberate and measured, not arbitrary:
+  #   --omit=dev      only dependencies that reach consumers of @opena2a/aim-sdk.
+  #                   Dev-only findings do not ship and must not be able to wedge an
+  #                   unrelated PR; they are tracked separately.
+  #   --package-lock-only
+  #                   installs nothing, so no dependency's install script executes on
+  #                   a fork's pull request.
+  #   sdk/typescript  measured clean (0 high, 0 critical) at 0b1f876. The repo ROOT
+  #                   tree is NOT gated here because it currently carries 4 prod highs
+  #                   (next, sharp, postcss, nanoid); adding it today would land a
+  #                   permanently-red gate, which teaches people to ignore it. Widen
+  #                   this to `.` once those are resolved — that is the intended end
+  #                   state, not a permanent exemption.
+  sdk-dependency-audit:
+    name: SDK dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: No high or critical advisories in the SDK's shipped dependencies
+        working-directory: sdk/typescript
+        run: |
+          set -uo pipefail
+          # No `|| true`, and no `exit-code: 0`. A finding here fails the gate.
+          npm audit --package-lock-only --omit=dev --audit-level=high
+
   # Detect which parts of the monorepo changed
   changes:
     name: Detect Changes
@@ -461,6 +501,7 @@ jobs:
         tenant-scoping-lint,
         workflow-lint,
         sync-protect-guard,
+        sdk-dependency-audit,
         changes,
         backend,
         integration,
@@ -477,17 +518,18 @@ jobs:
           tl='${{ needs.tenant-scoping-lint.result }}'
           wl='${{ needs.workflow-lint.result }}'
           sp='${{ needs.sync-protect-guard.result }}'
+          sa='${{ needs.sdk-dependency-audit.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
           it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp sdk-dependency-audit=$sa changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "sdk-dependency-audit:$sa" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
