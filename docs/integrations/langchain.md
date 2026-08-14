@@ -455,7 +455,8 @@ Every tool use is logged:
 - Agent identity
 - Verification status
 
-**SOC 2, HIPAA, GDPR compliant!**
+This is the kind of access and execution record SOC 2, HIPAA and GDPR programs ask for. AIM
+itself has not been assessed against any of them - see [SECURITY.md](../../SECURITY.md).
 
 ---
 

@@ -150,7 +150,7 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
 
 ## 🔒 Security & Compliance
 
-### SOC 2, HIPAA, GDPR Ready
+### Security and audit evidence
 
 1. **[Security Architecture](./security/architecture.md)** *(Coming Soon)*
    - How AIM secures agents

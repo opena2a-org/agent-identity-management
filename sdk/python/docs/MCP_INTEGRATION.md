@@ -827,7 +827,7 @@ except PermissionError as e:
 | ❌ No audit trail of MCP actions | ✅ Complete audit trail of all actions |
 | ❌ No trust scoring for servers | ✅ ML-powered trust scoring |
 | ❌ Manual security reviews | ✅ Automatic security verification |
-| ❌ No compliance reporting | ✅ SOC 2/HIPAA/GDPR compliance ready |
+| ❌ No compliance reporting | ✅ Exportable audit record for compliance reporting |
 
 ---
 

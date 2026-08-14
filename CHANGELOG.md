@@ -169,8 +169,8 @@ First stable release of the AIM platform. The stage in
 [STATUS.md](STATUS.md) is `stable`, and every gate criterion in
 [HARDENING.md](HARDENING.md)'s "Roadmap to 1.0" was met (PRs #247, #248, #250).
 Semver is honored from this release forward: breaking changes go through a
-deprecation cycle and ship in a major bump; security patches are triaged within
-24 hours per [SECURITY.md](SECURITY.md).
+deprecation cycle and ship in a major bump; security reports are handled per
+[SECURITY.md](SECURITY.md).
 
 See [README.md](README.md) for the full feature set (agent identity and
 attestation, Ed25519 key management, per-capability trust and execution modes,

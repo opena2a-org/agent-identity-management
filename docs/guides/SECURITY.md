@@ -520,12 +520,11 @@ AIM token security supports SOC 2 requirements:
 
 **DO NOT** create public GitHub issues for security vulnerabilities.
 
-**Contact**:
-- Email: info@opena2a.org
-- PGP Key: [Link to public key]
-- Response Time: Within 24 hours
+**Contact**: info@opena2a.org
 
-**Bug Bounty**: We offer rewards for responsibly disclosed vulnerabilities.
+Response times, the coordinated-disclosure timeline, supported versions, and what we do
+and do not offer for a report are all in the repository's single security policy:
+[SECURITY.md](../../SECURITY.md). This page does not set its own terms.
 
 ## Additional Resources
 

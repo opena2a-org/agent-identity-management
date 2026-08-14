@@ -1,6 +1,6 @@
 # Security Policy
 
-> **AIM 1.0.** Every Roadmap-to-1.0 gate criterion in [HARDENING.md](HARDENING.md) is met as of 2026-05-28. The capabilities described in this document reflect shipped behavior; items still tracked as "Partial" or "Roadmap" in the Enterprise Compliance section below are flagged inline so consumers can plan around the actual enforcement boundary. Semver is honored from 1.0 forward, and security patches are triaged within 24 hours per the reporting flow below.
+> **AIM 1.0.** Every Roadmap-to-1.0 gate criterion in [HARDENING.md](HARDENING.md) is met as of 2026-05-28. The capabilities described in this document reflect shipped behavior; items still tracked as "Partial" or "Roadmap" in the Enterprise Compliance section below are flagged inline so consumers can plan around the actual enforcement boundary. Semver is honored from 1.0 forward. Response times for security reports are in the reporting flow below.
 
 ## Reporting Security Vulnerabilities
 
@@ -118,14 +118,19 @@ AIM includes the following security features:
 6. **Validate all inputs** from users
 7. **Test authentication** and authorization flows
 
-## Security Audits
+## Security audits
 
-We conduct regular security assessments:
+AIM has not had a third-party security assessment. No SOC 2, HIPAA or GDPR assessment and no
+external penetration test has been performed on this project. If one is performed, this section
+will name the assessor and the date.
 
-- **Code Reviews**: All code changes are reviewed
-- **Dependency Scanning**: Automated vulnerability scanning
-- **Penetration Testing**: Periodic security audits
-- **Compliance Reviews**: SOC 2, HIPAA, GDPR assessments
+What runs automatically today is dependency and secret scanning, in
+[.github/workflows/security.yml](.github/workflows/security.yml). Each run's result is on that
+workflow's page under the repository's Actions tab.
+
+Changes reach `main` through pull requests, and the checks and approvals recorded on each pull
+request are the record of what ran for that change. Read the reviewer on a given pull request
+rather than inferring one from this document.
 
 ## Enterprise Compliance
 
