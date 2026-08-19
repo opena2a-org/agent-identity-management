@@ -79,17 +79,18 @@ class BrokerClient:
     def _health_probe(self) -> str:
         """A runnable /health command for whichever transport this client is using.
 
-        `-f` is load-bearing, not decoration: a bare `curl` prints the error body and
-        still exits 0, so a broker with no /health route hands the user a page of JSON
-        and a clean exit, which reads as success. With -f the command fails loudly
-        (exit 22) and stays quiet on the happy path.
+        Prints the status and nothing else. A bare `curl` exits 0 on an error and shows
+        only the body, so a broker with no /health route reads as success -- and `-f`
+        alone still exits 0 on a 3xx, which a redirecting proxy in front of the broker
+        would produce. Reporting the code sidesteps both.
 
         Only values this client already holds are interpolated -- never anything from
         the broker's response.
         """
+        wire = "-sS -o /dev/null -w '%{http_code}\\n'"
         if self.http_url:
-            return f"curl -fsS {self.http_url.rstrip('/')}/health"
-        return f"curl -fsS --unix-socket {self.socket_path} http://localhost/health"
+            return f"curl {wire} {self.http_url.rstrip('/')}/health"
+        return f"curl {wire} --unix-socket {self.socket_path} http://localhost/health"
 
     def _bearer(self) -> str:
         if self._token:
@@ -156,15 +157,10 @@ class BrokerClient:
             # back a check that runs on the transport THIS client is actually using -- a
             # hardcoded --unix-socket line is wrong for anyone on the http_url fallback.
             raise BrokerGrantError(
-                "/grant returned 404. The broker answered, so the socket and token "
-                "reached it. The most likely cause is that this build has no AAP grant "
-                "surface configured: a stock broker does not construct a grant "
-                "resolver, and then every grant call 404s. Check the broker is the one "
-                f"you meant with `{self._health_probe()}`. If that succeeds and grants "
-                "still 404, the remaining candidates are a grant reference this broker "
-                "has no binding for, or an http_url pointing at something other than "
-                "the broker. Background: "
-                "opena2a-standards/agent-authorization-protocol#1."
+                "/grant returned 404. Most likely this broker has no AAP grant surface "
+                "configured; a grant reference it has no binding for does the same. "
+                f"Check which broker you reached: `{self._health_probe()}`. "
+                "Background: opena2a-standards/agent-authorization-protocol#1."
             )
         raise BrokerGrantError(f"broker returned status {resp.status}")
 

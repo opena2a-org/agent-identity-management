@@ -172,9 +172,14 @@ class TestBrokerClientWire:
         # ...while stating the transport fact rather than ruling other causes out. A 404
         # also fits an unbound grant reference or a misaimed http_url, and the message
         # must leave the caller those options instead of asserting one cause.
-        assert "the socket and token reached it" in message
-        assert "most likely" in message
+        assert "Most likely" in message
         assert "no binding for" in message
+        # F8: transport-specific advice must not be handed to callers on the other
+        # transport. This client has no http_url, so the message must not mention one.
+        assert "http_url" not in message
+        # F10: no timeless claim about "a stock broker" -- it goes false the day the
+        # daemon wires the resolver.
+        assert "stock broker" not in message
 
     @pytest.mark.parametrize(
         "kwargs, must_contain, must_not_contain",
@@ -182,21 +187,21 @@ class TestBrokerClientWire:
             # A custom socket must appear; the DEFAULT path must not be assumed.
             (
                 {"socket_path": "/run/custom/broker.sock"},
-                ["curl -fsS --unix-socket /run/custom/broker.sock", "http://localhost/health"],
+                ["-o /dev/null -w", "%{http_code}", "--unix-socket /run/custom/broker.sock"],
                 [".secretless-ai"],
             ),
             # On the http_url fallback (e.g. Docker) a --unix-socket line is unrunnable.
             (
                 {"http_url": "http://broker.internal:7000/"},
-                ["curl -fsS http://broker.internal:7000/health"],
+                ["-o /dev/null -w", "http://broker.internal:7000/health"],
                 ["--unix-socket"],
             ),
-            # An uppercase scheme must still be recognised as TLS. This case previously
-            # escaped every patch and reached real DNS, because only HTTPConnection was
-            # stubbed while an https URL takes HTTPSConnection.
+            # Pins the emitted string for an uppercase scheme ONLY. TLS *selection* is
+            # covered by test_scheme_comparison_is_case_insensitive, not here: both
+            # constructors are stubbed with one double, so this case cannot see which ran.
             (
                 {"http_url": "HTTPS://broker.internal/"},
-                ["curl -fsS HTTPS://broker.internal/health"],
+                ["-o /dev/null -w", "HTTPS://broker.internal/health"],
                 ["--unix-socket"],
             ),
         ],
@@ -301,6 +306,18 @@ class TestBrokerClientWire:
             f"{url!r} selected {used!r}; a plaintext connection here sends the bearer "
             f"token in the clear"
         )
+
+    def test_health_probe_is_a_single_line_command(self):
+        """The -w format needs a literal backslash-n, not a newline character.
+
+        Written as "\n" in a normal Python string it becomes a real newline and the
+        emitted command breaks across two lines, so the second half runs as its own
+        shell command. Caught exactly that way once.
+        """
+        for kwargs in ({"socket_path": "/run/b.sock"}, {"http_url": "http://h:7000/"}):
+            probe = BrokerClient(token="t", **kwargs)._health_probe()
+            assert "\n" not in probe, f"probe spans lines: {probe!r}"
+            assert "\\n" in probe, f"probe lost its literal newline escape: {probe!r}"
 
     def test_other_statuses_still_fall_through_to_the_bare_message(self, monkeypatch):
         """The 404 branch must not swallow every non-200. 500 keeps the generic path."""
