@@ -165,11 +165,16 @@ class TestBrokerClientWire:
         # It must NOT be the old bare-status message, and must not be the denial class.
         assert message != "broker returned status 404"
         assert not isinstance(excinfo.value, GrantDeniedError)
-        # It must name the cause, exonerate the transport, and give a check to run.
+        # It must name the likely cause and give a check to run...
         assert "404" in message
         assert "grant surface" in message
-        assert "not a socket or token problem" in message
         assert "/health" in message
+        # ...while stating the transport fact rather than ruling other causes out. A 404
+        # also fits an unbound grant reference or a misaimed http_url, and the message
+        # must leave the caller those options instead of asserting one cause.
+        assert "the socket and token reached it" in message
+        assert "most likely" in message
+        assert "no binding for" in message
 
     @pytest.mark.parametrize(
         "kwargs, must_contain, must_not_contain",
@@ -177,13 +182,21 @@ class TestBrokerClientWire:
             # A custom socket must appear; the DEFAULT path must not be assumed.
             (
                 {"socket_path": "/run/custom/broker.sock"},
-                ["--unix-socket /run/custom/broker.sock", "http://localhost/health"],
+                ["curl -fsS --unix-socket /run/custom/broker.sock", "http://localhost/health"],
                 [".secretless-ai"],
             ),
             # On the http_url fallback (e.g. Docker) a --unix-socket line is unrunnable.
             (
                 {"http_url": "http://broker.internal:7000/"},
-                ["curl http://broker.internal:7000/health"],
+                ["curl -fsS http://broker.internal:7000/health"],
+                ["--unix-socket"],
+            ),
+            # An uppercase scheme must still be recognised as TLS. This case previously
+            # escaped every patch and reached real DNS, because only HTTPConnection was
+            # stubbed while an https URL takes HTTPSConnection.
+            (
+                {"http_url": "HTTPS://broker.internal/"},
+                ["curl -fsS HTTPS://broker.internal/health"],
                 ["--unix-socket"],
             ),
         ],
@@ -219,14 +232,75 @@ class TestBrokerClientWire:
         monkeypatch.setattr(
             "aim_sdk.grant_client.http.client.HTTPConnection", lambda *a, **k: _Conn()
         )
+        monkeypatch.setattr(
+            "aim_sdk.grant_client.http.client.HTTPSConnection", lambda *a, **k: _Conn()
+        )
         with pytest.raises(BrokerGrantError) as excinfo:
             client.grant("a", {}, "grant://x", {"method": "GET", "path": "/"})
 
         message = str(excinfo.value)
+        # L2: pytest.raises(BrokerGrantError) also accepts GrantDeniedError, which
+        # subclasses it. Without this the case survives a mutation that swaps the class.
+        assert not isinstance(excinfo.value, GrantDeniedError)
         for fragment in must_contain:
             assert fragment in message, f"{fragment!r} missing from: {message}"
         for fragment in must_not_contain:
             assert fragment not in message, f"{fragment!r} wrongly present in: {message}"
+
+    @pytest.mark.parametrize(
+        "url, expect_tls",
+        [
+            ("https://broker.internal/", True),
+            ("HTTPS://broker.internal/", True),   # the case that leaked
+            ("Https://broker.internal/", True),   # and its mixed-case sibling
+            ("http://broker.internal/", False),
+            ("HTTP://broker.internal/", False),
+        ],
+    )
+    def test_scheme_comparison_is_case_insensitive(self, monkeypatch, url, expect_tls):
+        """An uppercase https:// must not fall through to a plaintext connection.
+
+        grant() sends `Authorization: Bearer <broker token>`. When the scheme compare was
+        an exact lowercase match, `HTTPS://` selected HTTPConnection, so the token went
+        out in cleartext on port 80 while the caller believed they were on TLS.
+
+        The oracle has to record WHICH constructor ran. Stubbing both with the same
+        double cannot tell them apart, so a test written that way stays green when the
+        comparison regresses -- which is exactly what happened before this test existed.
+        """
+        client = BrokerClient(http_url=url, token="t")
+        used = []
+
+        def _make(kind):
+            def _ctor(*a, **k):
+                used.append(kind)
+                class _Resp:
+                    status = 200
+                    def read(self):
+                        return b'{"result":"ok"}'
+                class _Conn:
+                    def request(self, *a, **k):
+                        pass
+                    def getresponse(self):
+                        return _Resp()
+                    def close(self):
+                        pass
+                return _Conn()
+            return _ctor
+
+        monkeypatch.setattr(client, "_bearer", lambda: "t")
+        monkeypatch.setattr(
+            "aim_sdk.grant_client.http.client.HTTPSConnection", _make("tls")
+        )
+        monkeypatch.setattr(
+            "aim_sdk.grant_client.http.client.HTTPConnection", _make("plain")
+        )
+        client.grant("a", {}, "grant://x", {"method": "GET", "path": "/"})
+
+        assert used == ["tls" if expect_tls else "plain"], (
+            f"{url!r} selected {used!r}; a plaintext connection here sends the bearer "
+            f"token in the clear"
+        )
 
     def test_other_statuses_still_fall_through_to_the_bare_message(self, monkeypatch):
         """The 404 branch must not swallow every non-200. 500 keeps the generic path."""
