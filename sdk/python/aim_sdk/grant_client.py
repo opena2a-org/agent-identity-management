@@ -9,9 +9,14 @@ result. No credential value and no backend identifier ever enters the agent proc
 This module is intentionally thin: the broker (in Secretless AI) does all the work. See
 the Agent Authorization Protocol spec (opena2a-standards/agent-authorization-protocol).
 
-PROVISIONAL / EXPERIMENTAL. AAP is at spec v0.1. This client and the broker `/grant`
-wire format it depends on may change in a future minor release without a major version
-bump. Pin an exact aim-sdk version if you depend on it.
+PROVISIONAL / EXPERIMENTAL. AAP is at spec 0.4.0-draft. This client and the broker
+`/grant` wire format it depends on may change in a future minor release without a major
+version bump. Pin an exact aim-sdk version if you depend on it.
+
+Note that a released Secretless broker does not yet construct a grant resolver, so
+`/grant` answers 404 on a stock build and every call here fails until an operator-facing
+grant-binding configuration ships. Tracked in
+opena2a-standards/agent-authorization-protocol#1.
 """
 
 from __future__ import annotations
@@ -128,6 +133,18 @@ class BrokerClient:
                 raise BrokerGrantError("broker returned non-JSON success body") from exc
         if resp.status == 403:
             raise GrantDeniedError("grant denied")
+        if resp.status == 404:
+            # The broker is up and answering, it just has no grant resolver wired. A bare
+            # "status 404" here sends the caller looking for a typo in their grant
+            # reference, which is the wrong place. Say which side is missing.
+            raise BrokerGrantError(
+                "broker has no AAP grant surface configured (/grant returned 404). "
+                "The broker is reachable, so this is not a socket or token problem: the "
+                "running build does not construct a grant resolver. Verify with "
+                "`curl --unix-socket ~/.secretless-ai/broker.sock http://localhost/health`, "
+                "which answers 200 on the same broker. Tracked in "
+                "opena2a-standards/agent-authorization-protocol#1."
+            )
         raise BrokerGrantError(f"broker returned status {resp.status}")
 
 

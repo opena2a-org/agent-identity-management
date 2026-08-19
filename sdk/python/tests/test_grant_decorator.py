@@ -132,6 +132,71 @@ class TestBrokerClientWire:
         with pytest.raises(GrantDeniedError):
             client.grant("a", {}, "grant://x", {"method": "GET", "path": "/"})
 
+    def test_404_says_the_broker_lacks_a_grant_surface(self, monkeypatch):
+        """A 404 is not a bad grant reference: the broker is up and has no resolver.
+
+        The bare `broker returned status 404` this used to raise sent the caller looking
+        for a typo in their own grant reference, which is the one place the fault is not.
+        Assert on what the message has to TELL them, not on its exact wording.
+        """
+        client = BrokerClient(socket_path="/nonexistent.sock", token="t")
+
+        class _Resp:
+            status = 404
+            def read(self):
+                return b'{"error":"Not found"}'
+
+        class _Conn:
+            def request(self, *a, **k):
+                pass
+            def getresponse(self):
+                return _Resp()
+            def close(self):
+                pass
+
+        monkeypatch.setattr(client, "_bearer", lambda: "t")
+        monkeypatch.setattr(
+            "aim_sdk.grant_client._UnixHTTPConnection", lambda *a, **k: _Conn()
+        )
+        with pytest.raises(BrokerGrantError) as excinfo:
+            client.grant("a", {}, "grant://x", {"method": "GET", "path": "/"})
+
+        message = str(excinfo.value)
+        # It must NOT be the old bare-status message, and must not be the denial class.
+        assert message != "broker returned status 404"
+        assert not isinstance(excinfo.value, GrantDeniedError)
+        # It must name the cause, exonerate the transport, and give a check to run.
+        assert "404" in message
+        assert "grant surface" in message
+        assert "not a socket or token problem" in message
+        assert "/health" in message
+
+    def test_other_statuses_still_fall_through_to_the_bare_message(self, monkeypatch):
+        """The 404 branch must not swallow every non-200. 500 keeps the generic path."""
+        client = BrokerClient(socket_path="/nonexistent.sock", token="t")
+
+        class _Resp:
+            status = 500
+            def read(self):
+                return b"boom"
+
+        class _Conn:
+            def request(self, *a, **k):
+                pass
+            def getresponse(self):
+                return _Resp()
+            def close(self):
+                pass
+
+        monkeypatch.setattr(client, "_bearer", lambda: "t")
+        monkeypatch.setattr(
+            "aim_sdk.grant_client._UnixHTTPConnection", lambda *a, **k: _Conn()
+        )
+        with pytest.raises(BrokerGrantError) as excinfo:
+            client.grant("a", {}, "grant://x", {"method": "GET", "path": "/"})
+        assert str(excinfo.value) == "broker returned status 500"
+        assert "grant surface" not in str(excinfo.value)
+
     def test_grant_success_returns_result_only(self, monkeypatch):
         client = BrokerClient(socket_path="/nonexistent.sock", token="t")
 
