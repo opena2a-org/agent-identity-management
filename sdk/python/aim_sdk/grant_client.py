@@ -9,9 +9,15 @@ result. No credential value and no backend identifier ever enters the agent proc
 This module is intentionally thin: the broker (in Secretless AI) does all the work. See
 the Agent Authorization Protocol spec (opena2a-standards/agent-authorization-protocol).
 
-PROVISIONAL / EXPERIMENTAL. AAP is at spec v0.1. This client and the broker `/grant`
-wire format it depends on may change in a future minor release without a major version
-bump. Pin an exact aim-sdk version if you depend on it.
+PROVISIONAL / EXPERIMENTAL. AAP is at spec 0.4.0-draft. This client and the broker
+`/grant` wire format it depends on may change in a future minor release without a major
+version bump. Pin an exact aim-sdk version if you depend on it.
+
+Broker-side readiness is tracked in
+opena2a-standards/agent-authorization-protocol#1, which is the source of truth rather
+than this docstring. As of 2026-08-19 a stock Secretless broker did not construct a
+grant resolver, so `/grant` answered 404 and every call here failed; see that issue for
+the current state.
 """
 
 from __future__ import annotations
@@ -70,6 +76,22 @@ class BrokerClient:
         self._token = token
         self._token_path = token_path or DEFAULT_TOKEN_PATH
 
+    def _health_probe(self) -> str:
+        """A runnable /health command for whichever transport this client is using.
+
+        Prints the status and nothing else. A bare `curl` exits 0 on an error and shows
+        only the body, so a broker with no /health route reads as success -- and `-f`
+        alone still exits 0 on a 3xx, which a redirecting proxy in front of the broker
+        would produce. Reporting the code sidesteps both.
+
+        Only values this client already holds are interpolated -- never anything from
+        the broker's response.
+        """
+        wire = "-sS -o /dev/null -w '%{http_code}\\n'"
+        if self.http_url:
+            return f"curl {wire} {self.http_url.rstrip('/')}/health"
+        return f"curl {wire} --unix-socket {self.socket_path} http://localhost/health"
+
     def _bearer(self) -> str:
         if self._token:
             return self._token
@@ -106,7 +128,7 @@ class BrokerClient:
             scheme, _, host = url.partition("://")
             conn: http.client.HTTPConnection = (
                 http.client.HTTPSConnection(host, timeout=self.timeout)
-                if scheme == "https"
+                if scheme.lower() == "https"
                 else http.client.HTTPConnection(host, timeout=self.timeout)
             )
         else:
@@ -128,6 +150,18 @@ class BrokerClient:
                 raise BrokerGrantError("broker returned non-JSON success body") from exc
         if resp.status == 403:
             raise GrantDeniedError("grant denied")
+        if resp.status == 404:
+            # The broker is up and answering, it just has no grant resolver wired. A bare
+            # "status 404" here sends the caller looking for a typo in their grant
+            # reference, which is the wrong place. Say which side is missing, and hand
+            # back a check that runs on the transport THIS client is actually using -- a
+            # hardcoded --unix-socket line is wrong for anyone on the http_url fallback.
+            raise BrokerGrantError(
+                "/grant returned 404. Most likely this broker has no AAP grant surface "
+                "configured; a grant reference it has no binding for does the same. "
+                f"Check which broker you reached: `{self._health_probe()}`. "
+                "Background: opena2a-standards/agent-authorization-protocol#1."
+            )
         raise BrokerGrantError(f"broker returned status {resp.status}")
 
 

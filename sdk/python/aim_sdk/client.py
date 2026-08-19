@@ -2661,7 +2661,7 @@ class AIMClient:
                    agent references the grant; the broker resolves it and returns only the
                    operation result. No credential or backend identifier enters the agent
                    process (Agent Authorization Protocol §4).
-                   PROVISIONAL / EXPERIMENTAL: AAP is at spec v0.1; this argument and the
+                   PROVISIONAL / EXPERIMENTAL: AAP is at spec 0.4.0-draft; this argument and the
                    broker wire format may change in a future minor release. Opt-in only —
                    omitting ``grant`` leaves behavior unchanged.
 
