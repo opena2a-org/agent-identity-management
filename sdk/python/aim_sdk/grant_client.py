@@ -13,10 +13,11 @@ PROVISIONAL / EXPERIMENTAL. AAP is at spec 0.4.0-draft. This client and the brok
 `/grant` wire format it depends on may change in a future minor release without a major
 version bump. Pin an exact aim-sdk version if you depend on it.
 
-Note that a released Secretless broker does not yet construct a grant resolver, so
-`/grant` answers 404 on a stock build and every call here fails until an operator-facing
-grant-binding configuration ships. Tracked in
-opena2a-standards/agent-authorization-protocol#1.
+Broker-side readiness is tracked in
+opena2a-standards/agent-authorization-protocol#1, which is the source of truth rather
+than this docstring. As of 2026-08-19 a stock Secretless broker did not construct a
+grant resolver, so `/grant` answered 404 and every call here failed; see that issue for
+the current state.
 """
 
 from __future__ import annotations
@@ -74,6 +75,16 @@ class BrokerClient:
         self.timeout = timeout
         self._token = token
         self._token_path = token_path or DEFAULT_TOKEN_PATH
+
+    def _health_probe(self) -> str:
+        """A runnable /health command for whichever transport this client is using.
+
+        Mirrors the transport choice in grant(). Only values this client already holds
+        are interpolated -- never anything from the broker's response.
+        """
+        if self.http_url:
+            return f"curl {self.http_url.rstrip('/')}/health"
+        return f"curl --unix-socket {self.socket_path} http://localhost/health"
 
     def _bearer(self) -> str:
         if self._token:
@@ -136,14 +147,15 @@ class BrokerClient:
         if resp.status == 404:
             # The broker is up and answering, it just has no grant resolver wired. A bare
             # "status 404" here sends the caller looking for a typo in their grant
-            # reference, which is the wrong place. Say which side is missing.
+            # reference, which is the wrong place. Say which side is missing, and hand
+            # back a check that runs on the transport THIS client is actually using -- a
+            # hardcoded --unix-socket line is wrong for anyone on the http_url fallback.
             raise BrokerGrantError(
                 "broker has no AAP grant surface configured (/grant returned 404). "
                 "The broker is reachable, so this is not a socket or token problem: the "
                 "running build does not construct a grant resolver. Verify with "
-                "`curl --unix-socket ~/.secretless-ai/broker.sock http://localhost/health`, "
-                "which answers 200 on the same broker. Tracked in "
-                "opena2a-standards/agent-authorization-protocol#1."
+                f"`{self._health_probe()}`, which answers 200 on the same broker. "
+                "Tracked in opena2a-standards/agent-authorization-protocol#1."
             )
         raise BrokerGrantError(f"broker returned status {resp.status}")
 
