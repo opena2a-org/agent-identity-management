@@ -75,7 +75,26 @@ from .decorators import aim_verify, aim_verify_database, aim_verify_api_call
 # Alias for enterprise security
 secure = register_agent
 
-from .exceptions import AIMError, AuthenticationError, VerificationError, ActionDeniedError, ConfigurationError, StaleCredentialsError
+from .exceptions import (
+    AIMError,
+    AuthenticationError,
+    VerificationError,
+    ActionDeniedError,
+    VerificationUnavailableError,
+    ConfigurationError,
+    StaleCredentialsError,
+)
+# The typed three-state decision. Exported as a NAME in 2.0.0 so that 3.0.0,
+# where verify_capability returns one instead of a dict, introduces no new symbol.
+from .decision import (
+    VerificationDecision,
+    Outcome,
+    EnforcementMode,
+    ModeSource,
+    UnknownSource,
+)
+from .enforcement import PendingEnforcementChange
+from .strict_mode import strict_mode_override
 from .secrets import SecretsClient, SecretsError
 # AAP grant client — PROVISIONAL (experimental). The Agent Authorization Protocol
 # is at spec 0.4.0-draft; this surface (and the broker wire format it talks to) may change
@@ -188,8 +207,17 @@ __all__ = [
     "AuthenticationError",
     "VerificationError",
     "ActionDeniedError",
+    "VerificationUnavailableError",
     "ConfigurationError",
     "StaleCredentialsError",
+    # The typed three-state verification decision
+    "VerificationDecision",
+    "Outcome",
+    "EnforcementMode",
+    "ModeSource",
+    "UnknownSource",
+    "PendingEnforcementChange",
+    "strict_mode_override",
     # AAP grant client
     "BrokerClient",
     "GrantSession",

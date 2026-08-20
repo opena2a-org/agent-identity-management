@@ -110,20 +110,26 @@ client = secure("my-agent-name")
 
 ### Pattern 2: Capability Verification
 ```python
-# Request verification before performing capability
-verification = client.verify_capability(
-    capability="flights:search",
-    resource="NYC",
-    context={"risk_level": "low"}
-)
+from aim_sdk.exceptions import ActionDeniedError, VerificationUnavailableError
 
-if verification.approved:
-    # Perform the capability
+# verify_capability returns only when the action is permitted; a denial and an
+# undetermined outcome each raise. There is no `.approved` attribute and no
+# `audit_id` -- neither has ever existed on the returned value.
+try:
+    verification = client.verify_capability(
+        capability="flights:search",
+        resource="NYC",
+        context={"risk_level": "low"}
+    )
+except ActionDeniedError as e:
+    print(f"AIM denied the search: {e}")
+except VerificationUnavailableError as e:
+    print(f"AIM returned no decision: {e}")
+else:
     results = search_flights("NYC")
 
-    # Log the result
     client.log_capability_result(
-        audit_id=verification.audit_id,
+        verification_id=verification["verification_id"],
         success=True,
         result_summary=f"Found {len(results)} flights"
     )

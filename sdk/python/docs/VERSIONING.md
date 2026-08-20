@@ -58,17 +58,19 @@ aim-sdk-python-v1.1.0.zip
 
 ### Backend API Compatibility
 
-The SDK and backend API maintain backward compatibility within major versions:
-
-| SDK Version | Compatible Backend API Versions |
-|-------------|-------------------------------|
-| 1.x.x       | 1.x.x (any 1.x backend)       |
-| 2.x.x       | 2.x.x (any 2.x backend)       |
+The SDK and the backend platform are versioned and released independently — SDK
+tags are `sdk-py-v<version>`, platform tags are `platform-v<version>` (see the
+platform `CHANGELOG.md`), and a major version bump in one does not require a
+matching major version in the other. A SDK major version describes a breaking
+change in the SDK's own public Python API (for example, `verify_capability()`
+raising instead of returning a falsy dict in 2.0.0) — it says nothing about the
+backend's HTTP contract.
 
 **Example**:
-- SDK `1.0.0` works with backend `1.0.5` ✅
-- SDK `1.2.3` works with backend `1.0.0` ✅ (SDK has newer features but degrades gracefully)
-- SDK `1.x.x` does NOT work with backend `2.x.x` ❌ (major version mismatch)
+- SDK `2.0.0` runs against backend `platform-v1.0.0` — nothing about the wire
+  protocol changed in the SDK's 2.0.0 release.
+- Check a given release's `CHANGELOG.md` entry for whether it requires a
+  minimum backend version; there is no fixed major-version-matching rule.
 
 ### Python Version Requirements
 
@@ -343,7 +345,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Questions?
 
 - **How do I check my SDK version?** Run `python -c "import aim_sdk; print(aim_sdk.__version__)"`
-- **Can I use SDK 1.x with backend 2.x?** No, major versions must match
+- **Does my SDK major version have to match the backend's?** No. The SDK and the backend platform are versioned and released independently; see [Backend API Compatibility](#backend-api-compatibility). Check a release's `CHANGELOG.md` entry for any minimum backend requirement.
 - **When should I upgrade?** Minor/patch versions: anytime. Major versions: plan and test first.
 - **How long is each version supported?** Latest version: indefinite. N-1: 6 months security patches.
 

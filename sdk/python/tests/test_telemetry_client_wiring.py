@@ -78,7 +78,7 @@ def test_allow_feeds_enforcement_and_attaches_header():
 
 def test_deny_records_before_raise():
     c, records = _client_with_capturing_joiner({"id": "v1", "status": "denied",
-                                                "denial_reason": "policy X"})
+                                                "denialReason": "policy X"})
     with pytest.raises(ActionDeniedError):
         c.verify_capability("db:write", resource="secrets")
     assert len(records) == 0  # enforcement-only buffered; not yet flushed
@@ -104,7 +104,7 @@ def test_deny_then_window_flush_emits_partial():
                               on_record=lambda r: records.append(r))
     c = AIMClient(agent_id="agent-1", api_key="k", aim_url="http://localhost:9",
                   telemetry={"enabled": True, "joiner": joiner})
-    c.session = _SessionSpy({"id": "v1", "status": "denied", "denial_reason": "blocked"})
+    c.session = _SessionSpy({"id": "v1", "status": "denied", "denialReason": "blocked"})
     with pytest.raises(ActionDeniedError):
         c.verify_capability("net:connect", resource="evil.example")
     clock["t"] = 2000

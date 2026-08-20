@@ -37,6 +37,8 @@ import time
 import os
 from typing import Any, Callable, Optional, Dict
 from aim_sdk.client import AIMClient
+from aim_sdk.decision import EnforcementMode
+from aim_sdk.exceptions import ConfigurationError
 from aim_sdk.risk_detector import detect_risk_level
 
 
@@ -109,7 +111,16 @@ def aim_verify(
                 client = _get_or_create_client(agent_name, aim_url)
 
             if client is None:
-                raise ValueError(
+                # ConfigurationError, not a bare ValueError: this is the fifth
+                # verification entry point and the SDK documents "catch
+                # AIMError to handle every verification failure in one place".
+                # A plain ValueError escapes that handler silently -- measured
+                # by execution: `except AIMError: ...` around this call does
+                # not catch it. This is a setup failure like any other
+                # ConfigurationError (missing credentials, bad URL), not a
+                # decision about the wrapped action, so it keeps that category
+                # rather than joining the verification-outcome exceptions.
+                raise ConfigurationError(
                     "AIM client not provided and auto_init failed. "
                     "Either pass aim_client parameter or set AIM_AGENT_NAME environment variable."
                 )
@@ -132,130 +143,61 @@ def aim_verify(
                 "risk_auto_detected": risk_level is None,  # Track if auto-detected
             }
 
-            # Environment variable override for strict mode (useful for testing)
-            # If set to 'true', always use strict mode regardless of backend setting
-            # If set to 'false', always use monitoring mode regardless of backend setting
-            # If not set or any other value, use backend's enforcement mode
-            env_strict_override = os.getenv("AIM_STRICT_MODE")
-            verification_id = None
+            # Verify, then apply the one enforcement rule shared by every entry
+            # point in this SDK. Three defects lived in what this block used to be:
+            #
+            #  (a) it read the enforcement mode from `verification["enforcementMode"]`,
+            #      a key no return site in client.py ever emitted, so it fell back
+            #      to "monitoring" on every call and the organization's dashboard
+            #      setting had no effect on the Python SDK at all;
+            #  (b) a denial raised ActionDeniedError, which was not a
+            #      PermissionError, so it fell past `except PermissionError` into
+            #      the blanket `except Exception` fail-open branch and the wrapped
+            #      function ran -- no outage, no attacker, just the normal denial
+            #      path;
+            #  (c) it read the id as `verificationId`/`id` while the client emits
+            #      `verification_id`, so every execution report returned early on a
+            #      falsy id and AIM never received one.
+            #
+            # The blanket `except Exception` is GONE rather than narrowed. A
+            # denial is routed by the mode check below, never by which handler
+            # happens to catch it first -- ordering handlers is how (b) happened.
+            verdict, decision = client._verify_and_enforce(
+                capability=action_type,
+                resource=resource_name,
+                context=context,
+                what=f"'{action_type}' in {func.__name__}",
+            )
+            verification_id = decision.verification_id
+            strict = verdict.effective_mode is EnforcementMode.STRICT
 
-            # Perform verification
-            try:
-                verification = client.verify_capability(
-                    capability=action_type,
-                    resource=resource_name,
-                    context=context,
+            if verdict.blocked:
+                client.report_execution_status(
+                    verification_id=verification_id,
+                    executed=False,
+                    strict_mode=True,
+                    execution_error=f"Blocked by AIM: {verdict.error}",
                 )
+                raise verdict.error
 
-                # Capture verification ID for execution status reporting
-                verification_id = verification.get("verificationId") or verification.get("id")
-
-                # Determine enforcement mode from backend response (or env override)
-                backend_enforcement_mode = verification.get("enforcementMode", "monitoring")
-
-                if env_strict_override is not None:
-                    # Environment override takes precedence
-                    strict_mode = env_strict_override.lower() == "true"
-                else:
-                    # Use backend enforcement mode setting
-                    strict_mode = backend_enforcement_mode == "strict"
-
-                # Check if verification succeeded
-                if not verification.get("verified", False):
-                    denial_reason = verification.get('reason', verification.get('error', 'Unknown reason'))
-
-                    if strict_mode:
-                        # Strict mode: block execution and report it
-                        client.report_execution_status(
-                            verification_id=verification_id,
-                            executed=False,
-                            strict_mode=True,
-                            execution_error=f"Blocked by strict mode: {denial_reason}"
-                        )
-                        raise PermissionError(
-                            f"AIM verification failed for {func.__name__}: {denial_reason}"
-                        )
-                    else:
-                        # Monitoring mode: warn but continue execution
-                        from aim_sdk.console import console
-                        console.warning(f"AIM verification warning: {denial_reason}")
-                        try:
-                            result = func(*args, **kwargs)
-                            # Report that we executed despite denial (monitoring mode)
-                            client.report_execution_status(
-                                verification_id=verification_id,
-                                executed=True,
-                                strict_mode=False
-                            )
-                            return result
-                        except Exception as exec_error:
-                            # Report execution failure
-                            client.report_execution_status(
-                                verification_id=verification_id,
-                                executed=True,
-                                strict_mode=False,
-                                execution_error=str(exec_error)
-                            )
-                            raise
-
-                # Verification succeeded - execute the original function
-                try:
-                    result = func(*args, **kwargs)
-                    # Report successful execution
+            try:
+                result = func(*args, **kwargs)
+            except Exception as exec_error:
+                if verdict.reportable:
                     client.report_execution_status(
                         verification_id=verification_id,
                         executed=True,
-                        strict_mode=strict_mode
+                        strict_mode=strict,
+                        execution_error=str(exec_error),
                     )
-                    return result
-                except Exception as exec_error:
-                    # Report execution failure (function threw an error)
-                    client.report_execution_status(
-                        verification_id=verification_id,
-                        executed=True,
-                        strict_mode=strict_mode,
-                        execution_error=str(exec_error)
-                    )
-                    raise
-
-            except PermissionError:
-                # Re-raise permission errors (already reported above)
                 raise
-            except Exception as e:
-                # Verification itself failed (network error, etc.)
-                # Determine strict mode for error case (use env override or default to monitoring for safety)
-                strict_mode = env_strict_override.lower() == "true" if env_strict_override else False
-
-                if strict_mode:
-                    # In strict mode, verification failure blocks execution
-                    client.report_execution_status(
-                        verification_id=verification_id,
-                        executed=False,
-                        strict_mode=True,
-                        execution_error=f"Verification error: {str(e)}"
-                    )
-                    raise
-                else:
-                    # Monitoring mode: warn but continue execution
-                    from aim_sdk.console import console
-                    console.warning(f"AIM verification warning: {e}")
-                    try:
-                        result = func(*args, **kwargs)
-                        # Report that we executed despite verification error
-                        client.report_execution_status(
-                            verification_id=verification_id,
-                            executed=True,
-                            strict_mode=False
-                        )
-                        return result
-                    except Exception as exec_error:
-                        client.report_execution_status(
-                            verification_id=verification_id,
-                            executed=True,
-                            strict_mode=False,
-                            execution_error=str(exec_error)
-                        )
-                        raise
+            if verdict.reportable:
+                client.report_execution_status(
+                    verification_id=verification_id,
+                    executed=True,
+                    strict_mode=strict,
+                )
+            return result
 
         return wrapper
 

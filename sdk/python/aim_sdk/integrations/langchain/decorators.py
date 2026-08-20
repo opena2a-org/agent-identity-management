@@ -90,26 +90,35 @@ def aim_verify(
             if _resource is None and args:
                 _resource = str(args[0])[:100]  # First 100 chars of first arg
 
-            # Verify with AIM before execution
-            try:
-                verification_result = _agent.verify_action(
-                    action_type=_action_name,
-                    resource=_resource or "",
-                    context={
-                        "function": func.__name__,
-                        "args_count": len(args),
-                        "kwargs_keys": list(kwargs.keys()),
-                        "risk_level": risk_level,
-                        "source": "langchain_@aim_verify_decorator"
-                    },
-                    timeout_seconds=5  # Quick verification
-                )
-            except Exception as e:
-                # Verification failed - raise permission error
-                raise PermissionError(f"AIM verification failed for '{_action_name}': {e}")
+            # Verify with AIM, then apply the SDK's one enforcement rule.
+            #
+            # Before 2.0.0 this block had two defects. It never read `verified`
+            # at all, so every non-answer -- a 404, a 429, a 5xx, a timeout --
+            # fell through to the execute path and the tool ran unverified. And
+            # it converted every exception into PermissionError, which told a
+            # developer they had been denied when AIM was merely unreachable.
+            #
+            # The blanket conversion is gone. ActionDeniedError is already a
+            # PermissionError since 2.0.0, so a handler written for the
+            # documented `except PermissionError` still catches a real denial,
+            # while VerificationUnavailableError stays distinguishable.
+            verdict, decision = _agent._verify_and_enforce(
+                capability=_action_name,
+                resource=_resource or "",
+                context={
+                    "function": func.__name__,
+                    "args_count": len(args),
+                    "kwargs_keys": list(kwargs.keys()),
+                    "risk_level": risk_level,
+                    "source": "langchain_@aim_verify_decorator"
+                },
+                timeout_seconds=5,  # Quick verification
+                what=f"'{_action_name}'",
+            )
+            if verdict.blocked:
+                raise verdict.error
 
-            # Verification succeeded - execute the function
-            verification_id = verification_result.get("verification_id")
+            verification_id = decision.verification_id
 
             try:
                 result = func(*args, **kwargs)

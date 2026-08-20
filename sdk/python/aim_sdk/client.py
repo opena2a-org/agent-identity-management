@@ -25,9 +25,22 @@ from .exceptions import (
     AuthenticationError,
     VerificationError,
     ActionDeniedError,
+    VerificationUnavailableError,
     ConfigurationError,
     StaleCredentialsError,
 )
+from dataclasses import replace
+from .decision import (
+    EnforcementMode,
+    ModeSource,
+    Outcome,
+    UnknownSource,
+    VerificationDecision,
+    parse_enforcement_mode,
+    resolve_mode,
+)
+from .enforcement import PendingEnforcementChange, evaluate as _evaluate_enforcement
+from .strict_mode import strict_mode_override
 
 # Get version - we need to compute it directly to avoid circular import
 import os as _os
@@ -43,6 +56,32 @@ def _get_client_version():
     except Exception:
         return "0.0.0"
 __version__ = _get_client_version()
+
+# Warn once per process that verify_capability's dict return goes away in 3.0.0.
+_WARNED_LEGACY_RETURN = False
+
+# CISO-SDK-R6-C2: a 429 is our OWN rate limiter declining to answer, not a
+# decision. The limiter short-circuits before the handler runs, so no
+# verification event exists and a retry cannot duplicate one -- which is why a
+# retry is safe here and is NOT safe on a 5xx, where the handler may have
+# partially executed. Retrying obtains the decision instead of enforcing on its
+# absence.
+#
+# Both numbers below are UNMEASURED DEFAULTS, stated as such. No production rate
+# of 429s on the verification routes has been measured. They bound the retry so a
+# rate-limited agent degrades in latency rather than stalling.
+RATE_LIMIT_RETRY_ATTEMPTS = 2
+RATE_LIMIT_RETRY_MAX_DELAY_SECONDS = 5
+
+# The execution-status report is fire-and-forget and must never become the
+# slowest thing in a wrapped call. Before 2.0.0 it inherited the client's
+# request timeout (default 30s); it also never actually sent, because the id it
+# was given was always None. Fixing the id turns eight no-op calls into eight
+# real POSTs, so an unbounded inherited timeout would have shipped a 30s stall
+# per invocation onto the exact path that is already degraded -- silently, since
+# the call cannot raise. UNMEASURED DEFAULT.
+EXECUTION_REPORT_TIMEOUT_SECONDS = 5
+
 from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
 from .console import console
@@ -234,14 +273,20 @@ def validate_capability_format(capability: str) -> tuple[bool, str]:
 
 
 def _warn_deprecated_capability_format(capability: str):
-    """Warn if capability doesn't match the new namespace:action format."""
+    """Warn if capability doesn't match the new namespace:action format.
+
+    The docs link below was https://docs.aim.dev/capabilities until 2026-08-11.
+    That domain is not ours and does not resolve to anything about AIM: verified
+    HTTPS times out and HTTP serves a domain-parking redirect. Do not reintroduce
+    it or any *.aim.dev / *.aim.dev-shaped URL without confirming we control it.
+    """
     is_valid, error_msg = validate_capability_format(capability)
     if not is_valid:
         warnings.warn(
             f"DEPRECATION WARNING: {error_msg}\n"
             "The old capability format (e.g., 'read_files') is deprecated. "
             "Please update to the new namespace:action format (e.g., 'file:read').\n"
-            "See https://docs.aim.dev/capabilities for the full list of standard capabilities.",
+            "See https://opena2a.org/docs/aim for the full list of standard capabilities.",
             DeprecationWarning,
             stacklevel=3
         )
@@ -370,7 +415,7 @@ class AIMClient:
         # Session for connection pooling
         self.session = requests.Session()
         headers = {
-            'User-Agent': f'AIM-Python-SDK/1.0.0',
+            'User-Agent': f'AIM-Python-SDK/{__version__}',
             'Content-Type': 'application/json'
         }
 
@@ -530,8 +575,20 @@ class AIMClient:
         # Add Ed25519 signature authentication if signing key is available (highest priority)
         if self.signing_key and self.public_key and self.agent_id:
             try:
-                import time
-                import json
+                # `time` and `json` are already imported at module level
+                # (:9, :11). Re-importing them here, even though it looks
+                # harmless, makes Python treat both names as LOCAL to this
+                # entire function -- a local binding anywhere in a function
+                # body shadows the module-level name for the WHOLE function,
+                # not just from that line down. The retry/backoff loop below
+                # (`time.sleep(2 ** retry_count)`, outside this branch) then
+                # raises `UnboundLocalError: cannot access local variable
+                # 'time' where it is not associated with a value` for any
+                # caller that reaches a retry without signing_key/public_key/
+                # agent_id all being set -- api_key-only ("Manual mode")
+                # clients hitting a 429/5xx/network error, which masks the
+                # real error behind a confusing one. Pre-existing on
+                # origin/main; unrelated to the 2.0.0 enforcement work.
 
                 # Create timestamp
                 timestamp = str(int(time.time()))
@@ -642,23 +699,82 @@ class AIMClient:
         except requests.exceptions.RequestException as e:
             raise VerificationError(f"Request failed: {e}")
 
-    def verify_capability(
+    @staticmethod
+    def _retry_after_seconds(response) -> float:
+        """
+        Read Retry-After off a 429, in seconds.
+
+        Returns a small positive default when the header is absent or is not a
+        delta-seconds value, so a rate limiter that omits it still gets a bounded
+        retry rather than an immediate one. A negative or zero value is floored at
+        the default: a server asking us to retry in the past is not a reason to
+        hot-loop against a rate limiter.
+        """
+        default = 1.0
+        raw = None
+        try:
+            raw = response.headers.get("Retry-After")
+        except Exception:
+            return default
+        if raw is None:
+            return default
+        try:
+            value = float(str(raw).strip())
+        except (TypeError, ValueError):
+            # The HTTP-date form is legal but our limiter emits delta-seconds.
+            return default
+        if value <= 0:
+            return default
+        return value
+
+    def _undetermined(self, reason: str, source: UnknownSource) -> VerificationDecision:
+        """
+        Build an UNKNOWN decision, resolving the enforcement mode from the cache.
+
+        No mode came with this non-answer, so the resolver falls back to the
+        process-scoped last-known mode and then to UNKNOWN. `source` decides
+        whether the outcome may ever be handled permissively: only a transport
+        failure may. A server that answered is an answer, whatever it said.
+        """
+        mode, mode_source = resolve_mode(EnforcementMode.UNKNOWN, self.agent_id)
+        return VerificationDecision(
+            outcome=Outcome.UNKNOWN,
+            mode=mode,
+            mode_source=mode_source,
+            reason=reason,
+            unknown_source=source,
+        )
+
+    def _decide_capability(
         self,
         capability: str,
         resource: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         timeout_seconds: int = 300,
         telemetry: Optional[Dict[str, Any]] = None,
-    ) -> Dict:
+    ) -> VerificationDecision:
         """
-        Request verification for a capability from AIM.
+        Ask AIM to decide on a capability, and return a typed three-state decision.
+
+        Added in 2.0.0. PRIVATE ON PURPOSE. ``verify_capability`` is the single
+        public entry point into the verification path, and every decorator in this
+        SDK goes through it. A second public entry point with different failure
+        semantics would be an escape hatch out of an authorization fix -- and a
+        decorator calling this method directly would silently walk past the test
+        stubs that patch the public one, leaving them green while testing nothing.
+
+        This method NEVER raises for a denial: a denial is a decision, returned as
+        ``Outcome.DENY``. It still raises ``AuthenticationError`` for a credential
+        failure, which is a misconfiguration rather than a decision about the
+        action.
 
         This method:
         1. Creates a verification request with capability details
         2. Signs the request with the agent's private key
         3. Sends the request to AIM
         4. Waits for approval/denial (up to timeout_seconds)
-        5. Returns verification result
+        5. Returns the decision, with the organization's enforcement mode and
+           where that mode was resolved from
 
         Args:
             capability: Capability to verify (e.g., "db:read", "email:send", "file:write")
@@ -673,15 +789,18 @@ class AIMClient:
                 capture was opted in at client construction.
 
         Returns:
-            Verification result dict with keys:
-            - verified: bool (whether capability is approved)
-            - verification_id: str (unique ID for this verification)
-            - approved_by: str (user who approved, if applicable)
-            - expires_at: str (ISO timestamp when approval expires)
+            A :class:`~aim_sdk.decision.VerificationDecision`:
+            - outcome: ALLOW, DENY or UNKNOWN
+            - unknown_source: on UNKNOWN, whether the server answered or the
+              transport failed. Only a transport failure may be handled
+              permissively.
+            - mode / mode_source: the organization's enforcement mode, and
+              whether it came from this response, from the process-scoped cache,
+              or was unavailable.
+            - verification_id, status, reason, approved_by, expires_at
 
         Raises:
-            ActionDeniedError: If capability is explicitly denied
-            VerificationError: If verification request fails
+            AuthenticationError: If the agent's credentials were rejected (401)
         """
         # Create verification request payload
         timestamp = datetime.utcnow().isoformat() + 'Z'  # Match backend expected format
@@ -732,7 +851,7 @@ class AIMClient:
             # Prepare headers based on authentication mode
             headers = {
                 'Content-Type': 'application/json',
-                'User-Agent': f'AIM-Python-SDK/1.0.0'
+                'User-Agent': f'AIM-Python-SDK/{__version__}'
             }
 
             # Add API key header for API-key-only mode
@@ -746,13 +865,35 @@ class AIMClient:
             # Attach the correlation ID (best-effort, never overrides auth headers).
             headers.update(correlation_headers(correlation_id))
 
-            response = self.session.request(
-                method="POST",
-                url=url,
-                json=request_payload,
-                headers=headers,
-                timeout=self.timeout
-            )
+            def _send():
+                return self.session.request(
+                    method="POST",
+                    url=url,
+                    json=request_payload,
+                    headers=headers,
+                    timeout=self.timeout
+                )
+
+            response = _send()
+
+            # CISO-SDK-R6-C2: a 429 is our own rate limiter declining to answer.
+            # Retry it, bounded, honouring Retry-After, BEFORE classifying the
+            # outcome -- obtaining the decision beats enforcing on its absence.
+            # 429 only: the limiter returns without invoking the handler, so no
+            # verification event exists and a retry cannot duplicate one. On a
+            # 5xx the handler may have partly run, so a 5xx is never retried.
+            attempts = 0
+            while response.status_code == 429 and attempts < RATE_LIMIT_RETRY_ATTEMPTS:
+                delay = self._retry_after_seconds(response)
+                if delay > RATE_LIMIT_RETRY_MAX_DELAY_SECONDS or delay > timeout_seconds:
+                    break
+                attempts += 1
+                console.warning(
+                    f"AIM rate-limited this verification (429). Retrying in {delay}s "
+                    f"(attempt {attempts} of {RATE_LIMIT_RETRY_ATTEMPTS})."
+                )
+                time.sleep(delay)
+                response = _send()
 
             # Handle authentication errors
             if response.status_code == 401:
@@ -762,46 +903,123 @@ class AIMClient:
                     error_detail = response.text
                 raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
 
-            # Handle forbidden errors (denied action or agent status issue)
+            # Handle forbidden errors (denied action or agent status issue).
+            # A 403 on this route is the server refusing the action -- the wire
+            # form of a denial. It is returned as DENY rather than raised as an
+            # authentication problem: telling a developer their credentials are
+            # bad when policy refused them sends them to the wrong fix. The
+            # server's own detail is carried in the reason so a revoked-agent 403
+            # is still legible.
             if response.status_code == 403:
+                # The body is a full VerificationResponse, not an error envelope:
+                # `CreateVerification` builds the same struct for a denial and
+                # returns it with status 403. It carries `denialReason`, `id` and
+                # `enforcementMode`. This block used to read `error` -- a key the
+                # backend never sends -- and nothing else, which is why every
+                # production denial arrived with the reason "insufficient
+                # permissions", an unresolved mode, and no verification id.
                 try:
-                    error_detail = response.json().get("error", "insufficient permissions")
-                except:
-                    error_detail = response.text or "insufficient permissions"
-                raise AuthenticationError(f"Forbidden - {error_detail}")
+                    body = response.json()
+                except Exception:
+                    body = None
+                if not isinstance(body, dict):
+                    body = {}
 
-            # Handle 404 - endpoint not found (server may not be running or endpoint doesn't exist)
-            if response.status_code == 404:
-                console.warning("AIM verification endpoint not found (404). Server may not be running.")
-                return {
-                    "verified": False,
-                    "verification_id": None,
-                    "status": "pending",
-                    "error": "Endpoint not found - server may not be available"
-                }
+                error_detail = (
+                    body.get("denialReason")
+                    or body.get("error")  # a proxy or gateway 403, not ours
+                    or (response.text if not body else None)
+                    or "insufficient permissions"
+                )
 
-            # Handle other HTTP errors gracefully
+                # Defect (A). The mode was resolved from a hard-coded None, so a
+                # 403 never learned the org's mode from the one response that
+                # states it. This is safe to honour only because an explicit DENY
+                # now blocks in every mode; the two changes may not be separated
+                # (see `enforcement.py`) -- reading a fresh `monitoring` off the
+                # wire while the DENY row still consulted the mode would have
+                # flipped warm-strict processes to RUN, because `resolve_mode`
+                # correctly prefers a fresh RESPONSE over a stale CACHE.
+                mode, mode_source = resolve_mode(
+                    parse_enforcement_mode(body.get("enforcementMode")), self.agent_id
+                )
+
+                # Defect (B). Without the id, `report_execution_status` returns at
+                # its first line, so AIM is never told the blocked action was
+                # blocked and no row records that the control fired.
+                #
+                # Deliberately NOT claimed: that anyone sees this today. Migration
+                # 053's execution columns (`executed`, `strict_mode`,
+                # `executed_at`, `execution_error`) are write-only -- no
+                # production SELECT names them; the only readers are in an
+                # integration test. The cost of (B) is that the evidence does not
+                # EXIST, not that a reader is currently misled. It starts being
+                # read when the execution-outcome channel gets its own columns,
+                # and a channel switched on over a gap in the data reads as "the
+                # SDK ran denied actions" for every verification written before
+                # this fix.
+                verification_id = body.get("id")
+
+                if correlation_id:
+                    self._record_verification_telemetry(
+                        correlation_id, capability, resource, "deny", error_detail, telemetry
+                    )
+                security_logger.log_authorization(
+                    AuthzEventType.CAPABILITY_DENIED,
+                    action=capability,
+                    resource=resource,
+                    granted=False,
+                    agent_id=self.agent_id,
+                    details={
+                        "http_status": 403,
+                        "denial_reason": error_detail,
+                        "verification_id": verification_id,
+                    },
+                )
+                return VerificationDecision(
+                    outcome=Outcome.DENY,
+                    mode=mode,
+                    mode_source=mode_source,
+                    verification_id=verification_id,
+                    status="denied",
+                    reason=str(error_detail),
+                )
+
+            # Every remaining status >= 400 is a server ANSWER that carried no
+            # decision -- 400, 404, 409, 429, and all 5xx. Before 2.0.0 each of
+            # these returned `verified: False` and the decorators read that as
+            # "not permitted, but carry on", which is how a 429 turned
+            # verification off for an IP at zero cost to an attacker. They are
+            # UNKNOWN with SERVER_ANSWER, which is never permissive.
             if response.status_code >= 400:
                 error_msg = f"HTTP {response.status_code} error"
                 try:
                     error_detail = response.json().get("error", response.text)
                     error_msg = f"{error_msg}: {error_detail}"
-                except:
+                except Exception:
                     error_msg = f"{error_msg}: {response.text[:200]}"
-                
+
                 console.warning(f"Verification request failed: {error_msg}")
-                return {
-                    "verified": False,
-                    "verification_id": None,
-                    "status": "pending",
-                    "error": error_msg
-                }
+                return self._undetermined(error_msg, UnknownSource.SERVER_ANSWER)
 
             response.raise_for_status()
             result = response.json()
 
             verification_id = result.get("id")
             status = result.get("status")
+
+            # The organization's enforcement mode, finally read off the wire. The
+            # backend has always sent this; before 2.0.0 the decorator looked for
+            # it on the client's return value, which no return site ever set, so
+            # it fell back to "monitoring" on every single call and the dashboard
+            # setting had no effect on the Python SDK at all.
+            #
+            # An absent or unrecognised value resolves to UNKNOWN, never to
+            # monitoring: the backend emits "unknown" when its own organization
+            # lookup failed, and a degraded upstream must not be able to produce
+            # the lenient outcome by failing.
+            response_mode = parse_enforcement_mode(result.get("enforcementMode"))
+            mode, mode_source = resolve_mode(response_mode, self.agent_id)
 
             # If approved (or auto-approved in monitoring mode), return immediately
             if status in ("approved", "auto-approved"):
@@ -819,20 +1037,31 @@ class AIMClient:
                     agent_id=self.agent_id,
                     details={
                         "verification_id": verification_id,
-                        "approved_by": result.get("approved_by"),
+                        "approved_by": result.get("approvedBy"),
                         "auto_approved": True
                     }
                 )
-                return {
-                    "verified": True,
-                    "verification_id": verification_id,
-                    "approved_by": result.get("approved_by"),
-                    "expires_at": result.get("expires_at")
-                }
+                return VerificationDecision(
+                    outcome=Outcome.ALLOW,
+                    mode=mode,
+                    mode_source=mode_source,
+                    verification_id=verification_id,
+                    status=status,
+                    approved_by=result.get("approvedBy"),
+                    expires_at=result.get("expiresAt"),
+                )
 
-            # If denied, raise error
+            # A denial is a DECISION, so it is returned, not raised. The public
+            # verify_capability raises on it; keeping the raise out of here is
+            # what lets a caller distinguish "AIM said no" from "AIM never
+            # answered" without catching anything.
             if status == "denied":
-                reason = result.get("denial_reason", "Action denied by policy")
+                # `denialReason`, not `denial_reason`. Every field on this route is
+                # a `VerificationResponse` json tag and those are camelCase; the
+                # snake_case spelling read here since 1.x matches nothing the
+                # backend has ever sent, so the administrator's stated reason was
+                # replaced by this literal default on every denial.
+                reason = result.get("denialReason") or "Action denied by policy"
                 # Record the enforcement outcome (deny) BEFORE the raise -- this is
                 # the causal-denial case the telemetry exists to capture.
                 if correlation_id:
@@ -847,7 +1076,14 @@ class AIMClient:
                     agent_id=self.agent_id,
                     details={"verification_id": verification_id, "denial_reason": reason}
                 )
-                raise ActionDeniedError(f"Action denied: {reason}")
+                return VerificationDecision(
+                    outcome=Outcome.DENY,
+                    mode=mode,
+                    mode_source=mode_source,
+                    verification_id=verification_id,
+                    status=status,
+                    reason=reason,
+                )
 
             # If pending, poll for result (thread the telemetry context through so
             # a JIT approval/denial is captured the same way).
@@ -856,9 +1092,14 @@ class AIMClient:
                     verification_id, timeout_seconds,
                     correlation_id=correlation_id, capability=capability,
                     resource=resource, telemetry=telemetry,
+                    fallback_mode=mode, fallback_mode_source=mode_source,
                 )
 
-            raise VerificationError(f"Unexpected verification status: {status}")
+            # A status we do not recognise is a server answer that carried no
+            # decision we can act on. Not permissive.
+            return self._undetermined(
+                f"Unexpected verification status: {status}", UnknownSource.SERVER_ANSWER
+            )
 
         except (AuthenticationError, ActionDeniedError) as e:
             security_logger.log_authorization(
@@ -881,30 +1122,29 @@ class AIMClient:
                 error=f"Network error: {type(e).__name__}: {str(e)}"
             )
             console.warning(f"Network error during verification: {type(e).__name__}: {str(e)}")
-            return {
-                "verified": False,
-                "verification_id": None,
-                "status": "pending",
-                "error": f"Network error: {type(e).__name__}: {str(e)}"
-            }
+            # THE transport allowlist. UNKNOWN is populated from the transport
+            # exception here and nowhere else -- never from a status code -- so
+            # the permissive class cannot grow by someone adding a status to a
+            # denylist somewhere.
+            return self._undetermined(
+                f"Network error: {type(e).__name__}: {str(e)}", UnknownSource.TRANSPORT
+            )
         except json.JSONDecodeError as e:
-            # Handle JSON parsing errors
+            # The server answered; the body was not JSON. It answered, so this is
+            # not the transport class and is not permissive.
             console.warning(f"Invalid JSON response from server: {str(e)}")
-            return {
-                "verified": False,
-                "verification_id": None,
-                "status": "pending",
-                "error": f"JSON decode error: {str(e)}"
-            }
+            return self._undetermined(
+                f"JSON decode error: {str(e)}", UnknownSource.SERVER_ANSWER
+            )
         except Exception as e:
-            # Catch all other exceptions
+            # An unexpected failure inside our own code. It is not provably a
+            # transport failure, so it does not get the transport allowlist's
+            # leniency.
             console.warning(f"Unexpected error during verification: {type(e).__name__}: {str(e)}")
-            return {
-                "verified": False,
-                "verification_id": None,
-                "status": "pending",
-                "error": f"Unexpected error: {type(e).__name__}: {str(e)}"
-            }
+            return self._undetermined(
+                f"Unexpected error: {type(e).__name__}: {str(e)}",
+                UnknownSource.SERVER_ANSWER,
+            )
 
     # ---------------------------------------------------------------------- #
     # Causal-denial telemetry helpers (best-effort, off the enforcement path).
@@ -1007,6 +1247,202 @@ class AIMClient:
             self._own_relay = None
 
     # Backwards compatibility alias
+    def verify_capability(
+        self,
+        capability: str,
+        resource: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        timeout_seconds: int = 300,
+        telemetry: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
+        """
+        Request verification for a capability from AIM.
+
+        THE single public entry point into the verification path. Every decorator
+        in this SDK goes through it.
+
+        Returns ONLY when the capability is permitted. Since 2.0.0 the three
+        states are carried by Python's own type system rather than by a boolean:
+        an allow returns, a denial raises, and "no decision was obtained" raises a
+        different type. There is no longer any ``verified: False`` in this SDK, so
+        "denied" and "could not determine" can no longer be confused -- previously
+        both produced the same falsy dict and the decorators treated the pair as
+        "not permitted, but carry on".
+
+        Args:
+            capability: Capability to verify (e.g., "db:read", "email:send", "file:write")
+            resource: Resource being accessed (e.g., "users_table", "admin@example.com")
+            context: Additional context about the capability usage
+            timeout_seconds: Maximum time to wait for approval (default: 300s = 5min)
+            telemetry: Optional causal-denial telemetry seam (best-effort, off the
+                enforcement path). A dict with optional ``intent`` (IntentInput)
+                and ``detection`` (DetectionInput) parts that the injection
+                detector / intent classifier populate; joined with the enforcement
+                outcome into one correlated record. Ignored unless telemetry
+                capture was opted in at client construction.
+
+        Returns:
+            Verification result dict with keys:
+            - verified: bool (always True -- a non-allow raises)
+            - verification_id: str (unique ID for this verification)
+            - approved_by: str (user who approved, if applicable)
+            - expires_at: str (ISO timestamp when approval expires)
+            - mode: str (the organization's enforcement mode; new in 2.0.0)
+            - mode_source: str (where that mode came from; new in 2.0.0)
+
+            DEPRECATED SHAPE: in 3.0.0 this returns a
+            :class:`~aim_sdk.decision.VerificationDecision` instead of a dict.
+
+        Raises:
+            ActionDeniedError: If capability is explicitly denied
+            VerificationUnavailableError: If no decision could be obtained
+            VerificationError: If verification request fails
+            AuthenticationError: If the agent's credentials were rejected
+        """
+        decision = self._decide_capability(
+            capability=capability,
+            resource=resource,
+            context=context,
+            timeout_seconds=timeout_seconds,
+            telemetry=telemetry,
+        )
+
+        if decision.outcome is Outcome.ALLOW:
+            self._warn_legacy_return_shape()
+            return decision.to_legacy_dict()
+
+        if decision.outcome is Outcome.DENY:
+            raise ActionDeniedError(
+                f"Action denied: {decision.reason or 'Action denied by policy'}",
+                decision=decision,
+            )
+
+        raise VerificationUnavailableError(
+            f"AIM returned no verification decision: "
+            f"{decision.reason or 'no detail available'}",
+            decision=decision,
+        )
+
+    def _warn_legacy_return_shape(self) -> None:
+        """
+        Announce, once per process, that the dict return goes away in 3.0.0.
+
+        Required by the deprecation timeline in ``docs/VERSIONING.md``: a shape
+        that changes in a major must have warned in a prior minor.
+
+        Deliberately a module-level once-per-process warning rather than a
+        warning-emitting dict subclass. A subclass changes behaviour under
+        ``json.dumps``, ``**`` spread, ``copy()`` and pickling -- a subtle
+        serialization bug is a worse defect than the one this release fixes -- and
+        it would fire inside this SDK's own decorators, warning every user who
+        never reads the return value at all.
+        """
+        global _WARNED_LEGACY_RETURN
+        if _WARNED_LEGACY_RETURN:
+            return
+        _WARNED_LEGACY_RETURN = True
+        warnings.warn(
+            "verify_capability() returns a dict today and will return a typed "
+            "aim_sdk.decision.VerificationDecision in aim-sdk 3.0.0. The 'verified' "
+            "key is superseded by the decision's outcome. Reading 'verification_id', "
+            "'approved_by' and 'expires_at' keeps working via attributes of the same "
+            "name.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+    def _verify_and_enforce(
+        self,
+        capability: str,
+        resource: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        timeout_seconds: int = 300,
+        what: Optional[str] = None,
+        telemetry: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Verify a capability and apply the one enforcement rule.
+
+        Every decorator on this client uses this, and so does ``aim_verify``. It
+        deliberately calls the PUBLIC ``verify_capability`` rather than the
+        private decision method: that is the single entry point into the
+        authorization path, and it is the method existing tests stub. A decorator
+        that shortcut to the private method would walk straight past those stubs
+        and leave them green while testing nothing.
+
+        Returns:
+            (verdict, decision). The caller runs the wrapped body iff
+            ``verdict.run``, and raises ``verdict.error`` otherwise.
+        """
+        label = what or f"'{capability}'"
+
+        def _synthetic(outcome, reason, unknown_source=UnknownSource.NONE):
+            # A caller (or a test stub) can raise ActionDeniedError without a
+            # decision attached. Mode UNKNOWN, never MONITORING: an exception that
+            # carries no mode is not evidence that the organization chose leniency.
+            return VerificationDecision(
+                outcome=outcome,
+                mode=EnforcementMode.UNKNOWN,
+                mode_source=ModeSource.UNAVAILABLE,
+                reason=reason,
+                unknown_source=unknown_source,
+            )
+
+        try:
+            result = self.verify_capability(
+                capability=capability,
+                resource=resource,
+                context=context,
+                timeout_seconds=timeout_seconds,
+                telemetry=telemetry,
+            )
+        except ActionDeniedError as e:
+            decision = e.decision or _synthetic(Outcome.DENY, str(e))
+        except VerificationUnavailableError as e:
+            decision = e.decision or _synthetic(
+                Outcome.UNKNOWN, str(e), UnknownSource.SERVER_ANSWER
+            )
+        except (AuthenticationError, ConfigurationError):
+            # A credential or configuration failure is not a decision about the
+            # action, and it is not something enforcement mode should soften.
+            raise
+        except VerificationError as e:
+            decision = _synthetic(Outcome.UNKNOWN, str(e), UnknownSource.SERVER_ANSWER)
+        else:
+            # An ALLOW. Tolerate a stubbed or pre-2.0.0-shaped dict: read the
+            # mode if it is there, and treat its absence as UNKNOWN.
+            if isinstance(result, VerificationDecision):
+                decision = result
+            else:
+                payload = result if isinstance(result, dict) else {}
+                decision = VerificationDecision(
+                    outcome=Outcome.ALLOW,
+                    mode=parse_enforcement_mode(payload.get("mode")),
+                    mode_source=(
+                        ModeSource.RESPONSE
+                        if payload.get("mode_source") == ModeSource.RESPONSE.value
+                        else ModeSource.CACHE
+                        if payload.get("mode_source") == ModeSource.CACHE.value
+                        else ModeSource.UNAVAILABLE
+                    ),
+                    verification_id=payload.get("verification_id"),
+                    approved_by=payload.get("approved_by"),
+                    expires_at=payload.get("expires_at"),
+                    status="approved",
+                )
+
+        verdict = _evaluate_enforcement(
+            decision, strict_override=strict_mode_override(), what=label
+        )
+
+        if verdict.warning:
+            console.warning(verdict.warning)
+        if verdict.pending_change:
+            console.warning(verdict.pending_change)
+            warnings.warn(verdict.pending_change, PendingEnforcementChange, stacklevel=3)
+
+        return verdict, decision
+
     def verify_action(
         self,
         action_type: str,
@@ -1042,20 +1478,30 @@ class AIMClient:
         capability: Optional[str] = None,
         resource: Optional[str] = None,
         telemetry: Optional[Dict[str, Any]] = None,
-    ) -> Dict:
+        fallback_mode: "EnforcementMode" = EnforcementMode.UNKNOWN,
+        fallback_mode_source: "ModeSource" = ModeSource.UNAVAILABLE,
+    ) -> VerificationDecision:
         """
         Poll AIM server for verification approval.
 
         Args:
             verification_id: ID of the verification request
             timeout_seconds: Maximum time to wait
+            fallback_mode: enforcement mode from the request that created this
+                verification, used when a poll response does not carry one.
+            fallback_mode_source: where that fallback came from.
 
         Returns:
-            Verification result dict
+            A VerificationDecision. A JIT request that is never answered returns
+            UNKNOWN with SERVER_ANSWER -- the server is reachable and answering
+            "pending", we simply never got a decision. Before 2.0.0 this raised
+            VerificationError, which the decorators' blanket `except Exception`
+            routed into the fail-open branch, so an unanswered approval request
+            executed the action it was waiting on.
 
         Raises:
-            ActionDeniedError: If action is denied
-            VerificationError: If timeout or polling fails
+            AuthenticationError: If the agent's credentials were rejected
+            VerificationError: If the client is not configured to poll at all
         """
         start_time = time.time()
         poll_interval = 2  # Start with 2 second polls
@@ -1138,10 +1584,14 @@ class AIMClient:
                 if response.status_code == 403:
                     raise AuthenticationError("Forbidden - insufficient permissions")
 
-                # Handle 404 - endpoint not found
+                # Handle 404 - endpoint not found. A server answer with no
+                # decision: undetermined, and never permissive.
                 if response.status_code == 404:
                     console.warning("Verification endpoint not found (404). Cannot poll for approval.")
-                    raise VerificationError("Verification endpoint not available - cannot complete approval process")
+                    return self._undetermined(
+                        "Verification endpoint not available - cannot complete approval process",
+                        UnknownSource.SERVER_ANSWER,
+                    )
 
                 # Handle other HTTP errors
                 if response.status_code >= 400:
@@ -1175,19 +1625,31 @@ class AIMClient:
                         agent_id=self.agent_id,
                         details={
                             "verification_id": verification_id,
-                            "approved_by": result.get("approved_by"),
-                            "expires_at": result.get("expires_at")
+                            "approved_by": result.get("approvedBy"),
+                            "expires_at": result.get("expiresAt")
                         }
                     )
-                    return {
-                        "verified": True,
-                        "verification_id": verification_id,
-                        "approved_by": result.get("approved_by"),
-                        "expires_at": result.get("expires_at")
-                    }
+                    poll_mode, poll_mode_source = resolve_mode(
+                        parse_enforcement_mode(result.get("enforcementMode")), self.agent_id
+                    )
+                    if poll_mode is EnforcementMode.UNKNOWN:
+                        poll_mode, poll_mode_source = fallback_mode, fallback_mode_source
+                    return VerificationDecision(
+                        outcome=Outcome.ALLOW,
+                        mode=poll_mode,
+                        mode_source=poll_mode_source,
+                        verification_id=verification_id,
+                        status=status,
+                        approved_by=result.get("approvedBy"),
+                        expires_at=result.get("expiresAt"),
+                    )
 
                 if status == "denied":
-                    reason = result.get("denial_reason", "Action denied")
+                    # THE JIT denial. `writeVerificationResponse` copies the
+                    # administrator's reason into `denialReason`; reading
+                    # `denial_reason` matched nothing, so a developer blocked by a
+                    # human decision was told only "Action denied" and never why.
+                    reason = result.get("denialReason") or "Action denied"
                     if correlation_id and capability:
                         self._record_verification_telemetry(
                             correlation_id, capability, resource, "deny", reason, telemetry
@@ -1200,13 +1662,25 @@ class AIMClient:
                         agent_id=self.agent_id,
                         details={"verification_id": verification_id, "denial_reason": reason}
                     )
-                    raise ActionDeniedError(f"Action denied: {reason}")
+                    poll_mode, poll_mode_source = resolve_mode(
+                        parse_enforcement_mode(result.get("enforcementMode")), self.agent_id
+                    )
+                    if poll_mode is EnforcementMode.UNKNOWN:
+                        poll_mode, poll_mode_source = fallback_mode, fallback_mode_source
+                    return VerificationDecision(
+                        outcome=Outcome.DENY,
+                        mode=poll_mode,
+                        mode_source=poll_mode_source,
+                        verification_id=verification_id,
+                        status=status,
+                        reason=reason,
+                    )
 
                 # Still pending, wait and retry
                 time.sleep(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)  # Exponential backoff up to 10s
 
-            except (AuthenticationError, ActionDeniedError, VerificationError):
+            except (AuthenticationError, ActionDeniedError, VerificationError, VerificationUnavailableError):
                 raise
             except requests.exceptions.RequestException as e:
                 # Handle network errors - continue polling on transient network issues
@@ -1232,7 +1706,19 @@ class AIMClient:
             agent_id=self.agent_id,
             details={"verification_id": verification_id, "timeout_seconds": timeout_seconds}
         )
-        raise VerificationError(f"Verification timeout after {timeout_seconds} seconds")
+        # A JIT request nobody answered. The server is reachable and kept saying
+        # "pending", so this is a server answer, not a transport failure, and it is
+        # never permissive. Before 2.0.0 this raised VerificationError, which the
+        # decorators' blanket `except Exception` routed into the fail-open branch --
+        # so an approval request that timed out executed the very action it was
+        # waiting for a human to approve.
+        timed_out = self._undetermined(
+            f"Verification timeout after {timeout_seconds} seconds - no decision was made",
+            UnknownSource.SERVER_ANSWER,
+        )
+        if timed_out.mode is EnforcementMode.UNKNOWN and fallback_mode is not EnforcementMode.UNKNOWN:
+            return replace(timed_out, mode=fallback_mode, mode_source=fallback_mode_source)
+        return timed_out
 
     def log_capability_result(
         self,
@@ -1259,7 +1745,7 @@ class AIMClient:
             # Prepare headers - use API key if available, otherwise OAuth
             headers = {
                 'Content-Type': 'application/json',
-                'User-Agent': f'AIM-Python-SDK/1.0.0'
+                'User-Agent': f'AIM-Python-SDK/{__version__}'
             }
 
             if self.api_key:
@@ -1328,7 +1814,7 @@ class AIMClient:
 
             headers = {
                 'Content-Type': 'application/json',
-                'User-Agent': f'AIM-Python-SDK/1.0.0'
+                'User-Agent': f'AIM-Python-SDK/{__version__}'
             }
 
             if self.api_key:
@@ -1358,7 +1844,13 @@ class AIMClient:
                 url=url,
                 json=payload,
                 headers=headers,
-                timeout=self.timeout
+                # NOT self.timeout. This call is fire-and-forget, so it can never
+                # raise -- which means an unbounded wait here does not fail loudly,
+                # it just makes every wrapped invocation slower with no signal.
+                # Before 2.0.0 that was masked because the id was always None and
+                # the function returned before building a URL; fixing the id makes
+                # these calls real, so the timeout has to be bounded now.
+                timeout=min(EXECUTION_REPORT_TIMEOUT_SECONDS, self.timeout)
             )
 
             # Don't raise on errors - this is fire-and-forget
@@ -2728,17 +3220,26 @@ class AIMClient:
                     merged_context["risk_level"] = detected_risk
                     merged_context["function"] = func.__name__
                     merged_context["module"] = func.__module__
-                    console.jit_waiting(cap, detected_risk, timeout_seconds)
+                    console.jit_waiting(cap, detected_risk, timeout_seconds,
+                                        dashboard_url=f"{self.aim_url}/dashboard/admin/verifications")
 
-                # Request capability verification
-                verification_result = self.verify_capability(
+                # Request capability verification and apply the one enforcement
+                # rule. Before 2.0.0 this read no decision at all -- it never
+                # inspected `verified` -- so it executed the wrapped function on a
+                # 404, a 429, a 5xx and every network failure, contradicting its
+                # own docstring above. It blocked a denial only by the accident of
+                # an exception propagating.
+                verdict, decision = self._verify_and_enforce(
                     capability=cap,
                     resource=resource,
                     context=merged_context,
-                    timeout_seconds=timeout_seconds
+                    timeout_seconds=timeout_seconds,
+                    what=f"'{cap}'",
                 )
+                if verdict.blocked:
+                    raise verdict.error
 
-                verification_id = verification_result["verification_id"]
+                verification_id = decision.verification_id
 
                 # AAP: when a grant reference is set, bind a GrantSession to the broker and
                 # make it available to the function. The agent references the grant; the
@@ -2836,51 +3337,22 @@ class AIMClient:
                 if kwargs:
                     context["kwargs"] = str(kwargs)
 
-                # Request capability verification
-                try:
-                    verification_result = self.verify_capability(
-                        capability=action,
-                        resource=resource,
-                        context=context,
-                        timeout_seconds=300
-                    )
-                except Exception as e:
-                    # Handle any exceptions during verification
-                    console.warning(f"Verification request failed: {type(e).__name__}: {str(e)}")
-                    console.info(f"Capability '{action}' cannot proceed without verification")
-                    return {
-                        "error": True,
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                        "capability": action,
-                        "status": "verification_failed"
-                    }
+                # Request capability verification and apply the one enforcement
+                # rule. Before 2.0.0 this returned a sentinel dict instead of the
+                # wrapped function's value on every non-allow path, so a caller
+                # that ignored the return proceeded exactly as if the work had
+                # happened. It now raises, like every other entry point.
+                verdict, decision = self._verify_and_enforce(
+                    capability=action,
+                    resource=resource,
+                    context=context,
+                    timeout_seconds=300,
+                    what=f"'{action}'",
+                )
+                if verdict.blocked:
+                    raise verdict.error
 
-                # Check if verification result has an error
-                if verification_result.get("error"):
-                    error_msg = verification_result.get("error", "Unknown verification error")
-                    console.warning(f"Verification returned error: {error_msg}")
-                    console.info(f"Capability '{action}' cannot proceed without successful verification")
-                    return {
-                        "error": True,
-                        "error_type": "VerificationError",
-                        "error_message": error_msg,
-                        "capability": action,
-                        "status": "verification_failed"
-                    }
-
-                if not verification_result.get("verified", False):
-                    reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
-                    console.warning(f"Capability '{action}' not verified: {reason}")
-                    return {
-                        "error": True,
-                        "error_type": "CapabilityDenied",
-                        "error_message": f"Capability '{action}' denied: {reason}",
-                        "capability": action,
-                        "status": "denied"
-                    }
-
-                verification_id = verification_result.get("verification_id")
+                verification_id = decision.verification_id
 
                 try:
                     # Execute the function
@@ -2985,54 +3457,47 @@ class AIMClient:
                 if kwargs:
                     context["kwargs"] = str(kwargs)
 
-                console.show_jit_awaiting(action, risk_level, timeout_seconds)
+                # These three were `console.show_jit_awaiting` / `show_jit_denied`
+                # / `show_jit_approved`. No such methods exist on the console --
+                # the real names are `jit_waiting` / `jit_denied` / `jit_approved`
+                # -- so this decorator raised AttributeError on its FIRST line, on
+                # every call, including an approval. @require_approval has never
+                # executed a wrapped function. It was fail-closed by crash.
+                console.jit_waiting(action, risk_level, timeout_seconds,
+                                     dashboard_url=f"{self.aim_url}/dashboard/admin/verifications")
 
-                # Request capability verification with extended timeout
-                try:
-                    verification_result = self.verify_capability(
-                        capability=action,
-                        resource=resource,
-                        context=context,
-                        timeout_seconds=timeout_seconds
-                    )
-                except Exception as e:
-                    # Handle any exceptions during verification
-                    console.warning(f"Verification request failed: {type(e).__name__}: {str(e)}")
-                    console.warning(f"Capability '{action}' cannot proceed without verification.")
-                    return {
-                        "error": True,
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                        "capability": action,
-                        "status": "verification_failed"
-                    }
+                # Request capability verification with extended timeout, then
+                # apply the one enforcement rule.
+                verdict, decision = self._verify_and_enforce(
+                    capability=action,
+                    resource=resource,
+                    context=context,
+                    timeout_seconds=timeout_seconds,
+                    what=f"'{action}'",
+                )
+                if verdict.blocked:
+                    console.jit_denied(action, decision.reason or str(verdict.error))
+                    raise verdict.error
 
-                # Check if verification result has an error
-                if verification_result.get("error"):
-                    error_msg = verification_result.get("error", "Unknown verification error")
-                    console.warning(f"Verification returned error: {error_msg}")
-                    console.warning(f"Capability '{action}' cannot proceed without successful verification.")
-                    return {
-                        "error": True,
-                        "error_type": "VerificationError",
-                        "error_message": error_msg,
-                        "capability": action,
-                        "status": "verification_failed"
-                    }
-
-                if not verification_result.get("verified", False):
-                    reason = verification_result.get("reason", verification_result.get("error", "Unknown reason"))
-                    console.show_jit_denied(action, reason)
-                    return {
-                        "error": True,
-                        "error_type": "CapabilityDenied",
-                        "error_message": f"Capability '{action}' DENIED: {reason}",
-                        "capability": action,
-                        "status": "denied"
-                    }
-
-                console.show_jit_approved(action)
-                verification_id = verification_result.get("verification_id")
+                # SECURITY: fixing the AttributeError crash above (the whole
+                # point of this release) exposed a second defect underneath it.
+                # `verdict.blocked is False` does not mean AIM approved anything
+                # -- it is also true when a monitoring-mode organization ran the
+                # action after a DENY or an UNKNOWN outcome, and when the
+                # unresolved-mode warning window let it through unverified. Only
+                # `Outcome.ALLOW` is an actual approval. Printing "approved -
+                # executing..." for the other cases is a false statement in a
+                # security tool's own output: AIM was not reached, nobody
+                # approved anything, and the box above already said so via
+                # verdict.warning / verdict.pending_change. Measured: with the
+                # backend unreachable and AIM_STRICT_MODE unset, the pre-fix
+                # code printed "transfer_money approved - executing..." and ran
+                # the body, immediately under a warning that said the opposite.
+                if decision.outcome is Outcome.ALLOW:
+                    console.jit_approved(action)
+                else:
+                    console.jit_unverified(action)
+                verification_id = decision.verification_id
 
                 try:
                     # Execute the function

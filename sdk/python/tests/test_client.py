@@ -147,8 +147,8 @@ class TestVerifyAction:
             json={
                 "id": "verification-123",
                 "status": "approved",
-                "approved_by": "system",
-                "expires_at": "2025-10-07T13:00:00Z"
+                "approvedBy": "system",
+                "expiresAt": "2025-10-07T13:00:00Z"
             },
             status=200
         )
@@ -172,7 +172,7 @@ class TestVerifyAction:
             json={
                 "id": "verification-123",
                 "status": "denied",
-                "denial_reason": "Insufficient permissions"
+                "denialReason": "Insufficient permissions"
             },
             status=200
         )
@@ -204,8 +204,8 @@ class TestVerifyAction:
             json={
                 "id": "verification-123",
                 "status": "approved",
-                "approved_by": "admin@example.com",
-                "expires_at": "2025-10-07T13:00:00Z"
+                "approvedBy": "admin@example.com",
+                "expiresAt": "2025-10-07T13:00:00Z"
             },
             status=200
         )
@@ -259,7 +259,7 @@ class TestVerifyAction:
             json={
                 "id": "verification-123",
                 "status": "approved",
-                "approved_by": "system",
+                "approvedBy": "system",
             },
             status=200,
         )
@@ -333,7 +333,7 @@ class TestVerifyAction:
         responses.add(
             responses.GET,
             f"https://aim.example.com/api/v1/sdk-api/verifications/{lower_vid}",
-            json={"id": upper_vid, "status": "approved", "approved_by": "system"},
+            json={"id": upper_vid, "status": "approved", "approvedBy": "system"},
             status=200,
         )
 
@@ -448,8 +448,8 @@ class TestPerformActionDecorator:
             json={
                 "id": "verification-123",
                 "status": "approved",
-                "approved_by": "system",
-                "expires_at": "2025-10-07T13:00:00Z"
+                "approvedBy": "system",
+                "expiresAt": "2025-10-07T13:00:00Z"
             },
             status=200
         )
@@ -488,7 +488,7 @@ class TestPerformActionDecorator:
             json={
                 "id": "verification-123",
                 "status": "denied",
-                "denial_reason": "Policy violation"
+                "denialReason": "Policy violation"
             },
             status=200
         )
@@ -518,8 +518,8 @@ class TestPerformActionDecorator:
             json={
                 "id": "verification-123",
                 "status": "approved",
-                "approved_by": "system",
-                "expires_at": "2025-10-07T13:00:00Z"
+                "approvedBy": "system",
+                "expiresAt": "2025-10-07T13:00:00Z"
             },
             status=200
         )

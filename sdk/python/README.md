@@ -8,6 +8,14 @@ Cryptographic identity, capability authorization, and audit trails for Python AI
 
 Part of [Agent Identity Management (AIM)](../../README.md). Managed hosting at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started); self-host via the [main README](../../README.md#install-aim-self-hosted).
 
+## Upgrading to 2.0.0: a denied action now stops
+
+In every published version before 2.0.0, an action AIM **denied** executed anyway. The denial was raised, fell through a `except Exception` handler, and the wrapped function ran. From 2.0.0 it raises `ActionDeniedError` and the function does not run — **in every enforcement mode, including monitoring, which is the default and which every existing organization was backfilled to.**
+
+Monitoring mode governs what happens when AIM cannot give an answer, not what happens when AIM says no.
+
+Before upgrading a running agent, check whether anything it does is currently being denied and executing regardless (dashboard: Agents, and Settings → Security → Policies). Those calls will start raising. Full detail, including two smaller behaviour changes, is in the 2.0.0 entry of [CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md).
+
 ## Quick start
 
 ```python
@@ -89,16 +97,28 @@ def process_refund(order_id, amount): ...                 # waits for admin appr
 
 ### JIT access
 
-`jit_access=True` pauses execution and creates an approval request in the AIM dashboard. The function returns only after a human approves, or raises `JITAccessTimeoutError` after `timeout_seconds`.
+`jit_access=True` pauses execution and creates an approval request in the AIM dashboard. The function returns only after a human approves. There is no dedicated timeout exception — a request that times out, cannot be verified, or is denied raises through the same enforcement rule as every other verification path: `VerificationUnavailableError` if AIM could not be reached or answer within `timeout_seconds`, `ActionDeniedError` if explicitly denied. Both subclass `AIMError`.
 
 ### Enforcement mode
 
-The organization's enforcement mode (configured in dashboard Settings → Security → Policies) controls what happens on verification failure:
+The organization's enforcement mode (configured in dashboard Settings → Security → Policies) controls what happens when a verification **could not be completed**.
 
-- **Monitoring** (default) — warning logged, function executes anyway. For dev and gradual rollout.
-- **Strict** — `PermissionError` raised, function blocked. For production and compliance.
+> Monitoring mode governs what happens when AIM cannot give an answer, not what happens when AIM says no. A verification that could not be completed is logged and the action proceeds; an explicit denial blocks in every mode, because it is a decision AIM already made with your organization's enforcement mode in hand.
 
-Override locally for testing: `AIM_STRICT_MODE=true python my_agent.py`. Production deployments configure in the dashboard, not via env var.
+**An explicit denial raises `ActionDeniedError` and blocks the function, in every mode.** `ActionDeniedError` subclasses `PermissionError`, so `except PermissionError` catches it. AIM applies your enforcement mode server-side before it answers — under monitoring a policy refusal is converted to an approval and never reaches your process as a denial — so a denial that does reach the SDK is one the server declined to override while holding your organization's row.
+
+Where the mode does apply is the third case: AIM answered with no decision, or could not be reached at all. That raises `VerificationUnavailableError`, which deliberately does **not** subclass `VerificationError` or `PermissionError` — a handler written for "AIM said no" must not silently absorb "AIM was never asked".
+
+- **Monitoring** (default) — an unanswered verification logs a warning and the function executes anyway. For dev and gradual rollout.
+- **Strict** — an unanswered verification blocks. For production and compliance.
+
+If the mode cannot be resolved either, a server that answered still blocks, while an unreachable AIM currently runs and warns — that last case becomes a block in 3.0.0.
+
+`AIM_STRICT_MODE` is a **ratchet**: it can raise enforcement to strict but can never lower it. `AIM_STRICT_MODE=true|1|yes|on` forces strict mode locally, whatever the dashboard says; a false value is ignored with a warning. Use the dashboard to configure production, and the variable only to make a specific process stricter than its organization.
+
+> Before 2.0.0 this section was inverted, and so was the behaviour: the dashboard setting never reached the Python SDK, and the environment variable was the only lever that produced any enforcement at all. If you are upgrading from an earlier version, read [the 2.0.0 entry in CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md) before deploying.
+
+Everything the SDK enforces happens inside the agent's own process, so it is advisory with respect to that agent. It blocks denied actions for an honest operator and for a compromised agent that still routes through the SDK. It is not a control against a hostile operator.
 
 ## Capability declaration
 
@@ -287,14 +307,14 @@ All install via `pip install aim-sdk`.
 
 ## Versioning
 
-[Semantic Versioning 2.0.0](https://semver.org/). Current: see `VERSION` file. SDK 1.x.x is compatible with backend 1.x.x; SDK 2.x.x requires backend 2.x.x.
+[Semantic Versioning 2.0.0](https://semver.org/). Current: see `VERSION` file. The SDK and the backend platform are versioned and released independently — see [docs/VERSIONING.md](docs/VERSIONING.md#backend-api-compatibility).
 
 ```python
 import aim_sdk
 print(aim_sdk.__version__)
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) for history, [docs/VERSIONING.md](docs/VERSIONING.md) for the support policy.
+See [CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md) for history, [docs/VERSIONING.md](docs/VERSIONING.md) for the support policy.
 
 ## Related
 
