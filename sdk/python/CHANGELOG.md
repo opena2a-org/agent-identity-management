@@ -235,6 +235,29 @@ compromised agent still routing through the SDK is blocked, and the AIM console
 stops implying enforcement it never performed. It does **not** enforce anything
 against a hostile operator.
 
+### Known issues
+
+Two defects found by this release's fresh-user walkthrough are **not** fixed here.
+Both reproduce identically on 1.24.1, so neither is introduced by 2.0.0 and
+upgrading does not expose you to anything you were not already exposed to. Both
+are scheduled for **2.0.1**. They are recorded here rather than left silent
+because this release's own subject matter is the SDK reporting things that were
+not true.
+
+- **The registration panel prints `Trust Score: 85%` when the server sent no trust
+  score at all** ([#390](https://github.com/opena2a-org/agent-identity-management/issues/390)).
+  `client.py` reads `credentials.get("trust_score") or credentials.get("trustScore", 0.85)`,
+  so an absent field renders as `85%` in the same form as a measured value, on the
+  first thing a new user sees. The `or` also means a real server-sent score of `0`
+  displays as `85%`. The SDK's own stored record is correct — `~/.aim/agents/<name>.json`
+  holds `"trust_score": null` for the same registration — so the display contradicts
+  the file. Treat the trust score shown at registration as unverified; read it from
+  the dashboard instead.
+- **Emoji-class characters in console output**
+  ([#391](https://github.com/opena2a-org/agent-identity-management/issues/391)).
+  U+23F3 in the `@require_approval` panel, U+26A0 on warning lines, and U+2139 on
+  the API-key mode line. Cosmetic; no behavioural effect.
+
 ## [1.24.1] - 2026-06-08
 
 ### Fixed
