@@ -53,13 +53,26 @@ def my_function():
 - `false` - Fail if credentials not found (production mode)
 
 #### `AIM_STRICT_MODE` (Optional)
-**Description**: Block function execution if verification fails
+**Description**: Raise enforcement to strict for this process, whatever the
+organization's enforcement mode says. It is a **ratchet** — it can only make
+enforcement stricter, never looser.
 **Type**: Boolean
-**Default**: `false`
+**Default**: unset — the organization's enforcement mode governs (dashboard:
+Settings → Security → Policies)
 **Example**: `export AIM_STRICT_MODE="true"`
 **Values**:
-- `true` - Block execution on verification failure (production)
-- `false` - Log warning and continue (development)
+- `true`, `1`, `yes`, `on` (case-insensitive) — force strict mode: an action that
+  is not permitted raises and does not execute
+- `false`, `0`, `no`, `off` — **ignored, with a warning.** These cannot put a
+  strict-mode organization into monitoring mode. To run without enforcement, put
+  the organization in monitoring mode; unset the variable to use whatever the
+  organization configured.
+- anything else — ignored, with a warning
+
+> Changed in 2.0.0. This variable previously accepted only the literal `true`,
+> and `false` was documented as "log warning and continue". Both are corrected
+> above. `false` was measurably a no-op before 2.0.0 anyway, because the
+> organization's enforcement mode never reached the SDK at all.
 
 #### `AIM_CREDENTIALS_PATH` (Optional)
 **Description**: Custom path for storing agent credentials
@@ -86,7 +99,9 @@ def my_function():
 AIM_AGENT_NAME=dev-chatbot
 AIM_URL=http://localhost:8080
 AIM_AUTO_REGISTER=true
-AIM_STRICT_MODE=false
+# AIM_STRICT_MODE is a ratchet and is left unset here: a dev organization in
+# monitoring mode already logs-and-continues. Setting it to false would be
+# ignored with a warning.
 AIM_LOG_LEVEL=DEBUG
 ```
 
@@ -264,10 +279,11 @@ export AIM_CREDENTIALS_PATH=~/.aim/credentials.json
 
 ### 2. Use Strict Mode in Production
 ```bash
-# Development: Allow execution even if verification fails
-export AIM_STRICT_MODE=false
+# Development: leave AIM_STRICT_MODE unset and put the dev organization in
+# monitoring mode. AIM_STRICT_MODE=false does NOT relax enforcement -- it is a
+# ratchet and a false value is ignored with a warning.
 
-# Production: Block execution if verification fails
+# Production: force strict mode for this process, whatever the dashboard says
 export AIM_STRICT_MODE=true
 ```
 
@@ -302,7 +318,9 @@ import os
 AIM_CONFIG = {
     'AGENT_NAME': os.getenv('AIM_AGENT_NAME'),
     'URL': os.getenv('AIM_URL', 'http://localhost:8080'),
-    'STRICT_MODE': os.getenv('AIM_STRICT_MODE', 'true').lower() == 'true',
+    # Use the SDK's own parser rather than a second copy of it: it accepts
+    # true|1|yes|on and treats the variable as a ratchet.
+    'STRICT_MODE': __import__('aim_sdk.strict_mode', fromlist=['x']).strict_mode_override(),
 }
 ```
 
@@ -371,7 +389,8 @@ services:
       AIM_AGENT_NAME: my-agent
       AIM_URL: http://aim-backend:8080
       AIM_AUTO_REGISTER: "true"
-      AIM_STRICT_MODE: "false"
+      # Ratchet: a false value is ignored. Use the organization's monitoring
+      # mode for a permissive dev environment.
       AIM_LOG_LEVEL: DEBUG
     depends_on:
       - aim-backend

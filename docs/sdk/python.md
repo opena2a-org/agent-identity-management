@@ -711,45 +711,59 @@ agent = secure("my-agent", **config)
 
 ```python
 from aim_sdk.exceptions import (
-    AIMAuthenticationError,     # Authentication failed
-    AIMVerificationError,        # Action verification failed
-    AIMConnectionError,          # Cannot connect to AIM backend
-    AIMTimeoutError,             # Request timed out
-    AIMRateLimitError           # Rate limit exceeded
+    AIMError,                       # Base class for every SDK exception
+    AuthenticationError,            # Credentials rejected
+    ActionDeniedError,              # AIM ANSWERED and refused the action
+    VerificationUnavailableError,   # No decision obtained (2.0.0+)
+    VerificationError,              # Verification request failed
+    ConfigurationError,             # SDK is misconfigured
 )
 ```
+
+`ActionDeniedError` and `VerificationUnavailableError` are the two outcomes that
+must never be confused, and the class hierarchy enforces it:
+
+- `ActionDeniedError` also subclasses `PermissionError`, so `except PermissionError`
+  catches a denial. (It therefore also satisfies `except OSError`, which
+  `PermissionError` descends from.)
+- `VerificationUnavailableError` deliberately does **not** subclass
+  `VerificationError`, `ActionDeniedError` or `PermissionError`. A handler written
+  for "AIM said no" must not silently absorb "AIM was never asked".
+- Both subclass `AIMError`, which is the broadest compatible catch.
 
 ### Example Error Handling
 
 ```python
 from aim_sdk import secure
-from aim_sdk.exceptions import AIMVerificationError, AIMConnectionError
+from aim_sdk.exceptions import (
+    ActionDeniedError,
+    AuthenticationError,
+    VerificationUnavailableError,
+)
 
 try:
     agent = secure("my-agent")
 
-    # Verify high-risk capability
+    # Returns only when the action is permitted.
     agent.verify_capability(
         capability="db:delete",
         resource="production-database",
         context={"reason": "maintenance"}
     )
 
-except AIMAuthenticationError as e:
+except ActionDeniedError as e:
+    print(f"AIM denied the action: {e}")
+    # A decision was made and it was "no". Grant the capability to this agent
+    # in the dashboard, or accept the denial.
+
+except VerificationUnavailableError as e:
+    print(f"AIM returned no decision: {e}")
+    # NOT a denial. AIM was unreachable, rate-limited, or errored. Whether the
+    # action was blocked depends on the organization's enforcement mode.
+
+except AuthenticationError as e:
     print(f"Authentication failed: {e}")
-    # Check AIM_PRIVATE_KEY environment variable
-
-except AIMVerificationError as e:
-    print(f"Capability verification failed: {e}")
-    # Capability was rejected by AIM
-
-except AIMConnectionError as e:
-    print(f"Cannot connect to AIM backend: {e}")
-    # Check if AIM backend is running
-
-except AIMTimeoutError as e:
-    print(f"Request timed out: {e}")
-    # Increase AIM_TIMEOUT or check network
+    # The agent's credentials were rejected. Check the credentials file.
 ```
 
 ---
@@ -909,7 +923,7 @@ Complete SDK API documentation: [https://opena2a.org/docs/sdk/api](https://opena
 
 ### Issue: "Authentication failed"
 
-**Error**: `AIMAuthenticationError: Invalid private key`
+**Error**: `AuthenticationError: Invalid private key`
 
 **Solution**:
 1. Check `AIM_PRIVATE_KEY` is set: `echo $AIM_PRIVATE_KEY`
@@ -918,7 +932,7 @@ Complete SDK API documentation: [https://opena2a.org/docs/sdk/api](https://opena
 
 ### Issue: "Connection refused"
 
-**Error**: `AIMConnectionError: Connection refused to http://localhost:8080`
+**Error**: `VerificationUnavailableError: Connection refused to http://localhost:8080`
 
 **Solution**:
 1. Check AIM backend is running: `curl http://localhost:8080/health`

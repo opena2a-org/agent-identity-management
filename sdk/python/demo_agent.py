@@ -62,8 +62,15 @@ elif ":8080" in AIM_URL:
 else:
     DASHBOARD_URL = AIM_URL.replace("/api", "").rstrip("/")
 
-# Check strict mode
-STRICT_MODE = os.environ.get("AIM_STRICT_MODE", "").lower() in ("true", "1", "yes")
+# Check strict mode -- through the SDK's own parser, not a second copy of it.
+#
+# This line used to read `os.environ.get("AIM_STRICT_MODE", "").lower() in
+# ("true", "1", "yes")` while the SDK accepted only the literal "true". So
+# AIM_STRICT_MODE=1 executed a denied action while this demo printed
+# "Strict Mode: ENABLED - Unauthorized actions WILL BE BLOCKED". One parser now,
+# and it is the one that actually governs enforcement.
+from aim_sdk.strict_mode import strict_mode_override
+STRICT_MODE = strict_mode_override()
 
 # Banner
 print(f"""

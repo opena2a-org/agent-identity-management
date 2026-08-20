@@ -7,6 +7,234 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-11
+
+**On the deprecation window.** `docs/VERSIONING.md` documents a mandatory N+1 minor
+release — one version carrying a `DeprecationWarning` for a change before the
+change itself lands — before any breaking removal. This release does not have
+that precursor: there was no prior minor version warning that a previously
+falsy-returning path would start raising. The exception is deliberate, not an
+oversight. Every published version silently fails open on a denial; the fix
+*is* the raise. Holding it for a warning-only release would mean shipping a
+known fail-open bug for one more minor version to satisfy a process meant to
+protect callers, which is the opposite of what the process is for. Treat this
+as a named, one-time exception to the timeline in `docs/VERSIONING.md`, not a
+change to the policy itself.
+
+### Changed — read this before upgrading
+
+**Strict mode now actually blocks. Check which enforcement mode your organization
+is in before you upgrade** (dashboard: Settings → Security → Policies).
+
+Before this release the organization's enforcement mode never reached the Python
+SDK at all, so a strict-mode organization behaved exactly like a monitoring-mode
+one and denied actions executed. Three things can therefore newly stop a running
+agent, and all three are the policy you already configured finally taking effect:
+
+1. **A denied action now raises, in EVERY enforcement mode — including
+   monitoring, which is the default.** This is the change most likely to affect
+   you, because monitoring is the schema default and every organization created
+   before this release was backfilled to it.
+
+   Monitoring mode governs what happens when AIM cannot give an answer, not what
+   happens when AIM says no. A verification that could not be completed is logged
+   and the action proceeds; an explicit denial blocks in every mode, because it is
+   a decision AIM already made with your organization's enforcement mode in hand.
+
+   Concretely: the backend applies your enforcement mode before it answers, so
+   under monitoring a policy refusal is already converted to an approval and never
+   reaches your process as a denial. What does still arrive as a denial is the
+   short list the server refuses to override — an agent that is not found, an
+   agent **marked compromised**, a capability lookup that failed — plus an
+   administrator pressing Deny on a JIT request. Until this release the SDK
+   overrode all of those a second time and ran the action anyway.
+
+   If you rely on monitoring mode to observe without blocking, that still works
+   for everything except an explicit denial. If an agent of yours is currently
+   denied and executing regardless, it will now stop; grant the capability in the
+   dashboard under Agents, or check the agent's status there.
+2. **`AIM_STRICT_MODE=1`, `=yes` and `=on` now enforce.** They previously did
+   nothing — only the literal `true` was recognised — while our own
+   `demo_agent.py` accepted them and printed `Strict Mode: ENABLED -
+   Unauthorized actions WILL BE BLOCKED`. If you set one of these believing the
+   control was on, it is on now.
+3. **`AIM_STRICT_MODE=false` no longer disables enforcement.** The variable is a
+   ratchet: it can only raise enforcement, never lower it. It is ignored with a
+   warning rather than being a hard error. Remove it from your configuration —
+   it no longer does what `docs/ENV_CONFIG.md` previously described. Monitoring
+   mode is not a way to run without enforcement either: it stops AIM blocking on
+   verifications it could not complete, and does not stop it blocking on ones it
+   refused. There is no setting that makes a denied action execute.
+
+**The return value of `verify_capability()` keeps its shape in 2.0.0** on the
+approved path. `result["verified"]`, `result["verification_id"]`,
+`result["approved_by"]` and `result["expires_at"]` all keep working, and two keys
+are added: `mode` and `mode_source`.
+
+Two of those keys change *value* rather than shape. `approved_by` and
+`expires_at` were read from the response as `approved_by` and `expires_at`, while
+the backend has only ever sent `approvedBy` and `expiresAt`, so both were `None`
+on every call in every published version. They now carry the values the server
+sends. Code that treated them as always-absent — `if not result["approved_by"]`,
+or a `None` check standing in for "auto-approved" — will take a different branch.
+
+What *has* changed is that paths which previously returned a falsy dict now
+raise. `verify_capability()` returns only when the action is permitted:
+
+| Situation | Before | Now |
+|---|---|---|
+| Permitted | dict with `verified: True` | unchanged, plus `mode` / `mode_source` |
+| Explicitly denied | raised `ActionDeniedError` | unchanged |
+| 403 from the server | raised `AuthenticationError` | raises `ActionDeniedError` |
+| 404, 429, 5xx, bad JSON | returned `{"verified": False, ...}` | raises `VerificationUnavailableError` |
+| Timeout, connection, DNS, TLS | returned `{"verified": False, ...}` | raises `VerificationUnavailableError` |
+
+The broadest compatible catch is `except AIMError`, which every SDK exception
+still descends from.
+
+#### One narrow break, stated plainly
+
+If you run with `AIM_STRICT_MODE=true` and catch `PermissionError` around a
+decorated function, an *unavailable* AIM no longer lands in that handler.
+`VerificationUnavailableError` deliberately does not subclass `PermissionError`,
+because a handler written for "AIM said no" must not silently absorb "AIM was
+never asked". The action is blocked either way — only the label changed, and the
+old label was false.
+
+```python
+# before
+except PermissionError:
+    ...
+# after
+except (PermissionError, VerificationUnavailableError):
+    ...
+```
+
+#### Coming in 3.0.0
+
+When AIM cannot be reached **and** this process has no cached enforcement mode,
+the action currently executes and emits a `PendingEnforcementChange` warning. In
+3.0.0 it will be blocked instead. To adopt that behaviour now, set
+`AIM_STRICT_MODE=true`.
+
+### Fixed
+
+- **A denial arriving as HTTP 403 — the only wire form a real denial takes — was
+  parsed as if it were an error envelope.** `CreateVerification` returns a full
+  verification response with status 403: `id`, `denialReason`, `enforcementMode`.
+  The SDK read a key called `error`, which that route has never sent, and nothing
+  else. Three consequences, all fixed together because they share six lines:
+  every production denial reached the developer as the literal string
+  `insufficient permissions`, naming no policy and no capability; the
+  organization's enforcement mode was resolved from a hard-coded `None` on the
+  one response that states it; and the verification id was dropped, so
+  `report_execution_status` returned at its first line and AIM never recorded
+  that the blocked action was in fact blocked. Those execution columns are not
+  read by anything today, so nothing was displaying the wrong answer; what was
+  missing is the evidence itself, for every verification written by every
+  published version.
+- **The administrator's stated reason now reaches the developer on a JIT denial.**
+  The polling path read `denial_reason`; `writeVerificationResponse` sends
+  `denialReason`. A developer stopped by a human decision was told only
+  `Action denied`, never why. Same root cause as the 403 above: the SDK read
+  snake_case keys off a response whose fields are all camelCase. Test fixtures
+  reproduced the wrong shape, which is why 165 tests could not see any of it.
+- **An explicit denial no longer executes the action.** `ActionDeniedError` was
+  not a `PermissionError`, and the decorators' only two handlers were
+  `except PermissionError` and `except Exception` — so every denial fell into the
+  fail-open branch and the wrapped function ran. No outage, no attacker, no
+  misconfiguration required; this was the normal denial path in every published
+  version. `ActionDeniedError` now also subclasses `PermissionError`, so the
+  contract the README always documented is true. (Note that `PermissionError`
+  descends from `OSError`, so a denial now also satisfies `except OSError`.)
+- **The organization's enforcement mode now reaches the SDK.** The decorator read
+  `enforcementMode` off the client's return value; no return site in `client.py`
+  ever set that key, so it fell back to `"monitoring"` on every call and the
+  dashboard setting had no effect. An absent or unrecognised mode is now
+  `unknown`, never `monitoring` — a degraded upstream must not be able to emit
+  the lenient value by failing.
+- **Execution reports now actually send.** The decorator read the id as
+  `verificationId`/`id` while the client emits `verification_id`, so
+  `report_execution_status` returned early on a falsy id before building a URL.
+  All eight call sites were fed by that one value: AIM had never received an
+  execution report from the Python SDK. The report also now carries its own short
+  timeout instead of inheriting the client's 30-second request timeout.
+- **Which entry points send an execution report, and which do not.** Reporting runs
+  from `@aim_verify` in `aim_sdk/decorators.py`, and therefore also from the four
+  convenience wrappers `aim_verify_api_call`, `aim_verify_database`,
+  `aim_verify_file_access` and `aim_verify_external_service`, each of which
+  delegates to it. It does **not** run from `perform_action`, `track_action`,
+  `require_approval`, or the separate `aim_verify` in
+  `aim_sdk/integrations/langchain/decorators.py`. Those four resolve a decision and
+  act on it without writing an execution row, so an integration built only on them
+  produces no execution evidence in 2.0.0. Widening them is deferred deliberately
+  rather than done piecemeal, so that all four change in one release under one
+  contract.
+- **A rate-limited verification no longer disables verification.** A 429 is a
+  status ≥ 400, so it returned `verified: False` and the action ran — 101
+  requests in a minute from the agent's own IP turned verification off for that
+  IP, with no credentials and no exploit, and it also fired by accident behind a
+  NAT. A 429 is now retried once or twice honouring `Retry-After`, and if no
+  decision is obtained it is not permissive. A 5xx is never retried, because the
+  server may have partly executed the request.
+- **`@require_approval` works at all.** It called `console.show_jit_awaiting()`,
+  `show_jit_denied()` and `show_jit_approved()`, none of which exist — the real
+  names are `jit_waiting`, `jit_denied` and `jit_approved`. It raised
+  `AttributeError` on its first line on every call, including an approval, so it
+  had never executed a wrapped function. Fixing the crash exposed a defect it had
+  been hiding: `@require_approval` printed "approved - executing..." whenever the
+  wrapped function ran, which is also true when a monitoring-mode organization
+  ran it after an explicit denial, and when the 2.0.0 warning-window cell above
+  ran it unverified after a transport failure. Neither of those is an approval.
+  It now prints "approved" only on an explicit `ALLOW`, and something honest
+  otherwise. The waiting panel's "Approve in dashboard" link was also always
+  `http://localhost:3000/...` regardless of the configured server; it now uses
+  the client's own `aim_url`.
+- **`aim_verify`'s auto-init failure is now an `AIMError`.** With no client
+  passed and no `AIM_AGENT_NAME` to auto-initialize one, it raised a bare
+  `ValueError`, which the SDK's own documented `except AIMError:` pattern does
+  not catch. It is now `ConfigurationError`, the category already used for every
+  other setup failure (missing credentials, bad URL).
+- **The LangChain `@aim_verify` no longer runs tools unverified.** It never
+  inspected the verification result, so a 404, 429, 5xx or timeout fell through
+  to the execute path. It also converted every exception into `PermissionError`,
+  telling developers they had been denied when AIM was unreachable.
+- **`@track_action` and `@require_approval` no longer substitute a sentinel dict
+  for your function's return value** when verification does not permit the
+  action. A caller that ignored the return proceeded as if the work had happened.
+
+### Added
+
+- `aim_sdk.decision.VerificationDecision` — the typed three-state decision
+  (`ALLOW` / `DENY` / `UNKNOWN`) carrying the enforcement mode and its source.
+  Attached to `ActionDeniedError` and `VerificationUnavailableError` as
+  `.decision`, `.mode` and `.mode_source`.
+- `aim_sdk.exceptions.VerificationUnavailableError`.
+- `aim_sdk.strict_mode` — one `AIM_STRICT_MODE` parser, used by the SDK and by
+  `demo_agent.py`, accepting `true|1|yes|on` case-insensitively.
+- A process-scoped, in-memory enforcement-mode cache with a 300-second TTL on a
+  monotonic clock. It is never written to disk, a keyring, or any cross-process
+  store: a persisted cache is forgeable in the lenient direction.
+
+### Deprecated
+
+- The dict return from `verify_capability()`; 3.0.0 returns a
+  `VerificationDecision`. Emits a `DeprecationWarning` once per process.
+- The `verified` key, superseded by the decision's outcome.
+
+### Security
+
+All previously published versions of `aim-sdk` are affected by the denial
+fail-open. Upgrading to 2.0.0 is the fix. If you cannot upgrade, set
+`AIM_STRICT_MODE=true`.
+
+Note the honest bound: everything the SDK enforces is inside the agent's own
+process, and is therefore advisory with respect to the agent. This release means
+an honest operator's strict-mode organization actually blocks denied actions, a
+compromised agent still routing through the SDK is blocked, and the AIM console
+stops implying enforcement it never performed. It does **not** enforce anything
+against a hostile operator.
+
 ## [1.24.1] - 2026-06-08
 
 ### Fixed

@@ -271,10 +271,22 @@ class AIMConsole:
     # JIT ACCESS
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def jit_waiting(self, capability: str, risk_level: str, timeout: int):
-        """Display JIT access waiting message."""
+    def jit_waiting(self, capability: str, risk_level: str, timeout: int,
+                     dashboard_url: Optional[str] = None):
+        """Display JIT access waiting message.
+
+        ``dashboard_url`` is the caller's configured ``aim_url`` with the
+        verifications page appended. It used to be a hardcoded
+        ``http://localhost:3000/...`` regardless of what server the client was
+        actually talking to, so a hosted user was told to approve at an address
+        that did not exist for them. Falls back to that same string only when
+        the caller has none, so offline/unconfigured callers still see a link
+        rather than nothing.
+        """
         if self.quiet:
             return
+
+        url = dashboard_url or "http://localhost:3000/dashboard/admin/verifications"
 
         if RICH_AVAILABLE:
             self.console.print()
@@ -282,7 +294,7 @@ class AIMConsole:
                 f"[bold]Capability:[/] [cyan]{capability}[/]\n"
                 f"[bold]Risk Level:[/] [red]{risk_level.upper()}[/]\n"
                 f"[bold]Timeout:[/] {timeout}s\n\n"
-                f"[dim]Approve in dashboard: [link]http://localhost:3000/dashboard/admin/verifications[/link][/]",
+                f"[dim]Approve in dashboard: [link]{url}[/link][/]",
                 title="[bold yellow]⏳ Awaiting Admin Approval[/]",
                 title_align="left",
                 border_style="yellow",
@@ -299,11 +311,19 @@ class AIMConsole:
             print(f"│  Timeout:     {timeout}s{'':>30} │")
             print("╰─────────────────────────────────────────────────╯")
             print("  Approve in dashboard:")
-            print("  http://localhost:3000/dashboard/admin/verifications")
+            print(f"  {url}")
             print()
 
     def jit_approved(self, capability: str):
-        """Display JIT access approved message."""
+        """Display JIT access approved message.
+
+        Callers must call this ONLY when AIM returned an explicit ALLOW
+        (``decision.outcome is Outcome.ALLOW``). It asserts that a human or
+        policy approved the action; printing it for any other reason the
+        wrapped function happens to run (monitoring-mode leniency after a
+        deny, or the unresolved-mode warning window) is a false statement in
+        a security tool's output. See ``jit_unverified`` for those cases.
+        """
         if self.quiet:
             return
 
@@ -311,6 +331,26 @@ class AIMConsole:
             self.console.print(f"  [bold green]✓[/] [cyan]{capability}[/] [green]approved[/] - executing...")
         else:
             print(f"  ✓ {capability} approved - executing...")
+
+    def jit_unverified(self, capability: str):
+        """Display that the action is proceeding WITHOUT a completed approval.
+
+        Used when the enforcement rule says run=True for a reason other than
+        an explicit ALLOW: AIM denied but the organization is in monitoring
+        mode, AIM could not be reached and the mode is unresolved, etc. The
+        detailed reason is already printed separately via
+        ``verdict.warning``/``verdict.pending_change`` before this is called;
+        this line exists only so the approval box is not silently followed by
+        nothing, which reads as an unexplained pause rather than a completed
+        step.
+        """
+        if self.quiet:
+            return
+
+        if RICH_AVAILABLE:
+            self.console.print(f"  [dim]○[/] [cyan]{capability}[/] [dim]proceeding without a completed approval[/] - see warning above")
+        else:
+            print(f"  ○ {capability} proceeding without a completed approval - see warning above")
 
     def jit_denied(self, capability: str, reason: Optional[str] = None):
         """Display JIT access denied message."""

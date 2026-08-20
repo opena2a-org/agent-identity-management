@@ -238,6 +238,10 @@ export default function SecurityPoliciesPage() {
                   <p className="text-sm text-muted-foreground mb-2">
                     When verification fails, actions are <strong>logged but allowed</strong> to proceed.
                   </p>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    This covers verifications AIM could not complete. An action AIM
+                    explicitly <strong>denies</strong> is still blocked, in either mode.
+                  </p>
                   <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
                     <Info className="h-3 w-3 inline mr-1" />
                     Use during initial deployment to understand agent behavior before enforcing strict policies.
