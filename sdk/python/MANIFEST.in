@@ -1,4 +1,8 @@
 include VERSION
 include README.md
+# The PyPI page is README.md, and it tells the reader to check their
+# enforcement mode before upgrading. CHANGELOG.md was in neither the sdist nor
+# the wheel, so that instruction reached no pip user at all.
+include CHANGELOG.md
 include LICENSE
 recursive-include aim_sdk *.py
