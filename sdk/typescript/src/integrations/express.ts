@@ -5,7 +5,7 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { AIMClient } from '../client/AIMClient';
 import type { AIMClientConfig, VerifyActionOptions } from '../types';
-import { ActionDeniedError, AuthenticationError } from '../exceptions';
+import { classifyVerificationFailure } from './verification-outcome';
 
 /**
  * AIM context added to requests
@@ -132,21 +132,9 @@ export function verifyAction(
 
       next();
     } catch (error) {
-      if (error instanceof ActionDeniedError) {
-        res.status(403).json({
-          error: 'Action denied',
-          action: error.action,
-          reason: error.reason,
-          trustScore: error.trustScore,
-        });
-        return;
-      }
-
-      if (error instanceof AuthenticationError) {
-        res.status(401).json({
-          error: 'Authentication required',
-          message: error.message,
-        });
+      const failure = classifyVerificationFailure(error);
+      if (failure) {
+        res.status(failure.status).json(failure.body);
         return;
       }
 
@@ -186,21 +174,9 @@ export function aimErrorHandler(
   res: Response,
   next: NextFunction
 ): void {
-  if (error instanceof ActionDeniedError) {
-    res.status(403).json({
-      error: 'Action denied',
-      action: error.action,
-      reason: error.reason,
-      trustScore: error.trustScore,
-    });
-    return;
-  }
-
-  if (error instanceof AuthenticationError) {
-    res.status(401).json({
-      error: 'Authentication required',
-      message: error.message,
-    });
+  const failure = classifyVerificationFailure(error);
+  if (failure) {
+    res.status(failure.status).json(failure.body);
     return;
   }
 

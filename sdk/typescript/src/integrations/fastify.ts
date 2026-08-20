@@ -12,7 +12,7 @@ import type {
 import fp from 'fastify-plugin';
 import { AIMClient } from '../client/AIMClient';
 import type { AIMClientConfig, VerifyActionOptions } from '../types';
-import { ActionDeniedError, AuthenticationError } from '../exceptions';
+import { classifyVerificationFailure } from './verification-outcome';
 
 /**
  * Extended Fastify Request with AIM context
@@ -73,20 +73,9 @@ const aimPluginCallback: FastifyPluginCallback<AIMPluginOptions> = (
 
   // Add error handler
   fastify.setErrorHandler(async (error: Error, _request: FastifyRequest, reply: FastifyReply) => {
-    if (error instanceof ActionDeniedError) {
-      return reply.status(403).send({
-        error: 'Action denied',
-        action: error.action,
-        reason: error.reason,
-        trustScore: error.trustScore,
-      });
-    }
-
-    if (error instanceof AuthenticationError) {
-      return reply.status(401).send({
-        error: 'Authentication required',
-        message: error.message,
-      });
+    const failure = classifyVerificationFailure(error);
+    if (failure) {
+      return reply.status(failure.status).send(failure.body);
     }
 
     throw error;
@@ -166,20 +155,9 @@ export function verifyAction(
       request.aim.verified = true;
       request.aim.trustScore = result.trustScore;
     } catch (error) {
-      if (error instanceof ActionDeniedError) {
-        return reply.status(403).send({
-          error: 'Action denied',
-          action: error.action,
-          reason: error.reason,
-          trustScore: error.trustScore,
-        });
-      }
-
-      if (error instanceof AuthenticationError) {
-        return reply.status(401).send({
-          error: 'Authentication required',
-          message: error.message,
-        });
+      const failure = classifyVerificationFailure(error);
+      if (failure) {
+        return reply.status(failure.status).send(failure.body);
       }
 
       throw error;
@@ -202,50 +180,19 @@ export function verifyRoute(
     DELETE: 'delete',
   };
 
-  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (!request.aim?.client) {
-      return reply.status(500).send({ error: 'AIM plugin not initialized' });
-    }
-
+  // Delegates to verifyAction rather than repeating its body. The duplicate
+  // that used to live here is how two copies of the same catch ladder came to
+  // exist in one file; whichever one a later edit missed would silently stop
+  // agreeing with the other. Express's verifyRouter already delegated this way.
+  const handler: preHandlerAsyncHookHandler = async function (
+    this: FastifyInstance,
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> {
     const action = `${actionPrefix}:${methodAction[request.method] ?? 'access'}`;
-
-    try {
-      const result = await request.aim.client.verifyAction({
-        action,
-        resource: request.url,
-        resourceType: request.method.toLowerCase(),
-        context: {
-          method: request.method,
-          path: request.url,
-          query: request.query,
-          ip: request.ip,
-          ...options?.context,
-        },
-        ...options,
-      });
-
-      request.aim.verified = true;
-      request.aim.trustScore = result.trustScore;
-    } catch (error) {
-      if (error instanceof ActionDeniedError) {
-        return reply.status(403).send({
-          error: 'Action denied',
-          action: error.action,
-          reason: error.reason,
-          trustScore: error.trustScore,
-        });
-      }
-
-      if (error instanceof AuthenticationError) {
-        return reply.status(401).send({
-          error: 'Authentication required',
-          message: error.message,
-        });
-      }
-
-      throw error;
-    }
+    await verifyAction(action, options).call(this, request, reply);
   };
+  return handler;
 }
 
 export { AIMClient } from '../client/AIMClient';

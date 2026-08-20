@@ -5,6 +5,33 @@ All notable changes to `@opena2a/aim-sdk` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-08-11
+
+### Fixed
+
+- **A server-side denial is now reported as a denial, not as an opaque 500.**
+  `parseAPIError` maps HTTP 403 to `AuthorizationError`, but the express
+  middleware, the fastify preHandler, fastify's `verifyRoute` and
+  `aimErrorHandler` each checked only for `ActionDeniedError` and
+  `AuthenticationError`. An `AuthorizationError` matched no branch and fell
+  through to `next(error)` / `throw`, so the ordinary case of AIM refusing an
+  action over the wire surfaced to the caller with no status and no denial
+  reason. All four now answer `403 Action denied`.
+
+  Verification has always been fail-closed in these integrations -- a failed
+  verification never called `next()` and never reached the route handler -- so
+  this is a reporting defect, not a bypass. The Python SDK's fail-open denial
+  defect has no analogue here.
+
+### Changed
+
+- `verifyRoute` (fastify) now delegates to `verifyAction` instead of repeating
+  its body. Two copies of the same catch ladder in one file is how they came to
+  disagree; express's `verifyRouter` already delegated this way.
+- The error-to-response mapping lives in one place,
+  `src/integrations/verification-outcome.ts`, so the integrations agree by
+  construction rather than by three files being edited together.
+
 ## [1.1.0] - 2026-07-16
 
 ### Security
