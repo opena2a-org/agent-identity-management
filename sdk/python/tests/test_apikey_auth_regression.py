@@ -80,7 +80,7 @@ class TestApiKeyOnlyVerifyCapability:
             json={
                 "id": "ver-123",
                 "status": "approved",
-                "approved_by": "auto",
+                "approvedBy": "auto",
             },
             status=200,
         )
@@ -107,7 +107,7 @@ class TestApiKeyOnlyVerifyCapability:
             json={
                 "id": "ver-456",
                 "status": "approved",
-                "approved_by": "auto",
+                "approvedBy": "auto",
             },
             status=200,
         )
@@ -150,7 +150,7 @@ class TestApiKeyOnlyVerifyCapability:
             json={
                 "id": "ver-789",
                 "status": "approved",
-                "approved_by": "auto",
+                "approvedBy": "auto",
             },
             status=200,
         )
