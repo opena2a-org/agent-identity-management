@@ -17,6 +17,16 @@
  * hand-maintained version literal is the defect `SDK_VERSION` hit at 1.2.0
  * (package.json said 1.2.0, the export still said 1.1.0), and a comment asking
  * a human to remember is not a mechanism. `version.test.ts` beside this file is.
+ *
+ * Before changing this back: the `0.2.0` was not arbitrary. ARP shipped as its
+ * own npm package, `arp-guard`, and that package is still published -- at
+ * 0.3.0, last released 2026-03-23. So `0.2.0` was a fossil of a standalone
+ * lineage that this copy left behind. It matched neither the package it ships
+ * in (1.2.0) nor the standalone engine's current version (0.3.0), and the code
+ * here has moved a long way past what `arp-guard` 0.3.0 contains. There is no
+ * reading under which a frozen `0.2.0` was the right answer, and tracking
+ * `arp-guard` instead would report a version describing different bytes than
+ * the ones the caller installed.
  */
 import { SDK_VERSION } from '../version';
 
