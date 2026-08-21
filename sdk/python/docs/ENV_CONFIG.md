@@ -2,7 +2,7 @@
 
 The AIM Python SDK supports automatic configuration through environment variables, enabling zero-configuration deployments and seamless CI/CD integration.
 
-## 📋 Quick Start
+## Quick Start
 
 ```bash
 # Minimal configuration (agent auto-registers if not found)
@@ -24,7 +24,7 @@ def my_function():
 
 ---
 
-## 🔑 Environment Variables Reference
+## Environment Variables Reference
 
 ### Core Configuration
 
@@ -90,7 +90,7 @@ Settings → Security → Policies)
 
 ---
 
-## 🚀 Usage Examples
+## Usage Examples
 
 ### Example 1: Development Environment
 
@@ -265,14 +265,14 @@ jobs:
 
 ---
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
 ### 1. Never Commit Credentials
 ```bash
-# ❌ WRONG - Don't put credentials in .env files
+# ✗ WRONG - Don't put credentials in .env files
 AIM_PRIVATE_KEY=ed25519_private_key_abc123...
 
-# ✅ CORRECT - Use credential file with restricted permissions
+# ✓ CORRECT - Use credential file with restricted permissions
 chmod 600 ~/.aim/credentials.json
 export AIM_CREDENTIALS_PATH=~/.aim/credentials.json
 ```
@@ -308,7 +308,7 @@ chown myuser:mygroup ~/.aim/credentials.json
 
 ---
 
-## 📦 Integration with Popular Tools
+## Integration with Popular Tools
 
 ### Django
 ```python
@@ -368,7 +368,7 @@ chain = LLMChain(llm=llm, callbacks=[handler])
 
 ---
 
-## 🐳 Docker Compose Example
+## Docker Compose Example
 
 ```yaml
 # docker-compose.yml
@@ -398,7 +398,7 @@ services:
 
 ---
 
-## 🧪 Testing with Environment Variables
+## Testing with Environment Variables
 
 ```python
 # test_with_env.py
@@ -422,7 +422,7 @@ def test_aim_auto_init():
 
 ---
 
-## ❓ Troubleshooting
+## Troubleshooting
 
 ### Error: "AIM client not provided and auto_init failed"
 **Cause**: `AIM_AGENT_NAME` environment variable not set
@@ -455,7 +455,7 @@ python -c "from aim_sdk import secure; secure('my-agent')"
 
 ---
 
-## 📚 See Also
+## See Also
 
 - [AIM SDK Documentation](../README.md)
 - [Authentication Guide](./AUTHENTICATION.md)

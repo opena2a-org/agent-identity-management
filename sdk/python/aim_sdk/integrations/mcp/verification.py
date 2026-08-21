@@ -142,7 +142,7 @@ def log_mcp_action_result(
         return True
     except Exception as e:
         # Don't fail if result logging fails
-        print(f"⚠️  Warning: MCP action result logging error: {e}")
+        print(f"Warning: MCP action result logging error: {e}")
         return False
 
 
@@ -215,7 +215,7 @@ class MCPActionWrapper:
         _risk_level = risk_level or self.default_risk_level
 
         if self.verbose:
-            print(f"🔧 AIM: Verifying MCP tool '{tool_name}' (risk: {_risk_level})")
+            print(f"AIM: Verifying MCP tool '{tool_name}' (risk: {_risk_level})")
 
         # Verify with AIM
         try:
@@ -229,11 +229,11 @@ class MCPActionWrapper:
             verification_id = verification.get("verification_id")
 
             if self.verbose:
-                print(f"✅ AIM: Tool verified (id: {verification_id})")
+                print(f"✓ AIM: Tool verified (id: {verification_id})")
 
         except Exception as e:
             if self.verbose:
-                print(f"❌ AIM: Verification failed: {e}")
+                print(f"✗ AIM: Verification failed: {e}")
             raise
 
         # Execute tool
@@ -250,7 +250,7 @@ class MCPActionWrapper:
                 )
 
             if self.verbose:
-                print(f"✅ AIM: Tool execution completed and logged")
+                print(f"✓ AIM: Tool execution completed and logged")
 
             return result
 
@@ -265,6 +265,6 @@ class MCPActionWrapper:
                 )
 
             if self.verbose:
-                print(f"❌ AIM: Tool execution failed: {e}")
+                print(f"✗ AIM: Tool execution failed: {e}")
 
             raise

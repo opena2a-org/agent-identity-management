@@ -96,7 +96,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
         for run_id in stale_ids:
             if self.verbose:
                 tool_name = self._active_tools[run_id].get("tool_name", "unknown")
-                print(f"🧹 AIM: Cleaning up stale tool entry - {tool_name} (run_id: {run_id})")
+                print(f"AIM: Cleaning up stale tool entry - {tool_name} (run_id: {run_id})")
             del self._active_tools[run_id]
 
     def on_tool_start(
@@ -117,7 +117,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
         tool_name = serialized.get("name", "unknown_tool")
 
         if self.verbose:
-            print(f"🔧 AIM: Tool started - {tool_name}")
+            print(f"AIM: Tool started - {tool_name}")
 
         # Store tool invocation details for later logging
         self._active_tools[run_id] = {
@@ -140,14 +140,14 @@ class AIMCallbackHandler(BaseCallbackHandler):
         """Called when a tool finishes successfully"""
         if run_id not in self._active_tools:
             if self.verbose:
-                print(f"⚠️  AIM: Tool end event for unknown run_id: {run_id}")
+                print(f"Warning: AIM: Tool end event for unknown run_id: {run_id}")
             return
 
         tool_data = self._active_tools.pop(run_id)
         tool_name = tool_data["tool_name"]
 
         if self.verbose:
-            print(f"✅ AIM: Tool completed - {tool_name}")
+            print(f"✓ AIM: Tool completed - {tool_name}")
 
         # Log successful tool execution to AIM
         try:
@@ -175,7 +175,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
 
         except Exception as e:
             if self.log_errors and self.verbose:
-                print(f"⚠️  AIM logging error: {e}")
+                print(f"Warning: AIM logging error: {e}")
 
     def on_tool_error(
         self,
@@ -192,7 +192,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
         tool_name = tool_data["tool_name"]
 
         if self.verbose:
-            print(f"❌ AIM: Tool failed - {tool_name}: {str(error)[:100]}")
+            print(f"✗ AIM: Tool failed - {tool_name}: {str(error)[:100]}")
 
         # Log error to AIM
         if self.log_errors:
@@ -220,7 +220,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
 
             except Exception as e:
                 if self.verbose:
-                    print(f"⚠️  AIM logging error: {e}")
+                    print(f"Warning: AIM logging error: {e}")
 
     def on_chain_start(
         self,
@@ -233,7 +233,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
         """Called when a chain starts (optional - for chain-level logging)"""
         if self.verbose:
             chain_name = serialized.get("name", "unknown_chain")
-            print(f"🔗 AIM: Chain started - {chain_name}")
+            print(f"AIM: Chain started - {chain_name}")
 
     def on_chain_end(
         self,
@@ -244,7 +244,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
     ) -> Any:
         """Called when a chain ends (optional - for chain-level logging)"""
         if self.verbose:
-            print(f"✅ AIM: Chain completed")
+            print(f"✓ AIM: Chain completed")
 
     def on_chain_error(
         self,
@@ -255,4 +255,4 @@ class AIMCallbackHandler(BaseCallbackHandler):
     ) -> Any:
         """Called when a chain fails (optional - for chain-level logging)"""
         if self.verbose:
-            print(f"❌ AIM: Chain failed - {str(error)[:100]}")
+            print(f"✗ AIM: Chain failed - {str(error)[:100]}")

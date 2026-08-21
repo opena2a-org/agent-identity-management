@@ -79,7 +79,7 @@ def aim_verify(
                     _agent = AIMClient.from_credentials(auto_load_agent)
                 except FileNotFoundError:
                     # No AIM agent configured - run without verification (graceful degradation)
-                    print(f"⚠️  Warning: No AIM agent configured for {func.__name__}, running without verification")
+                    print(f"Warning: No AIM agent configured for {func.__name__}, running without verification")
                     return func(*args, **kwargs)
 
             # Determine action name

@@ -2,7 +2,7 @@
 
 This directory contains comprehensive integration guides and configuration documentation for the AIM Python SDK.
 
-## 📚 Integration Guides
+## Integration Guides
 
 ### Framework Integrations
 
@@ -24,7 +24,7 @@ This directory contains comprehensive integration guides and configuration docum
   - Server lifecycle management
   - Real-time verification
 
-## ⚙️ Configuration
+## Configuration
 
 - **[ENV_CONFIG.md](./ENV_CONFIG.md)** - Environment variables and configuration options
   - Authentication settings
@@ -39,19 +39,19 @@ This directory contains comprehensive integration guides and configuration docum
   - Upgrade guides
   - Support policy
 
-## 🚀 Quick Start
+## Quick Start
 
 For basic usage and getting started, see the main [README.md](../README.md) in the SDK root directory.
 
 For working code examples, check the [examples/](../examples/) directory.
 
-## 📖 Additional Resources
+## Additional Resources
 
 - **[Main SDK README](../README.md)** - Installation, quick start, and basic usage
 - **[Examples](../examples/)** - Working code examples
 - **[Tests](../tests/)** - Comprehensive test suite demonstrating SDK functionality
 
-## 🤝 Contributing
+## Contributing
 
 When adding new integration guides:
 1. Follow the existing document structure

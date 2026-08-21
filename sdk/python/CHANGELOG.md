@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Closes both defects 2.0.0 carried as known issues. `VERSION` is deliberately not
+bumped here: the release tag is what publishes, so cutting the version is a
+separate decision from landing the fix.
+
+### Fixed
+
+- **The registration panel no longer reports a trust score the server did not
+  send** ([#390](https://github.com/opena2a-org/agent-identity-management/issues/390)).
+  Three defects sat on this one path, each of which independently put a number on
+  screen that nothing measured:
+  - `client.py` defaulted to `0.85`, so an unscored agent was announced as
+    `Trust Score: 85%` in the same form as a real reading.
+  - The same line used `or` rather than a presence test, so a genuine server-sent
+    `0` — a real, maximally-untrusted score — is falsy and fell through to that
+    same fabricated 85%. Verified before fixing: a payload of
+    `{"trust_score": 0}` printed `Trust: 85%`.
+  - `AIMConsole._normalize_trust_score` mapped `None` to `0.0`, which rendered an
+    unknown score as a measured, alarming red `0%` — and, because callers
+    normalize before formatting, made the `N/A` branch in both formatters
+    unreachable. That branch existed and looked like a control; nothing could
+    reach it.
+
+  An absent score now stays absent and prints `N/A`. A genuine `0` still prints
+  `0%` and remains distinguishable from unknown.
+
+- **Emoji removed from user-facing output**
+  ([#391](https://github.com/opena2a-org/agent-identity-management/issues/391)).
+  U+23F3 hourglass becomes U+25CB, the mark this console already uses for
+  pending; U+26A0 warning sign (usually carrying U+FE0F, which forces colour
+  emoji presentation) becomes the word `Warning:`, which most of those lines
+  already carried; U+2139 is dropped, since the label states what it is. U+2713,
+  U+2717 and U+25CB are the house style and are unchanged.
+
+  Characters are named by codepoint here rather than shown, because the
+  regression guard below scans this file too.
+
+  The sweep went wider than the issue's table, which listed three codepoints.
+  The same standard was being broken by U+2705 heavy check mark (23 uses), U+274C
+  cross mark (12) and sixteen pictographs in the same files — fixing only the
+  tabled three would have shipped a panel with house-style U+2713 and emoji
+  U+2705 on adjacent lines. U+2705 and U+274C map to U+2713 and U+2717; the
+  pictographs are dropped.
+
+  Correction to the issue's framing: `docs/*.md` are described there as shipped.
+  They are not — `MANIFEST.in` ships `VERSION`, `README.md`, `CHANGELOG.md`,
+  `LICENSE` and `aim_sdk/*.py` only. They are swept anyway because they are
+  public on GitHub, but no pip user was receiving them.
+
+### Added
+
+- A regression guard that enumerates the package and the prose from disk and
+  fails on any emoji, rather than checking the sites that were once wrong.
+  Checking only known-bad sites is how this class returns. The guard is
+  property-based for the same reason: the first pass at this fix used a
+  hand-written list of pictographs to strip, and the list was the defect — it
+  missed ten others sitting in the same documents.
+
 ## [2.0.0] - 2026-08-11
 
 **On the deprecation window.** `docs/VERSIONING.md` documents a mandatory N+1 minor
@@ -358,7 +415,7 @@ this release also carries the 1.22.0 changes listed below.
   added in `tests/test_register_agent.py`.
 - **`aim-sdk login` callback pages now render UTF-8 correctly.** The local OAuth
   callback responses sent `Content-Type: text/html` with no charset, so browsers
-  decoded the page as Latin-1 and the `✅` showed up as `âœ…`. Both the success
+  decoded the page as Latin-1 and the `✓` showed up as `âœ…`. Both the success
   and error responses now send `text/html; charset=utf-8`.
 
 ## [1.22.0] - 2026-05-25
@@ -650,8 +707,8 @@ This release positions AIM as an MCP supply chain security platform:
 
 | Version | Status | Support Level | End of Support |
 |---------|--------|---------------|----------------|
-| 1.0.x   | ✅ Current | Full support | N/A |
-| 0.9.x   | ⚠️ Pre-release | No support | Immediately |
+| 1.0.x   | ✓ Current | Full support | N/A |
+| 0.9.x   | Warning: Pre-release | No support | Immediately |
 
 ## Migration Guides
 
@@ -674,7 +731,7 @@ def query_users():
 # Critical actions with JIT access - requires admin approval
 @agent.perform_action(risk_level="critical", jit_access=True, resource="database:users")
 def delete_all_users():
-    return db.execute("DELETE FROM users")  # ⏸️ Pauses until admin approves
+    return db.execute("DELETE FROM users")  # ○ Pauses until admin approves
 
 # Alternative: use @require_approval for critical actions
 @agent.require_approval(risk_level="critical", resource="database:users")
@@ -683,8 +740,8 @@ def purge_data():
 ```
 
 **Action Required**:
-- ✅ No immediate action required - 0.9.x code continues to work
-- ⚠️ Update decorators to new style before v2.0.0 (recommended)
+- ✓ No immediate action required - 0.9.x code continues to work
+- Warning: Update decorators to new style before v2.0.0 (recommended)
 
 ---
 

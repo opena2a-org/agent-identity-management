@@ -2810,8 +2810,8 @@ class AIMClient:
 
             # SECURITY: Never print private keys - they're saved to secure file storage
             # Credentials are stored in ~/.aim/agents/{name}.json with 0600 permissions
-            print(f"✅ Created agent: {new_agent['id']}")
-            print(f"🔐 Credentials saved to: ~/.aim/agents/{name}.json")
+            print(f"✓ Created agent: {new_agent['id']}")
+            print(f"Credentials saved to: ~/.aim/agents/{name}.json")
 
         Raises:
             ConfigurationError: If name is missing or invalid
@@ -4556,7 +4556,7 @@ def register_agent(
     if capabilities:
         registration_data["capabilities"] = capabilities
     if tags:
-        registration_data["tagIds"] = tags  # ✅ Tags applied during registration
+        registration_data["tagIds"] = tags  # ✓ Tags applied during registration
 
     # 5. Register agent (mode-specific endpoint)
     try:
@@ -5393,7 +5393,14 @@ def _print_registration_success(
     agent_id = credentials.get("agent_id") or credentials.get("id", "")
     agent_type = credentials.get("agentType") or credentials.get("agent_type", "ai_agent")
     version = credentials.get("version", "1.0.0")
-    trust_score = credentials.get("trust_score") or credentials.get("trustScore", 0.85)
+    # An absent trust score stays absent. Two things were wrong here: the 0.85
+    # default announced an unscored agent as "Trust Score: 85%", and `or` made a
+    # genuine server-sent 0 -- a real, maximally-untrusted score -- falsy, so it
+    # fell through to that same fabricated 85%. Test both spellings explicitly
+    # for presence, not truthiness.
+    trust_score = credentials.get("trust_score")
+    if trust_score is None:
+        trust_score = credentials.get("trustScore")
     status = credentials.get("status", "active")
 
     console.agent_registered(
