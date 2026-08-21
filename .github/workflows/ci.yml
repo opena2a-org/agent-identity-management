@@ -92,6 +92,21 @@ jobs:
       - name: .sync-protect is honoured by every sync path
         run: ./scripts/test-sync-protect.sh
 
+  # The `docker` paths filter in security.yml decides whether Container Scan
+  # runs. It was maintained beside the Dockerfiles rather than derived from
+  # them and drifted twice (#389, #398), each time letting a change to the
+  # image's own contents skip the scan of that image. Unconditional, because
+  # the drift it catches is a change to a Dockerfile OR to the filter, and
+  # gating this check behind a filter would reintroduce the class it exists
+  # to close.
+  docker-paths-filter:
+    name: Docker paths filter follows the Dockerfiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every COPY source is covered by the docker filter
+        run: ./scripts/lint-docker-paths-filter.sh
+
   # A BLOCKING audit of the SDK's shipped dependency tree.
   #
   # Why this exists, and why it is separate from security.yml's "Dependency Audit":
@@ -509,6 +524,7 @@ jobs:
         tenant-scoping-lint,
         workflow-lint,
         sync-protect-guard,
+        docker-paths-filter,
         sdk-dependency-audit,
         changes,
         backend,
@@ -526,6 +542,7 @@ jobs:
           tl='${{ needs.tenant-scoping-lint.result }}'
           wl='${{ needs.workflow-lint.result }}'
           sp='${{ needs.sync-protect-guard.result }}'
+          dp='${{ needs.docker-paths-filter.result }}'
           sa='${{ needs.sdk-dependency-audit.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
@@ -533,11 +550,11 @@ jobs:
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp sdk-dependency-audit=$sa changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "sdk-dependency-audit:$sa" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
