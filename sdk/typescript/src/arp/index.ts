@@ -1,10 +1,36 @@
 /**
- * ARP engine version. This tracks the ARP protocol/engine lineage and is
- * INTENTIONALLY independent of the `@opena2a/aim-sdk` package version (the
- * package may be 1.x while the engine is 0.2.x). Read the package version from
- * `require('@opena2a/aim-sdk/package.json').version` if you need that instead.
+ * The version this ARP build reports -- the package version, deliberately.
+ *
+ * This used to be a separate literal tracking an "ARP engine lineage"
+ * independent of `@opena2a/aim-sdk`. It read `0.2.0` from the day the module
+ * landed and no release ever moved it, so five published package versions
+ * (1.0.0 through 1.2.0) all reported the same engine version. The independence
+ * was asserted by a comment, never exercised by a bump.
+ *
+ * That is not cosmetic, because this constant goes on the wire: both telemetry
+ * channels send it as `User-Agent: OpenA2A-ARP/<VERSION>`, and it is the only
+ * build signal the registry records for a submission. Every ARP request the
+ * registry has ever logged carries `OpenA2A-ARP/0.2.0`, so no ingested
+ * signature can be attributed to the sensor build that produced it.
+ *
+ * There is one npm package, so there is one version line. A second
+ * hand-maintained version literal is the defect `SDK_VERSION` hit at 1.2.0
+ * (package.json said 1.2.0, the export still said 1.1.0), and a comment asking
+ * a human to remember is not a mechanism. `version.test.ts` beside this file is.
+ *
+ * Before changing this back: the `0.2.0` was not arbitrary. ARP shipped as its
+ * own npm package, `arp-guard`, and that package is still published -- at
+ * 0.3.0, last released 2026-03-23. So `0.2.0` was a fossil of a standalone
+ * lineage that this copy left behind. It matched neither the package it ships
+ * in (1.2.0) nor the standalone engine's current version (0.3.0), and the code
+ * here has moved a long way past what `arp-guard` 0.3.0 contains. There is no
+ * reading under which a frozen `0.2.0` was the right answer, and tracking
+ * `arp-guard` instead would report a version describing different bytes than
+ * the ones the caller installed.
  */
-export const VERSION = '0.2.0';
+import { SDK_VERSION } from '../version';
+
+export const VERSION = SDK_VERSION;
 
 // Re-export types
 export type {
