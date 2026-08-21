@@ -391,6 +391,12 @@ Turn it on with either of:
 
 Turn it off again — an opt-out always wins over an opt-in — with any one of:
 
+- `OPENA2A_TELEMETRY=off` in the environment. This is the ecosystem-wide switch
+  documented at [opena2a.org/privacy](https://opena2a.org/privacy), and it works
+  here the same way it works on the CLIs (`off`, `0`, `false` and `no` are all
+  accepted). It is read in the off direction only: `OPENA2A_TELEMETRY=on` will
+  not turn this channel on, because a library running inside your process should
+  not start a network channel on the strength of an ecosystem-wide CLI setting.
 - `OPENA2A_TELEMETRY_OPTOUT=1` (or `ARP_TELEMETRY_DISABLED=1`) in the
   environment,
 - `signatureTelemetry: { enabled: false }` in your ARP config, or

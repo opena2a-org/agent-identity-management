@@ -45,6 +45,31 @@ function envTruthy(name: string): boolean {
   return s === '1' || s === 'true' || s === 'yes' || s === 'on';
 }
 
+/**
+ * The ecosystem-wide opt-out, read in the OFF direction only.
+ *
+ * `opena2a.org/privacy` tells users verbatim to "Set the environment variable
+ * OPENA2A_TELEMETRY=off in your shell profile", and `opena2a.org/telemetry`
+ * repeats it as working on every OpenA2A surface. This is a VALUE predicate,
+ * not a truthy-name one: the name being present means nothing, the value
+ * off/0/false/no is the refusal. Reading it with `envTruthy` would treat
+ * `OPENA2A_TELEMETRY=off` as unset and fail open on the one spelling we
+ * publish. Kept byte-compatible with the canonical implementation in
+ * `opena2a/packages/telemetry/src/config.ts` (`envOptOut`), trim included —
+ * trailing whitespace is routine in .env files, docker-compose YAML and
+ * command substitution, and an opt-out must never fail open over a stray space.
+ *
+ * Deliberately one-directional: `OPENA2A_TELEMETRY=on` does NOT opt in here.
+ * That variable is an ecosystem CLI switch, while this SDK is a library inside
+ * someone else's production process; opting in stays explicit and AIM-specific.
+ */
+function ecosystemOptOut(): boolean {
+  const v = process.env.OPENA2A_TELEMETRY;
+  if (v === undefined) return false;
+  const s = v.trim().toLowerCase();
+  return s === 'off' || s === '0' || s === 'false' || s === 'no';
+}
+
 /** True if the opt-out marker file is present. */
 export function optOutMarkerExists(): boolean {
   return existsSync(homePath(OPTOUT_MARKER_FILE));
@@ -62,6 +87,7 @@ export function optOutMarkerExists(): boolean {
 export function isOptedOut(config?: SignatureTelemetryConfig): boolean {
   if (config?.enabled === false) return true;
   if (envTruthy('OPENA2A_TELEMETRY_OPTOUT') || envTruthy('ARP_TELEMETRY_DISABLED')) return true;
+  if (ecosystemOptOut()) return true;
   if (optOutMarkerExists()) return true;
   return false;
 }

@@ -16,6 +16,7 @@ let home: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'arp-cfg-'));
   process.env.OPENA2A_HOME = home;
+  delete process.env.OPENA2A_TELEMETRY;
   delete process.env.OPENA2A_TELEMETRY_OPTOUT;
   delete process.env.ARP_TELEMETRY_DISABLED;
   delete process.env.OPENA2A_REGISTRY_URL;
@@ -23,6 +24,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   delete process.env.OPENA2A_HOME;
+  delete process.env.OPENA2A_TELEMETRY;
   delete process.env.OPENA2A_TELEMETRY_OPTOUT;
   delete process.env.ARP_TELEMETRY_DISABLED;
   delete process.env.OPENA2A_REGISTRY_URL;
@@ -66,6 +68,57 @@ describe('the channel is OFF unless explicitly turned on', () => {
 
   it('config enabled:true turns it on', () => {
     expect(signatureTelemetryEnabled({ enabled: true })).toBe(true);
+  });
+});
+
+describe('OPENA2A_TELEMETRY — the spelling the published privacy policy documents', () => {
+  // opena2a.org/privacy tells users verbatim: "Set the environment variable
+  // OPENA2A_TELEMETRY=off in your shell profile", and opena2a.org/telemetry
+  // repeats it as working "on every OpenA2A CLI". Every published version of
+  // this SDK (1.0.0 through 1.1.0) read only OPENA2A_TELEMETRY_OPTOUT and
+  // ARP_TELEMETRY_DISABLED, so a user who did exactly what the policy said was
+  // still emitting. These tests fail on that code.
+  //
+  // Value semantics are the ecosystem's, not this file's older truthy-name
+  // convention: the canonical predicate is
+  // opena2a/packages/telemetry/src/config.ts envOptOut(), which opts out on
+  // off/0/false/no after a trim. A name-truthy test would read
+  // OPENA2A_TELEMETRY=off as "not set" and fail open.
+
+  it.each(['off', '0', 'false', 'no', 'OFF', 'False', ' off ', 'off\n'])(
+    'OPENA2A_TELEMETRY=%j opts out',
+    (v) => {
+      process.env.OPENA2A_TELEMETRY = v;
+      expect(isOptedOut()).toBe(true);
+      expect(signatureTelemetryEnabled()).toBe(false);
+    },
+  );
+
+  it('beats an explicit opt-in, like every other opt-out source', () => {
+    process.env.AIM_TELEMETRY = '1';
+    process.env.OPENA2A_TELEMETRY = 'off';
+    expect(signatureTelemetryEnabled()).toBe(false);
+    expect(signatureTelemetryEnabled({ enabled: true })).toBe(false);
+  });
+
+  it('does NOT opt in when set to an on value — the switch only moves the safe way', () => {
+    // Deliberate asymmetry. OPENA2A_TELEMETRY is an ecosystem-wide CLI switch;
+    // this SDK is a library running inside someone else's production process.
+    // Someone who exported OPENA2A_TELEMETRY=on for the CLIs must not thereby
+    // start a network channel inside their agent. Opting IN stays explicit and
+    // AIM-specific (AIM_TELEMETRY / signatureTelemetry.enabled).
+    for (const v of ['on', '1', 'true', 'yes']) {
+      process.env.OPENA2A_TELEMETRY = v;
+      expect(isOptedIn()).toBe(false);
+      expect(signatureTelemetryEnabled()).toBe(false);
+    }
+  });
+
+  it('unset or empty is not a refusal', () => {
+    delete process.env.OPENA2A_TELEMETRY;
+    expect(isOptedOut()).toBe(false);
+    process.env.OPENA2A_TELEMETRY = '';
+    expect(isOptedOut()).toBe(false);
   });
 });
 

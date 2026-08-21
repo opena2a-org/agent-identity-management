@@ -20,6 +20,17 @@ you turn it on:
 If you were relying on this channel, it stops on upgrade and you must opt in to
 restore it. If you had already opted out, nothing changes for you.
 
+**`OPENA2A_TELEMETRY=off` now works in this SDK.** That is the spelling
+[opena2a.org/privacy](https://opena2a.org/privacy) documents and the one it
+tells you to put in your shell profile, but no released version of this package
+ever read it: 1.0.0 through 1.1.0 read only `OPENA2A_TELEMETRY_OPTOUT` and
+`ARP_TELEMETRY_DISABLED`, neither of which appears in the policy. A user who did
+exactly what the policy said was still emitting. `off`, `0`, `false` and `no`
+are accepted, matching the CLIs. It is honored in the off direction only —
+`OPENA2A_TELEMETRY=on` does not turn the channel on, because an ecosystem-wide
+CLI setting should not start a network channel inside a library embedded in your
+process.
+
 An opt-out still beats an opt-in, so `OPENA2A_TELEMETRY_OPTOUT=1`,
 `ARP_TELEMETRY_DISABLED=1`, `signatureTelemetry.enabled: false` and the
 `~/.opena2a/telemetry-optout` marker all continue to work and now take
