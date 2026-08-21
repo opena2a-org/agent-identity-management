@@ -287,7 +287,7 @@ async function telemetryCommand(): Promise<void> {
       // remote purge below is best-effort cleanup of already-sent data and must
       // never block or undo the opt-out (fail OPEN).
       const p = writeOptOutMarker();
-      console.log('\n  OpenA2A telemetry DISABLED (both signature and GTIN channels).');
+      console.log('\n  OpenA2A telemetry DISABLED (signature, GTIN and fleet-gradient channels).');
       console.log(`  Marker: ${p}`);
 
       if (args.includes('--no-purge')) {
@@ -314,8 +314,13 @@ async function telemetryCommand(): Promise<void> {
         console.log('  NOTE: telemetry is still disabled by an env var or config');
         console.log('  (OPENA2A_TELEMETRY_OPTOUT / ARP_TELEMETRY_DISABLED, or');
         console.log('  signatureTelemetry.enabled: false). Clear those to re-enable.\n');
+      } else if (signatureTelemetryEnabled(tcfg)) {
+        console.log('  Structural signature telemetry is ON.\n');
       } else {
-        console.log('  Structural signature telemetry is ON (default).\n');
+        // Clearing a refusal is not consent. Say so rather than implying the
+        // channel just started.
+        console.log('  This channel stays OFF until you turn it on:');
+        console.log('    AIM_TELEMETRY=1  (or signatureTelemetry.enabled: true)\n');
       }
       break;
     }
@@ -331,10 +336,11 @@ async function telemetryCommand(): Promise<void> {
     disclosure    Print the full install-time disclosure
     opt-out       Disable ALL OpenA2A telemetry (also deletes already-sent
                   signatures from the registry; use --no-purge to skip that)
-    opt-in        Remove the local opt-out marker
+    opt-in        Remove the local opt-out marker (does not turn the channel on)
     purge         Ask the registry to delete already-sent signatures (right-to-delete)
 
-  Structural signatures are DEFAULT-ON. Only the SHAPE of an anomalous
+  Structural signatures are OFF unless you turn them on with AIM_TELEMETRY=1
+  or signatureTelemetry.enabled: true. Only the SHAPE of an anomalous
   behavior is shared, never payloads. Every byte sent is recorded locally
   first — review it with: arp telemetry log
 `);
@@ -422,15 +428,22 @@ async function telemetryLog(): Promise<void> {
 
 async function telemetryStatus(tcfg?: import('../types').SignatureTelemetryConfig): Promise<void> {
   const enabled = signatureTelemetryEnabled(tcfg);
+  const optedOut = isOptedOut(tcfg);
   const records = await readAuditRecords(100000);
   const counts: Record<string, number> = {};
   for (const r of records) counts[r.phase] = (counts[r.phase] ?? 0) + 1;
 
   console.log('\n  OpenA2A structural signature telemetry');
   console.log('  ─────────────────────────────────────');
-  console.log(`  State:        ${enabled ? 'ON (default-on)' : 'OFF (opted out)'}`);
-  if (!enabled) {
+  // Off-because-refused and off-because-never-enabled are different states and
+  // must not be collapsed: only one of them has a reason to report.
+  console.log(
+    `  State:        ${enabled ? 'ON' : optedOut ? 'OFF (opted out)' : 'OFF (not turned on)'}`,
+  );
+  if (optedOut) {
     console.log(`  Opted out by: ${optOutReason(tcfg)}`);
+  } else if (!enabled) {
+    console.log('  Turn on with: AIM_TELEMETRY=1 (or signatureTelemetry.enabled: true)');
   }
   console.log(`  Registry:     ${resolveRegistryUrl(tcfg)}`);
   try {
@@ -453,7 +466,9 @@ async function telemetryStatus(tcfg?: import('../types').SignatureTelemetryConfi
   console.log('  Dropped:      ' + (counts['dropped'] ?? 0));
   console.log('\n  Review payloads: arp telemetry log');
   console.log('  Disclosure:      arp telemetry disclosure');
-  console.log(`  ${enabled ? 'Opt out:         arp telemetry opt-out' : 'Opt back in:     arp telemetry opt-in'}\n`);
+  console.log(
+    `  ${enabled ? 'Opt out:         arp telemetry opt-out' : optedOut ? 'Opt back in:     arp telemetry opt-in' : 'Turn on:         AIM_TELEMETRY=1'}\n`,
+  );
 }
 
 function optOutReason(tcfg?: import('../types').SignatureTelemetryConfig): string {

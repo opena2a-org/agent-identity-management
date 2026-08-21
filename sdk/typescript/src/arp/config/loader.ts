@@ -96,10 +96,11 @@ export function defaultConfig(): ARPConfig {
       enableBatching: true,
       batchWindowMs: 300000,
     },
-    // Structural signature telemetry is DEFAULT-ON (opt-out). It emits only the
-    // structural shape of anomalous behaviors and writes every byte sent to a
-    // local audit log first. Opt out with OPENA2A_TELEMETRY_OPTOUT=1, `arp
-    // telemetry opt-out`, or `signatureTelemetry.enabled: false`.
-    signatureTelemetry: { enabled: true },
+    // Structural signature telemetry is OFF unless the operator turns it on
+    // (AIM_TELEMETRY=1, or signatureTelemetry.enabled: true). Deliberately
+    // ABSENT here rather than `{ enabled: false }`: an explicit false is an
+    // opt-OUT, and an opt-out beats an opt-in, so writing one here would make
+    // AIM_TELEMETRY=1 silently do nothing. Absent means "nobody has chosen",
+    // which is the only value that leaves both switches working.
   };
 }

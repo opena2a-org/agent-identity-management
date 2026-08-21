@@ -74,17 +74,22 @@ export interface ARPConfig {
   /** GTIN (Global Threat Intelligence Network) opt-in configuration */
   gtin?: GTINConfig;
   /**
-   * Structural signature telemetry (DEFAULT-ON, opt-out). Distinct from GTIN.
+   * Structural signature telemetry (OFF by default, opt-in). Distinct from GTIN.
    * Emits only the structural shape of anomalous behaviors, with a local audit
-   * log of every byte sent. Set `enabled: false` (or OPENA2A_TELEMETRY_OPTOUT,
-   * or `arp telemetry opt-out`) to disable ALL OpenA2A telemetry.
+   * log of every byte sent. Turn on with `enabled: true` or AIM_TELEMETRY=1.
+   * Set `enabled: false` (or OPENA2A_TELEMETRY_OPTOUT, or `arp telemetry
+   * opt-out`) to disable ALL OpenA2A telemetry.
    */
   signatureTelemetry?: SignatureTelemetryConfig;
 }
 
 /** Structural signature telemetry configuration (see telemetry/signature). */
 export interface SignatureTelemetryConfig {
-  /** Master enable. Default true (default-on). false opts out of ALL telemetry. */
+  /**
+   * Master switch. Undefined (the default) means nobody has chosen and the
+   * channel does NOT run. true opts in; false opts out of ALL telemetry and
+   * beats any opt-in.
+   */
   enabled?: boolean;
   /** Registry base URL override (default OPENA2A_REGISTRY_URL or https://api.oa2a.org). */
   registryUrl?: string;

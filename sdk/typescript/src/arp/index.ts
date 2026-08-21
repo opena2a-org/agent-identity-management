@@ -212,7 +212,7 @@ export class AgentRuntimeProtection {
   private readonly monitors: Monitor[] = [];
   private gtinForwarder: GTINForwarder | null = null;
   /**
-   * Structural signature producer (G2/G4/G5/G7). DEFAULT-ON, opt-out — distinct
+   * Structural signature producer (G2/G4/G5/G7). OFF by default, opt-in — distinct
    * from the legacy opt-in GTIN runtime channel. Null only when the customer has
    * opted out (the single master opt-out, which also gates GTIN below).
    */
@@ -324,9 +324,16 @@ export class AgentRuntimeProtection {
       this.monitors.push(new A2AProtocolInterceptor(this.engine, al.a2a.trustedAgents));
     }
 
-    // The single master opt-out (env / marker file / config) disables ALL
-    // OpenA2A telemetry, so a customer who opts out is never surprised by a
-    // second channel. Resolved once here and applied to both channels below.
+    // The master opt-out (env / marker file / config) disables every channel
+    // THIS module produces, so a customer who opts out is not surprised by a
+    // second one. Resolved once here and applied to both channels below; the
+    // third (fleet gradients) applies it in RuntimeTwin itself, at construction
+    // and again before each send.
+    //
+    // It does NOT govern src/telemetry/relay.ts, which is the AIM client's
+    // causal-denial channel with its own switch, default off. That exclusion is
+    // deliberate and documented in README.md; telemetry-egress-census.test.ts
+    // pins the whole set so a new channel cannot join it silently.
     const optedOut = isOptedOut(this.config.signatureTelemetry);
 
     // Create GTIN forwarder if opted in AND not globally opted out. GTIN remains
@@ -346,7 +353,8 @@ export class AgentRuntimeProtection {
       });
     }
 
-    // Create the structural signature emitter unless opted out (DEFAULT-ON).
+    // Create the structural signature emitter only if explicitly opted in
+    // (OFF by default; see telemetry/signature/config.ts).
     if (signatureTelemetryEnabled(this.config.signatureTelemetry)) {
       this.signatureEmitter = new SignatureEmitter({
         registryUrl: resolveRegistryUrl(this.config.signatureTelemetry),
@@ -381,7 +389,7 @@ export class AgentRuntimeProtection {
     }
 
     // Start the structural signature emitter and, on first run only, print the
-    // plain install-time disclosure (G7) so a default-on customer knows exactly
+    // plain first-run disclosure (G7) so a customer who turned this on knows exactly
     // what is shared and how to opt out.
     if (this.signatureEmitter) {
       maybeShowDisclosure(undefined, this.config.signatureTelemetry);
