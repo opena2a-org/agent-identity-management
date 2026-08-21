@@ -1,0 +1,29 @@
+# Paths exempt from the local build-and-swap docker verification gate.
+#
+# One path prefix or glob per line. `**` is the only recursive form; a single
+# `*` does not cross a `/`.
+#
+# This is NOT a list of paths that stay out of the image. It is a list of paths
+# that reach the image without reaching the RUNNING SERVICE, so a build-and-swap
+# run cannot observe any difference a change to them makes.
+#
+# The gate still applies unless EVERY changed file in the diff matches, and a
+# diff that touches this file is never exempt -- an exemption must not be able
+# to widen itself in the same merge that relies on it.
+#
+# GitHub CI is a separate matter and is NOT relaxed here: `.github/workflows/ci.yml`
+# includes `sdk/**` in the `backend` filter, so the backend build and the
+# container scan do run on these changes.
+
+# infrastructure/docker/Dockerfile.backend does `COPY sdk ./sdk` in the final
+# stage, so sdk changes do change the image. Nothing in the Go backend reads
+# /app/sdk at runtime and nothing embeds it -- measured 2026-08-20, no runtime
+# reference and no go:embed -- so those files ship as inert payload for
+# consumers to read out of the image, never as code the service executes.
+#
+# If that ever stops being true -- the server starts serving, parsing or
+# executing anything under /app/sdk -- delete this line. The claim it rests on
+# is checked by:
+#   grep -rn --include='*.go' -e '"./sdk' -e '/app/sdk' -e 'go:embed.*sdk' apps/backend
+# which must return nothing.
+sdk/**
