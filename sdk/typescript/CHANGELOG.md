@@ -7,6 +7,22 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`@opena2a/aim-sdk/arp` now reports the version npm published.** Its
+  `VERSION` export was a second hand-maintained literal that read `0.2.0` from
+  the day the module landed and was never bumped, so 1.0.0 through 1.2.0 all
+  reported the same ARP version while the root export reported the real one.
+  Both subpaths now export one value.
+
+  This constant goes on the wire. The two telemetry channels send it as
+  `User-Agent: OpenA2A-ARP/<VERSION>`, which is the only build signal the
+  registry records for a submission, so every ARP request it has ever logged
+  looks like it came from the same sensor build. If you parse that header,
+  expect the package version from this release on and `0.2.0` before it.
+
+## [1.2.0] - 2026-08-21
+
 ### Changed — read this before upgrading
 
 **Structural signature telemetry is now OFF by default.** It previously ran
@@ -56,10 +72,6 @@ unless the operator finds the switch is inconsistent with both.
   `arp telemetry opt-in` now distinguish them.
 - The first-run disclosure text no longer says "ON by default" and now names how
   to turn the channel on as well as off.
-
-## [1.2.0] - 2026-08-11
-
-### Fixed
 
 - **A server-side denial is now reported as a denial, not as an opaque 500.**
   `parseAPIError` maps HTTP 403 to `AuthorizationError`, but the express
