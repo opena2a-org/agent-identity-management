@@ -43,12 +43,22 @@ jobs:
               - 'apps/backend/**'
             frontend:
               - 'apps/web/**'
+            # Derived from what the Dockerfiles COPY, not maintained beside
+            # them. `scripts/lint-docker-paths-filter.sh` fails CI if a COPY
+            # source stops being covered, because maintaining this list by hand
+            # drifted twice: #389 (ci.yml missed sdk/**) and #398 (this filter
+            # missed sdk/**, apps/backend/** and apps/web/**). Both were
+            # invisible in review, since a skipped job satisfies a required
+            # status check and the PR reads green with the image never scanned.
+            #
+            # Dockerfile.backend  COPY: apps/backend/, apps/backend/go.mod,
+            #                           apps/backend/migrations, sdk
+            # Dockerfile.frontend COPY: apps/web/, apps/web/package.json
             docker:
               - 'infrastructure/docker/**'
-              - 'apps/backend/go.mod'
-              - 'apps/backend/go.sum'
-              - 'apps/web/package.json'
-              - 'apps/web/package-lock.json'
+              - 'apps/backend/**'
+              - 'apps/web/**'
+              - 'sdk/**'
             deps:
               - 'apps/backend/go.mod'
               - 'apps/backend/go.sum'
