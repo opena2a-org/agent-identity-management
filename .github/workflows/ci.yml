@@ -151,8 +151,16 @@ jobs:
             # Root package.json/package-lock.json feed apps/web via npm
             # workspaces (apps/web has no lockfile of its own) — a root dep
             # bump that skipped the frontend build would merge unvalidated.
+            # `sdk/**` is here because the backend IMAGE contains it:
+            # infrastructure/docker/Dockerfile.backend does `COPY sdk ./sdk` in
+            # its final stage. The filter listed only apps/backend/**, so every
+            # sdk-only change skipped the backend job AND the container scan for
+            # an image whose contents that change had just altered. The filter
+            # has to match the Dockerfile's inputs, and the Dockerfile's inputs
+            # are exactly apps/backend/** and sdk/**.
             backend:
               - 'apps/backend/**'
+              - 'sdk/**'
               - '.golangci.yml'
               - '.github/workflows/ci.yml'
             frontend:
