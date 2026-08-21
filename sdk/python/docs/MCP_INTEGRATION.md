@@ -1,29 +1,29 @@
-# 🔌 AIM + MCP (Model Context Protocol) Integration Guide
+# AIM + MCP (Model Context Protocol) Integration Guide
 
-**Status**: ✅ **SDK IMPLEMENTATION COMPLETE** - Backend endpoints exist, SDK ready
+**Status**: ✓ **SDK IMPLEMENTATION COMPLETE** - Backend endpoints exist, SDK ready
 **Last Updated**: December 10, 2025
 **Note**: Integration testing requires authentication setup
 
 ---
 
-## 🎯 Overview
+## Overview
 
 Seamless integration between **AIM (Agent Identity Management)** and **MCP (Model Context Protocol)** for registration, verification, and audit logging of MCP servers and their actions.
 
 ### What This Enables
 
-- ✅ **MCP Server Registration** with cryptographic verification
-- ✅ **Dynamic Capability Discovery** - Automatically queries MCP servers for their tools
-- ✅ **Auto-Attestation** - Agents automatically attest to MCP capabilities on registration
-- ✅ **Action Verification** for MCP tools, resources, and prompts
-- ✅ **Trust Scoring** for MCP servers based on usage history
-- ✅ **Audit Trail** for all MCP server interactions
-- ✅ **Centralized Registry** of trusted MCP servers
-- ✅ **Security Verification** before tool/resource access
+- ✓ **MCP Server Registration** with cryptographic verification
+- ✓ **Dynamic Capability Discovery** - Automatically queries MCP servers for their tools
+- ✓ **Auto-Attestation** - Agents automatically attest to MCP capabilities on registration
+- ✓ **Action Verification** for MCP tools, resources, and prompts
+- ✓ **Trust Scoring** for MCP servers based on usage history
+- ✓ **Audit Trail** for all MCP server interactions
+- ✓ **Centralized Registry** of trusted MCP servers
+- ✓ **Security Verification** before tool/resource access
 
 ---
 
-## 📦 What is MCP?
+## What is MCP?
 
 **Model Context Protocol (MCP)** is an open standard introduced by Anthropic in November 2024 that enables AI systems (like LLMs) to integrate with external data sources and tools.
 
@@ -46,7 +46,7 @@ Seamless integration between **AIM (Agent Identity Management)** and **MCP (Mode
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Step 1: Register an MCP Server
 
@@ -68,7 +68,7 @@ server_info = register_mcp_server(
     version="1.0.0"
 )
 
-print(f"✅ Server registered: {server_info['id']}")
+print(f"✓ Server registered: {server_info['id']}")
 print(f"   Status: {server_info['status']}")
 print(f"   Trust Score: {server_info['trust_score']}")
 ```
@@ -99,7 +99,7 @@ verification = verify_mcp_action(
     risk_level="low"
 )
 
-print(f"✅ Action verified: {verification['verification_id']}")
+print(f"✓ Action verified: {verification['verification_id']}")
 
 # Execute MCP tool (your implementation)
 results = mcp_server.tools.web_search(query="AI safety")
@@ -142,14 +142,14 @@ print(f"Results: {result}")
 ```
 
 **Benefits**:
-- ✅ Automatic verification before execution
-- ✅ Automatic result logging after completion
-- ✅ Error handling and logging
-- ✅ Clean, simple API
+- ✓ Automatic verification before execution
+- ✓ Automatic result logging after completion
+- ✓ Error handling and logging
+- ✓ Clean, simple API
 
 ---
 
-## 🔍 Dynamic Capability Discovery
+## Dynamic Capability Discovery
 
 The SDK automatically discovers MCP server capabilities by querying each server using the official MCP protocol. **No hardcoded capability lists** - capabilities are discovered at runtime directly from the servers.
 
@@ -205,11 +205,11 @@ agent = secure(
 
 | Without Dynamic Discovery | With Dynamic Discovery |
 |---------------------------|------------------------|
-| ❌ Hardcoded capability lists | ✅ Real capabilities from servers |
-| ❌ Lists become outdated | ✅ Always up-to-date |
-| ❌ Manual maintenance | ✅ Zero maintenance |
-| ❌ Limited to known servers | ✅ Works with any MCP server |
-| ❌ Users must list all tools | ✅ Automatic - just provide server names |
+| ✗ Hardcoded capability lists | ✓ Real capabilities from servers |
+| ✗ Lists become outdated | ✓ Always up-to-date |
+| ✗ Manual maintenance | ✓ Zero maintenance |
+| ✗ Limited to known servers | ✓ Works with any MCP server |
+| ✗ Users must list all tools | ✓ Automatic - just provide server names |
 
 ### Advanced: Full Detection with Tools
 
@@ -227,7 +227,7 @@ for d in detections:
 
 ---
 
-## 🔐 Smart Attestation System
+## Smart Attestation System
 
 The SDK provides **smart attestation** - intelligent, automatic attestation that builds trust in MCP servers through cryptographic verification while minimizing overhead.
 
@@ -277,7 +277,7 @@ The SDK automatically detects when MCP servers change their capabilities:
 
 ```python
 # If capability drift is detected, you'll see:
-# ⚠️ Capability drift detected (severity: medium): +2 added, -1 removed
+# Warning: Capability drift detected (severity: medium): +2 added, -1 removed
 
 # Drift severity levels:
 # - low: New tools added (expansion)
@@ -299,8 +299,8 @@ agent = secure(
 )
 
 # Console output:
-# ✅ Registered MCP server: filesystem
-# ✅ Auto-attested MCP server 'filesystem' with 14 capabilities
+# ✓ Registered MCP server: filesystem
+# ✓ Auto-attested MCP server 'filesystem' with 14 capabilities
 ```
 
 ### Manual Attestation
@@ -336,7 +336,7 @@ result = agent.use_mcp_tool(
 
 ---
 
-## 📊 Supply Chain Analytics
+## Supply Chain Analytics
 
 The SDK tracks MCP tool usage for supply chain visibility, enabling:
 
@@ -397,7 +397,7 @@ if decision["shouldAttest"]:
 
 ---
 
-## 🔧 API Reference
+## API Reference
 
 ### register_mcp_server()
 
@@ -634,7 +634,7 @@ report = cache.get_supply_chain_report()
 
 ---
 
-## 📊 What Gets Logged to AIM
+## What Gets Logged to AIM
 
 ### MCP Server Registration
 
@@ -673,7 +673,7 @@ report = cache.get_supply_chain_report()
 
 ---
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
 ### 1. Verify All High-Risk MCP Actions
 
@@ -715,7 +715,7 @@ admin_server = register_mcp_server(
 server = get_mcp_server(aim_client, server_id)
 
 if server['trust_score'] < 60.0:
-    print(f"⚠️  Warning: Low trust score for {server['name']}")
+    print(f"Warning: Warning: Low trust score for {server['name']}")
     # Consider suspending or reviewing server
 ```
 
@@ -733,7 +733,7 @@ for server in servers:
 
 ---
 
-## 🎯 Real-World Examples
+## Real-World Examples
 
 ### Example 1: Research Assistant MCP Server
 
@@ -812,26 +812,26 @@ try:
         context={"user_id": "user123", "reason": "account closure"}
     )
 except PermissionError as e:
-    print(f"❌ Operation denied: {e}")
+    print(f"✗ Operation denied: {e}")
     # Handle denial (notify admin, log incident, etc.)
 ```
 
 ---
 
-## 📈 MCP vs AIM Integration Benefits
+## MCP vs AIM Integration Benefits
 
 | Without AIM | With AIM Integration |
 |-------------|---------------------|
-| ❌ No central registry of MCP servers | ✅ Centralized MCP server registry |
-| ❌ No verification before tool execution | ✅ Cryptographic verification required |
-| ❌ No audit trail of MCP actions | ✅ Complete audit trail of all actions |
-| ❌ No trust scoring for servers | ✅ ML-powered trust scoring |
-| ❌ Manual security reviews | ✅ Automatic security verification |
-| ❌ No compliance reporting | ✅ Exportable audit record for compliance reporting |
+| ✗ No central registry of MCP servers | ✓ Centralized MCP server registry |
+| ✗ No verification before tool execution | ✓ Cryptographic verification required |
+| ✗ No audit trail of MCP actions | ✓ Complete audit trail of all actions |
+| ✗ No trust scoring for servers | ✓ ML-powered trust scoring |
+| ✗ Manual security reviews | ✓ Automatic security verification |
+| ✗ No compliance reporting | ✓ Exportable audit record for compliance reporting |
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "Authentication failed" Error
 
@@ -876,7 +876,7 @@ public_key_b64 = base64.b64encode(public_key_bytes).decode()
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
 1. **Register Your MCP Server**: Use `register_mcp_server()` to add your server
 2. **Test Verification**: Try `verify_mcp_action()` with a sample action
@@ -886,7 +886,7 @@ public_key_b64 = base64.b64encode(public_key_bytes).decode()
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **MCP Specification**: https://modelcontextprotocol.io/specification/2025-06-18
 - **AIM Documentation**: [Main README](../../README.md)
@@ -895,11 +895,11 @@ public_key_b64 = base64.b64encode(public_key_bytes).decode()
 
 ---
 
-**Integration Status**: ✅ **SDK IMPLEMENTATION COMPLETE**
-**Backend Status**: ✅ **ENDPOINTS IMPLEMENTED**
+**Integration Status**: ✓ **SDK IMPLEMENTATION COMPLETE**
+**Backend Status**: ✓ **ENDPOINTS IMPLEMENTED**
 **Last Updated**: December 10, 2025
 **AIM SDK Version**: 1.8.0
 
 ---
 
-**Secure Your MCP Servers with AIM! 🔌🔒**
+**Secure Your MCP Servers with AIM! **

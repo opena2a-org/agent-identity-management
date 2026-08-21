@@ -72,7 +72,7 @@ class AIMTaskCallback:
 
         if self.verbose:
             task_desc = getattr(task, 'description', 'unknown task')
-            print(f"🔧 AIM: Task started - {task_desc[:50]}")
+            print(f"AIM: Task started - {task_desc[:50]}")
 
     def on_task_complete(self, output: Any) -> None:
         """
@@ -84,7 +84,7 @@ class AIMTaskCallback:
             output: Task output/result
         """
         if self.verbose:
-            print(f"✅ AIM: Task completed")
+            print(f"✓ AIM: Task completed")
 
         # Log to AIM
         try:
@@ -109,11 +109,11 @@ class AIMTaskCallback:
             )
 
             if self.verbose:
-                print("✅ AIM: Task completion logged")
+                print("✓ AIM: Task completion logged")
 
         except Exception as e:
             if self.verbose:
-                print(f"⚠️  AIM logging error: {e}")
+                print(f"Warning: AIM logging error: {e}")
 
     def on_task_error(self, error: Exception, task: Optional[Any] = None) -> None:
         """
@@ -127,7 +127,7 @@ class AIMTaskCallback:
             task_desc = "unknown task"
             if task:
                 task_desc = getattr(task, 'description', 'unknown task')
-            print(f"❌ AIM: Task failed - {task_desc[:50]}: {error}")
+            print(f"✗ AIM: Task failed - {task_desc[:50]}: {error}")
 
         # Log error to AIM
         try:
@@ -144,8 +144,8 @@ class AIMTaskCallback:
             )
 
             if self.verbose:
-                print("✅ AIM: Task failure logged")
+                print("✓ AIM: Task failure logged")
 
         except Exception as e:
             if self.verbose:
-                print(f"⚠️  AIM logging error: {e}")
+                print(f"Warning: AIM logging error: {e}")

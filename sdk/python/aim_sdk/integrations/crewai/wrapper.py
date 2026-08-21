@@ -113,7 +113,7 @@ class AIMCrewWrapper:
             PermissionError: If AIM verification fails
         """
         if self.verbose:
-            print(f"🔧 AIM: Verifying crew execution (risk: {self.risk_level})")
+            print(f"AIM: Verifying crew execution (risk: {self.risk_level})")
 
         # Prepare resource for verification
         resource = ""
@@ -135,13 +135,13 @@ class AIMCrewWrapper:
             )
         except Exception as e:
             if self.verbose:
-                print(f"⚠️  AIM verification error: {e}")
+                print(f"Warning: AIM verification error: {e}")
             raise PermissionError(f"AIM verification failed for crew execution: {e}")
 
         verification_id = verification_result.get("verification_id")
 
         if self.verbose:
-            print(f"✅ AIM: Crew execution verified (id: {verification_id})")
+            print(f"✓ AIM: Crew execution verified (id: {verification_id})")
 
         # Execute crew
         try:
@@ -161,10 +161,10 @@ class AIMCrewWrapper:
                     )
                 except Exception as e:
                     if self.verbose:
-                        print(f"⚠️  AIM result logging error: {e}")
+                        print(f"Warning: AIM result logging error: {e}")
 
             if self.verbose:
-                print("✅ AIM: Crew execution completed and logged")
+                print("✓ AIM: Crew execution completed and logged")
 
             return result
 
@@ -179,10 +179,10 @@ class AIMCrewWrapper:
                     )
                 except Exception as log_error:
                     if self.verbose:
-                        print(f"⚠️  AIM result logging error: {log_error}")
+                        print(f"Warning: AIM result logging error: {log_error}")
 
             if self.verbose:
-                print(f"❌ AIM: Crew execution failed: {e}")
+                print(f"✗ AIM: Crew execution failed: {e}")
 
             raise
 
@@ -200,7 +200,7 @@ class AIMCrewWrapper:
             PermissionError: If AIM verification fails
         """
         if self.verbose:
-            print(f"🔧 AIM: Verifying async crew execution (risk: {self.risk_level})")
+            print(f"AIM: Verifying async crew execution (risk: {self.risk_level})")
 
         # Prepare resource for verification
         resource = ""
@@ -223,13 +223,13 @@ class AIMCrewWrapper:
             )
         except Exception as e:
             if self.verbose:
-                print(f"⚠️  AIM verification error: {e}")
+                print(f"Warning: AIM verification error: {e}")
             raise PermissionError(f"AIM verification failed for async crew execution: {e}")
 
         verification_id = verification_result.get("verification_id")
 
         if self.verbose:
-            print(f"✅ AIM: Async crew execution verified (id: {verification_id})")
+            print(f"✓ AIM: Async crew execution verified (id: {verification_id})")
 
         # Execute crew asynchronously
         try:
@@ -249,10 +249,10 @@ class AIMCrewWrapper:
                     )
                 except Exception as e:
                     if self.verbose:
-                        print(f"⚠️  AIM result logging error: {e}")
+                        print(f"Warning: AIM result logging error: {e}")
 
             if self.verbose:
-                print("✅ AIM: Async crew execution completed and logged")
+                print("✓ AIM: Async crew execution completed and logged")
 
             return result
 
@@ -267,10 +267,10 @@ class AIMCrewWrapper:
                     )
                 except Exception as log_error:
                     if self.verbose:
-                        print(f"⚠️  AIM result logging error: {log_error}")
+                        print(f"Warning: AIM result logging error: {log_error}")
 
             if self.verbose:
-                print(f"❌ AIM: Async crew execution failed: {e}")
+                print(f"✗ AIM: Async crew execution failed: {e}")
 
             raise
 

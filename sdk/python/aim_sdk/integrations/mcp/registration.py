@@ -561,12 +561,12 @@ def attest_mcp_server(
         # Import discovery module (lazy import to avoid overhead when not used)
         from aim_sdk.integrations.mcp.discovery import discover_capabilities
 
-        print(f"🔍 Auto-discovering capabilities from MCP server: {mcp_url}")
+        print(f"Auto-discovering capabilities from MCP server: {mcp_url}")
         discovery_result = discover_capabilities(mcp_url, timeout_seconds=discovery_timeout)
 
         if discovery_result.error:
             if capabilities_found:
-                print(f"⚠️  Auto-discovery failed ({discovery_result.error}), using provided capabilities")
+                print(f"Warning: Auto-discovery failed ({discovery_result.error}), using provided capabilities")
             else:
                 raise ValueError(
                     f"Auto-discovery failed and no capabilities_found provided: {discovery_result.error}"
@@ -575,7 +575,7 @@ def attest_mcp_server(
             # Use discovered capabilities
             capabilities_found = discovery_result.tool_names
             connection_latency_ms = discovery_result.connection_latency_ms
-            print(f"✅ Discovered {len(capabilities_found)} tools: {capabilities_found}")
+            print(f"✓ Discovered {len(capabilities_found)} tools: {capabilities_found}")
 
     # Validate capabilities are provided
     if not capabilities_found:
@@ -590,9 +590,9 @@ def attest_mcp_server(
         try:
             challenge_response = get_attestation_challenge(aim_client, server_id)
             challenge = challenge_response.get("challenge")
-            print(f"🔐 Obtained attestation challenge (expires: {challenge_response.get('expiresAt')})")
+            print(f"Obtained attestation challenge (expires: {challenge_response.get('expiresAt')})")
         except Exception as e:
-            print(f"⚠️  Warning: Could not get challenge, proceeding without: {e}")
+            print(f"Warning: Could not get challenge, proceeding without: {e}")
             # Continue without challenge for backward compatibility
 
     # Step 2: Build attestation payload (including challenge for proof of key possession)
@@ -642,9 +642,9 @@ def attest_mcp_server(
     )
 
     if challenge:
-        print(f"✅ Attestation submitted with proof of key possession")
+        print(f"✓ Attestation submitted with proof of key possession")
     else:
-        print(f"✅ Attestation submitted (legacy mode, no challenge)")
+        print(f"✓ Attestation submitted (legacy mode, no challenge)")
 
     # Add discovery information to response if auto_discover was used
     if discovery_result and not discovery_result.error:

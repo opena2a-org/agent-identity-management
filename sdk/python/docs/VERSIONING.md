@@ -130,10 +130,10 @@ pytest tests/ -v --cov=aim_sdk --cov-report=html
 ```
 
 **Required**:
-- ✅ 100% of unit tests pass
-- ✅ Integration tests with backend pass
-- ✅ Decorator tests pass
-- ✅ Cryptographic signing tests pass
+- ✓ 100% of unit tests pass
+- ✓ Integration tests with backend pass
+- ✓ Decorator tests pass
+- ✓ Cryptographic signing tests pass
 
 ### 4. Build
 
@@ -223,8 +223,8 @@ python -c "import aim_sdk; print(aim_sdk.__version__)"
 - `@agent.perform_action()` now supports `jit_access=True` for admin approval flows
 
 **Action Required**:
-- ✅ No breaking changes
-- ⚠️ Migrate from `track_action()` to `perform_action()` (recommended)
+- ✓ No breaking changes
+- Warning: Migrate from `track_action()` to `perform_action()` (recommended)
 
 **Migration**:
 ```python

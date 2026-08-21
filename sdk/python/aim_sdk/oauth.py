@@ -41,7 +41,7 @@ try:
 except ImportError as e:
     SECURE_STORAGE_AVAILABLE = False
     SECURE_STORAGE_WARNING = (
-        "⚠️  SECURITY WARNING: Secure storage packages not installed.\n"
+        "SECURITY WARNING: Secure storage packages not installed.\n"
         "   Credentials will be stored in PLAINTEXT without encryption.\n"
         "   For encrypted storage, install: pip install cryptography keyring\n"
     )
@@ -95,10 +95,10 @@ def decode_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
 
     except jwt.exceptions.DecodeError as e:
         # Token is malformed (not a valid JWT)
-        print(f"⚠️  Warning: Failed to decode JWT: {e}")
+        print(f"Warning: Failed to decode JWT: {e}")
         return None
     except Exception as e:
-        print(f"⚠️  Warning: Unexpected error decoding JWT: {e}")
+        print(f"Warning: Unexpected error decoding JWT: {e}")
         return None
 
 
@@ -187,14 +187,14 @@ class OAuthTokenManager:
                     # credentials we still need.
                     _save_sdk_credentials_to_module(creds)
                     print(
-                        f"🔄 Migrated credentials from encrypted shadow file to JSON "
+                        f"Migrated credentials from encrypted shadow file to JSON "
                         f"single source of truth at {self.credentials_path}."
                     )
                     migrated = True
             except Exception as e:
                 decrypt_failed = True
                 print(
-                    f"⚠️  Could not migrate legacy encrypted credentials at "
+                    f"Warning: Could not migrate legacy encrypted credentials at "
                     f"{encrypted_path} ({e}); leaving the file in place."
                 )
 
@@ -209,7 +209,7 @@ class OAuthTokenManager:
                 encrypted_path.unlink()
                 if not migrated:
                     print(
-                        f"🧹 Removed deprecated encrypted credentials file at "
+                        f"Removed deprecated encrypted credentials file at "
                         f"{encrypted_path} (single-source-of-truth migration, audit #12)."
                     )
             except Exception:
@@ -238,7 +238,7 @@ class OAuthTokenManager:
                 return True
             return False
         except Exception as e:
-            print(f"⚠️  Warning: Failed to load credentials: {e}")
+            print(f"Warning: Failed to load credentials: {e}")
             return False
 
     def save_credentials(self, credentials: Dict[str, Any]) -> bool:
@@ -259,7 +259,7 @@ class OAuthTokenManager:
             self.credentials = credentials
             return True
         except Exception as e:
-            print(f"⚠️  Warning: Failed to save credentials: {e}")
+            print(f"Warning: Failed to save credentials: {e}")
             return False
 
     def has_credentials(self) -> bool:
@@ -340,7 +340,7 @@ class OAuthTokenManager:
                         details={"token_id": token_id, "attempting_recovery": True}
                     )
                     if not suppress_errors:
-                        print("🔄 Token was revoked - attempting automatic recovery...")
+                        print("Token was revoked - attempting automatic recovery...")
 
                     # Try token recovery endpoint (new feature - zero downtime!)
                     recovery_url = f"{aim_url.rstrip('/')}/api/v1/auth/sdk/recover"
@@ -368,8 +368,8 @@ class OAuthTokenManager:
                                         self.credentials['sdkTokenId'] = new_token_id
 
                                 self.save_credentials(self.credentials)
-                                print("✅ Token recovered automatically! SDK credentials updated.")
-                                print("💡 No need to re-download the SDK - everything just works!")
+                                print("✓ Token recovered automatically! SDK credentials updated.")
+                                print("No need to re-download the SDK - everything just works!")
 
                                 # Decode new access token expiry using PyJWT
                                 payload = decode_jwt_claims(self.access_token)
@@ -412,7 +412,7 @@ class OAuthTokenManager:
                         details={"token_id": token_id, "http_status": response.status_code}
                     )
                     if not suppress_errors:
-                        print(f"⚠️  Token refresh failed with status {response.status_code}: {error_msg}")
+                        print(f"Warning: Token refresh failed with status {response.status_code}: {error_msg}")
 
                 return None
 
@@ -447,7 +447,7 @@ class OAuthTokenManager:
                 # server-side so the user understands why an out-of-band copy
                 # (other machine, another venv, bundled SDK) would stop working.
                 print(
-                    "🔄 Token rotated successfully \u2014 old refresh token revoked "
+                    "Token rotated successfully \u2014 old refresh token revoked "
                     f"(new id: {new_token_id_full[:8] + '...' if new_token_id_full else 'unknown'})"
                 )
 
@@ -478,7 +478,7 @@ class OAuthTokenManager:
                 details={"token_id": local_token_id}
             )
             if not suppress_errors:
-                print(f"⚠️  Warning: Token refresh failed: {e}")
+                print(f"Warning: Token refresh failed: {e}")
             return None
 
     def get_auth_header(self) -> Dict[str, str]:
@@ -527,11 +527,11 @@ class OAuthTokenManager:
             self.access_token = None
             self.access_token_expiry = None
 
-            print("✅ Token revoked and credentials deleted")
+            print("✓ Token revoked and credentials deleted")
             return True
 
         except Exception as e:
-            print(f"⚠️  Warning: Token revocation failed: {e}")
+            print(f"Warning: Token revocation failed: {e}")
             # Still delete local credentials for safety
             if self.credentials_path.exists():
                 self.credentials_path.unlink()

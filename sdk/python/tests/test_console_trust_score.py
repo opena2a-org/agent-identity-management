@@ -21,8 +21,11 @@ class TestTrustScoreNormalization:
     def test_hundred_normalized(self):
         assert AIMConsole._normalize_trust_score(100) == 1.0
 
-    def test_none_returns_zero(self):
-        assert AIMConsole._normalize_trust_score(None) == 0.0
+    def test_none_stays_none(self):
+        # Was `== 0.0`, which asserted the #390 defect: an agent the server sent
+        # no score for was normalized into a measured, alarming red 0%. Unknown
+        # and zero are different claims and must stay distinguishable.
+        assert AIMConsole._normalize_trust_score(None) is None
 
     def test_high_float_normalized(self):
         # 85 from server should become 0.85

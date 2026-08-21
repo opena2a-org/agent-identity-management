@@ -58,7 +58,7 @@ def aim_verified_task(
                     _agent = AIMClient.from_credentials(auto_load_agent)
                 except FileNotFoundError:
                     print(
-                        f"⚠️  Warning: No AIM agent configured for task '{func.__name__}', "
+                        f"Warning: No AIM agent configured for task '{func.__name__}', "
                         f"running without verification"
                     )
                     # Run without verification if no agent available
@@ -109,7 +109,7 @@ def aim_verified_task(
                         )
                     except Exception as e:
                         # Don't fail the task if logging fails
-                        print(f"⚠️  Warning: AIM result logging failed: {e}")
+                        print(f"Warning: AIM result logging failed: {e}")
 
                 return result
 
@@ -123,7 +123,7 @@ def aim_verified_task(
                             error_message=str(e)
                         )
                     except Exception as log_error:
-                        print(f"⚠️  Warning: AIM error logging failed: {log_error}")
+                        print(f"Warning: AIM error logging failed: {log_error}")
 
                 # Re-raise the original exception
                 raise

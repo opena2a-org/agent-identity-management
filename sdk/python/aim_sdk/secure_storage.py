@@ -60,7 +60,7 @@ class SecureCredentialStorage:
                 missing.append("keyring")
 
             raise RuntimeError(
-                f"❌ SECURITY ERROR: Required packages not installed: {', '.join(missing)}\n"
+                f"✗ SECURITY ERROR: Required packages not installed: {', '.join(missing)}\n"
                 f"   AIM SDK REQUIRES secure credential storage.\n"
                 f"   Install with: pip install {' '.join(missing)}\n"
                 f"   We do NOT support insecure plaintext storage."
@@ -92,13 +92,13 @@ class SecureCredentialStorage:
                 # Generate new key and store in keyring
                 key = Fernet.generate_key().decode('utf-8')
                 keyring.set_password(self.SERVICE_NAME, self.KEY_NAME, key)
-                print("🔐 Generated new encryption key and stored in system keyring")
+                print("Generated new encryption key and stored in system keyring")
 
             return Fernet(key.encode('utf-8'))
 
         except Exception as e:
             raise RuntimeError(
-                f"❌ SECURITY ERROR: Failed to access system keyring: {e}\n"
+                f"✗ SECURITY ERROR: Failed to access system keyring: {e}\n"
                 f"   AIM SDK requires secure credential storage.\n"
                 f"   Please check your system keyring configuration."
             )
@@ -146,7 +146,7 @@ class SecureCredentialStorage:
                 return credentials
             except Exception as e:
                 raise RuntimeError(
-                    f"❌ SECURITY ERROR: Failed to decrypt credentials: {e}\n"
+                    f"✗ SECURITY ERROR: Failed to decrypt credentials: {e}\n"
                     f"   Credentials may be corrupted or encryption key changed.\n"
                     f"   You may need to re-register with AIM."
                 )
@@ -158,19 +158,19 @@ class SecureCredentialStorage:
                 with open(self.credentials_path, 'r') as f:
                     credentials = json.load(f)
 
-                print(f"🔐 Auto-migrating plaintext credentials to encrypted storage...")
+                print(f"Auto-migrating plaintext credentials to encrypted storage...")
 
                 # Save as encrypted (this also sets self.credentials)
                 self.save_credentials(credentials)
 
                 # Plaintext file already deleted by save_credentials()
-                print(f"✅ Credentials migrated successfully to encrypted storage.")
+                print(f"✓ Credentials migrated successfully to encrypted storage.")
 
                 return credentials
 
             except Exception as e:
                 # If migration fails, try to read plaintext if it still exists
-                print(f"⚠️  Warning: Failed to migrate credentials to encrypted storage: {e}")
+                print(f"Warning: Failed to migrate credentials to encrypted storage: {e}")
                 print(f"   Attempting to use plaintext credentials as fallback...")
 
                 try:
@@ -191,11 +191,11 @@ class SecureCredentialStorage:
         """Delete stored credentials (both encrypted and plaintext)."""
         if self.encrypted_path.exists():
             self.encrypted_path.unlink()
-            print(f"🗑️  Deleted encrypted credentials at {self.encrypted_path}")
+            print(f"Deleted encrypted credentials at {self.encrypted_path}")
 
         if self.credentials_path.exists():
             self.credentials_path.unlink()
-            print(f"🗑️  Deleted plaintext credentials at {self.credentials_path}")
+            print(f"Deleted plaintext credentials at {self.credentials_path}")
 
     def credentials_exist(self) -> bool:
         """Check if credentials file exists (encrypted or plaintext)."""
@@ -209,11 +209,11 @@ class SecureCredentialStorage:
             True if migration successful, False otherwise
         """
         if not self.cipher:
-            print("⚠️  Encryption not available, cannot migrate")
+            print("Warning: Encryption not available, cannot migrate")
             return False
 
         if not self.credentials_path.exists():
-            print("⚠️  No plaintext credentials found to migrate")
+            print("Warning: No plaintext credentials found to migrate")
             return False
 
         try:
@@ -223,11 +223,11 @@ class SecureCredentialStorage:
             # Save encrypted
             self.save_credentials(credentials)
 
-            print("✅ Successfully migrated credentials to encrypted storage")
+            print("✓ Successfully migrated credentials to encrypted storage")
             return True
 
         except Exception as e:
-            print(f"❌ Failed to migrate credentials: {e}")
+            print(f"✗ Failed to migrate credentials: {e}")
             return False
 
 

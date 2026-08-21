@@ -45,15 +45,22 @@ class AIMConsole:
             print(message)
 
     @staticmethod
-    def _normalize_trust_score(score: float) -> float:
-        """Normalize trust score to a 0-1 float.
+    def _normalize_trust_score(score: Optional[float]) -> Optional[float]:
+        """Normalize trust score to a 0-1 float, preserving "unknown".
 
         The server may return trust scores as either a 0-1 float (e.g. 0.55)
         or a 0-100 integer (e.g. 55). Python's :.0% format expects 0-1, so
         values > 1 are divided by 100 to normalize.
+
+        ``None`` means the server sent no score and propagates as ``None``. It
+        previously became ``0.0``, which is a different and worse claim: it
+        announced an unscored agent as measured at an alarming red 0%, and
+        because callers normalize before formatting, it also made the ``N/A``
+        branch in both formatters unreachable. A genuine server-sent ``0``
+        still normalizes to ``0.0`` and stays distinguishable from unknown.
         """
         if score is None:
-            return 0.0
+            return None
         if score > 1:
             return score / 100.0
         return float(score)
@@ -144,7 +151,9 @@ class AIMConsole:
         print(f"│  Type:        {agent_type:<32} │")
         print(f"│  Version:     {version:<32} │")
         print(f"│  Status:      {status:<32} │")
-        print(f"│  Trust Score: {trust_score:.0%}{'':>28} │")
+        # None means the server sent no score; print that rather than a number.
+        trust_display = "N/A" if trust_score is None else f"{trust_score:.0%}"
+        print(f"│  Trust Score: {trust_display}{'':>28} │")
         if capabilities:
             cap_str = ", ".join(capabilities[:3])
             if len(capabilities) > 3:
@@ -295,7 +304,7 @@ class AIMConsole:
                 f"[bold]Risk Level:[/] [red]{risk_level.upper()}[/]\n"
                 f"[bold]Timeout:[/] {timeout}s\n\n"
                 f"[dim]Approve in dashboard: [link]{url}[/link][/]",
-                title="[bold yellow]⏳ Awaiting Admin Approval[/]",
+                title="[bold yellow]○ Awaiting Admin Approval[/]",
                 title_align="left",
                 border_style="yellow",
                 padding=(1, 2)
@@ -304,7 +313,7 @@ class AIMConsole:
         else:
             print()
             print("╭─────────────────────────────────────────────────╮")
-            print("│  ⏳ Awaiting Admin Approval                     │")
+            print("│  ○ Awaiting Admin Approval                      │")
             print("├─────────────────────────────────────────────────┤")
             print(f"│  Capability:  {capability:<32} │")
             print(f"│  Risk Level:  {risk_level.upper():<32} │")
@@ -411,16 +420,16 @@ class AIMConsole:
     def warning(self, message: str):
         """Display warning message."""
         if RICH_AVAILABLE:
-            self.console.print(f"[yellow]⚠ Warning:[/] {message}")
+            self.console.print(f"[yellow]Warning:[/] {message}")
         else:
-            print(f"⚠ Warning: {message}")
+            print(f"Warning: {message}")
 
     def info(self, message: str):
         """Display info message."""
         if RICH_AVAILABLE:
-            self.console.print(f"[blue]ℹ[/] {message}")
+            self.console.print(f"{message}")
         else:
-            print(f"ℹ {message}")
+            print(f"{message}")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # PROGRESS INDICATORS
@@ -449,9 +458,9 @@ class AIMConsole:
         if self.quiet or not os.environ.get("AIM_DEBUG"):
             return
         if RICH_AVAILABLE:
-            self.console.print(f"[dim]🔍 {message}[/]")
+            self.console.print(f"[dim]{message}[/]")
         else:
-            print(f"🔍 {message}")
+            print(f"{message}")
 
 
 # Global console instance for the SDK

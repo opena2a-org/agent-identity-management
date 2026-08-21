@@ -224,7 +224,7 @@ def save_sdk_credentials(credentials: Dict[str, Any]) -> bool:
             success=False,
             error=str(e)
         )
-        print(f"⚠️  Failed to save SDK credentials: {e}")
+        print(f"Warning: Failed to save SDK credentials: {e}")
         return False
 
 
@@ -306,7 +306,7 @@ def _migrate_sdk_credentials(credentials: Dict[str, Any]) -> None:
     """Migrate SDK credentials from legacy to new location."""
     try:
         save_sdk_credentials(credentials)
-        print(f"✅ SDK credentials migrated to {SDK_CREDENTIALS_FILE}")
+        print(f"✓ SDK credentials migrated to {SDK_CREDENTIALS_FILE}")
     except Exception:
         pass
 
@@ -443,7 +443,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
             success=False,
             error=str(e)
         )
-        print(f"⚠️  Failed to save agent credentials: {e}")
+        print(f"Warning: Failed to save agent credentials: {e}")
         return False
 
 
@@ -499,16 +499,16 @@ def _migrate_legacy_agent_credentials(data: Dict[str, Any]) -> None:
         for key, value in data.items():
             if isinstance(value, dict) and ("agent_id" in value or "private_key" in value):
                 save_agent_credentials(key, value)
-                print(f"✅ Agent '{key}' credentials migrated to {AGENTS_DIR}")
+                print(f"✓ Agent '{key}' credentials migrated to {AGENTS_DIR}")
 
         # Check for flat format with name field
         if "agent_id" in data or "private_key" in data:
             name = data.get("name") or data.get("agent_name") or "default"
             save_agent_credentials(name, data)
-            print(f"✅ Agent '{name}' credentials migrated to {AGENTS_DIR}")
+            print(f"✓ Agent '{name}' credentials migrated to {AGENTS_DIR}")
 
     except Exception as e:
-        print(f"⚠️  Failed to migrate agent credentials: {e}")
+        print(f"Warning: Failed to migrate agent credentials: {e}")
 
 
 # =============================================================================
@@ -519,7 +519,7 @@ def print_sdk_credentials_not_found_error(aim_url: str = "http://localhost:8080"
     """Print a clear error message when SDK credentials are not found."""
     print()
     print("=" * 72)
-    print("❌ SDK CREDENTIALS NOT FOUND")
+    print("✗ SDK CREDENTIALS NOT FOUND")
     print("=" * 72)
     print()
     print("No SDK authentication credentials found.")
@@ -542,7 +542,7 @@ def print_wrong_credential_type_error(found_type: str, agent_name: str = None, a
     """Print a clear error message when wrong credential type is found."""
     print()
     print("=" * 72)
-    print("⚠️  WRONG CREDENTIAL TYPE")
+    print("Warning: WRONG CREDENTIAL TYPE")
     print("=" * 72)
     print()
 
@@ -579,7 +579,7 @@ def print_token_expired_error(aim_url: str = "http://localhost:8080") -> None:
     """
     print()
     print("=" * 72)
-    print("⚠️  SDK REFRESH TOKEN REJECTED")
+    print("Warning: SDK REFRESH TOKEN REJECTED")
     print("=" * 72)
     print()
     print(f"The AIM server rejected the refresh token at {SDK_CREDENTIALS_FILE}.")

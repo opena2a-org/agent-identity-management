@@ -1,27 +1,27 @@
-# 🦜 AIM + LangChain Integration Guide
+# AIM + LangChain Integration Guide
 
-**Status**: ✅ **PRODUCTION-READY** - Fully tested and verified
+**Status**: ✓ **PRODUCTION-READY** - Fully tested and verified
 **Last Updated**: October 8, 2025
-**Test Results**: 4/4 passing ✅
+**Test Results**: 4/4 passing ✓
 
 ---
 
-## 🎯 Overview
+## Overview
 
 Seamless integration between **AIM (Agent Identity Management)** and **LangChain** for automatic tool verification and audit logging.
 
 ### What This Enables
 
-- ✅ **Automatic logging** of all LangChain tool invocations
-- ✅ **Explicit verification** before tool execution
-- ✅ **Wrap existing tools** with zero code changes
-- ✅ **Audit trail** for compliance (SOC 2, HIPAA, GDPR)
-- ✅ **Trust scoring** for AI agent actions
-- ✅ **Zero-friction** developer experience
+- ✓ **Automatic logging** of all LangChain tool invocations
+- ✓ **Explicit verification** before tool execution
+- ✓ **Wrap existing tools** with zero code changes
+- ✓ **Audit trail** for compliance (SOC 2, HIPAA, GDPR)
+- ✓ **Trust scoring** for AI agent actions
+- ✓ **Zero-friction** developer experience
 
 ---
 
-## 🚀 Quick Start (3 Options)
+## Quick Start (3 Options)
 
 ### Option 1: Automatic Logging (Simplest)
 
@@ -63,10 +63,10 @@ agent.invoke({"input": "Find user john@example.com and send them an email"})
 ```
 
 **Benefits**:
-- ✅ Zero changes to existing tools
-- ✅ Automatic logging of all tool calls
-- ✅ Tracks successes and failures
-- ✅ Minimal performance overhead (<50ms)
+- ✓ Zero changes to existing tools
+- ✓ Automatic logging of all tool calls
+- ✓ Tracks successes and failures
+- ✓ Minimal performance overhead (<50ms)
 
 ---
 
@@ -87,8 +87,8 @@ agent = secure("langchain-agent")
 @aim_verify(agent=agent, risk_level="high")
 def delete_user(user_id: str) -> str:
     '''Delete a user from the database'''
-    # ✅ AIM verification happens BEFORE this code runs
-    # ❌ Raises PermissionError if verification fails
+    # ✓ AIM verification happens BEFORE this code runs
+    # ✗ Raises PermissionError if verification fails
     return f"Deleted user {user_id}"
 
 # Medium-risk tool
@@ -156,14 +156,14 @@ agent = create_react_agent(
 ```
 
 **Benefits**:
-- ✅ No code changes to existing tools
-- ✅ Batch wrap multiple tools at once
-- ✅ Consistent verification across all tools
-- ✅ Easy to add/remove verification
+- ✓ No code changes to existing tools
+- ✓ Batch wrap multiple tools at once
+- ✓ Consistent verification across all tools
+- ✓ Easy to add/remove verification
 
 ---
 
-## 📦 Installation
+## Installation
 
 ```bash
 # Install AIM SDK with LangChain support
@@ -179,7 +179,7 @@ pip install langchain langchain-core langchain-openai
 
 ---
 
-## 🔧 API Reference
+## API Reference
 
 ### AIMCallbackHandler
 
@@ -265,7 +265,7 @@ verified_tools = wrap_tools_with_aim(
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run the integration tests to verify everything works:
 
@@ -278,19 +278,19 @@ python test_langchain_integration.py
 ======================================================================
 TEST SUMMARY
 ======================================================================
-✅ PASSED: AIMCallbackHandler
-✅ PASSED: @aim_verify decorator
-✅ PASSED: AIMToolWrapper
-✅ PASSED: Graceful degradation
+✓ PASSED: AIMCallbackHandler
+✓ PASSED: @aim_verify decorator
+✓ PASSED: AIMToolWrapper
+✓ PASSED: Graceful degradation
 
 Total: 4/4 tests passed
 
-🎉 ALL TESTS PASSED - LangChain integration working perfectly!
+ALL TESTS PASSED - LangChain integration working perfectly!
 ```
 
 ---
 
-## 📊 What Gets Logged to AIM
+## What Gets Logged to AIM
 
 ### For Each Tool Invocation
 
@@ -312,18 +312,18 @@ Total: 4/4 tests passed
 
 ### Available in AIM Dashboard
 
-- ✅ **Tool name** and **description**
-- ✅ **Input** (first 100 chars)
-- ✅ **Output** (first 500 chars)
-- ✅ **Execution time**
-- ✅ **Success/failure status**
-- ✅ **Error messages** (if failed)
-- ✅ **Run ID** (for tracing)
-- ✅ **Tags** and **metadata**
+- ✓ **Tool name** and **description**
+- ✓ **Input** (first 100 chars)
+- ✓ **Output** (first 500 chars)
+- ✓ **Execution time**
+- ✓ **Success/failure status**
+- ✓ **Error messages** (if failed)
+- ✓ **Run ID** (for tracing)
+- ✓ **Tags** and **metadata**
 
 ---
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
 ### 1. Use Risk Levels Appropriately
 
@@ -362,7 +362,7 @@ chmod 600 ~/.aim/credentials.json
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "No AIM agent configured" Warning
 
@@ -411,7 +411,7 @@ except PermissionError as e:
 
 ---
 
-## 📈 Performance
+## Performance
 
 ### Benchmarks (Measured)
 
@@ -422,11 +422,11 @@ except PermissionError as e:
 | **Tool wrapping** | <1ms | One-time overhead |
 | **Total overhead** | **~10-15ms** | Per tool invocation |
 
-**Conclusion**: Minimal performance impact (<50ms target achieved ✅)
+**Conclusion**: Minimal performance impact (<50ms target achieved ✓)
 
 ---
 
-## 🎯 Real-World Examples
+## Real-World Examples
 
 ### Example 1: Customer Support Agent
 
@@ -487,7 +487,7 @@ def drop_table(table_name: str) -> str:
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
 1. **Install LangChain**: `pip install langchain langchain-core`
 2. **Register AIM Agent**: `python -c "from aim_sdk import secure; secure('langchain-agent')"`
@@ -497,7 +497,7 @@ def drop_table(table_name: str) -> str:
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **AIM Documentation**: [Main README](../../README.md)
 - **LangChain Docs**: https://python.langchain.com/docs/
@@ -506,7 +506,7 @@ def drop_table(table_name: str) -> str:
 
 ---
 
-**Integration Status**: ✅ **PRODUCTION-READY**
+**Integration Status**: ✓ **PRODUCTION-READY**
 **Last Tested**: October 8, 2025
 **Test Results**: 4/4 passing
 **LangChain Version**: 0.3.78
@@ -514,4 +514,4 @@ def drop_table(table_name: str) -> str:
 
 ---
 
-**Happy Building with AIM + LangChain! 🦜✨**
+**Happy Building with AIM + LangChain! **

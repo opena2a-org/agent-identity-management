@@ -1,27 +1,27 @@
-# 🤖 AIM + CrewAI Integration Guide
+# AIM + CrewAI Integration Guide
 
-**Status**: ✅ **PRODUCTION-READY** - Fully tested and verified
+**Status**: ✓ **PRODUCTION-READY** - Fully tested and verified
 **Last Updated**: October 8, 2025
-**Test Results**: 4/4 passing ✅
+**Test Results**: 4/4 passing ✓
 
 ---
 
-## 🎯 Overview
+## Overview
 
 Seamless integration between **AIM (Agent Identity Management)** and **CrewAI** for automatic verification and audit logging of multi-agent AI systems.
 
 ### What This Enables
 
-- ✅ **Crew-level verification** of multi-agent system executions
-- ✅ **Task-level verification** for individual agent tasks
-- ✅ **Automatic logging** of all crew and task executions
-- ✅ **Audit trail** for compliance (SOC 2, HIPAA, GDPR)
-- ✅ **Trust scoring** for AI agent crews
-- ✅ **Zero-friction** developer experience
+- ✓ **Crew-level verification** of multi-agent system executions
+- ✓ **Task-level verification** for individual agent tasks
+- ✓ **Automatic logging** of all crew and task executions
+- ✓ **Audit trail** for compliance (SOC 2, HIPAA, GDPR)
+- ✓ **Trust scoring** for AI agent crews
+- ✓ **Zero-friction** developer experience
 
 ---
 
-## 🚀 Quick Start (3 Options)
+## Quick Start (3 Options)
 
 ### Option 1: Crew Wrapper (Simplest)
 
@@ -77,10 +77,10 @@ result = verified_crew.kickoff(inputs={"topic": "AI safety"})
 ```
 
 **Benefits**:
-- ✅ Zero changes to existing crew code
-- ✅ Automatic verification of all executions
-- ✅ Works with sync and async kickoff
-- ✅ Minimal performance overhead
+- ✓ Zero changes to existing crew code
+- ✓ Automatic verification of all executions
+- ✓ Works with sync and async kickoff
+- ✓ Minimal performance overhead
 
 ---
 
@@ -103,8 +103,8 @@ agent = secure(
 @aim_verified_task(agent=aim_client, risk_level="high")
 def analyze_sensitive_data(data: str) -> str:
     '''Analyze sensitive financial data'''
-    # ✅ AIM verification happens BEFORE this code runs
-    # ❌ Raises PermissionError if verification fails
+    # ✓ AIM verification happens BEFORE this code runs
+    # ✗ Raises PermissionError if verification fails
     return perform_analysis(data)
 
 # Medium-risk task
@@ -172,14 +172,14 @@ crew.kickoff()
 ```
 
 **Benefits**:
-- ✅ Automatic logging of all task completions
-- ✅ Error logging for failed tasks
-- ✅ Minimal code changes
-- ✅ Works with existing tasks
+- ✓ Automatic logging of all task completions
+- ✓ Error logging for failed tasks
+- ✓ Minimal code changes
+- ✓ Works with existing tasks
 
 ---
 
-## 📦 Installation
+## Installation
 
 ```bash
 # Install AIM SDK with CrewAI support
@@ -195,7 +195,7 @@ pip3 install crewai crewai-tools
 
 ---
 
-## 🔧 API Reference
+## API Reference
 
 ### AIMCrewWrapper
 
@@ -287,7 +287,7 @@ task = Task(
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run the integration tests to verify everything works:
 
@@ -300,19 +300,19 @@ python3 sdks/python/test_crewai_integration.py
 ======================================================================
 TEST SUMMARY
 ======================================================================
-✅ PASSED: AIMCrewWrapper
-✅ PASSED: @aim_verified_task decorator
-✅ PASSED: AIMTaskCallback
-✅ PASSED: Graceful degradation
+✓ PASSED: AIMCrewWrapper
+✓ PASSED: @aim_verified_task decorator
+✓ PASSED: AIMTaskCallback
+✓ PASSED: Graceful degradation
 
 Total: 4/4 tests passed
 
-🎉 ALL TESTS PASSED - CrewAI integration working perfectly!
+ALL TESTS PASSED - CrewAI integration working perfectly!
 ```
 
 ---
 
-## 📊 What Gets Logged to AIM
+## What Gets Logged to AIM
 
 ### For Each Crew Execution
 
@@ -333,17 +333,17 @@ Total: 4/4 tests passed
 
 ### Available in AIM Dashboard
 
-- ✅ **Crew composition** (number of agents and tasks)
-- ✅ **Execution inputs** (first 100 chars)
-- ✅ **Execution outputs** (first 500 chars)
-- ✅ **Execution time** and **status**
-- ✅ **Success/failure** tracking
-- ✅ **Error messages** (if failed)
-- ✅ **Risk level** and **verification ID**
+- ✓ **Crew composition** (number of agents and tasks)
+- ✓ **Execution inputs** (first 100 chars)
+- ✓ **Execution outputs** (first 500 chars)
+- ✓ **Execution time** and **status**
+- ✓ **Success/failure** tracking
+- ✓ **Error messages** (if failed)
+- ✓ **Risk level** and **verification ID**
 
 ---
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
 ### 1. Use Risk Levels Appropriately
 
@@ -383,7 +383,7 @@ chmod 600 ~/.aim/credentials.json
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "No AIM agent configured" Warning
 
@@ -436,7 +436,7 @@ os.environ["OPENAI_API_KEY"] = "sk-..."
 
 ---
 
-## 📈 Performance
+## Performance
 
 ### Benchmarks (Measured)
 
@@ -447,11 +447,11 @@ os.environ["OPENAI_API_KEY"] = "sk-..."
 | **Callback logging** | <1ms | Async, non-blocking |
 | **Total overhead** | **~15-20ms** | Per crew execution |
 
-**Conclusion**: Minimal performance impact (<50ms target achieved ✅)
+**Conclusion**: Minimal performance impact (<50ms target achieved ✓)
 
 ---
 
-## 🎯 Real-World Examples
+## Real-World Examples
 
 ### Example 1: Research & Writing Crew
 
@@ -539,7 +539,7 @@ result = verified_crew.kickoff(inputs={"quarter": "Q4 2025"})
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
 1. **Install CrewAI**: `pip3 install crewai crewai-tools`
 2. **Register AIM Agent**: `python3 -c "from aim_sdk import secure; secure('crewai-agent')"`
@@ -549,7 +549,7 @@ result = verified_crew.kickoff(inputs={"quarter": "Q4 2025"})
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
 - **AIM Documentation**: [Main README](../../README.md)
 - **CrewAI Docs**: https://docs.crewai.com/
@@ -558,7 +558,7 @@ result = verified_crew.kickoff(inputs={"quarter": "Q4 2025"})
 
 ---
 
-**Integration Status**: ✅ **PRODUCTION-READY**
+**Integration Status**: ✓ **PRODUCTION-READY**
 **Last Tested**: October 8, 2025
 **Test Results**: 4/4 passing
 **CrewAI Version**: 0.201.1
@@ -566,4 +566,4 @@ result = verified_crew.kickoff(inputs={"quarter": "Q4 2025"})
 
 ---
 
-**Happy Building with AIM + CrewAI! 🤖✨**
+**Happy Building with AIM + CrewAI! **
