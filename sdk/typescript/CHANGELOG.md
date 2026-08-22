@@ -25,7 +25,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   The bin is named `aim-arp`, not `arp`: `arp` is a system utility on macOS
   and Linux and an unrelated npm package. Sensor enrollment (`register`) is
   deliberately not part of the shipped surface. A test now walks every command
-  citation in the shipped sources and fails when one names a command the
+  citation in the shipped TypeScript sources and fails when one names a command the
   package does not register, so this class cannot silently return.
 
 ### Fixed
@@ -35,7 +35,7 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   root secret — as a side effect of looking. A read command now reads: identity
   fields report `none yet (created on first send)` until a send mints them.
 
-- **Server-supplied text is sanitised before it can reach your terminal.**
+- **Server-supplied text is sanitized before it can reach your terminal.**
   Registry error and message strings printed by `opt-out`, `purge` and
   enrollment failures are stripped of C0/C1 control bytes (ANSI escapes,
   carriage-return overwrite) and capped at 500 chars with an explicit
@@ -43,6 +43,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   [#384](https://github.com/opena2a-org/agent-identity-management/issues/384).
   The manual-retry `curl` commands also single-quote-escape their interpolated
   values.
+
+- **A registry-assigned sensor id is shape-validated before it is persisted.**
+  Enrollment adopted the server's `sensorId` verbatim into a local file that
+  `telemetry status` later prints; a hostile registry could place
+  terminal-driving bytes there. Ids are now accepted only when they match
+  `^[A-Za-z0-9._-]{1,128}$`, and status strips control bytes from anything it
+  reads off disk regardless.
+
+- **`opt-out` and `purge` no longer create a sensor identity on a machine that
+  never sent.** Building the purge proof minted the identity it was about to
+  purge. Both commands now check first and report that there is nothing to
+  purge.
 
 - **`@opena2a/aim-sdk/arp` now reports the version npm published.** Its
   `VERSION` export was a second hand-maintained literal that read `0.2.0` from

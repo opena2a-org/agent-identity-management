@@ -175,3 +175,36 @@ describe('readEnrollmentRecord', () => {
     expect(readEnrollmentRecord()).toBeNull();
   });
 });
+
+describe('a hostile registry cannot place terminal-driving bytes in the persisted id', () => {
+  // CISO pre-tag blocker B1 (2026-08-22): the assigned sensorId is persisted
+  // and later printed by `telemetry status`, so it is shape-validated where it
+  // enters — rejected, not repaired.
+  const HOSTILE_IDS = [
+    '\x1b[2K\x1b[1Aowned',
+    'abc\x9b31mdef',
+    'id\rwith\roverwrites',
+    'x'.repeat(129), // over-long
+    'has spaces and; semicolons',
+  ];
+
+  for (const hostile of HOSTILE_IDS) {
+    it(`rejects ${JSON.stringify(hostile.slice(0, 20))}...`, async () => {
+      const fakeFetch = (async () =>
+        ({ ok: true, status: 201, json: async () => ({ sensorId: hostile, state: 'pending' }) }) as unknown as Response) as unknown as typeof fetch;
+
+      const res = await enrollSensor({ registryUrl: 'https://r.test' }, { fetchImpl: fakeFetch });
+      expect(res.ok).toBe(true);
+      expect(res.sensorId).toBeUndefined();
+      // Nothing hostile was persisted.
+      expect(existsSync(join(home, SENSOR_ID_FILE))).toBe(false);
+    });
+  }
+
+  it('still accepts a normal service-account id', async () => {
+    const fakeFetch = (async () =>
+      ({ ok: true, status: 201, json: async () => ({ sensorId: 'svc-acct.0042', state: 'verified' }) }) as unknown as Response) as unknown as typeof fetch;
+    const res = await enrollSensor({ registryUrl: 'https://r.test' }, { fetchImpl: fakeFetch });
+    expect(res.sensorId).toBe('svc-acct.0042');
+  });
+});

@@ -183,7 +183,15 @@ export async function enrollSensor(
     try {
       const json = (await res.json()) as { sensorId?: string; state?: string; message?: string };
       if (json?.state === 'pending' || json?.state === 'verified') state = json.state;
-      if (typeof json?.sensorId === 'string') sensorId = json.sensorId;
+      // Shape-validated where it enters (#384 class): this value is PERSISTED
+      // and later printed by `telemetry status`, so a hostile registry must not
+      // be able to place terminal-driving bytes in it. A service-account id is
+      // ASCII word characters, dots and hyphens; anything else is rejected,
+      // not repaired -- a repaired id would fail the registry's exact-match
+      // identity resolution anyway.
+      if (typeof json?.sensorId === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(json.sensorId)) {
+        sensorId = json.sensorId;
+      }
       if (typeof json?.message === 'string') message = sanitizeTerminalText(json.message);
     } catch {
       // A 2xx with an unparseable body still counts as success; details unknown.

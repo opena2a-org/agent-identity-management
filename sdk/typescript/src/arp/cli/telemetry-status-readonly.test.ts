@@ -83,3 +83,16 @@ describe('peek functions', () => {
     }
   });
 });
+
+describe('opt-out and purge do not mint identity on a machine that never sent', () => {
+  it('purge on a clean home creates nothing and says there is nothing to purge', async () => {
+    const lines: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      lines.push(a.join(' '));
+    });
+    const { telemetryPurge } = await import('./telemetry');
+    await telemetryPurge(undefined);
+    expect(existsSync(home)).toBe(false);
+    expect(lines.join('\n')).toContain('nothing to purge');
+  });
+});

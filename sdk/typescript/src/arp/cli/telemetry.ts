@@ -24,6 +24,7 @@ import {
   purgeRemoteSignatures,
   manualPurgeCurl,
   readEnrollmentRecord,
+  sanitizeTerminalText,
 } from '../telemetry/signature';
 import type { SignatureTelemetryConfig } from '../types';
 
@@ -47,10 +48,10 @@ export function telemetryHelpText(): string {
   ${SHIPPED_INVOCATION} <subcommand>
 
     status        Show telemetry state, sensor identity, and send counts
-    log [N]       Show the last N audited payloads sent (default 20)
+    log [N]       Show the last N audited payloads (default 20)
     disclosure    Print the full install-time disclosure
-    opt-out       Disable ALL OpenA2A telemetry (also deletes already-sent
-                  signatures from the registry; use --no-purge to skip that)
+    opt-out       Disable ALL OpenA2A telemetry (also asks the registry to
+                  delete already-sent signatures; use --no-purge to skip that)
     opt-in        Remove the local opt-out marker (does not turn the channel on)
     purge         Ask the registry to delete already-sent signatures (right-to-delete)
 
@@ -69,15 +70,19 @@ export async function telemetryLog(countArg?: string): Promise<void> {
     console.log('  No telemetry has been sent yet (or the log is empty).\n');
     return;
   }
-  console.log(`  Last ${records.length} record(s) — every byte that left this machine:\n`);
+  console.log(
+    `  Last ${records.length} record(s), audited before any send (phase shows whether each was sent):\n`,
+  );
   for (const r of records) {
     const phase = r.phase.toUpperCase().padEnd(9);
     console.log(`  ${r.ts}  ${phase}  ${r.techniqueId.padEnd(10)} ${r.severity}/${r.outcome}`);
     if (r.body) console.log(`      payload: ${r.body}`);
     if (r.detail) console.log(`      detail:  ${r.detail}`);
   }
-  console.log('\n  This is exactly what was transmitted. No payloads, prompts, args,');
-  console.log('  paths, secrets, or identities are present by design.\n');
+  console.log("\n  A sent record's payload is byte-for-byte what left this machine. No");
+  console.log('  prompts, tool args, paths, file contents, or secrets are present by');
+  console.log('  design; the only identifiers are the sensor id and the rotating org');
+  console.log('  pseudonym in the payload.\n');
 }
 
 export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<void> {
@@ -101,12 +106,16 @@ export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<
   }
   console.log(`  Registry:     ${resolveRegistryUrl(tcfg)}`);
   // Read-only: status must never CREATE identity state. Peeks return null until
-  // the first send mints an identity.
+  // the first send mints an identity. Peeked values pass the terminal strip as
+  // defence in depth -- an on-disk id predating enroll's shape validation, or
+  // one written by another tool, must not drive the terminal.
   const sensorId = peekSensorId();
   const orgPseudonym = peekOrgPseudonym();
-  console.log(`  Sensor id:    ${sensorId ?? 'none yet (created on first send)'}`);
   console.log(
-    `  Org pseudonym:${' '}${orgPseudonym ? `${orgPseudonym} (rotates monthly)` : 'none yet (created on first send)'}`,
+    `  Sensor id:    ${sensorId ? sanitizeTerminalText(sensorId) : 'none yet (created on first send)'}`,
+  );
+  console.log(
+    `  Org pseudonym:${' '}${orgPseudonym ? `${sanitizeTerminalText(orgPseudonym)} (rotates monthly)` : 'none yet (created on first send)'}`,
   );
   const enrollment = readEnrollmentRecord();
   if (enrollment) {
@@ -152,7 +161,7 @@ export async function telemetryOptOut(
     console.log('  Skipped deleting already-sent signatures (--no-purge).');
     console.log(`  Delete them later with: ${SHIPPED_INVOCATION} purge`);
   } else {
-    await runRemotePurge(tcfg);
+    await runRemotePurge(tcfg, 'opt-out');
   }
   console.log(`  Re-enable with: ${SHIPPED_INVOCATION} opt-in\n`);
 }
@@ -160,7 +169,7 @@ export async function telemetryOptOut(
 export async function telemetryPurge(tcfg?: SignatureTelemetryConfig): Promise<void> {
   // Standalone right-to-delete: request the registry delete already-sent
   // signatures without changing the opt-out state.
-  await runRemotePurge(tcfg);
+  await runRemotePurge(tcfg, 'purge');
   console.log('');
 }
 
@@ -186,7 +195,20 @@ export function telemetryOptIn(tcfg?: SignatureTelemetryConfig): void {
 // signatures (G6 right-to-delete). Fails OPEN: any network/registry failure is
 // reported with a manual retry command but never throws — the caller's opt-out
 // (or standalone purge intent) completes regardless.
-async function runRemotePurge(tcfg?: SignatureTelemetryConfig): Promise<void> {
+//
+// A machine with no sensor identity has never sent anything, so there is
+// nothing to purge — and building the purge proof would MINT the identity it
+// is about to purge, which falsifies status's 'created on first send'. Peek
+// first; skip the remote call when no identity exists.
+async function runRemotePurge(
+  tcfg: SignatureTelemetryConfig | undefined,
+  context: 'opt-out' | 'purge',
+): Promise<void> {
+  if (peekSensorId() === null) {
+    console.log('  No sensor identity exists; nothing has ever been sent from this');
+    console.log('  machine, so there is nothing to purge.');
+    return;
+  }
   console.log('  Requesting deletion of already-sent signatures from the registry...');
   const result = await purgeRemoteSignatures(tcfg);
   if (result.ok) {
@@ -194,9 +216,13 @@ async function runRemotePurge(tcfg?: SignatureTelemetryConfig): Promise<void> {
     console.log(`  Registry purge complete (deleted: ${n}).`);
     return;
   }
-  // Fail open: the local opt-out still stands; tell the user how to retry the purge.
+  // Fail open; the two callers' true states differ and must not share a claim.
   console.log(`  Could not reach the registry to delete sent signatures (${result.error ?? 'unknown error'}).`);
-  console.log('  Your opt-out still took effect locally; no new data will be sent.');
+  if (context === 'opt-out') {
+    console.log('  Your opt-out still took effect locally; no new data will be sent.');
+  } else {
+    console.log('  Nothing was deleted; your local telemetry state is unchanged.');
+  }
   console.log(`  Retry the deletion later with: ${SHIPPED_INVOCATION} purge`);
   console.log('  Or run it directly:');
   console.log(`    ${manualPurgeCurl(result)}`);
