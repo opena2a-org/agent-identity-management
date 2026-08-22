@@ -38,7 +38,7 @@ voids that reasoning and makes a signed, expiring mode assertion mandatory.
 
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
@@ -47,6 +47,40 @@ from typing import Optional
 # not a finding. It bounds how long a process keeps enforcing a mode the
 # organization may have already changed.
 DEFAULT_MODE_TTL_SECONDS = 300
+
+# A reason longer than this is truncated with an explicit marker. The server
+# accepts denial reasons up to its body limit; nothing a human wrote for a human
+# needs more than this on a terminal.
+REASON_MAX_CHARS = 500
+_TRUNCATION_MARKER = " [truncated]"
+
+
+def _sanitize_reason(raw: object) -> str:
+    """
+    Make a server-supplied string safe to place in an exception message or a
+    console line (#384).
+
+    Total over any input: a non-str value (a server sending ``{"reason": 123}``
+    or a JSON object) is coerced with ``str()`` first. Raising here would turn
+    an explicit DENY into UNKNOWN at construction time -- a fail-open -- so this
+    function must never raise.
+
+    C0 control bytes other than newline and tab, DEL, and the C1 range are
+    stripped: ESC and the single-byte CSI drive the reader's terminal instead of
+    being read, and carriage return overwrites the line the developer just saw.
+    Newline itself is kept (ordinary whitespace, per #384's acceptance) -- a
+    multi-line reason is an accepted residual, visible as indented continuation
+    text. Unicode bidi controls are deliberately NOT stripped -- legitimate RTL
+    text may carry them, and this value renders in contexts we do not control.
+    """
+    if not isinstance(raw, str):
+        raw = str(raw)
+    cleaned = "".join(
+        ch for ch in raw if not ((ch < " " and ch not in "\n\t") or "\x7f" <= ch <= "\x9f")
+    )
+    if len(cleaned) > REASON_MAX_CHARS:
+        cleaned = cleaned[:REASON_MAX_CHARS] + _TRUNCATION_MARKER
+    return cleaned
 
 
 class Outcome(str, Enum):
@@ -101,6 +135,17 @@ class VerificationDecision:
     approved_by: Optional[str] = None
     expires_at: Optional[str] = None
     unknown_source: UnknownSource = UnknownSource.NONE
+
+    def __post_init__(self):
+        # Sanitised at construction rather than at each message site, so a new
+        # message builder reading decision.reason cannot miss it (#384). This
+        # covers only DECISION-BORNE strings: client.py also prints server text
+        # directly (pre-decision console warnings, the 401 exception message)
+        # and sanitises those at their own entry sites, with a control-byte
+        # strip in AIMConsole as defence in depth. The other fields here are
+        # returned to callers as data, and rewriting an id would corrupt it.
+        if self.reason is not None:
+            object.__setattr__(self, "reason", _sanitize_reason(self.reason))
 
     @property
     def allowed(self) -> bool:

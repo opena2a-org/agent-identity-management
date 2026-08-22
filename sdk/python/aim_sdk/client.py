@@ -36,6 +36,7 @@ from .decision import (
     Outcome,
     UnknownSource,
     VerificationDecision,
+    _sanitize_reason,
     parse_enforcement_mode,
     resolve_mode,
 )
@@ -901,7 +902,10 @@ class AIMClient:
                     error_detail = response.json().get("error", "unknown error")
                 except:
                     error_detail = response.text
-                raise AuthenticationError(f"Authentication failed - invalid agent credentials: {error_detail}")
+                # Server text sanitised where it enters the message (#384 class).
+                raise AuthenticationError(
+                    f"Authentication failed - invalid agent credentials: {_sanitize_reason(error_detail)}"
+                )
 
             # Handle forbidden errors (denied action or agent status issue).
             # A 403 on this route is the server refusing the action -- the wire
@@ -925,7 +929,7 @@ class AIMClient:
                 if not isinstance(body, dict):
                     body = {}
 
-                error_detail = (
+                error_detail = _sanitize_reason(
                     body.get("denialReason")
                     or body.get("error")  # a proxy or gateway 403, not ours
                     or (response.text if not body else None)
@@ -994,10 +998,14 @@ class AIMClient:
             if response.status_code >= 400:
                 error_msg = f"HTTP {response.status_code} error"
                 try:
-                    error_detail = response.json().get("error", response.text)
+                    # Server text sanitised where it enters the string that both
+                    # the console warning and the decision reason are built from
+                    # (#384 class) — this print happens BEFORE the decision
+                    # exists, so construction-time sanitisation cannot cover it.
+                    error_detail = _sanitize_reason(response.json().get("error", response.text))
                     error_msg = f"{error_msg}: {error_detail}"
                 except Exception:
-                    error_msg = f"{error_msg}: {response.text[:200]}"
+                    error_msg = f"{error_msg}: {_sanitize_reason(response.text[:200])}"
 
                 console.warning(f"Verification request failed: {error_msg}")
                 return self._undetermined(error_msg, UnknownSource.SERVER_ANSWER)
@@ -1597,10 +1605,11 @@ class AIMClient:
                 if response.status_code >= 400:
                     error_msg = f"HTTP {response.status_code} error"
                     try:
-                        error_detail = response.json().get("error", response.text)
+                        # Server text sanitised at entry (#384 class).
+                        error_detail = _sanitize_reason(response.json().get("error", response.text))
                         error_msg = f"{error_msg}: {error_detail}"
                     except:
-                        error_msg = f"{error_msg}: {response.text[:200]}"
+                        error_msg = f"{error_msg}: {_sanitize_reason(response.text[:200])}"
                     # Continue polling on transient errors, but log the issue
                     console.warning(f"Error polling verification status: {error_msg}")
                     time.sleep(poll_interval)

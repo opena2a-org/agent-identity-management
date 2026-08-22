@@ -23,6 +23,22 @@ except ImportError:
 # Global console instance
 _console = Console() if RICH_AVAILABLE else None
 
+
+def _strip_control_bytes(text: str) -> str:
+    """
+    Defence in depth for the free-text output methods (#384 class): drop C0
+    control bytes other than newline and tab, DEL, and the C1 range, so a
+    message assembled from server text cannot drive the reader's terminal even
+    if a call site forgot to sanitise. No length cap here — legitimate console
+    content can be long; length bounds belong at the untrusted-value entry
+    sites (decision.py / client.py).
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    return "".join(
+        ch for ch in text if not ((ch < " " and ch not in "\n\t") or "\x7f" <= ch <= "\x9f")
+    )
+
 # AIM Brand Colors
 BRAND_BLUE = "#3B82F6"
 BRAND_TEAL = "#14B8A6"
@@ -366,7 +382,9 @@ class AIMConsole:
         if self.quiet:
             return
 
-        reason_str = f" - {reason}" if reason else ""
+        # Same sink defence as warning/error/info: today's callers pass a
+        # sanitised decision.reason, but a future caller may not.
+        reason_str = f" - {_strip_control_bytes(reason)}" if reason else ""
         if RICH_AVAILABLE:
             self.console.print(f"  [bold red]✗[/] [cyan]{capability}[/] [red]denied[/]{reason_str}")
         else:
@@ -408,6 +426,8 @@ class AIMConsole:
 
     def error(self, message: str, details: Optional[str] = None):
         """Display error message."""
+        message = _strip_control_bytes(message)
+        details = _strip_control_bytes(details) if details else details
         if RICH_AVAILABLE:
             self.console.print(f"[bold red]✗ Error:[/] {message}")
             if details:
@@ -419,6 +439,7 @@ class AIMConsole:
 
     def warning(self, message: str):
         """Display warning message."""
+        message = _strip_control_bytes(message)
         if RICH_AVAILABLE:
             self.console.print(f"[yellow]Warning:[/] {message}")
         else:
@@ -426,6 +447,7 @@ class AIMConsole:
 
     def info(self, message: str):
         """Display info message."""
+        message = _strip_control_bytes(message)
         if RICH_AVAILABLE:
             self.console.print(f"{message}")
         else:
