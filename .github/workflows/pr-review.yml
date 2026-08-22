@@ -264,7 +264,7 @@ jobs:
         # — and copy-paste is how one defect became nine. Pinned to a SHA, never
         # @main: @main would move every consuming repo, and this check is
         # REQUIRED on this repo's main, the instant that file changed.
-        uses: opena2a-org/.github/actions/claude-review@d278bf3b88f8822a8c3b020aac3f824db33a18e2
+        uses: opena2a-org/.github/actions/claude-review@025b1897886f261c12ccc79da3f75d345842c897
         with:
           # A composite action cannot read `secrets`, so the caller passes it in.
           # A step `env:` is the boundary GitHub actually enforces: this key
