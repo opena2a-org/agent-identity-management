@@ -56,9 +56,9 @@ export function telemetryHelpText(): string {
     purge         Ask the registry to delete already-sent signatures (right-to-delete)
 
   Structural signatures are OFF unless you turn them on with AIM_TELEMETRY=1
-  or signatureTelemetry.enabled: true. Only the SHAPE of an anomalous
-  behavior is shared, never payloads. Every byte sent is recorded locally
-  first — review it with: ${SHIPPED_INVOCATION} log
+  or signatureTelemetry.enabled: true. The SHAPE of an anomalous behavior is
+  shared (plus a sensor id and org pseudonym), never payloads. Every byte
+  sent is recorded locally first — review it with: ${SHIPPED_INVOCATION} log
 `;
 }
 
