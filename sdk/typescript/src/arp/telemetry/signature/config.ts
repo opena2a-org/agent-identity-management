@@ -63,7 +63,7 @@ function envTruthy(name: string): boolean {
  * That variable is an ecosystem CLI switch, while this SDK is a library inside
  * someone else's production process; opting in stays explicit and AIM-specific.
  */
-function ecosystemOptOut(): boolean {
+export function ecosystemOptOut(): boolean {
   const v = process.env.OPENA2A_TELEMETRY;
   if (v === undefined) return false;
   const s = v.trim().toLowerCase();

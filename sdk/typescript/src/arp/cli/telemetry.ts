@@ -25,6 +25,8 @@ import {
   manualPurgeCurl,
   readEnrollmentRecord,
   sanitizeTerminalText,
+  ecosystemOptOut,
+  optOutMarkerExists,
 } from '../telemetry/signature';
 import type { SignatureTelemetryConfig } from '../types';
 
@@ -158,8 +160,12 @@ export async function telemetryOptOut(
   console.log(`  Marker: ${p}`);
 
   if (opts.noPurge) {
-    console.log('  Skipped deleting already-sent signatures (--no-purge).');
-    console.log(`  Delete them later with: ${SHIPPED_INVOCATION} purge`);
+    if (peekSensorId() === null) {
+      console.log('  Nothing was ever sent from this machine, so there is nothing to delete.');
+    } else {
+      console.log('  Skipped deleting already-sent signatures (--no-purge).');
+      console.log(`  Delete them later with: ${SHIPPED_INVOCATION} purge`);
+    }
   } else {
     await runRemotePurge(tcfg, 'opt-out');
   }
@@ -174,13 +180,14 @@ export async function telemetryPurge(tcfg?: SignatureTelemetryConfig): Promise<v
 }
 
 export function telemetryOptIn(tcfg?: SignatureTelemetryConfig): void {
+  const hadMarker = optOutMarkerExists();
   clearOptOutMarker();
   const stillOff = isOptedOut(tcfg);
-  console.log('\n  Opt-out marker removed.');
+  console.log(hadMarker ? '\n  Opt-out marker removed.' : '\n  No opt-out marker was present.');
   if (stillOff) {
     console.log('  NOTE: telemetry is still disabled by an env var or config');
-    console.log('  (OPENA2A_TELEMETRY_OPTOUT / ARP_TELEMETRY_DISABLED, or');
-    console.log('  signatureTelemetry.enabled: false). Clear those to re-enable.\n');
+    console.log('  (OPENA2A_TELEMETRY=off, OPENA2A_TELEMETRY_OPTOUT, ARP_TELEMETRY_DISABLED,');
+    console.log('  or signatureTelemetry.enabled: false). Clear those to re-enable.\n');
   } else if (signatureTelemetryEnabled(tcfg)) {
     console.log('  Structural signature telemetry is ON.\n');
   } else {
@@ -230,6 +237,9 @@ async function runRemotePurge(
 
 function optOutReason(tcfg?: SignatureTelemetryConfig): string {
   if (tcfg?.enabled === false) return 'config (signatureTelemetry.enabled: false)';
+  // The published ecosystem spelling gets its own attribution: the clear
+  // instruction differs (unset the variable; opt-in cannot clear it).
+  if (ecosystemOptOut()) return 'environment variable (OPENA2A_TELEMETRY; unset it to clear)';
   if (process.env.OPENA2A_TELEMETRY_OPTOUT || process.env.ARP_TELEMETRY_DISABLED) return 'environment variable';
   return `local opt-out marker (${SHIPPED_INVOCATION} opt-in to clear)`;
 }

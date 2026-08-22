@@ -96,3 +96,67 @@ describe('opt-out and purge do not mint identity on a machine that never sent', 
     expect(lines.join('\n')).toContain('nothing to purge');
   });
 });
+
+describe('opt-out attribution names the source that is actually in effect', () => {
+  // The 1.3.0 release walkthrough found OPENA2A_TELEMETRY=off attributed to a
+  // "local opt-out marker" with `opt-in` cited as the fix — a dead end, since
+  // opt-in cannot clear an env var.
+  function statusOutput(): Promise<string> {
+    const lines: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      lines.push(a.join(' '));
+    });
+    return import('./telemetry').then((t) => t.telemetryStatus(undefined)).then(() => lines.join('\n'));
+  }
+
+  it('OPENA2A_TELEMETRY=off is attributed to the env var, not the marker', async () => {
+    process.env.OPENA2A_TELEMETRY = 'off';
+    try {
+      const out = await statusOutput();
+      expect(out).toContain('OFF (opted out)');
+      expect(out).toContain('OPENA2A_TELEMETRY');
+      expect(out).not.toContain('local opt-out marker');
+    } finally {
+      delete process.env.OPENA2A_TELEMETRY;
+    }
+  });
+
+  it('opt-in under OPENA2A_TELEMETRY=off names that spelling in its NOTE', async () => {
+    process.env.OPENA2A_TELEMETRY = 'off';
+    const lines: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      lines.push(a.join(' '));
+    });
+    try {
+      const { telemetryOptIn } = await import('./telemetry');
+      telemetryOptIn(undefined);
+      const out = lines.join('\n');
+      expect(out).toContain('OPENA2A_TELEMETRY=off');
+    } finally {
+      delete process.env.OPENA2A_TELEMETRY;
+    }
+  });
+
+  it('opt-in on a clean home does not claim a marker was removed', async () => {
+    const lines: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      lines.push(a.join(' '));
+    });
+    const { telemetryOptIn } = await import('./telemetry');
+    telemetryOptIn(undefined);
+    expect(lines.join('\n')).toContain('No opt-out marker was present');
+    expect(lines.join('\n')).not.toContain('marker removed');
+  });
+
+  it('opt-out --no-purge on a never-sent machine does not cite a later purge', async () => {
+    const lines: string[] = [];
+    vi.mocked(console.log).mockImplementation((...a: unknown[]) => {
+      lines.push(a.join(' '));
+    });
+    const { telemetryOptOut } = await import('./telemetry');
+    await telemetryOptOut(undefined, { noPurge: true });
+    const out = lines.join('\n');
+    expect(out).toContain('nothing to delete');
+    expect(out).not.toContain('Delete them later');
+  });
+});
