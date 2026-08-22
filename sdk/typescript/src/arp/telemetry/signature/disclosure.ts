@@ -5,8 +5,10 @@
  * it on: it confirms plainly what that choice shares, what it never shares, and
  * how to reverse it. Intentionally plain and non-marketing (CPO/legal voice).
  * Shown once (a marker is written after the first show) and always available on
- * demand via `disclosureText()` (or `arp telemetry disclosure` for hackmyagent
- * CLI users).
+ * demand via `disclosureText()` or `aim-arp telemetry disclosure`.
+ *
+ * Every command this text cites must be registered by the shipped `aim-arp`
+ * bin — enforced by cli/cited-commands.test.ts (#400).
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -44,8 +46,8 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'verify exactly what left your machine.',
     '',
     `Audit log:  ${auditLogPath()}`,
-    'Review it:  read the audit log file above. If you installed the hackmyagent',
-    '            CLI you can also run `arp telemetry log` / `arp telemetry status`.',
+    'Review it:  read the audit log file above, or run `aim-arp telemetry log` /',
+    '            `aim-arp telemetry status` (also: `npx @opena2a/aim-sdk telemetry log`).',
     '',
     'This channel is OFF unless you turn it on (either one):',
     '  - set AIM_TELEMETRY=1',
@@ -54,7 +56,7 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'How to turn it off again (any one):',
     '  - set OPENA2A_TELEMETRY_OPTOUT=1 (or ARP_TELEMETRY_DISABLED=1)',
     '  - signatureTelemetry.enabled: false in your ARP config',
-    '  - run `arp telemetry opt-out` (hackmyagent CLI)',
+    '  - run `aim-arp telemetry opt-out` (or `npx @opena2a/aim-sdk telemetry opt-out`)',
     'An opt-out always wins over an opt-in. It disables every channel this',
     'runtime-protection module produces: structural signatures, the legacy GTIN',
     'channel, and fleet behavioral gradients. It also purges signatures this',

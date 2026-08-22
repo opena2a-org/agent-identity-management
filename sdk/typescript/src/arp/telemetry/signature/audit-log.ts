@@ -3,7 +3,7 @@
  *
  * BEFORE any payload is transmitted, the producer appends to this local,
  * append-only JSONL log EXACTLY the bytes it will send. A customer can therefore
- * verify with their own eyes (via `arp telemetry log`) that no payload, prompt,
+ * verify with their own eyes (via `aim-arp telemetry log`) that no payload, prompt,
  * argument, path, secret, or PII ever leaves the device — the evidence behind
  * the claim, rather than a promise to be taken on trust.
  *
@@ -81,7 +81,7 @@ export function queuedRecord(
 }
 
 /**
- * Read the last `limit` audit records (default 100) for `arp telemetry log`.
+ * Read the last `limit` audit records (default 100) for `aim-arp telemetry log`.
  * Returns [] if the log does not exist yet.
  */
 export async function readAuditRecords(limit = 100): Promise<AuditRecord[]> {
