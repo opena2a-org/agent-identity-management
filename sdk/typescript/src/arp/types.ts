@@ -77,7 +77,7 @@ export interface ARPConfig {
    * Structural signature telemetry (OFF by default, opt-in). Distinct from GTIN.
    * Emits only the structural shape of anomalous behaviors, with a local audit
    * log of every byte sent. Turn on with `enabled: true` or AIM_TELEMETRY=1.
-   * Set `enabled: false` (or OPENA2A_TELEMETRY_OPTOUT, or `arp telemetry
+   * Set `enabled: false` (or OPENA2A_TELEMETRY_OPTOUT, or `aim-arp telemetry
    * opt-out`) to disable ALL OpenA2A telemetry.
    */
   signatureTelemetry?: SignatureTelemetryConfig;

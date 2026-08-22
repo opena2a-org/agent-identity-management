@@ -379,10 +379,12 @@ one-way hash of structural tokens — is signed and reported to the OpenA2A
 registry (`https://api.oa2a.org`), so an attack shape first seen at one
 deployment can protect others. Prompts, model responses, tool arguments, file
 contents or paths, command lines, environment values, secrets, IP addresses,
-hostnames, and account, tool, agent, and model names are never shared. A
-one-time disclosure is printed before first collection, and every payload is
-appended to a local audit log (`~/.opena2a/telemetry-audit.log`, JSONL) before
-it is sent.
+hostnames, and account, tool, agent, and model names never appear in a report.
+A report does carry a random per-install sensor id and a monthly-rotating org
+pseudonym alongside the structural fields. A one-time disclosure is printed
+before first collection, and every payload is appended to a local audit log
+(`~/.opena2a/telemetry-audit.log`, JSONL) before it is sent — review it with
+`aim-arp telemetry log` (or `npx @opena2a/aim-sdk telemetry log`).
 
 Turn it on with either of:
 
@@ -399,17 +401,19 @@ Turn it off again — an opt-out always wins over an opt-in — with any one of:
   not start a network channel on the strength of an ecosystem-wide CLI setting.
 - `OPENA2A_TELEMETRY_OPTOUT=1` (or `ARP_TELEMETRY_DISABLED=1`) in the
   environment,
-- `signatureTelemetry: { enabled: false }` in your ARP config, or
+- `signatureTelemetry: { enabled: false }` in your ARP config,
+- `aim-arp telemetry opt-out`, the consent CLI this package installs (also asks
+  the registry to delete already-sent signatures), or
 - `writeOptOutMarker()` from `@opena2a/aim-sdk/arp`, which persists
   `~/.opena2a/telemetry-optout` across processes.
 
 Any one of these is the runtime-protection module's master switch: it disables
-every telemetry channel the module can produce - structural signatures, the
+every telemetry channel the module can produce — structural signatures, the
 opt-in legacy GTIN runtime channel, and fleet behavioral gradients. The causal-denial channel above is
 controlled solely by its own `telemetry` client config and is off unless you
-enabled it. To also delete signatures this sensor already shared, call
-`purgeRemoteSignatures()` (right-to-delete; best-effort, never blocks the
-local opt-out).
+enabled it. To also delete signatures this sensor already shared, run
+`aim-arp telemetry purge` (or call `purgeRemoteSignatures()`) — right-to-delete;
+best-effort, never blocks the local opt-out.
 
 ## Configuration
 

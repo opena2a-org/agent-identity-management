@@ -55,6 +55,20 @@ export function loadSensorId(): string {
 }
 
 /**
+ * Read the sensor id WITHOUT creating one. Returns null when no identity exists
+ * yet. Read-only surfaces (`aim-arp telemetry status`) must use this: a status
+ * command that mints a persistent identity is a side effect nobody consented to.
+ */
+export function peekSensorId(): string | null {
+  const fromEnv = process.env.OPENA2A_SENSOR_ID;
+  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
+  const p = homePath(SENSOR_ID_FILE);
+  if (!existsSync(p)) return null;
+  const id = readFileSync(p, 'utf8').trim();
+  return id || null;
+}
+
+/**
  * Persist the sensor id locally (the canonical SENSOR_ID_FILE). Used after a
  * successful enrollment to ADOPT the registry-assigned service-account id as this
  * sensor's id, so future reports carry the id the registry binds to the registered

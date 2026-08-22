@@ -5,8 +5,10 @@
  * it on: it confirms plainly what that choice shares, what it never shares, and
  * how to reverse it. Intentionally plain and non-marketing (CPO/legal voice).
  * Shown once (a marker is written after the first show) and always available on
- * demand via `disclosureText()` (or `arp telemetry disclosure` for hackmyagent
- * CLI users).
+ * demand via `disclosureText()` or `aim-arp telemetry disclosure`.
+ *
+ * Every command this text cites must be registered by the shipped `aim-arp`
+ * bin — enforced by cli/cited-commands.test.ts (#400).
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -29,12 +31,15 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     '----------------------------------------',
     status,
     '',
-    'What is shared: only the STRUCTURAL SHAPE of an anomalous behavior the',
-    'runtime observed — a technique class, an action/target category, an outcome,',
-    'a severity, and a one-way hash of those tokens. Reports are signed so the',
-    'registry can recognize the same attack shape seen across deployments.',
+    'What is shared: the STRUCTURAL SHAPE of an anomalous behavior the runtime',
+    'observed — a technique class, a severity, an outcome, an event count, and a',
+    'one-way hash of allowlisted structural tokens (action/target categories',
+    'among them). Each report also carries a random per-install sensor id, a',
+    'monthly-rotating org pseudonym, and the sensor key signature, so the',
+    'registry can tell one sensor seeing an attack shape twice from the same',
+    'shape appearing at many deployments.',
     '',
-    'What is NEVER shared: prompts, model responses, tool arguments, file',
+    'What a report NEVER contains: prompts, model responses, tool arguments, file',
     'contents or paths, command lines, environment values, secrets, IP addresses,',
     'hostnames, account ids, or the names of your tools, agents, or models.',
     '',
@@ -44,21 +49,24 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'verify exactly what left your machine.',
     '',
     `Audit log:  ${auditLogPath()}`,
-    'Review it:  read the audit log file above. If you installed the hackmyagent',
-    '            CLI you can also run `arp telemetry log` / `arp telemetry status`.',
+    'Review it:  read the audit log file above, or run `aim-arp telemetry log` /',
+    '            `aim-arp telemetry status` (also: `npx @opena2a/aim-sdk telemetry log`).',
     '',
     'This channel is OFF unless you turn it on (either one):',
     '  - set AIM_TELEMETRY=1',
     '  - signatureTelemetry.enabled: true in your ARP config',
     '',
     'How to turn it off again (any one):',
-    '  - set OPENA2A_TELEMETRY_OPTOUT=1 (or ARP_TELEMETRY_DISABLED=1)',
+    '  - set OPENA2A_TELEMETRY=off (the ecosystem switch opena2a.org/privacy',
+    '    documents; OPENA2A_TELEMETRY_OPTOUT=1 and ARP_TELEMETRY_DISABLED=1 also work)',
     '  - signatureTelemetry.enabled: false in your ARP config',
-    '  - run `arp telemetry opt-out` (hackmyagent CLI)',
+    '  - run `aim-arp telemetry opt-out` (or `npx @opena2a/aim-sdk telemetry opt-out`)',
     'An opt-out always wins over an opt-in. It disables every channel this',
     'runtime-protection module produces: structural signatures, the legacy GTIN',
-    'channel, and fleet behavioral gradients. It also purges signatures this',
-    'sensor already shared with the registry (right-to-delete). Fleet gradients',
+    'channel, and fleet behavioral gradients. The `aim-arp telemetry opt-out`',
+    'command additionally asks the registry to delete signatures this sensor',
+    'already sent (right-to-delete); the env and config opt-outs stop sending but',
+    'do not delete — run `aim-arp telemetry purge` for that. Fleet gradients',
     'carry no identifier, so there is nothing about them to purge.',
     'The AIM client has a separate causal-denial relay with its own switch,',
     'off unless you enabled it; this opt-out does not govern it.',

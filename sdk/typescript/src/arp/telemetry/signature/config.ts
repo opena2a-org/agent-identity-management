@@ -20,7 +20,7 @@
  * ALWAYS beats an opt-in — the switch only ever moves in the safe direction, so
  * a stale env var cannot re-enable a channel someone deliberately disabled:
  *   1. Environment: OPENA2A_TELEMETRY_OPTOUT / ARP_TELEMETRY_DISABLED truthy.
- *   2. A marker file at ~/.opena2a/telemetry-optout (written by `arp telemetry opt-out`).
+ *   2. A marker file at ~/.opena2a/telemetry-optout (written by `aim-arp telemetry opt-out`).
  *   3. Config: `signatureTelemetry.enabled === false`.
  *
  * `isOptedOut` deliberately keeps its original meaning — "has someone actively
@@ -116,7 +116,7 @@ export function resolveRegistryUrl(config?: SignatureTelemetryConfig): string {
   return config?.registryUrl || process.env.OPENA2A_REGISTRY_URL || DEFAULT_REGISTRY_URL;
 }
 
-/** Persist the opt-out marker (used by `arp telemetry opt-out`). Idempotent. */
+/** Persist the opt-out marker (used by `aim-arp telemetry opt-out`). Idempotent. */
 export function writeOptOutMarker(): string {
   const home = opena2aHome();
   if (!existsSync(home)) mkdirSync(home, { recursive: true });
@@ -125,7 +125,7 @@ export function writeOptOutMarker(): string {
   return p;
 }
 
-/** Remove the opt-out marker (used by `arp telemetry opt-in`). Idempotent. */
+/** Remove the opt-out marker (used by `aim-arp telemetry opt-in`). Idempotent. */
 export function clearOptOutMarker(): void {
   const p = homePath(OPTOUT_MARKER_FILE);
   if (existsSync(p)) {

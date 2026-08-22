@@ -1,5 +1,6 @@
 /**
- * Self-serve sensor enrollment (the producer half of `arp telemetry register`).
+ * Self-serve sensor enrollment (the producer half of `telemetry register`,
+ * internal CLI only — the shipped `aim-arp` bin deliberately does not register it).
  *
  * A sensor already holds an Ed25519 keypair (sensor-identity.ts). Enrollment
  * registers that key with the registry, which creates a PENDING (unverified)
@@ -34,6 +35,7 @@ import {
 } from './sensor-identity';
 import { generateNonce } from './wire';
 import { resolveRegistryUrl, type SignatureTelemetryConfig } from './config';
+import { sanitizeTerminalText } from './sanitize';
 import { opena2aHome, homePath, SENSOR_ENROLLMENT_FILE } from './paths';
 
 /** The enroll canonical schema prefix (distinct from the ingest/purge schemas). */
@@ -167,7 +169,8 @@ export async function enrollSensor(
       let error = `HTTP ${res.status}`;
       try {
         const json = (await res.json()) as { error?: string };
-        if (json?.error) error = `HTTP ${res.status}: ${json.error}`;
+        // Sanitised where the server text enters the result (#384 class).
+        if (json?.error) error = `HTTP ${res.status}: ${sanitizeTerminalText(json.error)}`;
       } catch {
         // non-JSON error body; keep the bare status
       }
@@ -180,8 +183,16 @@ export async function enrollSensor(
     try {
       const json = (await res.json()) as { sensorId?: string; state?: string; message?: string };
       if (json?.state === 'pending' || json?.state === 'verified') state = json.state;
-      if (typeof json?.sensorId === 'string') sensorId = json.sensorId;
-      if (typeof json?.message === 'string') message = json.message;
+      // Shape-validated where it enters (#384 class): this value is PERSISTED
+      // and later printed by `telemetry status`, so a hostile registry must not
+      // be able to place terminal-driving bytes in it. A service-account id is
+      // ASCII word characters, dots and hyphens; anything else is rejected,
+      // not repaired -- a repaired id would fail the registry's exact-match
+      // identity resolution anyway.
+      if (typeof json?.sensorId === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(json.sensorId)) {
+        sensorId = json.sensorId;
+      }
+      if (typeof json?.message === 'string') message = sanitizeTerminalText(json.message);
     } catch {
       // A 2xx with an unparseable body still counts as success; details unknown.
     }
@@ -198,13 +209,18 @@ export async function enrollSensor(
 
     return { ok: true, status: res.status, state, sensorId, message, url, body };
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = sanitizeTerminalText(err instanceof Error ? err.message : String(err));
     return { ok: false, error, url, body };
   }
+}
+
+/** Escape a value for safe inclusion inside a single-quoted shell string. */
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /** A copy-pasteable curl the user can run to retry a failed enrollment by hand. */
 export function manualEnrollCurl(result: EnrollResult): string {
   const json = JSON.stringify(result.body);
-  return `curl -X POST '${result.url}' -H 'Content-Type: application/json' -d '${json}'`;
+  return `curl -X POST ${shellSingleQuote(result.url)} -H 'Content-Type: application/json' -d ${shellSingleQuote(json)}`;
 }

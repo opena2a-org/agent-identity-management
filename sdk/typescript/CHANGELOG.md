@@ -5,9 +5,56 @@ All notable changes to `@opena2a/aim-sdk` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.0] - 2026-08-22
+
+### Added
+
+- **The telemetry consent CLI now actually ships** as the `aim-arp` bin
+  ([#400](https://github.com/opena2a-org/agent-identity-management/issues/400)).
+  The install-time disclosure has cited `arp telemetry log` / `status` /
+  `opt-out` since 1.0.0, attributing them to the hackmyagent CLI — but no
+  installed package registered any such command. The audit-log read path,
+  status, opt-out, opt-in and the right-to-delete purge were designed and
+  implemented, and unreachable. They are now real:
+
+  ```
+  aim-arp telemetry status|log|disclosure|opt-out|opt-in|purge
+  npx @opena2a/aim-sdk telemetry <subcommand>   # same bin, no global install
+  ```
+
+  The bin is named `aim-arp`, not `arp`: `arp` is a system utility on macOS
+  and Linux and an unrelated npm package. Sensor enrollment (`register`) is
+  deliberately not part of the shipped surface. A test now walks every command
+  citation in the shipped TypeScript sources and fails when one names a command the
+  package does not register, so this class cannot silently return.
 
 ### Fixed
+
+- **`telemetry status` no longer creates identity state.** Reading status on a
+  clean machine minted three files — the sensor id, the org id, and the org
+  root secret — as a side effect of looking. A read command now reads: identity
+  fields report `none yet (created on first send)` until a send mints them.
+
+- **Server-supplied text is sanitized before it can reach your terminal.**
+  Registry error and message strings printed by `opt-out`, `purge` and
+  enrollment failures are stripped of C0/C1 control bytes (ANSI escapes,
+  carriage-return overwrite) and capped at 500 chars with an explicit
+  truncation marker — the TypeScript half of the class filed as
+  [#384](https://github.com/opena2a-org/agent-identity-management/issues/384).
+  The manual-retry `curl` commands also single-quote-escape their interpolated
+  values.
+
+- **A registry-assigned sensor id is shape-validated before it is persisted.**
+  Enrollment adopted the server's `sensorId` verbatim into a local file that
+  `telemetry status` later prints; a hostile registry could place
+  terminal-driving bytes there. Ids are now accepted only when they match
+  `^[A-Za-z0-9._-]{1,128}$`, and status strips control bytes from anything it
+  reads off disk regardless.
+
+- **`opt-out` and `purge` no longer create a sensor identity on a machine that
+  never sent.** Building the purge proof minted the identity it was about to
+  purge. Both commands now check first and report that there is nothing to
+  purge.
 
 - **`@opena2a/aim-sdk/arp` now reports the version npm published.** Its
   `VERSION` export was a second hand-maintained literal that read `0.2.0` from
