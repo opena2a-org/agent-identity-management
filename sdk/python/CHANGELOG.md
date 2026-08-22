@@ -5,11 +5,27 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.1] - 2026-08-22
 
-Closes both defects 2.0.0 carried as known issues. `VERSION` is deliberately not
-bumped here: the release tag is what publishes, so cutting the version is a
-separate decision from landing the fix.
+Closes both defects 2.0.0 carried as known issues, and hardens every path a
+server-sent string takes to a developer's terminal.
+
+### Security
+
+- **Server-sent text is sanitized before it can reach a terminal**
+  ([#384](https://github.com/opena2a-org/agent-identity-management/issues/384)).
+  A denial reason flowed from the server into exception messages and the
+  monitoring-mode warning with no control-byte stripping and no length bound,
+  so a hostile or compromised AIM server could carry ANSI escapes that rewrite
+  what a developer sees, or scroll the real message away. Decision-borne
+  strings are sanitized where they enter `VerificationDecision` (total over
+  any JSON value — a non-string reason is coerced, never raised on, because a
+  constructor raise would turn an explicit DENY into UNKNOWN). The pre-decision
+  console warnings, the JIT poll warning, the 401 exception message and the
+  403 denial-detail parse sanitize at their own entry sites, and the console's
+  free-text methods strip control bytes as defence in depth. C0 bytes other
+  than newline and tab, DEL and the C1 range are removed; text over 500 chars
+  is truncated with an explicit marker.
 
 ### Fixed
 
