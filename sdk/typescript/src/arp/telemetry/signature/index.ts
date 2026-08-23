@@ -66,8 +66,9 @@ export type { AuditRecord, AuditPhase } from './audit-log';
 
 export {
   isOptedOut,
-  isOptedIn,
+  ecosystemOptOut,
   optOutMarkerExists,
+  isOptedIn,
   signatureTelemetryEnabled,
   resolveRegistryUrl,
   writeOptOutMarker,
