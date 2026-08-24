@@ -30,6 +30,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Asking a subcommand for help no longer runs it.** `aim-arp telemetry
+  opt-out --help` performed a real opt-out — the marker was written by the
+  question — `opt-in --help` removed one, and on a machine that had sent,
+  `purge --help` would have fired the right-to-delete from a help query.
+  The dispatcher read only the subcommand name and ignored every argument
+  after it, so unknown options were silently swallowed too. `--help` / `-h`
+  anywhere in the arguments now print usage and change nothing, and an
+  unrecognised option is an error naming the option instead of a no-op.
+
+- **`telemetry status` names every environment variable it attributes an
+  opt-out to.** `OPENA2A_TELEMETRY_OPTOUT` and `ARP_TELEMETRY_DISABLED` were
+  reported as a bare "environment variable" with no clearing instruction,
+  while `OPENA2A_TELEMETRY` already got "unset it to clear". All three now
+  name the variable in effect.
+
 - **`telemetry status` no longer creates identity state.** Reading status on a
   clean machine minted three files — the sensor id, the org id, and the org
   root secret — as a side effect of looking. A read command now reads: identity
