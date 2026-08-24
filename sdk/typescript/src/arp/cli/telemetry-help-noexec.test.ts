@@ -4,8 +4,9 @@
  * opt-out — the marker was written by the question — `opt-in --help` removed
  * one, and on a machine that had sent, `purge --help` would have fired the
  * right-to-delete from a help query (found in the 1.3.0 release test,
- * 2026-08-24). The dispatcher read only the subcommand and never looked at
- * the args, so unknown options were silently ignored too.
+ * 2026-08-24). The dispatcher chose what to run from the subcommand name
+ * alone and never validated the args, so unknown options were silently
+ * ignored too.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

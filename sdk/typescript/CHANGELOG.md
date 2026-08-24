@@ -34,10 +34,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   opt-out --help` performed a real opt-out — the marker was written by the
   question — `opt-in --help` removed one, and on a machine that had sent,
   `purge --help` would have fired the right-to-delete from a help query.
-  The dispatcher read only the subcommand name and ignored every argument
-  after it, so unknown options were silently swallowed too. `--help` / `-h`
-  anywhere in the arguments now print usage and change nothing, and an
-  unrecognised option is an error naming the option instead of a no-op.
+  The dispatcher chose what to run from the subcommand name alone and never
+  validated the arguments, so `--help` never stopped execution and unknown
+  options were silently swallowed. `--help` / `-h` anywhere in the arguments
+  now print usage and change nothing, and an unrecognized option is an error
+  naming the option instead of a no-op.
   A mistyped subcommand is still reported as the error even when `--help`
   rides along, so scripts keep the typo signal. The internal CLI's
   `register` subcommand had the same defect — its help query built and sent
