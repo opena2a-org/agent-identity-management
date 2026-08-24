@@ -258,17 +258,35 @@ async function telemetryCommand(): Promise<void> {
   // the shared shipped surface, dispatched through the same code path the
   // `aim-arp` bin uses so the two cannot drift.
   if (sub === 'register') {
+    // Same contract as runTelemetrySubcommand: a help request is answered
+    // with help, never by running the command — register builds a signed
+    // enrollment proof and POSTs it, the worst possible answer to a question.
+    const rest = args.slice(2);
+    if (rest.some((a) => a === '--help' || a === '-h')) {
+      printTelemetryHelpWithInternal();
+      return;
+    }
+    const unknown = rest.find((a) => a.startsWith('-'));
+    if (unknown !== undefined) {
+      console.error(`  Unknown option for register: ${unknown}`);
+      console.error('  Run: arp-guard telemetry --help');
+      process.exit(1);
+    }
     await telemetryRegister(tcfg);
     return;
   }
   if (sub === undefined || sub === '--help' || sub === '-h') {
-    console.log(telemetryHelpText());
-    console.log('  Internal-only (this CLI, not the shipped bin):');
-    console.log('    register      Enroll this sensor with the registry (pending admin approval)\n');
+    printTelemetryHelpWithInternal();
     return;
   }
   const code = await runTelemetrySubcommand(sub, args.slice(2), tcfg);
   if (code !== 0) process.exit(code);
+}
+
+function printTelemetryHelpWithInternal(): void {
+  console.log(telemetryHelpText());
+  console.log('  Internal-only (this CLI, not the shipped bin):');
+  console.log('    register      Enroll this sensor with the registry (pending admin approval)\n');
 }
 
 // telemetryRegister enrolls this sensor with the registry (the producer half of the

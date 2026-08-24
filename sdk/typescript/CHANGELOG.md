@@ -38,12 +38,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   after it, so unknown options were silently swallowed too. `--help` / `-h`
   anywhere in the arguments now print usage and change nothing, and an
   unrecognised option is an error naming the option instead of a no-op.
+  A mistyped subcommand is still reported as the error even when `--help`
+  rides along, so scripts keep the typo signal. The internal CLI's
+  `register` subcommand had the same defect — its help query built and sent
+  a real enrollment — and is guarded the same way.
 
 - **`telemetry status` names every environment variable it attributes an
-  opt-out to.** `OPENA2A_TELEMETRY_OPTOUT` and `ARP_TELEMETRY_DISABLED` were
-  reported as a bare "environment variable" with no clearing instruction,
-  while `OPENA2A_TELEMETRY` already got "unset it to clear". All three now
-  name the variable in effect.
+  opt-out to, and only when that variable is what opted you out.**
+  `OPENA2A_TELEMETRY_OPTOUT` and `ARP_TELEMETRY_DISABLED` were reported as a
+  bare "environment variable" with no clearing instruction, while
+  `OPENA2A_TELEMETRY` already got "unset it to clear". All three now name
+  the variable in effect, and attribution reads the same strict truthiness
+  as the opt-out decision — `OPENA2A_TELEMETRY_OPTOUT=0` alongside a local
+  marker names the marker, not a variable whose unsetting would clear
+  nothing.
 
 - **`telemetry status` no longer creates identity state.** Reading status on a
   clean machine minted three files — the sensor id, the org id, and the org

@@ -49,6 +49,9 @@ describe('--help on a subcommand prints help and executes nothing', () => {
     expect(existsSync(marker())).toBe(false);
     expect(existsSync(home)).toBe(false);
     expect(logLines.join('\n')).not.toContain('DISABLED');
+    // Help must actually be PRINTED, not just nothing executed: a guard that
+    // silently returned 0 would pass every negative assertion in this file.
+    expect(logLines.join('\n')).toContain('aim-arp telemetry <subcommand>');
   });
 
   it('opt-out -h writes no marker and exits 0', async () => {
@@ -105,6 +108,41 @@ describe('unrecognised options are an error, not a silent no-op', () => {
   });
 });
 
+describe('dispatch ordering: help slot, typo signal, then options', () => {
+  it('--help in the subcommand slot wins over junk args', async () => {
+    const code = await runTelemetrySubcommand('--help', ['-x']);
+    expect(code).toBe(0);
+    expect(logLines.join('\n')).toContain('aim-arp telemetry <subcommand>');
+    expect(errLines.join('\n')).toBe('');
+  });
+
+  it('-h in the subcommand slot wins over junk args', async () => {
+    const code = await runTelemetrySubcommand('-h', ['--bogus']);
+    expect(code).toBe(0);
+    expect(logLines.join('\n')).toContain('aim-arp telemetry <subcommand>');
+  });
+
+  it('a typo\'d subcommand is the reported error even with --help alongside', async () => {
+    const code = await runTelemetrySubcommand('frobnicate', ['--help']);
+    expect(code).toBe(1);
+    expect(errLines.join('\n')).toContain('frobnicate');
+    expect(existsSync(home)).toBe(false);
+  });
+
+  it('a typo\'d subcommand outranks its unknown options in the error', async () => {
+    const code = await runTelemetrySubcommand('frobnicate', ['--bogus']);
+    expect(code).toBe(1);
+    expect(errLines.join('\n')).toContain('Unknown telemetry subcommand: frobnicate');
+    expect(errLines.join('\n')).not.toContain('Unknown option');
+  });
+
+  it('no subcommand at all still helps, junk args and all (API path)', async () => {
+    const code = await runTelemetrySubcommand(undefined, ['-x']);
+    expect(code).toBe(0);
+    expect(logLines.join('\n')).toContain('aim-arp telemetry <subcommand>');
+  });
+});
+
 describe('env-var opt-outs are attributed to the variable actually set', () => {
   const VARS = ['OPENA2A_TELEMETRY', 'OPENA2A_TELEMETRY_OPTOUT', 'ARP_TELEMETRY_DISABLED'] as const;
   const saved: Record<string, string | undefined> = {};
@@ -133,5 +171,18 @@ describe('env-var opt-outs are attributed to the variable actually set', () => {
     process.env.ARP_TELEMETRY_DISABLED = '1';
     await telemetryStatus(undefined);
     expect(logLines.join('\n')).toContain('ARP_TELEMETRY_DISABLED; unset it to clear');
+  });
+
+  it('a non-truthy value is not blamed: OPTOUT=0 with a marker names the marker', async () => {
+    // isOptedOut treats only 1/true/yes/on as an env opt-out. Attribution must
+    // read the SAME predicate: with OPTOUT=0 the marker is the deciding source,
+    // and telling the user to unset the variable would not clear anything.
+    process.env.OPENA2A_TELEMETRY_OPTOUT = '0';
+    await runTelemetrySubcommand('opt-out', ['--no-purge']);
+    logLines.length = 0;
+    await telemetryStatus(undefined);
+    const out = logLines.join('\n');
+    expect(out).toContain('local opt-out marker');
+    expect(out).not.toContain('OPENA2A_TELEMETRY_OPTOUT');
   });
 });
