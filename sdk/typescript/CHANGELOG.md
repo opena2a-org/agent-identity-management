@@ -41,8 +41,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   naming the option instead of a no-op.
   A mistyped subcommand is still reported as the error even when `--help`
   rides along, so scripts keep the typo signal. The internal CLI's
-  `register` subcommand had the same defect — its help query built and sent
-  a real enrollment — and is guarded the same way.
+  `register` subcommand had the same defect — its help query would have
+  built and sent a real enrollment — and is guarded the same way.
 
 - **`telemetry status` names every environment variable it attributes an
   opt-out to, and only when that variable is what opted you out.**
