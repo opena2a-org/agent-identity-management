@@ -38,7 +38,12 @@ export type { SignatureTelemetryConfig };
 
 const DEFAULT_REGISTRY_URL = 'https://api.oa2a.org';
 
-function envTruthy(name: string): boolean {
+/**
+ * Strict truthiness for opt-out env vars: only 1/true/yes/on count. Exported so
+ * user-facing attribution (`optOutReason`) reads the SAME predicate as the
+ * decision (`isOptedOut`) — a value like `0` must neither opt out nor be blamed.
+ */
+export function envTruthy(name: string): boolean {
   const v = process.env[name];
   if (!v) return false;
   const s = v.trim().toLowerCase();

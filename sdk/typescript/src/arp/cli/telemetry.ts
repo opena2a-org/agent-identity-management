@@ -26,6 +26,7 @@ import {
   readEnrollmentRecord,
   sanitizeTerminalText,
   ecosystemOptOut,
+  envTruthy,
   optOutMarkerExists,
 } from '../telemetry/signature';
 import type { SignatureTelemetryConfig } from '../types';
@@ -240,7 +241,8 @@ function optOutReason(tcfg?: SignatureTelemetryConfig): string {
   // The published ecosystem spelling gets its own attribution: the clear
   // instruction differs (unset the variable; opt-in cannot clear it).
   if (ecosystemOptOut()) return 'environment variable (OPENA2A_TELEMETRY; unset it to clear)';
-  if (process.env.OPENA2A_TELEMETRY_OPTOUT || process.env.ARP_TELEMETRY_DISABLED) return 'environment variable';
+  if (envTruthy('OPENA2A_TELEMETRY_OPTOUT')) return 'environment variable (OPENA2A_TELEMETRY_OPTOUT; unset it to clear)';
+  if (envTruthy('ARP_TELEMETRY_DISABLED')) return 'environment variable (ARP_TELEMETRY_DISABLED; unset it to clear)';
   return `local opt-out marker (${SHIPPED_INVOCATION} opt-in to clear)`;
 }
 
@@ -248,11 +250,46 @@ function optOutReason(tcfg?: SignatureTelemetryConfig): string {
  * Dispatch a telemetry subcommand. Returns the process exit code. Shared by the
  * shipped bin and the internal CLI so the two surfaces cannot diverge.
  */
+/** Options each subcommand recognises; any other option-shaped arg is an error. */
+const KNOWN_SUBCOMMAND_OPTIONS: Record<string, readonly string[]> = {
+  'opt-out': ['--no-purge'],
+};
+
+const isHelpFlag = (a: string): boolean => a === '--help' || a === '-h';
+
 export async function runTelemetrySubcommand(
   sub: string | undefined,
   rest: string[],
   tcfg?: SignatureTelemetryConfig,
 ): Promise<number> {
+  // A help request in the subcommand slot (or no subcommand at all) is
+  // answered with help regardless of what else is on the line.
+  if (sub === undefined || isHelpFlag(sub)) {
+    console.log(telemetryHelpText());
+    return 0;
+  }
+  // A typo'd subcommand is reported as the error even when --help rides
+  // along: the typo signal outranks the help shortcut, and nothing executes
+  // either way.
+  if (!(TELEMETRY_SUBCOMMANDS as readonly string[]).includes(sub)) {
+    console.error(`  Unknown telemetry subcommand: ${sub}`);
+    console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+    return 1;
+  }
+  // A help request anywhere in the args is answered with help, never by
+  // running the command: `opt-out --help` asks what opt-out does, and
+  // executing it would change the consent state the question was about.
+  if (rest.some(isHelpFlag)) {
+    console.log(telemetryHelpText());
+    return 0;
+  }
+  const known = KNOWN_SUBCOMMAND_OPTIONS[sub] ?? [];
+  const unknown = rest.find((a) => a.startsWith('-') && !known.includes(a));
+  if (unknown !== undefined) {
+    console.error(`  Unknown option for ${sub}: ${unknown}`);
+    console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+    return 1;
+  }
   switch (sub) {
     case 'log':
       await telemetryLog(rest[0]);
@@ -272,12 +309,10 @@ export async function runTelemetrySubcommand(
     case 'opt-in':
       telemetryOptIn(tcfg);
       return 0;
-    case undefined:
-    case '--help':
-    case '-h':
-      console.log(telemetryHelpText());
-      return 0;
     default:
+      // Unreachable while the list and the arms agree: `sub` was validated
+      // against TELEMETRY_SUBCOMMANDS above. A list entry with no arm lands
+      // here instead of silently succeeding.
       console.error(`  Unknown telemetry subcommand: ${sub}`);
       console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
       return 1;
