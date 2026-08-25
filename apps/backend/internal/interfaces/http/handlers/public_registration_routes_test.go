@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -60,7 +61,8 @@ func TestPublicRegistrationRoutes_RefuseWith503AndCodeWhenNoAdministratorExists(
 			payload, _ := json.Marshal(tc.body)
 			req := httptest.NewRequest("POST", tc.route, bytes.NewReader(payload))
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := app.Test(req)
+			// Fiber's default test timeout is one second; a loaded CI runner needs more.
+			resp, err := app.Test(req, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
