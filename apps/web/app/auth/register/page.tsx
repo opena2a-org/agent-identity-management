@@ -154,7 +154,6 @@ export default function RegisterPage() {
           <h1 className="text-3xl font-bold tracking-[-0.03em] text-ink mb-2">
             Welcome to AIM
           </h1>
-          <p className="text-sm text-brand-text font-medium mb-1">AIM for a better security</p>
           <p className="text-ink-secondary">
             Sign up to manage AI agents and MCP servers
           </p>
@@ -468,9 +467,9 @@ export default function RegisterPage() {
           {/* Info Box */}
           <div className="rounded-inset bg-brand-soft p-4">
             <p className="text-sm text-ink-body">
-              <strong>Note:</strong> After you sign up, an administrator will
-              review and approve your account. You'll receive an email
-              notification once your account is ready.
+              <strong>Note:</strong> After you sign up, an administrator reviews
+              your account before you can sign in. Until then the sign-in page
+              will tell you the request is still pending.
             </p>
           </div>
 

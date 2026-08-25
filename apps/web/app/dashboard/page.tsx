@@ -184,7 +184,9 @@ function VerificationActivityCard({ activity }: { activity: VerificationActivity
     <div className="glass flex flex-col p-5">
       <div className="flex items-center justify-between">
         <h3 className="text-[13.5px] font-bold text-ink">Verification activity</h3>
-        <span className="text-2xs text-ink-tertiary">last {activity.length} months</span>
+        {activity.length > 0 && (
+          <span className="text-2xs text-ink-tertiary">last {activity.length} months</span>
+        )}
       </div>
       {activity.length === 0 ? (
         <p className="mt-3 text-xs text-ink-secondary">No verifications yet. They show up here as your agents check in.</p>
