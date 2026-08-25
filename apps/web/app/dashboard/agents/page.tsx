@@ -224,6 +224,10 @@ function AgentsPageContent() {
 
   // Get filter parameter from URL (e.g., ?filter=low_trust)
   const urlFilter = searchParams.get("filter");
+  // /dashboard/agents?register=1 (home CTA, mobile tab bar) opens the registration form.
+  useEffect(() => {
+    if (searchParams.get("register") === "1") setShowRegisterModal(true);
+  }, [searchParams]);
 
   // Modal states
   const [showRegisterModal, setShowRegisterModal] = useState(false);

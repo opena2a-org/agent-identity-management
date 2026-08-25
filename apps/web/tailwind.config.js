@@ -57,12 +57,12 @@ module.exports = {
         },
         // Glasshouse tokens
         brand: {
-          DEFAULT: 'var(--accent)',
-          hover: 'var(--accent-hover)',
-          text: 'var(--accent-text)',
-          soft: 'var(--accent-soft)',
-          sky: 'var(--accent-sky)',
-          indigo: 'var(--accent-indigo)',
+          DEFAULT: 'var(--brand)',
+          hover: 'var(--brand-hover)',
+          text: 'var(--brand-text)',
+          soft: 'var(--brand-soft)',
+          sky: 'var(--brand-sky)',
+          indigo: 'var(--brand-indigo)',
         },
         success: {
           DEFAULT: 'var(--green)',
@@ -137,7 +137,7 @@ module.exports = {
         card: 'var(--shadow-card)',
         chrome: 'var(--shadow-chrome)',
         modal: 'var(--shadow-modal)',
-        accent: 'var(--accent-shadow)',
+        accent: 'var(--brand-shadow)',
         segment: 'var(--segment-active-shadow)',
       },
       backdropBlur: {
@@ -162,7 +162,7 @@ module.exports = {
           to: { height: 0 },
         },
         'pulse-ring': {
-          '0%': { boxShadow: '0 0 0 0 var(--accent-soft)' },
+          '0%': { boxShadow: '0 0 0 0 var(--brand-soft)' },
           '70%': { boxShadow: '0 0 0 8px transparent' },
           '100%': { boxShadow: '0 0 0 0 transparent' },
         },

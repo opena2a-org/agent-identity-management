@@ -46,14 +46,15 @@
     --segment-inactive-text: #66666b;
     --nav-active-fill: rgba(0, 113, 227, 0.1);
 
-    /* Accent (fill vs text differ for contrast: white on #0071e3 = 4.7:1, #0066cc on glass = 5.3:1) */
-    --accent: #0071e3;
-    --accent-hover: #0077ed;
-    --accent-text: #0066cc;
-    --accent-soft: rgba(0, 113, 227, 0.1);
-    --accent-shadow: 0 6px 18px rgba(0, 113, 227, 0.3);
-    --accent-sky: #38bdf8;
-    --accent-indigo: #6366f1;
+    /* Brand accent (fill vs text differ for contrast: white on #0071e3 = 4.7:1, #0066cc on glass = 5.3:1).
+       Named --brand because shadcn already owns --accent below. */
+    --brand: #0071e3;
+    --brand-hover: #0077ed;
+    --brand-text: #0066cc;
+    --brand-soft: rgba(0, 113, 227, 0.1);
+    --brand-shadow: 0 6px 18px rgba(0, 113, 227, 0.3);
+    --brand-sky: #38bdf8;
+    --brand-indigo: #6366f1;
     --gradient-logo: linear-gradient(135deg, #38bdf8, #6366f1);
     --gradient-bar: linear-gradient(90deg, #38bdf8, #0071e3);
 
@@ -140,11 +141,11 @@
     --segment-inactive-text: #86868b;
     --nav-active-fill: rgba(41, 151, 255, 0.16);
 
-    --accent: #0071e3;
-    --accent-hover: #1a80f0;
-    --accent-text: #2997ff;
-    --accent-soft: rgba(41, 151, 255, 0.16);
-    --accent-shadow: 0 6px 18px rgba(41, 151, 255, 0.35);
+    --brand: #0071e3;
+    --brand-hover: #1a80f0;
+    --brand-text: #2997ff;
+    --brand-soft: rgba(41, 151, 255, 0.16);
+    --brand-shadow: 0 6px 18px rgba(41, 151, 255, 0.35);
     --gradient-bar: linear-gradient(90deg, #38bdf8, #2997ff);
 
     --green: #34c759;
@@ -230,7 +231,7 @@
   }
 
   ::selection {
-    background: var(--accent-soft);
+    background: var(--brand-soft);
   }
 
   @media (prefers-reduced-motion: reduce) {
