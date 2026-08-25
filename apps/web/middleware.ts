@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server'
 
 // Define role-based route protection
 import { ROUTE_PERMISSIONS } from './lib/route-permissions';
+import { decodeJwtPayload } from './lib/jwt-payload';
+import type { UserRole } from './lib/permissions';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -34,18 +36,17 @@ export function middleware(request: NextRequest) {
 
   try {
     // Decode JWT to get role (basic check, real validation happens server-side).
-    // JWT segments use the base64url alphabet; atob() only accepts standard base64.
-    const segment = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(segment));
-    const userRole = payload?.role;
+    const payload = decodeJwtPayload(token);
+    if (!payload) throw new Error('token payload is not decodable');
+    const userRole = payload.role;
 
     // Normalize "pending" role to "viewer"
-    const normalizedRole = userRole === 'pending' ? 'viewer' : userRole;
+    const normalizedRole = (userRole === 'pending' ? 'viewer' : userRole) as UserRole | undefined;
 
     // Check if current route requires specific role
     for (const [route, allowedRoles] of Object.entries(ROUTE_PERMISSIONS)) {
       if (pathname.startsWith(route)) {
-        if (!allowedRoles.includes(normalizedRole)) {
+        if (!normalizedRole || !allowedRoles.includes(normalizedRole)) {
           // User doesn't have required role, redirect to forbidden page
           return NextResponse.redirect(new URL('/dashboard/forbidden', request.url));
         }

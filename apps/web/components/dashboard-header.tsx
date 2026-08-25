@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, ChevronDown, Loader2, Lock, LogOut } from "lucide-react";
@@ -64,7 +65,8 @@ export function DashboardHeader() {
         const token = api.getToken();
         if (token) {
           try {
-            const payload = JSON.parse(atob(token.split(".")[1]));
+            const payload = decodeJwtPayload(token);
+            if (!payload) throw new Error("token payload is not decodable");
 
             const now = Math.floor(Date.now() / 1000);
             if (payload?.exp && payload.exp < now) {

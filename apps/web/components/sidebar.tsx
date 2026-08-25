@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, Loader2, Shield, X } from "lucide-react";
@@ -84,7 +85,8 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
         const token = api.getToken();
         if (token) {
           try {
-            const payload = JSON.parse(atob(token.split(".")[1]));
+            const payload = decodeJwtPayload(token);
+            if (!payload) throw new Error("token payload is not decodable");
 
             // Check if token is expired
             const now = Math.floor(Date.now() / 1000);

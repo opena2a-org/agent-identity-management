@@ -8,6 +8,7 @@ import { ArrowRight, Bell, Server, ShieldCheck, ShieldPlus } from "lucide-react"
 import { api, type Agent } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
 import { effectiveEdgeRoles } from "@/lib/route-permissions";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { getErrorMessage } from "@/lib/error-messages";
 import { usePersona } from "@/lib/persona";
 import { AuthGuard } from "@/components/auth-guard";
@@ -91,15 +92,8 @@ function useOrigin() {
 
 /** The role claim of the session token, for when /users/me is unavailable; pending reads as viewer. */
 function roleFromToken(): UserRole {
-  try {
-    const token = api.getToken();
-    if (!token) return "viewer";
-    const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const role = JSON.parse(atob(segment))?.role;
-    return role === "admin" || role === "manager" || role === "member" ? role : "viewer";
-  } catch {
-    return "viewer";
-  }
+  const role = decodeJwtPayload(api.getToken())?.role;
+  return role === "admin" || role === "manager" || role === "member" ? role : "viewer";
 }
 
 function greeting(name?: string) {

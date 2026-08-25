@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -147,7 +148,8 @@ export default function PendingVerificationsPage() {
         router.replace("/auth/login");
         return;
       }
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const userRole = (payload.role as any) || "viewer";
       setRole(userRole);
       if (userRole !== "admin") {

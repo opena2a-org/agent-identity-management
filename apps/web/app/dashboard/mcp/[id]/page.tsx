@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -160,7 +161,8 @@ export default function MCPServerDetailsPage({
     const token = api.getToken?.();
     if (!token) return;
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const role = (payload.role as any) || "viewer";
       setUserRole(role);
     } catch {}

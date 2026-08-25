@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useDebounce } from "@/hooks/use-debounce";
 import {
   Key,
@@ -155,7 +156,8 @@ export default function APIKeysPage() {
     const token = api.getToken();
     if (token) {
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
+        const payload = decodeJwtPayload(token);
+        if (!payload) throw new Error("token payload is not decodable");
         setUserRole((payload.role as UserRole) || "viewer");
       } catch (e) {
         console.error("Failed to decode JWT token:", e);
