@@ -84,66 +84,66 @@ interface TrustScoreHistory {
 const factorMetadata = {
   verificationStatus: {
     icon: Shield,
-    label: 'Verification Status',
+    label: 'Verification status',
     description: 'Ed25519 signature verification for all actions',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-500/10',
+    color: 'text-brand-text',
+    bgColor: 'bg-brand-soft',
   },
   uptime: {
     icon: Activity,
-    label: 'Uptime & Availability',
+    label: 'Uptime & availability',
     description: 'Health check responsiveness over time',
-    color: 'text-green-600',
-    bgColor: 'bg-green-500/10',
+    color: 'text-success-text',
+    bgColor: 'bg-success-fill',
   },
   successRate: {
     icon: CheckCircle,
-    label: 'Action Success Rate',
+    label: 'Action success rate',
     description: 'Percentage of actions that complete successfully',
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-500/10',
+    color: 'text-success-text',
+    bgColor: 'bg-success-fill',
   },
   securityAlerts: {
     icon: AlertTriangle,
-    label: 'Security Alerts',
+    label: 'Security alerts',
     description: 'Active security alerts by severity (critical, high, medium, low)',
-    color: 'text-orange-600',
-    bgColor: 'bg-orange-500/10',
+    color: 'text-warning-text',
+    bgColor: 'bg-warning-fill',
   },
   compliance: {
     icon: FileCheck,
-    label: 'Compliance Score',
+    label: 'Compliance score',
     description: 'SOC 2, HIPAA, GDPR adherence',
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-500/10',
+    color: 'text-brand-text',
+    bgColor: 'bg-brand-soft',
   },
   age: {
     icon: Clock,
-    label: 'Age & History',
+    label: 'Age & history',
     description: 'How long agent has been operating successfully (<7d, 7-30d, 30-90d, 90d+)',
-    color: 'text-cyan-600',
-    bgColor: 'bg-cyan-500/10',
+    color: 'text-ink-secondary',
+    bgColor: 'bg-glass-inset-gray',
   },
   driftDetection: {
     icon: TrendingUp,
-    label: 'Drift Detection',
+    label: 'Drift detection',
     description: 'Behavioral pattern changes and anomaly detection',
-    color: 'text-indigo-600',
-    bgColor: 'bg-indigo-500/10',
+    color: 'text-brand-text',
+    bgColor: 'bg-brand-soft',
   },
   userFeedback: {
     icon: ThumbsUp,
-    label: 'User Feedback',
+    label: 'User feedback',
     description: 'Explicit user ratings and feedback',
-    color: 'text-pink-600',
-    bgColor: 'bg-pink-500/10',
+    color: 'text-ink-secondary',
+    bgColor: 'bg-glass-inset-gray',
   },
   executionIsolation: {
     icon: Box,
-    label: 'Execution Isolation',
+    label: 'Execution isolation',
     description: 'Self-reported runtime isolation posture (sandbox, network, filesystem, process). Defaults to a low baseline until the agent reports it.',
-    color: 'text-teal-600',
-    bgColor: 'bg-teal-500/10',
+    color: 'text-brand-text',
+    bgColor: 'bg-brand-soft',
   },
 };
 
@@ -153,10 +153,10 @@ const factorMetadata = {
 // shipped server-side before this map was updated).
 const fallbackFactorMetadata = {
   icon: Shield,
-  label: 'Trust Factor',
+  label: 'Trust factor',
   description: 'Contributing trust factor',
-  color: 'text-gray-600',
-  bgColor: 'bg-gray-500/10',
+  color: 'text-ink-secondary',
+  bgColor: 'bg-glass-inset-gray',
 } as const;
 
 export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScoreUpdate }: TrustScoreBreakdownProps) {
@@ -205,22 +205,22 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
   }, [agentId]);
 
   const getScoreColor = (score: number): string => {
-    if (score >= 0.95) return 'text-green-600';
-    if (score >= 0.75) return 'text-yellow-600';
-    return 'text-red-600';
+    if (score >= 0.95) return 'text-success-text';
+    if (score >= 0.75) return 'text-warning-text';
+    return 'text-danger-text';
   };
 
   const getProgressColor = (score: number): string => {
-    if (score >= 0.95) return 'bg-green-600';
-    if (score >= 0.75) return 'bg-yellow-600';
-    return 'bg-red-600';
+    if (score >= 0.95) return 'bg-success';
+    if (score >= 0.75) return 'bg-warning';
+    return 'bg-danger';
   };
 
   if (loading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Trust Score Breakdown</CardTitle>
+          <CardTitle>Trust score breakdown</CardTitle>
           <CardDescription>Loading trust score analysis...</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -239,11 +239,11 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Trust Score Breakdown</CardTitle>
+          <CardTitle>Trust score breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-yellow-600" />
+          <div className="text-center py-8 text-ink-secondary">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-3 text-warning-text" />
             <p>{error || 'No trust score data available'}</p>
           </div>
         </CardContent>
@@ -257,7 +257,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
         {/* Overall Score Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Overall Trust Score</CardTitle>
+            <CardTitle>Overall trust score</CardTitle>
             <CardDescription>
               Weighted average of 9 behavioral and security factors
             </CardDescription>
@@ -268,11 +268,11 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                 <div className={`text-4xl font-bold ${getScoreColor(breakdown.overall)}`}>
                   {(breakdown.overall * 100).toFixed(1)}%
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-sm text-ink-secondary mt-1">
                   Confidence: {(breakdown.confidence * 100).toFixed(1)}%
                 </p>
               </div>
-              <div className="text-right text-sm text-muted-foreground">
+              <div className="text-right text-sm text-ink-secondary">
                 <p>Last calculated:</p>
                 <p>{new Date(breakdown.calculatedAt).toLocaleString()}</p>
               </div>
@@ -287,7 +287,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
         {/* Individual Factors */}
         <Card>
           <CardHeader>
-            <CardTitle>Factor Breakdown</CardTitle>
+            <CardTitle>Factor breakdown</CardTitle>
             <CardDescription>
               Individual components contributing to the overall trust score
             </CardDescription>
@@ -300,18 +300,18 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
               const contribution = breakdown.contributions[key as keyof typeof breakdown.contributions];
 
               return (
-                <div key={key} className="group p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 transition-all">
+                <div key={key} className="group p-4 rounded-panel border border-divider hover:border-brand transition-all">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3 flex-1">
-                      <div className={`p-2.5 rounded-lg ${metadata.bgColor} transition-transform group-hover:scale-110`}>
+                      <div className={`p-2.5 rounded-inset-sm ${metadata.bgColor} transition-transform group-hover:scale-110`}>
                         <Icon className={`h-5 w-5 ${metadata.color}`} />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-base">{metadata.label}</span>
+                          <span className="font-semibold text-base text-ink">{metadata.label}</span>
                           <Tooltip>
                             <TooltipTrigger>
-                              <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-blue-600 transition-colors" />
+                              <Info className="h-3.5 w-3.5 text-ink-tertiary hover:text-brand-text transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-xs">
                               <p>{metadata.description}</p>
@@ -322,14 +322,14 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                         {/* Visual weight and contribution indicators */}
                         <div className="flex items-center gap-4 mt-2">
                           <div className="flex items-center gap-1.5">
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Weight</div>
-                            <div className="px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                            <div className="text-xs font-medium text-ink-tertiary">Weight</div>
+                            <div className="px-2 py-0.5 rounded-md bg-glass-inset-gray text-xs font-semibold text-ink-body">
                               {(weight * 100).toFixed(0)}%
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <div className="text-xs font-medium text-gray-500 dark:text-gray-400">Impact</div>
-                            <div className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                            <div className="text-xs font-medium text-ink-tertiary">Impact</div>
+                            <div className="px-2 py-0.5 rounded-md bg-brand-soft text-xs font-semibold text-brand-text">
                               +{(contribution * 100).toFixed(1)}%
                             </div>
                           </div>
@@ -342,7 +342,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                       <div className={`text-2xl font-bold ${getScoreColor(value)}`}>
                         {(value * 100).toFixed(1)}%
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
+                      <div className="text-xs text-ink-tertiary mt-0.5">
                         score
                       </div>
                     </div>
@@ -350,12 +350,12 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
 
                   {/* Progress bar with gradient */}
                   <div className="relative">
-                    <div className="h-2.5 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-2.5 w-full bg-track rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          value >= 0.95 ? 'bg-gradient-to-r from-green-500 to-green-600' :
-                          value >= 0.75 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600' :
-                          'bg-gradient-to-r from-red-500 to-red-600'
+                          value >= 0.95 ? 'bg-success' :
+                          value >= 0.75 ? 'bg-warning' :
+                          'bg-danger'
                         }`}
                         style={{ width: `${value * 100}%` }}
                       />
@@ -372,7 +372,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <History className="h-5 w-5" />
-              Trust Score History
+              Trust score history
             </CardTitle>
             <CardDescription>
               Historical changes in trust score over time
@@ -384,7 +384,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                 <Skeleton className="h-64 w-full" />
               </div>
             ) : historyError || !history || history.history.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
+              <div className="text-center py-12 text-ink-secondary">
                 <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>{historyError || 'No historical data available yet'}</p>
                 <p className="text-xs mt-2">Trust score changes will appear here over time</p>
@@ -404,30 +404,32 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                       }))}
                       margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" />
                       <XAxis
                         dataKey="timestamp"
-                        className="text-xs text-muted-foreground"
+                        stroke="var(--stroke)"
+                        tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
                       />
                       <YAxis
                         domain={[0, 100]}
-                        className="text-xs text-muted-foreground"
-                        label={{ value: 'Trust Score (%)', angle: -90, position: 'insideLeft' }}
+                        stroke="var(--stroke)"
+                        tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
+                        label={{ value: 'Trust score (%)', angle: -90, position: 'insideLeft', fill: 'var(--text-tertiary)', fontSize: 11 }}
                       />
                       <RechartsTooltip
                         content={({ active, payload }: { active?: boolean; payload?: any[] }) => {
                           if (active && payload && payload.length) {
                             const data = payload[0].payload;
                             return (
-                              <div className="bg-white dark:bg-gray-800 p-3 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                              <div className="glass p-3 text-ink">
                                 <p className="font-semibold">{data.fullTimestamp}</p>
                                 <p className="text-sm mt-1">
                                   Score: <span className="font-semibold">{data.score}%</span>
                                 </p>
-                                <p className="text-xs text-muted-foreground mt-1">
+                                <p className="text-xs text-ink-secondary mt-1">
                                   Reason: {data.reason}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs text-ink-secondary">
                                   By: {data.changedBy}
                                 </p>
                               </div>
@@ -440,40 +442,40 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                       <Line
                         type="monotone"
                         dataKey="score"
-                        stroke="#3b82f6"
+                        stroke="var(--brand)"
                         strokeWidth={2}
                         dot={{ r: 4 }}
                         activeDot={{ r: 6 }}
-                        name="Trust Score (%)"
+                        name="Trust score (%)"
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
 
                 {/* History Table */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                <div className="border border-divider rounded-panel overflow-hidden">
                   <div className="max-h-96 overflow-y-auto">
                     <table className="w-full">
-                      <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                      <thead className="bg-glass-inset-gray sticky top-0">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Date & Time
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                            Date & time
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Trust Score
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                            Trust score
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
                             Reason
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Changed By
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                            Changed by
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody className="divide-y divide-divider">
                         {history.history.map((entry, index) => (
-                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
+                          <tr key={index} className="hover:bg-glass-inset-gray">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-ink">
                               {new Date(entry.timestamp).toLocaleString()}
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -481,10 +483,10 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                                 {(entry.trustScore * 100).toFixed(1)}%
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                            <td className="px-4 py-3 text-sm text-ink-secondary">
                               {entry.reason}
                             </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-ink-secondary">
                               {entry.changedBy}
                             </td>
                           </tr>
