@@ -682,7 +682,7 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 // platformAdminAllowlist returns the non-empty, lower-cased, trimmed entries of
 // AIM_PLATFORM_ADMINS; an unset, empty or separator-only variable yields no entries.
 func platformAdminAllowlist() []string {
-	var entries []string
+	entries := make([]string, 0)
 	for _, entry := range strings.Split(os.Getenv("AIM_PLATFORM_ADMINS"), ",") {
 		if e := strings.ToLower(strings.TrimSpace(entry)); e != "" {
 			entries = append(entries, e)
