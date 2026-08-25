@@ -28,6 +28,11 @@ export default function AgentSuccessPage() {
   const [loading, setLoading] = useState(true);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [downloadingSDK, setDownloadingSDK] = useState<string | null>(null);
+  // `aim-sdk login` defaults to the hosted service; a self-hosted dashboard passes its own origin.
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
   const [selectedLanguage, setSelectedLanguage] = useState<'python' | 'java'>('python');
 
   useEffect(() => {
@@ -148,7 +153,7 @@ export default function AgentSuccessPage() {
         </h1>
         <p className="text-ink-secondary max-w-2xl mx-auto">
           Your agent <span className="font-semibold">{agent.displayName}</span> has been registered with AIM.
-          Download the SDK to start building with automatic identity verification.
+          Connect it from your code with the steps below; actions it performs through the SDK are then verified against its identity.
         </p>
       </div>
 
@@ -232,75 +237,11 @@ export default function AgentSuccessPage() {
             Download SDK
           </CardTitle>
           <CardDescription>
-            Get started with the pre-configured SDK for your preferred language
+            Java: a package pre-configured for this agent. Python: the steps below, no download needed
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4">
-            {/* Python SDK - Production Ready */}
-            <div className="rounded-card border border-stroke bg-glass-inset p-6">
-              <div className="flex flex-col h-full">
-                <div className="mb-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="h-12 w-12 bg-brand rounded-inset shadow-glow flex items-center justify-center">
-                      <Download className="h-6 w-6 text-ink-inverse" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-xl mb-1">Python SDK</h3>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-pill border border-success-border bg-success-fill text-xs font-medium text-success-text">
-                        Production ready
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-ink-body mb-3">
-                    Official production-ready SDK with Ed25519 cryptographic signing, OAuth integration,
-                    automatic MCP detection, and secure keyring storage.
-                  </p>
-                  <div className="space-y-2 text-sm text-ink-secondary">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-success-text" />
-                      <span>Ed25519 cryptographic signing</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-success-text" />
-                      <span>OAuth/OIDC integration (Google, Microsoft, Okta)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-success-text" />
-                      <span>Automatic MCP detection</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-success-text" />
-                      <span>Secure keyring credential storage</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-success-text" />
-                      <span>100% test coverage</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-auto">
-                  <Button
-                    className="w-full"
-                    onClick={() => downloadSDK('python')}
-                    disabled={downloadingSDK !== null}
-                  >
-                    {downloadingSDK === 'python' ? (
-                      <>
-                        <div className="animate-spin rounded-pill h-4 w-4 border-b-2 border-current mr-2"></div>
-                        Downloading...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        Download Python SDK
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
             {/* Java SDK - Production Ready */}
             <div className="rounded-card border border-stroke bg-glass-inset p-6">
               <div className="flex flex-col h-full">
@@ -365,15 +306,6 @@ export default function AgentSuccessPage() {
               </div>
             </div>
 
-            {/* Future SDKs Note */}
-            <div className="rounded-inset border border-divider bg-glass-inset-gray p-4">
-              <p className="text-sm text-ink-body mb-2">
-                <strong>Future releases:</strong> Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026.
-              </p>
-              <p className="text-xs text-ink-tertiary">
-                Python and Java SDKs provide complete feature parity and are production-ready for all use cases.
-              </p>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -416,7 +348,7 @@ export default function AgentSuccessPage() {
                 <div>
                   <h4 className="font-semibold mb-1">Install the SDK</h4>
                   <p className="text-sm text-ink-secondary">
-                    From PyPI. For machines without registry access, download the package above and use the offline install on the SDK page.
+                    From PyPI. For machines without registry access, use the offline install on the SDK page.
                   </p>
                   <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>pip install aim-sdk</code>
@@ -434,7 +366,7 @@ export default function AgentSuccessPage() {
                     Links your machine to this account; no API key needed
                   </p>
                   <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
-                    <code>aim-sdk login</code>
+                    <code>{origin ? `aim-sdk login --url ${origin}` : "aim-sdk login"}</code>
                   </pre>
                 </div>
               </div>
@@ -446,7 +378,7 @@ export default function AgentSuccessPage() {
                 <div>
                   <h4 className="font-semibold mb-1">Connect this agent</h4>
                   <p className="text-sm text-ink-secondary">
-                    Use this agent&apos;s own identifier so the SDK attaches to it instead of registering a new one
+                    Use this agent&apos;s identifier. The SDK creates a new key pair on this machine, stores it under ~/.aim/ and replaces the key created at registration, so no other copy of a private key has to exist.
                   </p>
                   <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>{`from aim_sdk import secure
@@ -460,24 +392,16 @@ agent = secure("${agent.id}")`}</code>
               <div className="mt-6">
                 <h4 className="font-semibold mb-2">Example usage</h4>
                 <pre className="glass-contrast p-4 rounded-inset font-mono text-xs text-ink-code overflow-x-auto">
-                  <code>{`from aim_sdk import AIMClient
-from aim_sdk.config import AGENT_ID, PUBLIC_KEY, PRIVATE_KEY, AIM_URL
+                  <code>{`from aim_sdk import secure
 
-# Initialize client with embedded credentials
-client = AIMClient(
-    agent_id=AGENT_ID,
-    public_key=PUBLIC_KEY,
-    private_key=PRIVATE_KEY,
-    aim_url=AIM_URL
-)
+agent = secure("${agent.id}")
 
-# Automatic verification with decorator
-@client.perform_action("read_database", resource="users_table")
+# Each call is verified against the agent's capabilities before it runs
+@agent.perform_action("read_database", resource="users_table")
 def get_users():
     # Your agent code here
     return database.query("SELECT * FROM users")
 
-# Just call the function - verification happens automatically!
 users = get_users()`}</code>
                 </pre>
               </div>

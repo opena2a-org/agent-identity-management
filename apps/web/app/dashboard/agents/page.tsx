@@ -224,10 +224,6 @@ function AgentsPageContent() {
 
   // Get filter parameter from URL (e.g., ?filter=low_trust)
   const urlFilter = searchParams.get("filter");
-  // /dashboard/agents?register=1 (home CTA, mobile tab bar) opens the registration form.
-  useEffect(() => {
-    if (searchParams.get("register") === "1") setShowRegisterModal(true);
-  }, [searchParams]);
 
   // Modal states
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -253,6 +249,13 @@ function AgentsPageContent() {
 
   // Get role-based permissions
   const permissions = getAgentPermissions(userRole);
+
+  // /dashboard/agents?register=1 (home CTA, mobile tab bar) opens the registration form for
+  // roles that may register; ?filter=pending (the Executive lens) preselects the status filter.
+  useEffect(() => {
+    if (searchParams.get("register") === "1" && permissions.canCreateAgent) setShowRegisterModal(true);
+    if (urlFilter === "pending") setStatusFilter("pending");
+  }, [searchParams, urlFilter, permissions.canCreateAgent]);
 
   const fetchAgents = async () => {
     try {

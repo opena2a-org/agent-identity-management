@@ -233,9 +233,6 @@ export default function SDKDownloadPage() {
                   <span className="inline-flex items-center px-2 py-0.5 rounded-pill text-xs font-medium bg-success-fill border border-success-border text-success-text">
                     Stable
                   </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-glass-inset-gray text-ink-body">
-                    v1.15.0
-                  </span>
                 </div>
               </div>
             </div>

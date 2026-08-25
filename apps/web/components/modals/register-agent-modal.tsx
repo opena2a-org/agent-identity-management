@@ -90,17 +90,17 @@ const RISK_LEVEL_COLORS: Record<string, string> = {
 
 /**
  * Fills the fields the backend's auto-verify predicate requires (shouldAutoVerifyAgent:
- * name, displayName, description all non-empty) with the SAME defaults the Python SDK
- * applies (client.py: displayName = name, description = f"Agent {name} registered via AIM
- * SDK"), so an agent registered from this form and one registered by the SDK get the same
- * verification outcome. Version defaults to 1.0.0 when left blank.
+ * name, displayName, description all non-empty) the way the Python SDK's secure() does
+ * (client.py: displayName defaults to the name, description to a generated sentence,
+ * version to 1.0.0), so an agent registered from this form and one registered by the SDK
+ * get the same verification outcome. The description names where the agent came from.
  */
 export function registrationDefaults(form: { name: string; displayName: string; description: string; version: string }) {
   const name = form.name.trim();
   return {
     name,
     displayName: form.displayName.trim() || name,
-    description: form.description.trim() || `Agent ${name} registered via AIM SDK`,
+    description: form.description.trim() || `Agent ${name} registered from the AIM dashboard`,
     version: form.version.trim() || "1.0.0",
   };
 }
@@ -387,7 +387,11 @@ export function RegisterAgentModal({
     try {
       // Send snake_case to match backend JSON tags
       const agentData: any = {
-        ...registrationDefaults(formData),
+        // Defaults apply only at registration; an edit sends what was typed, so a cleared
+        // field is cleared rather than refilled.
+        ...(editMode
+          ? { name: formData.name.trim(), displayName: formData.displayName.trim(), description: formData.description.trim(), version: formData.version.trim() }
+          : registrationDefaults(formData)),
         agentType: formData.agentType,
       };
 
@@ -1288,7 +1292,7 @@ print(f"Result: {result}")
                 {/* Display Name */}
                 <div>
                   <label className="block text-sm font-medium text-ink-body mb-1">
-                    Display name <span className="text-danger-text">*</span>
+                    Display name
                   </label>
                   <input
                     ref={displayNameRef}
@@ -1363,7 +1367,7 @@ print(f"Result: {result}")
 
                   <div>
                     <label className="block text-sm font-medium text-ink-body mb-1">
-                      Version <span className="text-danger-text">*</span>
+                      Version
                     </label>
                     <input
                       ref={versionRef}
@@ -1457,11 +1461,11 @@ print(f"Result: {result}")
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-ink-body mb-2">
-                    Capabilities <span className="text-danger-text">*</span>
+                    Capabilities
                   </label>
                   <p className="text-xs text-ink-tertiary mb-3">
-                    Select at least one capability this agent has. These define what
-                    actions the agent can perform. Format: <code className="bg-glass-inset-gray px-1 rounded">namespace:action</code>
+                    Optional: the SDK detects capabilities when the agent runs. Add any you want
+                    recorded now. Format: <code className="bg-glass-inset-gray px-1 rounded">namespace:action</code>
                   </p>
                   {errors.capabilities && (
                     <p className="text-xs text-danger-text mb-2">{errors.capabilities}</p>
