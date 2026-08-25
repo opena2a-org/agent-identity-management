@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
+import { normalizeViolation, type SecurityViolation } from "./violations";
 
 const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
@@ -2297,26 +2298,21 @@ class APIClient {
     limit: number = 50,
     offset: number = 0
   ): Promise<{
-    violations: Array<{
-      id: string;
-      agentId: string;
-      attemptedCapability: string;
-      registeredCapabilities: string[];
-      severity: string;
-      trustScoreImpact: number;
-      isBlocked: boolean;
-      sourceIp: string;
-      requestMetadata: Record<string, any>;
-      createdAt: string;
-      agentName?: string;
-    }>;
+    violations: SecurityViolation[];
     total: number;
     limit: number;
     offset: number;
   }> {
-    return this.request(
+    // The backend serializes violations with snake_case tags; consumers read camelCase.
+    const raw = await this.request<{ violations?: Array<Record<string, unknown>>; total?: number; limit?: number; offset?: number }>(
       `/api/v1/security/violations?limit=${limit}&offset=${offset}`
     );
+    return {
+      violations: (raw?.violations ?? []).map(normalizeViolation),
+      total: raw?.total ?? 0,
+      limit: raw?.limit ?? limit,
+      offset: raw?.offset ?? offset,
+    };
   }
 
   async getAgentKeyVault(agentId: string): Promise<any> {

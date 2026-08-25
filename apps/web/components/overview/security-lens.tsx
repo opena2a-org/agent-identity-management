@@ -4,18 +4,24 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight } from "lucide-react";
 import { CardTitle, EmptyNote, KpiTile, StatusChip, relativeTime, shortTime, trustDisplay } from "@/components/overview/shared";
 import type { LensData, StatsData, VerificationStatistics } from "@/components/overview/types";
+import type { UserRole } from "@/lib/permissions";
+import { effectiveEdgeRoles } from "@/lib/route-permissions";
 import { cn } from "@/lib/utils";
 
 /**
  * Security practitioner lens of the overview: what needs attention first, the verification
  * stream, policy coverage. Same objects as the developer lens, reordered and emphasized.
  * Every value comes from /security/metrics, /security/violations, /verification-events/*.
+ * A null section of the lens data means the endpoint failed or the role may not read it; it
+ * renders as unavailable, never as empty. Violations carry no open/resolved state, so counts
+ * are all-time. Links are rendered only for roles the edge gate lets through.
  */
-export function SecurityLens({ stats, verification, lens }: { stats: StatsData; verification: VerificationStatistics | null; lens: LensData }) {
+export function SecurityLens({ stats, verification, lens, role }: { stats: StatsData; verification: VerificationStatistics | null; lens: LensData; role: UserRole }) {
   const m = lens.security;
   const violations = lens.violations?.violations ?? [];
-  const openViolations = lens.violations?.total ?? violations.length;
+  const violationCount = lens.violations ? lens.violations.total ?? violations.length : null;
   const events = lens.events ?? [];
+  const canOpenSecurity = effectiveEdgeRoles("/dashboard/security").includes(role);
   const approved = verification && verification.totalVerifications > 0 ? Math.round((verification.successCount / verification.totalVerifications) * 1000) / 10 : null;
   const hero = violations[0] ?? null;
   const heroAgent = hero ? stats.agentsById?.[hero.agentId] : undefined;
@@ -23,7 +29,13 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        <KpiTile label="Open violations" value={openViolations.toLocaleString()} delta={m ? `${m.highSeverityCount.toLocaleString()} high severity` : undefined} tone={openViolations > 0 ? "alert" : "default"} href="/dashboard/security/violations" />
+        <KpiTile
+          label="Violations, all time"
+          value={violationCount !== null ? violationCount.toLocaleString() : "–"}
+          delta={m ? `${m.highSeverityCount.toLocaleString()} high severity` : violationCount === null ? "unavailable" : undefined}
+          tone={violationCount ? "alert" : "default"}
+          href={canOpenSecurity ? "/dashboard/security/violations" : undefined}
+        />
         <KpiTile label="Verifications, last 24h" value={verification ? verification.totalVerifications.toLocaleString() : "–"} delta={approved !== null ? `${approved}% approved` : verification ? "none yet" : "unavailable"} />
         <KpiTile label="Blocked today" value={m ? m.actionsBlockedToday.toLocaleString() : "–"} delta={m ? `${m.blockedThreats.toLocaleString()} of ${m.totalThreats.toLocaleString()} capability violations blocked, all time` : "unavailable"} />
         <KpiTile label="Avg trust" value={trustDisplay(m?.averageTrustScore ?? stats.avgTrustScore) ?? "–"} delta={`across ${stats.totalAgents.toLocaleString()} ${stats.totalAgents === 1 ? "agent" : "agents"}`} tone="accent" />
@@ -34,7 +46,7 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
           {hero ? (
             <div className="glass-alert flex flex-col gap-4 p-5 sm:p-6">
               <p className="inline-flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.06em] text-danger-text">
-                <AlertTriangle className="h-4 w-4" aria-hidden="true" /> Needs attention
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" /> Most recent violation
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-inset bg-danger-fill text-lg font-bold text-danger-text">
@@ -71,14 +83,20 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
                   {hero.isBlocked ? "The action was denied before it ran." : "The action was not blocked; review the agent's policy."}
                   {typeof hero.trustScoreImpact === "number" && hero.trustScoreImpact !== 0 ? ` Trust impact ${hero.trustScoreImpact > 0 ? "+" : ""}${hero.trustScoreImpact.toFixed(2)}.` : ""}
                 </p>
-                <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-[13px] font-bold text-white shadow-glow hover:bg-brand-hover">
-                  Review
-                </Link>
+                {canOpenSecurity && (
+                  <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-[13px] font-bold text-white shadow-glow hover:bg-brand-hover">
+                    Review
+                  </Link>
+                )}
               </div>
+            </div>
+          ) : lens.violations === null ? (
+            <div className="glass p-5 sm:p-6">
+              <CardTitle sub="They need the manager role; if you have it, refresh to retry.">Violations could not be loaded</CardTitle>
             </div>
           ) : (
             <div className="glass p-5 sm:p-6">
-              <CardTitle sub="No open violations. Denied actions appear here after the next refresh.">Nothing needs attention</CardTitle>
+              <CardTitle sub="Denied actions appear here after the next refresh.">No violations recorded</CardTitle>
             </div>
           )}
 
@@ -132,7 +150,9 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
           >
             Verification stream
           </CardTitle>
-          {events.length === 0 ? (
+          {lens.events === null ? (
+            <EmptyNote>The verification stream could not be loaded. Refresh to retry.</EmptyNote>
+          ) : events.length === 0 ? (
             <EmptyNote>No verifications in the last hour. Actions your agents send through the SDK are checked against policy and land here.</EmptyNote>
           ) : (
             <ul className="mt-1 divide-y divide-divider">
@@ -152,9 +172,11 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
             </ul>
           )}
           <p className="mt-auto pt-4 text-2xs text-ink-tertiary">Actions sent through the SDK are checked against policy. In monitoring mode a failed check is recorded and the action still runs.</p>
-          <Link href="/dashboard/security" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
-            Open Security <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
+          {canOpenSecurity && (
+            <Link href="/dashboard/security" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
+              Open Security <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          )}
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { ArrowRight, Bell, Server, ShieldCheck, ShieldPlus } from "lucide-react";
 import { api, type Agent } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
+import { effectiveEdgeRoles } from "@/lib/route-permissions";
 import { getErrorMessage } from "@/lib/error-messages";
 import { usePersona } from "@/lib/persona";
 import { AuthGuard } from "@/components/auth-guard";
@@ -63,9 +64,43 @@ interface HomeData {
 // The canonical quickstart. Every surface that teaches the install path must match this.
 // Python only: the npm SDK does not export secure() and ships no aim-sdk binary (measured
 // 2026-08-24, @opena2a/aim-sdk 1.3.0), so a TypeScript command block would not run.
-export const QUICKSTART = {
-  python: ["pip install aim-sdk", "aim-sdk login", 'python -c "from aim_sdk import secure; secure(\\"my-first-agent\\")"'],
-} as const;
+export const QUICKSTART_LANGS = ["python"] as const;
+type QuickstartLang = (typeof QUICKSTART_LANGS)[number];
+
+/**
+ * `aim-sdk login` defaults to the hosted service (sdk/python/aim_sdk/cli.py DEFAULT_AIM_URL);
+ * a self-hosted dashboard passes its own origin, which proxies /api to the backend.
+ */
+export function quickstartLines(lang: QuickstartLang, origin: string): readonly string[] {
+  const login = origin ? `aim-sdk login --url ${origin}` : "aim-sdk login";
+  switch (lang) {
+    case "python":
+    default:
+      return ["pip install aim-sdk", login, 'python -c "from aim_sdk import secure; secure(\\"my-first-agent\\")"'];
+  }
+}
+
+/** The page origin, known only in the browser (empty during prerender). */
+function useOrigin() {
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+  return origin;
+}
+
+/** The role claim of the session token, for when /users/me is unavailable; pending reads as viewer. */
+function roleFromToken(): UserRole {
+  try {
+    const token = api.getToken();
+    if (!token) return "viewer";
+    const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const role = JSON.parse(atob(segment))?.role;
+    return role === "admin" || role === "manager" || role === "member" ? role : "viewer";
+  } catch {
+    return "viewer";
+  }
+}
 
 function greeting(name?: string) {
   const h = new Date().getHours();
@@ -142,14 +177,20 @@ function CodeBlock({ lines, className }: { lines: readonly string[]; className?:
   );
 }
 
+function OriginQuickstart({ className }: { className?: string }) {
+  const origin = useOrigin();
+  return <CodeBlock lines={quickstartLines("python", origin)} className={className} />;
+}
+
 function Quickstart({ compact = false }: { compact?: boolean }) {
-  const [lang, setLang] = useState<keyof typeof QUICKSTART>("python");
+  const [lang, setLang] = useState<QuickstartLang>("python");
+  const origin = useOrigin();
   return (
     <div className={cn("glass-contrast flex min-w-0 flex-col gap-3 overflow-hidden p-5", compact && "p-4")}>
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[13.5px] font-bold">Quickstart</h3>
         <div className="flex gap-1.5" role="tablist" aria-label="Language">
-          {(Object.keys(QUICKSTART) as Array<keyof typeof QUICKSTART>).map((k) => (
+          {QUICKSTART_LANGS.map((k) => (
             <button
               key={k}
               type="button"
@@ -166,7 +207,7 @@ function Quickstart({ compact = false }: { compact?: boolean }) {
           ))}
         </div>
       </div>
-      <CodeBlock lines={QUICKSTART[lang]} />
+      <CodeBlock lines={quickstartLines(lang, origin)} />
       <p className="text-xs leading-relaxed text-ink-inverse-secondary">
         The SDK creates an Ed25519 keypair on your machine, registers the agent under your account and stores the credentials in{" "}
         <span className="font-mono text-ink-inverse">~/.aim/</span>. The private key never leaves your machine.
@@ -272,7 +313,7 @@ function FirstAgentCard() {
           </p>
         </div>
       </div>
-      <CodeBlock lines={QUICKSTART.python} className="!bg-glass-inset-gray !text-ink" />
+      <OriginQuickstart className="!bg-glass-inset-gray !text-ink" />
       <div className="flex flex-wrap items-center gap-2">
         <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
           Secure it in the browser instead
@@ -342,13 +383,13 @@ function DashboardContent() {
       setLoading(false);
       return;
     }
-    const role: UserRole = user.status === "fulfilled" && user.value?.role && user.value.role !== "pending" ? (user.value.role as UserRole) : "viewer";
+    const role: UserRole = user.status === "fulfilled" && user.value?.role && user.value.role !== "pending" ? (user.value.role as UserRole) : roleFromToken();
     setData({
       stats: stats.value as DashboardStats,
       verification: verification.status === "fulfilled" ? (verification.value as VerificationStatistics) : null,
       activity: activity.status === "fulfilled" ? (activity.value?.activity ?? []) : [],
       agents: agents.status === "fulfilled" ? agents.value?.agents ?? [] : [],
-      user: user.status === "fulfilled" ? { name: firstName(user.value), role } : null,
+      user: { name: user.status === "fulfilled" ? firstName(user.value) : "", role },
     });
     setLoading(false);
   }, [searchParams]);
@@ -362,8 +403,8 @@ function DashboardContent() {
   // The Security and Executive lenses read endpoints the developer lens does not need. They are
   // fetched only for roles the permission map already allows; a lens never widens authorization.
   useEffect(() => {
-    if (!data?.user || persona === "developer") return;
-    if (!permissions.canViewSecurityMetrics) {
+    if (persona === "developer") return;
+    if (!data?.user || !permissions.canViewSecurityMetrics) {
       setLensData({ security: null, violations: null, events: null, compliance: null });
       return;
     }
@@ -410,21 +451,30 @@ function DashboardContent() {
       ? Math.round((verification.successCount / verification.totalVerifications) * 1000) / 10
       : null;
 
-  const openViolations = lensData?.violations?.total ?? 0;
+  // Violations carry no open/resolved state, so the count is all-time. Null means the role may
+  // not read them or the request failed; the headline then falls through to the developer one.
+  const violationCount = lensData?.violations?.total ?? null;
   const lensReady = persona === "developer" || (lensData !== null && !lensLoading);
-  const headline = zero
-    ? "No agents secured yet."
-    : persona === "security" && lensReady
-      ? openViolations > 0
-        ? `${openViolations} open ${openViolations === 1 ? "violation" : "violations"} to review.`
-        : "No open violations."
-      : persona === "executive" && lensReady
-        ? `${stats.verifiedAgents.toLocaleString()} of ${stats.totalAgents.toLocaleString()} agents verified.`
-        : stats.criticalAlerts > 0
+  const developerHeadline =
+    stats.criticalAlerts > 0
       ? `${stats.criticalAlerts} critical ${stats.criticalAlerts === 1 ? "alert needs" : "alerts need"} attention.`
       : stats.pendingAgents > 0
         ? `${stats.pendingAgents} ${stats.pendingAgents === 1 ? "agent is" : "agents are"} waiting for verification.`
         : "No critical alerts. No agents waiting for verification.";
+  const headline = zero
+    ? "No agents secured yet."
+    : persona === "security" && lensReady && violationCount !== null
+      ? violationCount > 0
+        ? `${violationCount} capability ${violationCount === 1 ? "violation" : "violations"} recorded.`
+        : "No capability violations recorded."
+      : persona === "executive" && lensReady
+        ? `${stats.verifiedAgents.toLocaleString()} of ${stats.totalAgents.toLocaleString()} agents verified.`
+        : developerHeadline;
+  // Only asserted when every input it depends on is known and zero.
+  const allClear =
+    stats.criticalAlerts === 0 && stats.activeAlerts === 0 && violationCount === 0 && verification !== null && verification.failedCount === 0;
+  const role = data.user?.role ?? "viewer";
+  const canOpenAlerts = permissions.canViewAlerts && effectiveEdgeRoles("/dashboard/admin/alerts").includes(role);
 
   const sortedAgents = [...agents]
     .sort((a, b) => (a.status === "suspended" || a.status === "revoked" ? -1 : 0) - (b.status === "suspended" || b.status === "revoked" ? -1 : 0) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
@@ -437,9 +487,11 @@ function DashboardContent() {
         <div>
           <p className="text-xs font-semibold text-ink-secondary">{persona === "executive" && !zero ? "Overview" : greeting(data.user?.name)}</p>
           <h1 className="text-headline mt-0.5">{headline}</h1>
-          {persona === "executive" && !zero && lensReady && (
+          {persona === "executive" && !zero && lensReady && (stats.criticalAlerts > 0 || allClear) && (
             <p className="mt-1 text-xs text-ink-secondary">
-              {stats.criticalAlerts > 0 ? `${stats.criticalAlerts} critical ${stats.criticalAlerts === 1 ? "alert needs" : "alerts need"} attention.` : "Everything is verifying normally."}
+              {stats.criticalAlerts > 0
+                ? `${stats.criticalAlerts} critical ${stats.criticalAlerts === 1 ? "alert needs" : "alerts need"} attention.`
+                : "No open alerts, no failed verifications in the last 24 hours, no violations recorded."}
             </p>
           )}
         </div>
@@ -453,10 +505,10 @@ function DashboardContent() {
 
       {!zero && persona !== "developer" && !lensReady && <HomeSkeleton />}
       {!zero && persona === "security" && lensReady && lensData && (
-        <SecurityLens stats={{ ...stats, agentsById: Object.fromEntries(agents.map((a) => [a.id, a])) }} verification={verification} lens={lensData} />
+        <SecurityLens stats={{ ...stats, agentsById: Object.fromEntries(agents.map((a) => [a.id, a])) }} verification={verification} lens={lensData} role={role} />
       )}
       {!zero && persona === "executive" && lensReady && lensData && (
-        <ExecutiveLens stats={stats} verification={verification} activity={activity} agents={agents} lens={lensData} />
+        <ExecutiveLens stats={stats} verification={verification} activity={activity} agents={agents} lens={lensData} role={role} />
       )}
       {(zero || persona === "developer") && (
         <>
@@ -479,7 +531,7 @@ function DashboardContent() {
           value={stats.activeAlerts.toLocaleString()}
           delta={stats.criticalAlerts > 0 ? `${stats.criticalAlerts} critical` : "none critical"}
           tone={stats.criticalAlerts > 0 ? "alert" : "default"}
-          href={permissions.canViewAlerts ? "/dashboard/admin/alerts" : undefined}
+          href={canOpenAlerts ? "/dashboard/admin/alerts" : undefined}
         />
       </div>
 
@@ -516,7 +568,7 @@ function DashboardContent() {
             </span>
           </Link>
         )}
-        {permissions.canViewAlerts && (
+        {canOpenAlerts && (
           <Link href="/dashboard/admin/alerts" className="glass flex items-start gap-3 p-5 hover:-translate-y-0.5 transition-transform">
             <Bell className="mt-0.5 h-4 w-4 text-ink-tertiary" aria-hidden="true" />
             <span>

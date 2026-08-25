@@ -5,11 +5,14 @@ import { ArrowRight } from "lucide-react";
 import type { Agent } from "@/lib/api";
 import { CardTitle, EmptyNote, KpiTile, relativeTime, trustDisplay } from "@/components/overview/shared";
 import type { LensData, StatsData, VerificationActivityMonth, VerificationStatistics } from "@/components/overview/types";
+import type { UserRole } from "@/lib/permissions";
+import { effectiveEdgeRoles } from "@/lib/route-permissions";
 import { cn } from "@/lib/utils";
 
 /**
  * Executive lens of the overview: posture, coverage, incidents and one recommended action,
- * recovery-framed (no letter grades). Tiles without a backend source are not rendered.
+ * recovery-framed (no letter grades). Tiles without a backend source are not rendered, and
+ * links are rendered only for roles the edge gate lets through.
  */
 export function ExecutiveLens({
   stats,
@@ -17,16 +20,20 @@ export function ExecutiveLens({
   activity,
   agents,
   lens,
+  role,
 }: {
   stats: StatsData;
   verification: VerificationStatistics | null;
   activity: VerificationActivityMonth[];
   agents: Agent[];
   lens: LensData;
+  role: UserRole;
 }) {
   const m = lens.security;
   const c = lens.compliance;
   const openViolations = lens.violations?.total ?? null;
+  const canOpenSecurity = effectiveEdgeRoles("/dashboard/security").includes(role);
+  const alertsHref = effectiveEdgeRoles("/dashboard/admin/alerts").includes(role) ? "/dashboard/admin/alerts" : canOpenSecurity ? "/dashboard/security" : undefined;
   const approved = verification && verification.totalVerifications > 0 ? Math.round((verification.successCount / verification.totalVerifications) * 1000) / 10 : null;
   const weekAgo = Date.now() - 7 * 86400000;
   const newThisWeek = agents.filter((a) => a.createdAt && new Date(a.createdAt).getTime() >= weekAgo).length;
@@ -57,8 +64,12 @@ export function ExecutiveLens({
   });
 
   const recommended =
-    m && m.openIncidents > 0
-      ? { text: `Review ${m.openIncidents.toLocaleString()} open ${m.openIncidents === 1 ? "incident" : "incidents"}.`, href: "/dashboard/security" }
+    stats.criticalAlerts > 0
+      ? { text: `Review ${stats.criticalAlerts.toLocaleString()} critical ${stats.criticalAlerts === 1 ? "alert" : "alerts"}.`, href: alertsHref }
+      : m && m.openIncidents > 0
+      ? { text: `Review ${m.openIncidents.toLocaleString()} open ${m.openIncidents === 1 ? "incident" : "incidents"}.`, href: canOpenSecurity ? "/dashboard/security" : undefined }
+      : stats.activeAlerts > 0
+        ? { text: `Review ${stats.activeAlerts.toLocaleString()} open ${stats.activeAlerts === 1 ? "alert" : "alerts"}.`, href: alertsHref }
       : stats.pendingAgents > 0
         ? { text: `Verify ${stats.pendingAgents.toLocaleString()} pending ${stats.pendingAgents === 1 ? "agent" : "agents"}.`, href: "/dashboard/agents?filter=pending" }
         : m && m.mcpServersTotal > m.mcpServersVerified
@@ -72,10 +83,10 @@ export function ExecutiveLens({
         <KpiTile size="sm" label="MCP servers" value={stats.totalMcpServers.toLocaleString()} delta={m ? `${m.mcpServersVerified.toLocaleString()} of ${m.mcpServersTotal.toLocaleString()} attested` : `${stats.activeMcpServers.toLocaleString()} active`} href="/dashboard/mcp" />
         <KpiTile size="sm" label="Verifications, last 24h" value={verification ? verification.totalVerifications.toLocaleString() : "–"} delta={approved !== null ? `${approved}% approved` : verification ? "none yet" : "unavailable"} />
         {openViolations !== null && (
-          <KpiTile size="sm" label="Open violations" value={openViolations.toLocaleString()} delta={m ? `${m.highSeverityCount.toLocaleString()} high severity` : undefined} tone={openViolations > 0 ? "alert" : "default"} href="/dashboard/security/violations" />
+          <KpiTile size="sm" label="Violations, all time" value={openViolations.toLocaleString()} delta={m ? `${m.highSeverityCount.toLocaleString()} high severity` : undefined} tone={openViolations > 0 ? "alert" : "default"} href={canOpenSecurity ? "/dashboard/security/violations" : undefined} />
         )}
         {m && (
-          <KpiTile size="sm" label="Security posture" value={m.securityScore.toLocaleString()} delta="of 100" tone="accent" href="/dashboard/security" />
+          <KpiTile size="sm" label="Security posture" value={m.securityScore.toLocaleString()} delta="of 100" tone="accent" href={canOpenSecurity ? "/dashboard/security" : undefined} />
         )}
       </div>
 
@@ -189,7 +200,7 @@ export function ExecutiveLens({
           {c ? (
             <>
               <p className="mt-2 text-[22px] font-bold capitalize tracking-[-0.02em] text-ink">{c.complianceLevel.replace(/[_-]/g, " ")}</p>
-              <p className="text-xs font-semibold text-ink-secondary">{Math.round((c.verificationRate <= 1 ? c.verificationRate : c.verificationRate / 100) * 100)}% of agents verified</p>
+              <p className="text-xs font-semibold text-ink-secondary">{Math.round(c.verificationRate)}% of agents verified</p>
               <dl className="mt-auto pt-3 text-xs">
                 {[
                   ["Verified agents", `${c.verifiedAgents.toLocaleString()} / ${c.totalAgents.toLocaleString()}`],
@@ -215,12 +226,16 @@ export function ExecutiveLens({
           {recommended ? (
             <>
               <p className="mt-2 text-[15px] font-bold tracking-[-0.02em] text-ink">{recommended.text}</p>
-              <Link href={recommended.href} className="mt-auto inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
-                Assign or open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </Link>
+              {recommended.href && (
+                <Link href={recommended.href} className="mt-auto inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
+                  Open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                </Link>
+              )}
             </>
+          ) : m && openViolations !== null ? (
+            <EmptyNote>Nothing is waiting on you: no open alerts, incidents or pending agents, and every MCP server is attested.</EmptyNote>
           ) : (
-            <EmptyNote>Nothing is waiting on you.</EmptyNote>
+            <EmptyNote>Recommended actions need the security metrics, which could not be loaded. Refresh to retry.</EmptyNote>
           )}
           {m?.recentBlockedActions?.length ? (
             <ul className="mt-4 divide-y divide-divider border-t border-divider pt-1">
