@@ -55,3 +55,27 @@ func TestRegistrationSuccessMessage_StatesTheOutcome(t *testing.T) {
 		t.Fatalf("pending message must ask to wait for approval: %q", pending)
 	}
 }
+
+// The refusal carries a machine-readable code; unrelated errors carry none.
+func TestRegistrationErrorBody_CarriesTheCodeOnlyForTheOperatorRefusal(t *testing.T) {
+	body := registrationErrorBody(application.ErrNoAdministrators, NoAdministratorsMessage)
+	if body["success"] != false || body["error"] != NoAdministratorsMessage || body["code"] != NoAdministratorsCode {
+		t.Fatalf("unexpected refusal body: %v", body)
+	}
+	other := registrationErrorBody(errors.New("boom"), "Registration failed")
+	if _, ok := other["code"]; ok {
+		t.Fatalf("code attached to an unrelated error: %v", other)
+	}
+}
+
+// One message serves every refusal state (variable unset, set but nobody listed has registered,
+// sole administrator deactivated), so it must not claim the variable is unset.
+func TestNoAdministratorsMessage_IsTrueWhenTheAllowlistIsSet(t *testing.T) {
+	lower := strings.ToLower(NoAdministratorsMessage)
+	if strings.Contains(lower, "no administrators configured") || strings.Contains(lower, "not set") {
+		t.Fatalf("message asserts an unset variable, which is false when it is set: %q", NoAdministratorsMessage)
+	}
+	if !strings.Contains(lower, "no active administrator") {
+		t.Fatalf("message does not state the measured condition: %q", NoAdministratorsMessage)
+	}
+}

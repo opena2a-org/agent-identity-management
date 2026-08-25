@@ -137,7 +137,10 @@ export default function RegisterPage() {
         error.message || "Registration failed. Please try again.";
       toast.error(errorMessage);
 
-      if (errorMessage.includes("email already exists")) {
+      if (error.code === "noAdministrators") {
+        // An operator instruction: keep it on the page, not only in a transient toast.
+        setErrors({ form: errorMessage });
+      } else if (errorMessage.includes("email already exists")) {
         setErrors({ email: "An account with this email already exists" });
       } else if (errorMessage.includes("password")) {
         setErrors({ password: errorMessage });
@@ -460,6 +463,16 @@ export default function RegisterPage() {
                 )}
               </div>
             </div>
+
+            {errors.form && (
+              <div
+                role="alert"
+                className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger-text flex items-start gap-2"
+              >
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{errors.form}</span>
+              </div>
+            )}
 
             <button
               type="submit"

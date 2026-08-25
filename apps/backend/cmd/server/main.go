@@ -103,6 +103,9 @@ func main() {
 	}
 	log.Println("✅ Database migrations completed successfully")
 
+	// Report how AIM_PLATFORM_ADMINS was read; a mistyped entry is visible, not silent.
+	application.ReportPlatformAdminAllowlist()
+
 	// Override default admin password if ADMIN_PASSWORD env var is set
 	if err := applyAdminPasswordOverride(db); err != nil {
 		log.Printf("⚠️  Failed to apply admin password override: %v", err)
@@ -352,8 +355,8 @@ func main() {
 	// message, a ±30s window and revocation enforcement; the handlers add the
 	// agent-ownership check, because the group authenticates *an* agent and also
 	// falls through to JWT for human callers (pqc_agent_auth.go:39-41, :50-52).
-	sdkAPI.Post("/verifications/:id/result", h.Verification.SubmitVerificationResult)        // Withdrawn: 403 for every caller
-	sdkAPI.Post("/verifications/:id/execution-status", h.Verification.UpdateExecutionStatus) // Agent-owned execution report
+	sdkAPI.Post("/verifications/:id/result", h.Verification.SubmitVerificationResult)              // Withdrawn: 403 for every caller
+	sdkAPI.Post("/verifications/:id/execution-status", h.Verification.UpdateExecutionStatus)       // Agent-owned execution report
 	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
 	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                          // SDK capability reporting (legacy)
 	sdkAPI.Post("/agents/:id/capabilities/register", h.Capability.RegisterCapability)              // SDK capability registration (respects enforcement mode)
@@ -1766,8 +1769,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	verifications := v1.Group("/verifications")
 	verifications.Use(middleware.AuthMiddleware(jwtService))
 	verifications.Use(middleware.RateLimitMiddleware())
-	verifications.Post("/", h.Verification.CreateVerification)                 // Request verification for agent action
-	verifications.Get("/:id", h.Verification.GetVerification)                  // Get verification status by ID
+	verifications.Post("/", h.Verification.CreateVerification) // Request verification for agent action
+	verifications.Get("/:id", h.Verification.GetVerification)  // Get verification status by ID
 	// REMOVED: `verifications.Post("/:id/result", ...)`. This mount authenticated a
 	// JWT user but the handler had no ownership check, so any authenticated user of
 	// any organization could rewrite any verification by UUID. It is deleted rather
