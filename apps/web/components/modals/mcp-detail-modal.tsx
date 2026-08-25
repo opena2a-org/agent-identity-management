@@ -242,17 +242,16 @@ export function MCPDetailModal({
     }
   };
 
+  // Three tiers: 80 and above, 60-79, below 60.
   const getTrustScoreColor = (score: number) => {
     if (score >= 80) return "text-success-text";
     if (score >= 60) return "text-warning-text";
-    if (score >= 40) return "text-warning-text";
     return "text-danger-text";
   };
 
   const getConfidenceScoreColor = (score: number) => {
     if (score >= 80) return "text-success-text";
     if (score >= 60) return "text-warning-text";
-    if (score >= 40) return "text-warning-text";
     return "text-danger-text";
   };
 
@@ -281,9 +280,9 @@ export function MCPDetailModal({
     }
   };
 
-  const calculateFingerprint = (publicKey: string): string => {
+  // The first 64 characters of the encoded key, grouped in pairs. Not a digest.
+  const publicKeyPrefix = (publicKey: string): string => {
     if (!publicKey) return "N/A";
-    // Simple mock fingerprint - in production this would use crypto.subtle.digest
     const hash = publicKey.substring(0, 64);
     return (
       hash
@@ -784,10 +783,10 @@ export function MCPDetailModal({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <h4 className="text-sm font-medium text-ink-body mb-2">
-                      Public key fingerprint (SHA-256)
+                      Public key (prefix)
                     </h4>
                     <p className="text-xs text-ink font-mono bg-glass-inset p-2 rounded-inset-sm border border-stroke break-all">
-                      {calculateFingerprint(mcp.publicKey)}
+                      {publicKeyPrefix(mcp.publicKey)}
                     </p>
                   </div>
 

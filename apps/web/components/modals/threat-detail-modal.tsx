@@ -281,9 +281,9 @@ export default function ThreatDetailModal({
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case "critical":
-        return "bg-danger-fill text-danger-text";
+        return "bg-danger-fill text-danger-text border border-danger-strong font-bold";
       case "high":
-        return "bg-warning-fill text-warning-text";
+        return "bg-danger-fill text-danger-text";
       case "medium":
         return "bg-warning-fill text-warning-text";
       case "low":
@@ -296,9 +296,9 @@ export default function ThreatDetailModal({
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "critical":
-        return "bg-danger-fill border-danger-border";
+        return "bg-danger-fill border-danger-strong";
       case "high":
-        return "bg-warning-fill border-warning-border";
+        return "bg-danger-fill border-danger-border";
       case "medium":
         return "bg-warning-fill border-warning-border";
       case "low":
@@ -313,7 +313,7 @@ export default function ThreatDetailModal({
       case "critical":
         return "text-danger-text";
       case "high":
-        return "text-warning-text";
+        return "text-danger-text";
       case "medium":
         return "text-warning-text";
       case "low":

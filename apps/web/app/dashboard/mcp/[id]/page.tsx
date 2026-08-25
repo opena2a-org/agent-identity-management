@@ -931,7 +931,7 @@ export default function MCPServerDetailsPage({
                           </p>
                           <div className="bg-glass-contrast border border-glass-contrast-border rounded-md p-2 overflow-x-auto">
                             <code className="text-xs text-ink-code whitespace-nowrap font-mono">
-                              agent.attest_mcp("{server.name}")
+                              agent.attest_mcp("{server.id}")
                             </code>
                           </div>
                         </div>

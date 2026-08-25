@@ -53,8 +53,8 @@ const severityColors: Record<string, string> = {
   info: "border-transparent bg-brand-soft text-brand-text",
   medium: "border-warning-border bg-warning-fill text-warning-text",
   warning: "border-warning-border bg-warning-fill text-warning-text",
-  high: "border-warning-border bg-warning-fill text-warning-text",
-  critical: "border-danger-border bg-danger-fill text-danger-text",
+  high: "border-danger-border bg-danger-fill text-danger-text",
+  critical: "border-danger-strong bg-danger-fill text-danger-text font-bold",
 };
 
 interface VerificationEvent {

@@ -677,11 +677,12 @@ function ConsentTab({ consents: initialConsents, loading }: { consents: A2AConse
 function TasksTab({ tasks, loading }: { tasks: A2ATask[]; loading: boolean }) {
   const [stateFilter, setStateFilter] = useState("all");
 
-  const filteredTasks = stateFilter === "all" ? tasks : tasks.filter(t => t.state === stateFilter);
+  // Task states arrive upper-case from the backend; the counts and the filter compare lower-case.
+  const filteredTasks = stateFilter === "all" ? tasks : tasks.filter(t => (t.state || "").toLowerCase() === stateFilter);
 
   const stateCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
+    tasks.forEach(t => { const key = (t.state || "").toLowerCase(); counts[key] = (counts[key] || 0) + 1; });
     return counts;
   }, [tasks]);
 

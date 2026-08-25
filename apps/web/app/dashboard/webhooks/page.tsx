@@ -551,7 +551,7 @@ export default function WebhooksPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteWebhook}
-              className="bg-danger text-white hover:opacity-90"
+              className="bg-danger-strong text-white shadow-none hover:bg-danger-strong hover:brightness-95"
             >
               Delete
             </AlertDialogAction>

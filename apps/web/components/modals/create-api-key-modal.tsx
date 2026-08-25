@@ -23,7 +23,6 @@ interface CreateAPIKeyModalProps {
 interface FormData {
   name: string;
   agentId: string;
-  expiresIn: string;
 }
 
 export function CreateAPIKeyModal({
@@ -42,7 +41,6 @@ export function CreateAPIKeyModal({
   const [formData, setFormData] = useState<FormData>({
     name: "",
     agentId: "",
-    expiresIn: "90",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -74,10 +72,9 @@ export function CreateAPIKeyModal({
 
     try {
       const result = await api.createAPIKey(formData.agentId, formData.name);
-      console.log("API Key creation result:", result);
 
       if (!result.apiKey) {
-        console.error("No API key in response:", result);
+        console.error("No API key in response");
         throw new Error("API key not returned from server");
       }
 
@@ -104,7 +101,6 @@ export function CreateAPIKeyModal({
     setFormData({
       name: "",
       agentId: "",
-      expiresIn: "90",
     });
     setErrors({});
     setError(null);
@@ -148,18 +144,6 @@ export function CreateAPIKeyModal({
         handleClose();
       }
     }
-  };
-
-  const getExpirationDate = () => {
-    const days = parseInt(formData.expiresIn);
-    if (days === 0) return "Never";
-    const date = new Date();
-    date.setDate(date.getDate() + days);
-    return date.toLocaleDateString("en-US", {
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
   };
 
   if (!isOpen) return null;
@@ -344,29 +328,8 @@ export function CreateAPIKeyModal({
                 )}
               </div>
 
-              {/* Expiration */}
-              <div>
-                <label className="block text-sm font-medium text-ink-body mb-1">
-                  Expiration
-                </label>
-                <select
-                  value={formData.expiresIn}
-                  onChange={(e) =>
-                    setFormData({ ...formData, expiresIn: e.target.value })
-                  }
-                  className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink"
-                  disabled={loading}
-                >
-                  <option value="30">30 days</option>
-                  <option value="90">90 days</option>
-                  <option value="180">180 days</option>
-                  <option value="365">1 year</option>
-                  <option value="0">Never</option>
-                </select>
-                <p className="mt-1 text-xs text-ink-tertiary">
-                  Expires on: {getExpirationDate()}
-                </p>
-              </div>
+              {/* Lifetime: the backend issues every key for 90 days (api_key_handler.go). */}
+              <p className="text-xs text-ink-tertiary">Keys expire 90 days after they are created.</p>
 
               {/* Footer */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-divider">

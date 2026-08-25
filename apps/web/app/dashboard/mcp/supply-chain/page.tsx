@@ -62,6 +62,7 @@ import {
   Legend,
 } from "recharts";
 import { api } from "@/lib/api";
+import { escapeHtml } from "@/lib/html-escape";
 import { formatDateTime } from "@/lib/date-utils";
 import { AuthGuard } from "@/components/auth-guard";
 
@@ -703,6 +704,8 @@ function SupplyChainPage() {
 
   // Generate printable HTML for PDF
   const generateABOMPrintHTML = (data: ABOMData): string => {
+    // Every data value is escaped: the report is written into a same-origin window.
+    const esc = escapeHtml;
     return `
       <!DOCTYPE html>
       <html>
@@ -733,7 +736,7 @@ function SupplyChainPage() {
         <h1>Agent Bill of Materials (ABOM)</h1>
         <div class="meta">
           <p>Generated: ${new Date(data.generatedAt).toLocaleString()}</p>
-          <p>Version: ${data.version}</p>
+          <p>Version: ${esc(data.version)}</p>
         </div>
 
         <h2>Summary</h2>
@@ -751,11 +754,11 @@ function SupplyChainPage() {
           <tr><th>Name</th><th>Status</th><th>Trust score</th><th>Capabilities</th><th>Data access</th></tr>
           ${data.agents.map((a) => `
             <tr>
-              <td>${a.name}</td>
-              <td><span class="badge badge-${a.status === "active" ? "green" : "yellow"}">${a.status}</span></td>
-              <td>${a.trustScore}%</td>
-              <td>${(a.capabilities || []).map((c) => `<span class="badge badge-blue">${c}</span>`).join(" ")}</td>
-              <td>${(a.dataAccess || []).map((d) => `<span class="badge badge-yellow">${d}</span>`).join(" ")}</td>
+              <td>${esc(a.name)}</td>
+              <td><span class="badge badge-${a.status === "active" ? "green" : "yellow"}">${esc(a.status)}</span></td>
+              <td>${Math.round((a.trustScore || 0) * 100)}%</td>
+              <td>${(a.capabilities || []).map((c) => `<span class="badge badge-blue">${esc(c)}</span>`).join(" ")}</td>
+              <td>${(a.dataAccess || []).map((d) => `<span class="badge badge-yellow">${esc(d)}</span>`).join(" ")}</td>
             </tr>
           `).join("")}
         </table>
@@ -765,9 +768,9 @@ function SupplyChainPage() {
           <tr><th>Name</th><th>URL</th><th>Status</th><th>Tools</th><th>Attestations</th></tr>
           ${data.mcpServers.map((s) => `
             <tr>
-              <td>${s.name}</td>
-              <td style="font-size:12px;color:#6b7280;">${s.url}</td>
-              <td><span class="badge badge-${s.status === "verified" ? "green" : "yellow"}">${s.status}</span></td>
+              <td>${esc(s.name)}</td>
+              <td style="font-size:12px;color:#6b7280;">${esc(s.url)}</td>
+              <td><span class="badge badge-${s.status === "verified" ? "green" : "yellow"}">${esc(s.status)}</span></td>
               <td>${s.toolCount || 0}</td>
               <td>${s.attestationCount || 0}</td>
             </tr>
@@ -779,9 +782,9 @@ function SupplyChainPage() {
           <tr><th>Agent</th><th>MCP Server</th><th>Type</th><th>Attestations</th><th>Status</th></tr>
           ${data.connections.map((c) => `
             <tr>
-              <td>${c.agentName}</td>
-              <td>${c.mcpServerName}</td>
-              <td>${c.connectionType}</td>
+              <td>${esc(c.agentName)}</td>
+              <td>${esc(c.mcpServerName)}</td>
+              <td>${esc(c.connectionType)}</td>
               <td>${c.attestationCount}</td>
               <td><span class="badge badge-${c.isActive ? "green" : "yellow"}">${c.isActive ? "Active" : "Inactive"}</span></td>
             </tr>
@@ -1015,7 +1018,7 @@ function SupplyChainPage() {
         />
         <StatCard
           icon={Box}
-          label="Unique capabilities"
+          label="Total tools"
           value={mcpServers.reduce(
             (sum, s) => sum + (s.toolCount || 0),
             0

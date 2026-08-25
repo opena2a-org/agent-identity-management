@@ -713,7 +713,7 @@ export default function MCPServersPage() {
                   Use the AIM SDK to automatically register MCP servers when your agent connects to them.
                 </p>
                 <code className="text-xs bg-glass-inset-gray px-2 py-1 rounded-md block mt-2 font-mono text-ink-body">
-                  agent.attest_mcp("server-name", "https://mcp.example.com")
+                  agent.attest_mcp("&lt;server-id&gt;", mcp_url="https://mcp.example.com", mcp_name="server-name")
                 </code>
               </div>
               <div className="glass-inset p-4 text-left">
@@ -796,8 +796,8 @@ export default function MCPServersPage() {
               About MCP server verification
             </h3>
             <p className="mt-2 text-sm text-ink-body">
-              Model Context Protocol (MCP) servers must be verified before they
-              can interact with AI agents. Cryptographic verification uses
+              Model Context Protocol (MCP) servers can be required to pass
+              verification before agents use them, through an MCP security policy. Cryptographic verification uses
               public key infrastructure to ensure servers meet security
               standards and operate within defined boundaries. Regular
               re-verification is recommended to maintain trust scores.

@@ -60,10 +60,11 @@ function getCategoryIcon(capability: string) {
 function getSeverityStyles(severity: string) {
   switch (severity.toLowerCase()) {
     case "critical":
+      // Critical carries a solid danger border so it reads differently from high.
       return {
         bg: "bg-danger-fill",
         text: "text-danger-text",
-        border: "border-danger-border",
+        border: "border-danger-strong",
       };
     case "high":
       return {

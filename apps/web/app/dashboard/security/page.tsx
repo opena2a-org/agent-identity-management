@@ -272,14 +272,14 @@ function RiskCategoryBar({ category, blocked, riskLevel, maxBlocked }: {
   const riskColors = {
     high: "bg-danger",
     medium: "bg-warning",
-    low: "bg-warning",
+    low: "bg-track",
     secure: "bg-success",
   };
 
   const riskLabels = {
     high: { text: "High risk", class: "text-danger-text" },
     medium: { text: "Medium", class: "text-warning-text" },
-    low: { text: "Low", class: "text-warning-text" },
+    low: { text: "Low", class: "text-ink-secondary" },
     secure: { text: "Secure", class: "text-success-text" },
   };
 
@@ -416,11 +416,12 @@ export default function SecurityPage() {
   // Calculate insight text for protection
   const protectionInsight = useMemo(() => {
     if (!metrics) return null;
+    // Both numbers come from the same 30-day timeline so the ratio stays within 0-100.
     const totalActions = metrics.protectionTimeline?.reduce((sum, d) => sum + d.actions, 0) || 0;
-    const totalBlocked = metrics.actionsBlocked || 0;
-    if (totalActions === 0) return "No agent actions recorded yet.";
-    const authorizedRate = ((totalActions - totalBlocked) / totalActions * 100).toFixed(1);
-    return `${authorizedRate}% of agent actions were authorized. AIM blocked ${totalBlocked} unauthorized attempt${totalBlocked !== 1 ? 's' : ''}.`;
+    const totalBlocked = metrics.protectionTimeline?.reduce((sum, d) => sum + d.blocked, 0) || 0;
+    if (totalActions === 0) return "No agent actions recorded in the last 30 days.";
+    const authorizedRate = Math.min(100, Math.max(0, ((totalActions - totalBlocked) / totalActions) * 100)).toFixed(1);
+    return `${authorizedRate}% of agent actions in the last 30 days were authorized. AIM denied ${totalBlocked} of them.`;
   }, [metrics]);
 
   // Get max blocked for category chart scaling
@@ -477,7 +478,7 @@ export default function SecurityPage() {
                   <span className="mx-1">+</span>
                   <span className="font-medium text-ink">{metrics?.mcpServersTotal || 0}</span> MCP servers monitored
                   <span className="mx-2">•</span>
-                  <span className="font-medium text-ink">{metrics?.actionsBlocked || 0}</span> threats blocked
+                  <span className="font-medium text-ink">{metrics?.actionsBlocked || 0}</span> actions denied
                   {metrics?.lastIncidentAt && (
                     <>
                       <span className="mx-2">•</span>
@@ -665,10 +666,10 @@ export default function SecurityPage() {
               <div>
                 <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
                   <Shield className="h-5 w-5 text-success-text" />
-                  Blocked actions
+                  Denied actions
                 </h3>
                 <p className="text-sm text-ink-secondary mt-1">
-                  AIM prevented these unauthorized attempts
+                  Actions AIM denied. Whether the agent ran them anyway is self-reported; AIM does not observe execution.
                 </p>
               </div>
               {(metrics?.actionsBlocked || 0) > 10 && (
@@ -743,12 +744,6 @@ export default function SecurityPage() {
                         {req.agentName || "Agent"} wants <span className="font-mono">{req.requestedCapability}</span>
                       </p>
                       <div className="flex gap-2 mt-2">
-                        <button className="px-2 py-1 text-xs font-medium rounded bg-success-fill text-success-text hover:bg-success-border transition-colors">
-                          Approve
-                        </button>
-                        <button className="px-2 py-1 text-xs font-medium rounded bg-danger-fill text-danger-text hover:bg-danger-border transition-colors">
-                          Deny
-                        </button>
                         <Link
                           href={`/dashboard/admin/capability-requests?id=${req.id}`}
                           className="px-2 py-1 text-xs font-medium rounded bg-glass-inset-gray text-ink-body hover:bg-track transition-colors"
@@ -784,7 +779,7 @@ export default function SecurityPage() {
                         {formatRelativeTime(alert.createdAt)}
                       </p>
                       <Link
-                        href={`/dashboard/admin/alerts?id=${alert.id}`}
+                        href={`/dashboard/admin/alerts?selected=${alert.id}`}
                         className="mt-1 text-xs text-brand-text hover:underline"
                       >
                         Investigate →
@@ -832,14 +827,14 @@ export default function SecurityPage() {
                   <div key={alert.id} className="p-4 hover:bg-glass-inset-gray transition-colors">
                     <div className="flex items-start gap-3">
                       <div className={`p-1.5 rounded-full ${
-                        alert.severity === 'critical' ? 'bg-danger-fill' :
-                        alert.severity === 'high' ? 'bg-warning-fill' :
+                        alert.severity === 'critical' ? 'bg-danger-strong' :
+                        alert.severity === 'high' ? 'bg-danger-fill' :
                         alert.severity === 'medium' ? 'bg-warning-fill' :
                         'bg-brand-soft'
                       }`}>
                         <AlertTriangle className={`h-4 w-4 ${
-                          alert.severity === 'critical' ? 'text-danger-text' :
-                          alert.severity === 'high' ? 'text-warning-text' :
+                          alert.severity === 'critical' ? 'text-white' :
+                          alert.severity === 'high' ? 'text-danger-text' :
                           alert.severity === 'medium' ? 'text-warning-text' :
                           'text-brand-text'
                         }`} />
@@ -850,8 +845,8 @@ export default function SecurityPage() {
                             {alert.title}
                           </p>
                           <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
-                            alert.severity === 'critical' ? 'bg-danger-fill text-danger-text' :
-                            alert.severity === 'high' ? 'bg-warning-fill text-warning-text' :
+                            alert.severity === 'critical' ? 'bg-danger-fill text-danger-text border border-danger-strong font-bold' :
+                            alert.severity === 'high' ? 'bg-danger-fill text-danger-text' :
                             alert.severity === 'medium' ? 'bg-warning-fill text-warning-text' :
                             'bg-brand-soft text-brand-text'
                           }`}>
