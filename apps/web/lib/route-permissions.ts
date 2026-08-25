@@ -13,6 +13,9 @@
 import type { UserRole } from "@/lib/permissions";
 
 export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
+  // Top-level /admin (registration review lives here in the OSS tree): admins only.
+  // Measured 2026-08-24: without this entry the proxy passed any authenticated role.
+  "/admin": ["admin"],
   "/dashboard/admin": ["admin"],
   "/dashboard/admin/users": ["admin"],
   "/dashboard/admin/alerts": ["admin", "manager"],
