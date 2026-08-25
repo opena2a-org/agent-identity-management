@@ -111,8 +111,8 @@ export default function MCPDiscoveryPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <Loader2 className="h-8 w-8 animate-spin text-brand" />
+          <span className="text-sm text-ink-secondary">
             Scanning for discovered MCP servers...
           </span>
         </div>
@@ -124,13 +124,13 @@ export default function MCPDiscoveryPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-2">
-          <AlertCircle className="h-8 w-8 text-red-500" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <AlertCircle className="h-8 w-8 text-danger" />
+          <span className="text-sm text-ink-secondary">
             {error}
           </span>
           <button
             onClick={fetchDiscoveryData}
-            className="mt-2 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1"
+            className="mt-2 px-3 py-1 text-sm bg-brand text-white rounded-pill shadow-accent hover:bg-brand-hover flex items-center gap-1 transition-colors"
           >
             <RefreshCw className="h-3 w-3" />
             Retry
@@ -145,16 +145,16 @@ export default function MCPDiscoveryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            MCP Discovery
+          <h1 className="text-2xl font-bold tracking-[-0.03em] text-ink">
+            MCP discovery
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm text-ink-secondary mt-1">
             MCP servers detected through agent connections that may need registration
           </p>
         </div>
         <button
           onClick={fetchDiscoveryData}
-          className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 text-sm bg-glass-inset-gray text-ink-body rounded-pill hover:bg-glass-inset transition-colors"
         >
           <RefreshCw className="h-4 w-4" />
           Refresh
@@ -163,65 +163,65 @@ export default function MCPDiscoveryPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="glass p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              <div className="p-2 bg-warning-fill rounded-inset-sm">
+                <AlertTriangle className="h-5 w-5 text-warning-text" />
               </div>
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <span className="text-sm font-medium text-ink-secondary">
                 Unmapped MCPs
               </span>
             </div>
-            <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            <span className="text-2xl font-bold text-warning-text">
               {data?.totalUnmapped || 0}
             </span>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="glass p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <Server className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="p-2 bg-success-fill rounded-inset-sm">
+                <Server className="h-5 w-5 text-success-text" />
               </div>
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <span className="text-sm font-medium text-ink-secondary">
                 Registered
               </span>
             </div>
-            <span className="text-2xl font-bold text-green-600 dark:text-green-400">
+            <span className="text-2xl font-bold text-success-text">
               {data?.registeredServers || 0}
             </span>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="glass p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="p-2 bg-brand-soft rounded-inset-sm">
+                <Bot className="h-5 w-5 text-brand-text" />
               </div>
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Agents Scanned
+              <span className="text-sm font-medium text-ink-secondary">
+                Agents scanned
               </span>
             </div>
-            <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            <span className="text-2xl font-bold text-brand-text">
               {data?.totalAgents || 0}
             </span>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div className="glass p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                <Search className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="p-2 bg-glass-inset-gray rounded-inset-sm">
+                <Search className="h-5 w-5 text-ink-secondary" />
               </div>
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Total Discovered
+              <span className="text-sm font-medium text-ink-secondary">
+                Total discovered
               </span>
             </div>
-            <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+            <span className="text-2xl font-bold text-ink">
               {data?.discovered?.length || 0}
             </span>
           </div>
@@ -229,49 +229,49 @@ export default function MCPDiscoveryPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <div className="flex items-center gap-4 glass p-4">
         <div className="flex items-center gap-2">
-          <Search className="h-4 w-4 text-gray-400" />
+          <Search className="h-4 w-4 text-ink-tertiary" />
           <input
             type="text"
             placeholder="Search by name, URL, or agent..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent border-none outline-none text-sm text-gray-900 dark:text-gray-100 placeholder-gray-500 w-64"
+            className="bg-transparent border-none outline-none text-sm text-ink placeholder:text-ink-tertiary w-64"
           />
         </div>
 
-        <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
+        <div className="h-6 w-px bg-stroke" />
 
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500 dark:text-gray-400">Filter:</span>
+          <span className="text-sm text-ink-secondary">Filter:</span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setFilter("all")}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              className={`px-3 py-1 text-sm rounded-pill transition-colors ${
                 filter === "all"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  ? "bg-brand text-white shadow-accent"
+                  : "bg-glass-inset-gray text-ink-body hover:bg-glass-inset"
               }`}
             >
               All
             </button>
             <button
               onClick={() => setFilter("unmapped")}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              className={`px-3 py-1 text-sm rounded-pill transition-colors ${
                 filter === "unmapped"
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  ? "bg-warning-fill text-warning-text"
+                  : "bg-glass-inset-gray text-ink-body hover:bg-glass-inset"
               }`}
             >
               Unmapped
             </button>
             <button
               onClick={() => setFilter("mapped")}
-              className={`px-3 py-1 text-sm rounded-md transition-colors ${
+              className={`px-3 py-1 text-sm rounded-pill transition-colors ${
                 filter === "mapped"
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  ? "bg-success-fill text-success-text"
+                  : "bg-glass-inset-gray text-ink-body hover:bg-glass-inset"
               }`}
             >
               Mapped
@@ -281,16 +281,16 @@ export default function MCPDiscoveryPage() {
       </div>
 
       {/* Discovery Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="glass overflow-hidden">
         {!paginatedMCPs || filteredMCPs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <Server className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-4" />
-            <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">
+            <Server className="h-12 w-12 text-ink-tertiary mb-4" />
+            <p className="text-ink-secondary text-sm font-medium">
               {searchQuery || filter !== "all"
                 ? "No MCP servers match your filters"
                 : "No MCP servers discovered yet"}
             </p>
-            <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">
+            <p className="text-ink-tertiary text-xs mt-1">
               {searchQuery || filter !== "all"
                 ? "Try adjusting your search or filter criteria"
                 : "MCP references in agent talks_to fields will appear here"}
@@ -299,57 +299,57 @@ export default function MCPDiscoveryPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+              <thead className="bg-glass-inset-gray border-b border-divider">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    MCP Name / URL
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                    MCP name / URL
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Detected By
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                    Detected by
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Detection Method
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                    Detection method
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    First Seen
+                  <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                    First seen
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-medium text-ink-tertiary uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-divider">
                 {paginatedMCPs.map((mcp, index) => (
                   <tr
                     key={index}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors"
+                    className="hover:bg-glass-inset-gray transition-colors"
                   >
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div
-                          className={`p-2 rounded-lg ${
+                          className={`p-2 rounded-inset-sm ${
                             mcp.isRegistered
-                              ? "bg-green-100 dark:bg-green-900/30"
-                              : "bg-orange-100 dark:bg-orange-900/30"
+                              ? "bg-success-fill"
+                              : "bg-warning-fill"
                           }`}
                         >
                           <Server
                             className={`h-4 w-4 ${
                               mcp.isRegistered
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-orange-600 dark:text-orange-400"
+                                ? "text-success-text"
+                                : "text-warning-text"
                             }`}
                           />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          <p className="text-sm font-medium text-ink">
                             {mcp.name}
                           </p>
                           {mcp.url && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs">
+                            <p className="text-xs text-ink-tertiary truncate max-w-xs">
                               {mcp.url}
                             </p>
                           )}
@@ -358,12 +358,12 @@ export default function MCPDiscoveryPage() {
                     </td>
                     <td className="px-4 py-4">
                       {mcp.isRegistered ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-pill text-xs font-medium border border-success-border bg-success-fill text-success-text">
                           <Check className="h-3 w-3" />
                           Registered
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300">
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-pill text-xs font-medium border border-warning-border bg-warning-fill text-warning-text">
                           <AlertTriangle className="h-3 w-3" />
                           Unmapped
                         </span>
@@ -375,30 +375,30 @@ export default function MCPDiscoveryPage() {
                           {mcp.detectedBy.slice(0, 3).map((agent, i) => (
                             <div
                               key={i}
-                              className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] text-white font-medium border-2 border-white dark:border-gray-800"
+                              className="w-6 h-6 rounded-full bg-brand flex items-center justify-center text-[10px] text-white font-medium border-2 border-glass-border"
                               title={agent}
                             >
                               {agent.charAt(0).toUpperCase()}
                             </div>
                           ))}
                           {mcp.detectedByCount > 3 && (
-                            <div className="w-6 h-6 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-[10px] text-gray-700 dark:text-gray-300 font-medium border-2 border-white dark:border-gray-800">
+                            <div className="w-6 h-6 rounded-full bg-track flex items-center justify-center text-[10px] text-ink-body font-medium border-2 border-glass-border">
                               +{mcp.detectedByCount - 3}
                             </div>
                           )}
                         </div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                        <span className="text-xs text-ink-tertiary">
                           {mcp.detectedByCount} agent{mcp.detectedByCount !== 1 ? "s" : ""}
                         </span>
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                      <span className="text-xs text-ink-body bg-glass-inset-gray px-2 py-1 rounded-pill">
                         {mcp.detectionMethod}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="flex items-center gap-1 text-xs text-ink-tertiary">
                         <Clock className="h-3 w-3" />
                         {formatDate(mcp.firstDetectedAt)}
                       </div>
@@ -408,7 +408,7 @@ export default function MCPDiscoveryPage() {
                         {mcp.isRegistered && mcp.matchingServerId ? (
                           <Link
                             href={`/dashboard/mcp/${mcp.matchingServerId}`}
-                            className="inline-flex items-center gap-1 px-3 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1 text-xs text-brand-text hover:bg-brand-soft rounded-pill transition-colors"
                           >
                             <Eye className="h-3 w-3" />
                             View
@@ -416,7 +416,7 @@ export default function MCPDiscoveryPage() {
                         ) : (
                           <Link
                             href={`/dashboard/mcp?register=${encodeURIComponent(mcp.name)}`}
-                            className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-md transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-brand text-white shadow-accent hover:bg-brand-hover rounded-pill transition-colors"
                           >
                             <Plus className="h-3 w-3" />
                             Register
@@ -431,25 +431,25 @@ export default function MCPDiscoveryPage() {
 
             {/* Pagination Controls */}
             {filteredMCPs.length > 0 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-between px-4 py-3 border-t border-divider">
+                <div className="text-sm text-ink-secondary">
                   Showing {Math.min(currentPage * PAGE_SIZE, filteredMCPs.length)} of {filteredMCPs.length} servers
                 </div>
                 <div className="flex items-center gap-2">
                   {currentPage > 1 && (
                     <button
                       onClick={() => setCurrentPage(1)}
-                      className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      className="px-3 py-1 text-sm bg-glass-inset-gray text-ink-body rounded-pill hover:bg-glass-inset transition-colors"
                     >
-                      Show Less
+                      Show less
                     </button>
                   )}
                   {hasMore && (
                     <button
                       onClick={() => setCurrentPage(currentPage + 1)}
-                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      className="px-3 py-1 text-sm bg-brand text-white shadow-accent rounded-pill hover:bg-brand-hover transition-colors"
                     >
-                      Load More ({Math.min(PAGE_SIZE, filteredMCPs.length - currentPage * PAGE_SIZE)} more)
+                      Load more ({Math.min(PAGE_SIZE, filteredMCPs.length - currentPage * PAGE_SIZE)} more)
                     </button>
                   )}
                 </div>
@@ -460,17 +460,17 @@ export default function MCPDiscoveryPage() {
       </div>
 
       {/* Help Text */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-4">
+      <div className="bg-brand-soft rounded-card border border-stroke p-4">
         <div className="flex items-start gap-3">
-          <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-            <Server className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="p-2 bg-glass-inset rounded-inset-sm">
+            <Server className="h-5 w-5 text-brand-text" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">
-              How MCP Discovery Works
+            <h3 className="text-sm font-medium text-ink">
+              How MCP discovery works
             </h3>
-            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-              AIM automatically detects MCP servers referenced in agent <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">talks_to</code> fields.
+            <p className="text-xs text-ink-body mt-1">
+              AIM automatically detects MCP servers referenced in agent <code className="bg-glass-inset text-ink px-1 rounded">talks_to</code> fields.
               Unmapped MCPs represent servers that agents communicate with but haven't been formally registered in your organization.
               Registering these servers enables proper governance, trust scoring, and attestation workflows.
             </p>

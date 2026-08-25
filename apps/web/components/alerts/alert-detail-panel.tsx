@@ -49,12 +49,12 @@ interface AlertDetailPanelProps {
 }
 
 const severityColors: Record<string, string> = {
-  low: "bg-gray-100 text-gray-800 border-gray-300",
-  info: "bg-blue-100 text-blue-800 border-blue-300",
-  medium: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  warning: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  high: "bg-orange-100 text-orange-800 border-orange-300",
-  critical: "bg-red-100 text-red-800 border-red-300",
+  low: "border-glass-inset-border bg-glass-inset-gray text-ink-body",
+  info: "border-transparent bg-brand-soft text-brand-text",
+  medium: "border-warning-border bg-warning-fill text-warning-text",
+  warning: "border-warning-border bg-warning-fill text-warning-text",
+  high: "border-warning-border bg-warning-fill text-warning-text",
+  critical: "border-danger-border bg-danger-fill text-danger-text",
 };
 
 interface VerificationEvent {
@@ -211,14 +211,14 @@ export function AlertDetailPanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/20 z-40 transition-opacity"
+        className="fixed inset-0 z-40 bg-[rgba(29,29,31,0.45)] backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-white shadow-2xl z-50 overflow-y-auto animate-in slide-in-from-right duration-200">
+      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-glass-chrome border-l border-glass-chrome-border shadow-chrome backdrop-blur-chrome z-50 overflow-y-auto animate-in slide-in-from-right duration-200">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-start justify-between">
+        <div className="sticky top-0 bg-glass-chrome backdrop-blur-chrome border-b border-divider px-6 py-4 flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Badge
@@ -231,7 +231,7 @@ export function AlertDetailPanel({
                 {alert.alertType.replace(/_/g, " ")}
               </Badge>
             </div>
-            <h2 className="text-lg font-semibold truncate">{alert.title}</h2>
+            <h2 className="text-lg font-semibold text-ink truncate">{alert.title}</h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="ml-2">
             <X className="h-5 w-5" />
@@ -242,19 +242,19 @@ export function AlertDetailPanel({
         <div className="p-6 space-y-6">
           {/* Agent Info */}
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
               <User className="h-4 w-4" />
-              Agent Information
+              Agent information
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Agent Name</span>
-                <span className="font-medium">{alert.agentName || "Unknown"}</span>
+                <span className="text-sm text-ink-secondary">Agent name</span>
+                <span className="font-medium text-ink">{alert.agentName || "Unknown"}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Agent ID</span>
+                <span className="text-sm text-ink-secondary">Agent ID</span>
                 <div className="flex items-center gap-2">
-                  <code className="text-xs bg-gray-200 px-2 py-1 rounded font-mono">
+                  <code className="text-xs bg-glass-inset-gray text-ink px-2 py-1 rounded font-mono">
                     {alert.resourceId}
                   </code>
                   <Button
@@ -264,7 +264,7 @@ export function AlertDetailPanel({
                     onClick={() => copyToClipboard(alert.resourceId, "agentId")}
                   >
                     {copiedField === "agentId" ? (
-                      <Check className="h-3 w-3 text-green-600" />
+                      <Check className="h-3 w-3 text-success-text" />
                     ) : (
                       <Copy className="h-3 w-3" />
                     )}
@@ -274,8 +274,8 @@ export function AlertDetailPanel({
               {/* Show current trust score (freshly fetched) */}
               {currentTrustScore !== null && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Current Trust Score</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-ink-secondary">Current trust score</span>
+                  <span className="font-medium text-ink">
                     {(currentTrustScore * 100).toFixed(1)}%
                   </span>
                 </div>
@@ -284,8 +284,8 @@ export function AlertDetailPanel({
               {metadata.trustScore !== undefined && currentTrustScore !== null &&
                Math.abs((metadata.trustScore * 100) - (currentTrustScore * 100)) > 1 && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Trust Score at Alert Time</span>
-                  <span className="font-medium text-gray-500">
+                  <span className="text-sm text-ink-secondary">Trust score at alert time</span>
+                  <span className="font-medium text-ink-tertiary">
                     {(metadata.trustScore * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -293,8 +293,8 @@ export function AlertDetailPanel({
               {/* Fallback: show historical score if current couldn't be fetched */}
               {metadata.trustScore !== undefined && currentTrustScore === null && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Trust Score at Alert Time</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-ink-secondary">Trust score at alert time</span>
+                  <span className="font-medium text-ink">
                     {(metadata.trustScore * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -303,11 +303,11 @@ export function AlertDetailPanel({
               {/* Creator Info */}
               {agentDetails?.createdByName && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Created By</span>
-                  <span className="font-medium">
+                  <span className="text-sm text-ink-secondary">Created by</span>
+                  <span className="font-medium text-ink">
                     {agentDetails.createdByName}
                     {agentDetails.createdByEmail && (
-                      <span className="text-gray-500 text-xs ml-1">({agentDetails.createdByEmail})</span>
+                      <span className="text-ink-tertiary text-xs ml-1">({agentDetails.createdByEmail})</span>
                     )}
                   </span>
                 </div>
@@ -316,27 +316,27 @@ export function AlertDetailPanel({
               {/* SDK Token Info */}
               {agentDetails?.createdBySdkTokenId && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">SDK Token</span>
+                  <span className="text-sm text-ink-secondary">SDK token</span>
                   <div className="flex items-center gap-2">
                     <Link
                       href={`/dashboard/sdk-tokens?highlight=${agentDetails.createdBySdkTokenId}`}
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                      className="text-xs text-brand-text hover:underline flex items-center gap-1"
                     >
                       <KeyRound className="h-3 w-3" />
-                      View Token
+                      View token
                     </Link>
                     {!revokeSuccess ? (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2"
+                        className="h-6 text-xs text-danger-text hover:bg-danger-fill px-2"
                         onClick={() => setShowRevokeConfirm(true)}
                       >
                         <Ban className="h-3 w-3 mr-1" />
                         Revoke
                       </Button>
                     ) : (
-                      <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                      <Badge variant="outline" className="text-xs text-success-text border-success-border">
                         <Check className="h-3 w-3 mr-1" />
                         Revoked
                       </Badge>
@@ -350,14 +350,14 @@ export function AlertDetailPanel({
           {/* SDK Token Revoke Confirmation */}
           {showRevokeConfirm && agentDetails?.createdBySdkTokenId && (
             <section className="space-y-3">
-              <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+              <div className="glass-alert p-4">
                 <div className="flex items-start gap-3">
-                  <Ban className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <Ban className="h-5 w-5 text-danger-text flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h4 className="text-sm font-medium text-red-900 mb-1">
-                      Confirm SDK Token Revocation
+                    <h4 className="text-sm font-medium text-danger-text mb-1">
+                      Confirm SDK token revocation
                     </h4>
-                    <p className="text-xs text-red-800 mb-3">
+                    <p className="text-xs text-danger-text mb-3">
                       This will immediately revoke the SDK token used to create this agent.
                       Any applications using this token will no longer be able to authenticate.
                     </p>
@@ -377,7 +377,7 @@ export function AlertDetailPanel({
                         ) : (
                           <>
                             <Ban className="h-3 w-3 mr-1" />
-                            Yes, Revoke Token
+                            Yes, revoke token
                           </>
                         )}
                       </Button>
@@ -398,36 +398,36 @@ export function AlertDetailPanel({
 
           {/* Alert Details */}
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              Alert Details
+              Alert details
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
               <div>
-                <span className="text-sm text-gray-600">Description</span>
-                <p className="mt-1 text-sm">{alert.description}</p>
+                <span className="text-sm text-ink-secondary">Description</span>
+                <p className="mt-1 text-sm text-ink-body">{alert.description}</p>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Created</span>
-                <span className="text-sm">{formatDateTime(alert.createdAt)}</span>
+                <span className="text-sm text-ink-secondary">Created</span>
+                <span className="text-sm text-ink">{formatDateTime(alert.createdAt)}</span>
               </div>
               {alert.isAcknowledged && alert.acknowledgedAt && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Acknowledged</span>
-                  <span className="text-sm text-green-600">
+                  <span className="text-sm text-ink-secondary">Acknowledged</span>
+                  <span className="text-sm text-success-text">
                     {formatDateTime(alert.acknowledgedAt)}
                   </span>
                 </div>
               )}
               {metadata.policyName && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Policy</span>
+                  <span className="text-sm text-ink-secondary">Policy</span>
                   <Badge variant="outline">{metadata.policyName}</Badge>
                 </div>
               )}
               {metadata.enforcement && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Enforcement</span>
+                  <span className="text-sm text-ink-secondary">Enforcement</span>
                   <Badge
                     variant={metadata.isBlocked ? "destructive" : "secondary"}
                   >
@@ -440,21 +440,21 @@ export function AlertDetailPanel({
 
           {/* Verification History */}
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              Verification History
+              Verification history
             </h3>
 
             {loadingData ? (
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-4 w-1/2" />
               </div>
             ) : verificationHistory.length > 0 ? (
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-600">Recent Verifications</span>
+                  <span className="text-sm text-ink-secondary">Recent verifications</span>
                   <Badge variant="outline" className="text-xs">
                     {verificationHistory.length} events
                   </Badge>
@@ -467,12 +467,12 @@ export function AlertDetailPanel({
                     return (
                       <div
                         key={event.id}
-                        className={`p-3 rounded-lg border ${
+                        className={`p-3 rounded-inset border ${
                           isDenied
-                            ? "bg-red-50 border-red-200"
+                            ? "bg-danger-fill border-danger-border"
                             : isSuccess
-                            ? "bg-green-50 border-green-200"
-                            : "bg-gray-50 border-gray-200"
+                            ? "bg-success-fill border-success-border"
+                            : "bg-glass-inset-gray border-stroke"
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -483,11 +483,11 @@ export function AlertDetailPanel({
                             >
                               {isDenied ? "DENIED" : isSuccess ? "ALLOWED" : event.status.toUpperCase()}
                             </Badge>
-                            <span className="text-xs font-medium text-gray-600">
+                            <span className="text-xs font-medium text-ink-secondary">
                               {event.verificationType}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-ink-tertiary">
                             {formatDateTime(event.createdAt)}
                           </span>
                         </div>
@@ -495,17 +495,17 @@ export function AlertDetailPanel({
                         {(event.action || event.resource) && (
                           <div className="mt-2 space-y-1">
                             {event.action && (
-                              <p className="text-sm text-gray-700">
-                                <span className="text-gray-500">Capability:</span>{" "}
-                                <code className="text-xs bg-white px-1.5 py-0.5 rounded border">
+                              <p className="text-sm text-ink-body">
+                                <span className="text-ink-tertiary">Capability:</span>{" "}
+                                <code className="text-xs bg-glass text-ink px-1.5 py-0.5 rounded border border-stroke">
                                   {event.action}
                                 </code>
                               </p>
                             )}
                             {event.resource && (
-                              <p className="text-sm text-gray-700">
-                                <span className="text-gray-500">Resource:</span>{" "}
-                                <code className="text-xs bg-white px-1.5 py-0.5 rounded border">
+                              <p className="text-sm text-ink-body">
+                                <span className="text-ink-tertiary">Resource:</span>{" "}
+                                <code className="text-xs bg-glass text-ink px-1.5 py-0.5 rounded border border-stroke">
                                   {event.resource}
                                 </code>
                               </p>
@@ -514,7 +514,7 @@ export function AlertDetailPanel({
                         )}
 
                         {isDenied && event.reason && (
-                          <p className="text-sm text-red-600 mt-2">
+                          <p className="text-sm text-danger-text mt-2">
                             <span className="font-medium">Denied:</span> {event.reason}
                           </p>
                         )}
@@ -538,12 +538,12 @@ export function AlertDetailPanel({
                           execution-outcome follow-up.
                         */}
                         {event.executed !== undefined && (
-                          <div className={`mt-2 p-2 rounded text-xs ${
+                          <div className={`mt-2 p-2 rounded-inset-sm text-xs ${
                             event.executed
                               ? isDenied
-                                ? "bg-yellow-50 border border-yellow-200 text-yellow-700"
-                                : "bg-green-50 border border-green-200 text-green-700"
-                              : "bg-gray-50 border border-gray-200 text-gray-700"
+                                ? "bg-warning-fill border border-warning-border text-warning-text"
+                                : "bg-success-fill border border-success-border text-success-text"
+                              : "bg-glass-inset-gray border border-stroke text-ink-body"
                           }`}>
                             <span className="font-medium">
                               {event.executed ? (
@@ -556,7 +556,7 @@ export function AlertDetailPanel({
                                 "Agent reported: action not executed"
                               )}
                             </span>
-                            <p className="mt-1 text-gray-500">
+                            <p className="mt-1 text-ink-secondary">
                               Self-reported by the agent. AIM does not independently observe
                               execution, so this is not a record of enforcement.
                               {event.strictMode !== undefined && (
@@ -565,12 +565,12 @@ export function AlertDetailPanel({
                               )}
                             </p>
                             {event.executionError && (
-                              <p className="mt-1 text-red-600">Reported error: {event.executionError}</p>
+                              <p className="mt-1 text-danger-text">Reported error: {event.executionError}</p>
                             )}
                           </div>
                         )}
 
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-4 mt-2 text-xs text-ink-tertiary">
                           <span>Trust: {(event.trustScore * 100).toFixed(0)}%</span>
                           {event.durationMs > 0 && <span>{event.durationMs}ms</span>}
                           {event.initiatorIp && <span>IP: {event.initiatorIp}</span>}
@@ -581,8 +581,8 @@ export function AlertDetailPanel({
                 </div>
               </div>
             ) : (
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500">
+              <div className="bg-glass-inset-gray rounded-inset p-4">
+                <p className="text-sm text-ink-secondary">
                   No verification events recorded for this agent.
                 </p>
               </div>
@@ -597,17 +597,17 @@ export function AlertDetailPanel({
             if (contextEntries.length === 0) return null;
             return (
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
                   <Shield className="h-4 w-4" />
                   Context
                 </h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="bg-glass-inset-gray rounded-inset p-4 space-y-2">
                   {contextEntries.map(([key, value]) => (
                     <div key={key} className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600 capitalize">
+                      <span className="text-sm text-ink-secondary capitalize">
                         {key.replace(/([A-Z])/g, " $1").trim()}
                       </span>
-                      <span className="text-sm font-medium">
+                      <span className="text-sm font-medium text-ink">
                         {typeof value === "object" ? JSON.stringify(value) : String(value)}
                       </span>
                     </div>
@@ -619,7 +619,7 @@ export function AlertDetailPanel({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex gap-3">
+        <div className="sticky bottom-0 bg-glass-chrome backdrop-blur-chrome border-t border-divider px-6 py-4 flex gap-3">
           {!alert.isAcknowledged ? (
             <Button
               className="flex-1"
@@ -630,7 +630,7 @@ export function AlertDetailPanel({
           ) : (
             <Button
               variant="outline"
-              className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+              className="flex-1 border-success-border text-success-text hover:bg-success-fill"
               onClick={() => onResolve(alert.id)}
             >
               Resolve
@@ -639,7 +639,7 @@ export function AlertDetailPanel({
           <Link href={`/dashboard/agents/${alert.resourceId}`} className="flex-1">
             <Button variant="outline" className="w-full">
               <ExternalLink className="h-4 w-4 mr-2" />
-              View Agent
+              View agent
             </Button>
           </Link>
         </div>

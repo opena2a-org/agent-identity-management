@@ -115,7 +115,7 @@ export default function AgentSuccessPage() {
     return (
       <div className="max-w-4xl mx-auto mt-12">
         <div className="flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-pill h-12 w-12 border-b-2 border-brand"></div>
         </div>
       </div>
     );
@@ -126,7 +126,7 @@ export default function AgentSuccessPage() {
       <div className="max-w-4xl mx-auto mt-12">
         <Card>
           <CardContent className="pt-6">
-            <p className="text-center text-gray-600">Agent not found</p>
+            <p className="text-center text-ink-secondary">Agent not found</p>
           </CardContent>
         </Card>
       </div>
@@ -139,14 +139,14 @@ export default function AgentSuccessPage() {
       {/* Success Header */}
       <div className="text-center pt-8 pb-4">
         <div className="flex justify-center mb-4">
-          <div className="bg-green-100 p-4 rounded-full">
-            <CheckCircle className="h-16 w-16 text-green-600" />
+          <div className="bg-success-fill p-4 rounded-pill">
+            <CheckCircle className="h-16 w-16 text-success-text" />
           </div>
         </div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Agent Registered Successfully!
+        <h1 className="text-3xl font-bold text-ink mb-2">
+          Agent registered successfully
         </h1>
-        <p className="text-gray-600 max-w-2xl mx-auto">
+        <p className="text-ink-secondary max-w-2xl mx-auto">
           Your agent <span className="font-semibold">{agent.displayName}</span> has been registered with AIM.
           Download the SDK to start building with automatic identity verification.
         </p>
@@ -156,17 +156,17 @@ export default function AgentSuccessPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-green-600" />
-            Agent Details
+            <CheckCircle className="h-5 w-5 text-success-text" />
+            Agent details
           </CardTitle>
           <CardDescription>Your agent has been created with these credentials</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Agent ID */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-glass-inset-gray rounded-inset">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Agent ID</p>
-              <p className="text-sm text-gray-600 font-mono break-all">{agent.id}</p>
+              <p className="text-sm font-medium text-ink-body">Agent ID</p>
+              <p className="text-sm text-ink-secondary font-mono break-all">{agent.id}</p>
             </div>
             <Button
               variant="ghost"
@@ -174,7 +174,7 @@ export default function AgentSuccessPage() {
               onClick={() => copyToClipboard(agent.id, 'agent_id')}
             >
               {copiedField === 'agent_id' ? (
-                <Check className="h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-success-text" />
               ) : (
                 <Copy className="h-4 w-4" />
               )}
@@ -182,19 +182,19 @@ export default function AgentSuccessPage() {
           </div>
 
           {/* Agent Name */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-glass-inset-gray rounded-inset">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Agent Name</p>
-              <p className="text-sm text-gray-600">{agent.name}</p>
+              <p className="text-sm font-medium text-ink-body">Agent name</p>
+              <p className="text-sm text-ink-secondary">{agent.name}</p>
             </div>
           </div>
 
           {/* Public Key */}
           {agent.publicKey && (
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-glass-inset-gray rounded-inset">
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Public Key (Ed25519)</p>
-                <p className="text-sm text-gray-600 font-mono break-all truncate max-w-[500px]">
+                <p className="text-sm font-medium text-ink-body">Public key (Ed25519)</p>
+                <p className="text-sm text-ink-secondary font-mono break-all truncate max-w-[500px]">
                   {agent.publicKey}
                 </p>
               </div>
@@ -204,7 +204,7 @@ export default function AgentSuccessPage() {
                 onClick={() => copyToClipboard(agent.publicKey!, 'public_key')}
               >
                 {copiedField === 'public_key' ? (
-                  <Check className="h-4 w-4 text-green-600" />
+                  <Check className="h-4 w-4 text-success-text" />
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
@@ -213,10 +213,10 @@ export default function AgentSuccessPage() {
           )}
 
           {/* Status */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-glass-inset-gray rounded-inset">
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Status</p>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              <p className="text-sm font-medium text-ink-body">Status</p>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-pill border border-warning-border bg-warning-fill text-xs font-medium text-warning-text">
                 {agent.status}
               </span>
             </div>
@@ -238,56 +238,56 @@ export default function AgentSuccessPage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4">
             {/* Python SDK - Production Ready */}
-            <div className="border-2 border-blue-500 rounded-lg p-6 bg-gradient-to-br from-blue-50 to-white">
+            <div className="rounded-card border border-stroke bg-glass-inset p-6">
               <div className="flex flex-col h-full">
                 <div className="mb-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Download className="h-6 w-6 text-blue-600" />
+                    <div className="h-12 w-12 bg-brand rounded-inset shadow-accent flex items-center justify-center">
+                      <Download className="h-6 w-6 text-ink-inverse" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-xl mb-1">Python SDK</h3>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Production Ready
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-pill border border-success-border bg-success-fill text-xs font-medium text-success-text">
+                        Production ready
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-700 mb-3">
+                  <p className="text-sm text-ink-body mb-3">
                     Official production-ready SDK with Ed25519 cryptographic signing, OAuth integration,
                     automatic MCP detection, and secure keyring storage.
                   </p>
-                  <div className="space-y-2 text-sm text-gray-600">
+                  <div className="space-y-2 text-sm text-ink-secondary">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>Ed25519 cryptographic signing</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>OAuth/OIDC integration (Google, Microsoft, Okta)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>Automatic MCP detection</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>Secure keyring credential storage</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>100% test coverage</span>
                     </div>
                   </div>
                 </div>
                 <div className="mt-auto">
                   <Button
-                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    className="w-full"
                     onClick={() => downloadSDK('python')}
                     disabled={downloadingSDK !== null}
                   >
                     {downloadingSDK === 'python' ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        <div className="animate-spin rounded-pill h-4 w-4 border-b-2 border-current mr-2"></div>
                         Downloading...
                       </>
                     ) : (
@@ -302,56 +302,56 @@ export default function AgentSuccessPage() {
             </div>
 
             {/* Java SDK - Production Ready */}
-            <div className="border-2 border-orange-500 rounded-lg p-6 bg-gradient-to-br from-orange-50 to-white">
+            <div className="rounded-card border border-stroke bg-glass-inset p-6">
               <div className="flex flex-col h-full">
                 <div className="mb-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                      <Download className="h-6 w-6 text-orange-600" />
+                    <div className="h-12 w-12 bg-brand rounded-inset shadow-accent flex items-center justify-center">
+                      <Download className="h-6 w-6 text-ink-inverse" />
                     </div>
                     <div>
                       <h3 className="font-semibold text-xl mb-1">Java SDK</h3>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Production Ready
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-pill border border-success-border bg-success-fill text-xs font-medium text-success-text">
+                        Production ready
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-700 mb-3">
-                    Enterprise-grade Java SDK with Ed25519 cryptographic signing, OAuth integration,
-                    AspectJ annotations, and seamless Spring Boot support.
+                  <p className="text-sm text-ink-body mb-3">
+                    Java SDK with Ed25519 cryptographic signing, OAuth integration,
+                    AspectJ annotations, and Spring Boot support.
                   </p>
-                  <div className="space-y-2 text-sm text-gray-600">
+                  <div className="space-y-2 text-sm text-ink-secondary">
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>Ed25519 cryptographic signing</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>OAuth client credentials flow</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>@SecureAction AspectJ annotations</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>Spring Boot integration</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <CheckCircle className="h-4 w-4 text-success-text" />
                       <span>MCP server attestation</span>
                     </div>
                   </div>
                 </div>
                 <div className="mt-auto">
                   <Button
-                    className="w-full bg-orange-600 hover:bg-orange-700"
+                    className="w-full"
                     onClick={() => downloadSDK('java')}
                     disabled={downloadingSDK !== null}
                   >
                     {downloadingSDK === 'java' ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        <div className="animate-spin rounded-pill h-4 w-4 border-b-2 border-current mr-2"></div>
                         Downloading...
                       </>
                     ) : (
@@ -366,11 +366,11 @@ export default function AgentSuccessPage() {
             </div>
 
             {/* Future SDKs Note */}
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <p className="text-sm text-gray-600 mb-2">
-                <strong>Future Releases:</strong> Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026.
+            <div className="rounded-inset border border-divider bg-glass-inset-gray p-4">
+              <p className="text-sm text-ink-body mb-2">
+                <strong>Future releases:</strong> Go and JavaScript/TypeScript SDKs are planned for Q1-Q2 2026.
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-tertiary">
                 Python and Java SDKs provide complete feature parity and are production-ready for all use cases.
               </p>
             </div>
@@ -383,7 +383,7 @@ export default function AgentSuccessPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Book className="h-5 w-5" />
-            Quick Start Guide
+            Quick start guide
           </CardTitle>
           <CardDescription>Get up and running in 3 steps</CardDescription>
         </CardHeader>
@@ -394,7 +394,6 @@ export default function AgentSuccessPage() {
               variant={selectedLanguage === 'python' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setSelectedLanguage('python')}
-              className={selectedLanguage === 'python' ? 'bg-blue-600 hover:bg-blue-700' : ''}
             >
               Python
             </Button>
@@ -402,7 +401,6 @@ export default function AgentSuccessPage() {
               variant={selectedLanguage === 'java' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setSelectedLanguage('java')}
-              className={selectedLanguage === 'java' ? 'bg-orange-600 hover:bg-orange-700' : ''}
             >
               Java
             </Button>
@@ -412,15 +410,15 @@ export default function AgentSuccessPage() {
             <div className="space-y-4">
               {/* Python Step 1 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
                   1
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Download and Extract SDK</h4>
-                  <p className="text-sm text-gray-600">
+                  <h4 className="font-semibold mb-1">Download and extract SDK</h4>
+                  <p className="text-sm text-ink-secondary">
                     Download the Python SDK above and extract the ZIP file to your project directory
                   </p>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>unzip aim-sdk-{agent.name}-python.zip</code>
                   </pre>
                 </div>
@@ -428,15 +426,15 @@ export default function AgentSuccessPage() {
 
               {/* Python Step 2 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
                   2
                 </div>
                 <div>
                   <h4 className="font-semibold mb-1">Install SDK</h4>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-ink-secondary">
                     Install the SDK and its dependencies
                   </p>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>pip install -e .</code>
                   </pre>
                 </div>
@@ -444,15 +442,15 @@ export default function AgentSuccessPage() {
 
               {/* Python Step 3 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
                   3
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Run Example</h4>
-                  <p className="text-sm text-gray-600">
+                  <h4 className="font-semibold mb-1">Run example</h4>
+                  <p className="text-sm text-ink-secondary">
                     Test the automatic verification with the included example
                   </p>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>python example.py</code>
                   </pre>
                 </div>
@@ -460,8 +458,8 @@ export default function AgentSuccessPage() {
 
               {/* Python Example Code */}
               <div className="mt-6">
-                <h4 className="font-semibold mb-2">Example Usage</h4>
-                <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto">
+                <h4 className="font-semibold mb-2">Example usage</h4>
+                <pre className="glass-contrast p-4 rounded-inset font-mono text-xs text-ink-code overflow-x-auto">
                   <code>{`from aim_sdk import AIMClient
 from aim_sdk.config import AGENT_ID, PUBLIC_KEY, PRIVATE_KEY, AIM_URL
 
@@ -488,15 +486,15 @@ users = get_users()`}</code>
             <div className="space-y-4">
               {/* Java Step 1 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
                   1
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Download and Extract SDK</h4>
-                  <p className="text-sm text-gray-600">
+                  <h4 className="font-semibold mb-1">Download and extract SDK</h4>
+                  <p className="text-sm text-ink-secondary">
                     Download the Java SDK above and extract the ZIP file to your project directory
                   </p>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>unzip aim-sdk-{agent.name}-java.zip</code>
                   </pre>
                 </div>
@@ -504,15 +502,15 @@ users = get_users()`}</code>
 
               {/* Java Step 2 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
                   2
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Add to Your Project</h4>
-                  <p className="text-sm text-gray-600">
+                  <h4 className="font-semibold mb-1">Add to your project</h4>
+                  <p className="text-sm text-ink-secondary">
                     Add the SDK to your Maven or Gradle project
                   </p>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>{`<!-- Maven -->
 mvn install:install-file -Dfile=aim-sdk.jar \\
   -DgroupId=org.opena2a -DartifactId=aim-sdk \\
@@ -523,15 +521,15 @@ mvn install:install-file -Dfile=aim-sdk.jar \\
 
               {/* Java Step 3 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
                   3
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Run Example</h4>
-                  <p className="text-sm text-gray-600">
+                  <h4 className="font-semibold mb-1">Run example</h4>
+                  <p className="text-sm text-ink-secondary">
                     Compile and run the included example
                   </p>
-                  <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto">
+                  <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
                     <code>mvn compile exec:java -Dexec.mainClass="BasicExample"</code>
                   </pre>
                 </div>
@@ -539,8 +537,8 @@ mvn install:install-file -Dfile=aim-sdk.jar \\
 
               {/* Java Example Code */}
               <div className="mt-6">
-                <h4 className="font-semibold mb-2">Example Usage</h4>
-                <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto">
+                <h4 className="font-semibold mb-2">Example usage</h4>
+                <pre className="glass-contrast p-4 rounded-inset font-mono text-xs text-ink-code overflow-x-auto">
                   <code>{`import org.opena2a.aim.client.AIMClient;
 import org.opena2a.aim.client.AgentType;
 import java.util.Arrays;
@@ -576,16 +574,16 @@ public class MyAgent {
       </Card>
 
       {/* Security Notice */}
-      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded">
+      <div className="rounded-card border border-warning-border bg-warning-fill p-4">
         <div className="flex">
           <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+            <svg className="h-5 w-5 text-warning" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-800">Security Notice</h3>
-            <div className="mt-2 text-sm text-yellow-700">
+            <h3 className="text-sm font-medium text-warning-text">Security notice</h3>
+            <div className="mt-2 text-sm text-ink-body">
               <p>
                 The downloaded SDK contains your agent's <strong>private key</strong>. Never commit this file to version control
                 or share it publicly. Keep it secure and regenerate keys immediately if compromised.
@@ -601,18 +599,18 @@ public class MyAgent {
           variant="outline"
           onClick={() => router.push('/dashboard/agents')}
         >
-          View All Agents
+          View all agents
         </Button>
         <Button
           onClick={() => window.open('https://opena2a.org/docs', '_blank')}
         >
           <Book className="h-4 w-4 mr-2" />
-          View Documentation
+          View documentation
         </Button>
         <Button
           onClick={() => router.push('/dashboard')}
         >
-          Go to Dashboard
+          Go to dashboard
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
