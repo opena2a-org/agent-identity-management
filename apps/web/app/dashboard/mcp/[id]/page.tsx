@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -24,7 +25,7 @@ import {
   FileText,
   Clock,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -160,7 +161,8 @@ export default function MCPServerDetailsPage({
     const token = api.getToken?.();
     if (!token) return;
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const role = (payload.role as any) || "viewer";
       setUserRole(role);
     } catch {}
@@ -331,17 +333,17 @@ export default function MCPServerDetailsPage({
 
   // Get trust score color
   const getTrustColor = (score: number): string => {
-    if (score >= 80) return "text-green-600 bg-green-500/10";
-    if (score >= 60) return "text-yellow-600 bg-yellow-500/10";
-    return "text-red-600 bg-red-500/10";
+    if (score >= 80) return "text-success-text bg-success-fill border-success-border";
+    if (score >= 60) return "text-warning-text bg-warning-fill border-warning-border";
+    return "text-danger-text bg-danger-fill border-danger-border";
   };
 
   // Get confidence score color (for agent attestation)
   const getConfidenceColor = (score: number): string => {
-    if (score >= 80) return "text-green-600 bg-green-500/10";
-    if (score >= 60) return "text-yellow-600 bg-yellow-500/10";
-    if (score >= 40) return "text-orange-600 bg-orange-500/10";
-    return "text-red-600 bg-red-500/10";
+    if (score >= 80) return "text-success-text bg-success-fill border-success-border";
+    if (score >= 60) return "text-warning-text bg-warning-fill border-warning-border";
+    if (score >= 40) return "text-warning-text bg-warning-fill border-warning-border";
+    return "text-danger-text bg-danger-fill border-danger-border";
   };
 
   // Get status color
@@ -349,13 +351,13 @@ export default function MCPServerDetailsPage({
     switch (status) {
       case "active":
       case "verified":
-        return "bg-green-500/10 text-green-600";
+        return "bg-success-fill text-success-text border-success-border";
       case "pending":
-        return "bg-yellow-500/10 text-yellow-600";
+        return "bg-warning-fill text-warning-text border-warning-border";
       case "inactive":
-        return "bg-gray-500/10 text-gray-600";
+        return "bg-glass-inset-gray text-ink-body border-glass-inset-border";
       default:
-        return "bg-gray-500/10 text-gray-600";
+        return "bg-glass-inset-gray text-ink-body border-glass-inset-border";
     }
   };
 
@@ -373,13 +375,13 @@ export default function MCPServerDetailsPage({
       <div className="flex items-center justify-center min-h-[400px]">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
+            <CardTitle className="flex items-center gap-2 text-danger-text">
               <AlertTriangle className="h-5 w-5" />
-              Error Loading MCP Server
+              Error loading MCP server
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-ink-secondary mb-4">
               {error ||
                 "MCP server not found or you do not have permission to view it."}
             </p>
@@ -388,7 +390,7 @@ export default function MCPServerDetailsPage({
               onClick={() => router.push("/dashboard/mcp")}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to MCP Servers
+              Back to MCP servers
             </Button>
           </CardContent>
         </Card>
@@ -408,25 +410,25 @@ export default function MCPServerDetailsPage({
             className="mb-4"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to MCP Servers
+            Back to MCP servers
           </Button>
 
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-purple-500/10">
-                <Server className="h-8 w-8 text-purple-600" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-inset bg-brand-soft">
+                <Server className="h-8 w-8 text-brand-text" />
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <h1 className="text-3xl font-bold">{server.name}</h1>
                   {isVerified && (
                     <span title="Verified">
-                      <Shield className="h-6 w-6 text-green-600" />
+                      <Shield className="h-6 w-6 text-success-text" />
                     </span>
                   )}
                 </div>
                 {server.description && (
-                  <p className="text-muted-foreground mb-2">
+                  <p className="text-ink-secondary mb-2">
                     {server.description}
                   </p>
                 )}
@@ -465,7 +467,6 @@ export default function MCPServerDetailsPage({
                 <Button
                   onClick={handleVerify}
                   disabled={verifying}
-                  className="bg-green-600 hover:bg-green-700"
                 >
                   {verifying ? (
                     <>
@@ -503,16 +504,16 @@ export default function MCPServerDetailsPage({
 
         {/* HERO: Confidence Score Card */}
         {server.verificationMethod === "agent_attestation" ? (
-          <Card className="border-blue-200 dark:border-blue-700">
+          <Card className="border-brand-soft">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                    <Shield className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft">
+                    <Shield className="h-6 w-6 text-brand-text" />
                   </div>
                   <div>
                     <CardTitle className="text-lg font-semibold">
-                      Confidence Score
+                      Confidence score
                     </CardTitle>
                     <CardDescription className="text-sm">
                       Verified by {server.attestationCount || 0} agent attestation
@@ -528,7 +529,7 @@ export default function MCPServerDetailsPage({
                   >
                     {(server.confidenceScore ?? 0).toFixed(1)}%
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-secondary">
                     {(server.attestationCount ?? 0) === 0
                       ? "No attestations yet"
                       : (server.confidenceScore ?? 0) >= 80
@@ -543,7 +544,7 @@ export default function MCPServerDetailsPage({
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-4 text-sm text-ink-secondary">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="h-4 w-4" />
                   <span>
@@ -577,7 +578,7 @@ export default function MCPServerDetailsPage({
                       ) : (
                         <>
                           <CheckCircle className="h-3 w-3 mr-1.5" />
-                          Request Verification
+                          Request verification
                         </>
                       )}
                     </Button>
@@ -592,7 +593,7 @@ export default function MCPServerDetailsPage({
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg font-semibold">
-                    Trust Score
+                    Trust score
                   </CardTitle>
                   <CardDescription className="text-sm">
                     Traditional verification method
@@ -606,7 +607,7 @@ export default function MCPServerDetailsPage({
                   >
                     {trustScorePercent(server.trustScore).toFixed(1)}%
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-secondary">
                     {trustScorePercent(server.trustScore) >= 80
                       ? "High trust"
                       : trustScorePercent(server.trustScore) >= 60
@@ -638,13 +639,13 @@ export default function MCPServerDetailsPage({
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Connected Agents
+              <CardTitle className="text-sm font-medium text-ink-secondary">
+                Connected agents
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{connectedAgents.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-ink-secondary mt-1">
                 Agent{connectedAgents.length !== 1 ? "s" : ""} using this server
               </p>
             </CardContent>
@@ -652,13 +653,13 @@ export default function MCPServerDetailsPage({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-sm font-medium text-ink-secondary">
                 Capabilities
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{capabilities.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-ink-secondary mt-1">
                 Tool{capabilities.length !== 1 ? "s" : ""} and resource
                 {capabilities.length !== 1 ? "s" : ""}
               </p>
@@ -667,13 +668,13 @@ export default function MCPServerDetailsPage({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-sm font-medium text-ink-secondary">
                 Attestations
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{attestations.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-ink-secondary mt-1">
                 Cryptographic verification{attestations.length !== 1 ? "s" : ""}
               </p>
             </CardContent>
@@ -681,7 +682,7 @@ export default function MCPServerDetailsPage({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-sm font-medium text-ink-secondary">
                 Status
               </CardTitle>
             </CardHeader>
@@ -689,11 +690,11 @@ export default function MCPServerDetailsPage({
               <Badge className={getStatusColor(server.status)}>
                 {server.status.charAt(0).toUpperCase() + server.status.slice(1)}
               </Badge>
-              <p className="text-xs text-muted-foreground mt-2">
+              <p className="text-xs text-ink-secondary mt-2">
                 {server.lastVerifiedAt
                   ? `Verified ${new Date(server.lastVerifiedAt).toLocaleDateString()}`
                   : server.status === "verified"
-                  ? "Via Attestation"
+                  ? "Via attestation"
                   : "Not yet verified"}
               </p>
             </CardContent>
@@ -708,7 +709,7 @@ export default function MCPServerDetailsPage({
               <ExternalLink className="h-4 w-4 mr-2" />
               Capabilities
             </TabsTrigger>
-            <TabsTrigger value="agents">Connected Agents</TabsTrigger>
+            <TabsTrigger value="agents">Connected agents</TabsTrigger>
             <TabsTrigger value="activity">
               <Activity className="h-4 w-4 mr-2" />
               Attestations
@@ -719,7 +720,7 @@ export default function MCPServerDetailsPage({
             </TabsTrigger>
             <TabsTrigger value="audit">
               <Activity className="h-4 w-4 mr-2" />
-              Audit Trail
+              Audit trail
             </TabsTrigger>
             <TabsTrigger value="integration">
               <Code2 className="h-4 w-4 mr-2" />
@@ -730,7 +731,7 @@ export default function MCPServerDetailsPage({
           <TabsContent value="capabilities" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>MCP Server Capabilities</CardTitle>
+                <CardTitle>MCP server capabilities</CardTitle>
                 <CardDescription>
                   Capability types supported by this MCP server
                 </CardDescription>
@@ -738,25 +739,25 @@ export default function MCPServerDetailsPage({
               <CardContent>
                 {capabilities.length === 0 ? (
                   <div className="text-center py-8 space-y-4">
-                    <p className="text-muted-foreground">
+                    <p className="text-ink-secondary">
                       No capabilities detected yet
                     </p>
                     <div className="max-w-md mx-auto space-y-3">
-                      <div className="bg-muted/50 rounded-md p-3 text-left">
+                      <div className="bg-glass-inset-gray rounded-md p-3 text-left">
                         <p className="font-medium text-sm mb-1">Option 1: Auto-detect via SDK</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-ink-secondary">
                           When an agent attests to this MCP server, capabilities are automatically detected.
                         </p>
                       </div>
-                      <div className="bg-muted/50 rounded-md p-3 text-left">
+                      <div className="bg-glass-inset-gray rounded-md p-3 text-left">
                         <p className="font-medium text-sm mb-1">Option 2: Manual verification</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-ink-secondary">
                           Click "Verify" above to query the MCP server directly.
                         </p>
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-foreground">SDK documentation</a> for more details.
+                    <p className="text-xs text-ink-secondary mt-2">
+                      See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-ink">SDK documentation</a> for more details.
                     </p>
                   </div>
                 ) : (
@@ -768,7 +769,7 @@ export default function MCPServerDetailsPage({
 
                       return (
                         <div key={type} className="space-y-2">
-                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 capitalize flex items-center gap-2">
+                          <h4 className="text-sm font-semibold text-ink-body capitalize flex items-center gap-2">
                             <CheckCircle className="h-4 w-4" />
                             {type}s ({typeCaps.length})
                           </h4>
@@ -776,15 +777,15 @@ export default function MCPServerDetailsPage({
                             {typeCaps.map((capability) => (
                               <div
                                 key={capability.id}
-                                className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                                className="p-3 bg-glass-inset-gray border border-glass-inset-border rounded-md"
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    <p className="text-sm font-medium text-ink">
                                       {capability.name}
                                     </p>
                                     {capability.description && (
-                                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                      <p className="text-xs text-ink-secondary mt-0.5">
                                         {capability.description}
                                       </p>
                                     )}
@@ -811,7 +812,7 @@ export default function MCPServerDetailsPage({
           <TabsContent value="agents" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Connected Agents</CardTitle>
+                <CardTitle>Connected agents</CardTitle>
                 <CardDescription>
                   Agents that can communicate with this MCP server
                 </CardDescription>
@@ -819,11 +820,11 @@ export default function MCPServerDetailsPage({
               <CardContent>
                 {agentsError ? (
                   <div className="text-center py-8">
-                    <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
-                    <p className="text-destructive font-medium">
+                    <AlertTriangle className="h-8 w-8 text-danger-text mx-auto mb-2" />
+                    <p className="text-danger-text font-medium">
                       Failed to load connected agents
                     </p>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-sm text-ink-secondary mt-1">
                       {agentsError}
                     </p>
                     <Button
@@ -832,16 +833,16 @@ export default function MCPServerDetailsPage({
                       className="mt-4"
                       onClick={handleRefresh}
                     >
-                      Try Again
+                      Try again
                     </Button>
                   </div>
                 ) : connectedAgents.length === 0 ? (
                   <div className="text-center py-8">
-                    <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground">
+                    <Bot className="h-8 w-8 text-ink-secondary mx-auto mb-2" />
+                    <p className="text-ink-secondary">
                       No agents connected yet
                     </p>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-sm text-ink-secondary mt-1">
                       Agents that attest to this MCP server will appear here
                     </p>
                   </div>
@@ -850,19 +851,19 @@ export default function MCPServerDetailsPage({
                     {connectedAgents.map((agent) => (
                       <div
                         key={agent.id}
-                        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                        className="flex items-center gap-3 p-3 border border-divider rounded-lg hover:bg-glass-inset-gray transition-colors cursor-pointer"
                         onClick={() =>
                           router.push(`/dashboard/agents/${agent.id}`)
                         }
                       >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                          <Bot className="h-5 w-5 text-blue-600" />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft">
+                          <Bot className="h-5 w-5 text-brand-text" />
                         </div>
                         <div className="flex-1">
                           <h4 className="font-medium">
                             {agent.displayName || agent.name}
                           </h4>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-ink-secondary">
                             {agent.agentType}
                           </p>
                         </div>
@@ -879,7 +880,7 @@ export default function MCPServerDetailsPage({
                             {agent.status}
                           </Badge>
                         )}
-                        <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                        <ExternalLink className="h-4 w-4 text-ink-secondary" />
                       </div>
                     ))}
                   </div>
@@ -901,13 +902,13 @@ export default function MCPServerDetailsPage({
                   <div className="py-6">
                     {/* Header */}
                     <div className="text-center mb-6">
-                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-3">
-                        <Shield className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-brand-soft mb-3">
+                        <Shield className="h-6 w-6 text-brand-text" />
                       </div>
-                      <h3 className="text-lg font-semibold text-foreground">
+                      <h3 className="text-lg font-semibold text-ink">
                         No attestations yet
                       </h3>
-                      <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+                      <p className="text-sm text-ink-secondary mt-1 max-w-sm mx-auto">
                         Build trust by having agents verify this MCP server
                       </p>
                     </div>
@@ -916,23 +917,23 @@ export default function MCPServerDetailsPage({
                     <div className="grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
                       {/* Option 1: SDK */}
                       <div className="relative group">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg opacity-20 group-hover:opacity-30 transition" />
-                        <div className="relative bg-card border rounded-lg p-4 h-full">
+                        <div className="absolute -inset-0.5 bg-bar rounded-lg opacity-20 group-hover:opacity-30 transition" />
+                        <div className="relative bg-glass border border-glass-border rounded-lg p-4 h-full">
                           <div className="flex items-center gap-2 mb-2">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-100 dark:bg-blue-900/30">
-                              <Bot className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-brand-soft">
+                              <Bot className="h-4 w-4 text-brand-text" />
                             </div>
                             <div>
-                              <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Recommended</span>
-                              <h4 className="font-semibold text-sm">Agent Attestation</h4>
+                              <span className="text-xs font-medium text-brand-text">Recommended</span>
+                              <h4 className="font-semibold text-sm">Agent attestation</h4>
                             </div>
                           </div>
-                          <p className="text-xs text-muted-foreground mb-3">
+                          <p className="text-xs text-ink-secondary mb-3">
                             Agents automatically create cryptographically-signed attestations via the SDK.
                           </p>
-                          <div className="bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-md p-2 overflow-x-auto">
-                            <code className="text-xs text-blue-700 dark:text-blue-300 whitespace-nowrap font-mono">
-                              agent.attest_mcp("{server.name}")
+                          <div className="bg-glass-contrast border border-glass-contrast-border rounded-md p-2 overflow-x-auto">
+                            <code className="text-xs text-ink-code whitespace-nowrap font-mono">
+                              agent.attest_mcp("{server.id}")
                             </code>
                           </div>
                         </div>
@@ -940,30 +941,30 @@ export default function MCPServerDetailsPage({
 
                       {/* Option 2: Manual */}
                       <div className="relative group">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-gray-400 to-gray-500 rounded-lg opacity-10 group-hover:opacity-20 transition" />
-                        <div className="relative bg-card border rounded-lg p-4 h-full">
+                        <div className="absolute -inset-0.5 bg-stroke rounded-lg opacity-10 group-hover:opacity-20 transition" />
+                        <div className="relative bg-glass border border-glass-border rounded-lg p-4 h-full">
                           <div className="flex items-center gap-2 mb-2">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-gray-100 dark:bg-gray-800">
-                              <User className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                            <div className="flex items-center justify-center w-8 h-8 rounded-md bg-glass-inset-gray">
+                              <User className="h-4 w-4 text-ink-secondary" />
                             </div>
                             <div>
-                              <span className="text-xs font-medium text-muted-foreground">Alternative</span>
-                              <h4 className="font-semibold text-sm">Manual Attestation</h4>
+                              <span className="text-xs font-medium text-ink-secondary">Alternative</span>
+                              <h4 className="font-semibold text-sm">Manual attestation</h4>
                             </div>
                           </div>
-                          <p className="text-xs text-muted-foreground mb-3">
+                          <p className="text-xs text-ink-secondary mb-3">
                             {canManage
                               ? "Verify this server manually using the attestation form below."
                               : "Contact an admin or manager to manually verify this server."}
                           </p>
                           {canManage ? (
-                            <div className="flex items-center text-xs text-muted-foreground">
-                              <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-green-500" />
+                            <div className="flex items-center text-xs text-ink-secondary">
+                              <CheckCircle className="h-3.5 w-3.5 mr-1.5 text-success-text" />
                               <span>You have permission to attest</span>
                             </div>
                           ) : (
-                            <div className="flex items-center text-xs text-muted-foreground">
-                              <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
+                            <div className="flex items-center text-xs text-ink-secondary">
+                              <AlertTriangle className="h-3.5 w-3.5 mr-1.5 text-warning-text" />
                               <span>Requires admin/manager role</span>
                             </div>
                           )}
@@ -972,13 +973,13 @@ export default function MCPServerDetailsPage({
                     </div>
 
                     {/* Footer link */}
-                    <p className="text-xs text-center text-muted-foreground mt-5">
+                    <p className="text-xs text-center text-ink-secondary mt-5">
                       Learn more in the{" "}
                       <a
                         href="https://opena2a.org/docs/integration/python"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                        className="text-brand-text hover:underline"
                       >
                         SDK documentation
                       </a>
@@ -989,24 +990,24 @@ export default function MCPServerDetailsPage({
                     {attestations.map((attestation) => (
                       <div
                         key={attestation.id}
-                        className="border rounded-lg p-4 space-y-3"
+                        className="border border-divider rounded-lg p-4 space-y-3"
                       >
                         {/* Header */}
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <Bot className="h-5 w-5 text-blue-600" />
+                            <Bot className="h-5 w-5 text-brand-text" />
                             <div>
                               <p className="font-medium">
                                 {attestation.agentName}
                               </p>
-                              <p className="text-sm text-muted-foreground">
-                                Trust Score: {(attestation.agentTrustScore * 100).toFixed(0)}%
+                              <p className="text-sm text-ink-secondary">
+                                Trust score: {(attestation.agentTrustScore * 100).toFixed(0)}%
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             {attestation.isValid ? (
-                              <Badge variant="default" className="bg-green-600">
+                              <Badge variant="success">
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 Valid
                               </Badge>
@@ -1017,7 +1018,7 @@ export default function MCPServerDetailsPage({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                className="h-7 px-2 text-danger-text hover:bg-danger-fill hover:text-danger-text"
                                 onClick={() => openRevokeDialog(attestation)}
                               >
                                 <Ban className="h-3.5 w-3.5 mr-1" />
@@ -1030,14 +1031,14 @@ export default function MCPServerDetailsPage({
                         {/* Details */}
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
-                            <span className="text-muted-foreground">Verified:</span>
+                            <span className="text-ink-secondary">Verified:</span>
                             <span className="ml-2">
                               {new Date(attestation.verifiedAt).toLocaleString()}
                             </span>
                           </div>
                           {attestation.connectionLatencyMs > 0 && (
                             <div>
-                              <span className="text-muted-foreground">Latency:</span>
+                              <span className="text-ink-secondary">Latency:</span>
                               <span className="ml-2">{attestation.connectionLatencyMs}ms</span>
                             </div>
                           )}
@@ -1048,7 +1049,7 @@ export default function MCPServerDetailsPage({
                           {attestation.healthCheckPassed && (
                             <Badge variant="outline" className="text-xs">
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Health Check Passed
+                              Health check passed
                             </Badge>
                           )}
                         </div>
@@ -1056,8 +1057,8 @@ export default function MCPServerDetailsPage({
                         {/* Capabilities */}
                         {attestation.capabilitiesConfirmed && attestation.capabilitiesConfirmed.length > 0 && (
                           <div>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              Capabilities Verified ({attestation.capabilitiesConfirmed.length}):
+                            <p className="text-sm text-ink-secondary mb-2">
+                              Capabilities verified ({attestation.capabilitiesConfirmed.length}):
                             </p>
                             <div className="flex flex-wrap gap-1">
                               {attestation.capabilitiesConfirmed.map((cap, idx) => (
@@ -1095,7 +1096,7 @@ export default function MCPServerDetailsPage({
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5" />
-                  Activity Timeline
+                  Activity timeline
                 </CardTitle>
                 <CardDescription>
                   Unified view of attestations, capability changes, and administrative actions
@@ -1111,9 +1112,9 @@ export default function MCPServerDetailsPage({
                   if (auditLogs.length === 0) {
                     return (
                       <div className="text-center py-12">
-                        <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                        <p className="text-muted-foreground">No activity recorded yet</p>
-                        <p className="text-sm text-muted-foreground mt-2">
+                        <Activity className="h-12 w-12 text-ink-secondary mx-auto mb-4" />
+                        <p className="text-ink-secondary">No activity recorded yet</p>
+                        <p className="text-sm text-ink-secondary mt-2">
                           Events will appear here when agents interact with this MCP server
                         </p>
                       </div>
@@ -1124,24 +1125,24 @@ export default function MCPServerDetailsPage({
                     <div className="space-y-4">
                       {/* Summary Cards */}
                       <div className="grid grid-cols-3 gap-4 mb-6">
-                        <div className="p-3 rounded-lg border bg-card">
-                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                            <CheckCircle className="h-3 w-3 text-green-500" />
+                        <div className="p-3 rounded-lg border border-glass-inset-border bg-glass-inset-gray">
+                          <div className="flex items-center gap-2 text-ink-secondary text-xs mb-1">
+                            <CheckCircle className="h-3 w-3 text-success-text" />
                             Attestations
                           </div>
                           <div className="text-2xl font-bold">{attestationCount}</div>
                         </div>
-                        <div className="p-3 rounded-lg border bg-card">
-                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                            <Code2 className="h-3 w-3 text-purple-500" />
+                        <div className="p-3 rounded-lg border border-glass-inset-border bg-glass-inset-gray">
+                          <div className="flex items-center gap-2 text-ink-secondary text-xs mb-1">
+                            <Code2 className="h-3 w-3 text-brand-indigo" />
                             Capabilities
                           </div>
                           <div className="text-2xl font-bold">{capabilityCount}</div>
                         </div>
-                        <div className="p-3 rounded-lg border bg-card">
-                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                            <FileText className="h-3 w-3 text-blue-500" />
-                            Admin Actions
+                        <div className="p-3 rounded-lg border border-glass-inset-border bg-glass-inset-gray">
+                          <div className="flex items-center gap-2 text-ink-secondary text-xs mb-1">
+                            <FileText className="h-3 w-3 text-brand-text" />
+                            Admin actions
                           </div>
                           <div className="text-2xl font-bold">{auditCount}</div>
                         </div>
@@ -1149,7 +1150,7 @@ export default function MCPServerDetailsPage({
 
                       {/* Timeline */}
                       <div className="relative">
-                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-divider" />
                         <div className="space-y-4">
                           {auditLogs.slice(0, auditPage * AUDIT_PAGE_SIZE).map((log, index) => {
                             const eventType = log.eventType || 'audit';
@@ -1208,25 +1209,25 @@ export default function MCPServerDetailsPage({
                             return (
                               <div key={log.id || index} className="relative pl-10">
                                 {/* Timeline dot */}
-                                <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
-                                  eventType === 'attestation' ? 'border-green-500' :
-                                  eventType === 'capability' ? 'border-purple-500' :
-                                  'border-blue-500'
+                                <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-page ${
+                                  eventType === 'attestation' ? 'border-success' :
+                                  eventType === 'capability' ? 'border-brand-indigo' :
+                                  'border-brand'
                                 }`} />
 
                                 {/* Event card */}
                                 <div className={`p-3 rounded-lg border ${
-                                  eventType === 'attestation' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' :
-                                  eventType === 'capability' ? 'bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900' :
-                                  'bg-card'
+                                  eventType === 'attestation' ? 'bg-success-fill border-success-border' :
+                                  eventType === 'capability' ? 'bg-brand-soft border-brand-soft' :
+                                  'bg-glass-inset-gray border-glass-inset-border'
                                 }`}>
                                   <div className="flex items-start justify-between gap-4">
                                     <div className="flex items-start gap-3">
                                       {/* Icon */}
                                       <div className={`mt-0.5 ${
-                                        eventType === 'attestation' ? 'text-green-500' :
-                                        eventType === 'capability' ? 'text-purple-500' :
-                                        'text-blue-500'
+                                        eventType === 'attestation' ? 'text-success-text' :
+                                        eventType === 'capability' ? 'text-brand-indigo' :
+                                        'text-brand-text'
                                       }`}>
                                         {eventType === 'attestation' && <CheckCircle className="h-4 w-4" />}
                                         {eventType === 'capability' && <Code2 className="h-4 w-4" />}
@@ -1234,7 +1235,7 @@ export default function MCPServerDetailsPage({
                                       </div>
                                       <div>
                                         <div className="font-medium text-sm">{details.title}</div>
-                                        <div className="text-sm text-muted-foreground">{details.description}</div>
+                                        <div className="text-sm text-ink-secondary">{details.description}</div>
 
                                         {/* Show capabilities confirmed for attestations */}
                                         {eventType === 'attestation' && metadata.capabilitiesConfirmed && metadata.capabilitiesConfirmed.length > 0 && (
@@ -1252,7 +1253,7 @@ export default function MCPServerDetailsPage({
                                           </div>
                                         )}
 
-                                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                        <div className="text-xs text-ink-secondary mt-1 flex items-center gap-1">
                                           <Clock className="h-3 w-3" />
                                           {log.timestamp ? new Date(log.timestamp).toLocaleString() : 'Unknown time'}
                                         </div>
@@ -1273,8 +1274,8 @@ export default function MCPServerDetailsPage({
 
                       {/* Pagination Controls */}
                       {auditLogs.length > 0 && (
-                        <div className="flex items-center justify-between pt-4 border-t mt-4">
-                          <div className="text-sm text-muted-foreground">
+                        <div className="flex items-center justify-between pt-4 border-t border-divider mt-4">
+                          <div className="text-sm text-ink-secondary">
                             Showing {Math.min(auditPage * AUDIT_PAGE_SIZE, auditLogs.length)} of {auditLogs.length} events
                           </div>
                           <div className="flex items-center gap-2">
@@ -1284,7 +1285,7 @@ export default function MCPServerDetailsPage({
                                 size="sm"
                                 onClick={() => setAuditPage(1)}
                               >
-                                Show Less
+                                Show less
                               </Button>
                             )}
                             {auditPage * AUDIT_PAGE_SIZE < auditLogs.length && (
@@ -1293,7 +1294,7 @@ export default function MCPServerDetailsPage({
                                 size="sm"
                                 onClick={() => setAuditPage(auditPage + 1)}
                               >
-                                Load More ({Math.min(AUDIT_PAGE_SIZE, auditLogs.length - auditPage * AUDIT_PAGE_SIZE)} more)
+                                Load more ({Math.min(AUDIT_PAGE_SIZE, auditLogs.length - auditPage * AUDIT_PAGE_SIZE)} more)
                               </Button>
                             )}
                           </div>
@@ -1309,7 +1310,7 @@ export default function MCPServerDetailsPage({
           <TabsContent value="details" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>MCP Server Details</CardTitle>
+                <CardTitle>MCP server details</CardTitle>
                 <CardDescription>
                   Detailed information about this MCP server
                 </CardDescription>
@@ -1317,7 +1318,7 @@ export default function MCPServerDetailsPage({
               <CardContent>
                 <div className="grid gap-4">
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       Server ID:
                     </span>
                     <span className="col-span-2 text-sm font-mono">
@@ -1326,21 +1327,21 @@ export default function MCPServerDetailsPage({
                   </div>
                   <Separator />
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       Name:
                     </span>
                     <span className="col-span-2 text-sm">{server.name}</span>
                   </div>
                   <Separator />
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       URL:
                     </span>
                     <a
                       href={server.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="col-span-2 text-sm text-blue-600 hover:underline"
+                      className="col-span-2 text-sm text-brand-text hover:underline"
                     >
                       {server.url}
                     </a>
@@ -1349,7 +1350,7 @@ export default function MCPServerDetailsPage({
                   {server.description && (
                     <>
                       <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm font-medium text-muted-foreground">
+                        <span className="text-sm font-medium text-ink-secondary">
                           Description:
                         </span>
                         <span className="col-span-2 text-sm">
@@ -1360,7 +1361,7 @@ export default function MCPServerDetailsPage({
                     </>
                   )}
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       Status:
                     </span>
                     <span className="col-span-2 text-sm">
@@ -1372,10 +1373,10 @@ export default function MCPServerDetailsPage({
                   </div>
                   <Separator />
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       {server.verificationMethod === "agent_attestation"
-                        ? "Confidence Score:"
-                        : "Trust Score:"}
+                        ? "Confidence score:"
+                        : "Trust score:"}
                     </span>
                     <span className="col-span-2 text-sm">
                       <Badge
@@ -1396,19 +1397,19 @@ export default function MCPServerDetailsPage({
                   {/* ✅ NEW: Attestation Info Card */}
                   {server.verificationMethod === "agent_attestation" && (
                     <>
-                      <div className="col-span-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <div className="col-span-3 bg-brand-soft border border-brand-soft rounded-lg p-4">
                         <div className="flex items-start gap-3">
-                          <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                          <Shield className="h-5 w-5 text-brand-text mt-0.5" />
                           <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                              Verified by Agent Attestations
+                            <h4 className="text-sm font-semibold text-ink mb-2">
+                              Verified by agent attestations
                             </h4>
                             <div className="grid grid-cols-2 gap-3 text-sm">
                               <div>
-                                <span className="text-blue-700 dark:text-blue-300 font-medium">
+                                <span className="text-brand-text font-medium">
                                   {server.attestationCount || 0}
                                 </span>
-                                <span className="text-blue-600 dark:text-blue-400 ml-1">
+                                <span className="text-ink-body ml-1">
                                   {server.attestationCount === 1
                                     ? "attestation"
                                     : "attestations"}
@@ -1416,10 +1417,10 @@ export default function MCPServerDetailsPage({
                               </div>
                               {server.lastAttestedAt && (
                                 <div>
-                                  <span className="text-blue-700 dark:text-blue-300 font-medium">
+                                  <span className="text-brand-text font-medium">
                                     Last attested:
                                   </span>
-                                  <span className="text-blue-600 dark:text-blue-400 ml-1">
+                                  <span className="text-ink-body ml-1">
                                     {new Date(
                                       server.lastAttestedAt
                                     ).toLocaleDateString()}
@@ -1427,7 +1428,7 @@ export default function MCPServerDetailsPage({
                                 </div>
                               )}
                             </div>
-                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                            <p className="text-xs text-ink-secondary mt-2">
                               This MCP server's identity is cryptographically
                               verified by {server.attestationCount || 0} verified
                               agent{server.attestationCount !== 1 ? "s" : ""} with
@@ -1442,8 +1443,8 @@ export default function MCPServerDetailsPage({
                   {server.keyType && (
                     <>
                       <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Key Type:
+                        <span className="text-sm font-medium text-ink-secondary">
+                          Key type:
                         </span>
                         <span className="col-span-2 text-sm">
                           {server.keyType}
@@ -1455,8 +1456,8 @@ export default function MCPServerDetailsPage({
                   {server.lastVerifiedAt && (
                     <>
                       <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Last Verified:
+                        <span className="text-sm font-medium text-ink-secondary">
+                          Last verified:
                         </span>
                         <span className="col-span-2 text-sm">
                           {new Date(server.lastVerifiedAt).toLocaleString()}
@@ -1466,7 +1467,7 @@ export default function MCPServerDetailsPage({
                     </>
                   )}
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       Created:
                     </span>
                     <span className="col-span-2 text-sm">
@@ -1477,8 +1478,8 @@ export default function MCPServerDetailsPage({
                     <>
                       <Separator />
                       <div className="grid grid-cols-3 items-center gap-4">
-                        <span className="text-sm font-medium text-muted-foreground">
-                          Last Updated:
+                        <span className="text-sm font-medium text-ink-secondary">
+                          Last updated:
                         </span>
                         <span className="col-span-2 text-sm">
                           {new Date(server.updatedAt).toLocaleString()}
@@ -1488,7 +1489,7 @@ export default function MCPServerDetailsPage({
                   )}
                   <Separator />
                   <div className="grid grid-cols-3 items-center gap-4">
-                    <span className="text-sm font-medium text-muted-foreground">
+                    <span className="text-sm font-medium text-ink-secondary">
                       Organization ID:
                     </span>
                     <span className="col-span-2 text-sm font-mono">
@@ -1528,7 +1529,7 @@ export default function MCPServerDetailsPage({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete MCP Server</AlertDialogTitle>
+              <AlertDialogTitle>Delete MCP server</AlertDialogTitle>
               <AlertDialogDescription>
                 This action cannot be undone. This will permanently delete the
                 server "{server?.name}".
@@ -1538,7 +1539,7 @@ export default function MCPServerDetailsPage({
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDelete}
-                className="bg-red-600 hover:bg-red-700"
+                className={buttonVariants({ variant: "destructive" })}
               >
                 Delete
               </AlertDialogAction>
@@ -1560,8 +1561,8 @@ export default function MCPServerDetailsPage({
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
-                <Ban className="h-5 w-5 text-red-600" />
-                Revoke Attestation
+                <Ban className="h-5 w-5 text-danger-text" />
+                Revoke attestation
               </AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-4">
@@ -1574,8 +1575,8 @@ export default function MCPServerDetailsPage({
                   </p>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">
-                      Reason for revocation <span className="text-red-500">*</span>
+                    <label className="text-sm font-medium text-ink">
+                      Reason for revocation <span className="text-danger-text">*</span>
                     </label>
                     <Select
                       value={revokeReason}
@@ -1587,31 +1588,31 @@ export default function MCPServerDetailsPage({
                       <SelectContent>
                         <SelectItem value="compromised">
                           <div className="flex items-center gap-2">
-                            <XCircle className="h-4 w-4 text-red-600" />
-                            <span>Compromised - Security concern detected</span>
+                            <XCircle className="h-4 w-4 text-danger-text" />
+                            <span>Compromised - security concern detected</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="outdated">
                           <div className="flex items-center gap-2">
-                            <Activity className="h-4 w-4 text-yellow-600" />
-                            <span>Outdated - Server changed significantly</span>
+                            <Activity className="h-4 w-4 text-warning-text" />
+                            <span>Outdated - server changed significantly</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="false_positive">
                           <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4 text-orange-600" />
-                            <span>False Positive - Incorrect attestation</span>
+                            <AlertTriangle className="h-4 w-4 text-warning-text" />
+                            <span>False positive - incorrect attestation</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="policy_violation">
                           <div className="flex items-center gap-2">
-                            <Shield className="h-4 w-4 text-purple-600" />
-                            <span>Policy Violation - Does not meet requirements</span>
+                            <Shield className="h-4 w-4 text-brand-indigo" />
+                            <span>Policy violation - does not meet requirements</span>
                           </div>
                         </SelectItem>
                         <SelectItem value="other">
                           <div className="flex items-center gap-2">
-                            <Edit className="h-4 w-4 text-gray-600" />
+                            <Edit className="h-4 w-4 text-ink-secondary" />
                             <span>Other</span>
                           </div>
                         </SelectItem>
@@ -1620,19 +1621,19 @@ export default function MCPServerDetailsPage({
                   </div>
 
                   {selectedAttestation && (
-                    <div className="bg-muted rounded-lg p-3 space-y-1 text-sm">
+                    <div className="bg-glass-inset-gray rounded-lg p-3 space-y-1 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Agent:</span>
+                        <span className="text-ink-secondary">Agent:</span>
                         <span className="font-medium">{selectedAttestation.agentName}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Agent Trust:</span>
+                        <span className="text-ink-secondary">Agent trust:</span>
                         <span className="font-medium">
                           {(selectedAttestation.agentTrustScore * 100).toFixed(0)}%
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Attested:</span>
+                        <span className="text-ink-secondary">Attested:</span>
                         <span className="font-medium">
                           {new Date(selectedAttestation.verifiedAt).toLocaleDateString()}
                         </span>
@@ -1657,7 +1658,7 @@ export default function MCPServerDetailsPage({
                 ) : (
                   <>
                     <Ban className="h-4 w-4 mr-2" />
-                    Revoke Attestation
+                    Revoke attestation
                   </>
                 )}
               </Button>

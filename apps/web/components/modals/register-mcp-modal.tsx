@@ -169,7 +169,7 @@ export function RegisterMCPModal({
 
       // Show success toast
       toast.success(
-        editMode ? "MCP Server Updated Successfully" : "MCP Server Registered Successfully",
+        editMode ? "MCP server updated successfully" : "MCP server registered successfully",
         {
           description: editMode
             ? `${formData.name} has been updated.`
@@ -197,7 +197,7 @@ export function RegisterMCPModal({
       setError(errorMessage);
 
       // Show toast notification with the backend error message
-      toast.error("MCP Server Registration Failed", {
+      toast.error("MCP server registration failed", {
         description: errorMessage,
         action: {
           label: "Retry",
@@ -248,20 +248,20 @@ export function RegisterMCPModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(29,29,31,0.45)] backdrop-blur-sm"
       style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="glass-chrome max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {editMode ? "Edit MCP Server" : "Register MCP Server"}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-divider">
+          <h2 className="text-xl font-semibold text-ink">
+            {editMode ? "Edit MCP server" : "Register MCP server"}
           </h2>
           <button
             onClick={handleClose}
             disabled={loading}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+            className="text-ink-tertiary hover:text-ink transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -281,10 +281,10 @@ export function RegisterMCPModal({
           />
           {/* Success Message */}
           {success && (
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-              <p className="text-sm text-green-800 dark:text-green-300">
-                MCP Server {editMode ? "updated" : "registered"} successfully!
+            <div className="p-4 bg-success-fill border border-success-border rounded-inset flex items-center gap-3">
+              <CheckCircle className="h-5 w-5 text-success-text" />
+              <p className="text-sm text-success-text">
+                MCP server {editMode ? "updated" : "registered"} successfully
               </p>
             </div>
           )}
@@ -293,11 +293,11 @@ export function RegisterMCPModal({
           {error && (
             <div
               ref={errorBannerRef}
-              className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3"
+              className="glass-alert p-4 flex items-center gap-3"
             >
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <AlertCircle className="h-5 w-5 text-danger-text" />
               <div className="flex-1">
-                <p className="text-sm text-red-800 dark:text-red-300">
+                <p className="text-sm text-danger-text">
                   {error}
                 </p>
               </div>
@@ -306,14 +306,14 @@ export function RegisterMCPModal({
 
           {/* Basic Information */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-              Basic Information
+            <h3 className="text-overline">
+              Basic information
             </h3>
 
             {/* Server Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Server Name <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-ink-body mb-1">
+                Server name <span className="text-danger-text">*</span>
               </label>
               <input
                 ref={nameRef}
@@ -323,21 +323,21 @@ export function RegisterMCPModal({
                   setFormData({ ...formData, name: e.target.value })
                 }
                 placeholder="e.g., filesystem-mcp or github-mcp"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.name
-                  ? "border-red-500"
-                  : "border-gray-200 dark:border-gray-700"
+                className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.name
+                  ? "border-danger"
+                  : "border-stroke"
                   }`}
                 disabled={loading || success}
               />
               {errors.name && (
-                <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+                <p className="mt-1 text-xs text-danger-text">{errors.name}</p>
               )}
             </div>
 
             {/* Server URL */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Server URL <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-ink-body mb-1">
+                Server URL <span className="text-danger-text">*</span>
               </label>
               <input
                 ref={urlRef}
@@ -347,20 +347,20 @@ export function RegisterMCPModal({
                   setFormData({ ...formData, url: e.target.value })
                 }
                 placeholder="https://mcp.example.com"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.url
-                  ? "border-red-500"
-                  : "border-gray-200 dark:border-gray-700"
+                className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.url
+                  ? "border-danger"
+                  : "border-stroke"
                   }`}
                 disabled={loading || success}
               />
               {errors.url && (
-                <p className="mt-1 text-xs text-red-500">{errors.url}</p>
+                <p className="mt-1 text-xs text-danger-text">{errors.url}</p>
               )}
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-ink-body mb-1">
                 Description
               </label>
               <textarea
@@ -370,14 +370,14 @@ export function RegisterMCPModal({
                 }
                 placeholder="Brief description of what this MCP server provides..."
                 rows={3}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                 disabled={loading || success}
               />
             </div>
 
             {/* Version */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-ink-body mb-1">
                 Version
               </label>
               <input
@@ -388,16 +388,16 @@ export function RegisterMCPModal({
                   setFormData({ ...formData, version: e.target.value })
                 }
                 placeholder="1.0.0"
-                className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.version
-                  ? "border-red-500"
-                  : "border-gray-200 dark:border-gray-700"
+                className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.version
+                  ? "border-danger"
+                  : "border-stroke"
                   }`}
                 disabled={loading || success}
               />
               {errors.version && (
-                <p className="mt-1 text-xs text-red-500">{errors.version}</p>
+                <p className="mt-1 text-xs text-danger-text">{errors.version}</p>
               )}
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs text-ink-tertiary">
                 Must be in format X.Y.Z (e.g., 1.0.0)
               </p>
             </div>
@@ -405,21 +405,21 @@ export function RegisterMCPModal({
 
           {/* Security Configuration */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-              Security Configuration (Optional)
+            <h3 className="text-overline">
+              Security configuration (optional)
             </h3>
 
             {/* Info Box - Automatic Security */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="bg-brand-soft border border-stroke rounded-inset p-4">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
-                  <CheckCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <CheckCircle className="h-5 w-5 text-brand-text" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                    Automatic Key Generation & Verification
+                  <h4 className="text-sm font-medium text-ink">
+                    Automatic key generation and verification
                   </h4>
-                  <p className="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                  <p className="mt-1 text-xs text-ink-body">
                     AIM will automatically generate Ed25519 cryptographic keys
                     and detect capabilities from your MCP server. You can
                     optionally provide your own public key if you've already
@@ -431,8 +431,8 @@ export function RegisterMCPModal({
 
             {/* Public Key */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Public Key (Optional)
+              <label className="block text-sm font-medium text-ink-body mb-1">
+                Public key (optional)
               </label>
               <textarea
                 value={formData.public_key}
@@ -441,36 +441,36 @@ export function RegisterMCPModal({
                 }
                 placeholder="Base64-encoded Ed25519 public key (leave empty for automatic generation)"
                 rows={3}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 font-mono text-xs"
+                className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary font-mono text-xs"
                 disabled={loading || success}
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                If empty, AIM generates secure Ed25519 keys automatically
+              <p className="mt-1 text-xs text-ink-tertiary">
+                If empty, AIM generates Ed25519 keys automatically
               </p>
             </div>
           </div>
 
           {/* Auto-Detection Info */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-              MCP Capabilities
+            <h3 className="text-overline">
+              MCP capabilities
             </h3>
 
-            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+            <div className="bg-success-fill border border-success-border rounded-inset p-4">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
-                  <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <CheckCircle className="h-5 w-5 text-success-text" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-green-900 dark:text-green-100">
-                    Automatic Capability Detection
+                  <h4 className="text-sm font-medium text-ink">
+                    Automatic capability detection
                   </h4>
-                  <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+                  <p className="mt-1 text-xs text-ink-body">
                     AIM will automatically discover capabilities from your MCP server's{" "}
-                    <code className="bg-green-100 dark:bg-green-800 px-1 py-0.5 rounded">
+                    <code className="bg-glass-inset-gray text-ink px-1 py-0.5 rounded">
                       /.well-known/mcp/capabilities
                     </code>{" "}
-                    endpoint. No manual configuration needed!
+                    endpoint. No manual configuration needed.
                   </p>
                 </div>
               </div>
@@ -478,22 +478,22 @@ export function RegisterMCPModal({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-divider">
             <button
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-gray rounded-pill transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || (editMode && !success && !isFormDirty())}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {editMode ? "Update Server" : "Register Server"}
+              {editMode ? "Update server" : "Register server"}
             </button>
           </div>
         </form>
