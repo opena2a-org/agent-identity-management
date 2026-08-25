@@ -775,6 +775,11 @@ func (m *MockUserRepoForRegistration) CountActiveUsers(orgID uuid.UUID, withinMi
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockUserRepoForRegistration) CountByRoleAndStatus(role domain.UserRole, status domain.UserStatus) (int, error) {
+	args := m.Called(role, status)
+	return args.Int(0), args.Error(1)
+}
+
 // MockOrgRepoForRegistration implements domain.OrganizationRepository
 type MockOrgRepoForRegistration struct {
 	mock.Mock
@@ -913,10 +918,12 @@ func TestRegistrationService_CreateManualRegistrationRequest_WeakPassword(t *tes
 }
 
 func TestRegistrationService_CreateManualRegistrationRequest_StoresSignupProfile(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
 	ctx := context.Background()
 
 	mockUserRepo := new(MockUserRepoForRegistration)
 	mockUserRepo.On("GetByEmail", "survey@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(1, nil)
 
 	mockRegRepo := new(MockRegistrationRepoForService)
 	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "survey@example.com").Return(nil, errors.New("not found"))
@@ -938,10 +945,12 @@ func TestRegistrationService_CreateManualRegistrationRequest_StoresSignupProfile
 }
 
 func TestRegistrationService_CreateManualRegistrationRequest_NoProfileLeavesMetadataNil(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
 	ctx := context.Background()
 
 	mockUserRepo := new(MockUserRepoForRegistration)
 	mockUserRepo.On("GetByEmail", "plain@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(1, nil)
 
 	mockRegRepo := new(MockRegistrationRepoForService)
 	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "plain@example.com").Return(nil, errors.New("not found"))
@@ -958,10 +967,12 @@ func TestRegistrationService_CreateManualRegistrationRequest_NoProfileLeavesMeta
 }
 
 func TestRegistrationService_CreateAccessRequest_Success(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
 	ctx := context.Background()
 
 	mockUserRepo := new(MockUserRepoForRegistration)
 	mockUserRepo.On("GetByEmail", "newuser@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(1, nil)
 
 	mockRegRepo := new(MockRegistrationRepoForService)
 	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "newuser@example.com").Return(nil, errors.New("not found"))
@@ -1001,10 +1012,12 @@ func TestRegistrationService_CreateAccessRequest_UserExists(t *testing.T) {
 }
 
 func TestRegistrationService_CreateAccessRequest_WithOrganizationName(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
 	ctx := context.Background()
 
 	mockUserRepo := new(MockUserRepoForRegistration)
 	mockUserRepo.On("GetByEmail", "user@company.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(1, nil)
 
 	mockRegRepo := new(MockRegistrationRepoForService)
 	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "user@company.com").Return(nil, errors.New("not found"))
@@ -1345,4 +1358,214 @@ func TestRegistrationService_ApproveRegistrationRequest_NotPending(t *testing.T)
 	assert.Nil(t, user)
 	assert.Equal(t, ErrRegistrationNotPending, err)
 	mockRegRepo.AssertExpectations(t)
+}
+
+// A fresh self-hosted install with no AIM_PLATFORM_ADMINS and no active administrator cannot
+// serve a pending request; the service must refuse before writing anything.
+func TestRegistrationService_NoAllowlistNoAdmin_RefusesBeforeWriting(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "first@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(0, nil)
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "first@example.com").Return(nil, errors.New("not found"))
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	req, err := service.CreateManualRegistrationRequest(ctx, "first@example.com", "First", "User", "Str0ng!Passw0rd", nil)
+
+	assert.Nil(t, req)
+	assert.Equal(t, ErrNoAdministrators, err)
+	mockRegRepo.AssertNotCalled(t, "CreateRegistrationRequest", mock.Anything, mock.Anything)
+	mockUserRepo.AssertNotCalled(t, "Create", mock.Anything)
+	mockUserRepo.AssertExpectations(t)
+}
+
+// An allowlisted address is auto-approved exactly as before; the administrator count is not
+// even consulted.
+func TestRegistrationService_AllowlistSet_AutoApproveUnchanged(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", " Ops@Example.com ,")
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "ops@example.com").Return(nil, errors.New("not found"))
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "ops@example.com").Return(nil, errors.New("not found"))
+	mockRegRepo.On("CreateRegistrationRequest", ctx, mock.MatchedBy(func(r *domain.UserRegistrationRequest) bool {
+		return r.Status == domain.RegistrationStatusApproved
+	})).Return(nil)
+
+	// The organization step fails on purpose: it proves the request was written as approved
+	// (the allowlist path) without exercising organization creation here.
+	mockOrgRepo := new(MockOrgRepoForRegistration)
+	mockOrgRepo.On("GetByDomain", "example.com").Return(nil, errors.New("stop here"))
+	mockOrgRepo.On("Create", mock.Anything).Return(errors.New("stop here"))
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, mockOrgRepo, nil, nil)
+
+	_, err := service.CreateManualRegistrationRequest(ctx, "ops@example.com", "Ops", "User", "Str0ng!Passw0rd", nil)
+
+	assert.Error(t, err)
+	assert.NotEqual(t, ErrNoAdministrators, err)
+	mockRegRepo.AssertExpectations(t)
+	mockUserRepo.AssertNotCalled(t, "CountByRoleAndStatus", mock.Anything, mock.Anything)
+}
+
+// With an active administrator, a pending request is servable and is created as today.
+func TestRegistrationService_NoAllowlistWithAdmin_PendingAsToday(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "second@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(1, nil)
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "second@example.com").Return(nil, errors.New("not found"))
+	mockRegRepo.On("CreateRegistrationRequest", ctx, mock.MatchedBy(func(r *domain.UserRegistrationRequest) bool {
+		return r.Status == domain.RegistrationStatusPending
+	})).Return(nil)
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	req, err := service.CreateManualRegistrationRequest(ctx, "second@example.com", "Second", "User", "Str0ng!Passw0rd", nil)
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, req) {
+		assert.Equal(t, domain.RegistrationStatusPending, req.Status)
+	}
+	mockRegRepo.AssertExpectations(t)
+	mockUserRepo.AssertExpectations(t)
+}
+
+func TestPlatformAdminAllowlist_ParsesEntries(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
+	assert.Empty(t, platformAdminAllowlist())
+	t.Setenv("AIM_PLATFORM_ADMINS", " , ")
+	assert.Empty(t, platformAdminAllowlist())
+	t.Setenv("AIM_PLATFORM_ADMINS", " A@Example.com, b@example.com ,")
+	assert.Equal(t, []string{"a@example.com", "b@example.com"}, platformAdminAllowlist())
+}
+
+// The public access-request path writes the same pending row and needs the same approver.
+func TestRegistrationService_AccessRequest_NoAllowlistNoAdmin_RefusesBeforeWriting(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "access@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(0, nil)
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "access@example.com").Return(nil, errors.New("not found"))
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	req, err := service.CreateAccessRequest(ctx, "access@example.com", "Access", "User", "needs a dashboard account", nil)
+
+	assert.Nil(t, req)
+	assert.Equal(t, ErrNoAdministrators, err)
+	mockRegRepo.AssertNotCalled(t, "CreateRegistrationRequest", mock.Anything, mock.Anything)
+	mockUserRepo.AssertExpectations(t)
+}
+
+// A failing administrator count is a failure, not a refusal and not a write.
+func TestRegistrationService_AdminCountFails_ErrorsWithoutWriting(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "db@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(0, errors.New("db down"))
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "db@example.com").Return(nil, errors.New("not found"))
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	req, err := service.CreateManualRegistrationRequest(ctx, "db@example.com", "Db", "User", "Str0ng!Passw0rd", nil)
+
+	assert.Nil(t, req)
+	assert.Error(t, err)
+	assert.NotEqual(t, ErrNoAdministrators, err)
+	assert.Contains(t, err.Error(), "failed to count administrators")
+	mockRegRepo.AssertNotCalled(t, "CreateRegistrationRequest", mock.Anything, mock.Anything)
+}
+
+// The allowlist is intent, not an approver. With the variable set to an address that never
+// registered (a typo, or the operator not yet signed up), a non-listed registrant must be
+// refused before anything is written, on both public creators; the count is consulted.
+func TestRegistrationService_AllowlistSetNonListedNoAdmin_Refuses(t *testing.T) {
+	for _, allowlist := range []string{"ops@exmaple.com", "true"} {
+		t.Run(allowlist, func(t *testing.T) {
+			t.Setenv("AIM_PLATFORM_ADMINS", allowlist)
+			ctx := context.Background()
+
+			mockUserRepo := new(MockUserRepoForRegistration)
+			mockUserRepo.On("GetByEmail", "first@example.com").Return(nil, errors.New("not found"))
+			mockUserRepo.On("GetByEmail", "access@example.com").Return(nil, errors.New("not found"))
+			mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(0, nil).Twice()
+
+			mockRegRepo := new(MockRegistrationRepoForService)
+			mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "first@example.com").Return(nil, errors.New("not found"))
+			mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "access@example.com").Return(nil, errors.New("not found"))
+
+			service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+			req, err := service.CreateManualRegistrationRequest(ctx, "first@example.com", "First", "User", "Str0ng!Passw0rd", nil)
+			assert.Nil(t, req)
+			assert.Equal(t, ErrNoAdministrators, err)
+
+			access, err := service.CreateAccessRequest(ctx, "access@example.com", "Access", "User", "needs a dashboard account", nil)
+			assert.Nil(t, access)
+			assert.Equal(t, ErrNoAdministrators, err)
+
+			mockRegRepo.AssertNotCalled(t, "CreateRegistrationRequest", mock.Anything, mock.Anything)
+			mockUserRepo.AssertNotCalled(t, "Create", mock.Anything)
+			mockUserRepo.AssertExpectations(t)
+		})
+	}
+}
+
+// Once an administrator exists, a set allowlist changes nothing for a non-listed registrant.
+func TestRegistrationService_AllowlistSetNonListedWithAdmin_PendingAsToday(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "ops@example.com")
+	ctx := context.Background()
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "second@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(1, nil)
+
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "second@example.com").Return(nil, errors.New("not found"))
+	mockRegRepo.On("CreateRegistrationRequest", ctx, mock.MatchedBy(func(r *domain.UserRegistrationRequest) bool {
+		return r.Status == domain.RegistrationStatusPending
+	})).Return(nil)
+
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	req, err := service.CreateManualRegistrationRequest(ctx, "second@example.com", "Second", "User", "Str0ng!Passw0rd", nil)
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, req) {
+		assert.Equal(t, domain.RegistrationStatusPending, req.Status)
+	}
+	mockRegRepo.AssertExpectations(t)
+	mockUserRepo.AssertExpectations(t)
+}
+
+// Tokens that cannot be an address are ignored, so a mistyped variable neither approves
+// anyone nor counts as an approver; the filter is no stricter than registration itself.
+func TestPlatformAdminAllowlist_IgnoresTokensThatCannotBeAnAddress(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "true, @example.com, ops@ , ,")
+	assert.Empty(t, platformAdminAllowlist())
+	assert.False(t, isPlatformAdmin("true"))
+
+	entries, ignored := parsePlatformAdminAllowlist("true, A@Example.com, x@, ops@exmaple.com")
+	assert.Equal(t, []string{"a@example.com", "ops@exmaple.com"}, entries)
+	assert.Equal(t, []string{"true", "x@"}, ignored)
 }

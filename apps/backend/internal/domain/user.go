@@ -39,8 +39,8 @@ type User struct {
 	Status                 UserStatus `json:"status"`     // pending, active, suspended, deactivated
 	PasswordHash           *string    `json:"-"`          // Never expose in JSON
 	ForcePasswordChange    bool       `json:"forcePasswordChange"`
-	PasswordResetToken     *string    `json:"-"` // Never expose in JSON
-	PasswordResetExpiresAt *time.Time `json:"-"` // Never expose in JSON
+	PasswordResetToken     *string    `json:"-"`                    // Never expose in JSON
+	PasswordResetExpiresAt *time.Time `json:"-"`                    // Never expose in JSON
 	ApprovedBy             *uuid.UUID `json:"approvedBy,omitempty"` // Admin who approved this user
 	ApprovedAt             *time.Time `json:"approvedAt,omitempty"` // When user was approved
 	LastLoginAt            *time.Time `json:"lastLoginAt"`
@@ -61,4 +61,7 @@ type UserRepository interface {
 	UpdateRole(id uuid.UUID, role UserRole) error
 	Delete(id uuid.UUID) error
 	CountActiveUsers(orgID uuid.UUID, withinMinutes int) (int, error)
+	// CountByRoleAndStatus counts users across every organization with the given role and status
+	// (soft-deleted users excluded); the registration path uses it to learn whether anyone can approve.
+	CountByRoleAndStatus(role UserRole, status UserStatus) (int, error)
 }

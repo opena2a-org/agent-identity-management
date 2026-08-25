@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ var (
 	ErrRegistrationNotPending    = errors.New("registration request is not pending")
 	ErrUserAlreadyExists         = errors.New("user with this email already exists")
 	ErrRegistrationRequestExists = errors.New("registration request with this email already exists")
+	// ErrNoAdministrators: the request would wait for an approval nobody in this deployment can give.
+	ErrNoAdministrators = errors.New("no administrator can approve a registration request in this deployment")
 )
 
 // RegistrationRepository defines the interface for registration data persistence
@@ -94,6 +97,10 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 	// (see PR-B) and team creation is an explicit user action (see PR-C).
 	emailDomain := extractEmailDomain(email)
 	shouldAutoApprove := isPlatformAdmin(email)
+
+	if err := s.ensureApproverExists(email, shouldAutoApprove); err != nil {
+		return nil, err
+	}
 
 	// Create new manual registration request
 	req := domain.NewUserRegistrationRequestManual(
@@ -231,6 +238,11 @@ func (s *RegistrationService) CreateAccessRequest(
 	existingRequest, err := s.registrationRepo.GetRegistrationRequestByEmail(ctx, email)
 	if err == nil && existingRequest != nil && existingRequest.IsPending() {
 		return nil, ErrRegistrationRequestExists
+	}
+
+	// An access request is never auto-approved, so it needs an approver like any other.
+	if err := s.ensureApproverExists(email, false); err != nil {
+		return nil, err
 	}
 
 	// Create new access request (no password)
@@ -664,14 +676,86 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 // Email comparison is case-insensitive and trims whitespace. Empty env var means
 // no platform admins exist (safe default — only approved-by-existing-admin users
 // can register).
-func isPlatformAdmin(email string) bool {
-	allowlist := os.Getenv("AIM_PLATFORM_ADMINS")
-	if allowlist == "" {
-		return false
+// ensureApproverExists refuses a request that would wait for an approval nobody in this
+// deployment can give. On a fresh self-hosted install with no AIM_PLATFORM_ADMINS allowlist
+// and no active administrator, a pending request would wait forever and nothing would say
+// so; the refusal happens before anything is written (never write-then-refuse). A request
+// that auto-approves needs no approver.
+func (s *RegistrationService) ensureApproverExists(email string, autoApproved bool) error {
+	if autoApproved {
+		return nil
 	}
+	// The allowlist is intent; the users table is state. A listed address that never
+	// registered (or a mistyped entry) is not an approver, so the count runs regardless.
+	approvers, err := s.userRepo.CountByRoleAndStatus(domain.RoleAdmin, domain.UserStatusActive)
+	if err != nil {
+		return fmt.Errorf("failed to count administrators: %w", err)
+	}
+	if approvers == 0 {
+		// The client receives one message for every sub-case; the sub-case is operator-only.
+		log.Printf("registration refused for %s: 0 active administrators, %d valid AIM_PLATFORM_ADMINS entries, registrant listed=false", email, len(platformAdminAllowlist()))
+		return ErrNoAdministrators
+	}
+	return nil
+}
+
+// platformAdminAllowlist returns the lower-cased, trimmed entries of AIM_PLATFORM_ADMINS
+// that could be an email address (something@something). An unset, empty or separator-only
+// variable yields no entries; a token that cannot be an address is ignored (reported once at
+// startup by ReportPlatformAdminAllowlist). The filter is deliberately no stricter than what
+// registration itself accepts.
+func platformAdminAllowlist() []string {
+	entries, _ := parsePlatformAdminAllowlist(os.Getenv("AIM_PLATFORM_ADMINS"))
+	return entries
+}
+
+// parsePlatformAdminAllowlist splits the variable into accepted entries and ignored tokens.
+func parsePlatformAdminAllowlist(raw string) (entries []string, ignored []string) {
+	entries = make([]string, 0)
+	ignored = make([]string, 0)
+	for _, entry := range strings.Split(raw, ",") {
+		e := strings.ToLower(strings.TrimSpace(entry))
+		if e == "" {
+			continue
+		}
+		at := strings.Index(e, "@")
+		if at <= 0 || at == len(e)-1 {
+			ignored = append(ignored, e)
+			continue
+		}
+		entries = append(entries, e)
+	}
+	return entries, ignored
+}
+
+// ReportPlatformAdminAllowlist logs, once at startup, how AIM_PLATFORM_ADMINS was read: the
+// number of accepted addresses and every ignored token by position, so a mistyped variable is
+// visible to the operator without refusing to boot.
+func ReportPlatformAdminAllowlist() {
+	raw := os.Getenv("AIM_PLATFORM_ADMINS")
+	if strings.TrimSpace(raw) == "" {
+		return
+	}
+	entries, ignored := parsePlatformAdminAllowlist(raw)
+	for i, tok := range strings.Split(raw, ",") {
+		t := strings.ToLower(strings.TrimSpace(tok))
+		for _, ig := range ignored {
+			if t == ig {
+				log.Printf("AIM_PLATFORM_ADMINS entry %d (%q) is not an email address and is ignored", i+1, t)
+			}
+		}
+	}
+	if len(entries) == 0 {
+		log.Printf("AIM_PLATFORM_ADMINS is set but contains no email address; no account will be approved automatically")
+		return
+	}
+	log.Printf("AIM_PLATFORM_ADMINS: %d address(es) accepted", len(entries))
+}
+
+func isPlatformAdmin(email string) bool {
 	target := strings.ToLower(strings.TrimSpace(email))
-	for _, entry := range strings.Split(allowlist, ",") {
-		if strings.ToLower(strings.TrimSpace(entry)) == target {
+	for _, entry := range platformAdminAllowlist() {
+		if entry == target {
 			return true
 		}
 	}

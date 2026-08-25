@@ -215,6 +215,8 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
       # Admin user configuration (optional - override default admin password)
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
+      # Comma-separated emails approved automatically at sign-up; they become the first administrators.
+      - AIM_PLATFORM_ADMINS=${AIM_PLATFORM_ADMINS:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       # DEFAULT_ADMIN_PASSWORD is read by `aim-bootstrap --default` inside the
       # container so operators can pre-set the canonical admin password via

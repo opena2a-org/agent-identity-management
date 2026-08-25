@@ -53,8 +53,8 @@ func (r *UserRepository) Create(user *domain.User) error {
 		user.Name,
 		user.AvatarURL,
 		user.Role,
-		user.Provider,    // Added provider
-		user.ProviderID,  // Added provider_id
+		user.Provider,   // Added provider
+		user.ProviderID, // Added provider_id
 		user.PasswordHash,
 		user.Status,
 		user.ForcePasswordChange,
@@ -342,6 +342,25 @@ func (r *UserRepository) CountActiveUsers(orgID uuid.UUID, withinMinutes int) (i
 	err := r.db.QueryRow(query, orgID, withinMinutes).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count active users: %w", err)
+	}
+
+	return count, nil
+}
+
+// CountByRoleAndStatus counts users across every organization with the given role and status,
+// excluding soft-deleted rows.
+func (r *UserRepository) CountByRoleAndStatus(role domain.UserRole, status domain.UserStatus) (int, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM users
+		WHERE role = $1
+		  AND status = $2
+		  AND deleted_at IS NULL
+	`
+
+	var count int
+	if err := r.db.QueryRow(query, string(role), string(status)).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count users by role and status: %w", err)
 	}
 
 	return count, nil

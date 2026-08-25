@@ -68,6 +68,7 @@ type RegisterUserResponse struct {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
+// @Failure 503 {object} map[string]interface{}
 // @Router /api/v1/public/register [post]
 func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 	var req RegisterUserRequest
@@ -119,38 +120,17 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		signupProfile,
 	)
 	if err != nil {
-		// Handle specific error cases
-		switch err {
-		case application.ErrUserAlreadyExists:
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"success": false,
-				"error":   "A user with this email already exists",
-			})
-		case application.ErrRegistrationRequestExists:
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"success": false,
-				"error":   "A registration request with this email already exists and is pending approval",
-			})
-		default:
-			// Return validation errors (e.g. password too short) to the client
-			if strings.Contains(err.Error(), "password validation failed") {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"success": false,
-					"error":   err.Error(),
-				})
-			}
+		status, message := registrationErrorResponse(err)
+		if status == fiber.StatusInternalServerError {
 			// SECURITY: Log unexpected errors server-side, return generic message to client
 			log.Printf("Registration request failed for email %s: %v", email, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"success": false,
-				"error":   "An internal error occurred. Please try again later.",
-			})
 		}
+		return c.Status(status).JSON(registrationErrorBody(err, message))
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(&RegisterUserResponse{
 		Success:             true,
-		Message:             "Registration request submitted successfully. Please wait for admin approval.",
+		Message:             registrationSuccessMessage(registrationRequest.Status),
 		RegistrationRequest: registrationRequest,
 		RequestID:           registrationRequest.ID,
 	})
@@ -483,6 +463,7 @@ type RequestAccessResponse struct {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
+// @Failure 503 {object} map[string]interface{}
 // @Router /api/v1/public/request-access [post]
 func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 	var req RequestAccessRequest
@@ -586,19 +567,11 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 				"error":   "An access request with this email is already pending approval",
 			})
 		default:
-			// Return validation errors (e.g. password too short) to the client
-			if strings.Contains(err.Error(), "password validation failed") {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"success": false,
-					"error":   err.Error(),
-				})
+			status, message := registrationErrorResponse(err)
+			if status == fiber.StatusInternalServerError {
+				log.Printf("Access request failed for email %s: %v", email, err)
 			}
-			// SECURITY: Log unexpected errors server-side, return generic message to client
-			log.Printf("Access request failed for email %s: %v", email, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"success": false,
-				"error":   "An internal error occurred. Please try again later.",
-			})
+			return c.Status(status).JSON(registrationErrorBody(err, message))
 		}
 	}
 
@@ -842,4 +815,49 @@ func (h *PublicRegistrationHandler) RegisterRoutes(app *fiber.App) {
 	public.Post("/login", h.Login)
 	public.Post("/change-password", h.ChangePassword)
 	public.Post("/forgot-password", h.ForgotPassword)
+}
+
+// NoAdministratorsMessage is shown verbatim on the sign-up page when nobody in the deployment
+// could approve the request (no AIM_PLATFORM_ADMINS allowlist and no active administrator).
+const NoAdministratorsMessage = "This deployment has no active administrator, so new accounts cannot be approved yet. If you operate it: set AIM_PLATFORM_ADMINS to a comma-separated list of email addresses, restart, and register with one of those addresses; that account is approved automatically and can approve everyone else."
+
+// NoAdministratorsCode is the machine-readable form of that refusal.
+const NoAdministratorsCode = "noAdministrators"
+
+// registrationErrorResponse maps a registration failure to the status and message the client
+// receives. Unexpected errors map to 500 with a generic message; the caller logs them.
+func registrationErrorResponse(err error) (int, string) {
+	switch err {
+	case application.ErrUserAlreadyExists:
+		return fiber.StatusConflict, "A user with this email already exists"
+	case application.ErrRegistrationRequestExists:
+		return fiber.StatusConflict, "A registration request with this email already exists and is pending approval"
+	case application.ErrNoAdministrators:
+		// The deployment, not the request, is the problem: unavailable until an operator configures it.
+		return fiber.StatusServiceUnavailable, NoAdministratorsMessage
+	}
+	// Return validation errors (e.g. password too short) to the client
+	if strings.Contains(err.Error(), "password validation failed") {
+		return fiber.StatusBadRequest, err.Error()
+	}
+	return fiber.StatusInternalServerError, "An internal error occurred. Please try again later."
+}
+
+// registrationSuccessMessage states the outcome of a successful sign-up: an allowlisted
+// address (AIM_PLATFORM_ADMINS) is approved on the spot, everyone else waits for review.
+func registrationSuccessMessage(status domain.RegistrationRequestStatus) string {
+	if status == domain.RegistrationStatusApproved {
+		return "Registration approved. You can sign in now."
+	}
+	return "Registration request submitted successfully. Please wait for admin approval."
+}
+
+// registrationErrorBody is the JSON body for a refused registration or access request; the
+// operator-actionable refusal carries a machine-readable code as well as its message.
+func registrationErrorBody(err error, message string) fiber.Map {
+	body := fiber.Map{"success": false, "error": message}
+	if err == application.ErrNoAdministrators {
+		body["code"] = NoAdministratorsCode
+	}
+	return body
 }

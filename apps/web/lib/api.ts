@@ -3,6 +3,9 @@
 import { toast } from "sonner";
 import { normalizeViolation, type SecurityViolation } from "./violations";
 
+/** An Error thrown for a non-2xx response, carrying the status and the backend's code when it sent one. */
+export type ApiRequestError = Error & { status?: number; code?: string };
+
 const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
 // Runtime API URL configuration
@@ -686,7 +689,12 @@ class APIClient {
       // Backend can return either 'error' or 'message' field
       const errorMessage =
         error?.error || error?.message || `HTTP ${response.status}`;
-      throw new Error(errorMessage);
+      const requestError = new Error(errorMessage) as ApiRequestError;
+      requestError.status = response.status;
+      if (typeof error?.code === "string") {
+        requestError.code = error.code;
+      }
+      throw requestError;
     }
 
     // Handle 204 No Content responses (e.g., DELETE operations)
@@ -791,11 +799,13 @@ class APIClient {
     success: boolean;
     message: string;
     requestId: string;
+    registrationRequest?: { id: string; status: string };
   }> {
     const response = await this.request<{
       success: boolean;
       message: string;
       requestId: string;
+    registrationRequest?: { id: string; status: string };
     }>("/api/v1/public/register", {
       method: "POST",
       body: JSON.stringify(data),
