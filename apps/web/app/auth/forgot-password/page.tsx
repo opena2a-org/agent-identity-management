@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
             <p className="text-sm font-bold text-ink">Next steps</p>
             <ul className="mt-2 space-y-1.5 text-xs text-ink-body">
               <li>Open the message from Agent Identity Management and follow the reset link.</li>
-              <li>The link works once; request another if it has expired.</li>
+              <li>The link expires after one hour; request another if it has.</li>
               <li>Check your spam folder if nothing arrives.</li>
             </ul>
             <div className="mt-6 flex flex-col gap-2">
