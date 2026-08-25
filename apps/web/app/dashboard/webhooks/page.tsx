@@ -261,7 +261,7 @@ export default function WebhooksPage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
           >
             <Plus className="h-4 w-4" />
             Create webhook

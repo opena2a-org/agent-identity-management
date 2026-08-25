@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filterNavigationByRole, type UserRole } from "@/lib/permissions";
-import { navigationBase, orderNavigationForPersona, overviewHrefForPersona } from "@/lib/navigation";
+import { navigationBase, orderNavigationForPersona } from "@/lib/navigation";
 import { PERSONAS, personaFromSignupRole, type Persona } from "@/lib/persona";
 
 const ROLES: (UserRole | undefined)[] = ["admin", "manager", "member", "viewer", undefined];
@@ -31,11 +31,6 @@ describe("persona lens never changes authorization", () => {
     );
   });
 
-  it("the overview destination is always a dashboard route the viewer role can reach or /dashboard", () => {
-    for (const { value } of PERSONAS) {
-      expect(overviewHrefForPersona(value).startsWith("/dashboard")).toBe(true);
-    }
-  });
 });
 
 describe("personaFromSignupRole", () => {

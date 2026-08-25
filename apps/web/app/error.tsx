@@ -18,10 +18,10 @@ export default function GlobalError({
   return (
     <main className="glass-page relative flex min-h-screen items-center justify-center overflow-hidden p-6">
       <div className="glass-chrome w-full max-w-md p-8 text-center">
-        <p className="text-overline">Something went wrong</p>
+        <p className="text-overline">Error</p>
         <h1 className="text-headline mt-2">This page could not load.</h1>
         <p className="mt-2 text-sm text-ink-secondary">
-          Nothing was changed. Try again, or go back to the dashboard.
+          Your last action may or may not have completed. Check the page you came from before retrying.
           {error.digest ? (
             <>
               {" "}
@@ -33,7 +33,7 @@ export default function GlobalError({
           <button
             type="button"
             onClick={reset}
-            className="inline-flex h-10 items-center rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-accent hover:bg-brand-hover"
+            className="inline-flex h-10 items-center rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover"
           >
             Try again
           </button>

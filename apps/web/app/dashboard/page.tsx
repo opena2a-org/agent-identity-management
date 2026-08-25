@@ -61,9 +61,10 @@ interface HomeData {
 }
 
 // The canonical quickstart. Every surface that teaches the install path must match this.
+// Python only: the npm SDK does not export secure() and ships no aim-sdk binary (measured
+// 2026-08-24, @opena2a/aim-sdk 1.3.0), so a TypeScript command block would not run.
 export const QUICKSTART = {
   python: ["pip install aim-sdk", "aim-sdk login", 'python -c "from aim_sdk import secure; secure(\\"my-first-agent\\")"'],
-  typescript: ["npm install @opena2a/aim-sdk", "npx aim-sdk login", 'node -e "require(\'@opena2a/aim-sdk\').secure(\'my-first-agent\')"'],
 } as const;
 
 function greeting(name?: string) {
@@ -146,7 +147,7 @@ function Quickstart({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cn("glass-contrast flex min-w-0 flex-col gap-3 overflow-hidden p-5", compact && "p-4")}>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13.5px] font-bold">30-second quickstart</h3>
+        <h3 className="text-[13.5px] font-bold">Quickstart</h3>
         <div className="flex gap-1.5" role="tablist" aria-label="Language">
           {(Object.keys(QUICKSTART) as Array<keyof typeof QUICKSTART>).map((k) => (
             <button
@@ -157,7 +158,7 @@ function Quickstart({ compact = false }: { compact?: boolean }) {
               onClick={() => setLang(k)}
               className={cn(
                 "rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
-                lang === k ? "bg-brand text-white shadow-accent" : "bg-white/10 text-ink-inverse-secondary hover:text-ink-inverse"
+                lang === k ? "bg-brand text-white shadow-glow" : "bg-white/10 text-ink-inverse-secondary hover:text-ink-inverse"
               )}
             >
               {k === "python" ? "Python" : "TypeScript"}
@@ -265,14 +266,14 @@ function FirstAgentCard() {
         <div>
           <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Secure your first agent</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-            Three commands give an agent a verifiable identity. The moment it checks in, it appears here with its trust score.
+            Three commands give an agent a verifiable identity. Refresh this page once it has checked in and it appears here with its trust score.
           </p>
         </div>
       </div>
       <CodeBlock lines={QUICKSTART.python} className="!bg-glass-inset-gray !text-ink" />
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-accent hover:bg-brand-hover">
-          Register in the browser instead
+        <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
+          Secure it in the browser instead
         </Link>
         <Link href="/dashboard/developers" className="inline-flex h-9 items-center rounded-pill border border-stroke bg-glass px-4 text-xs font-bold text-ink">
           Developer guide
@@ -393,7 +394,7 @@ function DashboardContent() {
         <p className="text-overline">Overview</p>
         <h2 className="text-headline mt-2">The overview could not load.</h2>
         <p className="mt-2 text-sm text-ink-secondary">{error ?? "No data was returned."}</p>
-        <button type="button" onClick={load} className="mt-5 inline-flex h-10 items-center rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-accent hover:bg-brand-hover">
+        <button type="button" onClick={load} className="mt-5 inline-flex h-10 items-center rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
           Try again
         </button>
       </div>
@@ -407,19 +408,21 @@ function DashboardContent() {
       ? Math.round((verification.successCount / verification.totalVerifications) * 1000) / 10
       : null;
 
-  const attention = lensData?.security?.requiresAttention ?? 0;
+  const openViolations = lensData?.violations?.total ?? 0;
   const lensReady = persona === "developer" || (lensData !== null && !lensLoading);
   const headline = zero
     ? "No agents secured yet."
-    : persona === "security" && lensReady && attention > 0
-      ? `${attention} ${attention === 1 ? "agent needs" : "agents need"} attention. Everything else is verifying normally.`
+    : persona === "security" && lensReady
+      ? openViolations > 0
+        ? `${openViolations} open ${openViolations === 1 ? "violation" : "violations"} to review.`
+        : "No open violations."
       : persona === "executive" && lensReady
-        ? "Your agent estate at a glance."
+        ? `${stats.verifiedAgents.toLocaleString()} of ${stats.totalAgents.toLocaleString()} agents verified.`
         : stats.criticalAlerts > 0
       ? `${stats.criticalAlerts} critical ${stats.criticalAlerts === 1 ? "alert needs" : "alerts need"} attention.`
       : stats.pendingAgents > 0
         ? `${stats.pendingAgents} ${stats.pendingAgents === 1 ? "agent is" : "agents are"} waiting for verification.`
-        : "Everything is verifying normally.";
+        : "No critical alerts. No agents waiting for verification.";
 
   const sortedAgents = [...agents]
     .sort((a, b) => (a.status === "suspended" || a.status === "revoked" ? -1 : 0) - (b.status === "suspended" || b.status === "revoked" ? -1 : 0) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
@@ -439,7 +442,7 @@ function DashboardContent() {
           )}
         </div>
         {!zero && (
-          <Link href="/dashboard/agents?register=1" className="hidden h-10 items-center gap-2 rounded-pill bg-brand px-5 text-[13.5px] font-bold text-white shadow-accent hover:bg-brand-hover sm:inline-flex">
+          <Link href="/dashboard/agents?register=1" className="hidden h-10 items-center gap-2 rounded-pill bg-brand px-5 text-[13.5px] font-bold text-white shadow-glow hover:bg-brand-hover sm:inline-flex">
             <ShieldPlus className="h-4 w-4" aria-hidden="true" />
             Secure an agent
           </Link>
@@ -459,7 +462,7 @@ function DashboardContent() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <KpiTile label="Agents secured" value={stats.totalAgents.toLocaleString()} delta={`${stats.verifiedAgents.toLocaleString()} verified`} href="/dashboard/agents" />
         <KpiTile
-          label="Verifications today"
+          label="Verifications, last 24h"
           value={verification ? verification.totalVerifications.toLocaleString() : "–"}
           delta={approvedPct !== null ? `${approvedPct}% approved` : verification ? "none yet" : "unavailable"}
         />

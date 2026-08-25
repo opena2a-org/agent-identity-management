@@ -925,7 +925,7 @@ export function MCPDetailModal({
           {onEdit && (
             <button
               onClick={() => onEdit(mcp)}
-              className="px-4 py-2 text-sm font-medium text-ink-inverse bg-brand shadow-accent hover:bg-brand-hover rounded-pill transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium text-ink-inverse bg-brand shadow-glow hover:bg-brand-hover rounded-pill transition-colors flex items-center gap-2"
             >
               <Edit className="h-4 w-4" />
               Edit server

@@ -83,7 +83,7 @@ export default function ForgotPasswordPage() {
               <li>Check your spam folder if nothing arrives.</li>
             </ul>
             <div className="mt-6 flex flex-col gap-2">
-              <Link href="/auth/login" className="inline-flex h-11 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-accent hover:bg-brand-hover">
+              <Link href="/auth/login" className="inline-flex h-11 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
                 Back to sign in
               </Link>
               <button

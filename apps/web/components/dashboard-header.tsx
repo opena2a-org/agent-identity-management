@@ -132,7 +132,9 @@ export function DashboardHeader() {
   };
 
   const roleLabel = user?.role ? getRoleInfo(user.role).label : null;
-  const canSeeAlerts = user?.role === "admin" || user?.role === "manager";
+  // Interim admin-only: the edge gate blocks managers from /dashboard/admin/alerts (prefix
+  // intersection); restore manager access when alerts move out of the admin prefix.
+  const canSeeAlerts = user?.role === "admin";
   const initial = (user?.displayName || user?.email || "?").slice(0, 1).toUpperCase();
 
   return (

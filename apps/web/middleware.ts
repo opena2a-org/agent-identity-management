@@ -2,15 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Define role-based route protection
-const ROUTE_PERMISSIONS: Record<string, string[]> = {
-  '/dashboard/admin': ['admin'],
-  '/dashboard/admin/users': ['admin'],
-  '/dashboard/admin/alerts': ['admin', 'manager'],
-  '/dashboard/admin/audit': ['admin', 'manager'],
-  '/dashboard/admin/security-policies': ['admin'],
-  '/dashboard/admin/capability-requests': ['admin'],
-  '/dashboard/security': ['admin', 'manager', 'member'],
-};
+import { ROUTE_PERMISSIONS } from './lib/route-permissions';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

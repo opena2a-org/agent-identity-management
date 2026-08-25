@@ -147,7 +147,7 @@ export default function RegisterPage() {
         {/* Logo and Title */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-logo rounded-card flex items-center justify-center shadow-accent">
+            <div className="w-16 h-16 bg-logo rounded-card flex items-center justify-center shadow-glow">
               <Shield className="w-10 h-10 text-ink-inverse" />
             </div>
           </div>
@@ -459,7 +459,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 rounded-pill bg-brand text-ink-inverse font-medium shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 px-4 rounded-pill bg-brand text-ink-inverse font-medium shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? "Creating account..." : "Create account"}
             </button>

@@ -402,7 +402,7 @@ export default function APIKeysPage() {
           {permissions.canCreateAPIKey && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-accent hover:bg-brand-hover transition-colors"
+              className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover transition-colors"
             >
               <Plus className="h-4 w-4" />
               Create API key

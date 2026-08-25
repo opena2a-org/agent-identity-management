@@ -133,11 +133,13 @@ module.exports = {
         nav: '11px',
         avatar: '10px',
       },
+      // Keys here must not collide with color names (colors.card / colors.accent would make
+      // Tailwind emit a second .shadow-* rule for the ring color); hence panel/glow.
       boxShadow: {
-        card: 'var(--shadow-card)',
+        panel: 'var(--shadow-card)',
         chrome: 'var(--shadow-chrome)',
         modal: 'var(--shadow-modal)',
-        accent: 'var(--brand-shadow)',
+        glow: 'var(--brand-shadow)',
         segment: 'var(--segment-active-shadow)',
       },
       backdropBlur: {
@@ -147,7 +149,7 @@ module.exports = {
       backgroundImage: {
         logo: 'var(--gradient-logo)',
         bar: 'var(--gradient-bar)',
-        page: 'var(--bg-page)',
+        'page-gradient': 'var(--bg-page)',
       },
       fontSize: {
         '2xs': ['10.5px', { lineHeight: '1.3' }],

@@ -70,8 +70,8 @@ function ResetPasswordPageContent() {
 
       if (response.success) {
         setIsSuccess(true);
-        toast.success("Password reset successful!", {
-          description: "You can now log in with your new password.",
+        toast.success("Password updated", {
+          description: "Sign in with your new password.",
         });
 
         // Redirect to login after 3 seconds
@@ -98,7 +98,7 @@ function ResetPasswordPageContent() {
         setTokenValid(false);
       }
 
-      toast.error("Password Reset Failed", {
+      toast.error("Could not reset the password", {
         description: errorMessage,
         duration: 5000,
       });
@@ -133,7 +133,7 @@ function ResetPasswordPageContent() {
               <li>Use the link within an hour of receiving it.</li>
             </ul>
             <div className="mt-6 flex flex-col gap-2">
-              <Link href="/auth/forgot-password" className="inline-flex h-11 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-accent hover:bg-brand-hover">
+              <Link href="/auth/forgot-password" className="inline-flex h-11 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
                 Request a new link
               </Link>
               <Link href="/auth/login" className="inline-flex h-11 items-center justify-center rounded-pill border border-stroke bg-glass text-sm font-bold text-ink hover:bg-glass-inset">
@@ -160,7 +160,7 @@ function ResetPasswordPageContent() {
           </div>
           <div className="glass-chrome p-6 text-center sm:p-8" role="status" aria-live="polite">
             <p className="text-xs text-ink-secondary">Taking you to sign in in a few seconds.</p>
-            <Link href="/auth/login" className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-accent hover:bg-brand-hover">
+            <Link href="/auth/login" className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
               Go to sign in now
             </Link>
           </div>

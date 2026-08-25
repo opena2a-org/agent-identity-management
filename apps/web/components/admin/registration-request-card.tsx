@@ -189,7 +189,7 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
                   type="button"
                   onClick={handleApprove}
                   disabled={isApproving || isRejecting}
-                  className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-accent hover:bg-brand-hover disabled:opacity-50"
+                  className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover disabled:opacity-50"
                 >
                   {isApproving ? (
                     <>

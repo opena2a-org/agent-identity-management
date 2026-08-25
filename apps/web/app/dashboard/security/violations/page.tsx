@@ -297,7 +297,7 @@ export default function ViolationsPage() {
             <p className="text-ink-body">{error}</p>
             <button
               onClick={fetchViolations}
-              className="mt-4 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+              className="mt-4 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
             >
               Retry
             </button>

@@ -130,7 +130,7 @@ export default function MCPDiscoveryPage() {
           </span>
           <button
             onClick={fetchDiscoveryData}
-            className="mt-2 px-3 py-1 text-sm bg-brand text-white rounded-pill shadow-accent hover:bg-brand-hover flex items-center gap-1 transition-colors"
+            className="mt-2 px-3 py-1 text-sm bg-brand text-white rounded-pill shadow-glow hover:bg-brand-hover flex items-center gap-1 transition-colors"
           >
             <RefreshCw className="h-3 w-3" />
             Retry
@@ -250,7 +250,7 @@ export default function MCPDiscoveryPage() {
               onClick={() => setFilter("all")}
               className={`px-3 py-1 text-sm rounded-pill transition-colors ${
                 filter === "all"
-                  ? "bg-brand text-white shadow-accent"
+                  ? "bg-brand text-white shadow-glow"
                   : "bg-glass-inset-gray text-ink-body hover:bg-glass-inset"
               }`}
             >
@@ -416,7 +416,7 @@ export default function MCPDiscoveryPage() {
                         ) : (
                           <Link
                             href={`/dashboard/mcp?register=${encodeURIComponent(mcp.name)}`}
-                            className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-brand text-white shadow-accent hover:bg-brand-hover rounded-pill transition-colors"
+                            className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-brand text-white shadow-glow hover:bg-brand-hover rounded-pill transition-colors"
                           >
                             <Plus className="h-3 w-3" />
                             Register
@@ -447,7 +447,7 @@ export default function MCPDiscoveryPage() {
                   {hasMore && (
                     <button
                       onClick={() => setCurrentPage(currentPage + 1)}
-                      className="px-3 py-1 text-sm bg-brand text-white shadow-accent rounded-pill hover:bg-brand-hover transition-colors"
+                      className="px-3 py-1 text-sm bg-brand text-white shadow-glow rounded-pill hover:bg-brand-hover transition-colors"
                     >
                       Load more ({Math.min(PAGE_SIZE, filteredMCPs.length - currentPage * PAGE_SIZE)} more)
                     </button>

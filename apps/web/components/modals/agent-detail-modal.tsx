@@ -588,7 +588,7 @@ export function AgentDetailModal({
           {onEdit && (
             <button
               onClick={() => onEdit(agent)}
-              className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors flex items-center gap-2"
             >
               <Edit className="h-4 w-4" />
               Edit agent

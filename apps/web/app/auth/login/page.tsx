@@ -67,7 +67,7 @@ function LoginPageContent() {
       if (response.success) {
         if (response.isApproved) {
           // User is approved, redirect to return URL or dashboard
-          toast.success("Login successful!");
+          toast.success("Signed in");
           router.push(decodeURIComponent(returnUrl));
         } else {
           // User exists but not approved yet - redirect to pending page
@@ -88,7 +88,7 @@ function LoginPageContent() {
       }
 
       // Show toast notification with the exact backend error
-      toast.error("Login Failed", {
+      toast.error("Could not sign in", {
         description: errorMessage,
         duration: 5000,
       });
@@ -188,7 +188,7 @@ function LoginPageContent() {
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
             <p className="text-xs leading-relaxed text-ink-body">
-              New accounts are reviewed by an administrator before they can sign in. Your credentials are encrypted in transit and at rest.
+              New accounts are reviewed by an administrator before they can sign in. Passwords are stored as bcrypt hashes, never in plain text.
             </p>
           </div>
 

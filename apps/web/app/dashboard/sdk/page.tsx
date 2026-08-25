@@ -189,7 +189,8 @@ export default function SDKDownloadPage() {
           Open source agent security
         </h1>
         <p className="text-ink-secondary text-lg">
-          Secure your agents with minimal code. No configuration required.
+          Offline install path: download the SDK package for machines without registry access.
+          The supported path is <code className="font-mono text-base">pip install aim-sdk</code>.
         </p>
       </div>
 
@@ -223,7 +224,7 @@ export default function SDKDownloadPage() {
         <div className="glass overflow-hidden">
           <div className="p-6">
             <div className="flex items-center gap-4 mb-4">
-              <div className="h-14 w-14 bg-brand rounded-inset flex items-center justify-center shadow-accent">
+              <div className="h-14 w-14 bg-brand rounded-inset flex items-center justify-center shadow-glow">
                 <Code className="h-7 w-7 text-white" />
               </div>
               <div>
@@ -247,7 +248,7 @@ export default function SDKDownloadPage() {
             <button
               onClick={() => handleDownload('python')}
               disabled={downloading && selectedSDK === 'python'}
-              className="w-full rounded-pill bg-brand text-white shadow-accent px-4 py-2.5 font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+              className="w-full rounded-pill bg-brand text-white shadow-glow px-4 py-2.5 font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
               {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download Python SDK'}
@@ -259,7 +260,7 @@ export default function SDKDownloadPage() {
         <div className="glass overflow-hidden">
           <div className="p-6">
             <div className="flex items-center gap-4 mb-4">
-              <div className="h-14 w-14 bg-brand rounded-inset flex items-center justify-center shadow-accent">
+              <div className="h-14 w-14 bg-brand rounded-inset flex items-center justify-center shadow-glow">
                 <Code className="h-7 w-7 text-white" />
               </div>
               <div>
@@ -283,7 +284,7 @@ export default function SDKDownloadPage() {
             <button
               onClick={() => handleDownload('java')}
               disabled={downloading && selectedSDK === 'java'}
-              className="w-full rounded-pill bg-brand text-white shadow-accent px-4 py-2.5 font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+              className="w-full rounded-pill bg-brand text-white shadow-glow px-4 py-2.5 font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
               {downloading && selectedSDK === 'java' ? 'Downloading...' : 'Download Java SDK'}
@@ -306,7 +307,7 @@ export default function SDKDownloadPage() {
               onClick={() => setSelectedCodeTab('python')}
               className={`px-4 py-2 rounded-pill text-sm font-medium transition-colors ${
                 selectedCodeTab === 'python'
-                  ? 'bg-brand text-white shadow-accent'
+                  ? 'bg-brand text-white shadow-glow'
                   : 'bg-glass-inset-gray text-ink-body hover:bg-track'
               }`}
             >
@@ -316,7 +317,7 @@ export default function SDKDownloadPage() {
               onClick={() => setSelectedCodeTab('java')}
               className={`px-4 py-2 rounded-pill text-sm font-medium transition-colors ${
                 selectedCodeTab === 'java'
-                  ? 'bg-brand text-white shadow-accent'
+                  ? 'bg-brand text-white shadow-glow'
                   : 'bg-glass-inset-gray text-ink-body hover:bg-track'
               }`}
             >

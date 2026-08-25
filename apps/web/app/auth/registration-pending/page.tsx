@@ -50,13 +50,13 @@ function RegistrationPendingContent() {
               </span>
               <div>
                 <p className="text-sm font-bold text-ink">Check back by signing in</p>
-                <p className="text-xs text-ink-secondary">Once approved, signing in takes you straight to your dashboard. Until then the sign-in page will tell you the request is still pending.</p>
+                <p className="text-xs text-ink-secondary">Once approved, signing in takes you straight to your dashboard. Until then the sign-in page will tell you the request is still pending. If the request is declined you will not receive a message; contact the administrator if you have not been approved.</p>
               </div>
             </li>
           </ol>
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-            <Link href="/auth/login" className="inline-flex h-11 flex-1 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-accent hover:bg-brand-hover">
+            <Link href="/auth/login" className="inline-flex h-11 flex-1 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
               Go to sign in
             </Link>
             <a

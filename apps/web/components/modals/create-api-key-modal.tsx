@@ -245,7 +245,7 @@ export function CreateAPIKeyModal({
                     </button>
                     <button
                       onClick={copyToClipboard}
-                      className="flex items-center gap-1 px-3 py-1 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors flex-shrink-0"
+                      className="flex items-center gap-1 px-3 py-1 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors flex-shrink-0"
                     >
                       {copied ? (
                         <>
@@ -272,7 +272,7 @@ export function CreateAPIKeyModal({
               <div className="flex items-center justify-end pt-4 border-t border-divider">
                 <button
                   onClick={handleClose}
-                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
                 >
                   Done
                 </button>
@@ -381,7 +381,7 @@ export function CreateAPIKeyModal({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create API key

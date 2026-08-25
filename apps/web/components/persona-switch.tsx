@@ -21,7 +21,7 @@ export function PersonaSwitch({
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {label ? <span className="text-overline pl-1">{label}</span> : null}
-      <div role="radiogroup" aria-label="Lens" className="glass-segment w-full">
+      <div role="radiogroup" aria-label="Dashboard view" className="glass-segment w-full">
         {PERSONAS.map((p) => {
           const active = persona === p.value;
           return (
@@ -30,6 +30,7 @@ export function PersonaSwitch({
               type="button"
               role="radio"
               aria-checked={active}
+              aria-label={p.label}
               data-active={active}
               title={p.description}
               onClick={() => setPersona(p.value)}

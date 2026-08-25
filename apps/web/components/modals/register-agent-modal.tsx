@@ -87,6 +87,24 @@ const RISK_LEVEL_COLORS: Record<string, string> = {
   critical: "bg-danger-fill text-danger-text border border-danger-border",
 };
 
+
+/**
+ * Fills the fields the backend's auto-verify predicate requires (shouldAutoVerifyAgent:
+ * name, displayName, description all non-empty) with the SAME defaults the Python SDK
+ * applies (client.py: displayName = name, description = f"Agent {name} registered via AIM
+ * SDK"), so an agent registered from this form and one registered by the SDK get the same
+ * verification outcome. Version defaults to 1.0.0 when left blank.
+ */
+export function registrationDefaults(form: { name: string; displayName: string; description: string; version: string }) {
+  const name = form.name.trim();
+  return {
+    name,
+    displayName: form.displayName.trim() || name,
+    description: form.description.trim() || `Agent ${name} registered via AIM SDK`,
+    version: form.version.trim() || "1.0.0",
+  };
+}
+
 export function RegisterAgentModal({
   isOpen,
   onClose,
@@ -307,13 +325,10 @@ export function RegisterAgentModal({
         "Agent name must be lowercase alphanumeric with dashes/underscores";
     }
 
-    if (!formData.displayName.trim()) {
-      newErrors.displayName = "Display name is required";
-    }
+    // Display name is optional: registrationDefaults() fills it the way the SDK does,
+    // so both registration paths satisfy the auto-verify field checks.
 
-    if (!formData.version.trim()) {
-      newErrors.version = "Version is required";
-    } else if (!/^\d+\.\d+\.\d+$/.test(formData.version)) {
+    if (formData.version.trim() && !/^\d+\.\d+\.\d+$/.test(formData.version)) {
       newErrors.version = "Version must be in format X.Y.Z (e.g., 1.0.0)";
     }
 
@@ -329,10 +344,8 @@ export function RegisterAgentModal({
       newErrors.documentationUrl = "Must be a valid HTTP(S) URL";
     }
 
-    // Require at least 1 capability
-    if (formData.capabilities.length === 0) {
-      newErrors.capabilities = "At least one capability is required";
-    }
+    // Capabilities are optional: the SDK detects them at runtime, and a hand-typed
+    // capability string is the worst jargon wall at first contact (CPO 2026-08-24).
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
@@ -374,11 +387,8 @@ export function RegisterAgentModal({
     try {
       // Send snake_case to match backend JSON tags
       const agentData: any = {
-        name: formData.name,
-        displayName: formData.displayName,
-        description: formData.description,
+        ...registrationDefaults(formData),
         agentType: formData.agentType,
-        version: formData.version,
       };
 
       // Add optional fields only if they have values
@@ -727,7 +737,7 @@ export function RegisterAgentModal({
                       <button
                         type="button"
                         onClick={() => copyToClipboard(createdApiKey.key, "api_key")}
-                        className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors flex items-center gap-2"
+                        className="px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors flex items-center gap-2"
                       >
                         {copiedField === "api_key" ? (
                           <>
@@ -965,7 +975,7 @@ print(f"Result: {result}")
                     <div className="flex flex-wrap gap-2 mb-2">
                       <a
                         href="/dashboard/sdk"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover text-sm font-medium transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover text-sm font-medium transition-colors"
                       >
                         <Package className="h-4 w-4" />
                         Download Python SDK
@@ -981,7 +991,7 @@ print(f"Result: {result}")
                       </a>
                     </div>
                     <p className="text-xs text-ink-body">
-                      After downloading, run: <code className="bg-glass-inset-gray px-1 rounded">pip install -e .</code>
+                      The supported install is <code className="bg-glass-inset-gray px-1 rounded">pip install aim-sdk</code>; the download is for machines without registry access.
                     </p>
                   </div>
 
@@ -1528,7 +1538,7 @@ print(f"Result: {result}")
                           type="button"
                           onClick={addCustomCapability}
                           disabled={!customCapability.trim() || loading || success}
-                          className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                          className="px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                           <Plus className="h-4 w-4" />
                           Add
@@ -1582,7 +1592,7 @@ print(f"Result: {result}")
                       type="button"
                       onClick={() => addMcpServer()}
                       disabled={!newMcpServer.trim() || loading || success}
-                      className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Plus className="h-4 w-4" />
                       Add
@@ -1749,7 +1759,7 @@ print(f"Result: {result}")
               <button
                 type="button"
                 onClick={handleSkipSDK}
-                className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors flex items-center gap-2"
               >
                 <CheckCircle className="h-4 w-4" />
                 Done
@@ -1769,7 +1779,7 @@ print(f"Result: {result}")
                   type="submit"
                   disabled={loading || success || JSON.stringify(formData) === JSON.stringify(initialFormData)}
                   className=
-                  "px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                  "px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                   {editMode ? "Update agent" : "Register agent"}

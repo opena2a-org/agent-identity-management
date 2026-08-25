@@ -24,8 +24,8 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <KpiTile label="Open violations" value={openViolations.toLocaleString()} delta={m ? `${m.highSeverityCount.toLocaleString()} high severity` : undefined} tone={openViolations > 0 ? "alert" : "default"} href="/dashboard/security/violations" />
-        <KpiTile label="Verifications today" value={verification ? verification.totalVerifications.toLocaleString() : "–"} delta={approved !== null ? `${approved}% approved` : verification ? "none yet" : "unavailable"} />
-        <KpiTile label="Blocked today" value={m ? m.actionsBlockedToday.toLocaleString() : "–"} delta={m ? `${m.blockedThreats.toLocaleString()} of ${m.totalThreats.toLocaleString()} threats blocked` : "unavailable"} />
+        <KpiTile label="Verifications, last 24h" value={verification ? verification.totalVerifications.toLocaleString() : "–"} delta={approved !== null ? `${approved}% approved` : verification ? "none yet" : "unavailable"} />
+        <KpiTile label="Blocked today" value={m ? m.actionsBlockedToday.toLocaleString() : "–"} delta={m ? `${m.blockedThreats.toLocaleString()} of ${m.totalThreats.toLocaleString()} capability violations blocked, all time` : "unavailable"} />
         <KpiTile label="Avg trust" value={trustDisplay(m?.averageTrustScore ?? stats.avgTrustScore) ?? "–"} delta={`across ${stats.totalAgents.toLocaleString()} ${stats.totalAgents === 1 ? "agent" : "agents"}`} tone="accent" />
       </div>
 
@@ -71,14 +71,14 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
                   {hero.isBlocked ? "The action was denied before it ran." : "The action was not blocked; review the agent's policy."}
                   {typeof hero.trustScoreImpact === "number" && hero.trustScoreImpact !== 0 ? ` Trust impact ${hero.trustScoreImpact > 0 ? "+" : ""}${hero.trustScoreImpact.toFixed(2)}.` : ""}
                 </p>
-                <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-[13px] font-bold text-white shadow-accent hover:bg-brand-hover">
+                <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-[13px] font-bold text-white shadow-glow hover:bg-brand-hover">
                   Review
                 </Link>
               </div>
             </div>
           ) : (
             <div className="glass p-5 sm:p-6">
-              <CardTitle sub="No open violations. Denied actions appear here the moment policy blocks one.">Nothing needs attention</CardTitle>
+              <CardTitle sub="No open violations. Denied actions appear here after the next refresh.">Nothing needs attention</CardTitle>
             </div>
           )}
 
@@ -100,7 +100,7 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
                 ))}
               </div>
             ) : (
-              <EmptyNote>Security metrics are unavailable for this role.</EmptyNote>
+              <EmptyNote>Security metrics need the manager role. Ask an organization admin to change your role.</EmptyNote>
             )}
             {m && m.riskByCategory?.length > 0 && (
               <div className="mt-4">
@@ -133,7 +133,7 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
             Verification stream
           </CardTitle>
           {events.length === 0 ? (
-            <EmptyNote>No verifications in the last hour. Each request an agent makes is checked against policy before it runs and lands here.</EmptyNote>
+            <EmptyNote>No verifications in the last hour. Actions your agents send through the SDK are checked against policy and land here.</EmptyNote>
           ) : (
             <ul className="mt-1 divide-y divide-divider">
               {events.slice(0, 8).map((e) => {
@@ -151,7 +151,7 @@ export function SecurityLens({ stats, verification, lens }: { stats: StatsData; 
               })}
             </ul>
           )}
-          <p className="mt-auto pt-4 text-2xs text-ink-tertiary">Every request is checked against policy before it runs.</p>
+          <p className="mt-auto pt-4 text-2xs text-ink-tertiary">Actions sent through the SDK are checked against policy. In monitoring mode a failed check is recorded and the action still runs.</p>
           <Link href="/dashboard/security" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
             Open Security <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>

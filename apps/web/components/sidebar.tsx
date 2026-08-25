@@ -45,7 +45,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
   };
   const persona = usePersona((s) => s.persona);
   const seedFromSignupRole = usePersona((s) => s.seedFromSignupRole);
-  const [isLoading, setIsLoading] = useState(true); // ✅ Add loading state
+  const [isLoading, setIsLoading] = useState(true); // Add loading state
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [user, setUser] = useState<{
     email: string;
@@ -64,7 +64,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
     // Fetch current user
     const fetchUser = async () => {
       try {
-        setIsLoading(true); // ✅ Start loading
+        setIsLoading(true); // Start loading
         const userData = await api.getCurrentUser();
         const normalizedRole: UserRole | undefined =
           userData?.role === "pending"
@@ -112,13 +112,13 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
           setTimeout(() => router.push("/auth/login"), 0);
         }
       } finally {
-        setIsLoading(false); // ✅ Stop loading
+        setIsLoading(false); // Stop loading
       }
     };
     fetchUser();
   }, [router]);
 
-  // ✅ Filter navigation based on user role using permissions system
+  // Filter navigation based on user role using permissions system
   useEffect(() => {
     if (!user?.role) return;
 
@@ -299,7 +299,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
     return pathname === href || pathname.startsWith(href + "/");
   };
 
-  // ✅ Sidebar Loading Skeleton
+  // Sidebar Loading Skeleton
   const NavList = () => (
     <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-0.5" aria-label="Main">
       {navigation.map((section, idx) => (

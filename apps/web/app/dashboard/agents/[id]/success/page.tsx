@@ -242,7 +242,7 @@ export default function AgentSuccessPage() {
               <div className="flex flex-col h-full">
                 <div className="mb-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-12 w-12 bg-brand rounded-inset shadow-accent flex items-center justify-center">
+                    <div className="h-12 w-12 bg-brand rounded-inset shadow-glow flex items-center justify-center">
                       <Download className="h-6 w-6 text-ink-inverse" />
                     </div>
                     <div>
@@ -306,7 +306,7 @@ export default function AgentSuccessPage() {
               <div className="flex flex-col h-full">
                 <div className="mb-4">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-12 w-12 bg-brand rounded-inset shadow-accent flex items-center justify-center">
+                    <div className="h-12 w-12 bg-brand rounded-inset shadow-glow flex items-center justify-center">
                       <Download className="h-6 w-6 text-ink-inverse" />
                     </div>
                     <div>
@@ -410,48 +410,48 @@ export default function AgentSuccessPage() {
             <div className="space-y-4">
               {/* Python Step 1 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-bold">
                   1
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Download and extract SDK</h4>
+                  <h4 className="font-semibold mb-1">Install the SDK</h4>
                   <p className="text-sm text-ink-secondary">
-                    Download the Python SDK above and extract the ZIP file to your project directory
+                    From PyPI. For machines without registry access, download the package above and use the offline install on the SDK page.
                   </p>
                   <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
-                    <code>unzip aim-sdk-{agent.name}-python.zip</code>
+                    <code>pip install aim-sdk</code>
                   </pre>
                 </div>
               </div>
-
               {/* Python Step 2 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-bold">
                   2
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Install SDK</h4>
+                  <h4 className="font-semibold mb-1">Sign in once</h4>
                   <p className="text-sm text-ink-secondary">
-                    Install the SDK and its dependencies
+                    Links your machine to this account; no API key needed
                   </p>
                   <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
-                    <code>pip install -e .</code>
+                    <code>aim-sdk login</code>
                   </pre>
                 </div>
               </div>
-
               {/* Python Step 3 */}
               <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-semibold">
+                <div className="flex-shrink-0 w-8 h-8 rounded-pill bg-brand-soft text-brand-text flex items-center justify-center font-bold">
                   3
                 </div>
                 <div>
-                  <h4 className="font-semibold mb-1">Run example</h4>
+                  <h4 className="font-semibold mb-1">Connect this agent</h4>
                   <p className="text-sm text-ink-secondary">
-                    Test the automatic verification with the included example
+                    Use this agent&apos;s own identifier so the SDK attaches to it instead of registering a new one
                   </p>
                   <pre className="mt-2 p-3 rounded-inset-sm bg-glass-inset-gray font-mono text-xs text-ink-body overflow-x-auto">
-                    <code>python example.py</code>
+                    <code>{`from aim_sdk import secure
+
+agent = secure("${agent.id}")`}</code>
                   </pre>
                 </div>
               </div>

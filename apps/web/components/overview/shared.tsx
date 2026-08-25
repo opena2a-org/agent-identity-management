@@ -107,8 +107,12 @@ export function EmptyNote({ children }: { children: React.ReactNode }) {
   return <p className="mt-3 text-xs leading-relaxed text-ink-secondary">{children}</p>;
 }
 
-/** Recovery-framed posture: never a letter grade. */
-export function postureDelta(score: number) {
-  const next = score >= 90 ? 100 : Math.ceil((score + 1) / 10) * 10;
-  return next > score ? `+${next - score} to reach ${next}` : "at the top of the scale";
+/**
+ * Recovery framing for the posture score. HELD by CCO (2026-08-24): a bare arithmetic delta
+ * names no action and leaks the hidden grade boundaries, so nothing renders it today. It
+ * returns once /security/metrics exposes the score components so the copy can name the lever
+ * ("+9 available by attesting 2 MCP servers"). Do not re-wire it to the next multiple of ten.
+ */
+export function postureDelta(_score: number) {
+  return "";
 }

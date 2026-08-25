@@ -58,7 +58,7 @@ interface FlowNodeData {
 function MCPNode({ data }: { data: any }) {
   return (
     <div
-      className="flex flex-col items-center justify-center p-3 rounded-panel border-2 shadow-card bg-glass backdrop-blur-card min-w-[120px] cursor-pointer hover:shadow-chrome transition-shadow"
+      className="flex flex-col items-center justify-center p-3 rounded-panel border-2 shadow-panel bg-glass backdrop-blur-card min-w-[120px] cursor-pointer hover:shadow-chrome transition-shadow"
       style={{ borderColor: data.color }}
     >
       <Server
@@ -88,7 +88,7 @@ function MCPNode({ data }: { data: any }) {
 function AgentNode({ data }: { data: any }) {
   return (
     <div
-      className="flex flex-col items-center justify-center p-3 rounded-full border-2 shadow-card bg-glass backdrop-blur-card min-w-[100px] min-h-[100px] cursor-pointer hover:shadow-chrome transition-shadow"
+      className="flex flex-col items-center justify-center p-3 rounded-full border-2 shadow-panel bg-glass backdrop-blur-card min-w-[100px] min-h-[100px] cursor-pointer hover:shadow-chrome transition-shadow"
       style={{ borderColor: data.color }}
     >
       <Bot
@@ -261,7 +261,7 @@ export function MCPNetworkGraph({
           </span>
           <button
             onClick={fetchGraphData}
-            className="mt-2 px-3 py-1 text-sm rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover flex items-center gap-1"
+            className="mt-2 px-3 py-1 text-sm rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover flex items-center gap-1"
           >
             <RefreshCw className="h-3 w-3" />
             Retry

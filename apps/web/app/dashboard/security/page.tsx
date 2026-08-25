@@ -43,7 +43,6 @@ import ThreatDetailModal from "@/components/modals/threat-detail-modal";
 import { formatDateTime, formatRelativeTime } from "@/lib/date-utils";
 import { getErrorMessage } from "@/lib/error-messages";
 import { AuthGuard } from "@/components/auth-guard";
-import { postureDelta } from "@/components/overview/shared";
 
 // ============================================
 // TYPES
@@ -144,7 +143,6 @@ function SecurityScoreGauge({ score, grade, status }: { score: number; grade: st
       <div className="absolute flex flex-col items-center">
         <span className={`text-3xl font-bold ${colors.text}`}>{score}</span>
         <span className="text-xs text-ink-secondary">/100</span>
-        <span className="text-[10px] font-semibold text-success-text">{postureDelta(score)}</span>
       </div>
     </div>
   );
@@ -357,7 +355,7 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
         {!is403 && (
           <button
             onClick={onRetry}
-            className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+            className="px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
           >
             Retry
           </button>

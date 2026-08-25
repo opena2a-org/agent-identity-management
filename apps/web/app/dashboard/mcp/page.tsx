@@ -242,7 +242,7 @@ function ErrorDisplay({
         <p className="text-sm text-ink-secondary">{message}</p>
         <button
           onClick={onRetry}
-          className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+          className="px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
         >
           Retry
         </button>
@@ -517,7 +517,7 @@ export default function MCPServersPage() {
             setEditingMCP(null);
             setShowRegisterModal(true);
           }}
-          className="flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
         >
           <Plus className="h-4 w-4" />
           Register MCP server
@@ -726,7 +726,7 @@ export default function MCPServersPage() {
 
             <button
               onClick={() => setShowRegisterModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
             >
               <Plus className="h-4 w-4" />
               Register MCP server
@@ -775,7 +775,7 @@ export default function MCPServersPage() {
               {hasMore && (
                 <button
                   onClick={() => setCurrentPage(currentPage + 1)}
-                  className="px-4 py-2 text-sm rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
+                  className="px-4 py-2 text-sm rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
                 >
                   Load More
                 </button>

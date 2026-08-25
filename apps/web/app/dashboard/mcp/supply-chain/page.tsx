@@ -838,7 +838,7 @@ function SupplyChainPage() {
             {activeTab === "analytics" ? (
               <button
                 onClick={handleExport}
-                className="inline-flex items-center px-4 py-2 rounded-pill bg-brand text-sm font-medium text-white shadow-accent hover:bg-brand-hover"
+                className="inline-flex items-center px-4 py-2 rounded-pill bg-brand text-sm font-medium text-white shadow-glow hover:bg-brand-hover"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export report
@@ -850,7 +850,7 @@ function SupplyChainPage() {
                     const dropdown = document.getElementById("abom-export-dropdown");
                     if (dropdown) dropdown.classList.toggle("hidden");
                   }}
-                  className="inline-flex items-center px-4 py-2 rounded-pill bg-brand text-sm font-medium text-white shadow-accent hover:bg-brand-hover"
+                  className="inline-flex items-center px-4 py-2 rounded-pill bg-brand text-sm font-medium text-white shadow-glow hover:bg-brand-hover"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Export ABOM

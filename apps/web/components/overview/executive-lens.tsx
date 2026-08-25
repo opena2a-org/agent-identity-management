@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { Agent } from "@/lib/api";
-import { CardTitle, EmptyNote, KpiTile, postureDelta, relativeTime, trustDisplay } from "@/components/overview/shared";
+import { CardTitle, EmptyNote, KpiTile, relativeTime, trustDisplay } from "@/components/overview/shared";
 import type { LensData, StatsData, VerificationActivityMonth, VerificationStatistics } from "@/components/overview/types";
 import { cn } from "@/lib/utils";
 
@@ -68,14 +68,14 @@ export function ExecutiveLens({
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 xl:gap-3.5">
-        <KpiTile size="sm" label="Agents registered" value={stats.totalAgents.toLocaleString()} delta={newThisWeek > 0 ? `+${newThisWeek} this week` : "none new this week"} href="/dashboard/agents" />
+        <KpiTile size="sm" label="Agents registered" value={stats.totalAgents.toLocaleString()} delta={newThisWeek > 0 ? `+${newThisWeek} in the last 7 days` : "none new in the last 7 days"} href="/dashboard/agents" />
         <KpiTile size="sm" label="MCP servers" value={stats.totalMcpServers.toLocaleString()} delta={m ? `${m.mcpServersVerified.toLocaleString()} of ${m.mcpServersTotal.toLocaleString()} attested` : `${stats.activeMcpServers.toLocaleString()} active`} href="/dashboard/mcp" />
-        <KpiTile size="sm" label="Verifications today" value={verification ? verification.totalVerifications.toLocaleString() : "–"} delta={approved !== null ? `${approved}% approved` : verification ? "none yet" : "unavailable"} />
+        <KpiTile size="sm" label="Verifications, last 24h" value={verification ? verification.totalVerifications.toLocaleString() : "–"} delta={approved !== null ? `${approved}% approved` : verification ? "none yet" : "unavailable"} />
         {openViolations !== null && (
           <KpiTile size="sm" label="Open violations" value={openViolations.toLocaleString()} delta={m ? `${m.highSeverityCount.toLocaleString()} high severity` : undefined} tone={openViolations > 0 ? "alert" : "default"} href="/dashboard/security/violations" />
         )}
         {m && (
-          <KpiTile size="sm" label="Security posture" value={m.securityScore.toLocaleString()} delta={`of 100 · ${postureDelta(m.securityScore)}`} tone="accent" href="/dashboard/security" />
+          <KpiTile size="sm" label="Security posture" value={m.securityScore.toLocaleString()} delta="of 100" tone="accent" href="/dashboard/security" />
         )}
       </div>
 
@@ -117,7 +117,7 @@ export function ExecutiveLens({
                   <circle key={a.label} cx="70" cy="70" r={r} fill="none" stroke={a.color} strokeWidth="16" strokeDasharray={a.dash} strokeDashoffset={a.offset} transform="rotate(-90 70 70)" />
                 ))}
                 <text x="70" y="66" textAnchor="middle" fontSize="22" fontWeight="700" fill="var(--text-primary)">{trustDisplay(stats.avgTrustScore) ?? "–"}</text>
-                <text x="70" y="82" textAnchor="middle" fontSize="9" letterSpacing="0.5" fill="var(--text-tertiary)">AVG TRUST</text>
+                <text x="70" y="82" textAnchor="middle" fontSize="9" letterSpacing="0.5" fill="var(--text-tertiary)">Avg trust</text>
               </svg>
               <ul className="flex flex-1 flex-col gap-2">
                 {arcs.map((a) => (
@@ -142,7 +142,6 @@ export function ExecutiveLens({
                 <span className="text-[30px] font-bold tracking-[-0.03em] text-ink">{m.securityScore}</span>
                 <span className="text-xs font-semibold text-ink-tertiary">/ 100 posture</span>
               </p>
-              <p className="text-xs font-semibold text-success-text">{postureDelta(m.securityScore)}</p>
               <dl className="mt-auto pt-3 text-xs">
                 {[
                   ["Open violations", openViolations !== null ? openViolations.toLocaleString() : "–"],
@@ -157,7 +156,7 @@ export function ExecutiveLens({
               </dl>
             </>
           ) : (
-            <EmptyNote>Security metrics need the manager role.</EmptyNote>
+            <EmptyNote>Security metrics need the manager role. Ask an organization admin to change your role.</EmptyNote>
           )}
         </div>
 
@@ -207,7 +206,7 @@ export function ExecutiveLens({
               </Link>
             </>
           ) : (
-            <EmptyNote>Compliance status needs the admin role.</EmptyNote>
+            <EmptyNote>Compliance status needs the admin role. Ask an organization admin to change your role.</EmptyNote>
           )}
         </div>
 
@@ -216,12 +215,12 @@ export function ExecutiveLens({
           {recommended ? (
             <>
               <p className="mt-2 text-[15px] font-bold tracking-[-0.02em] text-ink">{recommended.text}</p>
-              <Link href={recommended.href} className="mt-auto inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-accent hover:bg-brand-hover">
+              <Link href={recommended.href} className="mt-auto inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
                 Assign or open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             </>
           ) : (
-            <EmptyNote>Nothing is waiting on you. Verification is running normally.</EmptyNote>
+            <EmptyNote>Nothing is waiting on you.</EmptyNote>
           )}
           {m?.recentBlockedActions?.length ? (
             <ul className="mt-4 divide-y divide-divider border-t border-divider pt-1">

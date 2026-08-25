@@ -22,9 +22,9 @@ import type { NavSection } from "@/lib/permissions";
 import type { Persona } from "@/lib/persona";
 
 export const SECTION_MAIN = "";
-export const SECTION_BUILD = "Build";
-export const SECTION_MONITORING = "Monitoring";
-export const SECTION_ACCOUNT = "Account";
+export const SECTION_BUILD = "Developers";
+export const SECTION_MONITORING = "Security";
+export const SECTION_ACCOUNT = "Organization";
 
 /**
  * Navigation with role-based access control. `roles` is the authorization
@@ -55,7 +55,10 @@ export const navigationBase: NavSection[] = [
     title: SECTION_MONITORING,
     items: [
       { name: "Security", href: "/dashboard/security", icon: AlertTriangle, roles: ["admin", "manager"] },
-      { name: "Alerts", href: "/dashboard/admin/alerts", icon: Bell, roles: ["admin", "manager"] },
+      // Interim: the edge gate's /dashboard/admin prefix rule blocks managers from this page
+      // (middleware.ts / proxy.ts intersect all matching prefixes), so the nav must not show it
+      // to managers until the IA move relocates alerts out of the admin prefix.
+      { name: "Alerts", href: "/dashboard/admin/alerts", icon: Bell, roles: ["admin"] },
     ],
   },
   {
@@ -92,7 +95,3 @@ export function orderNavigationForPersona(sections: NavSection[], persona: Perso
   return [...sections].sort((a, b) => rank(a.title) - rank(b.title));
 }
 
-/** Where the "Overview" tab and the logo lead for a lens. Always inside /dashboard. */
-export function overviewHrefForPersona(persona: Persona): string {
-  return persona === "security" ? "/dashboard/security" : "/dashboard";
-}

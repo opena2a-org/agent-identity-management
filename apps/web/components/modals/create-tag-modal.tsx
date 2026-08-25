@@ -416,7 +416,7 @@ export function CreateTagModal({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create tag
