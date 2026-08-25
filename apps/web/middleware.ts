@@ -33,8 +33,10 @@ export function middleware(request: NextRequest) {
   }
 
   try {
-    // Decode JWT to get role (basic check, real validation happens server-side)
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    // Decode JWT to get role (basic check, real validation happens server-side).
+    // JWT segments use the base64url alphabet; atob() only accepts standard base64.
+    const segment = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(segment));
     const userRole = payload?.role;
 
     // Normalize "pending" role to "viewer"
