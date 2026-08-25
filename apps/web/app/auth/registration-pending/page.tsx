@@ -55,6 +55,17 @@ function RegistrationPendingContent() {
             </li>
           </ol>
 
+          <div className="mt-5 rounded-inset bg-glass-inset-gray px-4 py-3">
+            <p className="text-xs leading-relaxed text-ink-secondary">
+              Running this deployment yourself? Accounts whose email is listed in the{" "}
+              <code className="font-mono text-ink">AIM_PLATFORM_ADMINS</code> environment variable
+              (comma-separated, for example{" "}
+              <code className="font-mono text-ink">AIM_PLATFORM_ADMINS=you@example.com</code>) are
+              approved automatically and become administrators of their own organization.
+              Administrators approve everyone else under Admin &gt; Registrations.
+            </p>
+          </div>
+
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
             <Link href="/auth/login" className="inline-flex h-11 flex-1 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
               Go to sign in
