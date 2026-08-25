@@ -119,33 +119,15 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		signupProfile,
 	)
 	if err != nil {
-		// Handle specific error cases
-		switch err {
-		case application.ErrUserAlreadyExists:
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"success": false,
-				"error":   "A user with this email already exists",
-			})
-		case application.ErrRegistrationRequestExists:
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"success": false,
-				"error":   "A registration request with this email already exists and is pending approval",
-			})
-		default:
-			// Return validation errors (e.g. password too short) to the client
-			if strings.Contains(err.Error(), "password validation failed") {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"success": false,
-					"error":   err.Error(),
-				})
-			}
+		status, message := registrationErrorResponse(err)
+		if status == fiber.StatusInternalServerError {
 			// SECURITY: Log unexpected errors server-side, return generic message to client
 			log.Printf("Registration request failed for email %s: %v", email, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"success": false,
-				"error":   "An internal error occurred. Please try again later.",
-			})
 		}
+		return c.Status(status).JSON(fiber.Map{
+			"success": false,
+			"error":   message,
+		})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(&RegisterUserResponse{
@@ -842,4 +824,27 @@ func (h *PublicRegistrationHandler) RegisterRoutes(app *fiber.App) {
 	public.Post("/login", h.Login)
 	public.Post("/change-password", h.ChangePassword)
 	public.Post("/forgot-password", h.ForgotPassword)
+}
+
+// NoAdministratorsMessage is shown verbatim on the sign-up page when nobody in the deployment
+// could approve the request (no AIM_PLATFORM_ADMINS allowlist and no active administrator).
+const NoAdministratorsMessage = "This deployment has no administrators configured. Set AIM_PLATFORM_ADMINS to a comma-separated list of emails and restart; accounts on that list are approved automatically."
+
+// registrationErrorResponse maps a registration failure to the status and message the client
+// receives. Unexpected errors map to 500 with a generic message; the caller logs them.
+func registrationErrorResponse(err error) (int, string) {
+	switch err {
+	case application.ErrUserAlreadyExists:
+		return fiber.StatusConflict, "A user with this email already exists"
+	case application.ErrRegistrationRequestExists:
+		return fiber.StatusConflict, "A registration request with this email already exists and is pending approval"
+	case application.ErrNoAdministrators:
+		// The deployment, not the request, is the problem: unavailable until an operator configures it.
+		return fiber.StatusServiceUnavailable, NoAdministratorsMessage
+	}
+	// Return validation errors (e.g. password too short) to the client
+	if strings.Contains(err.Error(), "password validation failed") {
+		return fiber.StatusBadRequest, err.Error()
+	}
+	return fiber.StatusInternalServerError, "An internal error occurred. Please try again later."
 }

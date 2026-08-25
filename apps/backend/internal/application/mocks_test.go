@@ -665,6 +665,11 @@ func (m *SharedMockUserRepository) CountActiveUsers(orgID uuid.UUID, withinMinut
 	return args.Int(0), args.Error(1)
 }
 
+func (m *SharedMockUserRepository) CountByRoleAndStatus(role domain.UserRole, status domain.UserStatus) (int, error) {
+	args := m.Called(role, status)
+	return args.Int(0), args.Error(1)
+}
+
 // SharedMockOrganizationRepository is a mock implementation of OrganizationRepository
 type SharedMockOrganizationRepository struct {
 	mock.Mock

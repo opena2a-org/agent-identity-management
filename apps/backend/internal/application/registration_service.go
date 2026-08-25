@@ -18,6 +18,8 @@ var (
 	ErrRegistrationNotPending    = errors.New("registration request is not pending")
 	ErrUserAlreadyExists         = errors.New("user with this email already exists")
 	ErrRegistrationRequestExists = errors.New("registration request with this email already exists")
+	// ErrNoAdministrators: the request would wait for an approval nobody in this deployment can give.
+	ErrNoAdministrators = errors.New("no administrator can approve a registration request in this deployment")
 )
 
 // RegistrationRepository defines the interface for registration data persistence
@@ -94,6 +96,19 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 	// (see PR-B) and team creation is an explicit user action (see PR-C).
 	emailDomain := extractEmailDomain(email)
 	shouldAutoApprove := isPlatformAdmin(email)
+
+	// A pending request needs someone who can approve it. On a fresh self-hosted install with
+	// no AIM_PLATFORM_ADMINS allowlist and no active administrator, the request would wait
+	// forever and nothing would say so; refuse before writing it (never write-then-refuse).
+	if !shouldAutoApprove && len(platformAdminAllowlist()) == 0 {
+		approvers, err := s.userRepo.CountByRoleAndStatus(domain.RoleAdmin, domain.UserStatusActive)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count administrators: %w", err)
+		}
+		if approvers == 0 {
+			return nil, ErrNoAdministrators
+		}
+	}
 
 	// Create new manual registration request
 	req := domain.NewUserRegistrationRequestManual(
@@ -664,14 +679,22 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 // Email comparison is case-insensitive and trims whitespace. Empty env var means
 // no platform admins exist (safe default — only approved-by-existing-admin users
 // can register).
-func isPlatformAdmin(email string) bool {
-	allowlist := os.Getenv("AIM_PLATFORM_ADMINS")
-	if allowlist == "" {
-		return false
+// platformAdminAllowlist returns the non-empty, lower-cased, trimmed entries of
+// AIM_PLATFORM_ADMINS; an unset, empty or separator-only variable yields no entries.
+func platformAdminAllowlist() []string {
+	var entries []string
+	for _, entry := range strings.Split(os.Getenv("AIM_PLATFORM_ADMINS"), ",") {
+		if e := strings.ToLower(strings.TrimSpace(entry)); e != "" {
+			entries = append(entries, e)
+		}
 	}
+	return entries
+}
+
+func isPlatformAdmin(email string) bool {
 	target := strings.ToLower(strings.TrimSpace(email))
-	for _, entry := range strings.Split(allowlist, ",") {
-		if strings.ToLower(strings.TrimSpace(entry)) == target {
+	for _, entry := range platformAdminAllowlist() {
+		if entry == target {
 			return true
 		}
 	}
