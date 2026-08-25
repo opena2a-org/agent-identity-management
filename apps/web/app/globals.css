@@ -3,12 +3,14 @@
 @tailwind utilities;
 
 /*
-  Glasshouse design system (AIM, decided 2026-08-24).
-  Source of truth for every color, radius, blur and shadow in the app. Pages and
-  components consume tokens through Tailwind (`bg-glass`, `text-ink-secondary`,
-  `rounded-card`, ...) or the `.glass*` component classes below, never raw
-  palette classes. Values come from the signed-off artboards; the handful that
-  differ are contrast corrections (WCAG AA) recorded in the council ledger.
+  Glasshouse design system.
+  Source of truth for the theme tokens: the colors, radii, blur and shadows the
+  Glasshouse surfaces use. Pages and components consume them through Tailwind
+  (`bg-glass`, `text-ink-secondary`, `rounded-card`, ...) or the `.glass*`
+  component classes below; new code must not add raw palette classes. Pages not
+  yet moved onto the tokens still carry raw palette classes and `dark:` twins,
+  which is why the theme defaults to light until they land. Values come from the
+  signed-off artboards; the handful that differ are contrast corrections (WCAG AA).
 */
 
 @layer base {

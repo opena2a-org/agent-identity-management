@@ -345,7 +345,7 @@ export function RegisterAgentModal({
     }
 
     // Capabilities are optional: the SDK detects them at runtime, and a hand-typed
-    // capability string is the worst jargon wall at first contact (CPO 2026-08-24).
+    // capability string is the worst jargon wall at first contact.
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {

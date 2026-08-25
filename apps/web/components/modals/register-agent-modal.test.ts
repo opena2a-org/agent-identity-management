@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { registrationDefaults } from "@/components/modals/register-agent-modal";
 
 /**
- * Regression for the silent-forever-pending defect (CPO B2, 2026-08-24): the backend's
- * shouldAutoVerifyAgent refuses agents whose name, displayName or description is empty, so
- * the browser payload must always carry all three, byte-identical to the SDK's defaults
- * (sdk/python/aim_sdk/client.py).
+ * Regression for the silent-forever-pending defect: the backend's shouldAutoVerifyAgent
+ * refuses agents whose name, displayName or description is empty, so the browser payload
+ * must always carry all three, byte-identical to the defaults the Python SDK's secure()
+ * sends (sdk/python/aim_sdk/client.py, "Prepare registration request").
  */
 describe("registrationDefaults", () => {
   it("fills displayName, description and version for a minimal form", () => {

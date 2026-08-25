@@ -108,7 +108,7 @@ export function EmptyNote({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Recovery framing for the posture score. HELD by CCO (2026-08-24): a bare arithmetic delta
+ * Recovery framing for the posture score. Withheld for now: a bare arithmetic delta
  * names no action and leaks the hidden grade boundaries, so nothing renders it today. It
  * returns once /security/metrics exposes the score components so the copy can name the lever
  * ("+9 available by attesting 2 MCP servers"). Do not re-wire it to the next multiple of ten.

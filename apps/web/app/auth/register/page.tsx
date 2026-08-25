@@ -485,18 +485,6 @@ export default function RegisterPage() {
             </Link>
           </div>
         </div>
-
-        {/* Additional Info */}
-        <div className="mt-6 text-center text-xs text-ink-tertiary">
-          By signing up, you agree to our{" "}
-          <a href="/terms" className="text-brand-text hover:underline">
-            Terms of Service
-          </a>{" "}
-          and{" "}
-          <a href="/privacy" className="text-brand-text hover:underline">
-            Privacy Policy
-          </a>
-        </div>
       </div>
     </div>
   );
