@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { filterNavigationByRole, type UserRole } from "@/lib/permissions";
 import { navigationBase, orderNavigationForPersona } from "@/lib/navigation";
-import { PERSONAS, personaFromSignupRole, type Persona } from "@/lib/persona";
+import { PERSONAS, type Persona } from "@/lib/persona";
 
 const ROLES: (UserRole | undefined)[] = ["admin", "manager", "member", "viewer", undefined];
 const hrefs = (sections: ReturnType<typeof filterNavigationByRole>) =>
@@ -31,15 +31,4 @@ describe("persona lens never changes authorization", () => {
     );
   });
 
-});
-
-describe("personaFromSignupRole", () => {
-  it("maps the signup roles onto the three lenses", () => {
-    expect(personaFromSignupRole("developer")).toBe("developer");
-    expect(personaFromSignupRole("student-or-researcher")).toBe("developer");
-    expect(personaFromSignupRole("security-engineer")).toBe("security");
-    expect(personaFromSignupRole("founder-or-exec")).toBe("executive");
-    expect(personaFromSignupRole("other")).toBe("developer");
-    expect(personaFromSignupRole(undefined)).toBe("developer");
-  });
 });

@@ -25,41 +25,22 @@ export function isPersona(value: unknown): value is Persona {
   return value === "developer" || value === "security" || value === "executive";
 }
 
-/** Maps the role collected at signup (`profile.role`) to the initial lens. */
-export function personaFromSignupRole(role?: string | null): Persona {
-  switch (role) {
-    case "security-engineer":
-      return "security";
-    case "founder-or-exec":
-      return "executive";
-    case "developer":
-    case "student-or-researcher":
-    default:
-      return "developer";
-  }
-}
 
-type PersonaSource = "default" | "signup" | "user";
+type PersonaSource = "default" | "user";
 
 interface PersonaState {
   persona: Persona;
   source: PersonaSource;
   /** Explicit user choice (the switcher). Always wins and is remembered. */
   setPersona: (persona: Persona) => void;
-  /** Seeds the lens from the signup role unless the user already picked one. */
-  seedFromSignupRole: (role?: string | null) => void;
 }
 
 export const usePersona = create<PersonaState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       persona: "developer",
       source: "default",
       setPersona: (persona) => set({ persona, source: "user" }),
-      seedFromSignupRole: (role) => {
-        if (get().source === "user") return;
-        set({ persona: personaFromSignupRole(role), source: "signup" });
-      },
     }),
     {
       name: "aim.persona",

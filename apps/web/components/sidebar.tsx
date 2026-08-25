@@ -44,7 +44,6 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
     onMobileOpenChange?.(open);
   };
   const persona = usePersona((s) => s.persona);
-  const seedFromSignupRole = usePersona((s) => s.seedFromSignupRole);
   const [isLoading, setIsLoading] = useState(true); // Add loading state
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [user, setUser] = useState<{
@@ -77,7 +76,6 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
           role: normalizedRole,
           provider: (userData as any)?.provider || undefined,
         });
-        seedFromSignupRole((userData as any)?.profile?.role);
       } catch (error) {
         // Silently handle errors - don't throw to UI
         console.log("API call failed, using token fallback");
@@ -118,14 +116,30 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
     fetchUser();
   }, [router]);
 
-  // Filter navigation based on user role using permissions system
+  // The navigation is derived from the role filter, the lens order and the live counts.
+  // Badges are matched by href so a label change cannot detach them, and a lens switch
+  // rebuilds the list with the counts it already has.
   useEffect(() => {
     if (!user?.role) return;
 
-    const filteredNav = filterNavigationByRole(navigationBase, user.role);
+    const badges: Record<string, number> = {
+      "/dashboard/security": securityAlertCount,
+      "/dashboard/admin/alerts": alertCount,
+      "/dashboard/admin/capability-requests": capabilityRequestCount,
+      "/dashboard/admin/jit-requests": verificationCount,
+    };
+    const filteredNav = filterNavigationByRole(navigationBase, user.role).map((section) => ({
+      ...section,
+      items: section.items.map((item) => {
+        const count = badges[item.href];
+        if (count && count > 0) return { ...item, badge: count };
+        const { badge: _badge, ...withoutBadge } = item;
+        return withoutBadge;
+      }),
+    }));
     // The lens only reorders what the role filter already allowed (lib/persona.test.ts).
     setNavigation(orderNavigationForPersona(filteredNav, persona));
-  }, [user?.role, persona]);
+  }, [user?.role, persona, alertCount, securityAlertCount, capabilityRequestCount, verificationCount]);
 
   useEffect(() => {
     // Fetch alert count, capability request count, and verification approvals
@@ -157,49 +171,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
           setVerificationCount(pendingVerificationCount);
         }
 
-        // Update navigation with badges
-        setNavigation((prev) =>
-          prev.map((section) => ({
-            ...section,
-            items: section.items.map((item) => {
-              // Update Security badge (critical + high alerts)
-              if (item.name === "Security" && securityAlertCount > 0) {
-                return { ...item, badge: securityAlertCount };
-              }
-              // Update Alerts badge
-              if (item.name === "Alerts" && alertCount > 0) {
-                return { ...item, badge: alertCount };
-              }
-              // Update Capability Requests badge
-              if (
-                item.name === "Capability Requests" &&
-                capabilityRequestCount > 0
-              ) {
-                return { ...item, badge: capabilityRequestCount };
-              }
-              // Update JIT Requests badge
-              if (
-                item.name === "JIT Requests" &&
-                verificationCount > 0
-              ) {
-                return { ...item, badge: verificationCount };
-              }
-              // Remove badges when count is 0
-              if (
-                (item.name === "Security" && securityAlertCount === 0) ||
-                (item.name === "Alerts" && alertCount === 0) ||
-                (item.name === "Capability Requests" &&
-                  capabilityRequestCount === 0) ||
-                (item.name === "JIT Requests" &&
-                  verificationCount === 0)
-              ) {
-                const { badge, ...itemWithoutBadge } = item;
-                return itemWithoutBadge;
-              }
-              return item;
-            }),
-          }))
-        );
+        // Badges are applied by the navigation effect from these counts.
       } catch (error) {
         console.log("Failed to fetch counts:", error);
       }

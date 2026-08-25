@@ -80,6 +80,7 @@ module.exports = {
         },
         danger: {
           DEFAULT: 'var(--red)',
+          strong: 'var(--red-strong)',
           text: 'var(--red-text)',
           fill: 'var(--red-fill)',
           border: 'var(--red-border)',

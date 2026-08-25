@@ -16,6 +16,7 @@ import {
   Shield,
   ShieldCheck,
   Tag,
+  UserPlus,
   Users,
 } from "lucide-react";
 import type { NavSection } from "@/lib/permissions";
@@ -65,6 +66,8 @@ export const navigationBase: NavSection[] = [
     // Administering your own organization (every signup administers its own account).
     title: SECTION_ACCOUNT,
     items: [
+      // The approval queue for new accounts (the registration-pending page points here).
+      { name: "Registrations", href: "/admin/registrations", icon: UserPlus, roles: ["admin"] },
       { name: "JIT requests", href: "/dashboard/admin/jit-requests", icon: CheckCircle, roles: ["admin"] },
       { name: "Capability requests", href: "/dashboard/admin/capability-requests", icon: CheckSquare, roles: ["admin"] },
       { name: "Security policies", href: "/dashboard/admin/security-policies", icon: ShieldCheck, roles: ["admin"] },

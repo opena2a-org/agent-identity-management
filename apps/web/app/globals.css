@@ -70,6 +70,7 @@
     --amber-fill: rgba(245, 166, 35, 0.14);
     --amber-border: rgba(245, 166, 35, 0.3);
     --red: #ff3b30;
+    --red-strong: #d70015; /* filled controls carrying white text (5.4:1); --red stays for tints and strokes */
     --red-text: #c1000f;
     --red-fill: rgba(255, 59, 48, 0.08);
     --red-border: rgba(255, 59, 48, 0.25);
@@ -81,7 +82,7 @@
     --text-tertiary: #737378;
     --text-inverse: #f5f5f7;
     --text-inverse-secondary: #a1a1a6;
-    --text-code: #7dd3fc;
+    --text-code: #0b5cad;
 
     /* Lines */
     --divider: rgba(60, 60, 67, 0.08);
@@ -159,6 +160,7 @@
     --amber-fill: rgba(245, 166, 35, 0.14);
     --amber-border: rgba(245, 166, 35, 0.3);
     --red: #ff3b30;
+    --red-strong: #d70015; /* filled controls carrying white text (5.4:1); --red stays for tints and strokes */
     --red-text: #ff6961;
     --red-fill: rgba(255, 59, 48, 0.12);
     --red-border: rgba(255, 59, 48, 0.35);
@@ -248,32 +250,52 @@
 }
 
 @layer components {
-  /* Radial washes behind a page. Apply to a `relative overflow-hidden` wrapper. */
+  /*
+    Radial washes behind a page. Apply to a `relative overflow-hidden` wrapper.
+    A wrapper that must keep `overflow: visible` (the dashboard shell, whose sidebar is
+    `position: sticky`) uses `.glass-page--layered` instead and puts an empty
+    `.glass-page-wash` element inside it: the wash layer clips its own overflow.
+  */
   .glass-page::before,
-  .glass-page::after {
+  .glass-page::after,
+  .glass-page-wash::before,
+  .glass-page-wash::after {
     content: "";
     position: absolute;
     border-radius: 50%;
     pointer-events: none;
     z-index: 0;
   }
-  .glass-page::before {
+  .glass-page::before,
+  .glass-page-wash::before {
     top: -180px;
     right: -120px;
     width: 560px;
     height: 560px;
     background: radial-gradient(circle, var(--wash-1), transparent 70%);
   }
-  .glass-page::after {
+  .glass-page::after,
+  .glass-page-wash::after {
     bottom: -220px;
     left: 240px;
     width: 640px;
     height: 640px;
     background: radial-gradient(circle, var(--wash-2), transparent 70%);
   }
+  .glass-page--layered::before,
+  .glass-page--layered::after {
+    content: none;
+  }
   .glass-page > * {
     position: relative;
     z-index: 1;
+  }
+  .glass-page > .glass-page-wash {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
   }
 
   .glass {

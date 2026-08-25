@@ -79,8 +79,8 @@ export default function RegistrationsPage() {
   }));
 
   return (
-    <main className="glass-page relative min-h-screen overflow-hidden">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <main>
+      <div className="mx-auto max-w-5xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-inset-sm bg-brand-soft text-brand-text">

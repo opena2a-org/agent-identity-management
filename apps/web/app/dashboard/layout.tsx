@@ -36,7 +36,8 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="glass-page relative min-h-screen overflow-hidden">
+    <div className="glass-page glass-page--layered relative min-h-screen">
+      <div className="glass-page-wash" aria-hidden="true" />
       {/* Idle / absolute session timeout (30m idle, 8h cap) */}
       <IdleTimeoutGuard />
       <div className="flex gap-5 p-4 pb-28 sm:p-6 lg:pb-6">
