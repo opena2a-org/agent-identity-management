@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, LogOut, Lock, Loader2, Bell } from "lucide-react";
+import { Bell, ChevronDown, Loader2, Lock, LogOut } from "lucide-react";
 import { api } from "@/lib/api";
-import { type UserRole } from "@/lib/permissions";
+import { getRoleInfo, type UserRole } from "@/lib/permissions";
 import { eventEmitter } from "@/lib/event-emitter";
+import { AimLogo } from "@/components/sidebar";
+import { cn } from "@/lib/utils";
 
 export function DashboardHeader() {
   const router = useRouter();
@@ -129,114 +131,92 @@ export function DashboardHeader() {
     }
   };
 
-  const getRoleBadge = (role?: UserRole) => {
-    if (!role) return null;
-
-    const roleColors = {
-      admin:
-        "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
-      manager:
-        "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
-      member:
-        "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300",
-      viewer: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
-    };
-
-    const roleLabels = {
-      admin: "System Administrator",
-      manager: "Manager",
-      member: "Member",
-      viewer: "Viewer",
-    };
-
-    return (
-      <span
-        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${roleColors[role]}`}
-      >
-        {roleLabels[role]}
-      </span>
-    );
-  };
+  const roleLabel = user?.role ? getRoleInfo(user.role).label : null;
+  const canSeeAlerts = user?.role === "admin" || user?.role === "manager";
+  const initial = (user?.displayName || user?.email || "?").slice(0, 1).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-sm">
-      <div className="flex items-center justify-end h-16 px-4 sm:px-6 lg:px-8">
-        {/* User Profile Dropdown */}
+    <header className="flex items-center justify-between gap-3 px-1 py-1">
+      {/* The sidebar carries the logo on large screens; show it here on small ones. */}
+      <Link href="/dashboard" className="flex items-center gap-2.5 lg:invisible" aria-label="Overview">
+        <AimLogo />
+        <span className="text-base font-bold tracking-[-0.02em] text-ink">AIM</span>
+      </Link>
+
+      <div className="flex items-center gap-2">
+        {canSeeAlerts && (
+          <Link
+            href="/dashboard/admin/alerts"
+            className="relative inline-flex h-9 w-9 items-center justify-center rounded-pill border border-glass-border bg-glass text-ink-secondary backdrop-blur-card hover:text-ink"
+            aria-label={priorityAlertCount > 0 ? `${priorityAlertCount} priority alerts` : "Alerts"}
+          >
+            <Bell className="h-4 w-4" aria-hidden="true" />
+            {priorityAlertCount > 0 && (
+              <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-pill bg-danger px-1 text-[10px] font-bold leading-[18px] text-white">
+                {priorityAlertCount > 99 ? "99+" : priorityAlertCount}
+              </span>
+            )}
+          </Link>
+        )}
+
         <div className="relative">
           <button
+            type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-haspopup="menu"
+            aria-expanded={isDropdownOpen}
+            className="flex items-center gap-2 rounded-pill border border-glass-border bg-glass py-1 pl-1 pr-2.5 backdrop-blur-card hover:bg-glass-inset"
           >
-            {/* Avatar */}
-            <div className="w-9 h-9 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold">
-              {user?.email?.[0]?.toUpperCase() || "U"}
-            </div>
-
-            {/* User Info */}
-            <div className="flex flex-col items-start min-w-0">
-              <div className="flex items-center gap-2">
-                {getRoleBadge(user?.role)}
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[200px]">
-                {user?.email || "Loading..."}
-              </p>
-            </div>
-
-            {/* Dropdown Icon */}
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#6366f1] text-xs font-bold text-white">
+              {initial}
+            </span>
+            <span className="hidden max-w-[160px] truncate text-xs font-bold text-ink sm:block">
+              {user?.displayName || "Account"}
+            </span>
             <ChevronDown
-              className={`h-4 w-4 text-gray-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`}
+              className={cn("h-3.5 w-3.5 text-ink-tertiary transition-transform", isDropdownOpen && "rotate-180")}
+              aria-hidden="true"
             />
           </button>
 
-          {/* Dropdown Menu */}
           {isDropdownOpen && (
             <>
-              {/* Backdrop */}
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setIsDropdownOpen(false)}
-              />
-
-              {/* Menu */}
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
-                {/* User Info Header */}
-                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {user?.displayName || "User Account"}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {user?.email || "Loading..."}
-                  </p>
-                </div>
-
-                {/* Menu Items */}
-                <div className="py-2">
-                  {user?.provider === "local" && (
-                    <button
-                      onClick={() => {
-                        setIsDropdownOpen(false);
-                        router.push("/auth/change-password");
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      <Lock className="h-4 w-4" />
-                      <span>Change Password</span>
-                    </button>
+              <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} aria-hidden="true" />
+              <div role="menu" className="glass absolute right-0 z-50 mt-2 w-64 p-1.5">
+                <div className="px-3 py-2.5">
+                  <p className="truncate text-sm font-bold text-ink">{user?.displayName || "Account"}</p>
+                  <p className="truncate text-2xs text-ink-tertiary">{user?.email || "Loading..."}</p>
+                  {roleLabel && (
+                    <span className="mt-1.5 inline-flex rounded-pill bg-brand-soft px-2 py-0.5 text-2xs font-bold text-brand-text">
+                      {roleLabel}
+                    </span>
                   )}
-
-                  <button
-                    onClick={handleLogout}
-                    disabled={isLoggingOut}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isLoggingOut ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <LogOut className="h-4 w-4" />
-                    )}
-                    <span>{isLoggingOut ? "Logging out..." : "Logout"}</span>
-                  </button>
                 </div>
+                <div className="my-1 border-t border-divider" />
+                {user?.provider === "local" && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsDropdownOpen(false);
+                      router.push("/auth/change-password");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-nav px-3 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
+                  >
+                    <Lock className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
+                    <span>Change password</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="flex w-full items-center gap-2.5 rounded-nav px-3 py-2 text-sm font-medium text-danger-text hover:bg-danger-fill disabled:opacity-60"
+                >
+                  {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
+                  <span>{isLoggingOut ? "Signing out..." : "Sign out"}</span>
+                </button>
               </div>
             </>
           )}

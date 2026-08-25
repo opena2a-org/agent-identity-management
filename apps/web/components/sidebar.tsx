@@ -2,188 +2,49 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Home,
-  Shield,
-  AlertTriangle,
-  CheckCircle,
-  Server,
-  Key,
-  Users,
-  Bell,
-  LogOut,
-  ChevronLeft,
-  Menu,
-  X,
-  Download,
-  Lock,
-  ShieldCheck,
-  CheckSquare,
-  ClipboardCheck,
-  Tag,
-  BarChart3,
-  Code,
-  Loader2,
-  Search,
-  GitBranch,
-  Link2,
-} from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { LogOut, Loader2, Shield, X } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   filterNavigationByRole,
-  type UserRole,
   type NavSection,
+  type UserRole,
 } from "@/lib/permissions";
+import { navigationBase, orderNavigationForPersona } from "@/lib/navigation";
+import { usePersona } from "@/lib/persona";
 import { eventEmitter, Events } from "@/lib/events";
+import { PersonaSwitch } from "@/components/persona-switch";
+import { cn } from "@/lib/utils";
 
-// ✅ Navigation with role-based access control
-// Organized by natural user workflow: Main → Development → Monitoring → Administration → Settings
-const navigationBase: NavSection[] = [
-  {
-    title: "",
-    items: [
-      // Everyone starts here
-      {
-        name: "Dashboard",
-        href: "/dashboard",
-        icon: Home,
-        roles: ["admin", "manager", "member", "viewer"],
-      },
-      {
-        name: "Agents",
-        href: "/dashboard/agents",
-        icon: Shield,
-        roles: ["admin", "manager", "member", "viewer"],
-      },
-      {
-        name: "MCP Servers",
-        href: "/dashboard/mcp",
-        icon: Server,
-        roles: ["admin", "manager", "member"],
-      },
-      {
-        name: "MCP Discovery",
-        href: "/dashboard/mcp/discovery",
-        icon: Search,
-        roles: ["admin", "manager"],
-      },
-      {
-        name: "Supply Chain",
-        href: "/dashboard/mcp/supply-chain",
-        icon: GitBranch,
-        roles: ["admin", "manager"],
-      },
-      {
-        name: "A2A Protocol",
-        href: "/dashboard/a2a",
-        icon: Link2,
-        roles: ["admin", "manager", "member"],
-      },
-    ],
-  },
-  {
-    title: "Development",
-    items: [
-      // Developer resources and tools
-      {
-        name: "API Keys",
-        href: "/dashboard/api-keys",
-        icon: Key,
-        roles: ["admin", "manager", "member"],
-      },
-      {
-        name: "Download SDK",
-        href: "/dashboard/sdk",
-        icon: Download,
-        roles: ["admin", "manager", "member"],
-      },
-      {
-        name: "SDK Tokens",
-        href: "/dashboard/sdk-tokens",
-        icon: Lock,
-        roles: ["admin", "manager", "member"],
-      },
-    ],
-  },
-  {
-    title: "Monitoring",
-    items: [
-      {
-        name: "Security",
-        href: "/dashboard/security",
-        icon: AlertTriangle,
-        roles: ["admin", "manager"],
-      },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      // Admin-only access to alerts, approvals, and policies
-      {
-        name: "Alerts",
-        href: "/dashboard/admin/alerts",
-        icon: Bell,
-        roles: ["admin", "manager"], // Managers can view alerts
-      },
-      {
-        name: "JIT Requests",
-        href: "/dashboard/admin/jit-requests",
-        icon: CheckCircle,
-        roles: ["admin"], // Admin-only JIT access approvals
-      },
-      {
-        name: "Capability Requests",
-        href: "/dashboard/admin/capability-requests",
-        icon: CheckSquare,
-        roles: ["admin"], // Admin-only capability approval
-      },
-      {
-        name: "Security Policies",
-        href: "/dashboard/admin/security-policies",
-        icon: ShieldCheck,
-        roles: ["admin"], // Admin-only policy management (agents + MCP)
-      },
-      {
-        name: "Compliance",
-        href: "/dashboard/admin/compliance",
-        icon: ClipboardCheck,
-        roles: ["admin"], // Admin-only compliance monitoring
-      },
-    ],
-  },
-  {
-    title: "Settings",
-    items: [
-      // Less frequently used pages at the bottom
-      {
-        name: "Users",
-        href: "/dashboard/admin/users",
-        icon: Users,
-        roles: ["admin"],
-      },
-      {
-        name: "Tags",
-        href: "/dashboard/tags",
-        icon: Tag,
-        roles: ["admin", "manager", "member"],
-      },
-      {
-        name: "Developers",
-        href: "/dashboard/developers",
-        icon: Code,
-        roles: ["admin", "manager", "member", "viewer"],
-      },
-    ],
-  },
-];
+export interface SidebarProps {
+  /** Controlled mobile drawer state (the bottom tab bar's Menu opens it). */
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}
 
-export function Sidebar() {
+export function AimLogo({ size = 30, className }: { size?: number; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("inline-flex items-center justify-center rounded-full bg-logo text-white", className)}
+      style={{ width: size, height: size }}
+    >
+      <Shield style={{ width: Math.round(size / 2), height: Math.round(size / 2) }} strokeWidth={2.4} />
+    </span>
+  );
+}
+
+export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: SidebarProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileOpenState, setMobileOpenState] = useState(false);
+  const mobileOpen = mobileOpenProp ?? mobileOpenState;
+  const setMobileOpen = (open: boolean) => {
+    setMobileOpenState(open);
+    onMobileOpenChange?.(open);
+  };
+  const persona = usePersona((s) => s.persona);
+  const seedFromSignupRole = usePersona((s) => s.seedFromSignupRole);
   const [isLoading, setIsLoading] = useState(true); // ✅ Add loading state
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [user, setUser] = useState<{
@@ -216,6 +77,7 @@ export function Sidebar() {
           role: normalizedRole,
           provider: (userData as any)?.provider || undefined,
         });
+        seedFromSignupRole((userData as any)?.profile?.role);
       } catch (error) {
         // Silently handle errors - don't throw to UI
         console.log("API call failed, using token fallback");
@@ -261,8 +123,9 @@ export function Sidebar() {
     if (!user?.role) return;
 
     const filteredNav = filterNavigationByRole(navigationBase, user.role);
-    setNavigation(filteredNav);
-  }, [user?.role]);
+    // The lens only reorders what the role filter already allowed (lib/persona.test.ts).
+    setNavigation(orderNavigationForPersona(filteredNav, persona));
+  }, [user?.role, persona]);
 
   useEffect(() => {
     // Fetch alert count, capability request count, and verification approvals
@@ -437,195 +300,132 @@ export function Sidebar() {
   };
 
   // ✅ Sidebar Loading Skeleton
-  const SidebarSkeleton = () => (
-    <>
-      {/* Logo Skeleton */}
-      <div className="px-4 py-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
-          {!collapsed && (
-            <div className="flex flex-col gap-1 flex-1">
-              <div className="h-5 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-              <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-            </div>
+  const NavList = () => (
+    <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-0.5" aria-label="Main">
+      {navigation.map((section, idx) => (
+        <div key={section.title || idx} className="flex flex-col gap-[2px]">
+          {section.title && (
+            <h3 className="text-overline mb-0.5 pl-3">{section.title}</h3>
           )}
-        </div>
-      </div>
-
-      {/* Navigation Skeleton */}
-      <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-        {/* Main Section */}
-        <div className="space-y-1">
-          {[...Array(6)].map((_, idx) => (
-            <div
-              key={idx}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg ${collapsed ? "justify-center" : ""}`}
-            >
-              <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-              {!collapsed && (
-                <div className="h-4 flex-1 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Administration Section */}
-        {!collapsed && (
-          <div className="space-y-1">
-            <div className="h-3 w-24 mx-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-2" />
-            {[...Array(4)].map((_, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg"
+          {section.items.map((item) => {
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] transition-colors",
+                  active
+                    ? "bg-nav-active font-bold text-brand-text"
+                    : "font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
+                )}
               >
-                <div className="w-5 h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-                <div className="h-4 flex-1 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-              </div>
-            ))}
-          </div>
-        )}
-      </nav>
-    </>
+                <item.icon
+                  className={cn("h-4 w-4 flex-shrink-0", active ? "text-brand-text" : "text-ink-tertiary")}
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+                <span className="flex-1 truncate">{item.name}</span>
+                {item.badge ? (
+                  <span
+                    className="inline-flex min-w-[20px] items-center justify-center rounded-pill bg-danger px-1.5 py-0.5 text-2xs font-bold text-white"
+                    aria-label={`${item.badge} pending`}
+                  >
+                    {item.badge}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
   );
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {isLoading ? (
-        <SidebarSkeleton />
-      ) : (
-        <>
-          {/* Logo */}
-          <div className="relative flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="w-8 h-8 flex items-center justify-center">
-                <img
-                  src="/opena2a-logo.svg"
-                  alt="OpenA2A Logo"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              {!collapsed && (
-                <div className="flex flex-col">
-                  <span className="text-lg font-bold text-gray-900 dark:text-white">
-                    AIM
-                  </span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Agent Identity Management
-                  </span>
-                </div>
-              )}
-            </Link>
-            {collapsed && (
-              <button
-                onClick={() => setCollapsed(false)}
-                className="absolute top-1/2 -translate-y-1/2 right-0 z-10 translate-x-1/2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow p-1 text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
-                aria-label="Expand sidebar"
-              >
-                <ChevronLeft className="h-4 w-4 rotate-180" />
-              </button>
-            )}
-            {!collapsed && (
-              <button
-                onClick={() => setCollapsed(true)}
-                className="lg:flex hidden p-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-            )}
-          </div>
+  const SidebarSkeleton = () => (
+    <div className="flex flex-col gap-2 pt-2" aria-busy="true" aria-label="Loading navigation">
+      {[...Array(7)].map((_, idx) => (
+        <div key={idx} className="flex items-center gap-2.5 px-[11px] py-[9px]">
+          <div className="h-4 w-4 animate-pulse rounded bg-track" />
+          <div className="h-3.5 flex-1 animate-pulse rounded bg-track" />
+        </div>
+      ))}
+    </div>
+  );
 
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto min-h-0">
-            {navigation.map((section, idx) => (
-              <div key={idx} className="space-y-1">
-                {section.title && !collapsed && (
-                  <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    {section.title}
-                  </h3>
-                )}
-                <div className="space-y-1">
-                  {section.items.map((item) => {
-                    const active = isActive(item.href);
-                    return (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        onClick={() => setMobileOpen(false)}
-                        className={`
-                          flex items-center gap-3 px-3 py-2 rounded-lg transition-all
-                          ${active
-                            ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                          }
-                          ${collapsed ? "justify-center" : ""}
-                        `}
-                        title={collapsed ? item.name : undefined}
-                      >
-                        <item.icon
-                          className={`h-5 w-5 flex-shrink-0 ${active ? "text-blue-600 dark:text-blue-400" : ""}`}
-                        />
-                        {!collapsed && (
-                          <>
-                            <span className="flex-1 font-medium">
-                              {item.name}
-                            </span>
-                            {item.badge && (
-                              <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">
-                                {item.badge}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </nav>
-        </>
-      )}
+  const SidebarContent = ({ inDrawer = false }: { inDrawer?: boolean }) => (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-shrink-0 items-center justify-between px-2.5 pb-4">
+        <Link href="/dashboard" className="flex items-center gap-2.5" onClick={() => setMobileOpen(false)}>
+          <AimLogo />
+          <span className="text-base font-bold tracking-[-0.02em] text-ink">AIM</span>
+        </Link>
+        {inDrawer && (
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="rounded-pill p-1.5 text-ink-secondary hover:bg-glass-inset-gray"
+            aria-label="Close menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      <PersonaSwitch className="mx-1.5 mb-4 flex-shrink-0" />
+
+      {isLoading ? <SidebarSkeleton /> : <NavList />}
+
+      <div className="mt-4 flex flex-shrink-0 flex-col gap-1 border-t border-divider pt-3">
+        {user && (
+          <div className="flex items-center gap-2.5 px-2">
+            <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#6366f1] text-xs font-bold text-white">
+              {(user.display_name || user.email || "?").slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-bold text-ink">{user.display_name}</span>
+              <span className="block truncate text-2xs text-ink-tertiary">{user.email}</span>
+            </span>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink disabled:opacity-60"
+        >
+          {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4 text-ink-tertiary" />}
+          <span>{isLoggingOut ? "Signing out..." : "Sign out"}</span>
+        </button>
+      </div>
     </div>
   );
 
   return (
     <>
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-4 right-4 z-50 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
-      >
-        {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-      </button>
-
-      {/* Mobile Overlay */}
-      {mobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Desktop Sidebar */}
-      <aside
-        className={`
-          hidden lg:flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700
-          transition-all duration-300 ease-in-out sticky top-0 h-screen
-          ${collapsed ? "w-20" : "w-64"}
-        `}
-      >
+      {/* Desktop: floating glass chrome */}
+      <aside className="glass-chrome sticky top-6 hidden h-[calc(100vh-3rem)] w-56 flex-shrink-0 flex-col px-3.5 py-5 lg:flex">
         <SidebarContent />
       </aside>
 
-      {/* Mobile Sidebar */}
+      {/* Mobile: drawer opened from the bottom tab bar */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
       <aside
-        className={`
-          lg:hidden fixed top-0 left-0 bottom-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700
-          transform transition-transform duration-300 ease-in-out flex flex-col
-          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
+        className={cn(
+          "glass-chrome fixed bottom-3 left-3 top-3 z-50 flex w-[280px] max-w-[85vw] flex-col px-3.5 py-5 transition-transform duration-300 ease-out lg:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-[120%]"
+        )}
+        aria-hidden={!mobileOpen}
       >
-        <SidebarContent />
+        <SidebarContent inDrawer />
       </aside>
     </>
   );
