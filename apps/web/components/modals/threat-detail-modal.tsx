@@ -302,7 +302,7 @@ export default function ThreatDetailModal({
       case "medium":
         return "bg-warning-fill border-warning-border";
       case "low":
-        return "bg-brand-soft border-brand-soft";
+        return "bg-brand-soft border-stroke";
       default:
         return "bg-glass-inset-gray border-glass-inset-border";
     }

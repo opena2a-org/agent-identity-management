@@ -410,7 +410,7 @@ export function RegisterMCPModal({
             </h3>
 
             {/* Info Box - Automatic Security */}
-            <div className="bg-brand-soft border border-brand-soft rounded-inset p-4">
+            <div className="bg-brand-soft border border-stroke rounded-inset p-4">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
                   <CheckCircle className="h-5 w-5 text-brand-text" />
