@@ -27,7 +27,7 @@ interface FormData {
 
 const TAG_CATEGORIES: { value: TagCategory; label: string }[] = [
   { value: "environment", label: "Environment" },
-  { value: "data_classification", label: "Data Classification" },
+  { value: "data_classification", label: "Data classification" },
   { value: "custom", label: "Custom" },
 ];
 
@@ -39,7 +39,7 @@ const PRESET_COLORS = [
   { hex: "#8B5CF6", name: "Purple" },
   { hex: "#EC4899", name: "Pink" },
   { hex: "#06B6D4", name: "Cyan" },
-  { hex: "#DC2626", name: "Dark Red" },
+  { hex: "#DC2626", name: "Dark red" },
   { hex: "#6B7280", name: "Gray" },
 ];
 
@@ -111,7 +111,7 @@ export function CreateTagModal({
       setSuccess(true);
 
       // Show success toast
-      toast.success("Tag Created Successfully", {
+      toast.success("Tag created successfully", {
         description: `Custom tag "${tagData.key}:${tagData.value}" has been created and is now available.`,
       });
 
@@ -136,7 +136,7 @@ export function CreateTagModal({
       setError(errorMessage);
 
       // Show error toast
-      toast.error("Tag Creation Failed", {
+      toast.error("Tag creation failed", {
         description: errorMessage,
         action: {
           label: "Retry",
@@ -205,19 +205,19 @@ export function CreateTagModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(29,29,31,0.45)] backdrop-blur-sm"
       onClick={handleOverlayClick}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="glass-chrome max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Create Custom Tag
+        <div className="flex items-center justify-between px-6 py-4 border-b border-divider">
+          <h2 className="text-xl font-semibold text-ink">
+            Create custom tag
           </h2>
           <button
             onClick={handleClose}
             disabled={loading}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+            className="text-ink-tertiary hover:text-ink transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -227,14 +227,14 @@ export function CreateTagModal({
         <div className="p-6">
           {/* Success Message */}
           {success && (
-            <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <div className="mb-6 p-4 bg-success-fill border border-success-border rounded-inset">
               <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                <CheckCircle className="h-5 w-5 text-success-text flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-green-800 dark:text-green-300">
-                    Tag Created Successfully
+                  <p className="text-sm font-medium text-success-text">
+                    Tag created successfully
                   </p>
-                  <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                  <p className="text-xs text-ink-body mt-1">
                     Your custom tag "{getTagPreview()}" has been created and is
                     now available.
                   </p>
@@ -248,10 +248,10 @@ export function CreateTagModal({
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Error Message */}
               {error && (
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg flex items-center gap-3">
-                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                <div className="p-4 bg-warning-fill border border-warning-border rounded-inset flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 text-warning-text" />
                   <div className="flex-1">
-                    <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                    <p className="text-sm text-warning-text">
                       {error}
                     </p>
                   </div>
@@ -260,12 +260,12 @@ export function CreateTagModal({
 
               {/* Tag Preview */}
               {getTagPreview() && (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <div className="p-3 bg-glass-inset-gray border border-divider rounded-inset">
+                  <p className="text-xs text-ink-tertiary mb-1">
                     Preview:
                   </p>
                   <div
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium text-white"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-pill text-xs font-medium text-white"
                     style={{ backgroundColor: formData.color }}
                   >
                     {getTagPreview()}
@@ -275,8 +275,8 @@ export function CreateTagModal({
 
               {/* Tag Key */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Tag Key <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-ink-body mb-1">
+                  Tag key <span className="text-danger-text">*</span>
                 </label>
                 <input
                   type="text"
@@ -285,17 +285,17 @@ export function CreateTagModal({
                     setFormData({ ...formData, key: e.target.value })
                   }
                   placeholder="e.g., team, region, project"
-                  className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
+                  className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${
                     errors.key
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
+                      ? "border-danger"
+                      : "border-stroke"
                   }`}
                   disabled={loading}
                 />
                 {errors.key && (
-                  <p className="mt-1 text-xs text-red-500">{errors.key}</p>
+                  <p className="mt-1 text-xs text-danger-text">{errors.key}</p>
                 )}
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-ink-tertiary">
                   The category or type of tag (lowercase, alphanumeric,
                   underscores only)
                 </p>
@@ -303,8 +303,8 @@ export function CreateTagModal({
 
               {/* Tag Value */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Tag Value <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-ink-body mb-1">
+                  Tag value <span className="text-danger-text">*</span>
                 </label>
                 <input
                   type="text"
@@ -313,17 +313,17 @@ export function CreateTagModal({
                     setFormData({ ...formData, value: e.target.value })
                   }
                   placeholder="e.g., backend, us-east, customer-portal"
-                  className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
+                  className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${
                     errors.value
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
+                      ? "border-danger"
+                      : "border-stroke"
                   }`}
                   disabled={loading}
                 />
                 {errors.value && (
-                  <p className="mt-1 text-xs text-red-500">{errors.value}</p>
+                  <p className="mt-1 text-xs text-danger-text">{errors.value}</p>
                 )}
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-xs text-ink-tertiary">
                   The specific value for this tag (lowercase, alphanumeric,
                   underscores/hyphens)
                 </p>
@@ -331,8 +331,8 @@ export function CreateTagModal({
 
               {/* Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Category <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-ink-body mb-1">
+                  Category <span className="text-danger-text">*</span>
                 </label>
                 <select
                   value={formData.category}
@@ -342,10 +342,10 @@ export function CreateTagModal({
                       category: e.target.value as TagCategory,
                     })
                   }
-                  className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
+                  className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink ${
                     errors.category
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
+                      ? "border-danger"
+                      : "border-stroke"
                   }`}
                   disabled={loading}
                 >
@@ -356,14 +356,14 @@ export function CreateTagModal({
                   ))}
                 </select>
                 {errors.category && (
-                  <p className="mt-1 text-xs text-red-500">{errors.category}</p>
+                  <p className="mt-1 text-xs text-danger-text">{errors.category}</p>
                 )}
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Description (Optional)
+                <label className="block text-sm font-medium text-ink-body mb-1">
+                  Description (optional)
                 </label>
                 <textarea
                   value={formData.description}
@@ -372,14 +372,14 @@ export function CreateTagModal({
                   }
                   placeholder="What does this tag represent?"
                   rows={2}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                  className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                   disabled={loading}
                 />
               </div>
 
               {/* Color */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-ink-body mb-2">
                   Color
                 </label>
                 <div className="grid grid-cols-5 gap-2">
@@ -390,9 +390,9 @@ export function CreateTagModal({
                       onClick={() =>
                         setFormData({ ...formData, color: preset.hex })
                       }
-                      className={`h-10 rounded-lg transition-all ${
+                      className={`h-10 rounded-inset transition-all ${
                         formData.color === preset.hex
-                          ? "ring-2 ring-offset-2 ring-blue-500 scale-105"
+                          ? "ring-2 ring-offset-2 ring-offset-page ring-ring scale-105"
                           : "hover:scale-105"
                       }`}
                       style={{ backgroundColor: preset.hex }}
@@ -404,22 +404,22 @@ export function CreateTagModal({
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-divider">
                 <button
                   type="button"
                   onClick={handleClose}
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-gray rounded-pill transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Create Tag
+                  Create tag
                 </button>
               </div>
             </form>

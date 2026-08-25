@@ -25,37 +25,37 @@ import { TagSelector } from "../ui/tag-selector";
 // Agent type display configuration
 const AGENT_TYPE_LABELS: Record<string, { label: string; color: string }> = {
   // LLM Providers
-  claude: { label: "Claude", color: "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300" },
-  gpt: { label: "GPT", color: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300" },
-  gemini: { label: "Gemini", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300" },
-  llama: { label: "Llama", color: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300" },
-  mistral: { label: "Mistral", color: "bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300" },
-  cohere: { label: "Cohere", color: "bg-pink-100 dark:bg-pink-900/30 text-pink-800 dark:text-pink-300" },
+  claude: { label: "Claude", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  gpt: { label: "GPT", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  gemini: { label: "Gemini", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  llama: { label: "Llama", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  mistral: { label: "Mistral", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  cohere: { label: "Cohere", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
   // Frameworks
-  langchain: { label: "LangChain", color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300" },
-  llamaindex: { label: "LlamaIndex", color: "bg-violet-100 dark:bg-violet-900/30 text-violet-800 dark:text-violet-300" },
-  langgraph: { label: "LangGraph", color: "bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300" },
-  crewai: { label: "CrewAI", color: "bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300" },
-  autogen: { label: "AutoGen", color: "bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-300" },
-  semantic_kernel: { label: "Semantic Kernel", color: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300" },
-  haystack: { label: "Haystack", color: "bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300" },
+  langchain: { label: "LangChain", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  llamaindex: { label: "LlamaIndex", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  langgraph: { label: "LangGraph", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  crewai: { label: "CrewAI", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  autogen: { label: "AutoGen", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  semantic_kernel: { label: "Semantic Kernel", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  haystack: { label: "Haystack", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
   // Copilots & Assistants
-  copilot: { label: "Copilot", color: "bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300" },
-  assistant: { label: "Assistant", color: "bg-lime-100 dark:bg-lime-900/30 text-lime-800 dark:text-lime-300" },
-  chatbot: { label: "Chatbot", color: "bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-800 dark:text-fuchsia-300" },
+  copilot: { label: "Copilot", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  assistant: { label: "Assistant", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  chatbot: { label: "Chatbot", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
   // Autonomous Agents
-  autogpt: { label: "AutoGPT", color: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300" },
-  babyagi: { label: "BabyAGI", color: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300" },
+  autogpt: { label: "AutoGPT", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
+  babyagi: { label: "BabyAGI", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
   // Other
-  custom: { label: "Custom", color: "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300" },
+  custom: { label: "Custom", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
   // Legacy
-  ai_agent: { label: "AI Agent", color: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300" },
+  ai_agent: { label: "AI Agent", color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" },
 };
 
 // Get display info for an agent type
 function getAgentTypeDisplay(agentType: string | undefined): { label: string; color: string } {
   if (!agentType) return AGENT_TYPE_LABELS.custom;
-  return AGENT_TYPE_LABELS[agentType] || { label: agentType, color: "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300" };
+  return AGENT_TYPE_LABELS[agentType] || { label: agentType, color: "border border-glass-inset-border bg-glass-inset-gray text-ink-body" };
 }
 
 interface AgentDetailModalProps {
@@ -307,48 +307,48 @@ export function AgentDetailModal({
   const getStatusColor = (status: string) => {
     switch (status) {
       case "verified":
-        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+        return "border border-success-border bg-success-fill text-success-text";
       case "pending":
-        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+        return "border border-warning-border bg-warning-fill text-warning-text";
       case "suspended":
       case "revoked":
-        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+        return "border border-danger-border bg-danger-fill text-danger-text";
       default:
-        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
+        return "border border-glass-inset-border bg-glass-inset-gray text-ink-body";
     }
   };
 
   const getTrustScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600 dark:text-green-400";
-    if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
-    return "text-red-600 dark:text-red-400";
+    if (score >= 80) return "text-success-text";
+    if (score >= 60) return "text-warning-text";
+    return "text-danger-text";
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(29,29,31,0.45)] backdrop-blur-sm"
       style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="glass-chrome max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-divider">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-logo rounded-inset flex items-center justify-center">
               <Shield className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-xl font-semibold text-ink">
                 {agent.displayName}
               </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-ink-secondary">
                 {agent.name}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="text-ink-tertiary hover:text-ink transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -359,18 +359,18 @@ export function AgentDetailModal({
           {/* Status and Trust Score */}
           <div className="flex items-center gap-4">
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+              <span className="text-sm text-ink-secondary block mb-1">
                 Status
               </span>
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${getStatusColor(agent.status)}`}
+                className={`inline-flex items-center px-3 py-1 rounded-pill text-sm font-medium capitalize ${getStatusColor(agent.status)}`}
               >
                 {agent.status}
               </span>
             </div>
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
-                Trust Score
+              <span className="text-sm text-ink-secondary block mb-1">
+                Trust score
               </span>
               <span
                 className={`text-2xl font-bold ${getTrustScoreColor(agent.trustScore)}`}
@@ -382,11 +382,11 @@ export function AgentDetailModal({
               </span>
             </div>
             <div>
-              <span className="text-sm text-gray-500 dark:text-gray-400 block mb-1">
+              <span className="text-sm text-ink-secondary block mb-1">
                 Type
               </span>
               <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getAgentTypeDisplay(agent.agentType).color}`}
+                className={`inline-flex items-center px-3 py-1 rounded-pill text-sm font-medium ${getAgentTypeDisplay(agent.agentType).color}`}
               >
                 {getAgentTypeDisplay(agent.agentType).label}
               </span>
@@ -396,10 +396,10 @@ export function AgentDetailModal({
           {/* Description */}
           {agent.description && (
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <h3 className="text-sm font-medium text-ink mb-2">
                 Description
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-ink-body">
                 {agent.description}
               </p>
             </div>
@@ -407,11 +407,11 @@ export function AgentDetailModal({
 
           {/* Tags */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            <h3 className="text-sm font-medium text-ink mb-3">
               Tags
             </h3>
             {loadingTags ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="text-sm text-ink-secondary">
                 Loading tags...
               </div>
             ) : (
@@ -426,12 +426,12 @@ export function AgentDetailModal({
 
           {/* Capabilities */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
               <Key className="h-4 w-4" />
               Capabilities
             </h3>
             {loadingCapabilities ? (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="text-sm text-ink-secondary">
                 Loading capabilities...
               </div>
             ) : capabilities && capabilities.length > 0 ? (
@@ -439,16 +439,16 @@ export function AgentDetailModal({
                 {capabilities.map((capability) => (
                   <div
                     key={capability.id}
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-brand-soft border border-stroke rounded-inset-sm"
                   >
-                    <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                    <CheckCircle className="h-4 w-4 text-brand-text flex-shrink-0" />
                     <div>
-                      <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      <p className="text-sm font-medium text-ink">
                         {capability.capabilityType}
                       </p>
                       {capability.capabilityScope &&
                         Object.keys(capability.capabilityScope).length > 0 && (
-                          <p className="text-xs text-blue-600 dark:text-blue-400">
+                          <p className="text-xs text-brand-text">
                             {Object.entries(capability.capabilityScope)
                               .map(([key, value]) => `${key}: ${value}`)
                               .join(", ")}
@@ -459,7 +459,7 @@ export function AgentDetailModal({
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+              <div className="text-sm text-ink-secondary italic">
                 No capabilities registered
               </div>
             )}
@@ -467,7 +467,7 @@ export function AgentDetailModal({
 
           {/* Talks To (MCP Servers) */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-ink mb-3 flex items-center gap-2">
               <svg
                 className="h-4 w-4"
                 fill="none"
@@ -481,21 +481,21 @@ export function AgentDetailModal({
                   d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                 />
               </svg>
-              Talks To (MCP Servers)
+              Talks to (MCP servers)
             </h3>
             {agent.talksTo && agent.talksTo.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {agent.talksTo.map((mcpServer, index) => (
                   <div
                     key={index}
-                    className="px-3 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md text-sm font-medium text-purple-900 dark:text-purple-100"
+                    className="px-3 py-2 border border-glass-inset-border bg-glass-inset-gray text-ink-body rounded-inset-sm text-sm font-medium"
                   >
                     {mcpServer}
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+              <div className="text-sm text-ink-secondary italic">
                 No MCP servers configured
               </div>
             )}
@@ -504,39 +504,39 @@ export function AgentDetailModal({
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <h3 className="text-sm font-medium text-ink mb-2">
                 Version
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">
+              <p className="text-sm text-ink font-mono">
                 {agent.version}
               </p>
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <h3 className="text-sm font-medium text-ink mb-2">
                 Organization ID
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100 font-mono">
+              <p className="text-sm text-ink font-mono">
                 {agent.organizationId}
               </p>
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <h3 className="text-sm font-medium text-ink mb-2 flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
                 Created
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100">
+              <p className="text-sm text-ink">
                 {formatDate(agent.createdAt)}
               </p>
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+              <h3 className="text-sm font-medium text-ink mb-2 flex items-center gap-2">
                 <Clock className="h-4 w-4" />
-                Last Updated
+                Last updated
               </h3>
-              <p className="text-sm text-gray-900 dark:text-gray-100">
+              <p className="text-sm text-ink">
                 {formatDate(agent.updatedAt)}
               </p>
             </div>
@@ -544,28 +544,28 @@ export function AgentDetailModal({
 
           {/* Audit History */}
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Recent Activity
+            <h3 className="text-sm font-medium text-ink mb-3">
+              Recent activity
             </h3>
             <div className="space-y-2">
-              <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <div className="flex items-center gap-3 p-3 glass-inset">
+                <CheckCircle className="h-4 w-4 text-success-text" />
                 <div className="flex-1">
-                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                  <p className="text-sm text-ink">
                     Agent registered
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-ink-secondary">
                     {formatDate(agent.createdAt)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <div className="flex items-center gap-3 p-3 glass-inset">
+                <CheckCircle className="h-4 w-4 text-brand-text" />
                 <div className="flex-1">
-                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                  <p className="text-sm text-ink">
                     Agent updated
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-ink-secondary">
                     {formatDate(agent.updatedAt)}
                   </p>
                 </div>
@@ -575,11 +575,11 @@ export function AgentDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-divider">
           {onDelete && (
             <button
               onClick={() => onDelete(agent)}
-              className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium text-danger-text hover:bg-danger-fill rounded-pill transition-colors flex items-center gap-2"
             >
               <Trash2 className="h-4 w-4" />
               Delete
@@ -588,10 +588,10 @@ export function AgentDetailModal({
           {onEdit && (
             <button
               onClick={() => onEdit(agent)}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors flex items-center gap-2"
             >
               <Edit className="h-4 w-4" />
-              Edit Agent
+              Edit agent
             </button>
           )}
         </div>
