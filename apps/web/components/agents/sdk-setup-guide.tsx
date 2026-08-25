@@ -31,8 +31,7 @@ export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuidePr
 agent = secure("${agentId}")`;
 
   // Advanced Python example
-  const advancedCode = `# Download SDK from AIM Dashboard → Settings → SDK Download
-# Install dependencies: pip install keyring PyNaCl requests cryptography
+  const advancedCode = `# pip install aim-sdk
 
 from aim_sdk import AIMClient
 import os

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -232,7 +233,8 @@ export default function AgentDetailsPage({
     const token = api.getToken?.();
     if (!token) return;
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const role = (payload.role as any) || "viewer";
       setUserRole(role);
     } catch {}
@@ -311,9 +313,9 @@ export default function AgentDetailsPage({
 
   // Get trust score color
   const getTrustColor = (score: number): string => {
-    if (score >= 80) return "text-green-600 bg-green-500/10";
-    if (score >= 60) return "text-yellow-600 bg-yellow-500/10";
-    return "text-red-600 bg-red-500/10";
+    if (score >= 80) return "text-success-text bg-success-fill";
+    if (score >= 60) return "text-warning-text bg-warning-fill";
+    return "text-danger-text bg-danger-fill";
   };
 
   // Check if agent is verified
@@ -327,14 +329,14 @@ export default function AgentDetailsPage({
   const getStatusBadgeClass = (status: string): string => {
     switch (status) {
       case "verified":
-        return "bg-green-500/10 text-green-600";
+        return "bg-success-fill text-success-text";
       case "pending":
-        return "bg-yellow-500/10 text-yellow-600";
+        return "bg-warning-fill text-warning-text";
       case "suspended":
       case "revoked":
-        return "bg-red-500/10 text-red-600";
+        return "bg-danger-fill text-danger-text";
       default:
-        return "bg-gray-500/10 text-gray-600";
+        return "bg-glass-inset-gray text-ink-secondary";
     }
   };
 
@@ -475,7 +477,7 @@ export default function AgentDetailsPage({
                 <h1 className="text-3xl font-bold">{agent.name}</h1>
                 {isVerified && (
                   <span title="Verified">
-                    <Shield className="h-6 w-6 text-green-600" />
+                    <Shield className="h-6 w-6 text-success-text" />
                   </span>
                 )}
               </div>
@@ -516,7 +518,7 @@ export default function AgentDetailsPage({
               <Button
                 onClick={handleVerify}
                 disabled={verifying || isVerified}
-                className="bg-green-600 hover:bg-green-700"
+                className="rounded-pill"
               >
                 {verifying ? (
                   <>
@@ -526,7 +528,7 @@ export default function AgentDetailsPage({
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-1" />{" "}
-                    {isVerified ? "Verified" : "Verify Agent"}
+                    {isVerified ? "Verified" : "Verify agent"}
                   </>
                 )}
               </Button>
@@ -536,7 +538,7 @@ export default function AgentDetailsPage({
                 variant="outline"
                 onClick={() => setShowSuspendConfirm(true)}
                 disabled={suspending}
-                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                className="rounded-pill border-warning-border text-warning-text hover:bg-warning-fill"
               >
                 {suspending ? (
                   <>
@@ -555,7 +557,7 @@ export default function AgentDetailsPage({
                 variant="outline"
                 onClick={handleReactivate}
                 disabled={reactivating}
-                className="border-green-500 text-green-600 hover:bg-green-50"
+                className="rounded-pill border-success-border text-success-text hover:bg-success-fill"
               >
                 {reactivating ? (
                   <>
@@ -648,9 +650,9 @@ export default function AgentDetailsPage({
           <CardContent>
             <div className="text-2xl font-bold">
               {isVerified ? (
-                <Shield className="h-8 w-8 text-green-600" />
+                <Shield className="h-8 w-8 text-success-text" />
               ) : (
-                <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                <AlertTriangle className="h-8 w-8 text-warning-text" />
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -687,7 +689,7 @@ export default function AgentDetailsPage({
             <Tag className="h-4 w-4 mr-2" />
             Tags
           </TabsTrigger>
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+          <TabsTrigger value="activity">Recent activity</TabsTrigger>
           <TabsTrigger value="trust">
             <Shield className="h-4 w-4 mr-2" />
             Trust Score
@@ -698,7 +700,7 @@ export default function AgentDetailsPage({
         <TabsContent value="connections" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>MCP Server Connections</CardTitle>
+              <CardTitle>MCP server connections</CardTitle>
               <CardDescription>
                 Manage which MCP servers this agent can communicate with. Shows both manually connected servers and auto-detected servers from SDK runtime.
               </CardDescription>
@@ -707,7 +709,7 @@ export default function AgentDetailsPage({
               {/* Manually Connected Servers */}
               {connectedMCPServers.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Manually Connected</h3>
+                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Manually connected</h3>
                   <MCPServerList
                     agentId={agent.id}
                     mcpServers={connectedMCPServers}
@@ -727,7 +729,7 @@ export default function AgentDetailsPage({
               {/* Auto-Detected Servers */}
               {detectedMCPs.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Auto-Detected by SDK</h3>
+                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Auto-detected by SDK</h3>
                   <div className="grid gap-3">
                     {detectedMCPs.map((detection: any) => (
                       <div key={detection.name} className="p-4 rounded-lg border bg-card">
@@ -762,7 +764,7 @@ export default function AgentDetailsPage({
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
                     <ExternalLink className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">No MCP Servers Detected</h3>
+                  <h3 className="text-lg font-semibold mb-2">No MCP servers detected</h3>
                   <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
                     This agent has no MCP servers connected or detected. Use the buttons above to add servers manually or install the AIM SDK to enable auto-detection.
                   </p>
@@ -979,29 +981,29 @@ export default function AgentDetailsPage({
                           <div key={event.id} className="relative pl-10">
                             {/* Timeline dot */}
                             <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
-                              event.type === 'alert' ? 'border-red-500' :
-                              event.icon === 'trust_down' ? 'border-orange-500' :
-                              event.icon === 'trust_up' ? 'border-green-500' :
-                              event.type === 'verification' ? 'border-blue-500' :
-                              'border-gray-400'
+                              event.type === 'alert' ? 'border-danger' :
+                              event.icon === 'trust_down' ? 'border-warning' :
+                              event.icon === 'trust_up' ? 'border-success' :
+                              event.type === 'verification' ? 'border-brand' :
+                              'border-stroke'
                             }`} />
 
                             {/* Event card */}
                             <div className={`p-3 rounded-lg border ${
-                              event.type === 'alert' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' :
-                              event.icon === 'trust_down' ? 'bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900' :
-                              event.icon === 'trust_up' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' :
-                              'bg-card'
+                              event.type === 'alert' ? 'bg-danger-fill border-danger-border' :
+                              event.icon === 'trust_down' ? 'bg-warning-fill border-warning-border' :
+                              event.icon === 'trust_up' ? 'bg-success-fill border-success-border' :
+                              'bg-glass-inset-gray border-divider'
                             }`}>
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex items-start gap-3">
                                   {/* Icon */}
                                   <div className={`mt-0.5 ${
-                                    event.type === 'alert' ? 'text-red-500' :
-                                    event.icon === 'trust_down' ? 'text-orange-500' :
-                                    event.icon === 'trust_up' ? 'text-green-500' :
-                                    event.type === 'verification' ? 'text-blue-500' :
-                                    'text-gray-500'
+                                    event.type === 'alert' ? 'text-danger-text' :
+                                    event.icon === 'trust_down' ? 'text-warning-text' :
+                                    event.icon === 'trust_up' ? 'text-success-text' :
+                                    event.type === 'verification' ? 'text-brand-text' :
+                                    'text-ink-secondary'
                                   }`}>
                                     {event.type === 'alert' && <AlertTriangle className="h-4 w-4" />}
                                     {event.icon === 'trust_down' && <TrendingDown className="h-4 w-4" />}
@@ -1078,7 +1080,7 @@ export default function AgentDetailsPage({
         <TabsContent value="details" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Agent Details</CardTitle>
+              <CardTitle>Agent details</CardTitle>
               <CardDescription>
                 Detailed information about this agent
               </CardDescription>
@@ -1134,7 +1136,7 @@ export default function AgentDetailsPage({
                   </span>
                   <span className="col-span-2 text-sm">
                     {isVerified ? (
-                      <Badge className="bg-green-500/10 text-green-600">
+                      <Badge className="bg-success-fill text-success-text">
                         Verified
                       </Badge>
                     ) : (
@@ -1202,7 +1204,7 @@ export default function AgentDetailsPage({
                           <Button
                             variant="link"
                             size="sm"
-                            className="p-0 h-auto text-xs text-orange-600 justify-start"
+                            className="p-0 h-auto text-xs text-warning-text justify-start"
                             onClick={() => router.push(`/dashboard/api-keys?highlight=${agent.createdByApiKeyId}`)}
                           >
                             <KeyRound className="h-3 w-3 mr-1" />
@@ -1295,7 +1297,7 @@ export default function AgentDetailsPage({
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+            <AlertDialogTitle>Delete agent</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the
               agent "{agent.name}" and remove associated data.
@@ -1305,7 +1307,7 @@ export default function AgentDetailsPage({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="rounded-pill bg-danger hover:brightness-95"
             >
               {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
@@ -1317,7 +1319,7 @@ export default function AgentDetailsPage({
       <AlertDialog open={showSuspendConfirm} onOpenChange={setShowSuspendConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Suspend Agent</AlertDialogTitle>
+            <AlertDialogTitle>Suspend agent</AlertDialogTitle>
             <AlertDialogDescription>
               This will temporarily suspend the agent "{agent.name}". The agent
               will be unable to authenticate or perform actions until
@@ -1328,7 +1330,7 @@ export default function AgentDetailsPage({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleSuspend}
-              className="bg-orange-600 hover:bg-orange-700"
+              className="rounded-pill bg-warning text-warning-foreground hover:opacity-90"
             >
               {suspending ? "Suspending..." : "Suspend"}
             </AlertDialogAction>

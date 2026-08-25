@@ -200,7 +200,7 @@ export default function WebhooksPage() {
             {[...Array(4)].map((_, i) => (
               <div
                 key={i}
-                className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+                className="glass p-6"
               >
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -215,7 +215,7 @@ export default function WebhooksPage() {
             ))}
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="glass">
             <div className="p-6">
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
@@ -234,11 +234,11 @@ export default function WebhooksPage() {
       <AuthGuard>
         <div className="space-y-6">
           <div className="text-center py-16">
-            <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-            <h2 className="text-2xl font-semibold mb-2 text-gray-900">Unable to Load Webhooks</h2>
-            <p className="text-gray-600">{error}</p>
+            <AlertCircle className="h-16 w-16 mx-auto mb-4 text-ink-tertiary" />
+            <h2 className="text-2xl font-semibold mb-2 text-ink">Unable to load webhooks</h2>
+            <p className="text-ink-secondary">{error}</p>
             <Button onClick={fetchWebhooks} className="mt-4">
-              Try Again
+              Try again
             </Button>
           </div>
         </div>
@@ -252,36 +252,36 @@ export default function WebhooksPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-2xl font-bold text-ink">
               Webhooks
             </h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-ink-secondary">
               Manage webhook endpoints and monitor delivery status
             </p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Create Webhook
+            Create webhook
           </button>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="glass p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <Webhook className="h-6 w-6 text-gray-400" />
+                <Webhook className="h-6 w-6 text-ink-tertiary" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Total Webhooks
+                  <dt className="text-sm font-medium text-ink-secondary truncate">
+                    Total webhooks
                   </dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                    <div className="text-2xl font-semibold text-ink">
                       {webhooks.length}
                     </div>
                   </dd>
@@ -290,18 +290,18 @@ export default function WebhooksPage() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="glass p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <Power className="h-6 w-6 text-gray-400" />
+                <Power className="h-6 w-6 text-ink-tertiary" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                  <dt className="text-sm font-medium text-ink-secondary truncate">
                     Active
                   </dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                    <div className="text-2xl font-semibold text-success-text">
                       {webhooks.filter((w) => w.isActive).length}
                     </div>
                   </dd>
@@ -310,18 +310,18 @@ export default function WebhooksPage() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="glass p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <CheckCircle className="h-6 w-6 text-gray-400" />
+                <CheckCircle className="h-6 w-6 text-ink-tertiary" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Total Successes
+                  <dt className="text-sm font-medium text-ink-secondary truncate">
+                    Total successes
                   </dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                    <div className="text-2xl font-semibold text-success-text">
                       {webhooks.reduce((sum, w) => sum + w.successCount, 0).toLocaleString()}
                     </div>
                   </dd>
@@ -330,18 +330,18 @@ export default function WebhooksPage() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="glass p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <XCircle className="h-6 w-6 text-gray-400" />
+                <XCircle className="h-6 w-6 text-ink-tertiary" />
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                    Total Failures
+                  <dt className="text-sm font-medium text-ink-secondary truncate">
+                    Total failures
                   </dt>
                   <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-red-600 dark:text-red-400">
+                    <div className="text-2xl font-semibold text-danger-text">
                       {webhooks.reduce((sum, w) => sum + w.failureCount, 0).toLocaleString()}
                     </div>
                   </dd>
@@ -354,7 +354,7 @@ export default function WebhooksPage() {
         {/* Webhooks Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Webhook Endpoints</CardTitle>
+            <CardTitle>Webhook endpoints</CardTitle>
             <CardDescription>
               Configure and monitor webhook endpoints for real-time event notifications
             </CardDescription>
@@ -369,7 +369,7 @@ export default function WebhooksPage() {
                 </p>
                 <Button onClick={() => setShowCreateModal(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Create Webhook
+                  Create webhook
                 </Button>
               </div>
             ) : (
@@ -380,8 +380,8 @@ export default function WebhooksPage() {
                     <TableHead>URL</TableHead>
                     <TableHead>Events</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Success Rate</TableHead>
-                    <TableHead>Last Triggered</TableHead>
+                    <TableHead>Success rate</TableHead>
+                    <TableHead>Last triggered</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -402,7 +402,7 @@ export default function WebhooksPage() {
                               href={webhook.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800"
+                              className="text-brand-text hover:underline"
                             >
                               <ExternalLink className="h-3 w-3" />
                             </a>
@@ -424,12 +424,12 @@ export default function WebhooksPage() {
                         </TableCell>
                         <TableCell>
                           {webhook.isActive ? (
-                            <Badge className="bg-green-100 text-green-800 border-green-200">
+                            <Badge className="bg-success-fill text-success-text border-success-border">
                               <Power className="h-3 w-3 mr-1" />
                               Active
                             </Badge>
                           ) : (
-                            <Badge className="bg-gray-100 text-gray-800 border-gray-200">
+                            <Badge className="bg-glass-inset-gray text-ink-secondary border-divider">
                               <PowerOff className="h-3 w-3 mr-1" />
                               Inactive
                             </Badge>
@@ -437,16 +437,16 @@ export default function WebhooksPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden w-20">
+                            <div className="flex-1 h-2 bg-track rounded-full overflow-hidden w-20">
                               <div
                                 className={`h-full rounded-full ${
                                   successRate >= 90
-                                    ? 'bg-green-500'
+                                    ? 'bg-success'
                                     : successRate >= 75
-                                      ? 'bg-blue-500'
+                                      ? 'bg-brand'
                                       : successRate >= 50
-                                        ? 'bg-yellow-500'
-                                        : 'bg-red-500'
+                                        ? 'bg-warning'
+                                        : 'bg-danger'
                                 }`}
                                 style={{ width: `${successRate}%` }}
                               />
@@ -472,7 +472,7 @@ export default function WebhooksPage() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleViewDetails(webhook)}
-                              className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                              className="p-1 text-ink-tertiary hover:text-brand-text transition-colors"
                               title="View details"
                             >
                               <Eye className="h-4 w-4" />
@@ -480,7 +480,7 @@ export default function WebhooksPage() {
                             <button
                               onClick={() => handleTestWebhook(webhook.id)}
                               disabled={testingWebhookId === webhook.id}
-                              className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="p-1 text-ink-tertiary hover:text-success-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               title="Test webhook"
                             >
                               <TestTube className="h-4 w-4" />
@@ -489,7 +489,7 @@ export default function WebhooksPage() {
                               <button
                                 onClick={() => handleToggleWebhook(webhook)}
                                 disabled={togglingWebhookId === webhook.id}
-                                className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="p-1 text-ink-tertiary hover:text-warning-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Disable webhook"
                               >
                                 <Ban className="h-4 w-4" />
@@ -497,7 +497,7 @@ export default function WebhooksPage() {
                             ) : (
                               <button
                                 onClick={() => setDeleteWebhookId(webhook.id)}
-                                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                                className="p-1 text-ink-tertiary hover:text-danger-text transition-colors"
                                 title="Delete webhook permanently"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -541,7 +541,7 @@ export default function WebhooksPage() {
       <AlertDialog open={!!deleteWebhookId} onOpenChange={() => setDeleteWebhookId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Webhook</AlertDialogTitle>
+            <AlertDialogTitle>Delete webhook</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete this webhook? This action cannot be undone, and the
               webhook will stop receiving events immediately.
@@ -551,7 +551,7 @@ export default function WebhooksPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteWebhook}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-danger-strong text-white shadow-none hover:bg-danger-strong hover:brightness-95"
             >
               Delete
             </AlertDialogAction>

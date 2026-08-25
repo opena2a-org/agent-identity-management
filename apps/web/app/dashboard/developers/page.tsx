@@ -180,7 +180,7 @@ function DevelopersPageContent() {
   const copyToClipboard = async (text: string, type: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedCode(type);
-    toast.success("Copied to clipboard!");
+    toast.success("Copied to clipboard");
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
@@ -313,17 +313,17 @@ function DevelopersPageContent() {
   const getMethodColor = (method: string) => {
     switch (method) {
       case "GET":
-        return "bg-blue-500";
+        return "border-transparent bg-brand-soft text-brand-text";
       case "POST":
-        return "bg-green-500";
+        return "border-success-border bg-success-fill text-success-text";
       case "PUT":
-        return "bg-yellow-500";
+        return "border-warning-border bg-warning-fill text-warning-text";
       case "DELETE":
-        return "bg-red-500";
+        return "border-danger-border bg-danger-fill text-danger-text";
       case "PATCH":
-        return "bg-purple-500";
+        return "border-stroke bg-glass-inset-gray text-ink";
       default:
-        return "bg-gray-500";
+        return "border-stroke bg-glass-inset-gray text-ink-secondary";
     }
   };
 
@@ -341,10 +341,10 @@ function DevelopersPageContent() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          API Documentation
+        <h1 className="text-headline">
+          API documentation
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">
+        <p className="text-ink-secondary mt-2">
           Complete AIM API reference with{" "}
           {apiDocumentation.reduce((sum, cat) => sum + cat.endpoints.length, 0)}{" "}
           endpoints
@@ -358,7 +358,7 @@ function DevelopersPageContent() {
             {/* Search Bar */}
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
                 <Input
                   type="text"
                   placeholder="Search endpoints, tags, descriptions..."
@@ -383,17 +383,17 @@ function DevelopersPageContent() {
 
             {/* Advanced Filters */}
             {showFilters && (
-              <div className="flex flex-wrap gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex flex-wrap gap-4 p-4 glass-inset rounded-inset">
                 <div className="flex-1 min-w-[200px]">
                   <label className="text-sm font-medium mb-2 block">
-                    HTTP Method
+                    HTTP method
                   </label>
                   <select
                     value={filterMethod}
                     onChange={(e) => setFilterMethod(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"
+                    className="w-full px-3 py-2 rounded-inset-sm border border-stroke bg-glass text-ink"
                   >
-                    <option value="all">All Methods</option>
+                    <option value="all">All methods</option>
                     <option value="GET">GET</option>
                     <option value="POST">POST</option>
                     <option value="PUT">PUT</option>
@@ -404,15 +404,15 @@ function DevelopersPageContent() {
 
                 <div className="flex-1 min-w-[200px]">
                   <label className="text-sm font-medium mb-2 block">
-                    Required Role
+                    Required role
                   </label>
                   <select
                     value={filterRole}
                     onChange={(e) => setFilterRole(e.target.value)}
-                    className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700"
+                    className="w-full px-3 py-2 rounded-inset-sm border border-stroke bg-glass text-ink"
                   >
-                    <option value="all">All Roles</option>
-                    <option value="admin">Admin Only</option>
+                    <option value="all">All roles</option>
+                    <option value="admin">Admin only</option>
                     <option value="manager">Manager+</option>
                     <option value="member">Member+</option>
                     <option value="viewer">Viewer+</option>
@@ -423,7 +423,7 @@ function DevelopersPageContent() {
                   <div className="flex items-end">
                     <Button variant="ghost" onClick={clearFilters}>
                       <X className="h-4 w-4 mr-2" />
-                      Clear Filters
+                      Clear filters
                     </Button>
                   </div>
                 )}
@@ -431,7 +431,7 @@ function DevelopersPageContent() {
             )}
 
             {/* Results Count */}
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="text-sm text-ink-secondary">
               Showing <span className="font-semibold">{totalEndpoints}</span> of{" "}
               <span className="font-semibold">
                 {apiDocumentation.reduce(
@@ -463,10 +463,10 @@ function DevelopersPageContent() {
                     {/* Category Header */}
                     <button
                       onClick={() => toggleCategory(category.category)}
-                      className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      className="w-full flex items-center justify-between p-2 rounded-nav hover:bg-glass-inset-gray transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <Icon className="h-4 w-4 text-brand-text" />
                         <span className="font-medium text-sm">
                           {category.category}
                         </span>
@@ -498,13 +498,13 @@ function DevelopersPageContent() {
                             }}
                             className={`w-full text-left p-2 rounded text-sm transition-colors ${
                               selectedEndpoint === endpoint
-                                ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
-                                : "hover:bg-gray-100 dark:hover:bg-gray-800"
+                                ? "bg-nav-active text-brand-text"
+                                : "hover:bg-glass-inset-gray"
                             }`}
                           >
                             <div className="flex items-center gap-2">
                               <Badge
-                                className={`${getMethodColor(endpoint.method)} text-white text-xs px-2 py-0`}
+                                className={`${getMethodColor(endpoint.method)} text-xs px-2 py-0`}
                               >
                                 {endpoint.method}
                               </Badge>
@@ -521,7 +521,7 @@ function DevelopersPageContent() {
               })}
 
               {filteredData.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-ink-tertiary">
                   <Search className="h-12 w-12 mx-auto mb-2 opacity-20" />
                   <p className="text-sm">No endpoints match your filters</p>
                 </div>
@@ -538,7 +538,7 @@ function DevelopersPageContent() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Badge
-                      className={`${getMethodColor(selectedEndpoint.method)} text-white`}
+                      className={getMethodColor(selectedEndpoint.method)}
                     >
                       {selectedEndpoint.method}
                     </Badge>
@@ -558,7 +558,7 @@ function DevelopersPageContent() {
                     {selectedEndpoint.requiresAuth && (
                       <Badge variant="destructive" className="text-xs">
                         <Lock className="h-3 w-3 mr-1" />
-                        Auth Required
+                        Auth required
                       </Badge>
                     )}
                     {selectedEndpoint.roleRequired && (
@@ -594,17 +594,17 @@ function DevelopersPageContent() {
                       <h3 className="text-sm font-semibold mb-2">
                         Authentication
                       </h3>
-                      <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="flex items-center gap-2 p-3 glass-inset">
                         {selectedEndpoint.requiresAuth ? (
                           <>
-                            <Lock className="h-4 w-4 text-red-600" />
+                            <Lock className="h-4 w-4 text-danger-text" />
                             <span className="text-sm">
                               {selectedEndpoint.auth}
                             </span>
                           </>
                         ) : (
                           <>
-                            <Unlock className="h-4 w-4 text-green-600" />
+                            <Unlock className="h-4 w-4 text-success-text" />
                             <span className="text-sm">
                               No authentication required
                             </span>
@@ -617,7 +617,7 @@ function DevelopersPageContent() {
                     {selectedEndpoint.requestSchema && (
                       <div>
                         <h3 className="text-sm font-semibold mb-2">
-                          Request Body
+                          Request body
                         </h3>
                         <div className="space-y-2">
                           {Object.entries(
@@ -625,7 +625,7 @@ function DevelopersPageContent() {
                           ).map(([key, prop]) => (
                             <div
                               key={key}
-                              className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                              className="p-3 glass-inset"
                             >
                               <div className="flex items-center justify-between mb-1">
                                 <code className="text-sm font-mono">{key}</code>
@@ -643,11 +643,11 @@ function DevelopersPageContent() {
                                   )}
                                 </div>
                               </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                              <p className="text-sm text-ink-secondary">
                                 {prop.description}
                               </p>
                               {(prop as any).example && (
-                                <code className="text-xs text-gray-500 mt-1 block">
+                                <code className="text-xs text-ink-tertiary mt-1 block">
                                   Example:{" "}
                                   {JSON.stringify((prop as any).example)}
                                 </code>
@@ -662,7 +662,7 @@ function DevelopersPageContent() {
                     {selectedEndpoint.responseSchema && (
                       <div>
                         <h3 className="text-sm font-semibold mb-2">
-                          Response Body
+                          Response body
                         </h3>
                         <div className="space-y-2">
                           {Object.entries(
@@ -670,7 +670,7 @@ function DevelopersPageContent() {
                           ).map(([key, prop]) => (
                             <div
                               key={key}
-                              className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                              className="p-3 glass-inset"
                             >
                               <div className="flex items-center justify-between mb-1">
                                 <code className="text-sm font-mono">{key}</code>
@@ -678,11 +678,11 @@ function DevelopersPageContent() {
                                   {prop.type}
                                 </Badge>
                               </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
+                              <p className="text-sm text-ink-secondary">
                                 {prop.description}
                               </p>
                               {(prop as any).example && (
-                                <code className="text-xs text-gray-500 mt-1 block">
+                                <code className="text-xs text-ink-tertiary mt-1 block">
                                   Example:{" "}
                                   {JSON.stringify((prop as any).example)}
                                 </code>
@@ -700,7 +700,7 @@ function DevelopersPageContent() {
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <h3 className="text-sm font-semibold">
-                              Example Request
+                              Example request
                             </h3>
                             <Button
                               size="sm"
@@ -719,7 +719,7 @@ function DevelopersPageContent() {
                               )}
                             </Button>
                           </div>
-                          <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                          <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm">
                             <code>{selectedEndpoint.example}</code>
                           </pre>
                         </div>
@@ -729,11 +729,11 @@ function DevelopersPageContent() {
                   {/* Try it out Tab */}
                   <TabsContent value="try-it" className="space-y-4 mt-6">
                     {/* Authentication Status */}
-                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="p-4 glass-inset">
                       {isAuthenticated ? (
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <CheckCircle className="h-5 w-5 text-success-text" />
                             <span className="font-medium">Authenticated</span>
                           </div>
                           <Button
@@ -751,9 +751,9 @@ function DevelopersPageContent() {
                       ) : (
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <AlertCircle className="h-5 w-5 text-yellow-600" />
+                            <AlertCircle className="h-5 w-5 text-warning-text" />
                             <span className="font-medium">
-                              Not Authenticated
+                              Not authenticated
                             </span>
                           </div>
                           {!showTokenInput ? (
@@ -761,7 +761,7 @@ function DevelopersPageContent() {
                               size="sm"
                               onClick={() => setShowTokenInput(true)}
                             >
-                              Add Token
+                              Add token
                             </Button>
                           ) : (
                             <div className="flex gap-2">
@@ -795,7 +795,7 @@ function DevelopersPageContent() {
                     {selectedEndpoint.method !== "GET" && (
                       <div>
                         <label className="text-sm font-semibold mb-2 block">
-                          Request Body
+                          Request body
                         </label>
                         <Textarea
                           value={requestBody}
@@ -819,14 +819,14 @@ function DevelopersPageContent() {
                       ) : (
                         <>
                           <Play className="h-4 w-4 mr-2" />
-                          Execute Request
+                          Execute request
                         </>
                       )}
                     </Button>
 
                     {/* Response Metadata */}
                     {responseMetadata && (
-                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="p-4 glass-inset">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium">Response</span>
                           <div className="flex gap-2">
@@ -853,7 +853,7 @@ function DevelopersPageContent() {
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-sm font-semibold">
-                            Response Body
+                            Response body
                           </h3>
                           <Button
                             size="sm"
@@ -872,7 +872,7 @@ function DevelopersPageContent() {
                             )}
                           </Button>
                         </div>
-                        <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm max-h-96">
+                        <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm max-h-96">
                           <code>{JSON.stringify(responseData, null, 2)}</code>
                         </pre>
                       </div>
@@ -880,14 +880,14 @@ function DevelopersPageContent() {
 
                     {/* Error Response */}
                     {executionError && (
-                      <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                      <div className="glass-alert p-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <AlertCircle className="h-5 w-5 text-red-600" />
-                          <span className="font-semibold text-red-600">
+                          <AlertCircle className="h-5 w-5 text-danger-text" />
+                          <span className="font-semibold text-danger-text">
                             Error
                           </span>
                         </div>
-                        <pre className="text-sm text-red-800 dark:text-red-200 overflow-x-auto">
+                        <pre className="text-sm text-danger-text overflow-x-auto">
                           {executionError}
                         </pre>
                       </div>
@@ -914,7 +914,7 @@ function DevelopersPageContent() {
                           )}
                         </Button>
                       </div>
-                      <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                      <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm">
                         <code>{generateCurl()}</code>
                       </pre>
                     </div>
@@ -942,7 +942,7 @@ function DevelopersPageContent() {
                           )}
                         </Button>
                       </div>
-                      <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                      <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm">
                         <code>{`fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}', {
   method: '${selectedEndpoint.method}',
   headers: {
@@ -975,7 +975,7 @@ function DevelopersPageContent() {
                           )}
                         </Button>
                       </div>
-                      <pre className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto text-sm">
+                      <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm">
                         <code>{`import requests
 
 url = '${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}'
@@ -992,7 +992,7 @@ print(response.json())`}</code>
             </Card>
           ) : (
             <Card className="h-full flex items-center justify-center min-h-[600px]">
-              <div className="text-center text-gray-500">
+              <div className="text-center text-ink-tertiary">
                 <BookOpen className="h-16 w-16 mx-auto mb-4 opacity-20" />
                 <p>Select an endpoint to view documentation</p>
               </div>
