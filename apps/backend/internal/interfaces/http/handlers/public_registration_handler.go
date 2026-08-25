@@ -130,9 +130,14 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		})
 	}
 
+	message := "Registration request submitted successfully. Please wait for admin approval."
+	if registrationRequest.Status == domain.RegistrationStatusApproved {
+		// An allowlisted address (AIM_PLATFORM_ADMINS) is approved on the spot.
+		message = "Registration approved. You can sign in now."
+	}
 	return c.Status(fiber.StatusCreated).JSON(&RegisterUserResponse{
 		Success:             true,
-		Message:             "Registration request submitted successfully. Please wait for admin approval.",
+		Message:             message,
 		RegistrationRequest: registrationRequest,
 		RequestID:           registrationRequest.ID,
 	})

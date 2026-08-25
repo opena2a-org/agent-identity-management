@@ -119,6 +119,12 @@ export default function RegisterPage() {
       });
 
       if (response.success) {
+        if (response.registrationRequest?.status === "approved") {
+          // An allowlisted address (AIM_PLATFORM_ADMINS) is approved on the spot.
+          toast.success("Account approved. Sign in to continue.");
+          router.push("/auth/login");
+          return;
+        }
         toast.success("Registration successful. Awaiting admin approval.");
         // Redirect to pending page with request ID
         router.push(

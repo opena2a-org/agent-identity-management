@@ -791,11 +791,13 @@ class APIClient {
     success: boolean;
     message: string;
     requestId: string;
+    registrationRequest?: { id: string; status: string };
   }> {
     const response = await this.request<{
       success: boolean;
       message: string;
       requestId: string;
+    registrationRequest?: { id: string; status: string };
     }>("/api/v1/public/register", {
       method: "POST",
       body: JSON.stringify(data),
