@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, Suspense, useMemo } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -113,11 +114,12 @@ function AlertsPageContent() {
         router.replace("/auth/login");
         return;
       }
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const userRole = (payload.role as any) || "viewer";
       setRole(userRole);
       const extractedUserId =
-        payload.userId || payload.sub || payload.id || null;
+        String(payload.userId ?? payload.sub ?? payload.id ?? "") || null;
       setUserId(extractedUserId);
       if (userRole !== "admin") {
         router.replace("/dashboard");

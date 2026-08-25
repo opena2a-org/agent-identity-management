@@ -3,7 +3,7 @@ import { Skeleton } from "./skeleton";
 // Stat Card Skeleton
 export function StatCardSkeleton() {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="glass p-6">
       <div className="flex items-center">
         <div className="flex-shrink-0">
           <Skeleton className="h-6 w-6" />
@@ -28,7 +28,7 @@ export function ChartSkeleton({ title }: { title?: string }) {
   const heights = [120, 80, 160, 100, 140, 90];
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+    <div className="glass p-6">
       <div className="flex items-center justify-between mb-4">
         <Skeleton className="h-6 w-48" />
         <Skeleton className="h-5 w-5" />
@@ -60,10 +60,10 @@ export function TableSkeleton({
   columns?: number;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="glass">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
+        <table className="min-w-full divide-y divide-divider">
+          <thead className="bg-glass-inset-gray">
             <tr>
               {[...Array(columns)].map((_, i) => (
                 <th key={i} className="px-6 py-3">
@@ -72,7 +72,7 @@ export function TableSkeleton({
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="bg-glass divide-y divide-divider">
             {[...Array(rows)].map((_, rowIndex) => (
               <tr key={rowIndex}>
                 {[...Array(columns)].map((_, colIndex) => (
@@ -103,10 +103,10 @@ export function TableSkeleton({
 // Agent Table Specific Skeleton
 export function AgentTableSkeleton({ rows = 8 }: { rows?: number }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="glass">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
+        <table className="min-w-full divide-y divide-divider">
+          <thead className="bg-glass-inset-gray">
             <tr>
               <th className="px-6 py-3">
                 <Skeleton className="h-4 w-24" />
@@ -131,7 +131,7 @@ export function AgentTableSkeleton({ rows = 8 }: { rows?: number }) {
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="bg-glass divide-y divide-divider">
             {[...Array(rows)].map((_, rowIndex) => (
               <tr key={rowIndex}>
                 <td className="px-6 py-4">
@@ -180,7 +180,7 @@ export function AgentTableSkeleton({ rows = 8 }: { rows?: number }) {
 // Metrics Card Skeleton
 export function MetricsCardSkeleton({ title }: { title?: string }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+    <div className="glass p-6">
       <div className="flex items-center gap-2 mb-4">
         <Skeleton className="h-5 w-5" />
         <Skeleton className="h-5 w-32" />
@@ -192,7 +192,7 @@ export function MetricsCardSkeleton({ title }: { title?: string }) {
             <Skeleton className="h-4 w-12" />
           </div>
         ))}
-        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+        <div className="pt-2 border-t border-divider">
           <div className="flex justify-between items-center">
             <Skeleton className="h-4 w-28" />
             <div className="flex items-center gap-1">
@@ -240,8 +240,8 @@ export function DashboardSkeleton() {
       </div>
 
       {/* Recent Activity Table Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="glass">
+        <div className="p-6 border-b border-divider">
           <div className="flex items-center justify-between">
             <Skeleton className="h-6 w-32" />
             <Skeleton className="h-5 w-5" />
@@ -274,7 +274,7 @@ export function AgentsPageSkeleton() {
       </div>
 
       {/* Filters Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="glass p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <Skeleton className="flex-1 h-10 rounded-lg" />
           <Skeleton className="h-10 w-40 rounded-lg" />
@@ -308,7 +308,7 @@ export function SDKTokensPageSkeleton() {
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+            className="glass"
           >
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -327,7 +327,7 @@ export function SDKTokensPageSkeleton() {
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+            className="glass"
           >
             <div className="p-6 space-y-4">
               <div className="flex items-start justify-between">
@@ -351,7 +351,7 @@ export function SDKTokensPageSkeleton() {
                   </div>
                 ))}
               </div>
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="pt-4 border-t border-divider">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-6">
                     <Skeleton className="h-4 w-32" />
@@ -397,14 +397,14 @@ export function MCPServerDetailSkeleton() {
       </div>
 
       {/* Separator */}
-      <div className="border-t border-gray-200 dark:border-gray-700" />
+      <div className="border-t border-divider" />
 
       {/* Info Cards Skeleton */}
       <div className="grid gap-4 md:grid-cols-3">
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+            className="glass"
           >
             <div className="p-6 pb-3">
               <Skeleton className="h-4 w-32" />
@@ -420,15 +420,15 @@ export function MCPServerDetailSkeleton() {
       {/* Tabs Skeleton */}
       <div className="space-y-4">
         {/* Tab Headers */}
-        <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-2 border-b border-divider">
           <Skeleton className="h-10 w-32 rounded-t-lg" />
           <Skeleton className="h-10 w-36 rounded-t-lg" />
           <Skeleton className="h-10 w-24 rounded-t-lg" />
         </div>
 
         {/* Tab Content - Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700 space-y-2">
+        <div className="glass">
+          <div className="p-6 border-b border-divider space-y-2">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-96" />
           </div>
@@ -436,7 +436,7 @@ export function MCPServerDetailSkeleton() {
             {[...Array(4)].map((_, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-lg"
+                className="flex items-start gap-3 p-3 border border-divider rounded-lg"
               >
                 <Skeleton className="h-6 w-16 rounded-full mt-1" />
                 <div className="flex-1 space-y-2">
@@ -465,7 +465,7 @@ export function DevelopersPageSkeleton() {
       </div>
 
       {/* Search and Filters Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="glass p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <Skeleton className="flex-1 h-10 rounded-lg" />
           <Skeleton className="h-10 w-32 rounded-lg" />
@@ -476,7 +476,7 @@ export function DevelopersPageSkeleton() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Sidebar Skeleton */}
         <div className="lg:col-span-3">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4 space-y-4">
+          <div className="glass p-4 space-y-4">
             {/* Categories */}
             {[...Array(6)].map((_, i) => (
               <div key={i} className="space-y-2">
@@ -501,9 +501,9 @@ export function DevelopersPageSkeleton() {
 
         {/* Content Area Skeleton */}
         <div className="lg:col-span-9">
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="glass">
             {/* Header */}
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 space-y-3">
+            <div className="p-6 border-b border-divider space-y-3">
               <div className="flex items-center gap-2">
                 <Skeleton className="h-6 w-16 rounded" />
                 <Skeleton className="h-6 w-64" />
@@ -512,7 +512,7 @@ export function DevelopersPageSkeleton() {
             </div>
 
             {/* Tabs */}
-            <div className="border-b border-gray-200 dark:border-gray-700">
+            <div className="border-b border-divider">
               <div className="flex items-center gap-4 px-6">
                 <Skeleton className="h-10 w-24" />
                 <Skeleton className="h-10 w-32" />
@@ -534,7 +534,7 @@ export function DevelopersPageSkeleton() {
                 {[...Array(3)].map((_, i) => (
                   <div
                     key={i}
-                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2"
+                    className="p-3 glass-inset space-y-2"
                   >
                     <div className="flex items-center justify-between">
                       <Skeleton className="h-4 w-24" />
@@ -554,7 +554,7 @@ export function DevelopersPageSkeleton() {
                 {[...Array(3)].map((_, i) => (
                   <div
                     key={i}
-                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg space-y-2"
+                    className="p-3 glass-inset space-y-2"
                   >
                     <div className="flex items-center justify-between">
                       <Skeleton className="h-4 w-24" />
