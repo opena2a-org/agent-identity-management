@@ -693,7 +693,7 @@ func (s *RegistrationService) ensureApproverExists(email string, autoApproved bo
 	}
 	if approvers == 0 {
 		// The client receives one message for every sub-case; the sub-case is operator-only.
-		log.Printf("registration refused for %s: 0 active administrators, %d valid AIM_PLATFORM_ADMINS entries, registrant listed=false", email, len(platformAdminAllowlist()))
+		log.Printf("registration refused for %s: 0 active administrators, %d valid AIM_PLATFORM_ADMINS entries, registrant listed=%t", email, len(platformAdminAllowlist()), isPlatformAdmin(email))
 		return ErrNoAdministrators
 	}
 	return nil
@@ -736,13 +736,15 @@ func ReportPlatformAdminAllowlist() {
 	if strings.TrimSpace(raw) == "" {
 		return
 	}
-	entries, ignored := parsePlatformAdminAllowlist(raw)
+	entries, _ := parsePlatformAdminAllowlist(raw)
 	for i, tok := range strings.Split(raw, ",") {
 		t := strings.ToLower(strings.TrimSpace(tok))
-		for _, ig := range ignored {
-			if t == ig {
-				log.Printf("AIM_PLATFORM_ADMINS entry %d (%q) is not an email address and is ignored", i+1, t)
-			}
+		if t == "" {
+			continue
+		}
+		// One line per position, so a token that appears twice is reported where it appears.
+		if accepted, _ := parsePlatformAdminAllowlist(t); len(accepted) == 0 {
+			log.Printf("AIM_PLATFORM_ADMINS entry %d (%q) is not an email address and is ignored", i+1, t)
 		}
 	}
 	if len(entries) == 0 {

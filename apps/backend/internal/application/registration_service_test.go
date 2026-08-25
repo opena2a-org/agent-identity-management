@@ -1,8 +1,11 @@
 package application
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -1568,4 +1571,61 @@ func TestPlatformAdminAllowlist_IgnoresTokensThatCannotBeAnAddress(t *testing.T)
 	entries, ignored := parsePlatformAdminAllowlist("true, A@Example.com, x@, ops@exmaple.com")
 	assert.Equal(t, []string{"a@example.com", "ops@exmaple.com"}, entries)
 	assert.Equal(t, []string{"true", "x@"}, ignored)
+}
+
+// The refusal log line reports whether the registrant is on the allowlist; on the
+// access-request route a listed address is still not auto-approved, so the value must be
+// computed, not assumed.
+func TestRegistrationService_RefusalLogLine_ReportsWhetherTheRegistrantIsListed(t *testing.T) {
+	t.Setenv("AIM_PLATFORM_ADMINS", "ops@example.com")
+	ctx := context.Background()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	mockUserRepo := new(MockUserRepoForRegistration)
+	mockUserRepo.On("GetByEmail", "ops@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("GetByEmail", "other@example.com").Return(nil, errors.New("not found"))
+	mockUserRepo.On("CountByRoleAndStatus", domain.RoleAdmin, domain.UserStatusActive).Return(0, nil).Twice()
+	mockRegRepo := new(MockRegistrationRepoForService)
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "ops@example.com").Return(nil, errors.New("not found"))
+	mockRegRepo.On("GetRegistrationRequestByEmail", ctx, "other@example.com").Return(nil, errors.New("not found"))
+	service := NewRegistrationService(mockRegRepo, mockUserRepo, nil, nil, nil)
+
+	_, err := service.CreateAccessRequest(ctx, "ops@example.com", "Ops", "User", "needs a dashboard account", nil)
+	assert.Equal(t, ErrNoAdministrators, err)
+	assert.Contains(t, buf.String(), "registration refused for ops@example.com: 0 active administrators, 1 valid AIM_PLATFORM_ADMINS entries, registrant listed=true")
+
+	buf.Reset()
+	_, err = service.CreateAccessRequest(ctx, "other@example.com", "Other", "User", "needs a dashboard account", nil)
+	assert.Equal(t, ErrNoAdministrators, err)
+	assert.Contains(t, buf.String(), "registrant listed=false")
+	assert.NotContains(t, buf.String(), "ops@example.com", "allowlist entries must not be logged")
+}
+
+// The startup report names every ignored token by position, once, and says when the variable
+// yields no address at all.
+func TestReportPlatformAdminAllowlist_ReportsIgnoredTokensOncePerPosition(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+
+	t.Setenv("AIM_PLATFORM_ADMINS", "true, A@Example.com, true, x@")
+	ReportPlatformAdminAllowlist()
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, `entry 1 ("true")`), out)
+	assert.Equal(t, 1, strings.Count(out, `entry 3 ("true")`), out)
+	assert.Equal(t, 1, strings.Count(out, `entry 4 ("x@")`), out)
+	assert.Equal(t, 3, strings.Count(out, "is not an email address and is ignored"), out)
+	assert.Contains(t, out, "1 address(es) accepted")
+
+	buf.Reset()
+	t.Setenv("AIM_PLATFORM_ADMINS", "true")
+	ReportPlatformAdminAllowlist()
+	assert.Contains(t, buf.String(), "contains no email address")
+
+	buf.Reset()
+	t.Setenv("AIM_PLATFORM_ADMINS", "")
+	ReportPlatformAdminAllowlist()
+	assert.Empty(t, buf.String(), "an unset variable is not reported")
 }
