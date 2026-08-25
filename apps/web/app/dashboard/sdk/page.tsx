@@ -185,21 +185,21 @@ export default function SDKDownloadPage() {
     <AuthGuard>
       <div className="container mx-auto py-8 px-4 max-w-4xl">
         <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Open Source Agent Security
+        <h1 className="text-3xl font-bold text-ink mb-2">
+          Open source agent security
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 text-lg">
-          Secure your agents with minimal code. Zero configuration required.
+        <p className="text-ink-secondary text-lg">
+          Secure your agents with minimal code. No configuration required.
         </p>
       </div>
 
       {/* Success message */}
       {success && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-          <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+        <div className="mb-6 p-4 bg-success-fill border border-success-border rounded-card-sm flex items-start gap-3">
+          <CheckCircle className="h-5 w-5 text-success-text mt-0.5 flex-shrink-0" />
           <div>
-            <p className="font-medium text-green-900">SDK downloaded successfully!</p>
-            <p className="text-sm text-green-700 mt-1">
+            <p className="font-medium text-success-text">SDK downloaded</p>
+            <p className="text-sm text-ink-body mt-1">
               Follow the setup instructions below to get started.
             </p>
           </div>
@@ -208,11 +208,11 @@ export default function SDKDownloadPage() {
 
       {/* Error message */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+        <div className="glass-alert mb-6 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-danger-text mt-0.5 flex-shrink-0" />
           <div>
-            <p className="font-medium text-red-900">Download failed</p>
-            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <p className="font-medium text-danger-text">Download failed</p>
+            <p className="text-sm text-ink-body mt-1">{error}</p>
           </div>
         </div>
       )}
@@ -220,26 +220,26 @@ export default function SDKDownloadPage() {
       {/* SDK Cards - Python and Java */}
       <div className="mb-8 grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
         {/* Python SDK - Stable */}
-        <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg overflow-hidden">
+        <div className="glass overflow-hidden">
           <div className="p-6">
             <div className="flex items-center gap-4 mb-4">
-              <div className="h-14 w-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+              <div className="h-14 w-14 bg-brand rounded-inset flex items-center justify-center shadow-accent">
                 <Code className="h-7 w-7 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Python SDK</h2>
+                <h2 className="text-xl font-bold text-ink">Python SDK</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    ✅ Stable
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-pill text-xs font-medium bg-success-fill border border-success-border text-success-text">
+                    Stable
                   </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-glass-inset-gray text-ink-body">
                     v1.15.0
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4">
+            <p className="text-sm text-ink-body mb-4">
               Official Python client with Ed25519 cryptographic verification, OAuth integration,
               automatic MCP detection, and secure keyring storage.
             </p>
@@ -247,7 +247,7 @@ export default function SDKDownloadPage() {
             <button
               onClick={() => handleDownload('python')}
               disabled={downloading && selectedSDK === 'python'}
-              className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm shadow-md"
+              className="w-full rounded-pill bg-brand text-white shadow-accent px-4 py-2.5 font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
               {downloading && selectedSDK === 'python' ? 'Downloading...' : 'Download Python SDK'}
@@ -256,26 +256,26 @@ export default function SDKDownloadPage() {
         </div>
 
         {/* Java SDK - New! */}
-        <div className="bg-white border-2 border-orange-500 rounded-lg shadow-lg overflow-hidden">
+        <div className="glass overflow-hidden">
           <div className="p-6">
             <div className="flex items-center gap-4 mb-4">
-              <div className="h-14 w-14 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center shadow-lg">
+              <div className="h-14 w-14 bg-brand rounded-inset flex items-center justify-center shadow-accent">
                 <Code className="h-7 w-7 text-white" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Java SDK</h2>
+                <h2 className="text-xl font-bold text-ink">Java SDK</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-pill text-xs font-medium bg-warning-fill border border-warning-border text-warning-text">
                     New
                   </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-gray-100 text-gray-700">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-glass-inset-gray text-ink-body">
                     v1.0.0
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-sm text-gray-700 mb-4">
+            <p className="text-sm text-ink-body mb-4">
               Java client with Maven support, AspectJ annotations, OkHttp,
               BouncyCastle cryptography, and Spring Boot integration.
             </p>
@@ -283,7 +283,7 @@ export default function SDKDownloadPage() {
             <button
               onClick={() => handleDownload('java')}
               disabled={downloading && selectedSDK === 'java'}
-              className="w-full bg-orange-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm shadow-md"
+              className="w-full rounded-pill bg-brand text-white shadow-accent px-4 py-2.5 font-medium hover:bg-brand-hover disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
             >
               <Download className="h-4 w-4" />
               {downloading && selectedSDK === 'java' ? 'Downloading...' : 'Download Java SDK'}
@@ -293,31 +293,31 @@ export default function SDKDownloadPage() {
       </div>
 
       {/* Setup Instructions */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <div className="glass overflow-hidden">
         <div className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Terminal className="h-5 w-5 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Quick Start - See Results in 60 Seconds!</h3>
+            <Terminal className="h-5 w-5 text-ink-body" />
+            <h3 className="text-lg font-semibold text-ink">Quick start</h3>
           </div>
 
           {/* Language Tabs - Applies to all steps */}
           <div className="flex gap-2 mb-4">
             <button
               onClick={() => setSelectedCodeTab('python')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-pill text-sm font-medium transition-colors ${
                 selectedCodeTab === 'python'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-brand text-white shadow-accent'
+                  : 'bg-glass-inset-gray text-ink-body hover:bg-track'
               }`}
             >
               Python
             </button>
             <button
               onClick={() => setSelectedCodeTab('java')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-4 py-2 rounded-pill text-sm font-medium transition-colors ${
                 selectedCodeTab === 'java'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-brand text-white shadow-accent'
+                  : 'bg-glass-inset-gray text-ink-body hover:bg-track'
               }`}
             >
               Java
@@ -326,17 +326,17 @@ export default function SDKDownloadPage() {
 
           <div className="space-y-6">
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">1. Extract & Install SDK</h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
+              <h4 className="font-medium text-ink mb-2">1. Extract and install the SDK</h4>
+              <div className="glass-contrast p-4 overflow-x-auto">
                 {selectedCodeTab === 'python' ? (
-                  <code className="text-sm text-green-400 font-mono">
+                  <code className="text-sm text-ink-code font-mono">
                     cd ~/projects  # or any folder you prefer<br />
                     unzip ~/Downloads/aim-sdk-python.zip<br />
                     cd aim-sdk-python<br />
                     pip install -e .
                   </code>
                 ) : (
-                  <code className="text-sm text-green-400 font-mono">
+                  <code className="text-sm text-ink-code font-mono">
                     cd ~/projects  # or any folder you prefer<br />
                     unzip ~/Downloads/aim-sdk-java.zip<br />
                     cd aim-sdk-java<br />
@@ -346,65 +346,65 @@ export default function SDKDownloadPage() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-4">
-              <h4 className="font-semibold text-green-900 mb-2">
-                2. Run the Demo Agent - Watch Dashboard Update Live!
+            <div className="bg-success-fill border border-success-border rounded-card-sm p-4">
+              <h4 className="font-semibold text-ink mb-2">
+                2. Run the demo agent
               </h4>
-              <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto mb-2">
+              <div className="glass-contrast p-4 overflow-x-auto mb-2">
                 {selectedCodeTab === 'python' ? (
-                  <code className="text-sm text-green-400 font-mono">
+                  <code className="text-sm text-ink-code font-mono">
                     python demo_agent.py
                   </code>
                 ) : (
-                  <code className="text-sm text-green-400 font-mono">
+                  <code className="text-sm text-ink-code font-mono">
                     mvn exec:java -Dexec.mainClass="org.opena2a.aim.demo.DemoAgent"
                   </code>
                 )}
               </div>
-              <p className="text-sm text-green-800 mb-2">
+              <p className="text-sm text-ink-body mb-2">
                 The demo agent includes interactive actions you can trigger. Open your{' '}
-                <Link href="/dashboard/agents" className="underline font-medium">Agents Dashboard</Link>{' '}
-                side-by-side and watch it update in real-time as you perform actions!
+                <Link href="/dashboard/agents" className="underline font-medium text-brand-text">agents dashboard</Link>{' '}
+                side-by-side and watch it update as you perform actions.
               </p>
-              <p className="text-sm text-green-700">
+              <p className="text-sm text-ink-secondary">
                 <strong>Actions included:</strong> Weather checks, product searches, user lookups, notifications, and more - each with different risk levels so you can see how AIM monitors them differently.
               </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">3. Build Your Own Agent</h4>
-              <div className="relative bg-black rounded-lg p-4 overflow-x-auto mb-2 border-2 border-primary/30">
+              <h4 className="font-medium text-ink mb-2">3. Build your own agent</h4>
+              <div className="glass-contrast relative p-4 overflow-x-auto mb-2">
                 <button
                   onClick={handleCopy}
-                  className="absolute top-3 right-3 p-2 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                  className="absolute top-3 right-3 p-2 rounded-md bg-glass-code hover:bg-glass-inset-gray text-ink-inverse-secondary hover:text-ink-inverse transition-colors"
                   title="Copy to clipboard"
                 >
-                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                  {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
                 </button>
-                <pre className="text-sm text-green-400 font-mono whitespace-pre overflow-x-auto">
+                <pre className="text-sm text-ink-code font-mono whitespace-pre overflow-x-auto">
                   {currentSampleCode}
                 </pre>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-ink-secondary flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-success-text mt-0.5 flex-shrink-0" />
                 <span>
                   {selectedCodeTab === 'python'
-                    ? 'Click the copy button above or use the demo_agent.py file as a starting point!'
-                    : 'Add the SDK to your Maven pom.xml and use the examples as a starting point!'}
+                    ? 'Click the copy button above or use the demo_agent.py file as a starting point.'
+                    : 'Add the SDK to your Maven pom.xml and use the examples as a starting point.'}
                 </span>
               </p>
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-2">4. View Real-Time Security Analytics</h4>
-              <p className="text-gray-700 dark:text-gray-300 mb-3">
-                Monitor your agent&apos;s security posture, trust score, MCP connections, and behavior analytics in real-time.
+              <h4 className="font-medium text-ink mb-2">4. View security analytics</h4>
+              <p className="text-ink-body mb-3">
+                Monitor your agent&apos;s security posture, trust score, MCP connections, and behavior analytics.
               </p>
               <Link
                 href="/dashboard/agents"
-                className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                className="inline-flex items-center gap-2 text-brand-text hover:underline font-medium"
               >
-                View Agents Dashboard →
+                View agents dashboard →
               </Link>
             </div>
           </div>

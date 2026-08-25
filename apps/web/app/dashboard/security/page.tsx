@@ -43,6 +43,7 @@ import ThreatDetailModal from "@/components/modals/threat-detail-modal";
 import { formatDateTime, formatRelativeTime } from "@/lib/date-utils";
 import { getErrorMessage } from "@/lib/error-messages";
 import { AuthGuard } from "@/components/auth-guard";
+import { postureDelta } from "@/components/overview/shared";
 
 // ============================================
 // TYPES
@@ -105,11 +106,11 @@ function SecurityScoreGauge({ score, grade, status }: { score: number; grade: st
   const strokeDashoffset = circumference - (score / 100) * circumference;
 
   const getScoreColor = () => {
-    if (score >= 90) return { stroke: "#22c55e", bg: "bg-green-50 dark:bg-green-900/20", text: "text-green-600 dark:text-green-400" };
-    if (score >= 80) return { stroke: "#84cc16", bg: "bg-lime-50 dark:bg-lime-900/20", text: "text-lime-600 dark:text-lime-400" };
-    if (score >= 70) return { stroke: "#eab308", bg: "bg-yellow-50 dark:bg-yellow-900/20", text: "text-yellow-600 dark:text-yellow-400" };
-    if (score >= 60) return { stroke: "#f97316", bg: "bg-orange-50 dark:bg-orange-900/20", text: "text-orange-600 dark:text-orange-400" };
-    return { stroke: "#ef4444", bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-600 dark:text-red-400" };
+    if (score >= 90) return { stroke: "var(--green)", bg: "bg-success-fill", text: "text-success-text" };
+    if (score >= 80) return { stroke: "var(--green)", bg: "bg-success-fill", text: "text-success-text" };
+    if (score >= 70) return { stroke: "var(--amber)", bg: "bg-warning-fill", text: "text-warning-text" };
+    if (score >= 60) return { stroke: "var(--amber)", bg: "bg-warning-fill", text: "text-warning-text" };
+    return { stroke: "var(--brand)", bg: "bg-brand-soft", text: "text-brand-text" };
   };
 
   const colors = getScoreColor();
@@ -123,9 +124,8 @@ function SecurityScoreGauge({ score, grade, status }: { score: number; grade: st
           cy="50"
           r="45"
           fill="none"
-          stroke="currentColor"
+          stroke="var(--track)"
           strokeWidth="8"
-          className="text-gray-200 dark:text-gray-700"
         />
         {/* Progress circle */}
         <circle
@@ -143,7 +143,8 @@ function SecurityScoreGauge({ score, grade, status }: { score: number; grade: st
       </svg>
       <div className="absolute flex flex-col items-center">
         <span className={`text-3xl font-bold ${colors.text}`}>{score}</span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">/100</span>
+        <span className="text-xs text-ink-secondary">/100</span>
+        <span className="text-[10px] font-semibold text-success-text">{postureDelta(score)}</span>
       </div>
     </div>
   );
@@ -165,39 +166,39 @@ function StatCard({
   variant?: "default" | "success" | "warning" | "danger";
 }) {
   const variantStyles = {
-    default: "from-gray-50 to-white dark:from-gray-800 dark:to-gray-800 border-gray-200 dark:border-gray-700",
-    success: "from-green-50 to-white dark:from-green-900/20 dark:to-gray-800 border-green-200 dark:border-green-800",
-    warning: "from-amber-50 to-white dark:from-amber-900/20 dark:to-gray-800 border-amber-200 dark:border-amber-800",
-    danger: "from-red-50 to-white dark:from-red-900/20 dark:to-gray-800 border-red-200 dark:border-red-800",
+    default: "glass",
+    success: "glass border-success-border",
+    warning: "glass border-warning-border",
+    danger: "glass-alert",
   };
 
   const iconStyles = {
-    default: "text-gray-600 dark:text-gray-400",
-    success: "text-green-600 dark:text-green-400",
-    warning: "text-amber-600 dark:text-amber-400",
-    danger: "text-red-600 dark:text-red-400",
+    default: "text-ink-secondary",
+    success: "text-success-text",
+    warning: "text-warning-text",
+    danger: "text-danger-text",
   };
 
   return (
-    <div className={`bg-gradient-to-br ${variantStyles[variant]} rounded-xl border p-5 shadow-sm hover:shadow-md transition-shadow`}>
+    <div className={`${variantStyles[variant]} p-5 transition-shadow`}>
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+          <p className="text-xs font-medium text-ink-secondary uppercase tracking-wide">{label}</p>
+          <p className="text-2xl font-bold text-ink mt-1">
             {typeof value === 'number' ? value.toLocaleString() : value}
           </p>
           {subValue && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{subValue}</p>
+            <p className="text-xs text-ink-secondary mt-1">{subValue}</p>
           )}
         </div>
-        <div className={`p-2 rounded-lg bg-white/50 dark:bg-gray-900/50 ${iconStyles[variant]}`}>
+        <div className={`p-2 rounded-lg bg-glass-inset-gray ${iconStyles[variant]}`}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
       {trend && (
         <div className="mt-2 flex items-center text-xs">
-          <TrendingUp className="h-3 w-3 mr-1 text-green-500" />
-          <span className="text-green-600 dark:text-green-400">{trend}</span>
+          <TrendingUp className="h-3 w-3 mr-1 text-success-text" />
+          <span className="text-success-text">{trend}</span>
         </div>
       )}
     </div>
@@ -217,43 +218,43 @@ function BlockedActionCard({ action }: { action: any }) {
   const CategoryIcon = getCategoryIcon(action.attemptedCapability);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-all">
+    <div className="glass-inset border border-divider p-4 transition-all">
       <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-          <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+        <div className="p-2 rounded-lg bg-danger-fill">
+          <XCircle className="h-5 w-5 text-danger-text" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300">
-              BLOCKED
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-danger-fill text-danger-text">
+              Blocked
             </span>
-            <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+            <span className="text-sm font-medium text-ink truncate">
               {action.agentName}
             </span>
           </div>
           <div className="flex items-center gap-2 mt-1.5">
-            <CategoryIcon className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-700 dark:text-gray-300 font-mono">
+            <CategoryIcon className="h-4 w-4 text-ink-tertiary" />
+            <span className="text-sm text-ink-body font-mono">
               {action.attemptedCapability}
             </span>
           </div>
           <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-3 text-xs text-ink-secondary">
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {formatRelativeTime(action.createdAt)}
               </span>
               {action.trustImpact !== 0 && (
-                <span className="text-red-600 dark:text-red-400">
+                <span className="text-danger-text">
                   Trust {action.trustImpact > 0 ? "+" : ""}{action.trustImpact}%
                 </span>
               )}
             </div>
             <Link
               href={`/dashboard/agents?id=${action.agentId}`}
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-xs text-brand-text hover:underline flex items-center gap-1"
             >
-              Review Agent <ChevronRight className="h-3 w-3" />
+              Review agent <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
         </div>
@@ -271,17 +272,17 @@ function RiskCategoryBar({ category, blocked, riskLevel, maxBlocked }: {
   const width = maxBlocked > 0 ? (blocked / maxBlocked) * 100 : 0;
 
   const riskColors = {
-    high: "bg-red-500",
-    medium: "bg-orange-500",
-    low: "bg-yellow-500",
-    secure: "bg-green-500",
+    high: "bg-danger",
+    medium: "bg-warning",
+    low: "bg-warning",
+    secure: "bg-success",
   };
 
   const riskLabels = {
-    high: { text: "High Risk", class: "text-red-600 dark:text-red-400" },
-    medium: { text: "Medium", class: "text-orange-600 dark:text-orange-400" },
-    low: { text: "Low", class: "text-yellow-600 dark:text-yellow-400" },
-    secure: { text: "Secure", class: "text-green-600 dark:text-green-400" },
+    high: { text: "High risk", class: "text-danger-text" },
+    medium: { text: "Medium", class: "text-warning-text" },
+    low: { text: "Low", class: "text-warning-text" },
+    secure: { text: "Secure", class: "text-success-text" },
   };
 
   const label = riskLabels[riskLevel as keyof typeof riskLabels] || riskLabels.secure;
@@ -289,13 +290,13 @@ function RiskCategoryBar({ category, blocked, riskLevel, maxBlocked }: {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-gray-700 dark:text-gray-300">{category}</span>
+        <span className="text-ink-body">{category}</span>
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 dark:text-white">{blocked}</span>
+          <span className="font-medium text-ink">{blocked}</span>
           <span className={`text-xs ${label.class}`}>{label.text}</span>
         </div>
       </div>
-      <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+      <div className="h-2 bg-track rounded-full overflow-hidden">
         <div
           className={`h-full ${riskColors[riskLevel as keyof typeof riskColors] || riskColors.secure} rounded-full transition-all duration-500`}
           style={{ width: `${width}%` }}
@@ -309,12 +310,12 @@ function SecurityPageSkeleton() {
   return (
     <div className="space-y-6">
       {/* Hero Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+      <div className="glass p-6">
         <div className="flex items-center gap-8">
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-32 w-32 rounded-full"></div>
+          <div className="animate-pulse bg-track h-32 w-32 rounded-full"></div>
           <div className="flex-1 space-y-3">
-            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-48 rounded"></div>
-            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-96 rounded"></div>
+            <div className="animate-pulse bg-track h-6 w-48 rounded"></div>
+            <div className="animate-pulse bg-track h-4 w-96 rounded"></div>
           </div>
         </div>
       </div>
@@ -322,10 +323,10 @@ function SecurityPageSkeleton() {
       {/* Stats Skeleton */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
+          <div key={i} className="glass p-5">
             <div className="animate-pulse space-y-3">
-              <div className="bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
-              <div className="bg-gray-200 dark:bg-gray-700 h-8 w-16 rounded"></div>
+              <div className="bg-track h-4 w-24 rounded"></div>
+              <div className="bg-track h-8 w-16 rounded"></div>
             </div>
           </div>
         ))}
@@ -340,23 +341,23 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
   return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
-        <Shield className={`h-16 w-16 ${is403 ? "text-amber-500" : "text-red-500"}`} />
+        <Shield className={`h-16 w-16 ${is403 ? "text-warning" : "text-danger"}`} />
         <div className="space-y-2">
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            {is403 ? "Access Restricted" : "Failed to Load Security Data"}
+          <h3 className="text-2xl font-bold text-ink">
+            {is403 ? "Access restricted" : "Failed to load security data"}
           </h3>
           {is403 ? (
-            <p className="text-base text-gray-600 dark:text-gray-400">
+            <p className="text-base text-ink-secondary">
               Security monitoring is only available to Admin and Manager roles.
             </p>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
+            <p className="text-sm text-ink-secondary">{message}</p>
           )}
         </div>
         {!is403 && (
           <button
             onClick={onRetry}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
           >
             Retry
           </button>
@@ -439,10 +440,10 @@ export default function SecurityPage() {
   }
 
   const statusIndicator = metrics?.securityStatus === "Secure" || metrics?.securityStatus === "Good"
-    ? { color: "bg-green-500", text: "All Systems Operational" }
+    ? { color: "bg-success", text: "All systems operational" }
     : metrics?.securityStatus === "Needs Attention"
-    ? { color: "bg-yellow-500", text: "Needs Attention" }
-    : { color: "bg-red-500", text: "Action Required" };
+    ? { color: "bg-warning", text: "Needs attention" }
+    : { color: "bg-danger", text: "Action required" };
 
   return (
     <AuthGuard>
@@ -450,7 +451,7 @@ export default function SecurityPage() {
         {/* ============================================ */}
         {/* HERO SECTION - Security Command Center */}
         {/* ============================================ */}
-        <div className="bg-gradient-to-br from-slate-50 to-white dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="glass overflow-hidden">
           <div className="p-6 md:p-8">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               {/* Security Score Gauge */}
@@ -465,20 +466,20 @@ export default function SecurityPage() {
               {/* Status Content */}
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Your AI Fleet
+                  <h1 className="text-2xl font-bold text-ink">
+                    Your AI fleet
                   </h1>
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${statusIndicator.color} animate-pulse`}></span>
-                    <span className="text-sm text-gray-600 dark:text-gray-400">{statusIndicator.text}</span>
+                    <span className="text-sm text-ink-secondary">{statusIndicator.text}</span>
                   </div>
                 </div>
-                <p className="text-gray-600 dark:text-gray-400">
-                  <span className="font-medium text-gray-900 dark:text-white">{metrics?.agentsMonitored || 0}</span> agents
+                <p className="text-ink-secondary">
+                  <span className="font-medium text-ink">{metrics?.agentsMonitored || 0}</span> agents
                   <span className="mx-1">+</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{metrics?.mcpServersTotal || 0}</span> MCP servers monitored
+                  <span className="font-medium text-ink">{metrics?.mcpServersTotal || 0}</span> MCP servers monitored
                   <span className="mx-2">•</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{metrics?.actionsBlocked || 0}</span> threats blocked
+                  <span className="font-medium text-ink">{metrics?.actionsBlocked || 0}</span> threats blocked
                   {metrics?.lastIncidentAt && (
                     <>
                       <span className="mx-2">•</span>
@@ -492,7 +493,7 @@ export default function SecurityPage() {
                   {(metrics?.requiresAttention || 0) > 0 && (
                     <Link
                       href="/dashboard/admin/alerts"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-sm font-medium"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-warning-fill text-warning-text rounded-pill hover:bg-warning-border transition-colors text-sm font-medium"
                     >
                       <Bell className="h-4 w-4" />
                       {metrics?.requiresAttention} items need attention
@@ -501,10 +502,10 @@ export default function SecurityPage() {
                   )}
                   <Link
                     href="/dashboard/agents"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-glass-inset-gray text-ink-body rounded-pill hover:bg-track transition-colors text-sm font-medium"
                   >
                     <Bot className="h-4 w-4" />
-                    View All Agents
+                    View all agents
                     <ChevronRight className="h-4 w-4" />
                   </Link>
                 </div>
@@ -519,35 +520,35 @@ export default function SecurityPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             icon={Shield}
-            label="Actions Blocked"
+            label="Actions blocked"
             value={metrics?.actionsBlocked || 0}
             subValue={`${metrics?.actionsBlockedToday || 0} today`}
             variant="success"
           />
           <StatCard
             icon={Bot}
-            label="Agents Monitored"
+            label="Agents monitored"
             value={metrics?.agentsMonitored || 0}
             subValue={`${metrics?.trustPercentage || 0}% trusted`}
             variant="default"
           />
           <StatCard
             icon={Server}
-            label="MCP Servers"
+            label="MCP servers"
             value={metrics?.mcpServersTotal || 0}
             subValue={`${metrics?.mcpTrustPercentage || 0}% verified`}
             variant="default"
           />
           <StatCard
             icon={Zap}
-            label="Actions Today"
+            label="Actions today"
             value={metrics?.actionsToday || 0}
             subValue="processed by agents"
             variant="default"
           />
           <StatCard
             icon={Bell}
-            label="Requires Attention"
+            label="Requires attention"
             value={metrics?.requiresAttention || 0}
             subValue="pending items"
             variant={(metrics?.requiresAttention || 0) > 10 ? "warning" : "default"}
@@ -559,71 +560,72 @@ export default function SecurityPage() {
         {/* ============================================ */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Protection Timeline */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+          <div className="glass p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Protection Timeline</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Last 30 days</p>
+                <h3 className="text-lg font-semibold text-ink">Protection timeline</h3>
+                <p className="text-sm text-ink-secondary">Last 30 days</p>
               </div>
-              <Activity className="h-5 w-5 text-gray-400" />
+              <Activity className="h-5 w-5 text-ink-tertiary" />
             </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={metrics?.protectionTimeline || []}>
                   <defs>
                     <linearGradient id="actionsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="var(--brand)" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                  <XAxis dataKey="date" stroke="#9CA3AF" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                  <YAxis stroke="#9CA3AF" tick={{ fontSize: 11 }} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-divider" />
+                  <XAxis dataKey="date" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                  <YAxis stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "0.5rem",
-                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                      backgroundColor: "var(--glass-fill)",
+                      border: "1px solid var(--glass-border)",
+                      borderRadius: "12px",
+                      boxShadow: "var(--shadow-card)",
+                      color: "var(--text-primary)",
                     }}
                   />
                   <Area
                     type="monotone"
                     dataKey="actions"
                     fill="url(#actionsGradient)"
-                    stroke="#3b82f6"
+                    stroke="var(--brand)"
                     strokeWidth={2}
                     name="Actions"
                   />
                   <Line
                     type="monotone"
                     dataKey="blocked"
-                    stroke="#ef4444"
+                    stroke="var(--red)"
                     strokeWidth={2}
                     name="Blocked"
-                    dot={{ fill: "#ef4444", strokeWidth: 2, r: 3 }}
+                    dot={{ fill: "var(--red)", strokeWidth: 2, r: 3 }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
             {/* Insight Box */}
             {protectionInsight && (
-              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-800 dark:text-blue-300">
-                  <span className="font-medium">💡 Insight:</span> {protectionInsight}
+              <div className="mt-4 p-3 bg-brand-soft rounded-inset border border-stroke">
+                <p className="text-sm text-brand-text">
+                  <span className="font-medium">Insight:</span> {protectionInsight}
                 </p>
               </div>
             )}
           </div>
 
           {/* Risk by Category */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+          <div className="glass p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Risk by Category</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Blocked actions by type</p>
+                <h3 className="text-lg font-semibold text-ink">Risk by category</h3>
+                <p className="text-sm text-ink-secondary">Blocked actions by type</p>
               </div>
-              <Shield className="h-5 w-5 text-gray-400" />
+              <Shield className="h-5 w-5 text-ink-tertiary" />
             </div>
             <div className="space-y-4">
               {metrics?.riskByCategory && metrics.riskByCategory.length > 0 ? (
@@ -638,17 +640,17 @@ export default function SecurityPage() {
                 ))
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <CheckCircle className="h-12 w-12 text-green-500 mb-3" />
-                  <p className="text-sm text-gray-600 dark:text-gray-400">No blocked actions detected</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">All agent actions are within authorized capabilities</p>
+                  <CheckCircle className="h-12 w-12 text-success mb-3" />
+                  <p className="text-sm text-ink-secondary">No blocked actions detected</p>
+                  <p className="text-xs text-ink-tertiary mt-1">All agent actions are within authorized capabilities</p>
                 </div>
               )}
             </div>
             {/* Risk Insight */}
             {metrics?.riskByCategory && metrics.riskByCategory.length > 0 && (
-              <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  <span className="font-medium">⚠️ Recommendation:</span> Review agents attempting{" "}
+              <div className="mt-4 p-3 bg-warning-fill rounded-inset border border-warning-border">
+                <p className="text-sm text-warning-text">
+                  <span className="font-medium">Recommendation:</span> Review agents attempting{" "}
                   <span className="font-medium">{metrics.riskByCategory[0]?.category}</span> actions.
                 </p>
               </div>
@@ -659,22 +661,22 @@ export default function SecurityPage() {
         {/* ============================================ */}
         {/* BLOCKED ACTIONS */}
         {/* ============================================ */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="glass">
+          <div className="p-6 border-b border-divider">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-green-600" />
-                  Blocked Actions
+                <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-success-text" />
+                  Blocked actions
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <p className="text-sm text-ink-secondary mt-1">
                   AIM prevented these unauthorized attempts
                 </p>
               </div>
               {(metrics?.actionsBlocked || 0) > 10 && (
                 <Link
                   href="/dashboard/security/violations"
-                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  className="text-sm text-brand-text hover:underline flex items-center gap-1"
                 >
                   View all <ChevronRight className="h-4 w-4" />
                 </Link>
@@ -690,11 +692,11 @@ export default function SecurityPage() {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="p-4 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
-                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                <div className="p-4 rounded-full bg-success-fill mb-4">
+                  <CheckCircle className="h-8 w-8 text-success-text" />
                 </div>
-                <h4 className="text-lg font-medium text-gray-900 dark:text-white">All Clear</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <h4 className="text-lg font-medium text-ink">All clear</h4>
+                <p className="text-sm text-ink-secondary mt-1">
                   No unauthorized actions have been blocked recently
                 </p>
               </div>
@@ -707,51 +709,51 @@ export default function SecurityPage() {
         {/* ============================================ */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Requires Attention */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="glass">
+            <div className="p-6 border-b border-divider">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Bell className="h-5 w-5 text-amber-500" />
-                    Requires Your Attention
+                  <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-warning" />
+                    Requires your attention
                   </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="text-sm text-ink-secondary mt-1">
                     {metrics?.requiresAttention || 0} pending items
                   </p>
                 </div>
                 <Link
                   href="/dashboard/admin/alerts"
-                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  className="text-sm text-brand-text hover:underline flex items-center gap-1"
                 >
                   View all <ChevronRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
-            <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-divider max-h-[400px] overflow-y-auto">
               {/* Capability Requests */}
               {capabilityRequests.slice(0, 3).map((req) => (
-                <div key={req.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                <div key={req.id} className="p-4 hover:bg-glass-inset-gray transition-colors">
                   <div className="flex items-start gap-3">
-                    <div className="p-1.5 rounded-full bg-amber-100 dark:bg-amber-900/30">
-                      <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <div className="p-1.5 rounded-full bg-warning-fill">
+                      <Clock className="h-4 w-4 text-warning-text" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        Capability Request
+                      <p className="text-sm font-medium text-ink">
+                        Capability request
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      <p className="text-xs text-ink-secondary truncate">
                         {req.agentName || "Agent"} wants <span className="font-mono">{req.requestedCapability}</span>
                       </p>
                       <div className="flex gap-2 mt-2">
-                        <button className="px-2 py-1 text-xs font-medium rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors">
+                        <button className="px-2 py-1 text-xs font-medium rounded bg-success-fill text-success-text hover:bg-success-border transition-colors">
                           Approve
                         </button>
-                        <button className="px-2 py-1 text-xs font-medium rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors">
+                        <button className="px-2 py-1 text-xs font-medium rounded bg-danger-fill text-danger-text hover:bg-danger-border transition-colors">
                           Deny
                         </button>
                         <Link
                           href={`/dashboard/admin/capability-requests?id=${req.id}`}
-                          className="px-2 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                          className="px-2 py-1 text-xs font-medium rounded bg-glass-inset-gray text-ink-body hover:bg-track transition-colors"
                         >
                           Review
                         </Link>
@@ -763,29 +765,29 @@ export default function SecurityPage() {
 
               {/* Unacknowledged Alerts */}
               {alerts.filter(a => !a.isAcknowledged).slice(0, 3).map((alert) => (
-                <div key={alert.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                <div key={alert.id} className="p-4 hover:bg-glass-inset-gray transition-colors">
                   <div className="flex items-start gap-3">
                     <div className={`p-1.5 rounded-full ${
                       alert.severity === 'critical' || alert.severity === 'high'
-                        ? 'bg-red-100 dark:bg-red-900/30'
-                        : 'bg-amber-100 dark:bg-amber-900/30'
+                        ? 'bg-danger-fill'
+                        : 'bg-warning-fill'
                     }`}>
                       <AlertTriangle className={`h-4 w-4 ${
                         alert.severity === 'critical' || alert.severity === 'high'
-                          ? 'text-red-600 dark:text-red-400'
-                          : 'text-amber-600 dark:text-amber-400'
+                          ? 'text-danger-text'
+                          : 'text-warning-text'
                       }`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      <p className="text-sm font-medium text-ink truncate">
                         {alert.title}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-ink-secondary">
                         {formatRelativeTime(alert.createdAt)}
                       </p>
                       <Link
                         href={`/dashboard/admin/alerts?id=${alert.id}`}
-                        className="mt-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        className="mt-1 text-xs text-brand-text hover:underline"
                       >
                         Investigate →
                       </Link>
@@ -797,75 +799,75 @@ export default function SecurityPage() {
               {/* Empty State */}
               {capabilityRequests.length === 0 && alerts.filter(a => !a.isAcknowledged).length === 0 && (
                 <div className="p-8 text-center">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500" />
-                  <p className="text-sm text-gray-500 dark:text-gray-400">All caught up!</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">No pending items require your attention</p>
+                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-success" />
+                  <p className="text-sm text-ink-secondary">All caught up</p>
+                  <p className="text-xs text-ink-tertiary mt-1">No pending items require your attention</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Security Alerts (for legacy compatibility) */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="glass">
+            <div className="p-6 border-b border-divider">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-red-500" />
-                    Security Alerts
+                  <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-danger" />
+                    Security alerts
                   </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  <p className="text-sm text-ink-secondary mt-1">
                     {alertCounts.unacknowledged} unacknowledged of {alertCounts.all} total
                   </p>
                 </div>
                 <Link
                   href="/dashboard/admin/alerts"
-                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  className="text-sm text-brand-text hover:underline flex items-center gap-1"
                 >
                   View all <ChevronRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
-            <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-divider max-h-[400px] overflow-y-auto">
               {alerts.length > 0 ? (
                 alerts.map((alert) => (
-                  <div key={alert.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <div key={alert.id} className="p-4 hover:bg-glass-inset-gray transition-colors">
                     <div className="flex items-start gap-3">
                       <div className={`p-1.5 rounded-full ${
-                        alert.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30' :
-                        alert.severity === 'high' ? 'bg-orange-100 dark:bg-orange-900/30' :
-                        alert.severity === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30' :
-                        'bg-blue-100 dark:bg-blue-900/30'
+                        alert.severity === 'critical' ? 'bg-danger-fill' :
+                        alert.severity === 'high' ? 'bg-warning-fill' :
+                        alert.severity === 'medium' ? 'bg-warning-fill' :
+                        'bg-brand-soft'
                       }`}>
                         <AlertTriangle className={`h-4 w-4 ${
-                          alert.severity === 'critical' ? 'text-red-600 dark:text-red-400' :
-                          alert.severity === 'high' ? 'text-orange-600 dark:text-orange-400' :
-                          alert.severity === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
-                          'text-blue-600 dark:text-blue-400'
+                          alert.severity === 'critical' ? 'text-danger-text' :
+                          alert.severity === 'high' ? 'text-warning-text' :
+                          alert.severity === 'medium' ? 'text-warning-text' :
+                          'text-brand-text'
                         }`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          <p className="text-sm font-medium text-ink truncate">
                             {alert.title}
                           </p>
                           <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
-                            alert.severity === 'critical' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                            alert.severity === 'high' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
-                            alert.severity === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
-                            'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                            alert.severity === 'critical' ? 'bg-danger-fill text-danger-text' :
+                            alert.severity === 'high' ? 'bg-warning-fill text-warning-text' :
+                            alert.severity === 'medium' ? 'bg-warning-fill text-warning-text' :
+                            'bg-brand-soft text-brand-text'
                           }`}>
                             {alert.severity}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        <p className="text-xs text-ink-secondary truncate mt-0.5">
                           {alert.description}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
-                          <Clock className="h-3 w-3 text-gray-400" />
-                          <span className="text-xs text-gray-400">{formatDateTime(alert.createdAt)}</span>
+                          <Clock className="h-3 w-3 text-ink-tertiary" />
+                          <span className="text-xs text-ink-tertiary">{formatDateTime(alert.createdAt)}</span>
                           {!alert.isAcknowledged && (
-                            <span className="text-xs px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded">
+                            <span className="text-xs px-1.5 py-0.5 bg-warning-fill text-warning-text rounded">
                               Unacknowledged
                             </span>
                           )}
@@ -876,8 +878,8 @@ export default function SecurityPage() {
                 ))
               ) : (
                 <div className="p-8 text-center">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500" />
-                  <p className="text-sm text-gray-500 dark:text-gray-400">No security alerts</p>
+                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-success" />
+                  <p className="text-sm text-ink-secondary">No security alerts</p>
                 </div>
               )}
             </div>

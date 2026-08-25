@@ -81,10 +81,10 @@ const CAPABILITY_PATTERN = /^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$/;
 
 // Risk level colors for capability badges
 const RISK_LEVEL_COLORS: Record<string, string> = {
-  low: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-  critical: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  low: "bg-success-fill text-success-text",
+  medium: "bg-warning-fill text-warning-text",
+  high: "bg-danger-fill text-danger-text",
+  critical: "bg-danger-fill text-danger-text border border-danger-border",
 };
 
 export function RegisterAgentModal({
@@ -647,20 +647,20 @@ export function RegisterAgentModal({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[rgba(29,29,31,0.45)] backdrop-blur-sm"
       style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="glass-chrome max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {editMode ? "Edit Agent" : "Register New Agent"}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-divider">
+          <h2 className="text-xl font-semibold text-ink">
+            {editMode ? "Edit agent" : "Register new agent"}
           </h2>
           <button
             onClick={handleClose}
             disabled={loading}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+            className="text-ink-tertiary hover:text-ink transition-colors disabled:opacity-50"
           >
             <X className="h-5 w-5" />
           </button>
@@ -682,67 +682,67 @@ export function RegisterAgentModal({
           {success && !editMode && createdAgent && (
             <div className="space-y-4">
               {/* Success Banner */}
-              <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
-                <p className="text-sm text-green-800 dark:text-green-300">
-                  Agent registered successfully! Cryptographic keys and API key generated
+              <div className="p-4 bg-success-fill border border-success-border rounded-inset flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 text-success-text" />
+                <p className="text-sm text-success-text">
+                  Agent registered. Cryptographic keys and an API key were generated
                   automatically.
                 </p>
               </div>
 
               {/* ✅ API KEY DISPLAY - Show immediately after creation */}
               {createdApiKey && (
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-2 border-yellow-400 dark:border-yellow-600 rounded-lg space-y-3">
+                <div className="p-4 bg-warning-fill border border-warning-border rounded-inset space-y-3">
                   <div>
-                    <p className="text-sm font-bold text-yellow-900 dark:text-yellow-300">
-                      🔑 Your API Key (for Manual Integration)
+                    <p className="text-sm font-bold text-warning-text">
+                      Your API key (for manual integration)
                     </p>
-                    <p className="text-xs text-yellow-800 dark:text-yellow-400 mt-1">
+                    <p className="text-xs text-warning-text mt-1">
                       SDK users can skip this. Only needed for manual API calls. You can always create a new key later.
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-yellow-800 dark:text-yellow-300 mb-1">
-                      Your API Key
+                    <label className="block text-xs font-medium text-warning-text mb-1">
+                      Your API key
                     </label>
                     <div className="flex gap-2">
                       <input
                         type={showPrivateKey ? "text" : "password"}
                         value={createdApiKey.key}
                         readOnly
-                        className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border-2 border-yellow-500 dark:border-yellow-600 rounded text-xs font-mono text-gray-900 dark:text-gray-100"
+                        className="flex-1 px-3 py-2 bg-glass-inset border border-warning-border rounded-inset-sm text-xs font-mono text-ink"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPrivateKey(!showPrivateKey)}
-                        className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                        className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
                       >
                         {showPrivateKey ? (
-                          <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                          <EyeOff className="h-4 w-4 text-ink-secondary" />
                         ) : (
-                          <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                          <Eye className="h-4 w-4 text-ink-secondary" />
                         )}
                       </button>
                       <button
                         type="button"
                         onClick={() => copyToClipboard(createdApiKey.key, "api_key")}
-                        className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors flex items-center gap-2"
+                        className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors flex items-center gap-2"
                       >
                         {copiedField === "api_key" ? (
                           <>
                             <CheckCircle className="h-4 w-4" />
-                            <span className="text-xs font-bold">Copied!</span>
+                            <span className="text-xs font-bold">Copied</span>
                           </>
                         ) : (
                           <>
                             <Copy className="h-4 w-4" />
-                            <span className="text-xs font-bold">Copy Key</span>
+                            <span className="text-xs font-bold">Copy key</span>
                           </>
                         )}
                       </button>
                     </div>
-                    <p className="mt-1 text-xs text-yellow-700 dark:text-yellow-400">
+                    <p className="mt-1 text-xs text-warning-text">
                       Key: {createdApiKey.name} • Expires: {createdApiKey.expiresAt ? new Date(createdApiKey.expiresAt).toLocaleDateString() : "Never"}
                     </p>
                   </div>
@@ -752,22 +752,22 @@ export function RegisterAgentModal({
               {/* Integration Method Selection - Show if no method chosen yet */}
               {!integrationMethod && (
                 <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                    🎯 Choose Your Integration Method
+                  <h4 className="text-sm font-semibold text-ink">
+                    Choose your integration method
                   </h4>
 
                   {/* Manual Integration Option - Primary */}
                   <button
                     onClick={handleManualIntegration}
-                    className="w-full p-4 border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:border-blue-300 dark:hover:border-blue-700 transition-colors text-left"
+                    className="w-full p-4 border border-brand-soft bg-brand-soft rounded-inset hover:border-brand transition-colors text-left"
                   >
                     <div className="flex items-start gap-3">
-                      <Code className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                      <Code className="h-5 w-5 text-brand-text mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
-                        <h5 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                          🔧 Manual Integration (Recommended for Dashboard Agents)
+                        <h5 className="text-sm font-semibold text-ink mb-1">
+                          Manual integration (recommended for dashboard agents)
                         </h5>
-                        <p className="text-xs text-blue-800 dark:text-blue-200">
+                        <p className="text-xs text-ink-body">
                           Use <strong>any programming language</strong> (Python, Rust,
                           Ruby, PHP, Java, etc.). Get your API key and credentials.
                         </p>
@@ -778,15 +778,15 @@ export function RegisterAgentModal({
                   {/* SDK Integration Option - Secondary */}
                   <button
                     onClick={() => setIntegrationMethod("sdk")}
-                    className="w-full p-4 border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:border-gray-300 dark:hover:border-gray-600 transition-colors text-left"
+                    className="w-full p-4 border border-divider bg-glass-inset-gray rounded-inset hover:border-stroke transition-colors text-left"
                   >
                     <div className="flex items-start gap-3">
-                      <Package className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+                      <Package className="h-5 w-5 text-ink-secondary mt-0.5 flex-shrink-0" />
                       <div className="flex-1">
-                        <h5 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                          📦 Using Python SDK?
+                        <h5 className="text-sm font-semibold text-ink mb-1">
+                          Using the Python SDK?
                         </h5>
-                        <p className="text-xs text-gray-700 dark:text-gray-300">
+                        <p className="text-xs text-ink-body">
                           The SDK auto-registers agents with local credentials.
                           See how to create agents directly via SDK code.
                         </p>
@@ -798,14 +798,14 @@ export function RegisterAgentModal({
 
               {/* SDK Integration Section - Show if SDK method chosen */}
               {integrationMethod === "sdk" && (
-                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg space-y-4">
+                <div className="p-4 bg-warning-fill border border-warning-border rounded-inset space-y-4">
                   <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <AlertCircle className="h-5 w-5 text-warning-text mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1">
-                        SDK Creates Agents Automatically
+                      <h4 className="text-sm font-semibold text-ink mb-1">
+                        The SDK creates agents automatically
                       </h4>
-                      <p className="text-xs text-amber-800 dark:text-amber-200 mb-3">
+                      <p className="text-xs text-ink-body mb-3">
                         The Python SDK generates local cryptographic keys and auto-registers agents.
                         Dashboard-created agents use server-side keys which won't work with the SDK.
                       </p>
@@ -814,11 +814,11 @@ export function RegisterAgentModal({
 
                   {/* Python Code Example */}
                   <div>
-                    <p className="text-xs font-medium text-amber-900 dark:text-amber-100 mb-2">
+                    <p className="text-xs font-medium text-ink mb-2">
                       Create your agent directly in Python code:
                     </p>
                     <div className="relative">
-                      <pre className="p-3 bg-gray-900 dark:bg-black text-green-400 text-xs font-mono rounded-lg overflow-x-auto whitespace-pre-wrap">
+                      <pre className="glass-contrast p-3 text-ink-code text-xs font-mono rounded-inset overflow-x-auto whitespace-pre-wrap">
 {`from aim_sdk import secure, AgentType
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -943,12 +943,12 @@ print(f"Result: {result}")
 # )`;
                           copyToClipboard(pythonCode, "python_code");
                         }}
-                        className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                        className="absolute top-2 right-2 px-2 py-1 rounded-pill bg-glass-code text-ink-inverse hover:bg-track text-xs transition-colors flex items-center gap-1"
                       >
                         {copiedField === "python_code" ? (
                           <>
                             <CheckCircle className="h-3 w-3" />
-                            Copied!
+                            Copied
                           </>
                         ) : (
                           <>
@@ -961,11 +961,11 @@ print(f"Result: {result}")
                   </div>
 
                   {/* SDK Download Link and Documentation */}
-                  <div className="pt-3 border-t border-amber-200 dark:border-amber-700">
+                  <div className="pt-3 border-t border-warning-border">
                     <div className="flex flex-wrap gap-2 mb-2">
                       <a
                         href="/dashboard/sdk"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover text-sm font-medium transition-colors"
                       >
                         <Package className="h-4 w-4" />
                         Download Python SDK
@@ -974,14 +974,14 @@ print(f"Result: {result}")
                         href="https://opena2a.org/docs/integration/python"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand-soft text-brand-text hover:brightness-95 text-sm font-medium transition-colors"
                       >
                         <ExternalLink className="h-4 w-4" />
-                        SDK Documentation
+                        SDK documentation
                       </a>
                     </div>
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      After downloading, run: <code className="bg-amber-100 dark:bg-amber-900 px-1 rounded">pip install -e .</code>
+                    <p className="text-xs text-ink-body">
+                      After downloading, run: <code className="bg-glass-inset-gray px-1 rounded">pip install -e .</code>
                     </p>
                   </div>
 
@@ -989,7 +989,7 @@ print(f"Result: {result}")
                   <div className="text-center pt-2">
                     <button
                       onClick={() => setIntegrationMethod(null)}
-                      className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+                      className="text-xs text-ink-secondary hover:text-ink underline"
                     >
                       ← Choose a different integration method
                     </button>
@@ -999,20 +999,20 @@ print(f"Result: {result}")
 
               {/* Manual Integration Section - Show if manual method chosen */}
               {integrationMethod === "manual" && (
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg space-y-4">
+                <div className="glass-inset p-4 space-y-4">
                   <div className="flex items-start gap-3">
-                    <Code className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-0.5" />
+                    <Code className="h-5 w-5 text-ink-secondary mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                        🔑 Agent Credentials & API Access
+                      <h4 className="text-sm font-semibold text-ink mb-1">
+                        Agent credentials and API access
                       </h4>
-                      <p className="text-xs text-gray-700 dark:text-gray-300 mb-4">
+                      <p className="text-xs text-ink-body mb-4">
                         Use these credentials to integrate AIM with any
                         programming language. Keep your private key secure.
                       </p>
 
                       {loadingKeys ? (
-                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center gap-2 text-sm text-ink-secondary">
                           <Loader2 className="h-4 w-4 animate-spin" />
                           Loading credentials...
                         </div>
@@ -1020,7 +1020,7 @@ print(f"Result: {result}")
                         <div className="space-y-3">
                           {/* Agent ID */}
                           <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            <label className="block text-xs font-medium text-ink-body mb-1">
                               Agent ID
                             </label>
                             <div className="flex gap-2">
@@ -1028,19 +1028,19 @@ print(f"Result: {result}")
                                 type="text"
                                 value={createdAgent.id}
                                 readOnly
-                                className="flex-1 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                                className="flex-1 px-3 py-2 bg-glass-inset border border-stroke rounded-inset-sm text-xs font-mono text-ink"
                               />
                               <button
                                 type="button"
                                 onClick={() =>
                                   copyToClipboard(createdAgent.id, "agent_id")
                                 }
-                                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                                className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
                               >
                                 {copiedField === "agent_id" ? (
-                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                  <CheckCircle className="h-4 w-4 text-success-text" />
                                 ) : (
-                                  <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                  <Copy className="h-4 w-4 text-ink-secondary" />
                                 )}
                               </button>
                             </div>
@@ -1048,15 +1048,15 @@ print(f"Result: {result}")
 
                           {/* ✅ Pre-filled Curl Command for Verification */}
                           {createdApiKey && formData.capabilities.length > 0 && (
-                            <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <div className="pt-3 border-t border-divider">
                               <div className="flex items-center gap-2 mb-2">
-                                <Terminal className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                  Verify Your Agent (Ready to Copy & Paste)
+                                <Terminal className="h-4 w-4 text-success-text" />
+                                <label className="text-xs font-medium text-ink-body">
+                                  Verify your agent (ready to copy and paste)
                                 </label>
                               </div>
                               <div className="relative">
-                                <pre className="p-3 bg-gray-900 dark:bg-black text-green-400 text-xs font-mono rounded-lg overflow-x-auto whitespace-pre-wrap break-all">
+                                <pre className="glass-contrast p-3 text-ink-code text-xs font-mono rounded-inset overflow-x-auto whitespace-pre-wrap break-all">
 {`curl -X POST "${typeof window !== 'undefined' ? window.location.origin.replace('-frontend', '-backend').replace(':3000', ':8080') : 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/verify-capability" \\
   -H "Authorization: Bearer ${createdApiKey.key}" \\
   -H "Content-Type: application/json" \\
@@ -1068,12 +1068,12 @@ print(f"Result: {result}")
                                     const curlCmd = `curl -X POST "${typeof window !== 'undefined' ? window.location.origin.replace('-frontend', '-backend').replace(':3000', ':8080') : 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/verify-capability" \\\n  -H "Authorization: Bearer ${createdApiKey.key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`;
                                     copyToClipboard(curlCmd, "curl_cmd");
                                   }}
-                                  className="absolute top-2 right-2 px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors flex items-center gap-1"
+                                  className="absolute top-2 right-2 px-2 py-1 rounded-pill bg-glass-code text-ink-inverse hover:bg-track text-xs transition-colors flex items-center gap-1"
                                 >
                                   {copiedField === "curl_cmd" ? (
                                     <>
                                       <CheckCircle className="h-3 w-3" />
-                                      Copied!
+                                      Copied
                                     </>
                                   ) : (
                                     <>
@@ -1083,63 +1083,63 @@ print(f"Result: {result}")
                                   )}
                                 </button>
                               </div>
-                              <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                                Run this command in your terminal to verify your agent can use the <code className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-1.5 py-0.5 rounded font-semibold">{formData.capabilities[0]}</code> capability.
+                              <p className="mt-2 text-xs text-ink-secondary">
+                                Run this command in your terminal to verify your agent can use the <code className="bg-brand-soft text-brand-text px-1.5 py-0.5 rounded font-semibold">{formData.capabilities[0]}</code> capability.
                               </p>
                             </div>
                           )}
 
                           {/* API Documentation Link */}
-                          <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <div className="pt-3 border-t border-divider">
                             <a
                               href="https://opena2a.org/docs/api/rest"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                              className="inline-flex items-center gap-2 text-sm text-brand-text hover:underline"
                             >
                               <ExternalLink className="h-4 w-4" />
-                              View Full API Documentation →
+                              View full API documentation
                             </a>
                           </div>
 
                           {/* Advanced: Cryptographic Keys (Collapsible) */}
-                          <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
+                          <div className="pt-3 border-t border-divider">
                             <button
                               type="button"
                               onClick={() => setShowAdvancedKeys(!showAdvancedKeys)}
-                              className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                              className="flex items-center gap-2 text-xs text-ink-tertiary hover:text-ink"
                             >
                               <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedKeys ? 'rotate-180' : ''}`} />
-                              Advanced: Cryptographic Keys (Ed25519)
+                              Advanced: cryptographic keys (Ed25519)
                             </button>
 
                             {showAdvancedKeys && (
-                              <div className="mt-3 space-y-3 p-3 bg-gray-100 dark:bg-gray-900 rounded-lg">
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                              <div className="mt-3 space-y-3 p-3 glass-inset">
+                                <p className="text-xs text-ink-tertiary">
                                   For custom integrations with request signing. Most users don't need these.
                                 </p>
 
                                 {/* Public Key */}
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Public Key
+                                  <label className="block text-xs font-medium text-ink-body mb-1">
+                                    Public key
                                   </label>
                                   <div className="flex gap-2">
                                     <input
                                       type="text"
                                       value={agentKeys.publicKey}
                                       readOnly
-                                      className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-xs font-mono"
+                                      className="flex-1 px-3 py-2 bg-glass-inset border border-stroke rounded-inset-sm text-xs font-mono text-ink"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => copyToClipboard(agentKeys.publicKey, "public_key")}
-                                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                                      className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
                                     >
                                       {copiedField === "public_key" ? (
-                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                        <CheckCircle className="h-4 w-4 text-success-text" />
                                       ) : (
-                                        <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                        <Copy className="h-4 w-4 text-ink-secondary" />
                                       )}
                                     </button>
                                   </div>
@@ -1147,36 +1147,36 @@ print(f"Result: {result}")
 
                                 {/* Private Key */}
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Private Key - ⚠️ Keep Secret
+                                  <label className="block text-xs font-medium text-ink-body mb-1">
+                                    Private key (keep secret)
                                   </label>
                                   <div className="flex gap-2">
                                     <input
                                       type={showPrivateKey ? "text" : "password"}
                                       value={agentKeys.privateKey}
                                       readOnly
-                                      className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded text-xs font-mono"
+                                      className="flex-1 px-3 py-2 bg-glass-inset border border-danger-border rounded-inset-sm text-xs font-mono text-ink"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => setShowPrivateKey(!showPrivateKey)}
-                                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                                      className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
                                     >
                                       {showPrivateKey ? (
-                                        <EyeOff className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                        <EyeOff className="h-4 w-4 text-ink-secondary" />
                                       ) : (
-                                        <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                        <Eye className="h-4 w-4 text-ink-secondary" />
                                       )}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => copyToClipboard(agentKeys.privateKey, "private_key")}
-                                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded transition-colors"
+                                      className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
                                     >
                                       {copiedField === "private_key" ? (
-                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                        <CheckCircle className="h-4 w-4 text-success-text" />
                                       ) : (
-                                        <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                        <Copy className="h-4 w-4 text-ink-secondary" />
                                       )}
                                     </button>
                                   </div>
@@ -1186,7 +1186,7 @@ print(f"Result: {result}")
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-red-600 dark:text-red-400">
+                        <p className="text-sm text-danger-text">
                           Failed to load credentials. Please try again from the
                           agent details page.
                         </p>
@@ -1198,7 +1198,7 @@ print(f"Result: {result}")
                   <div className="text-center">
                     <button
                       onClick={() => setIntegrationMethod(null)}
-                      className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+                      className="text-xs text-ink-secondary hover:text-ink underline"
                     >
                       ← Choose a different integration method
                     </button>
@@ -1211,7 +1211,7 @@ print(f"Result: {result}")
                 <div className="text-center">
                   <button
                     onClick={handleSkipSDK}
-                    className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline"
+                    className="text-xs text-ink-secondary hover:text-ink underline"
                   >
                     Done (you can access credentials later from agent details)
                   </button>
@@ -1224,11 +1224,11 @@ print(f"Result: {result}")
           {error && (
             <div
               ref={errorBannerRef}
-              className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3"
+              className="glass-alert p-4 flex items-center gap-3"
             >
-              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <AlertCircle className="h-5 w-5 text-danger-text" />
               <div className="flex-1">
-                <p className="text-sm text-red-800 dark:text-red-300">
+                <p className="text-sm text-danger-text">
                   {error}
                 </p>
               </div>
@@ -1240,14 +1240,14 @@ print(f"Result: {result}")
             <>
               {/* Basic Information */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-                  Basic Information
+                <h3 className="text-overline">
+                  Basic information
                 </h3>
 
                 {/* Agent Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Agent Name <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-ink-body mb-1">
+                    Agent name <span className="text-danger-text">*</span>
                   </label>
                   <input
                     ref={nameRef}
@@ -1257,28 +1257,28 @@ print(f"Result: {result}")
                       setFormData({ ...formData, name: e.target.value })
                     }
                     placeholder="e.g., claude-assistant"
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none text-gray-900 dark:text-gray-100 ${
+                    className={`w-full px-3 py-2 border rounded-inset focus:outline-none text-ink placeholder:text-ink-tertiary ${
                       // Styling for normal/active state
                       loading || success || editMode
-                        ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed border-gray-300 dark:border-gray-600 focus:ring-0"
-                        : "bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 border-gray-200 dark:border-gray-700"
+                        ? "bg-track cursor-not-allowed border-stroke focus:ring-0"
+                        : "bg-glass-inset focus:ring-2 focus:ring-ring border-stroke"
                       } ${
                       // Styling for error state (overrides normal/active styling if present)
                       errors.name
-                        ? "border-red-500"
+                        ? "border-danger"
                         : ""
                       }`}
                     disabled={loading || success || editMode}
                   />
                   {errors.name && (
-                    <p className="mt-1 text-xs text-red-500">{errors.name}</p>
+                    <p className="mt-1 text-xs text-danger-text">{errors.name}</p>
                   )}
                 </div>
 
                 {/* Display Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Display Name <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-ink-body mb-1">
+                    Display name <span className="text-danger-text">*</span>
                   </label>
                   <input
                     ref={displayNameRef}
@@ -1288,14 +1288,14 @@ print(f"Result: {result}")
                       setFormData({ ...formData, displayName: e.target.value })
                     }
                     placeholder="e.g., Claude AI Assistant"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.displayName
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
+                    className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.displayName
+                      ? "border-danger"
+                      : "border-stroke"
                       }`}
                     disabled={loading || success}
                   />
                   {errors.displayName && (
-                    <p className="mt-1 text-xs text-red-500">
+                    <p className="mt-1 text-xs text-danger-text">
                       {errors.displayName}
                     </p>
                   )}
@@ -1303,7 +1303,7 @@ print(f"Result: {result}")
 
                 {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-ink-body mb-1">
                     Description
                   </label>
                   <textarea
@@ -1314,7 +1314,7 @@ print(f"Result: {result}")
                     }
                     placeholder="Brief description of what this agent does..."
                     rows={3}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                    className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                     disabled={loading || success}
                   />
                 </div>
@@ -1322,8 +1322,8 @@ print(f"Result: {result}")
                 {/* Agent Type and Version */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Agent Type <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-ink-body mb-1">
+                      Agent type <span className="text-danger-text">*</span>
                     </label>
                     <select
                       value={formData.agentType}
@@ -1333,7 +1333,7 @@ print(f"Result: {result}")
                           agentType: e.target.value as AgentType,
                         })
                       }
-                      className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                      className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                       disabled={loading || success}
                     >
                       {AGENT_TYPE_CATEGORIES.map((category) => (
@@ -1346,14 +1346,14 @@ print(f"Result: {result}")
                         </optgroup>
                       ))}
                     </select>
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 text-xs text-ink-tertiary">
                       {AGENT_TYPE_OPTIONS.find(o => o.value === formData.agentType)?.description}
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Version <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-ink-body mb-1">
+                      Version <span className="text-danger-text">*</span>
                     </label>
                     <input
                       ref={versionRef}
@@ -1363,14 +1363,14 @@ print(f"Result: {result}")
                         setFormData({ ...formData, version: e.target.value })
                       }
                       placeholder="1.0.0"
-                      className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.version
-                        ? "border-red-500"
-                        : "border-gray-200 dark:border-gray-700"
+                      className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.version
+                        ? "border-danger"
+                        : "border-stroke"
                         }`}
                       disabled={loading || success}
                     />
                     {errors.version && (
-                      <p className="mt-1 text-xs text-red-500">
+                      <p className="mt-1 text-xs text-danger-text">
                         {errors.version}
                       </p>
                     )}
@@ -1380,13 +1380,13 @@ print(f"Result: {result}")
 
               {/* Additional Resources */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
-                  Additional Resources (Optional)
+                <h3 className="text-overline">
+                  Additional resources (optional)
                 </h3>
 
                 {/* Repository URL */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-ink-body mb-1">
                     Repository URL
                   </label>
                   <input
@@ -1400,14 +1400,14 @@ print(f"Result: {result}")
                       })
                     }
                     placeholder="https://github.com/yourusername/your-agent"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.repositoryUrl
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
+                    className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.repositoryUrl
+                      ? "border-danger"
+                      : "border-stroke"
                       }`}
                     disabled={loading || success}
                   />
                   {errors.repositoryUrl && (
-                    <p className="mt-1 text-xs text-red-500">
+                    <p className="mt-1 text-xs text-danger-text">
                       {errors.repositoryUrl}
                     </p>
                   )}
@@ -1415,7 +1415,7 @@ print(f"Result: {result}")
 
                 {/* Documentation URL */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className="block text-sm font-medium text-ink-body mb-1">
                     Documentation URL
                   </label>
                   <input
@@ -1429,14 +1429,14 @@ print(f"Result: {result}")
                       })
                     }
                     placeholder="https://docs.example.com/agents/your-agent"
-                    className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${errors.documentationUrl
-                      ? "border-red-500"
-                      : "border-gray-200 dark:border-gray-700"
+                    className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.documentationUrl
+                      ? "border-danger"
+                      : "border-stroke"
                       }`}
                     disabled={loading || success}
                   />
                   {errors.documentationUrl && (
-                    <p className="mt-1 text-xs text-red-500">
+                    <p className="mt-1 text-xs text-danger-text">
                       {errors.documentationUrl}
                     </p>
                   )}
@@ -1446,21 +1446,21 @@ print(f"Result: {result}")
               {/* Capabilities */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Capabilities <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-ink-body mb-2">
+                    Capabilities <span className="text-danger-text">*</span>
                   </label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  <p className="text-xs text-ink-tertiary mb-3">
                     Select at least one capability this agent has. These define what
-                    actions the agent can perform. Format: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">namespace:action</code>
+                    actions the agent can perform. Format: <code className="bg-glass-inset-gray px-1 rounded">namespace:action</code>
                   </p>
                   {errors.capabilities && (
-                    <p className="text-xs text-red-500 mb-2">{errors.capabilities}</p>
+                    <p className="text-xs text-danger-text mb-2">{errors.capabilities}</p>
                   )}
                 </div>
 
                 {/* Loading state */}
                 {loadingCapabilities ? (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 py-4">
+                  <div className="flex items-center gap-2 text-sm text-ink-secondary py-4">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading capabilities...
                   </div>
@@ -1471,25 +1471,25 @@ print(f"Result: {result}")
                       {mergedCapabilities.map((capability) => (
                         <label
                           key={capability.type}
-                          className="flex items-start gap-2 p-2 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                          className="flex items-start gap-2 p-2 rounded-inset-sm border border-divider hover:bg-glass-inset-gray cursor-pointer"
                         >
                           <input
                             type="checkbox"
                             checked={formData.capabilities.includes(capability.type)}
                             onChange={() => toggleCapability(capability.type)}
-                            className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="mt-1 rounded border-stroke text-brand focus:ring-ring"
                             disabled={loading || success}
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                              <span className="text-sm font-medium text-ink truncate">
                                 {capability.name}
                               </span>
                               <span className={`text-xs px-1.5 py-0.5 rounded ${RISK_LEVEL_COLORS[capability.riskLevel]}`}>
                                 {capability.riskLevel}
                               </span>
                             </div>
-                            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                            <span className="text-xs text-ink-tertiary font-mono">
                               {capability.type}
                             </span>
                           </div>
@@ -1498,11 +1498,11 @@ print(f"Result: {result}")
                     </div>
 
                     {/* Custom capability input */}
-                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Add Custom Capability
+                    <div className="pt-3 border-t border-divider">
+                      <label className="block text-sm font-medium text-ink-body mb-2">
+                        Add custom capability
                       </label>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      <p className="text-xs text-ink-tertiary mb-2">
                         Define custom capabilities for your organization. Reserved namespaces: {reservedNamespaces.join(", ")}
                       </p>
                       <div className="flex gap-2">
@@ -1519,8 +1519,8 @@ print(f"Result: {result}")
                             e.key === "Enter" && (e.preventDefault(), addCustomCapability())
                           }
                           placeholder="e.g., payment:process or email:send"
-                          className={`flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-800 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 font-mono text-sm ${
-                            customCapabilityError ? "border-red-500" : "border-gray-200 dark:border-gray-700"
+                          className={`flex-1 px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary font-mono text-sm ${
+                            customCapabilityError ? "border-danger" : "border-stroke"
                           }`}
                           disabled={loading || success}
                         />
@@ -1528,14 +1528,14 @@ print(f"Result: {result}")
                           type="button"
                           onClick={addCustomCapability}
                           disabled={!customCapability.trim() || loading || success}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                          className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                           <Plus className="h-4 w-4" />
                           Add
                         </button>
                       </div>
                       {customCapabilityError && (
-                        <p className="mt-1 text-xs text-red-500">{customCapabilityError}</p>
+                        <p className="mt-1 text-xs text-danger-text">{customCapabilityError}</p>
                       )}
                     </div>
                   </>
@@ -1544,10 +1544,10 @@ print(f"Result: {result}")
 
               {/* MCP Servers Communication */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  MCP Servers (Talks To)
+                <label className="block text-sm font-medium text-ink-body mb-2">
+                  MCP servers (talks to)
                 </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <p className="text-xs text-ink-tertiary mb-3">
                   Select MCP servers this agent communicates with. Choose from registered servers or discovered MCPs.
                 </p>
 
@@ -1556,7 +1556,7 @@ print(f"Result: {result}")
                   <div className="flex gap-2 mb-3">
                     <div className="relative flex-1">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-4 w-4 text-gray-400" />
+                        <Search className="h-4 w-4 text-ink-tertiary" />
                       </div>
                       <input
                         ref={mcpInputRef}
@@ -1574,7 +1574,7 @@ print(f"Result: {result}")
                           }
                         }}
                         placeholder="Search or type MCP server name..."
-                        className="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                        className="w-full pl-10 pr-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                         disabled={loading || success}
                       />
                     </div>
@@ -1582,7 +1582,7 @@ print(f"Result: {result}")
                       type="button"
                       onClick={() => addMcpServer()}
                       disabled={!newMcpServer.trim() || loading || success}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                     >
                       <Plus className="h-4 w-4" />
                       Add
@@ -1593,11 +1593,11 @@ print(f"Result: {result}")
                   {showMcpDropdown && !loading && !success && (
                     <div
                       ref={mcpDropdownRef}
-                      className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                      className="glass absolute z-50 w-full mt-1 rounded-inset max-h-60 overflow-y-auto"
                       style={{ top: "calc(100% - 12px)" }}
                     >
                       {loadingMcpSuggestions ? (
-                        <div className="p-3 text-center text-gray-500 dark:text-gray-400">
+                        <div className="p-3 text-center text-ink-tertiary">
                           <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1" />
                           <span className="text-sm">Loading MCP servers...</span>
                         </div>
@@ -1606,34 +1606,34 @@ print(f"Result: {result}")
                           {/* Registered MCPs Section */}
                           {filteredMcpSuggestions.filter(s => s.isRegistered).length > 0 && (
                             <>
-                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                                Registered MCP Servers
+                              <div className="px-3 py-2 text-xs font-semibold text-ink-tertiary bg-glass-inset-gray border-b border-divider">
+                                Registered MCP servers
                               </div>
                               {filteredMcpSuggestions.filter(s => s.isRegistered).map((suggestion) => (
                                 <button
                                   key={suggestion.id}
                                   type="button"
                                   onClick={() => addMcpServer(suggestion.name)}
-                                  className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                                  className="w-full px-3 py-2 text-left hover:bg-glass-inset-gray flex items-center gap-3 border-b border-divider last:border-b-0"
                                 >
-                                  <Server className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                  <Server className="h-4 w-4 text-success-text flex-shrink-0" />
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                      <span className="text-sm font-medium text-ink truncate">
                                         {suggestion.name}
                                       </span>
                                       <span className={`text-xs px-1.5 py-0.5 rounded ${
                                         suggestion.status === "verified"
-                                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                          ? "bg-success-fill text-success-text"
                                           : suggestion.status === "active"
-                                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                          : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400"
+                                          ? "bg-brand-soft text-brand-text"
+                                          : "bg-glass-inset-gray text-ink-secondary"
                                       }`}>
                                         {suggestion.status}
                                       </span>
                                     </div>
                                     {suggestion.url && (
-                                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">
+                                      <span className="text-xs text-ink-tertiary truncate block">
                                         {suggestion.url}
                                       </span>
                                     )}
@@ -1646,28 +1646,28 @@ print(f"Result: {result}")
                           {/* Discovered MCPs Section */}
                           {filteredMcpSuggestions.filter(s => s.isDiscovered).length > 0 && (
                             <>
-                              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
-                                Discovered (Not Registered)
+                              <div className="px-3 py-2 text-xs font-semibold text-ink-tertiary bg-glass-inset-gray border-b border-divider">
+                                Discovered (not registered)
                               </div>
                               {filteredMcpSuggestions.filter(s => s.isDiscovered).map((suggestion) => (
                                 <button
                                   key={suggestion.id}
                                   type="button"
                                   onClick={() => addMcpServer(suggestion.name)}
-                                  className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                                  className="w-full px-3 py-2 text-left hover:bg-glass-inset-gray flex items-center gap-3 border-b border-divider last:border-b-0"
                                 >
-                                  <Server className="h-4 w-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                                  <Server className="h-4 w-4 text-warning-text flex-shrink-0" />
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                      <span className="text-sm font-medium text-ink truncate">
                                         {suggestion.name}
                                       </span>
-                                      <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-warning-fill text-warning-text">
                                         discovered
                                       </span>
                                     </div>
                                     {suggestion.url && (
-                                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">
+                                      <span className="text-xs text-ink-tertiary truncate block">
                                         {suggestion.url}
                                       </span>
                                     )}
@@ -1678,7 +1678,7 @@ print(f"Result: {result}")
                           )}
                         </>
                       ) : (
-                        <div className="p-3 text-center text-gray-500 dark:text-gray-400">
+                        <div className="p-3 text-center text-ink-tertiary">
                           <span className="text-sm">
                             {mcpSuggestions.length === 0
                               ? "No MCP servers found. Type a name to add manually."
@@ -1693,34 +1693,34 @@ print(f"Result: {result}")
                 {/* Selected MCP Servers List */}
                 {formData.talksTo.length > 0 && (
                   <div className="space-y-2 mt-3">
-                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                      Selected MCP Servers ({formData.talksTo.length})
+                    <div className="text-xs font-medium text-ink-tertiary mb-1">
+                      Selected MCP servers ({formData.talksTo.length})
                     </div>
                     {formData.talksTo.map((server) => {
                       const suggestion = mcpSuggestions.find(s => s.name === server);
                       return (
                         <div
                           key={server}
-                          className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded"
+                          className="glass-inset flex items-center justify-between p-2"
                         >
                           <div className="flex items-center gap-2">
                             <Server className={`h-4 w-4 ${
                               suggestion?.isRegistered
-                                ? "text-green-600 dark:text-green-400"
+                                ? "text-success-text"
                                 : suggestion?.isDiscovered
-                                ? "text-yellow-600 dark:text-yellow-400"
-                                : "text-gray-400"
+                                ? "text-warning-text"
+                                : "text-ink-tertiary"
                             }`} />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
+                            <span className="text-sm text-ink-body">
                               {server}
                             </span>
                             {suggestion?.isRegistered && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-success-fill text-success-text">
                                 registered
                               </span>
                             )}
                             {suggestion?.isDiscovered && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-warning-fill text-warning-text">
                                 discovered
                               </span>
                             )}
@@ -1729,7 +1729,7 @@ print(f"Result: {result}")
                             type="button"
                             onClick={() => removeMcpServer(server)}
                             disabled={loading || success}
-                            className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+                            className="text-danger-text hover:text-danger disabled:opacity-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1743,13 +1743,13 @@ print(f"Result: {result}")
           )}
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-divider">
             {success && !editMode ? (
               // Show Done button after successful registration
               <button
                 type="button"
                 onClick={handleSkipSDK}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors flex items-center gap-2"
               >
                 <CheckCircle className="h-4 w-4" />
                 Done
@@ -1761,7 +1761,7 @@ print(f"Result: {result}")
                   type="button"
                   onClick={handleClose}
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-gray rounded-pill transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1769,10 +1769,10 @@ print(f"Result: {result}")
                   type="submit"
                   disabled={loading || success || JSON.stringify(formData) === JSON.stringify(initialFormData)}
                   className=
-                  "px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                  "px-4 py-2 text-sm font-medium rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {editMode ? "Update Agent" : "Register Agent"}
+                  {editMode ? "Update agent" : "Register agent"}
                 </button>
               </>
             )}

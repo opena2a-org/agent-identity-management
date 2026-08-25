@@ -60,26 +60,26 @@ interface MCPServer {
 
 function StatCard({ stat }: { stat: any }) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="glass p-6">
       <div className="flex items-center">
         <div className="flex-shrink-0">
-          <stat.icon className="h-6 w-6 text-gray-400" />
+          <stat.icon className="h-6 w-6 text-ink-tertiary" />
         </div>
         <div className="ml-5 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+            <dt className="text-sm font-medium text-ink-secondary truncate">
               {stat.name}
             </dt>
             <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              <div className="text-2xl font-semibold text-ink">
                 {stat.value}
               </div>
               {stat.change && (
                 <div
                   className={`ml-2 flex items-baseline text-sm font-semibold ${
                     stat.changeType === "positive"
-                      ? "text-green-600"
-                      : "text-red-600"
+                      ? "text-success-text"
+                      : "text-danger-text"
                   }`}
                 >
                   {stat.change}
@@ -97,22 +97,22 @@ function StatusBadge({ status }: { status: string }) {
   const getStatusStyles = (status: string) => {
     switch (status) {
       case "verified":
-        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+        return "bg-success-fill text-success-text border border-success-border";
       case "pending":
-        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+        return "bg-warning-fill text-warning-text border border-warning-border";
       case "suspended":
       case "revoked":
-        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+        return "bg-danger-fill text-danger-text border border-danger-border";
       case "inactive":
-        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
+        return "bg-glass-inset-gray text-ink-secondary border border-stroke";
       default:
-        return "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300";
+        return "bg-glass-inset-gray text-ink-secondary border border-stroke";
     }
   };
 
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusStyles(status)}`}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-pill text-xs font-medium capitalize ${getStatusStyles(status)}`}
     >
       {status}
     </span>
@@ -125,10 +125,10 @@ function MCPServersTableSkeleton() {
       {/* Header Skeleton */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-40 rounded"></div>
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-96 rounded"></div>
+          <div className="animate-pulse bg-track h-8 w-40 rounded"></div>
+          <div className="animate-pulse bg-track h-4 w-96 rounded"></div>
         </div>
-        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-32 rounded-lg"></div>
+        <div className="animate-pulse bg-track h-10 w-32 rounded-lg"></div>
       </div>
 
       {/* Stats Cards Skeleton */}
@@ -136,18 +136,18 @@ function MCPServersTableSkeleton() {
         {[...Array(4)].map((_, i) => (
           <div
             key={i}
-            className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+            className="glass p-6"
           >
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                <div className="animate-pulse bg-track h-6 w-6 rounded"></div>
               </div>
               <div className="ml-5 w-0 flex-1">
                 <div className="space-y-2">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                  <div className="animate-pulse bg-track h-4 w-24 rounded"></div>
                   <div className="flex items-baseline gap-2">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-16 rounded"></div>
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-12 rounded"></div>
+                    <div className="animate-pulse bg-track h-8 w-16 rounded"></div>
+                    <div className="animate-pulse bg-track h-4 w-12 rounded"></div>
                   </div>
                 </div>
               </div>
@@ -157,62 +157,62 @@ function MCPServersTableSkeleton() {
       </div>
 
       {/* Filters Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="glass p-4">
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 flex-1 h-10 rounded-lg"></div>
-          <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-40 rounded-lg"></div>
+          <div className="animate-pulse bg-track flex-1 h-10 rounded-lg"></div>
+          <div className="animate-pulse bg-track h-10 w-40 rounded-lg"></div>
         </div>
       </div>
 
       {/* Table Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="glass overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
+          <table className="min-w-full divide-y divide-divider">
+            <thead className="bg-glass-inset-gray">
               <tr>
                 <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                  <div className="animate-pulse bg-track h-4 w-24 rounded"></div>
                 </th>
                 <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                  <div className="animate-pulse bg-track h-4 w-16 rounded"></div>
                 </th>
                 <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                  <div className="animate-pulse bg-track h-4 w-16 rounded"></div>
                 </th>
                 <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-24 rounded"></div>
+                  <div className="animate-pulse bg-track h-4 w-24 rounded"></div>
                 </th>
                 <th className="px-6 py-3">
-                  <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                  <div className="animate-pulse bg-track h-4 w-16 rounded"></div>
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-divider">
               {[...Array(5)].map((_, rowIndex) => (
                 <tr key={rowIndex}>
                   <td className="px-6 py-4">
                     <div className="flex items-center">
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-10 rounded-lg"></div>
+                      <div className="animate-pulse bg-track h-10 w-10 rounded-lg"></div>
                       <div className="ml-4 space-y-1">
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-32 rounded"></div>
-                        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-20 rounded"></div>
+                        <div className="animate-pulse bg-track h-4 w-32 rounded"></div>
+                        <div className="animate-pulse bg-track h-3 w-20 rounded"></div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-20 rounded-full"></div>
+                    <div className="animate-pulse bg-track h-6 w-20 rounded-full"></div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-16 rounded"></div>
+                    <div className="animate-pulse bg-track h-4 w-16 rounded"></div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-20 rounded"></div>
+                    <div className="animate-pulse bg-track h-4 w-20 rounded"></div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
-                      <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-6 w-6 rounded"></div>
+                      <div className="animate-pulse bg-track h-6 w-6 rounded"></div>
+                      <div className="animate-pulse bg-track h-6 w-6 rounded"></div>
+                      <div className="animate-pulse bg-track h-6 w-6 rounded"></div>
                     </div>
                   </td>
                 </tr>
@@ -235,14 +235,14 @@ function ErrorDisplay({
   return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center">
-        <AlertCircle className="h-12 w-12 text-red-500" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Failed to Load MCP Servers
+        <AlertCircle className="h-12 w-12 text-danger-text" />
+        <h3 className="text-lg font-semibold text-ink">
+          Failed to load MCP servers
         </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
+        <p className="text-sm text-ink-secondary">{message}</p>
         <button
           onClick={onRetry}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
         >
           Retry
         </button>
@@ -381,21 +381,21 @@ export default function MCPServersPage() {
 
   const statCards = [
     {
-      name: "Total MCP Servers",
+      name: "Total MCP servers",
       value: stats.total.toLocaleString(),
       // change: "+15.3%",
       // changeType: "positive",
       icon: Server,
     },
     {
-      name: "Active Servers",
+      name: "Active servers",
       value: stats.active.toLocaleString(),
       // change: "+8.7%",
       // changeType: "positive",
       icon: CheckCircle2,
     },
     {
-      name: "Avg Trust Score",
+      name: "Avg trust score",
       // Trust scores are on the canonical [0,1] scale, so the average is
       // rendered as a percentage. It used to print the raw value, which read
       // as "75.0" only because the backend was writing the literal 75.0 into
@@ -406,7 +406,7 @@ export default function MCPServersPage() {
       icon: Shield,
     },
     {
-      name: "Last Activity",
+      name: "Last activity",
       value: stats.lastActivity
         ? formatRelativeTime(stats.lastActivity)
         : "N/A",
@@ -504,10 +504,10 @@ export default function MCPServersPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            MCP Servers
+          <h1 className="text-2xl font-bold text-ink">
+            MCP servers
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-ink-secondary">
             Manage Model Context Protocol (MCP) servers and their cryptographic
             verification status.
           </p>
@@ -517,10 +517,10 @@ export default function MCPServersPage() {
             setEditingMCP(null);
             setShowRegisterModal(true);
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Register MCP Server
+          Register MCP server
         </button>
       </div>
 
@@ -532,26 +532,26 @@ export default function MCPServersPage() {
       </div>
 
       {/* Search and Filter */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="glass p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
             <input
               type="text"
               placeholder="Search by name, URL, or ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
             />
           </div>
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-gray-400" />
+            <Filter className="h-4 w-4 text-ink-tertiary" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-4 py-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
             >
-              <option value="all">All Status</option>
+              <option value="all">All statuses</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="pending">Pending</option>
@@ -559,53 +559,53 @@ export default function MCPServersPage() {
           </div>
         </div>
         {searchTerm && (
-          <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+          <div className="mt-2 text-sm text-ink-secondary">
             Found {filteredServers.length} of {mcpServers.length} servers
           </div>
         )}
       </div>
 
       {/* MCP Servers Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="glass overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
+          <table className="min-w-full divide-y divide-divider">
+            <thead className="bg-glass-inset-gray">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Name
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Endpoint
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Verified
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-divider">
               {paginatedServers.map((server) => (
                 <tr
                   key={server?.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  className="hover:bg-glass-inset-gray transition-colors cursor-pointer"
                   onClick={() => handleViewMCP(server)}
                 >
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="flex-shrink-0 h-8 w-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                        <Server className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <div className="flex-shrink-0 h-8 w-8 bg-brand-soft rounded-lg flex items-center justify-center">
+                        <Server className="h-4 w-4 text-brand-text" />
                       </div>
                       <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <div className="text-sm font-medium text-ink">
                           {server?.name}
                         </div>
                         <div
-                          className="text-xs text-gray-500 dark:text-gray-400"
+                          className="text-xs text-ink-secondary"
                           title={server?.id}
                         >
                           {server?.id?.substring(0, 8)}...
@@ -614,13 +614,13 @@ export default function MCPServersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center text-sm text-gray-900 dark:text-gray-100">
-                      <Globe className="h-3 w-3 mr-1 text-gray-400 flex-shrink-0" />
+                    <div className="flex items-center text-sm text-ink">
+                      <Globe className="h-3 w-3 mr-1 text-ink-tertiary flex-shrink-0" />
                       <a
                         href={server?.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="truncate max-w-[200px] hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors text-xs"
+                        className="truncate max-w-[200px] hover:text-brand-text hover:underline transition-colors text-xs"
                         title={server?.url}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -634,22 +634,22 @@ export default function MCPServersPage() {
                   <td className="px-4 py-3 whitespace-nowrap">
                     {server?.lastVerifiedAt ? (
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                        <CheckCircle2 className="h-4 w-4 text-success-text" />
+                        <span className="text-sm text-ink">
                           {formatRelativeTime(server.lastVerifiedAt)}
                         </span>
                       </div>
                     ) : server?.status === "verified" ? (
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                        <CheckCircle2 className="h-4 w-4 text-success-text" />
+                        <span className="text-sm text-ink">
                           Via Attestation
                         </span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <XCircle className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                        <XCircle className="h-4 w-4 text-ink-tertiary" />
+                        <span className="text-sm text-ink-secondary">
                           Not verified
                         </span>
                       </div>
@@ -662,7 +662,7 @@ export default function MCPServersPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewMCP(server)}
-                        className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                        className="p-1 text-ink-tertiary hover:text-brand-text transition-colors"
                         title="View details"
                       >
                         <Eye className="h-4 w-4" />
@@ -672,7 +672,7 @@ export default function MCPServersPage() {
                         userRole === "member") && (
                         <button
                           onClick={() => handleEditMCP(server)}
-                          className="p-1 text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400 transition-colors"
+                          className="p-1 text-ink-tertiary hover:text-warning-text transition-colors"
                           title="Edit"
                         >
                           <Edit className="h-4 w-4" />
@@ -681,7 +681,7 @@ export default function MCPServersPage() {
                       {(userRole === "admin" || userRole === "manager") && (
                         <button
                           onClick={() => requestDeleteMCP(server)}
-                          className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                          className="p-1 text-ink-tertiary hover:text-danger-text transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -696,29 +696,29 @@ export default function MCPServersPage() {
         </div>
         {mcpServers.length === 0 && (
           <div className="text-center py-12 space-y-6">
-            <Server className="mx-auto h-12 w-12 text-gray-400" />
+            <Server className="mx-auto h-12 w-12 text-ink-tertiary" />
             <div>
-              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <h3 className="text-sm font-medium text-ink">
                 No MCP servers registered
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 Get started by registering your first MCP server.
               </p>
             </div>
 
             <div className="max-w-lg mx-auto space-y-3">
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-4 text-left">
-                <p className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1">Option 1: Register via SDK</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="glass-inset p-4 text-left">
+                <p className="font-medium text-sm text-ink mb-1">Option 1: Register via SDK</p>
+                <p className="text-xs text-ink-secondary">
                   Use the AIM SDK to automatically register MCP servers when your agent connects to them.
                 </p>
-                <code className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded block mt-2 text-gray-700 dark:text-gray-300">
+                <code className="text-xs bg-glass-inset-gray px-2 py-1 rounded-md block mt-2 font-mono text-ink-body">
                   agent.attest_mcp("server-name", "https://mcp.example.com")
                 </code>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-4 text-left">
-                <p className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1">Option 2: Manual registration</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="glass-inset p-4 text-left">
+                <p className="font-medium text-sm text-ink mb-1">Option 2: Manual registration</p>
+                <p className="text-xs text-ink-secondary">
                   Click the button below to manually register an MCP server with its URL and details.
                 </p>
               </div>
@@ -726,24 +726,24 @@ export default function MCPServersPage() {
 
             <button
               onClick={() => setShowRegisterModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
             >
               <Plus className="h-4 w-4" />
-              Register MCP Server
+              Register MCP server
             </button>
 
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-gray-700 dark:hover:text-gray-300">SDK documentation</a> for more details.
+            <p className="text-xs text-ink-secondary">
+              See the <a href="https://opena2a.org/docs/integration/python" className="underline hover:text-ink">SDK documentation</a> for more details.
             </p>
           </div>
         )}
         {mcpServers.length > 0 && filteredServers.length === 0 && (
           <div className="text-center py-12">
-            <Search className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+            <Search className="mx-auto h-12 w-12 text-ink-tertiary" />
+            <h3 className="mt-2 text-sm font-medium text-ink">
               No servers found
             </h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-ink-secondary">
               Try adjusting your search or filter criteria.
             </p>
             <button
@@ -751,7 +751,7 @@ export default function MCPServersPage() {
                 setSearchTerm("");
                 setStatusFilter("all");
               }}
-              className="mt-4 px-4 py-2 text-blue-600 dark:text-blue-400 hover:underline"
+              className="mt-4 px-4 py-2 text-brand-text hover:underline"
             >
               Clear filters
             </button>
@@ -759,15 +759,15 @@ export default function MCPServersPage() {
         )}
         {/* Pagination Controls */}
         {filteredServers.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <div className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="px-6 py-4 border-t border-divider flex items-center justify-between">
+            <div className="text-sm text-ink-secondary">
               Showing {paginatedServers.length} of {filteredServers.length} servers
             </div>
             <div className="flex gap-2">
               {currentPage > 1 && (
                 <button
                   onClick={() => setCurrentPage(1)}
-                  className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="px-4 py-2 text-sm text-ink-body hover:text-ink border border-stroke rounded-pill hover:bg-glass-inset-gray transition-colors"
                 >
                   Show Less
                 </button>
@@ -775,7 +775,7 @@ export default function MCPServersPage() {
               {hasMore && (
                 <button
                   onClick={() => setCurrentPage(currentPage + 1)}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 text-sm rounded-pill bg-brand text-white shadow-accent hover:bg-brand-hover transition-colors"
                 >
                   Load More
                 </button>
@@ -786,16 +786,16 @@ export default function MCPServersPage() {
       </div>
 
       {/* Info Card */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
+      <div className="glass p-6">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0">
-            <Shield className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <Shield className="h-6 w-6 text-brand-text" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">
-              About MCP Server Verification
+            <h3 className="text-sm font-medium text-ink">
+              About MCP server verification
             </h3>
-            <p className="mt-2 text-sm text-blue-700 dark:text-blue-300">
+            <p className="mt-2 text-sm text-ink-body">
               Model Context Protocol (MCP) servers must be verified before they
               can interact with AI agents. Cryptographic verification uses
               public key infrastructure to ensure servers meet security
@@ -831,7 +831,7 @@ export default function MCPServersPage() {
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        title="Delete MCP Server"
+        title="Delete MCP server"
         message={`Are you sure you want to delete "${
           deleteTarget?.name ?? "this MCP server"
         }"? This action cannot be undone.`}

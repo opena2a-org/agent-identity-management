@@ -119,7 +119,7 @@ export default function RegisterPage() {
       });
 
       if (response.success) {
-        toast.success("Registration successful! Awaiting admin approval.");
+        toast.success("Registration successful. Awaiting admin approval.");
         // Redirect to pending page with request ID
         router.push(
           `/auth/registration-pending?request_id=${response.requestId}`
@@ -142,27 +142,27 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+    <div className="glass-page relative flex min-h-screen items-center justify-center overflow-hidden p-4">
       <div className="w-full max-w-md">
         {/* Logo and Title */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <Shield className="w-10 h-10 text-white" />
+            <div className="w-16 h-16 bg-logo rounded-card flex items-center justify-center shadow-accent">
+              <Shield className="w-10 h-10 text-ink-inverse" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold tracking-[-0.03em] text-ink mb-2">
             Welcome to AIM
           </h1>
-          <p className="text-sm text-blue-600 font-medium mb-1">AIM for a better security</p>
-          <p className="text-gray-600">
+          <p className="text-sm text-brand-text font-medium mb-1">AIM for a better security</p>
+          <p className="text-ink-secondary">
             Sign up to manage AI agents and MCP servers
           </p>
         </div>
 
         {/* Registration Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6 text-center">
+        <div className="glass-chrome p-8">
+          <h2 className="text-xl font-semibold text-ink mb-6 text-center">
             Create your account
           </h2>
 
@@ -171,12 +171,12 @@ export default function RegisterPage() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-1"
+                className="block text-sm font-medium text-ink-body mb-1"
               >
-                Email Address
+                Email address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
                 <input
                   id="email"
                   type="email"
@@ -184,14 +184,14 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.email ? "border-red-500" : "border-gray-300"
+                  className={`w-full pl-10 pr-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
+                    errors.email ? "border-danger" : "border-stroke"
                   }`}
                   placeholder="you@example.com"
                 />
               </div>
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                <p className="mt-1 text-sm text-danger-text flex items-center gap-1">
                   <AlertCircle className="h-4 w-4" />
                   {errors.email}
                 </p>
@@ -202,12 +202,12 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="firstName"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-ink-body mb-1"
                 >
-                  First Name
+                  First name
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
                   <input
                     id="firstName"
                     type="text"
@@ -215,14 +215,14 @@ export default function RegisterPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, firstName: e.target.value })
                     }
-                    className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.firstName ? "border-red-500" : "border-gray-300"
+                    className={`w-full pl-10 pr-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
+                      errors.firstName ? "border-danger" : "border-stroke"
                     }`}
                     placeholder="John"
                   />
                 </div>
                 {errors.firstName && (
-                  <p className="mt-1 text-sm text-red-600">
+                  <p className="mt-1 text-sm text-danger-text">
                     {errors.firstName}
                   </p>
                 )}
@@ -231,9 +231,9 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="lastName"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-ink-body mb-1"
                 >
-                  Last Name
+                  Last name
                 </label>
                 <input
                   id="lastName"
@@ -242,13 +242,13 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, lastName: e.target.value })
                   }
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.lastName ? "border-red-500" : "border-gray-300"
+                  className={`w-full px-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
+                    errors.lastName ? "border-danger" : "border-stroke"
                   }`}
                   placeholder="Doe"
                 />
                 {errors.lastName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
+                  <p className="mt-1 text-sm text-danger-text">{errors.lastName}</p>
                 )}
               </div>
             </div>
@@ -256,12 +256,12 @@ export default function RegisterPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700 mb-1"
+                className="block text-sm font-medium text-ink-body mb-1"
               >
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -269,15 +269,15 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
                   }
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.password ? "border-red-500" : "border-gray-300"
+                  className={`w-full pl-10 pr-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
+                    errors.password ? "border-danger" : "border-stroke"
                   }`}
                   placeholder="Min. 8 characters, uppercase, lowercase, number, special char"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
@@ -288,13 +288,13 @@ export default function RegisterPage() {
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                <p className="mt-1 text-sm text-danger-text flex items-center gap-1">
                   <AlertCircle className="h-4 w-4" />
                   {errors.password}
                 </p>
               )}
               {!errors.password && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-ink-tertiary">
                   Must be 8+ characters with uppercase, lowercase, number &
                   special character
                 </p>
@@ -304,12 +304,12 @@ export default function RegisterPage() {
             <div>
               <label
                 htmlFor="confirmPassword"
-                className="block text-sm font-medium text-gray-700 mb-1"
+                className="block text-sm font-medium text-ink-body mb-1"
               >
-                Confirm Password
+                Confirm password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
                 <input
                   id="confirmPassword"
                   type={showConfirm ? "text" : "password"}
@@ -320,17 +320,17 @@ export default function RegisterPage() {
                       confirmPassword: e.target.value,
                     })
                   }
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  className={`w-full pl-10 pr-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
                     errors.confirmPassword
-                      ? "border-red-500"
-                      : "border-gray-300"
+                      ? "border-danger"
+                      : "border-stroke"
                   }`}
                   placeholder="Re-enter password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirm((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink"
                   aria-label={showConfirm ? "Hide password" : "Show password"}
                 >
                   {showConfirm ? (
@@ -341,22 +341,22 @@ export default function RegisterPage() {
                 </button>
               </div>
               {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                <p className="mt-1 text-sm text-danger-text flex items-center gap-1">
                   <AlertCircle className="h-4 w-4" />
                   {errors.confirmPassword}
                 </p>
               )}
             </div>
 
-            <div className="pt-2 border-t border-gray-200 space-y-4">
-              <p className="text-sm text-gray-600">
+            <div className="pt-2 border-t border-divider space-y-4">
+              <p className="text-sm text-ink-secondary">
                 A few quick questions so we can improve AIM:
               </p>
 
               <div>
                 <label
                   htmlFor="role"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-ink-body mb-1"
                 >
                   What best describes you?
                 </label>
@@ -366,9 +366,9 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, role: e.target.value })
                   }
-                  className={`w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.role ? "border-red-500" : "border-gray-300"
-                  } ${formData.role ? "text-gray-900" : "text-gray-400"}`}
+                  className={`w-full px-4 py-2 rounded-inset border bg-glass-inset focus:outline-none focus:ring-2 focus:ring-ring ${
+                    errors.role ? "border-danger" : "border-stroke"
+                  } ${formData.role ? "text-ink" : "text-ink-tertiary"}`}
                 >
                   <option value="" disabled>
                     Select an option
@@ -380,7 +380,7 @@ export default function RegisterPage() {
                   ))}
                 </select>
                 {errors.role && (
-                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1 text-sm text-danger-text flex items-center gap-1">
                     <AlertCircle className="h-4 w-4" />
                     {errors.role}
                   </p>
@@ -390,7 +390,7 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="primaryUseCase"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-ink-body mb-1"
                 >
                   What will you use AIM for?
                 </label>
@@ -400,9 +400,9 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, primaryUseCase: e.target.value })
                   }
-                  className={`w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.primaryUseCase ? "border-red-500" : "border-gray-300"
-                  } ${formData.primaryUseCase ? "text-gray-900" : "text-gray-400"}`}
+                  className={`w-full px-4 py-2 rounded-inset border bg-glass-inset focus:outline-none focus:ring-2 focus:ring-ring ${
+                    errors.primaryUseCase ? "border-danger" : "border-stroke"
+                  } ${formData.primaryUseCase ? "text-ink" : "text-ink-tertiary"}`}
                 >
                   <option value="" disabled>
                     Select an option
@@ -414,7 +414,7 @@ export default function RegisterPage() {
                   ))}
                 </select>
                 {errors.primaryUseCase && (
-                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1 text-sm text-danger-text flex items-center gap-1">
                     <AlertCircle className="h-4 w-4" />
                     {errors.primaryUseCase}
                   </p>
@@ -424,7 +424,7 @@ export default function RegisterPage() {
               <div>
                 <label
                   htmlFor="referralSource"
-                  className="block text-sm font-medium text-gray-700 mb-1"
+                  className="block text-sm font-medium text-ink-body mb-1"
                 >
                   How did you hear about AIM?
                 </label>
@@ -434,9 +434,9 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, referralSource: e.target.value })
                   }
-                  className={`w-full px-4 py-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.referralSource ? "border-red-500" : "border-gray-300"
-                  } ${formData.referralSource ? "text-gray-900" : "text-gray-400"}`}
+                  className={`w-full px-4 py-2 rounded-inset border bg-glass-inset focus:outline-none focus:ring-2 focus:ring-ring ${
+                    errors.referralSource ? "border-danger" : "border-stroke"
+                  } ${formData.referralSource ? "text-ink" : "text-ink-tertiary"}`}
                 >
                   <option value="" disabled>
                     Select an option
@@ -448,7 +448,7 @@ export default function RegisterPage() {
                   ))}
                 </select>
                 {errors.referralSource && (
-                  <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <p className="mt-1 text-sm text-danger-text flex items-center gap-1">
                     <AlertCircle className="h-4 w-4" />
                     {errors.referralSource}
                   </p>
@@ -459,15 +459,15 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 px-4 rounded-pill bg-brand text-ink-inverse font-medium shadow-accent hover:bg-brand-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? "Creating Account..." : "Create Account"}
+              {isLoading ? "Creating account..." : "Create account"}
             </button>
           </form>
 
           {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
+          <div className="rounded-inset bg-brand-soft p-4">
+            <p className="text-sm text-ink-body">
               <strong>Note:</strong> After you sign up, an administrator will
               review and approve your account. You'll receive an email
               notification once your account is ready.
@@ -475,11 +475,11 @@ export default function RegisterPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-6 text-center text-sm text-gray-600">
+          <div className="mt-6 text-center text-sm text-ink-secondary">
             Already have an account?{" "}
             <Link
               href="/auth/login"
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              className="font-semibold text-brand-text hover:underline"
             >
               Sign in
             </Link>
@@ -487,13 +487,13 @@ export default function RegisterPage() {
         </div>
 
         {/* Additional Info */}
-        <div className="mt-6 text-center text-xs text-gray-500">
+        <div className="mt-6 text-center text-xs text-ink-tertiary">
           By signing up, you agree to our{" "}
-          <a href="/terms" className="text-blue-600 hover:underline">
+          <a href="/terms" className="text-brand-text hover:underline">
             Terms of Service
           </a>{" "}
           and{" "}
-          <a href="/privacy" className="text-blue-600 hover:underline">
+          <a href="/privacy" className="text-brand-text hover:underline">
             Privacy Policy
           </a>
         </div>

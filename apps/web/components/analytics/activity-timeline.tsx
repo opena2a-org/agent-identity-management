@@ -78,27 +78,27 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
+        return <CheckCircle className="h-5 w-5 text-success-text" />;
       case 'failure':
-        return <XCircle className="h-5 w-5 text-red-600" />;
+        return <XCircle className="h-5 w-5 text-danger-text" />;
       case 'pending':
-        return <Clock className="h-5 w-5 text-yellow-600" />;
+        return <Clock className="h-5 w-5 text-warning-text" />;
       default:
-        return <Activity className="h-5 w-5 text-gray-600" />;
+        return <Activity className="h-5 w-5 text-ink-secondary" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const variants = {
-      success: 'bg-green-100 text-green-800 border-green-200',
-      failure: 'bg-red-100 text-red-800 border-red-200',
-      pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      success: 'bg-success-fill text-success-text border-success-border',
+      failure: 'bg-danger-fill text-danger-text border-danger-border',
+      pending: 'bg-warning-fill text-warning-text border-warning-border',
     };
 
     return (
       <Badge
         variant="outline"
-        className={variants[status as keyof typeof variants] || 'bg-gray-100 text-gray-800'}
+        className={variants[status as keyof typeof variants] || 'bg-glass-inset-gray text-ink-body border-stroke'}
       >
         {status}
       </Badge>
@@ -109,7 +109,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Agent Activity Timeline</CardTitle>
+          <CardTitle>Agent activity timeline</CardTitle>
           <CardDescription>Loading activity data...</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -131,15 +131,15 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Agent Activity Timeline</CardTitle>
+          <CardTitle>Agent activity timeline</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            <AlertCircle className="h-12 w-12 mx-auto mb-3 text-yellow-600" />
+          <div className="text-center py-8 text-ink-secondary">
+            <AlertCircle className="h-12 w-12 mx-auto mb-3 text-warning-text" />
             <p>{error || 'No activity data available'}</p>
             <Button onClick={handleRefresh} className="mt-4" variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
-              Try Again
+              Try again
             </Button>
           </div>
         </CardContent>
@@ -151,8 +151,8 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-          Agent Activity Timeline
+        <h2 className="text-2xl font-semibold tracking-[-0.02em] text-ink">
+          Agent activity timeline
         </h2>
         <Button
           variant="outline"
@@ -177,18 +177,18 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
       {/* Summary Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Total Activities */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="glass p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <Activity className="h-6 w-6 text-gray-400" />
+              <Activity className="h-6 w-6 text-ink-tertiary" />
             </div>
             <div className="ml-5 w-0 flex-1">
               <dl>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                  Total Activities
+                <dt className="text-sm font-medium text-ink-secondary truncate">
+                  Total activities
                 </dt>
                 <dd className="flex items-baseline">
-                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="text-2xl font-semibold text-ink">
                     {data.summary.totalActivities}
                   </div>
                 </dd>
@@ -198,18 +198,18 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
         </div>
 
         {/* Successful */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="glass p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+              <CheckCircle className="h-6 w-6 text-success-text" />
             </div>
             <div className="ml-5 w-0 flex-1">
               <dl>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                <dt className="text-sm font-medium text-ink-secondary truncate">
                   Successful
                 </dt>
                 <dd className="flex items-baseline">
-                  <div className="text-2xl font-semibold text-green-600">
+                  <div className="text-2xl font-semibold text-success-text">
                     {data.summary.successCount}
                   </div>
                 </dd>
@@ -219,18 +219,18 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
         </div>
 
         {/* Failed */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="glass p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <XCircle className="h-6 w-6 text-red-600" />
+              <XCircle className="h-6 w-6 text-danger-text" />
             </div>
             <div className="ml-5 w-0 flex-1">
               <dl>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+                <dt className="text-sm font-medium text-ink-secondary truncate">
                   Failed
                 </dt>
                 <dd className="flex items-baseline">
-                  <div className="text-2xl font-semibold text-red-600">
+                  <div className="text-2xl font-semibold text-danger-text">
                     {data.summary.failureCount}
                   </div>
                 </dd>
@@ -240,18 +240,18 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
         </div>
 
         {/* Success Rate */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="glass p-6">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <TrendingUp className="h-6 w-6 text-gray-400" />
+              <TrendingUp className="h-6 w-6 text-ink-tertiary" />
             </div>
             <div className="ml-5 w-0 flex-1">
               <dl>
-                <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                  Success Rate
+                <dt className="text-sm font-medium text-ink-secondary truncate">
+                  Success rate
                 </dt>
                 <dd className="flex items-baseline">
-                  <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="text-2xl font-semibold text-ink">
                     {data.summary.successRate.toFixed(1)}%
                   </div>
                 </dd>
@@ -262,13 +262,13 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
       </div>
 
       {/* Timeline */}
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-          Recent Activity
+      <div className="glass p-6">
+        <h3 className="text-lg font-medium text-ink mb-4">
+          Recent activity
         </h3>
         {data.activities.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+          <div className="text-center py-8 text-ink-secondary">
+            <Activity className="h-12 w-12 mx-auto mb-3 text-ink-tertiary" />
             <p>No activities recorded yet</p>
           </div>
         ) : (
@@ -277,7 +277,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
               <Link
                 key={`${activity.agentId}-${activity.timestamp}-${index}`}
                 href={`/dashboard/agents/${activity.agentId}`}
-                className="flex gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700 transition-colors cursor-pointer group"
+                className="flex gap-4 p-4 rounded-inset border border-divider bg-glass-inset-gray hover:bg-brand-soft hover:border-brand-text/30 transition-colors cursor-pointer group"
               >
                 {/* Status Icon */}
                 <div className="flex-shrink-0 mt-1">
@@ -288,31 +288,31 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4 mb-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      <span className="font-semibold text-sm text-ink group-hover:text-brand-text transition-colors">
                         {activity.agentName}
                       </span>
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="text-sm text-ink-body">
                         {activity.action}
                       </span>
                       {getStatusBadge(activity.status)}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      <span className="text-xs text-ink-secondary whitespace-nowrap">
                         {formatDistanceToNow(new Date(activity.timestamp), {
                           addSuffix: true,
                         })}
                       </span>
-                      <ExternalLink className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <ExternalLink className="h-3 w-3 text-ink-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
 
                   {activity.details && (
-                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-ink-body mt-1">
                       {activity.details}
                     </p>
                   )}
 
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                  <div className="text-xs text-ink-secondary mt-1 font-mono">
                     Agent ID: {activity.agentId}
                   </div>
                 </div>
@@ -328,7 +328,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
               variant="outline"
               onClick={() => setLimit(limit + 50)}
             >
-              Load More Activities
+              Load more activities
             </Button>
           </div>
         )}
