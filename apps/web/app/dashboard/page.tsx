@@ -12,6 +12,9 @@ import { usePersona } from "@/lib/persona";
 import { AuthGuard } from "@/components/auth-guard";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SecurityLens } from "@/components/overview/security-lens";
+import { ExecutiveLens } from "@/components/overview/executive-lens";
+import type { LensData } from "@/components/overview/types";
 import { cn } from "@/lib/utils";
 
 /* ----------------------------------------------------------------------------
@@ -312,6 +315,8 @@ function DashboardContent() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lensData, setLensData] = useState<LensData | null>(null);
+  const [lensLoading, setLensLoading] = useState(false);
 
   const load = useCallback(async () => {
     // A token handed over on the URL (device flow, OAuth) becomes the session.
@@ -351,6 +356,36 @@ function DashboardContent() {
 
   const permissions = useMemo(() => getDashboardPermissions(data?.user?.role), [data?.user?.role]);
 
+  // The Security and Executive lenses read endpoints the developer lens does not need. They are
+  // fetched only for roles the permission map already allows; a lens never widens authorization.
+  useEffect(() => {
+    if (!data?.user || persona === "developer") return;
+    if (!permissions.canViewSecurityMetrics) {
+      setLensData({ security: null, violations: null, events: null, compliance: null });
+      return;
+    }
+    let cancelled = false;
+    setLensLoading(true);
+    Promise.allSettled([
+      api.getSecurityMetrics(),
+      api.getSecurityViolations(20, 0),
+      api.getRecentVerificationEvents(60),
+      permissions.canViewAdmin ? api.getComplianceStatus() : Promise.reject(new Error("admin only")),
+    ]).then(([security, violations, events, compliance]) => {
+      if (cancelled) return;
+      setLensData({
+        security: security.status === "fulfilled" ? (security.value as LensData["security"]) : null,
+        violations: violations.status === "fulfilled" ? (violations.value as LensData["violations"]) : null,
+        events: events.status === "fulfilled" ? ((events.value as { events: LensData["events"] }).events ?? []) : null,
+        compliance: compliance.status === "fulfilled" ? (compliance.value as LensData["compliance"]) : null,
+      });
+      setLensLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.user, persona, permissions.canViewSecurityMetrics, permissions.canViewAdmin]);
+
   if (loading) return <HomeSkeleton />;
   if (error || !data?.stats) {
     return (
@@ -372,9 +407,15 @@ function DashboardContent() {
       ? Math.round((verification.successCount / verification.totalVerifications) * 1000) / 10
       : null;
 
+  const attention = lensData?.security?.requiresAttention ?? 0;
+  const lensReady = persona === "developer" || (lensData !== null && !lensLoading);
   const headline = zero
     ? "No agents secured yet."
-    : stats.criticalAlerts > 0
+    : persona === "security" && lensReady && attention > 0
+      ? `${attention} ${attention === 1 ? "agent needs" : "agents need"} attention. Everything else is verifying normally.`
+      : persona === "executive" && lensReady
+        ? "Your agent estate at a glance."
+        : stats.criticalAlerts > 0
       ? `${stats.criticalAlerts} critical ${stats.criticalAlerts === 1 ? "alert needs" : "alerts need"} attention.`
       : stats.pendingAgents > 0
         ? `${stats.pendingAgents} ${stats.pendingAgents === 1 ? "agent is" : "agents are"} waiting for verification.`
@@ -389,8 +430,13 @@ function DashboardContent() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-3 px-1">
         <div>
-          <p className="text-xs font-semibold text-ink-secondary">{greeting(data.user?.name)}</p>
+          <p className="text-xs font-semibold text-ink-secondary">{persona === "executive" && !zero ? "Overview" : greeting(data.user?.name)}</p>
           <h1 className="text-headline mt-0.5">{headline}</h1>
+          {persona === "executive" && !zero && lensReady && (
+            <p className="mt-1 text-xs text-ink-secondary">
+              {stats.criticalAlerts > 0 ? `${stats.criticalAlerts} critical ${stats.criticalAlerts === 1 ? "alert needs" : "alerts need"} attention.` : "Everything is verifying normally."}
+            </p>
+          )}
         </div>
         {!zero && (
           <Link href="/dashboard/agents?register=1" className="hidden h-10 items-center gap-2 rounded-pill bg-brand px-5 text-[13.5px] font-bold text-white shadow-accent hover:bg-brand-hover sm:inline-flex">
@@ -400,6 +446,15 @@ function DashboardContent() {
         )}
       </div>
 
+      {!zero && persona !== "developer" && !lensReady && <HomeSkeleton />}
+      {!zero && persona === "security" && lensReady && lensData && (
+        <SecurityLens stats={{ ...stats, agentsById: Object.fromEntries(agents.map((a) => [a.id, a])) }} verification={verification} lens={lensData} />
+      )}
+      {!zero && persona === "executive" && lensReady && lensData && (
+        <ExecutiveLens stats={stats} verification={verification} activity={activity} agents={agents} lens={lensData} />
+      )}
+      {(zero || persona === "developer") && (
+        <>
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <KpiTile label="Agents secured" value={stats.totalAgents.toLocaleString()} delta={`${stats.verifiedAgents.toLocaleString()} verified`} href="/dashboard/agents" />
@@ -467,6 +522,8 @@ function DashboardContent() {
         )}
       </div>
 
+        </>
+      )}
       {permissions.canViewRecentActivity && !zero && <ActivityTimeline defaultLimit={8} />}
     </div>
   );
