@@ -58,21 +58,21 @@ interface FlowNodeData {
 function MCPNode({ data }: { data: any }) {
   return (
     <div
-      className="flex flex-col items-center justify-center p-3 rounded-lg border-2 shadow-md bg-white dark:bg-gray-800 min-w-[120px] cursor-pointer hover:shadow-lg transition-shadow"
+      className="flex flex-col items-center justify-center p-3 rounded-panel border-2 shadow-panel bg-glass backdrop-blur-card min-w-[120px] cursor-pointer hover:shadow-chrome transition-shadow"
       style={{ borderColor: data.color }}
     >
       <Server
         className="h-6 w-6 mb-1"
         style={{ color: data.color }}
       />
-      <div className="text-xs font-medium text-gray-900 dark:text-gray-100 text-center max-w-[100px] truncate">
+      <div className="text-xs font-medium text-ink text-center max-w-[100px] truncate">
         {data.label}
       </div>
-      <div className="text-[10px] text-gray-500 dark:text-gray-400">
+      <div className="text-[10px] text-ink-secondary">
         {data.trustScore.toFixed(0)}% trust
       </div>
       <div
-        className="mt-1 px-2 py-0.5 rounded-full text-[9px] font-medium"
+        className="mt-1 px-2 py-0.5 rounded-pill text-[9px] font-medium"
         style={{
           backgroundColor: `${data.color}20`,
           color: data.color,
@@ -88,17 +88,17 @@ function MCPNode({ data }: { data: any }) {
 function AgentNode({ data }: { data: any }) {
   return (
     <div
-      className="flex flex-col items-center justify-center p-3 rounded-full border-2 shadow-md bg-white dark:bg-gray-800 min-w-[100px] min-h-[100px] cursor-pointer hover:shadow-lg transition-shadow"
+      className="flex flex-col items-center justify-center p-3 rounded-full border-2 shadow-panel bg-glass backdrop-blur-card min-w-[100px] min-h-[100px] cursor-pointer hover:shadow-chrome transition-shadow"
       style={{ borderColor: data.color }}
     >
       <Bot
         className="h-5 w-5 mb-1"
         style={{ color: data.color }}
       />
-      <div className="text-xs font-medium text-gray-900 dark:text-gray-100 text-center max-w-[80px] truncate">
+      <div className="text-xs font-medium text-ink text-center max-w-[80px] truncate">
         {data.label}
       </div>
-      <div className="text-[10px] text-gray-500 dark:text-gray-400">
+      <div className="text-[10px] text-ink-secondary">
         {data.trustScore.toFixed(0)}%
       </div>
     </div>
@@ -197,15 +197,15 @@ export function MCPNetworkGraph({
         type: "smoothstep",
         animated: edge.type === "attestation",
         style: {
-          stroke: edge.type === "attestation" ? "#22c55e" : "#6b7280",
+          stroke: edge.type === "attestation" ? "var(--green)" : "var(--text-tertiary)",
           strokeWidth: edge.weight,
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: edge.type === "attestation" ? "#22c55e" : "#6b7280",
+          color: edge.type === "attestation" ? "var(--green)" : "var(--text-tertiary)",
         },
         label: edge.type === "attestation" ? "attested" : undefined,
-        labelStyle: { fontSize: 10, fill: "#6b7280" },
+        labelStyle: { fontSize: 10, fill: "var(--text-secondary)" },
       }));
 
       setNodes(flowNodes);
@@ -235,12 +235,12 @@ export function MCPNetworkGraph({
   if (loading) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+        className="flex items-center justify-center glass rounded-panel"
         style={{ height }}
       >
         <div className="flex flex-col items-center gap-2">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
+          <span className="text-sm text-ink-secondary">
             Loading network graph...
           </span>
         </div>
@@ -251,17 +251,17 @@ export function MCPNetworkGraph({
   if (error) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+        className="flex items-center justify-center glass-alert rounded-panel"
         style={{ height }}
       >
         <div className="flex flex-col items-center gap-2">
-          <AlertCircle className="h-8 w-8 text-red-500" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">
+          <AlertCircle className="h-8 w-8 text-danger-text" />
+          <span className="text-sm text-ink-secondary">
             {error}
           </span>
           <button
             onClick={fetchGraphData}
-            className="mt-2 px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-1"
+            className="mt-2 px-3 py-1 text-sm rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover flex items-center gap-1"
           >
             <RefreshCw className="h-3 w-3" />
             Retry
@@ -274,15 +274,15 @@ export function MCPNetworkGraph({
   if (nodes.length === 0) {
     return (
       <div
-        className="flex items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+        className="flex items-center justify-center glass rounded-panel"
         style={{ height }}
       >
         <div className="flex flex-col items-center gap-2 text-center">
-          <Server className="h-12 w-12 text-gray-300 dark:text-gray-600" />
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+          <Server className="h-12 w-12 text-ink-tertiary" />
+          <p className="text-sm font-medium text-ink-secondary">
             No connections yet
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500 max-w-xs">
+          <p className="text-xs text-ink-tertiary max-w-xs">
             Register MCP servers and configure agent connections to see the
             network graph
           </p>
@@ -304,58 +304,61 @@ export function MCPNetworkGraph({
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.5}
         maxZoom={2}
-        className="bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700"
+        className="bg-glass rounded-panel border border-divider"
       >
-        {showControls && <Controls className="!bg-white dark:!bg-gray-800 !border-gray-200 dark:!border-gray-700" />}
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#d1d5db" />
+        {showControls && <Controls className="!bg-glass !border-glass-border" />}
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--stroke)" />
       </ReactFlow>
 
       {/* Legend */}
       {showLegend && (
-        <div className="absolute bottom-4 left-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm">
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <div className="absolute bottom-4 left-4 glass rounded-panel p-3">
+          <div className="text-xs font-medium text-ink mb-2">
             Legend
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded border-2 border-gray-400 flex items-center justify-center">
-                <Server className="h-2 w-2 text-gray-400" />
+              <div className="w-4 h-4 rounded border-2 border-ink-tertiary flex items-center justify-center">
+                <Server className="h-2 w-2 text-ink-tertiary" />
               </div>
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">
-                MCP Server
+              <span className="text-[10px] text-ink-secondary">
+                MCP server
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full border-2 border-gray-400 flex items-center justify-center">
-                <Bot className="h-2 w-2 text-gray-400" />
+              <div className="w-4 h-4 rounded-full border-2 border-ink-tertiary flex items-center justify-center">
+                <Bot className="h-2 w-2 text-ink-tertiary" />
               </div>
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              <span className="text-[10px] text-ink-secondary">
                 Agent
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-0.5 bg-gray-400"></div>
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              <div className="w-6 h-0.5 bg-ink-tertiary"></div>
+              <span className="text-[10px] text-ink-secondary">
                 Connection
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-0.5 bg-green-500 animate-pulse"></div>
-              <span className="text-[10px] text-gray-600 dark:text-gray-400">
+              <div className="w-6 h-0.5 bg-success animate-pulse"></div>
+              <span className="text-[10px] text-ink-secondary">
                 Attestation
               </span>
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-            <div className="text-[10px] text-gray-500 dark:text-gray-400">
-              Trust Score Colors
+          <div className="mt-2 pt-2 border-t border-divider">
+            <div className="text-[10px] text-ink-secondary">
+              Trust score colors
             </div>
+            {/* These swatches echo the exact scale the API sends as node.color
+                (backend trustScoreColor). They are data, not theme chrome:
+                tokenising them would stop the legend matching the drawn nodes. */}
             <div className="flex gap-1 mt-1">
-              <div className="w-3 h-3 rounded bg-green-500" title="≥80%"></div>
-              <div className="w-3 h-3 rounded bg-lime-500" title="60-79%"></div>
-              <div className="w-3 h-3 rounded bg-yellow-500" title="40-59%"></div>
-              <div className="w-3 h-3 rounded bg-orange-500" title="20-39%"></div>
-              <div className="w-3 h-3 rounded bg-red-500" title="<20%"></div>
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: "#22c55e" }} title="≥80%"></div>
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: "#84cc16" }} title="60-79%"></div>
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: "#eab308" }} title="40-59%"></div>
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: "#f97316" }} title="20-39%"></div>
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: "#ef4444" }} title="<20%"></div>
             </div>
           </div>
         </div>
@@ -364,10 +367,10 @@ export function MCPNetworkGraph({
       {/* Refresh button */}
       <button
         onClick={fetchGraphData}
-        className="absolute top-4 right-4 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        className="absolute top-4 right-4 p-2 glass rounded-inset hover:bg-glass-inset-gray transition-colors"
         title="Refresh graph"
       >
-        <RefreshCw className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+        <RefreshCw className="h-4 w-4 text-ink-secondary" />
       </button>
     </div>
   );

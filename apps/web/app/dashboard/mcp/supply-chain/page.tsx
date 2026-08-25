@@ -62,6 +62,7 @@ import {
   Legend,
 } from "recharts";
 import { api } from "@/lib/api";
+import { escapeHtml } from "@/lib/html-escape";
 import { formatDateTime } from "@/lib/date-utils";
 import { AuthGuard } from "@/components/auth-guard";
 
@@ -107,19 +108,19 @@ interface SupplyChainStats {
 
 // Colors for charts
 const CHART_COLORS = {
-  primary: "#3b82f6",
-  success: "#22c55e",
-  warning: "#f59e0b",
-  danger: "#ef4444",
-  info: "#06b6d4",
-  purple: "#8b5cf6",
+  primary: "var(--brand)",
+  success: "var(--green)",
+  warning: "var(--amber)",
+  danger: "var(--red)",
+  info: "var(--brand-sky)",
+  purple: "var(--brand-indigo)",
 };
 
 const CONFIDENCE_COLORS = [
-  { range: "90-100%", color: "#22c55e", fill: "#dcfce7" },
-  { range: "70-89%", color: "#3b82f6", fill: "#dbeafe" },
-  { range: "50-69%", color: "#f59e0b", fill: "#fef3c7" },
-  { range: "0-49%", color: "#ef4444", fill: "#fee2e2" },
+  { range: "90-100%", color: "var(--green)", fill: "var(--green-fill)" },
+  { range: "70-89%", color: "var(--brand)", fill: "var(--brand-soft)" },
+  { range: "50-69%", color: "var(--amber)", fill: "var(--amber-fill)" },
+  { range: "0-49%", color: "var(--red)", fill: "var(--red-fill)" },
 ];
 
 function StatCard({
@@ -129,9 +130,9 @@ function StatCard({
   change,
   changeType,
   suffix,
-  iconBg = "bg-gray-100 dark:bg-gray-700",
-  iconColor = "text-gray-500 dark:text-gray-400",
-  valueColor = "text-gray-900 dark:text-gray-100",
+  iconBg = "bg-glass-inset-gray",
+  iconColor = "text-ink-secondary",
+  valueColor = "text-ink",
 }: {
   icon: any;
   label: string;
@@ -144,21 +145,21 @@ function StatCard({
   valueColor?: string;
 }) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="glass p-6">
       <div className="flex items-center">
         <div className={`flex-shrink-0 p-2 rounded-lg ${iconBg}`}>
           <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>
         <div className="ml-4 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+            <dt className="text-sm font-medium text-ink-secondary truncate">
               {label}
             </dt>
             <dd className="flex items-baseline">
               <div className={`text-2xl font-semibold ${valueColor}`}>
                 {value}
                 {suffix && (
-                  <span className="text-lg font-normal text-gray-500 ml-1">
+                  <span className="text-lg font-normal text-ink-secondary ml-1">
                     {suffix}
                   </span>
                 )}
@@ -167,10 +168,10 @@ function StatCard({
                 <div
                   className={`ml-2 flex items-baseline text-sm font-semibold ${
                     changeType === "positive"
-                      ? "text-green-600"
+                      ? "text-success-text"
                       : changeType === "negative"
-                      ? "text-red-600"
-                      : "text-gray-500"
+                      ? "text-danger-text"
+                      : "text-ink-secondary"
                   }`}
                 >
                   {changeType === "positive" && (
@@ -195,20 +196,20 @@ function StatusBadge({ status }: { status: string }) {
     switch (status.toLowerCase()) {
       case "verified":
       case "active":
-        return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+        return "bg-success-fill text-success-text";
       case "pending":
-        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
+        return "bg-warning-fill text-warning-text";
       case "inactive":
       case "revoked":
-        return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+        return "bg-danger-fill text-danger-text";
       default:
-        return "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300";
+        return "bg-glass-inset-gray text-ink-body";
     }
   };
 
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusStyles(
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-pill text-xs font-medium ${getStatusStyles(
         status
       )}`}
     >
@@ -220,17 +221,17 @@ function StatusBadge({ status }: { status: string }) {
 function ConfidenceScoreBadge({ score }: { score: number }) {
   const getScoreStyles = (score: number) => {
     if (score >= 90)
-      return "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300";
+      return "bg-success-fill text-success-text";
     if (score >= 70)
-      return "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300";
+      return "bg-brand-soft text-brand-text";
     if (score >= 50)
-      return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300";
-    return "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300";
+      return "bg-warning-fill text-warning-text";
+    return "bg-danger-fill text-danger-text";
   };
 
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getScoreStyles(
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-pill text-xs font-medium ${getScoreStyles(
         score
       )}`}
     >
@@ -703,6 +704,8 @@ function SupplyChainPage() {
 
   // Generate printable HTML for PDF
   const generateABOMPrintHTML = (data: ABOMData): string => {
+    // Every data value is escaped: the report is written into a same-origin window.
+    const esc = escapeHtml;
     return `
       <!DOCTYPE html>
       <html>
@@ -733,7 +736,7 @@ function SupplyChainPage() {
         <h1>Agent Bill of Materials (ABOM)</h1>
         <div class="meta">
           <p>Generated: ${new Date(data.generatedAt).toLocaleString()}</p>
-          <p>Version: ${data.version}</p>
+          <p>Version: ${esc(data.version)}</p>
         </div>
 
         <h2>Summary</h2>
@@ -748,14 +751,14 @@ function SupplyChainPage() {
 
         <h2>Agents Inventory</h2>
         <table>
-          <tr><th>Name</th><th>Status</th><th>Trust Score</th><th>Capabilities</th><th>Data Access</th></tr>
+          <tr><th>Name</th><th>Status</th><th>Trust score</th><th>Capabilities</th><th>Data access</th></tr>
           ${data.agents.map((a) => `
             <tr>
-              <td>${a.name}</td>
-              <td><span class="badge badge-${a.status === "active" ? "green" : "yellow"}">${a.status}</span></td>
-              <td>${a.trustScore}%</td>
-              <td>${(a.capabilities || []).map((c) => `<span class="badge badge-blue">${c}</span>`).join(" ")}</td>
-              <td>${(a.dataAccess || []).map((d) => `<span class="badge badge-yellow">${d}</span>`).join(" ")}</td>
+              <td>${esc(a.name)}</td>
+              <td><span class="badge badge-${a.status === "active" ? "green" : "yellow"}">${esc(a.status)}</span></td>
+              <td>${Math.round((a.trustScore || 0) * 100)}%</td>
+              <td>${(a.capabilities || []).map((c) => `<span class="badge badge-blue">${esc(c)}</span>`).join(" ")}</td>
+              <td>${(a.dataAccess || []).map((d) => `<span class="badge badge-yellow">${esc(d)}</span>`).join(" ")}</td>
             </tr>
           `).join("")}
         </table>
@@ -765,9 +768,9 @@ function SupplyChainPage() {
           <tr><th>Name</th><th>URL</th><th>Status</th><th>Tools</th><th>Attestations</th></tr>
           ${data.mcpServers.map((s) => `
             <tr>
-              <td>${s.name}</td>
-              <td style="font-size:12px;color:#6b7280;">${s.url}</td>
-              <td><span class="badge badge-${s.status === "verified" ? "green" : "yellow"}">${s.status}</span></td>
+              <td>${esc(s.name)}</td>
+              <td style="font-size:12px;color:#6b7280;">${esc(s.url)}</td>
+              <td><span class="badge badge-${s.status === "verified" ? "green" : "yellow"}">${esc(s.status)}</span></td>
               <td>${s.toolCount || 0}</td>
               <td>${s.attestationCount || 0}</td>
             </tr>
@@ -779,9 +782,9 @@ function SupplyChainPage() {
           <tr><th>Agent</th><th>MCP Server</th><th>Type</th><th>Attestations</th><th>Status</th></tr>
           ${data.connections.map((c) => `
             <tr>
-              <td>${c.agentName}</td>
-              <td>${c.mcpServerName}</td>
-              <td>${c.connectionType}</td>
+              <td>${esc(c.agentName)}</td>
+              <td>${esc(c.mcpServerName)}</td>
+              <td>${esc(c.connectionType)}</td>
               <td>${c.attestationCount}</td>
               <td><span class="badge badge-${c.isActive ? "green" : "yellow"}">${c.isActive ? "Active" : "Inactive"}</span></td>
             </tr>
@@ -801,8 +804,8 @@ function SupplyChainPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-text mx-auto mb-4" />
+          <p className="text-ink-secondary">
             Loading supply chain data...
           </p>
         </div>
@@ -811,16 +814,16 @@ function SupplyChainPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+    <div className="min-h-screen p-6">
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-              <GitBranch className="h-8 w-8 text-blue-500" />
-              Supply Chain & ABOM
+            <h1 className="text-3xl font-bold text-ink flex items-center gap-3">
+              <GitBranch className="h-8 w-8 text-brand-text" />
+              Supply chain & ABOM
             </h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
+            <p className="mt-2 text-ink-secondary">
               Monitor MCP server dependencies, attestation health, and your Agent Bill of Materials.
             </p>
           </div>
@@ -828,7 +831,7 @@ function SupplyChainPage() {
             <button
               onClick={() => fetchData(true)}
               disabled={refreshing}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-stroke rounded-pill text-sm font-medium text-ink-body hover:bg-glass-inset-gray disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
@@ -838,10 +841,10 @@ function SupplyChainPage() {
             {activeTab === "analytics" ? (
               <button
                 onClick={handleExport}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                className="inline-flex items-center px-4 py-2 rounded-pill bg-brand text-sm font-medium text-white shadow-glow hover:bg-brand-hover"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export Report
+                Export report
               </button>
             ) : (
               <div className="relative">
@@ -850,23 +853,23 @@ function SupplyChainPage() {
                     const dropdown = document.getElementById("abom-export-dropdown");
                     if (dropdown) dropdown.classList.toggle("hidden");
                   }}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 rounded-pill bg-brand text-sm font-medium text-white shadow-glow hover:bg-brand-hover"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Export ABOM
                 </button>
                 <div
                   id="abom-export-dropdown"
-                  className="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-10"
+                  className="hidden absolute right-0 mt-2 w-48 glass-chrome overflow-hidden z-10"
                 >
                   <button
                     onClick={() => {
                       handleExportABOM("json");
                       document.getElementById("abom-export-dropdown")?.classList.add("hidden");
                     }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="flex items-center w-full px-4 py-2 text-sm text-ink-body hover:bg-glass-inset-gray"
                   >
-                    <FileJson className="h-4 w-4 mr-2 text-blue-500" />
+                    <FileJson className="h-4 w-4 mr-2 text-brand-text" />
                     Export as JSON
                   </button>
                   <button
@@ -874,9 +877,9 @@ function SupplyChainPage() {
                       handleExportABOM("yaml");
                       document.getElementById("abom-export-dropdown")?.classList.add("hidden");
                     }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="flex items-center w-full px-4 py-2 text-sm text-ink-body hover:bg-glass-inset-gray"
                   >
-                    <FileCode className="h-4 w-4 mr-2 text-green-500" />
+                    <FileCode className="h-4 w-4 mr-2 text-success-text" />
                     Export as YAML
                   </button>
                   <button
@@ -884,9 +887,9 @@ function SupplyChainPage() {
                       handleExportABOM("pdf");
                       document.getElementById("abom-export-dropdown")?.classList.add("hidden");
                     }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="flex items-center w-full px-4 py-2 text-sm text-ink-body hover:bg-glass-inset-gray"
                   >
-                    <Printer className="h-4 w-4 mr-2 text-red-500" />
+                    <Printer className="h-4 w-4 mr-2 text-danger-text" />
                     Print / PDF
                   </button>
                 </div>
@@ -898,19 +901,19 @@ function SupplyChainPage() {
 
       {/* Tabs */}
       <div className="mb-6">
-        <div className="border-b border-gray-200 dark:border-gray-700">
+        <div className="border-b border-divider">
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab("analytics")}
               className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                 activeTab === "analytics"
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                  ? "border-brand text-brand-text"
+                  : "border-transparent text-ink-secondary hover:text-ink hover:border-stroke"
               }`}
             >
               <BarChart3 className="h-4 w-4" />
               Analytics
-              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                 {stats?.totalMCPServers || 0}
               </span>
             </button>
@@ -918,13 +921,13 @@ function SupplyChainPage() {
               onClick={() => setActiveTab("abom")}
               className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                 activeTab === "abom"
-                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300"
+                  ? "border-brand text-brand-text"
+                  : "border-transparent text-ink-secondary hover:text-ink hover:border-stroke"
               }`}
             >
               <Package className="h-4 w-4" />
               ABOM
-              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 rounded-full">
+              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-brand-soft text-brand-text rounded-pill">
                 Bill of Materials
               </span>
             </button>
@@ -939,15 +942,15 @@ function SupplyChainPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           icon={Server}
-          label="Total MCP Servers"
+          label="Total MCP servers"
           value={stats?.totalMCPServers || 0}
-          iconBg="bg-purple-100 dark:bg-purple-900/30"
-          iconColor="text-purple-600 dark:text-purple-400"
-          valueColor="text-purple-600 dark:text-purple-400"
+          iconBg="bg-brand-soft"
+          iconColor="text-brand-indigo"
+          valueColor="text-brand-indigo"
         />
         <StatCard
           icon={Shield}
-          label="Verified Servers"
+          label="Verified servers"
           value={stats?.verifiedServers || 0}
           change={
             stats && stats.totalMCPServers > 0
@@ -955,18 +958,18 @@ function SupplyChainPage() {
               : undefined
           }
           changeType="positive"
-          iconBg="bg-green-100 dark:bg-green-900/30"
-          iconColor="text-green-600 dark:text-green-400"
-          valueColor="text-green-600 dark:text-green-400"
+          iconBg="bg-success-fill"
+          iconColor="text-success-text"
+          valueColor="text-success-text"
         />
         <StatCard
           icon={Link2}
-          label="Active Connections"
+          label="Active connections"
           value={stats?.activeConnections || 0}
           suffix={`/ ${stats?.totalConnections || 0}`}
-          iconBg="bg-cyan-100 dark:bg-cyan-900/30"
-          iconColor="text-cyan-600 dark:text-cyan-400"
-          valueColor="text-cyan-600 dark:text-cyan-400"
+          iconBg="bg-brand-soft"
+          iconColor="text-brand-sky"
+          valueColor="text-brand-sky"
         />
         <StatCard
           icon={AlertCircle}
@@ -975,9 +978,9 @@ function SupplyChainPage() {
           changeType={
             unmappedMcpCount > 0 ? "negative" : "positive"
           }
-          iconBg="bg-orange-100 dark:bg-orange-900/30"
-          iconColor="text-orange-600 dark:text-orange-400"
-          valueColor="text-orange-600 dark:text-orange-400"
+          iconBg="bg-warning-fill"
+          iconColor="text-warning-text"
+          valueColor="text-warning-text"
         />
       </div>
 
@@ -985,54 +988,54 @@ function SupplyChainPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           icon={Clock}
-          label="Pending Verification"
+          label="Pending verification"
           value={stats?.pendingServers || 0}
           changeType={
             (stats?.pendingServers || 0) > 0 ? "negative" : "positive"
           }
-          iconBg="bg-yellow-100 dark:bg-yellow-900/30"
-          iconColor="text-yellow-600 dark:text-yellow-400"
-          valueColor="text-yellow-600 dark:text-yellow-400"
+          iconBg="bg-warning-fill"
+          iconColor="text-warning-text"
+          valueColor="text-warning-text"
         />
         <StatCard
           icon={Activity}
           label="Attestations (24h)"
           value={stats?.attestationsLast24h || 0}
-          iconBg="bg-blue-100 dark:bg-blue-900/30"
-          iconColor="text-blue-600 dark:text-blue-400"
-          valueColor="text-blue-600 dark:text-blue-400"
+          iconBg="bg-brand-soft"
+          iconColor="text-brand-text"
+          valueColor="text-brand-text"
         />
         <StatCard
           icon={AlertTriangle}
-          label="Capability Drift Alerts"
+          label="Capability drift alerts"
           value={stats?.capabilityDriftAlerts || 0}
           changeType={
             (stats?.capabilityDriftAlerts || 0) > 0 ? "negative" : "positive"
           }
-          iconBg="bg-red-100 dark:bg-red-900/30"
-          iconColor="text-red-600 dark:text-red-400"
-          valueColor="text-red-600 dark:text-red-400"
+          iconBg="bg-danger-fill"
+          iconColor="text-danger-text"
+          valueColor="text-danger-text"
         />
         <StatCard
           icon={Box}
-          label="Unique Capabilities"
+          label="Total tools"
           value={mcpServers.reduce(
             (sum, s) => sum + (s.toolCount || 0),
             0
           )}
-          iconBg="bg-indigo-100 dark:bg-indigo-900/30"
-          iconColor="text-indigo-600 dark:text-indigo-400"
-          valueColor="text-indigo-600 dark:text-indigo-400"
+          iconBg="bg-brand-soft"
+          iconColor="text-brand-indigo"
+          valueColor="text-brand-indigo"
         />
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Attestation Trend Chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <BarChart3 className="h-5 w-5 text-blue-500" />
-            Attestation Activity (7 Days)
+        <div className="glass p-6">
+          <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-brand-text" />
+            Attestation activity (7 days)
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -1059,19 +1062,20 @@ function SupplyChainPage() {
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  className="stroke-gray-200 dark:stroke-gray-700"
+                  className="stroke-divider"
                 />
                 <XAxis
                   dataKey="date"
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  tick={{ fill: "var(--text-tertiary)", fontSize: 12 }}
                 />
-                <YAxis tick={{ fill: "#9ca3af", fontSize: 12 }} />
+                <YAxis tick={{ fill: "var(--text-tertiary)", fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1f2937",
-                    border: "none",
-                    borderRadius: "8px",
-                    color: "#fff",
+                    backgroundColor: "var(--glass-fill)",
+                    border: "1px solid var(--glass-border)",
+                    borderRadius: "12px",
+                    boxShadow: "var(--shadow-card)",
+                    color: "var(--text-primary)",
                   }}
                 />
                 <Area
@@ -1088,10 +1092,10 @@ function SupplyChainPage() {
         </div>
 
         {/* Confidence Distribution Chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <Shield className="h-5 w-5 text-green-500" />
-            Confidence Score Distribution
+        <div className="glass p-6">
+          <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-success-text" />
+            Confidence score distribution
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -1112,16 +1116,17 @@ function SupplyChainPage() {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1f2937",
-                    border: "none",
-                    borderRadius: "8px",
-                    color: "#fff",
+                    backgroundColor: "var(--glass-fill)",
+                    border: "1px solid var(--glass-border)",
+                    borderRadius: "12px",
+                    boxShadow: "var(--shadow-card)",
+                    color: "var(--text-primary)",
                   }}
                 />
                 <Legend
                   wrapperStyle={{ paddingTop: "20px" }}
                   formatter={(value: string) => (
-                    <span className="text-gray-600 dark:text-gray-300 text-sm">
+                    <span className="text-ink-secondary text-sm">
                       {value}
                     </span>
                   )}
@@ -1133,24 +1138,24 @@ function SupplyChainPage() {
       </div>
 
       {/* MCP Servers Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="glass overflow-hidden mb-8">
+        <div className="px-6 py-4 border-b border-divider">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Server className="h-5 w-5 text-purple-500" />
-                MCP Server Dependencies
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                <Server className="h-5 w-5 text-brand-indigo" />
+                MCP server dependencies
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {filteredMcpServers.length}
                 </span>
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 All MCP servers in your supply chain with their attestation status
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
                 <input
                   type="text"
                   placeholder="Search servers..."
@@ -1159,7 +1164,7 @@ function SupplyChainPage() {
                     setMcpSearchFilter(e.target.value);
                     setMcpPage(1);
                   }}
-                  className="pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-48"
+                  className="pl-9 pr-3 py-2 text-sm border border-stroke rounded-inset-sm bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent w-full sm:w-48"
                 />
               </div>
               <select
@@ -1168,9 +1173,9 @@ function SupplyChainPage() {
                   setMcpStatusFilter(e.target.value);
                   setMcpPage(1);
                 }}
-                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-3 py-2 text-sm border border-stroke rounded-inset-sm bg-glass-inset text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
               >
-                <option value="all">All Status</option>
+                <option value="all">All statuses</option>
                 <option value="verified">Verified</option>
                 <option value="pending">Pending</option>
                 <option value="active">Active</option>
@@ -1180,35 +1185,35 @@ function SupplyChainPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
+          <table className="min-w-full divide-y divide-divider">
+            <thead className="bg-glass-inset-gray">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Server
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Attestations
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Capabilities
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Last Attested
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                  Last attested
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-divider">
               {paginatedMcpServers.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
+                    className="px-6 py-12 text-center text-ink-secondary"
                   >
                     <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p className="text-lg font-medium">
@@ -1227,16 +1232,16 @@ function SupplyChainPage() {
                 paginatedMcpServers.map((server) => (
                   <tr
                     key={server.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    className="hover:bg-glass-inset-gray"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <Server className="h-5 w-5 text-gray-400 mr-3" />
+                        <Server className="h-5 w-5 text-ink-tertiary mr-3" />
                         <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          <div className="text-sm font-medium text-ink">
                             {server.name}
                           </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">
+                          <div className="text-sm text-ink-secondary truncate max-w-xs">
                             {server.url}
                           </div>
                         </div>
@@ -1245,13 +1250,13 @@ function SupplyChainPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge status={server.status} />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink">
                       {server.attestationCount || 0}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {server.toolCount || 0} tools
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {server.lastAttestedAt || server.lastVerifiedAt
                         ? formatDateTime(server.lastAttestedAt || server.lastVerifiedAt || "")
                         : "Never"}
@@ -1261,7 +1266,7 @@ function SupplyChainPage() {
                         onClick={() =>
                           router.push(`/dashboard/mcp/${server.id}`)
                         }
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                        className="text-brand-text hover:text-brand"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -1274,8 +1279,8 @@ function SupplyChainPage() {
         </div>
         {/* MCP Servers Pagination */}
         {filteredMcpServers.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <div className="px-6 py-4 border-t border-divider flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-ink-secondary">
               <span>Show</span>
               <select
                 value={mcpPageSize}
@@ -1283,7 +1288,7 @@ function SupplyChainPage() {
                   setMcpPageSize(Number(e.target.value));
                   setMcpPage(1);
                 }}
-                className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                className="px-2 py-1 border border-stroke rounded-inset-sm bg-glass-inset text-ink text-sm"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -1296,17 +1301,17 @@ function SupplyChainPage() {
               <button
                 onClick={() => setMcpPage((p) => Math.max(1, p - 1))}
                 disabled={mcpPage === 1}
-                className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink-body hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm text-gray-700 dark:text-gray-300">
+              <span className="text-sm text-ink-body">
                 Page {mcpPage} of {totalMcpPages || 1}
               </span>
               <button
                 onClick={() => setMcpPage((p) => Math.min(totalMcpPages, p + 1))}
                 disabled={mcpPage >= totalMcpPages}
-                className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink-body hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -1316,24 +1321,24 @@ function SupplyChainPage() {
       </div>
 
       {/* Agent Connections Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="glass overflow-hidden">
+        <div className="px-6 py-4 border-b border-divider">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Link2 className="h-5 w-5 text-cyan-500" />
-                Agent-MCP Connections
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-brand-sky" />
+                Agent-MCP connections
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {filteredConnections.length}
                 </span>
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 Active connections between agents and MCP servers
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
                 <input
                   type="text"
                   placeholder="Search agents or servers..."
@@ -1342,7 +1347,7 @@ function SupplyChainPage() {
                     setConnSearchFilter(e.target.value);
                     setConnPage(1);
                   }}
-                  className="pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-56"
+                  className="pl-9 pr-3 py-2 text-sm border border-stroke rounded-inset-sm bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent w-full sm:w-56"
                 />
               </div>
               <select
@@ -1351,9 +1356,9 @@ function SupplyChainPage() {
                   setConnStatusFilter(e.target.value);
                   setConnPage(1);
                 }}
-                className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-3 py-2 text-sm border border-stroke rounded-inset-sm bg-glass-inset text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
               >
-                <option value="all">All Status</option>
+                <option value="all">All statuses</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
@@ -1361,38 +1366,38 @@ function SupplyChainPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-900">
+          <table className="min-w-full divide-y divide-divider">
+            <thead className="bg-glass-inset-gray">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Agent
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  MCP Server
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                  MCP server
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Connection Type
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                  Connection type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Attestations
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  First Connected
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                  First connected
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Last Attested
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                  Last attested
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                   Status
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-divider">
               {paginatedConnections.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
+                    className="px-6 py-12 text-center text-ink-secondary"
                   >
                     <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p className="text-lg font-medium">
@@ -1411,48 +1416,48 @@ function SupplyChainPage() {
                 paginatedConnections.map((conn) => (
                   <tr
                     key={conn.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    className="hover:bg-glass-inset-gray"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                      <div className="text-sm font-medium text-ink">
                         {conn.agentName || conn.agentId.slice(0, 8)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">
+                      <div className="text-sm text-ink">
                         {conn.mcpServerName || conn.mcpServerId.slice(0, 8)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-pill text-xs font-medium ${
                           conn.connectionType === "attested"
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                            : "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300"
+                            ? "bg-success-fill text-success-text"
+                            : "bg-glass-inset-gray text-ink-body"
                         }`}
                       >
                         {conn.connectionType}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink">
                       {conn.attestationCount}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {formatDateTime(conn.firstConnectedAt)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {conn.lastAttestedAt
                         ? formatDateTime(conn.lastAttestedAt)
                         : "Never"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {conn.isActive ? (
-                        <span className="inline-flex items-center text-green-600 dark:text-green-400">
+                        <span className="inline-flex items-center text-success-text">
                           <CheckCircle2 className="h-4 w-4 mr-1" />
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center text-gray-500 dark:text-gray-400">
+                        <span className="inline-flex items-center text-ink-secondary">
                           <XCircle className="h-4 w-4 mr-1" />
                           Inactive
                         </span>
@@ -1466,8 +1471,8 @@ function SupplyChainPage() {
         </div>
         {/* Connections Pagination */}
         {filteredConnections.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <div className="px-6 py-4 border-t border-divider flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-ink-secondary">
               <span>Show</span>
               <select
                 value={connPageSize}
@@ -1475,7 +1480,7 @@ function SupplyChainPage() {
                   setConnPageSize(Number(e.target.value));
                   setConnPage(1);
                 }}
-                className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                className="px-2 py-1 border border-stroke rounded-inset-sm bg-glass-inset text-ink text-sm"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -1488,17 +1493,17 @@ function SupplyChainPage() {
               <button
                 onClick={() => setConnPage((p) => Math.max(1, p - 1))}
                 disabled={connPage === 1}
-                className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink-body hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-sm text-gray-700 dark:text-gray-300">
+              <span className="text-sm text-ink-body">
                 Page {connPage} of {totalConnPages || 1}
               </span>
               <button
                 onClick={() => setConnPage((p) => Math.min(totalConnPages, p + 1))}
                 disabled={connPage >= totalConnPages}
-                className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink-body hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -1509,57 +1514,57 @@ function SupplyChainPage() {
 
       {/* Capability Drift Alerts */}
       {driftAlerts.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mt-8">
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Capability Drift Alerts
-              <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-full">
+        <div className="glass overflow-hidden mt-8">
+          <div className="px-6 py-4 border-b border-divider">
+            <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-warning-text" />
+              Capability drift alerts
+              <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-warning-fill text-warning-text rounded-pill">
                 {driftAlertCount}
               </span>
             </h3>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-ink-secondary">
               Detected changes in MCP server capabilities that may require attention
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900">
+            <table className="min-w-full divide-y divide-divider">
+              <thead className="bg-glass-inset-gray">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                     Severity
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    MCP Server
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                    MCP server
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                     Capability
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Change Type
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
+                    Change type
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                     Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                     Detected
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-divider">
                 {paginatedDriftAlerts.map((alert) => (
                   <tr
                     key={alert.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    className="hover:bg-glass-inset-gray"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-pill text-xs font-medium ${
                           alert.severity === "high"
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
+                            ? "bg-danger-fill text-danger-text"
                             : alert.severity === "medium"
-                            ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
-                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
+                            ? "bg-warning-fill text-warning-text"
+                            : "bg-brand-soft text-brand-text"
                         }`}
                       >
                         {alert.severity === "high" && (
@@ -1569,26 +1574,26 @@ function SupplyChainPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                      <div className="text-sm font-medium text-ink">
                         {alert.mcpServerName}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">
+                      <div className="text-sm text-ink">
                         {alert.capabilityName}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-ink-secondary">
                         {alert.capabilityType}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-pill text-xs font-medium ${
                           alert.driftType === "added"
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                            ? "bg-success-fill text-success-text"
                             : alert.driftType === "removed"
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
-                            : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
+                            ? "bg-danger-fill text-danger-text"
+                            : "bg-warning-fill text-warning-text"
                         }`}
                       >
                         {alert.driftType}
@@ -1596,13 +1601,13 @@ function SupplyChainPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div
-                        className="text-sm text-gray-500 dark:text-gray-400 max-w-md truncate"
+                        className="text-sm text-ink-secondary max-w-md truncate"
                         title={alert.description}
                       >
                         {alert.description}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {formatDateTime(alert.detectedAt)}
                     </td>
                   </tr>
@@ -1612,8 +1617,8 @@ function SupplyChainPage() {
           </div>
           {/* Drift Alerts Pagination */}
           {driftAlerts.length > 0 && (
-            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <div className="px-6 py-4 border-t border-divider flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-sm text-ink-secondary">
                 <span>Show</span>
                 <select
                   value={driftPageSize}
@@ -1621,7 +1626,7 @@ function SupplyChainPage() {
                     setDriftPageSize(Number(e.target.value));
                     setDriftPage(1);
                   }}
-                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                  className="px-2 py-1 border border-stroke rounded-inset-sm bg-glass-inset text-ink text-sm"
                 >
                   <option value={5}>5</option>
                   <option value={10}>10</option>
@@ -1634,17 +1639,17 @@ function SupplyChainPage() {
                 <button
                   onClick={() => setDriftPage((p) => Math.max(1, p - 1))}
                   disabled={driftPage === 1}
-                  className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink-body hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="text-sm text-gray-700 dark:text-gray-300">
+                <span className="text-sm text-ink-body">
                   Page {driftPage} of {totalDriftPages || 1}
                 </span>
                 <button
                   onClick={() => setDriftPage((p) => Math.min(totalDriftPages, p + 1))}
                   disabled={driftPage >= totalDriftPages}
-                  className="p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 border border-stroke rounded-inset-sm bg-glass-inset text-ink-body hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1660,126 +1665,126 @@ function SupplyChainPage() {
       {activeTab === "abom" && (
         <div className="space-y-6">
           {/* ABOM Header Banner - Muted style matching Supply Chain */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+          <div className="glass p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <Package className="h-8 w-8 text-gray-400" />
+                <Package className="h-8 w-8 text-ink-tertiary" />
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Agent Bill of Materials</h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  <h2 className="text-xl font-semibold text-ink">Agent Bill of Materials</h2>
+                  <p className="text-sm text-ink-secondary mt-1">
                     Complete inventory of all agents, MCP servers, tools, and data access patterns observed by AIM
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Generated</p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">{new Date(abomData.generatedAt).toLocaleString()}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Version {abomData.version}</p>
+                <p className="text-xs text-ink-secondary">Generated</p>
+                <p className="text-sm font-medium text-ink">{new Date(abomData.generatedAt).toLocaleString()}</p>
+                <p className="text-xs text-ink-secondary mt-1">Version {abomData.version}</p>
               </div>
             </div>
           </div>
 
           {/* ABOM Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="glass p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div className="p-2 bg-brand-soft rounded-lg">
+                  <Bot className="h-5 w-5 text-brand-text" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{abomData.summary.totalAgents}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Agents</p>
+                  <p className="text-2xl font-bold text-brand-text">{abomData.summary.totalAgents}</p>
+                  <p className="text-xs text-ink-secondary">Agents</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="glass p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <Server className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="p-2 bg-brand-soft rounded-lg">
+                  <Server className="h-5 w-5 text-brand-indigo" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{abomData.summary.totalMcpServers}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">MCP Servers</p>
+                  <p className="text-2xl font-bold text-brand-indigo">{abomData.summary.totalMcpServers}</p>
+                  <p className="text-xs text-ink-secondary">MCP servers</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="glass p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <Wrench className="h-5 w-5 text-green-600 dark:text-green-400" />
+                <div className="p-2 bg-success-fill rounded-lg">
+                  <Wrench className="h-5 w-5 text-success-text" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{abomData.summary.totalTools}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Tools</p>
+                  <p className="text-2xl font-bold text-success-text">{abomData.summary.totalTools}</p>
+                  <p className="text-xs text-ink-secondary">Tools</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="glass p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
-                  <Link2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                <div className="p-2 bg-brand-soft rounded-lg">
+                  <Link2 className="h-5 w-5 text-brand-sky" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{abomData.summary.totalConnections}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Connections</p>
+                  <p className="text-2xl font-bold text-brand-sky">{abomData.summary.totalConnections}</p>
+                  <p className="text-xs text-ink-secondary">Connections</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="glass p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                  <Cpu className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                <div className="p-2 bg-warning-fill rounded-lg">
+                  <Cpu className="h-5 w-5 text-warning-text" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{abomData.summary.totalCapabilities}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Capabilities</p>
+                  <p className="text-2xl font-bold text-warning-text">{abomData.summary.totalCapabilities}</p>
+                  <p className="text-xs text-ink-secondary">Capabilities</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="glass p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
-                  <Database className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                <div className="p-2 bg-warning-fill rounded-lg">
+                  <Database className="h-5 w-5 text-warning-text" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{abomData.summary.dataCategories.length}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Data Categories</p>
+                  <p className="text-2xl font-bold text-warning-text">{abomData.summary.dataCategories.length}</p>
+                  <p className="text-xs text-ink-secondary">Data categories</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Agents Inventory */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Bot className="h-5 w-5 text-gray-500" />
-                Agents Inventory
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+          <div className="glass overflow-hidden">
+            <div className="px-6 py-4 border-b border-divider">
+              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                <Bot className="h-5 w-5 text-ink-secondary" />
+                Agents inventory
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {agents.length}
                 </span>
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 All registered AI agents with their capabilities and data access permissions
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+              <table className="min-w-full divide-y divide-divider">
+                <thead className="bg-glass-inset-gray">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Agent</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Trust Score</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Capabilities</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Data Access</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Registered By</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Agent</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Trust score</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Capabilities</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Data access</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Registered by</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Created</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-divider">
                   {agents.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={7} className="px-6 py-12 text-center text-ink-secondary">
                         <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p className="text-lg font-medium">No agents registered</p>
                         <p className="text-sm mt-1">Agents will appear here when registered with AIM</p>
@@ -1789,15 +1794,15 @@ function SupplyChainPage() {
                     paginatedAbomAgents.map((agent) => (
                       <tr
                         key={agent.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                        className="hover:bg-glass-inset-gray cursor-pointer"
                         onClick={() => setSelectedAgent(agent)}
                       >
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <Bot className="h-5 w-5 text-gray-400 mr-3" />
+                            <Bot className="h-5 w-5 text-ink-tertiary mr-3" />
                             <div>
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">{agent.name}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">{agent.id.slice(0, 8)}...</div>
+                              <div className="text-sm font-medium text-ink">{agent.name}</div>
+                              <div className="text-xs text-ink-secondary">{agent.id.slice(0, 8)}...</div>
                             </div>
                           </div>
                         </td>
@@ -1810,30 +1815,30 @@ function SupplyChainPage() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
                             {(agent.capabilities || []).slice(0, 3).map((cap, idx) => (
-                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-glass-inset-gray text-ink-body">
                                 {cap}
                               </span>
                             ))}
                             {(agent.capabilities || []).length > 3 && (
-                              <span className="text-xs text-gray-500">+{agent.capabilities.length - 3} more</span>
+                              <span className="text-xs text-ink-secondary">+{agent.capabilities.length - 3} more</span>
                             )}
                             {(!agent.capabilities || agent.capabilities.length === 0) && (
-                              <span className="text-xs text-gray-400">None declared</span>
+                              <span className="text-xs text-ink-tertiary">None declared</span>
                             )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
                             {(agent.dataAccess || []).slice(0, 2).map((data, idx) => (
-                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                              <span key={idx} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-glass-inset-gray text-ink-body">
                                 {data}
                               </span>
                             ))}
                             {(agent.dataAccess || []).length > 2 && (
-                              <span className="text-xs text-gray-500">+{agent.dataAccess!.length - 2} more</span>
+                              <span className="text-xs text-ink-secondary">+{agent.dataAccess!.length - 2} more</span>
                             )}
                             {(!agent.dataAccess || agent.dataAccess.length === 0) && (
-                              <span className="text-xs text-gray-400">None</span>
+                              <span className="text-xs text-ink-tertiary">None</span>
                             )}
                           </div>
                         </td>
@@ -1841,33 +1846,33 @@ function SupplyChainPage() {
                           <div className="flex items-center gap-2">
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
                               agent.createdBySdkTokenId
-                                ? "bg-purple-100 dark:bg-purple-900/30"
+                                ? "bg-brand-soft"
                                 : agent.createdByApiKeyId
-                                  ? "bg-amber-100 dark:bg-amber-900/30"
-                                  : "bg-blue-100 dark:bg-blue-900/30"
+                                  ? "bg-warning-fill"
+                                  : "bg-brand-soft"
                             }`}>
                               {agent.createdBySdkTokenId ? (
-                                <Code className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                                <Code className="h-3.5 w-3.5 text-brand-indigo" />
                               ) : agent.createdByApiKeyId ? (
-                                <Key className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                <Key className="h-3.5 w-3.5 text-warning-text" />
                               ) : (
-                                <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                                <User className="h-3.5 w-3.5 text-brand-text" />
                               )}
                             </div>
                             <div>
-                              <div className="text-sm text-gray-900 dark:text-white">
-                                {agent.createdByName || agent.createdByEmail || (agent.createdBySdkTokenId ? "SDK" : agent.createdByApiKeyId ? "API Key" : "Unknown")}
+                              <div className="text-sm text-ink">
+                                {agent.createdByName || agent.createdByEmail || (agent.createdBySdkTokenId ? "SDK" : agent.createdByApiKeyId ? "API key" : "Unknown")}
                               </div>
                               {agent.createdByEmail && agent.createdByName && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400">{agent.createdByEmail}</div>
+                                <div className="text-xs text-ink-secondary">{agent.createdByEmail}</div>
                               )}
                               {!agent.createdByName && !agent.createdByEmail && agent.createdBySdkTokenId && (
-                                <div className="text-xs text-gray-500 dark:text-gray-400">via SDK Token</div>
+                                <div className="text-xs text-ink-secondary">via SDK token</div>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                           {formatDateTime(agent.createdAt)}
                         </td>
                       </tr>
@@ -1878,25 +1883,25 @@ function SupplyChainPage() {
             </div>
             {/* Agents Pagination */}
             {agents.length > abomAgentPageSize && (
-              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="px-6 py-4 border-t border-divider flex items-center justify-between">
+                <div className="text-sm text-ink-secondary">
                   Showing {((abomAgentPage - 1) * abomAgentPageSize) + 1} to {Math.min(abomAgentPage * abomAgentPageSize, agents.length)} of {agents.length} agents
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setAbomAgentPage(p => Math.max(1, p - 1))}
                     disabled={abomAgentPage === 1}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm font-medium text-ink-body border border-stroke rounded-pill hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="text-sm text-ink-secondary">
                     Page {abomAgentPage} of {totalAbomAgentPages}
                   </span>
                   <button
                     onClick={() => setAbomAgentPage(p => Math.min(totalAbomAgentPages, p + 1))}
                     disabled={abomAgentPage === totalAbomAgentPages}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm font-medium text-ink-body border border-stroke rounded-pill hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
@@ -1906,38 +1911,38 @@ function SupplyChainPage() {
           </div>
 
           {/* MCP Tools & Servers */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Server className="h-5 w-5 text-gray-500" />
-                MCP Servers & Tools
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+          <div className="glass overflow-hidden">
+            <div className="px-6 py-4 border-b border-divider">
+              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                <Server className="h-5 w-5 text-ink-secondary" />
+                MCP servers & tools
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {mcpServers.length} servers
                 </span>
-                <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+                <span className="px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {abomData.summary.totalTools} tools
                 </span>
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 All MCP servers discovered through agent attestations with their exposed tools
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-900">
+              <table className="min-w-full divide-y divide-divider">
+                <thead className="bg-glass-inset-gray">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Server</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">URL</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tools</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Attestations</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Confidence</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Server</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">URL</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Tools</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Attestations</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Confidence</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-divider">
                   {mcpServers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={6} className="px-6 py-12 text-center text-ink-secondary">
                         <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p className="text-lg font-medium">No MCP servers discovered</p>
                         <p className="text-sm mt-1">MCP servers will appear here when agents attest their usage</p>
@@ -1945,33 +1950,33 @@ function SupplyChainPage() {
                     </tr>
                   ) : (
                     paginatedAbomMcpServers.map((server) => (
-                      <tr key={server.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <tr key={server.id} className="hover:bg-glass-inset-gray">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <Server className="h-5 w-5 text-gray-400 mr-3" />
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">{server.name}</div>
+                            <Server className="h-5 w-5 text-ink-tertiary mr-3" />
+                            <div className="text-sm font-medium text-ink">{server.name}</div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{server.url}</div>
+                          <div className="text-sm text-ink-secondary truncate max-w-xs">{server.url}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <StatusBadge status={server.status} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <Wrench className="h-4 w-4 text-gray-400 mr-1" />
-                            <span className="text-sm text-gray-900 dark:text-white">{server.toolCount || 0}</span>
+                            <Wrench className="h-4 w-4 text-ink-tertiary mr-1" />
+                            <span className="text-sm text-ink">{server.toolCount || 0}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-ink">
                           {server.attestationCount || 0}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {server.confidenceScore ? (
                             <ConfidenceScoreBadge score={server.confidenceScore} />
                           ) : (
-                            <span className="text-sm text-gray-400">N/A</span>
+                            <span className="text-sm text-ink-tertiary">N/A</span>
                           )}
                         </td>
                       </tr>
@@ -1982,25 +1987,25 @@ function SupplyChainPage() {
             </div>
             {/* MCP Servers Pagination */}
             {mcpServers.length > abomMcpPageSize && (
-              <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="px-6 py-4 border-t border-divider flex items-center justify-between">
+                <div className="text-sm text-ink-secondary">
                   Showing {((abomMcpPage - 1) * abomMcpPageSize) + 1} to {Math.min(abomMcpPage * abomMcpPageSize, mcpServers.length)} of {mcpServers.length} servers
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setAbomMcpPage(p => Math.max(1, p - 1))}
                     disabled={abomMcpPage === 1}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm font-medium text-ink-body border border-stroke rounded-pill hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="text-sm text-ink-secondary">
                     Page {abomMcpPage} of {totalAbomMcpPages}
                   </span>
                   <button
                     onClick={() => setAbomMcpPage(p => Math.min(totalAbomMcpPages, p + 1))}
                     disabled={abomMcpPage === totalAbomMcpPages}
-                    className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm font-medium text-ink-body border border-stroke rounded-pill hover:bg-glass-inset-gray disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
@@ -2010,21 +2015,21 @@ function SupplyChainPage() {
           </div>
 
           {/* Agent-MCP Connections Map */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Link2 className="h-5 w-5 text-gray-500" />
-                Agent-MCP Connection Map
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+          <div className="glass overflow-hidden">
+            <div className="px-6 py-4 border-b border-divider">
+              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-ink-secondary" />
+                Agent-MCP connection map
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {connections.length} connections
                 </span>
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 Observed connections between agents and MCP servers from attestation data
               </p>
             </div>
             {connections.length === 0 ? (
-              <div className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+              <div className="px-6 py-12 text-center text-ink-secondary">
                 <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p className="text-lg font-medium">No connections observed</p>
                 <p className="text-sm mt-1">Connections will appear here when agents attest MCP server usage</p>
@@ -2034,36 +2039,36 @@ function SupplyChainPage() {
                 {connections.slice(0, 12).map((conn) => (
                   <div
                     key={conn.id}
-                    className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700"
+                    className="flex items-center gap-3 p-4 rounded-inset bg-glass-inset-gray"
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <Bot className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        <Bot className="h-4 w-4 text-ink-secondary" />
+                        <span className="text-sm font-medium text-ink truncate">
                           {conn.agentName}
                         </span>
                       </div>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <ArrowRight className="h-4 w-4 text-ink-tertiary flex-shrink-0" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <Server className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        <Server className="h-4 w-4 text-ink-secondary" />
+                        <span className="text-sm font-medium text-ink truncate">
                           {conn.mcpServerName}
                         </span>
                       </div>
                     </div>
                     <div className="flex-shrink-0">
                       {conn.isActive ? (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        <CheckCircle2 className="h-4 w-4 text-success-text" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-gray-400" />
+                        <XCircle className="h-4 w-4 text-ink-tertiary" />
                       )}
                     </div>
                   </div>
                 ))}
                 {connections.length > 12 && (
-                  <div className="col-span-full text-center text-sm text-gray-500 dark:text-gray-400 py-2">
+                  <div className="col-span-full text-center text-sm text-ink-secondary py-2">
                     + {connections.length - 12} more connections
                   </div>
                 )}
@@ -2073,22 +2078,22 @@ function SupplyChainPage() {
 
           {/* Data Categories */}
           {abomData.summary.dataCategories.length > 0 && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
-                <Database className="h-5 w-5 text-gray-500" />
-                Data Access Categories
-                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full">
+            <div className="glass p-6">
+              <h3 className="text-lg font-semibold text-ink flex items-center gap-2 mb-4">
+                <Database className="h-5 w-5 text-ink-secondary" />
+                Data access categories
+                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                   {abomData.summary.dataCategories.length} categories
                 </span>
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              <p className="text-sm text-ink-secondary mb-4">
                 Types of sensitive data that agents in your organization have declared access to
               </p>
               <div className="flex flex-wrap gap-2">
                 {abomData.summary.dataCategories.map((cat, idx) => (
                   <span
                     key={idx}
-                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-glass-inset-gray text-ink-body"
                   >
                     <Database className="h-4 w-4 mr-2" />
                     {cat}
@@ -2099,16 +2104,16 @@ function SupplyChainPage() {
           )}
 
           {/* ABOM Notice */}
-          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <div className="glass p-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <Lock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <div className="p-2 bg-glass-inset-gray rounded-inset-sm">
+                <Lock className="h-5 w-5 text-ink-secondary" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  This ABOM is Read-Only
+                <h4 className="text-sm font-semibold text-ink">
+                  This ABOM is read-only
                 </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                <p className="text-sm text-ink-secondary mt-1">
                   The Agent Bill of Materials is automatically generated from AIM observations and attestations.
                   It cannot be manually modified and represents the actual state of your agent ecosystem.
                   Use the Export button above to download this ABOM for compliance, security audits, or sharing with stakeholders.
@@ -2119,24 +2124,24 @@ function SupplyChainPage() {
 
           {/* Agent Detail Modal */}
           {selectedAgent && (
-            <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="glass-chrome max-w-2xl w-full max-h-[90vh] overflow-hidden">
                 {/* Modal Header */}
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div className="px-6 py-4 border-b border-divider flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                      <Bot className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                    <div className="p-2 bg-glass-inset-gray rounded-inset-sm">
+                      <Bot className="h-6 w-6 text-ink-secondary" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedAgent.name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Agent ABOM Details</p>
+                      <h3 className="text-lg font-semibold text-ink">{selectedAgent.name}</h3>
+                      <p className="text-sm text-ink-secondary">Agent ABOM details</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setSelectedAgent(null)}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className="p-2 hover:bg-glass-inset-gray rounded-inset-sm transition-colors"
                   >
-                    <X className="h-5 w-5 text-gray-500" />
+                    <X className="h-5 w-5 text-ink-secondary" />
                   </button>
                 </div>
 
@@ -2146,52 +2151,52 @@ function SupplyChainPage() {
                     {/* Agent Info */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Agent ID</p>
-                        <p className="text-sm font-mono text-gray-900 dark:text-white mt-1">{selectedAgent.id}</p>
+                        <p className="text-xs font-medium text-ink-secondary uppercase">Agent ID</p>
+                        <p className="text-sm font-mono text-ink mt-1">{selectedAgent.id}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</p>
+                        <p className="text-xs font-medium text-ink-secondary uppercase">Status</p>
                         <div className="mt-1">
                           <StatusBadge status={selectedAgent.status} />
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Trust Score</p>
+                        <p className="text-xs font-medium text-ink-secondary uppercase">Trust score</p>
                         <div className="mt-1">
                           <ConfidenceScoreBadge score={selectedAgent.trustScore * 100} />
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Created</p>
-                        <p className="text-sm text-gray-900 dark:text-white mt-1">{formatDateTime(selectedAgent.createdAt)}</p>
+                        <p className="text-xs font-medium text-ink-secondary uppercase">Created</p>
+                        <p className="text-sm text-ink mt-1">{formatDateTime(selectedAgent.createdAt)}</p>
                       </div>
                       <div className="col-span-2">
-                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Registered By</p>
+                        <p className="text-xs font-medium text-ink-secondary uppercase">Registered by</p>
                         <div className="mt-1 flex items-center gap-2">
                           <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
                             selectedAgent.createdBySdkTokenId
-                              ? "bg-purple-100 dark:bg-purple-900/30"
+                              ? "bg-brand-soft"
                               : selectedAgent.createdByApiKeyId
-                                ? "bg-amber-100 dark:bg-amber-900/30"
-                                : "bg-blue-100 dark:bg-blue-900/30"
+                                ? "bg-warning-fill"
+                                : "bg-brand-soft"
                           }`}>
                             {selectedAgent.createdBySdkTokenId ? (
-                              <Code className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                              <Code className="h-3.5 w-3.5 text-brand-indigo" />
                             ) : selectedAgent.createdByApiKeyId ? (
-                              <Key className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                              <Key className="h-3.5 w-3.5 text-warning-text" />
                             ) : (
-                              <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                              <User className="h-3.5 w-3.5 text-brand-text" />
                             )}
                           </div>
                           <div>
-                            <p className="text-sm text-gray-900 dark:text-white">
-                              {selectedAgent.createdByName || selectedAgent.createdByEmail || (selectedAgent.createdBySdkTokenId ? "SDK" : selectedAgent.createdByApiKeyId ? "API Key" : "Unknown")}
+                            <p className="text-sm text-ink">
+                              {selectedAgent.createdByName || selectedAgent.createdByEmail || (selectedAgent.createdBySdkTokenId ? "SDK" : selectedAgent.createdByApiKeyId ? "API key" : "Unknown")}
                             </p>
                             {selectedAgent.createdByEmail && selectedAgent.createdByName && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{selectedAgent.createdByEmail}</p>
+                              <p className="text-xs text-ink-secondary">{selectedAgent.createdByEmail}</p>
                             )}
                             {!selectedAgent.createdByName && !selectedAgent.createdByEmail && selectedAgent.createdBySdkTokenId && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">via SDK Token</p>
+                              <p className="text-xs text-ink-secondary">via SDK token</p>
                             )}
                           </div>
                         </div>
@@ -2200,17 +2205,17 @@ function SupplyChainPage() {
 
                     {/* Capabilities */}
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
-                        Declared Capabilities ({(selectedAgent.capabilities || []).length})
+                      <p className="text-xs font-medium text-ink-secondary uppercase mb-2">
+                        Declared capabilities ({(selectedAgent.capabilities || []).length})
                       </p>
                       {(selectedAgent.capabilities || []).length === 0 ? (
-                        <p className="text-sm text-gray-400">No capabilities declared</p>
+                        <p className="text-sm text-ink-tertiary">No capabilities declared</p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {(selectedAgent.capabilities || []).map((cap, idx) => (
                             <span
                               key={idx}
-                              className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                              className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-glass-inset-gray text-ink-body"
                             >
                               {cap}
                             </span>
@@ -2221,17 +2226,17 @@ function SupplyChainPage() {
 
                     {/* Data Access */}
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
-                        Data Access Permissions ({(selectedAgent.dataAccess || []).length})
+                      <p className="text-xs font-medium text-ink-secondary uppercase mb-2">
+                        Data access permissions ({(selectedAgent.dataAccess || []).length})
                       </p>
                       {(selectedAgent.dataAccess || []).length === 0 ? (
-                        <p className="text-sm text-gray-400">No data access permissions declared</p>
+                        <p className="text-sm text-ink-tertiary">No data access permissions declared</p>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           {(selectedAgent.dataAccess || []).map((data, idx) => (
                             <span
                               key={idx}
-                              className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                              className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-medium bg-glass-inset-gray text-ink-body"
                             >
                               <Database className="h-4 w-4 mr-1.5" />
                               {data}
@@ -2243,11 +2248,11 @@ function SupplyChainPage() {
 
                     {/* Connected MCP Servers */}
                     <div>
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
-                        Connected MCP Servers
+                      <p className="text-xs font-medium text-ink-secondary uppercase mb-2">
+                        Connected MCP servers
                       </p>
                       {connections.filter(c => c.agentId === selectedAgent.id).length === 0 ? (
-                        <p className="text-sm text-gray-400">No MCP server connections observed</p>
+                        <p className="text-sm text-ink-tertiary">No MCP server connections observed</p>
                       ) : (
                         <div className="space-y-2">
                           {connections
@@ -2255,21 +2260,21 @@ function SupplyChainPage() {
                             .map((conn) => (
                               <div
                                 key={conn.id}
-                                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700"
+                                className="flex items-center justify-between p-3 rounded-inset bg-glass-inset-gray"
                               >
                                 <div className="flex items-center gap-2">
-                                  <Server className="h-4 w-4 text-gray-500" />
-                                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                  <Server className="h-4 w-4 text-ink-secondary" />
+                                  <span className="text-sm font-medium text-ink">
                                     {conn.mcpServerName}
                                   </span>
                                 </div>
                                 {conn.isActive ? (
-                                  <span className="inline-flex items-center text-xs text-green-600 dark:text-green-400">
+                                  <span className="inline-flex items-center text-xs text-success-text">
                                     <CheckCircle2 className="h-3 w-3 mr-1" />
                                     Active
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center text-xs text-gray-500">
+                                  <span className="inline-flex items-center text-xs text-ink-secondary">
                                     <XCircle className="h-3 w-3 mr-1" />
                                     Inactive
                                   </span>
@@ -2296,8 +2301,8 @@ export default function SupplyChainPageWrapper() {
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">Loading...</p>
+            <Loader2 className="h-8 w-8 animate-spin text-brand-text mx-auto mb-4" />
+            <p className="text-ink-secondary">Loading...</p>
           </div>
         </div>
       }>
