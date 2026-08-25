@@ -3,18 +3,11 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  CheckCircle2,
-  Shield,
-  Users,
-  Lock,
-  Mail,
-  AlertCircle,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { AimLogo } from "@/components/sidebar";
+import { Button } from "@/components/ui/button";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -106,159 +99,114 @@ function LoginPageContent() {
     }
   };
 
+  const inputClass = (invalid: boolean) =>
+    `w-full rounded-inset border bg-glass-inset py-2.5 pl-10 pr-10 text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 ${
+      invalid ? "border-danger" : "border-stroke"
+    }`;
+
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+    <main className="glass-page relative flex min-h-screen items-center justify-center overflow-hidden p-4">
       <div className="w-full max-w-md">
-        {/* Logo and Branding */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 mb-4">
-            <img
-              src="/opena2a-logo.svg"
-              alt="OpenA2A Logo"
-              className="w-full h-full object-contain"
-            />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome Back
-          </h1>
-          <p className="text-sm text-blue-600 font-medium mb-1">AIM for a better security</p>
-          <p className="text-gray-600">
-            Sign in to manage your AI agents and MCP servers
-          </p>
+        <div className="mb-6 flex flex-col items-center text-center">
+          <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
+          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Welcome back</h1>
+          <p className="mt-1 text-sm text-ink-secondary">Sign in to manage your agents and MCP servers.</p>
         </div>
 
-        {/* Main Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">
-            Sign in to your account
-          </h2>
-
-          {/* Email/Password Form */}
-          <form onSubmit={handlePasswordLogin} className="space-y-4 mb-6">
+        <div className="glass-chrome p-6 sm:p-8">
+          <form onSubmit={handlePasswordLogin} className="space-y-4" noValidate>
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Email Address
+              <label htmlFor="email" className="mb-1 block text-xs font-semibold text-ink-body">
+                Email address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
                 <input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.email ? "border-red-500" : "border-gray-300"
-                  }`}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className={inputClass(!!errors.email)}
                   placeholder="you@example.com"
+                  aria-invalid={!!errors.email}
+                  aria-describedby={errors.email ? "email-error" : undefined}
                 />
               </div>
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
+                <p id="email-error" className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   {errors.email}
                 </p>
               )}
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700"
-                >
+              <div className="mb-1 flex items-center justify-between">
+                <label htmlFor="password" className="block text-xs font-semibold text-ink-body">
                   Password
                 </label>
-                <Link
-                  href="/auth/forgot-password"
-                  className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
-                >
+                <Link href="/auth/forgot-password" className="text-xs font-semibold text-brand-text hover:underline">
                   Forgot password?
                 </Link>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={formData.password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, password: e.target.value })
-                  }
-                  className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.password ? "border-red-500" : "border-gray-300"
-                  }`}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className={inputClass(!!errors.password)}
                   placeholder="Enter your password"
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? "password-error" : undefined}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                 </button>
               </div>
               {errors.password && (
-                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                  <AlertCircle className="h-4 w-4" />
+                <p id="password-error" className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   {errors.password}
                 </p>
               )}
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoadingPassword}
-              className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoadingPassword ? "Signing in..." : "Sign In"}
-            </button>
+            <Button type="submit" disabled={isLoadingPassword} className="w-full" size="lg">
+              {isLoadingPassword ? "Signing in..." : "Sign in"}
+            </Button>
           </form>
 
-          {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mt-6">
-            <div className="flex gap-3">
-              <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-900">
-                <p className="font-medium mb-1">Secure Authentication</p>
-                <p className="text-blue-700">
-                  Your credentials are encrypted and protected. All new registrations require admin approval for enhanced security.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* New User Link */}
-          <div className="text-center pt-4 border-t border-gray-200 mt-6">
-            <p className="text-gray-600">
-              Don't have an account?{" "}
-              <Link
-                href="/auth/register"
-                className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
-              >
-                Sign Up
-              </Link>
+          <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
+            <p className="text-xs leading-relaxed text-ink-body">
+              New accounts are reviewed by an administrator before they can sign in. Your credentials are encrypted in transit and at rest.
             </p>
           </div>
-        </div>
 
+          <p className="mt-5 border-t border-divider pt-4 text-center text-sm text-ink-secondary">
+            Don&apos;t have an account?{" "}
+            <Link href="/auth/register" className="font-semibold text-brand-text hover:underline">
+              Create one
+            </Link>
+          </p>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-ink-secondary">Loading...</div>}>
       <LoginPageContent />
     </Suspense>
   );
