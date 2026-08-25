@@ -1,138 +1,98 @@
-'use client'
+"use client";
 
-import { useSearchParams } from 'next/navigation'
-import { Shield, CheckCircle, Mail, Clock } from 'lucide-react'
-import Link from 'next/link'
-import { Suspense } from 'react'
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { CheckCircle2, Clock, Mail } from "lucide-react";
+import { AimLogo } from "@/components/sidebar";
 
 function RegistrationPendingContent() {
-  const searchParams = useSearchParams()
-  const requestId = searchParams.get('request_id')
-  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'info@opena2a.org'
+  const searchParams = useSearchParams();
+  const requestId = searchParams.get("request_id");
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "info@opena2a.org";
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <Shield className="w-10 h-10 text-white" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            AIM - Agent Identity Management
-          </h1>
+    <main className="glass-page relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <div className="w-full max-w-xl">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
+          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Your request is in.</h1>
+          <p className="mt-1 text-sm text-ink-secondary">An administrator reviews new accounts before they can sign in.</p>
         </div>
 
-        {/* Success Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
-          {/* Success Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
-              <CheckCircle className="w-12 h-12 text-green-600" />
+        <div className="glass-chrome p-6 sm:p-8">
+          <div className="flex items-start gap-3 rounded-inset bg-success-fill p-4">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-success-text" aria-hidden="true" />
+            <div>
+              <p className="text-sm font-bold text-ink">Registration submitted</p>
+              {requestId && (
+                <p className="mt-1 text-xs text-ink-secondary">
+                  Request ID <span className="break-all font-mono text-ink">{requestId}</span>
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Title */}
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-4">
-            Registration Submitted Successfully!
-          </h2>
-
-          {/* Description */}
-          <p className="text-gray-600 text-center mb-8">
-            Your account request has been submitted and is now pending administrator approval.
-          </p>
-
-          {/* Request ID */}
-          {requestId && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-600 mb-1">Request ID:</p>
-              <p className="font-mono text-sm text-gray-900 break-all">
-                {requestId}
-              </p>
-            </div>
-          )}
-
-          {/* Next Steps */}
-          <div className="space-y-4 mb-8">
-            <h3 className="font-semibold text-gray-900 text-lg">What happens next?</h3>
-
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                <Clock className="w-4 h-4 text-blue-600" />
-              </div>
+          <h2 className="mt-6 text-[15px] font-bold tracking-[-0.02em] text-ink">What happens next</h2>
+          <ol className="mt-3 space-y-3">
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-text">
+                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
               <div>
-                <h4 className="font-medium text-gray-900">Administrator Review</h4>
-                <p className="text-sm text-gray-600">
-                  An administrator will review your registration request. This typically takes 1-2 business days.
-                </p>
+                <p className="text-sm font-bold text-ink">An administrator reviews the request</p>
+                <p className="text-xs text-ink-secondary">Approval happens in this AIM deployment's admin area; the time it takes depends on your administrator.</p>
               </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                <Mail className="w-4 h-4 text-purple-600" />
-              </div>
+            </li>
+            <li className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-text">
+                <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
               <div>
-                <h4 className="font-medium text-gray-900">Email Notification</h4>
-                <p className="text-sm text-gray-600">
-                  You'll receive an email notification once your account has been approved or if additional information is needed.
-                </p>
+                <p className="text-sm font-bold text-ink">Check back by signing in</p>
+                <p className="text-xs text-ink-secondary">Once approved, signing in takes you straight to your dashboard. Until then the sign-in page will tell you the request is still pending. If the request is declined you will not receive a message; contact the administrator if you have not been approved.</p>
               </div>
-            </div>
+            </li>
+          </ol>
 
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                <CheckCircle className="w-4 h-4 text-green-600" />
-              </div>
-              <div>
-                <h4 className="font-medium text-gray-900">Access Granted</h4>
-                <p className="text-sm text-gray-600">
-                  Once approved, you'll be able to sign in and start using AIM to manage your AI agents and MCP servers.
-                </p>
-              </div>
-            </div>
+          <div className="mt-5 rounded-inset bg-glass-inset-gray px-4 py-3">
+            <p className="text-xs leading-relaxed text-ink-secondary">
+              Running this deployment yourself? Accounts whose email is listed in the{" "}
+              <code className="font-mono text-ink">AIM_PLATFORM_ADMINS</code> environment variable
+              (comma-separated, for example{" "}
+              <code className="font-mono text-ink">AIM_PLATFORM_ADMINS=you@example.com</code>) are
+              approved automatically and become administrators of their own organization.
+              Administrators approve everyone else under Organization &gt; Registrations in the dashboard.
+            </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col gap-3">
-            <Link
-              href="/auth/login"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition-colors text-center"
-            >
-              Go to Sign In
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+            <Link href="/auth/login" className="inline-flex h-11 flex-1 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
+              Go to sign in
             </Link>
-
             <a
-              href={`mailto:${supportEmail}?subject=AIM Account Registration - Urgent`}
-              className="w-full border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors text-center"
+              href={`mailto:${supportEmail}?subject=${encodeURIComponent("AIM account registration")}`}
+              className="inline-flex h-11 flex-1 items-center justify-center rounded-pill border border-stroke bg-glass text-sm font-bold text-ink hover:bg-glass-inset"
             >
-              Contact Administrator
+              Contact the administrator
             </a>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="mt-6 text-center text-sm text-gray-500">
-          Need help?{' '}
-          <a href="/support" className="text-blue-600 hover:underline">
-            Contact Support
-          </a>
-        </div>
       </div>
-    </div>
-  )
+    </main>
+  );
 }
 
 export default function RegistrationPendingPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center" aria-busy="true">
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-track border-t-brand" aria-label="Loading" />
+        </div>
+      }
+    >
       <RegistrationPendingContent />
     </Suspense>
-  )
+  );
 }

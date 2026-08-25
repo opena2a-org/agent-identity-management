@@ -205,6 +205,8 @@ Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `lo
 
 Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
 
+New accounts wait for an administrator's approval. To bootstrap the first administrator, set `AIM_PLATFORM_ADMINS` (comma-separated emails) before starting the backend: accounts on that list are approved automatically and approve everyone else from the dashboard's admin area.
+
 ### From source
 
 Prerequisites: Docker, Go 1.22+, Node 20+, Python 3.11+.
