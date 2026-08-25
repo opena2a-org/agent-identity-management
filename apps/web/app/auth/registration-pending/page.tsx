@@ -62,7 +62,7 @@ function RegistrationPendingContent() {
               (comma-separated, for example{" "}
               <code className="font-mono text-ink">AIM_PLATFORM_ADMINS=you@example.com</code>) are
               approved automatically and become administrators of their own organization.
-              Administrators approve everyone else under Admin &gt; Registrations.
+              Administrators approve everyone else under Organization &gt; Registrations in the dashboard.
             </p>
           </div>
 

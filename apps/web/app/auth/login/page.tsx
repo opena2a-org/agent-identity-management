@@ -8,11 +8,12 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { AimLogo } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
+import { safeReturnUrl } from "@/lib/return-url";
 
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnUrl = searchParams.get("returnUrl") || "/dashboard";
+  const returnUrl = safeReturnUrl(searchParams.get("returnUrl"));
   const [isLoadingPassword, setIsLoadingPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -68,7 +69,7 @@ function LoginPageContent() {
         if (response.isApproved) {
           // User is approved, redirect to return URL or dashboard
           toast.success("Signed in");
-          router.push(decodeURIComponent(returnUrl));
+          router.push(returnUrl);
         } else {
           // User exists but not approved yet - redirect to pending page
           toast.info("Your account is pending admin approval.");

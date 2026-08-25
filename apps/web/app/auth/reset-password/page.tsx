@@ -38,9 +38,10 @@ function ResetPasswordPageContent() {
       newErrors.newPassword = "Password is required";
     } else if (formData.newPassword.length < 8) {
       newErrors.newPassword = "Password must be at least 8 characters";
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.newPassword)) {
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/.test(formData.newPassword)) {
+      // The same rule the backend enforces (infrastructure/auth/password.go ValidatePassword).
       newErrors.newPassword =
-        "Password must contain uppercase, lowercase, and number";
+        "Password must contain an uppercase letter, a lowercase letter, a number and a special character";
     }
 
     if (!formData.confirmPassword) {
@@ -124,13 +125,13 @@ function ResetPasswordPageContent() {
               <XCircle className="h-6 w-6" aria-hidden="true" />
             </span>
             <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">This reset link no longer works</h1>
-            <p className="mt-1 text-sm text-ink-secondary">Reset links expire one hour after they are sent.</p>
+            <p className="mt-1 text-sm text-ink-secondary">Reset links expire 24 hours after they are sent and work once.</p>
           </div>
           <div className="glass-chrome p-6 sm:p-8">
             <p className="text-sm font-bold text-ink">What to do</p>
             <ul className="mt-2 space-y-1.5 text-xs text-ink-body">
               <li>Request a new link and open the most recent email.</li>
-              <li>Use the link within an hour of receiving it.</li>
+              <li>Use the link within 24 hours of receiving it.</li>
             </ul>
             <div className="mt-6 flex flex-col gap-2">
               <Link href="/auth/forgot-password" className="inline-flex h-11 items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
@@ -217,7 +218,7 @@ function ResetPasswordPageContent() {
         <div className="mb-6 flex flex-col items-center text-center">
           <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
           <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Choose a new password</h1>
-          <p className="mt-1 text-sm text-ink-secondary">At least 8 characters with an uppercase letter, a lowercase letter and a number.</p>
+          <p className="mt-1 text-sm text-ink-secondary">At least 8 characters with an uppercase letter, a lowercase letter, a number and a special character.</p>
         </div>
 
         <div className="glass-chrome p-6 sm:p-8">
@@ -230,7 +231,7 @@ function ResetPasswordPageContent() {
           </form>
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-ink-body">Passwords are stored as bcrypt hashes. This reset link expires one hour after it was sent.</p>
+            <p className="text-xs leading-relaxed text-ink-body">Passwords are stored as bcrypt hashes. This reset link expires 24 hours after it was sent and works once.</p>
           </div>
         </div>
       </div>

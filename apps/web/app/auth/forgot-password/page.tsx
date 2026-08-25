@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
             <p className="text-sm font-bold text-ink">Next steps</p>
             <ul className="mt-2 space-y-1.5 text-xs text-ink-body">
               <li>Open the message from Agent Identity Management and follow the reset link.</li>
-              <li>The link expires after one hour; request another if it has.</li>
+              <li>The link expires after 24 hours and works once; request another if it has expired.</li>
               <li>Check your spam folder if nothing arrives.</li>
             </ul>
             <div className="mt-6 flex flex-col gap-2">
@@ -151,7 +151,7 @@ export default function ForgotPasswordPage() {
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
             <p className="text-xs leading-relaxed text-ink-body">
-              The response is the same whether or not an account exists, so an address cannot be probed here. A message is sent only to registered accounts.
+              The response does not say whether an account exists. A message is sent only to registered accounts.
             </p>
           </div>
 

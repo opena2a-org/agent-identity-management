@@ -233,7 +233,7 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
           <div className="glass-chrome w-full max-w-md p-6">
             <h3 id="reject-title" className="text-[17px] font-bold tracking-[-0.02em] text-ink">Reject this request</h3>
             <p className="mt-1 text-xs text-ink-secondary">
-              Give a reason for rejecting {fullName}. It is stored with the request for other administrators.
+              Give a reason for rejecting {fullName}. A reason is required and is kept with the request.
             </p>
             <label htmlFor="reject-reason" className="sr-only">Rejection reason</label>
             <textarea
