@@ -97,17 +97,8 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 	emailDomain := extractEmailDomain(email)
 	shouldAutoApprove := isPlatformAdmin(email)
 
-	// A pending request needs someone who can approve it. On a fresh self-hosted install with
-	// no AIM_PLATFORM_ADMINS allowlist and no active administrator, the request would wait
-	// forever and nothing would say so; refuse before writing it (never write-then-refuse).
-	if !shouldAutoApprove && len(platformAdminAllowlist()) == 0 {
-		approvers, err := s.userRepo.CountByRoleAndStatus(domain.RoleAdmin, domain.UserStatusActive)
-		if err != nil {
-			return nil, fmt.Errorf("failed to count administrators: %w", err)
-		}
-		if approvers == 0 {
-			return nil, ErrNoAdministrators
-		}
+	if err := s.ensureApproverExists(shouldAutoApprove); err != nil {
+		return nil, err
 	}
 
 	// Create new manual registration request
@@ -246,6 +237,11 @@ func (s *RegistrationService) CreateAccessRequest(
 	existingRequest, err := s.registrationRepo.GetRegistrationRequestByEmail(ctx, email)
 	if err == nil && existingRequest != nil && existingRequest.IsPending() {
 		return nil, ErrRegistrationRequestExists
+	}
+
+	// An access request is never auto-approved, so it needs an approver like any other.
+	if err := s.ensureApproverExists(false); err != nil {
+		return nil, err
 	}
 
 	// Create new access request (no password)
@@ -679,6 +675,25 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 // Email comparison is case-insensitive and trims whitespace. Empty env var means
 // no platform admins exist (safe default — only approved-by-existing-admin users
 // can register).
+// ensureApproverExists refuses a request that would wait for an approval nobody in this
+// deployment can give. On a fresh self-hosted install with no AIM_PLATFORM_ADMINS allowlist
+// and no active administrator, a pending request would wait forever and nothing would say
+// so; the refusal happens before anything is written (never write-then-refuse). A request
+// that auto-approves needs no approver.
+func (s *RegistrationService) ensureApproverExists(autoApproved bool) error {
+	if autoApproved || len(platformAdminAllowlist()) > 0 {
+		return nil
+	}
+	approvers, err := s.userRepo.CountByRoleAndStatus(domain.RoleAdmin, domain.UserStatusActive)
+	if err != nil {
+		return fmt.Errorf("failed to count administrators: %w", err)
+	}
+	if approvers == 0 {
+		return ErrNoAdministrators
+	}
+	return nil
+}
+
 // platformAdminAllowlist returns the non-empty, lower-cased, trimmed entries of
 // AIM_PLATFORM_ADMINS; an unset, empty or separator-only variable yields no entries.
 func platformAdminAllowlist() []string {

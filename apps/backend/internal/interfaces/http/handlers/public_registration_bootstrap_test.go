@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // The sign-up page shows the error string verbatim, so the message itself is the contract.
@@ -41,5 +42,16 @@ func TestRegistrationErrorResponse_ExistingMappingsUnchanged(t *testing.T) {
 		if c.status == fiber.StatusInternalServerError && strings.Contains(message, "exploded") {
 			t.Errorf("internal error text leaked to the client: %q", message)
 		}
+	}
+}
+
+func TestRegistrationSuccessMessage_StatesTheOutcome(t *testing.T) {
+	approved := registrationSuccessMessage(domain.RegistrationStatusApproved)
+	pending := registrationSuccessMessage(domain.RegistrationStatusPending)
+	if !strings.Contains(approved, "approved") || strings.Contains(approved, "wait") {
+		t.Fatalf("approved message must say approved and not ask to wait: %q", approved)
+	}
+	if !strings.Contains(pending, "wait for admin approval") {
+		t.Fatalf("pending message must ask to wait for approval: %q", pending)
 	}
 }

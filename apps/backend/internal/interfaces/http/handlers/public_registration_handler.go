@@ -68,6 +68,7 @@ type RegisterUserResponse struct {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
+// @Failure 503 {object} map[string]interface{}
 // @Router /api/v1/public/register [post]
 func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 	var req RegisterUserRequest
@@ -130,14 +131,9 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 		})
 	}
 
-	message := "Registration request submitted successfully. Please wait for admin approval."
-	if registrationRequest.Status == domain.RegistrationStatusApproved {
-		// An allowlisted address (AIM_PLATFORM_ADMINS) is approved on the spot.
-		message = "Registration approved. You can sign in now."
-	}
 	return c.Status(fiber.StatusCreated).JSON(&RegisterUserResponse{
 		Success:             true,
-		Message:             message,
+		Message:             registrationSuccessMessage(registrationRequest.Status),
 		RegistrationRequest: registrationRequest,
 		RequestID:           registrationRequest.ID,
 	})
@@ -470,6 +466,7 @@ type RequestAccessResponse struct {
 // @Failure 400 {object} map[string]interface{}
 // @Failure 409 {object} map[string]interface{}
 // @Failure 500 {object} map[string]interface{}
+// @Failure 503 {object} map[string]interface{}
 // @Router /api/v1/public/request-access [post]
 func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 	var req RequestAccessRequest
@@ -571,6 +568,11 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
 				"success": false,
 				"error":   "An access request with this email is already pending approval",
+			})
+		case application.ErrNoAdministrators:
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"success": false,
+				"error":   NoAdministratorsMessage,
 			})
 		default:
 			// Return validation errors (e.g. password too short) to the client
@@ -852,4 +854,13 @@ func registrationErrorResponse(err error) (int, string) {
 		return fiber.StatusBadRequest, err.Error()
 	}
 	return fiber.StatusInternalServerError, "An internal error occurred. Please try again later."
+}
+
+// registrationSuccessMessage states the outcome of a successful sign-up: an allowlisted
+// address (AIM_PLATFORM_ADMINS) is approved on the spot, everyone else waits for review.
+func registrationSuccessMessage(status domain.RegistrationRequestStatus) string {
+	if status == domain.RegistrationStatusApproved {
+		return "Registration approved. You can sign in now."
+	}
+	return "Registration request submitted successfully. Please wait for admin approval."
 }
