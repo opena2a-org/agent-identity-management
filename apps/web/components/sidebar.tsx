@@ -30,8 +30,10 @@ export function AimLogo({ size = 30, className }: { size?: number; className?: s
       className={cn("inline-flex items-center justify-center", className)}
       style={{ width: size, height: size }}
     >
+      {/* The brand mark with a real alpha channel (public/aim-mark.png): the earlier
+          asset's baked white shield face read as a plate in the header. */}
       {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, no optimization needed */}
-      <img src="/aim-logo.png" alt="" width={size} height={size} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      <img src="/aim-mark.png" alt="" width={size} height={size} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
     </span>
   );
 }

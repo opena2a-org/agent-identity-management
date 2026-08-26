@@ -456,8 +456,8 @@ export default function MCPServerDetailsPage({
                     }
                   >
                     {server.verificationMethod === "agent_attestation"
-                      ? `Confidence: ${(server.confidenceScore ?? 0).toFixed(1)}%`
-                      : `Trust: ${trustScorePercent(server.trustScore).toFixed(1)}%`}
+                      ? `Confidence: ${Math.round(server.confidenceScore ?? 0)}%`
+                      : `Trust: ${Math.round(trustScorePercent(server.trustScore))}%`}
                   </Badge>
                 </div>
               </div>
@@ -527,7 +527,7 @@ export default function MCPServerDetailsPage({
                       getConfidenceColor(server.confidenceScore ?? 0).split(" ")[0]
                     }`}
                   >
-                    {(server.confidenceScore ?? 0).toFixed(1)}%
+                    {Math.round(server.confidenceScore ?? 0)}%
                   </div>
                   <p className="text-sm text-ink-secondary">
                     {(server.attestationCount ?? 0) === 0
@@ -605,7 +605,7 @@ export default function MCPServerDetailsPage({
                       getTrustColor(trustScorePercent(server.trustScore)).split(" ")[0]
                     }`}
                   >
-                    {trustScorePercent(server.trustScore).toFixed(1)}%
+                    {Math.round(trustScorePercent(server.trustScore))}%
                   </div>
                   <p className="text-sm text-ink-secondary">
                     {trustScorePercent(server.trustScore) >= 80
@@ -1387,8 +1387,8 @@ export default function MCPServerDetailsPage({
                         }
                       >
                         {server.verificationMethod === "agent_attestation"
-                          ? (server.confidenceScore ?? 0).toFixed(1)
-                          : trustScorePercent(server.trustScore).toFixed(1)}%
+                          ? Math.round(server.confidenceScore ?? 0)
+                          : Math.round(trustScorePercent(server.trustScore))}%
                       </Badge>
                     </span>
                   </div>

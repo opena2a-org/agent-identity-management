@@ -186,7 +186,7 @@ export function DashboardHeader() {
           {isDropdownOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} aria-hidden="true" />
-              <div role="menu" className="glass absolute right-0 z-50 mt-2 w-64 p-1.5">
+              <div role="menu" className="overlay-surface absolute right-0 z-50 mt-2 w-64 p-1.5">
                 <div className="px-3 py-2.5">
                   <p className="truncate text-sm font-bold text-ink">{user?.displayName || "Account"}</p>
                   <p className="truncate text-2xs text-ink-tertiary">{user?.email || "Loading..."}</p>

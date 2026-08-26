@@ -420,7 +420,7 @@ export default function SecurityPage() {
     const totalActions = metrics.protectionTimeline?.reduce((sum, d) => sum + d.actions, 0) || 0;
     const totalBlocked = metrics.protectionTimeline?.reduce((sum, d) => sum + d.blocked, 0) || 0;
     if (totalActions === 0) return "No agent actions recorded in the last 30 days.";
-    const authorizedRate = Math.min(100, Math.max(0, ((totalActions - totalBlocked) / totalActions) * 100)).toFixed(1);
+    const authorizedRate = String(Math.round(Math.min(100, Math.max(0, ((totalActions - totalBlocked) / totalActions) * 100))));
     return `${authorizedRate}% of agent actions in the last 30 days were authorized. AIM denied ${totalBlocked} of them.`;
   }, [metrics]);
 

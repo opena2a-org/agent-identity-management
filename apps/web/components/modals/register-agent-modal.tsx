@@ -665,7 +665,7 @@ export function RegisterAgentModal({
       style={{ margin: 0 }}
       onClick={handleOverlayClick}
     >
-      <div className="glass-chrome max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="overlay-surface max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-divider">
           <h2 className="text-xl font-semibold text-ink">

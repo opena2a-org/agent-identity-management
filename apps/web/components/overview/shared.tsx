@@ -27,9 +27,10 @@ export function shortTime(iso?: string | null) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/** Trust scores display as whole numbers on the 0-100 scale, never decimals. */
 export function trustDisplay(score: number | null | undefined) {
   if (typeof score !== "number" || Number.isNaN(score)) return null;
-  return (score <= 1 ? score : score / 100).toFixed(2);
+  return String(Math.round(score <= 1 ? score * 100 : score));
 }
 
 export function KpiTile({

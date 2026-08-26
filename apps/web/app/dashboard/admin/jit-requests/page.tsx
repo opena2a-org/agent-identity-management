@@ -620,7 +620,7 @@ export default function PendingVerificationsPage() {
                             const metadata = verification.context as Record<string, any> | undefined;
                             const score = metadata?.trustScore ?? verification.trustScore;
                             return typeof score === "number" && Number.isFinite(score)
-                              ? `${(score * 100).toFixed(1)}%`
+                              ? `${Math.round(score * 100)}%`
                               : "—";
                           })()}
                         </p>

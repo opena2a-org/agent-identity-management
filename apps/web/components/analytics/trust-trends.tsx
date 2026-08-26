@@ -166,7 +166,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
                 </dt>
                 <dd className="flex items-baseline">
                   <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                    {(data.summary.overallAvg * 100).toFixed(1)}%
+                    {Math.round(data.summary.overallAvg * 100)}%
                   </div>
                 </dd>
               </dl>
@@ -188,7 +188,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
                 <dd className="flex items-baseline">
                   <div className={`text-2xl font-semibold ${getTrendColor()}`}>
                     {data.summary.changePercentage > 0 ? '+' : ''}
-                    {data.summary.changePercentage.toFixed(1)}%
+                    {Math.round(data.summary.changePercentage)}%
                   </div>
                 </dd>
               </dl>
