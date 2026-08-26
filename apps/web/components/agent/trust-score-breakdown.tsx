@@ -302,11 +302,11 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
               return (
                 <div key={key} className="group p-4 rounded-panel border border-divider hover:border-brand transition-all">
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start gap-3 flex-1">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <div className={`p-2.5 rounded-inset-sm ${metadata.bgColor} transition-transform group-hover:scale-110`}>
                         <Icon className={`h-5 w-5 ${metadata.color}`} />
                       </div>
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-base text-ink">{metadata.label}</span>
                           <Tooltip>
@@ -320,7 +320,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                         </div>
 
                         {/* Visual weight and contribution indicators */}
-                        <div className="flex items-center gap-4 mt-2">
+                        <div className="flex flex-wrap items-center gap-4 mt-2">
                           <div className="flex items-center gap-1.5">
                             <div className="text-xs font-medium text-ink-tertiary">Weight</div>
                             <div className="px-2 py-0.5 rounded-md bg-glass-inset-gray text-xs font-semibold text-ink-body">
@@ -338,7 +338,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                     </div>
 
                     {/* Score badge */}
-                    <div className="flex flex-col items-end ml-4">
+                    <div className="ml-4 flex shrink-0 flex-col items-end">
                       <div className={`text-2xl font-bold ${getScoreColor(value)}`}>
                         {(value * 100).toFixed(1)}%
                       </div>

@@ -128,7 +128,7 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
               // eslint-disable-next-line @next/next/no-img-element
               <img src={request.profilePictureUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
             ) : (
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#6366f1] text-sm font-bold text-white" aria-hidden="true">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-sm font-bold text-white" aria-hidden="true">
                 {fullName.slice(0, 1).toUpperCase()}
               </span>
             )}

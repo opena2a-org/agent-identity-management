@@ -686,9 +686,13 @@ class APIClient {
         .json()
         .catch(() => ({ message: "Request failed" }));
 
-      // Backend can return either 'error' or 'message' field
+      // Backend can return either 'error' or 'message'. Some layers (the
+      // panic handler) set `error` to a BOOLEAN with the text in `message`;
+      // only ever surface strings, never a stringified true.
       const errorMessage =
-        error?.error || error?.message || `HTTP ${response.status}`;
+        (typeof error?.error === "string" && error.error) ||
+        (typeof error?.message === "string" && error.message) ||
+        `HTTP ${response.status}`;
       const requestError = new Error(errorMessage) as ApiRequestError;
       requestError.status = response.status;
       if (typeof error?.code === "string") {

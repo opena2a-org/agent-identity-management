@@ -725,12 +725,12 @@ export function RegisterAgentModal({
                         type={showPrivateKey ? "text" : "password"}
                         value={createdApiKey.key}
                         readOnly
-                        className="flex-1 px-3 py-2 bg-glass-inset border border-warning-border rounded-inset-sm text-xs font-mono text-ink"
+                        className="flex-1 px-3 py-2 bg-glass-inset-brand border border-warning-border rounded-inset-sm text-xs font-mono text-ink"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPrivateKey(!showPrivateKey)}
-                        className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
+                        className="px-3 py-2 bg-glass-inset-brand hover:bg-track rounded-inset-sm transition-colors"
                       >
                         {showPrivateKey ? (
                           <EyeOff className="h-4 w-4 text-ink-secondary" />
@@ -792,7 +792,7 @@ export function RegisterAgentModal({
                   {/* SDK Integration Option - Secondary */}
                   <button
                     onClick={() => setIntegrationMethod("sdk")}
-                    className="w-full p-4 border border-divider bg-glass-inset-gray rounded-inset hover:border-stroke transition-colors text-left"
+                    className="w-full p-4 border border-divider bg-glass-inset-brand rounded-inset hover:border-stroke transition-colors text-left"
                   >
                     <div className="flex items-start gap-3">
                       <Package className="h-5 w-5 text-ink-secondary mt-0.5 flex-shrink-0" />
@@ -995,7 +995,7 @@ print(f"Result: {result}")
                       </a>
                     </div>
                     <p className="text-xs text-ink-body">
-                      The supported install is <code className="bg-glass-inset-gray px-1 rounded">pip install aim-sdk</code>; the download is for machines without registry access.
+                      The supported install is <code className="bg-glass-inset-brand px-1 rounded">pip install aim-sdk</code>; the download is for machines without registry access.
                     </p>
                   </div>
 
@@ -1042,14 +1042,14 @@ print(f"Result: {result}")
                                 type="text"
                                 value={createdAgent.id}
                                 readOnly
-                                className="flex-1 px-3 py-2 bg-glass-inset border border-stroke rounded-inset-sm text-xs font-mono text-ink"
+                                className="flex-1 px-3 py-2 bg-glass-inset-brand border border-stroke rounded-inset-sm text-xs font-mono text-ink"
                               />
                               <button
                                 type="button"
                                 onClick={() =>
                                   copyToClipboard(createdAgent.id, "agent_id")
                                 }
-                                className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
+                                className="px-3 py-2 bg-glass-inset-brand hover:bg-track rounded-inset-sm transition-colors"
                               >
                                 {copiedField === "agent_id" ? (
                                   <CheckCircle className="h-4 w-4 text-success-text" />
@@ -1143,12 +1143,12 @@ print(f"Result: {result}")
                                       type="text"
                                       value={agentKeys.publicKey}
                                       readOnly
-                                      className="flex-1 px-3 py-2 bg-glass-inset border border-stroke rounded-inset-sm text-xs font-mono text-ink"
+                                      className="flex-1 px-3 py-2 bg-glass-inset-brand border border-stroke rounded-inset-sm text-xs font-mono text-ink"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => copyToClipboard(agentKeys.publicKey, "public_key")}
-                                      className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
+                                      className="px-3 py-2 bg-glass-inset-brand hover:bg-track rounded-inset-sm transition-colors"
                                     >
                                       {copiedField === "public_key" ? (
                                         <CheckCircle className="h-4 w-4 text-success-text" />
@@ -1169,12 +1169,12 @@ print(f"Result: {result}")
                                       type={showPrivateKey ? "text" : "password"}
                                       value={agentKeys.privateKey}
                                       readOnly
-                                      className="flex-1 px-3 py-2 bg-glass-inset border border-danger-border rounded-inset-sm text-xs font-mono text-ink"
+                                      className="flex-1 px-3 py-2 bg-glass-inset-brand border border-danger-border rounded-inset-sm text-xs font-mono text-ink"
                                     />
                                     <button
                                       type="button"
                                       onClick={() => setShowPrivateKey(!showPrivateKey)}
-                                      className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
+                                      className="px-3 py-2 bg-glass-inset-brand hover:bg-track rounded-inset-sm transition-colors"
                                     >
                                       {showPrivateKey ? (
                                         <EyeOff className="h-4 w-4 text-ink-secondary" />
@@ -1185,7 +1185,7 @@ print(f"Result: {result}")
                                     <button
                                       type="button"
                                       onClick={() => copyToClipboard(agentKeys.privateKey, "private_key")}
-                                      className="px-3 py-2 bg-glass-inset-gray hover:bg-track rounded-inset-sm transition-colors"
+                                      className="px-3 py-2 bg-glass-inset-brand hover:bg-track rounded-inset-sm transition-colors"
                                     >
                                       {copiedField === "private_key" ? (
                                         <CheckCircle className="h-4 w-4 text-success-text" />
@@ -1275,7 +1275,7 @@ print(f"Result: {result}")
                       // Styling for normal/active state
                       loading || success || editMode
                         ? "bg-track cursor-not-allowed border-stroke focus:ring-0"
-                        : "bg-glass-inset focus:ring-2 focus:ring-ring border-stroke"
+                        : "bg-glass-inset-brand focus:ring-2 focus:ring-ring border-stroke"
                       } ${
                       // Styling for error state (overrides normal/active styling if present)
                       errors.name
@@ -1302,7 +1302,7 @@ print(f"Result: {result}")
                       setFormData({ ...formData, displayName: e.target.value })
                     }
                     placeholder="e.g., Claude AI Assistant"
-                    className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.displayName
+                    className={`w-full px-3 py-2 bg-glass-inset-brand border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.displayName
                       ? "border-danger"
                       : "border-stroke"
                       }`}
@@ -1328,7 +1328,7 @@ print(f"Result: {result}")
                     }
                     placeholder="Brief description of what this agent does..."
                     rows={3}
-                    className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
+                    className="w-full px-3 py-2 bg-glass-inset-brand border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                     disabled={loading || success}
                   />
                 </div>
@@ -1347,7 +1347,7 @@ print(f"Result: {result}")
                           agentType: e.target.value as AgentType,
                         })
                       }
-                      className="w-full px-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
+                      className="w-full px-3 py-2 bg-glass-inset-brand border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                       disabled={loading || success}
                     >
                       {AGENT_TYPE_CATEGORIES.map((category) => (
@@ -1377,7 +1377,7 @@ print(f"Result: {result}")
                         setFormData({ ...formData, version: e.target.value })
                       }
                       placeholder="1.0.0"
-                      className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.version
+                      className={`w-full px-3 py-2 bg-glass-inset-brand border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.version
                         ? "border-danger"
                         : "border-stroke"
                         }`}
@@ -1414,7 +1414,7 @@ print(f"Result: {result}")
                       })
                     }
                     placeholder="https://github.com/yourusername/your-agent"
-                    className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.repositoryUrl
+                    className={`w-full px-3 py-2 bg-glass-inset-brand border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.repositoryUrl
                       ? "border-danger"
                       : "border-stroke"
                       }`}
@@ -1443,7 +1443,7 @@ print(f"Result: {result}")
                       })
                     }
                     placeholder="https://docs.example.com/agents/your-agent"
-                    className={`w-full px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.documentationUrl
+                    className={`w-full px-3 py-2 bg-glass-inset-brand border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary ${errors.documentationUrl
                       ? "border-danger"
                       : "border-stroke"
                       }`}
@@ -1465,7 +1465,7 @@ print(f"Result: {result}")
                   </label>
                   <p className="text-xs text-ink-tertiary mb-3">
                     Optional: the SDK detects capabilities when the agent runs. Add any you want
-                    recorded now. Format: <code className="bg-glass-inset-gray px-1 rounded">namespace:action</code>
+                    recorded now. Format: <code className="bg-glass-inset-brand px-1 rounded">namespace:action</code>
                   </p>
                   {errors.capabilities && (
                     <p className="text-xs text-danger-text mb-2">{errors.capabilities}</p>
@@ -1485,7 +1485,7 @@ print(f"Result: {result}")
                       {mergedCapabilities.map((capability) => (
                         <label
                           key={capability.type}
-                          className="flex items-start gap-2 p-2 rounded-inset-sm border border-divider hover:bg-glass-inset-gray cursor-pointer"
+                          className="flex items-start gap-2 p-2 rounded-inset-sm border border-divider hover:bg-glass-inset-brand cursor-pointer"
                         >
                           <input
                             type="checkbox"
@@ -1533,7 +1533,7 @@ print(f"Result: {result}")
                             e.key === "Enter" && (e.preventDefault(), addCustomCapability())
                           }
                           placeholder="e.g., payment:process or email:send"
-                          className={`flex-1 px-3 py-2 bg-glass-inset border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary font-mono text-sm ${
+                          className={`flex-1 px-3 py-2 bg-glass-inset-brand border rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary font-mono text-sm ${
                             customCapabilityError ? "border-danger" : "border-stroke"
                           }`}
                           disabled={loading || success}
@@ -1588,7 +1588,7 @@ print(f"Result: {result}")
                           }
                         }}
                         placeholder="Search or type MCP server name..."
-                        className="w-full pl-10 pr-3 py-2 bg-glass-inset border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
+                        className="w-full pl-10 pr-3 py-2 bg-glass-inset-brand border border-stroke rounded-inset focus:outline-none focus:ring-2 focus:ring-ring text-ink placeholder:text-ink-tertiary"
                         disabled={loading || success}
                       />
                     </div>
@@ -1620,7 +1620,7 @@ print(f"Result: {result}")
                           {/* Registered MCPs Section */}
                           {filteredMcpSuggestions.filter(s => s.isRegistered).length > 0 && (
                             <>
-                              <div className="px-3 py-2 text-xs font-semibold text-ink-tertiary bg-glass-inset-gray border-b border-divider">
+                              <div className="px-3 py-2 text-xs font-semibold text-ink-tertiary bg-glass-inset-brand border-b border-divider">
                                 Registered MCP servers
                               </div>
                               {filteredMcpSuggestions.filter(s => s.isRegistered).map((suggestion) => (
@@ -1628,7 +1628,7 @@ print(f"Result: {result}")
                                   key={suggestion.id}
                                   type="button"
                                   onClick={() => addMcpServer(suggestion.name)}
-                                  className="w-full px-3 py-2 text-left hover:bg-glass-inset-gray flex items-center gap-3 border-b border-divider last:border-b-0"
+                                  className="w-full px-3 py-2 text-left hover:bg-glass-inset-brand flex items-center gap-3 border-b border-divider last:border-b-0"
                                 >
                                   <Server className="h-4 w-4 text-success-text flex-shrink-0" />
                                   <div className="flex-1 min-w-0">
@@ -1641,7 +1641,7 @@ print(f"Result: {result}")
                                           ? "bg-success-fill text-success-text"
                                           : suggestion.status === "active"
                                           ? "bg-brand-soft text-brand-text"
-                                          : "bg-glass-inset-gray text-ink-secondary"
+                                          : "bg-glass-inset-brand text-ink-secondary"
                                       }`}>
                                         {suggestion.status}
                                       </span>
@@ -1660,7 +1660,7 @@ print(f"Result: {result}")
                           {/* Discovered MCPs Section */}
                           {filteredMcpSuggestions.filter(s => s.isDiscovered).length > 0 && (
                             <>
-                              <div className="px-3 py-2 text-xs font-semibold text-ink-tertiary bg-glass-inset-gray border-b border-divider">
+                              <div className="px-3 py-2 text-xs font-semibold text-ink-tertiary bg-glass-inset-brand border-b border-divider">
                                 Discovered (not registered)
                               </div>
                               {filteredMcpSuggestions.filter(s => s.isDiscovered).map((suggestion) => (
@@ -1668,7 +1668,7 @@ print(f"Result: {result}")
                                   key={suggestion.id}
                                   type="button"
                                   onClick={() => addMcpServer(suggestion.name)}
-                                  className="w-full px-3 py-2 text-left hover:bg-glass-inset-gray flex items-center gap-3 border-b border-divider last:border-b-0"
+                                  className="w-full px-3 py-2 text-left hover:bg-glass-inset-brand flex items-center gap-3 border-b border-divider last:border-b-0"
                                 >
                                   <Server className="h-4 w-4 text-warning-text flex-shrink-0" />
                                   <div className="flex-1 min-w-0">
@@ -1775,7 +1775,7 @@ print(f"Result: {result}")
                   type="button"
                   onClick={handleClose}
                   disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-gray rounded-pill transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-brand rounded-pill transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>

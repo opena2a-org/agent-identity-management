@@ -52,22 +52,22 @@ function classifyByDriftPct(driftPct: number): DriftStatus {
 const STATUS_META: Record<DriftStatus, { label: string; badgeClass: string; scoreClass: string; icon: typeof CheckCircle; description: string }> = {
   clean: {
     label: 'Clean',
-    badgeClass: 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20',
-    scoreClass: 'text-green-600 dark:text-green-400',
+    badgeClass: 'bg-success-fill text-success-text border-success-border',
+    scoreClass: 'text-success-text',
     icon: CheckCircle,
     description: 'No behavioral drift detected. Runtime configuration matches registered baseline.',
   },
   mild: {
     label: 'Mild Drift',
-    badgeClass: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20',
-    scoreClass: 'text-yellow-600 dark:text-yellow-400',
+    badgeClass: 'bg-warning-fill text-warning-text border-warning-border',
+    scoreClass: 'text-warning-text',
     icon: Activity,
     description: 'Minor deviations from registered configuration. Review recent drift alerts.',
   },
   active: {
     label: 'Active Drift',
-    badgeClass: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20',
-    scoreClass: 'text-red-600 dark:text-red-400',
+    badgeClass: 'bg-danger-fill text-danger-text border-danger-border',
+    scoreClass: 'text-danger-text',
     icon: AlertTriangle,
     description: 'Significant runtime deviation from registered configuration. Investigate immediately.',
   },

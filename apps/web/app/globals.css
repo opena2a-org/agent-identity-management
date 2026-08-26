@@ -39,13 +39,14 @@
     --surface-inset: rgba(255, 255, 255, 0.7);
     --surface-inset-border: transparent;
     --surface-inset-gray: rgba(120, 120, 128, 0.08);
+    --surface-inset-brand: rgba(0, 113, 227, 0.07);
     --surface-contrast: rgba(29, 29, 31, 0.92);
     --surface-contrast-border: transparent;
     --code-fill: rgba(255, 255, 255, 0.08);
     --segment-track: rgba(120, 120, 128, 0.14);
     --segment-active: rgba(255, 255, 255, 0.95);
     --segment-active-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
-    --segment-inactive-text: #66666b;
+    --segment-inactive-text: var(--text-secondary); /* 4.91 on the track over the bare page; #66666b measured 4.21 */
     --nav-active-fill: rgba(0, 113, 227, 0.1);
 
     /* Brand accent (fill vs text differ for contrast: white on #0071e3 = 4.7:1, #0066cc on glass = 5.3:1).
@@ -62,7 +63,7 @@
 
     /* Semantic */
     --green: #34c759;
-    --green-text: #1f7a35;
+    --green-text: #1a6b2e; /* 5.13 on the green tint over the page; #1f7a35 measured 4.33 live */
     --green-fill: rgba(52, 199, 89, 0.14);
     --green-border: rgba(52, 199, 89, 0.28);
     --amber: #f5a623;
@@ -75,14 +76,25 @@
     --red-fill: rgba(255, 59, 48, 0.08);
     --red-border: rgba(255, 59, 48, 0.25);
 
-    /* Text tiers */
+    /* Text tiers. Light ratios measured against the bare page (#e9eef7), the
+       worst surface a tier lands on: secondary 5.71, tertiary 4.90, body 8+.
+       Inverse tiers sit on the contrast surface in both themes: inverse-secondary
+       4.81 on a white/10 pill, 6.59 on the bare contrast card. */
     --text-primary: #1d1d1f;
     --text-body: #48484a;
-    --text-secondary: #6e6e73;
-    --text-tertiary: #737378;
+    --text-secondary: #5c5c61;
+    --text-tertiary: #66666b;
     --text-inverse: #f5f5f7;
-    --text-inverse-secondary: #a1a1a6;
+    --text-inverse-secondary: #b4b4b9;
     --text-code: #0b5cad;
+    /* Code on the contrast (dark-in-both-themes) surface. `.glass-contrast`
+       re-declares --text-code / --code-fill from these so a code block inside it
+       never inherits the light-surface blue: 10.02 light, 10.56 dark. */
+    --text-code-on-contrast: #7dd3fc;
+    --code-fill-on-contrast: rgba(0, 0, 0, 0.35);
+    /* The `$ ` prompt before a command: secondary tier on a light code block
+       (6.6 on the inset-gray block), inverse-secondary inside the contrast card. */
+    --text-code-prompt: var(--text-secondary);
 
     /* Lines */
     --divider: rgba(60, 60, 67, 0.08);
@@ -106,7 +118,7 @@
     --secondary: 240 5% 93%;
     --secondary-foreground: 240 3% 12%;
     --muted: 240 5% 93%;
-    --muted-foreground: 240 2% 44%;
+    --muted-foreground: 240 2% 40%; /* 5.01 on --muted; 44% measured 4.31 */
     --accent: 210 90% 95%;
     --accent-foreground: 210 100% 40%;
     --destructive: 355 100% 38%;
@@ -135,13 +147,14 @@
     --surface-inset: rgba(255, 255, 255, 0.06);
     --surface-inset-border: rgba(255, 255, 255, 0.08);
     --surface-inset-gray: rgba(255, 255, 255, 0.05);
+    --surface-inset-brand: rgba(41, 151, 255, 0.12);
     --surface-contrast: rgba(255, 255, 255, 0.08);
     --surface-contrast-border: rgba(255, 255, 255, 0.14);
     --code-fill: rgba(0, 0, 0, 0.35);
     --segment-track: rgba(255, 255, 255, 0.08);
     --segment-active: rgba(255, 255, 255, 0.16);
     --segment-active-shadow: none;
-    --segment-inactive-text: #86868b;
+    --segment-inactive-text: var(--text-secondary); /* 5.39 on the track; #86868b measured 3.83 */
     --nav-active-fill: rgba(41, 151, 255, 0.16);
 
     --brand: #0071e3;
@@ -170,7 +183,7 @@
     --text-secondary: #a1a1a6;
     --text-tertiary: #86868b;
     --text-inverse: #f5f5f7;
-    --text-inverse-secondary: #a1a1a6;
+    --text-inverse-secondary: #b4b4b9;
     --text-code: #7dd3fc;
 
     --divider: rgba(255, 255, 255, 0.08);
@@ -328,6 +341,14 @@
     color: var(--text-inverse);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+  }
+  /* The contrast surface is dark in both themes, so code inside it uses the
+     on-contrast tokens regardless of theme (text-ink-code, .code-block, bg-glass-code). */
+  .glass-contrast,
+  .bg-glass-contrast {
+    --text-code: var(--text-code-on-contrast);
+    --code-fill: var(--code-fill-on-contrast);
+    --text-code-prompt: var(--text-inverse-secondary);
   }
   .glass-inset {
     background: var(--surface-inset-gray);

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOut, Loader2, Shield, X } from "lucide-react";
+import { LogOut, Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   filterNavigationByRole,
@@ -27,10 +27,11 @@ export function AimLogo({ size = 30, className }: { size?: number; className?: s
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-flex items-center justify-center rounded-full bg-logo text-white", className)}
+      className={cn("inline-flex items-center justify-center", className)}
       style={{ width: size, height: size }}
     >
-      <Shield style={{ width: Math.round(size / 2), height: Math.round(size / 2) }} strokeWidth={2.4} />
+      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, no optimization needed */}
+      <img src="/aim-logo.png" alt="" width={size} height={size} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
     </span>
   );
 }
@@ -355,7 +356,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
       <div className="mt-4 flex flex-shrink-0 flex-col gap-1 border-t border-divider pt-3">
         {user && (
           <div className="flex items-center gap-2.5 px-2">
-            <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#6366f1] text-xs font-bold text-white">
+            <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-xs font-bold text-white">
               {(user.display_name || user.email || "?").slice(0, 1).toUpperCase()}
             </span>
             <span className="min-w-0 flex-1">

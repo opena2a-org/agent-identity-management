@@ -103,6 +103,7 @@ module.exports = {
           inset: 'var(--surface-inset)',
           'inset-border': 'var(--surface-inset-border)',
           'inset-gray': 'var(--surface-inset-gray)',
+          'inset-brand': 'var(--surface-inset-brand)',
           contrast: 'var(--surface-contrast)',
           'contrast-border': 'var(--surface-contrast-border)',
           code: 'var(--code-fill)',
