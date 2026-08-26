@@ -4,7 +4,7 @@ import Link from "next/link";
 import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOut, Loader2, Shield, X } from "lucide-react";
+import { LogOut, Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   filterNavigationByRole,
@@ -27,10 +27,11 @@ export function AimLogo({ size = 30, className }: { size?: number; className?: s
   return (
     <span
       aria-hidden="true"
-      className={cn("inline-flex items-center justify-center rounded-full bg-logo text-white", className)}
+      className={cn("inline-flex items-center justify-center", className)}
       style={{ width: size, height: size }}
     >
-      <Shield style={{ width: Math.round(size / 2), height: Math.round(size / 2) }} strokeWidth={2.4} />
+      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, no optimization needed */}
+      <img src="/aim-logo.png" alt="" width={size} height={size} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
     </span>
   );
 }

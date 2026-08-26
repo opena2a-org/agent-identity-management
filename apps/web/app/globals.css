@@ -39,6 +39,7 @@
     --surface-inset: rgba(255, 255, 255, 0.7);
     --surface-inset-border: transparent;
     --surface-inset-gray: rgba(120, 120, 128, 0.08);
+    --surface-inset-brand: rgba(0, 113, 227, 0.07);
     --surface-contrast: rgba(29, 29, 31, 0.92);
     --surface-contrast-border: transparent;
     --code-fill: rgba(255, 255, 255, 0.08);
@@ -146,6 +147,7 @@
     --surface-inset: rgba(255, 255, 255, 0.06);
     --surface-inset-border: rgba(255, 255, 255, 0.08);
     --surface-inset-gray: rgba(255, 255, 255, 0.05);
+    --surface-inset-brand: rgba(41, 151, 255, 0.12);
     --surface-contrast: rgba(255, 255, 255, 0.08);
     --surface-contrast-border: rgba(255, 255, 255, 0.14);
     --code-fill: rgba(0, 0, 0, 0.35);
