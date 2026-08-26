@@ -171,7 +171,7 @@ export function DashboardHeader() {
             aria-expanded={isDropdownOpen}
             className="flex items-center gap-2 rounded-pill border border-glass-border bg-glass py-1 pl-1 pr-2.5 backdrop-blur-card hover:bg-glass-inset"
           >
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#6366f1] text-xs font-bold text-white">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-xs font-bold text-white">
               {initial}
             </span>
             <span className="hidden max-w-[160px] truncate text-xs font-bold text-ink sm:block">

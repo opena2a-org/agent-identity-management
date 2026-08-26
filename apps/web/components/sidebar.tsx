@@ -355,7 +355,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
       <div className="mt-4 flex flex-shrink-0 flex-col gap-1 border-t border-divider pt-3">
         {user && (
           <div className="flex items-center gap-2.5 px-2">
-            <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#a78bfa] to-[#6366f1] text-xs font-bold text-white">
+            <span className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-xs font-bold text-white">
               {(user.display_name || user.email || "?").slice(0, 1).toUpperCase()}
             </span>
             <span className="min-w-0 flex-1">

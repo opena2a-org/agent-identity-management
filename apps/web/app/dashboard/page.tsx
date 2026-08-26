@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
-import { ArrowRight, Bell, Server, ShieldCheck, ShieldPlus } from "lucide-react";
+import { ArrowRight, Bell, ExternalLink, Server, ShieldCheck, ShieldPlus } from "lucide-react";
 import { api, type Agent } from "@/lib/api";
 import { getDashboardPermissions, type UserRole } from "@/lib/permissions";
 import { effectiveEdgeRoles } from "@/lib/route-permissions";
@@ -67,6 +67,9 @@ interface HomeData {
 // 2026-08-24, @opena2a/aim-sdk 1.3.0), so a TypeScript command block would not run.
 export const QUICKSTART_LANGS = ["python"] as const;
 type QuickstartLang = (typeof QUICKSTART_LANGS)[number];
+
+/** Where the SDK is installed from; Python is the only quickstart language. */
+export const SDK_INSTALL_URL = "https://pypi.org/project/aim-sdk/";
 
 /**
  * `aim-sdk login` defaults to the hosted service (sdk/python/aim_sdk/cli.py DEFAULT_AIM_URL);
@@ -163,7 +166,7 @@ function CodeBlock({ lines, className }: { lines: readonly string[]; className?:
     <pre className={cn("code-block", className)} aria-label="Commands">
       {lines.map((l, i) => (
         <span key={i} className="block">
-          <span className="select-none text-ink-inverse-secondary">$ </span>
+          <span className="select-none text-[color:var(--text-code-prompt)]">$ </span>
           {l}
         </span>
       ))}
@@ -206,9 +209,20 @@ function Quickstart({ compact = false }: { compact?: boolean }) {
         The SDK creates an Ed25519 keypair on your machine, registers the agent under your account and stores the credentials in{" "}
         <span className="font-mono text-ink-inverse">~/.aim/</span>. The private key never leaves your machine.
       </p>
-      <Link href="/dashboard/developers" className="inline-flex items-center gap-1.5 self-start rounded-pill bg-white/10 px-4 py-2 text-xs font-bold text-ink-inverse hover:bg-white/15">
-        Open the developer guide <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={SDK_INSTALL_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-brand px-4 py-2 text-xs font-bold text-white shadow-glow hover:bg-brand-hover"
+        >
+          Install the SDK <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="sr-only">(PyPI, opens in a new tab)</span>
+        </a>
+        <Link href="/dashboard/developers" className="inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-4 py-2 text-xs font-bold text-ink-inverse hover:bg-white/15">
+          Developer guide <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </Link>
+      </div>
     </div>
   );
 }
@@ -309,7 +323,16 @@ function FirstAgentCard() {
       </div>
       <OriginQuickstart className="!bg-glass-inset-gray !text-ink" />
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
+        <a
+          href={SDK_INSTALL_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover"
+        >
+          Install the SDK <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="sr-only">(PyPI, opens in a new tab)</span>
+        </a>
+        <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill border border-stroke bg-glass px-4 text-xs font-bold text-ink">
           Secure it in the browser instead
         </Link>
         <Link href="/dashboard/developers" className="inline-flex h-9 items-center rounded-pill border border-stroke bg-glass px-4 text-xs font-bold text-ink">
