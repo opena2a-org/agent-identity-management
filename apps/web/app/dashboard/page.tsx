@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -11,6 +11,7 @@ import { effectiveEdgeRoles } from "@/lib/route-permissions";
 import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { getErrorMessage } from "@/lib/error-messages";
 import { usePersona } from "@/lib/persona";
+import { SDK_TABS, type SdkLang } from "@/lib/sdk-tabs";
 import { AuthGuard } from "@/components/auth-guard";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -60,28 +61,6 @@ interface HomeData {
   activity: VerificationActivityMonth[];
   agents: Agent[];
   user: { name: string; role: UserRole } | null;
-}
-
-// The canonical quickstart. Every surface that teaches the install path must match this.
-// Python only: the npm SDK does not export secure() and ships no aim-sdk binary (measured
-// 2026-08-24, @opena2a/aim-sdk 1.3.0), so a TypeScript command block would not run.
-export const QUICKSTART_LANGS = ["python"] as const;
-type QuickstartLang = (typeof QUICKSTART_LANGS)[number];
-
-/** Where the SDK is installed from; Python is the only quickstart language. */
-export const SDK_INSTALL_URL = "https://pypi.org/project/aim-sdk/";
-
-/**
- * `aim-sdk login` defaults to the hosted service (sdk/python/aim_sdk/cli.py DEFAULT_AIM_URL);
- * a self-hosted dashboard passes its own origin, which proxies /api to the backend.
- */
-export function quickstartLines(lang: QuickstartLang, origin: string): readonly string[] {
-  const login = origin ? `aim-sdk login --url ${origin}` : "aim-sdk login";
-  switch (lang) {
-    case "python":
-    default:
-      return ["pip install aim-sdk", login, 'python -c "from aim_sdk import secure; secure(\\"my-first-agent\\")"'];
-  }
 }
 
 /** The page origin, known only in the browser (empty during prerender). */
@@ -174,55 +153,73 @@ function CodeBlock({ lines, className }: { lines: readonly string[]; className?:
   );
 }
 
-function OriginQuickstart({ className }: { className?: string }) {
+/**
+ * The tabbed SDK quickstart, one instance per page. `dark` selects the on-contrast tab
+ * styling; the code blocks pick their own tokens from the surface. Extra actions go in
+ * `children`, beside the active tab's docs link.
+ */
+function SdkQuickstart({ dark = false, children }: { dark?: boolean; children?: ReactNode }) {
+  const [lang, setLang] = useState<SdkLang>("python");
   const origin = useOrigin();
-  return <CodeBlock lines={quickstartLines("python", origin)} className={className} />;
+  const active = SDK_TABS.find((t) => t.key === lang) ?? SDK_TABS[0];
+  const block = dark ? undefined : "!bg-glass-inset-gray !text-ink";
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="SDK language">
+        {SDK_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            id={`sdk-tab-${t.key}`}
+            aria-selected={lang === t.key}
+            aria-controls="sdk-tabpanel"
+            onClick={() => setLang(t.key)}
+            className={cn(
+              "rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
+              lang === t.key
+                ? "bg-brand text-white shadow-glow"
+                : dark
+                  ? "bg-white/10 text-ink-inverse-secondary hover:text-ink-inverse"
+                  : "bg-glass-inset-gray text-ink-secondary hover:text-ink"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div id="sdk-tabpanel" role="tabpanel" aria-labelledby={`sdk-tab-${active.key}`} className="flex min-w-0 flex-col gap-3">
+        <CodeBlock lines={active.install(origin).split(" && ")} className={block} />
+        <pre className={cn("code-block", block)} aria-label={`${active.label} example`}>
+          {active.code(origin)}
+        </pre>
+        {active.note && <p className={cn("text-xs leading-relaxed", dark ? "text-ink-inverse-secondary" : "text-ink-secondary")}>{active.note}</p>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={active.docsHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover"
+        >
+          {active.docsLabel} <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 function Quickstart({ compact = false }: { compact?: boolean }) {
-  const [lang, setLang] = useState<QuickstartLang>("python");
-  const origin = useOrigin();
   return (
     <div className={cn("glass-contrast flex min-w-0 flex-col gap-3 overflow-hidden p-5", compact && "p-4")}>
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[13.5px] font-bold">Quickstart</h3>
-        <div className="flex gap-1.5" role="tablist" aria-label="Language">
-          {QUICKSTART_LANGS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={lang === k}
-              onClick={() => setLang(k)}
-              className={cn(
-                "rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
-                lang === k ? "bg-brand text-white shadow-glow" : "bg-white/10 text-ink-inverse-secondary hover:text-ink-inverse"
-              )}
-            >
-              {k === "python" ? "Python" : "TypeScript"}
-            </button>
-          ))}
-        </div>
-      </div>
-      <CodeBlock lines={quickstartLines(lang, origin)} />
-      <p className="text-xs leading-relaxed text-ink-inverse-secondary">
-        The SDK creates an Ed25519 keypair on your machine, registers the agent under your account and stores the credentials in{" "}
-        <span className="font-mono text-ink-inverse">~/.aim/</span>. The private key never leaves your machine.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <a
-          href={SDK_INSTALL_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-pill bg-brand px-4 py-2 text-xs font-bold text-white shadow-glow hover:bg-brand-hover"
-        >
-          Install the SDK <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="sr-only">(PyPI, opens in a new tab)</span>
-        </a>
-        <Link href="/dashboard/developers" className="inline-flex items-center gap-1.5 rounded-pill bg-white/10 px-4 py-2 text-xs font-bold text-ink-inverse hover:bg-white/15">
+      <h3 className="text-[13.5px] font-bold">Quickstart</h3>
+      <SdkQuickstart dark>
+        <Link href="/dashboard/developers" className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-white/10 px-4 text-xs font-bold text-ink-inverse hover:bg-white/15">
           Developer guide <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
         </Link>
-      </div>
+      </SdkQuickstart>
     </div>
   );
 }
@@ -317,28 +314,18 @@ function FirstAgentCard() {
         <div>
           <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Secure your first agent</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-            Three commands give an agent a verifiable identity. Refresh this page once it has checked in and it appears here with its trust score.
+            Install the SDK, sign in once, wrap your agent. Refresh this page once it has checked in and it appears here with its trust score.
           </p>
         </div>
       </div>
-      <OriginQuickstart className="!bg-glass-inset-gray !text-ink" />
-      <div className="flex flex-wrap items-center gap-2">
-        <a
-          href={SDK_INSTALL_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover"
-        >
-          Install the SDK <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          <span className="sr-only">(PyPI, opens in a new tab)</span>
-        </a>
+      <SdkQuickstart>
         <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill border border-stroke bg-glass px-4 text-xs font-bold text-ink">
           Secure it in the browser instead
         </Link>
         <Link href="/dashboard/developers" className="inline-flex h-9 items-center rounded-pill border border-stroke bg-glass px-4 text-xs font-bold text-ink">
           Developer guide
         </Link>
-      </div>
+      </SdkQuickstart>
     </div>
   );
 }
@@ -556,7 +543,7 @@ function DashboardContent() {
       <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr] [&>*]:min-w-0">
         {zero ? <FirstAgentCard /> : <AgentsCard agents={sortedAgents} total={stats.totalAgents} />}
         <div className="flex min-w-0 flex-col gap-4">
-          <Quickstart compact />
+          {!zero && <Quickstart compact />}
           <VerificationActivityCard activity={activity} />
         </div>
       </div>
