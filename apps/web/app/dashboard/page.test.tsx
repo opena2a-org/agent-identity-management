@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, type Mock } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import type { ReactNode } from "react";
 import DashboardPage from "./page";
 import { api } from "@/lib/api";
@@ -28,6 +28,11 @@ vi.mock("@/lib/api", () => ({
     getVerificationActivity: vi.fn(),
     listAgents: vi.fn(),
     getCurrentUser: vi.fn(),
+    // Read by the security/executive lens effect; the lens components are mocked out.
+    getSecurityMetrics: vi.fn(),
+    getSecurityViolations: vi.fn(),
+    getRecentVerificationEvents: vi.fn(),
+    getComplianceStatus: vi.fn(),
   },
 }));
 
@@ -55,6 +60,10 @@ function arrange(totalAgents: number) {
   (api.getVerificationActivity as Mock).mockResolvedValue({ activity: [] });
   (api.listAgents as Mock).mockResolvedValue({ agents: totalAgents ? [agent] : [] });
   (api.getCurrentUser as Mock).mockResolvedValue({ name: "Seat Three", email: "seat@example.test", role: "admin" });
+  (api.getSecurityMetrics as Mock).mockResolvedValue({});
+  (api.getSecurityViolations as Mock).mockResolvedValue({ total: 0, violations: [] });
+  (api.getRecentVerificationEvents as Mock).mockResolvedValue({ events: [] });
+  (api.getComplianceStatus as Mock).mockResolvedValue({});
 }
 
 const installBlocks = () => document.querySelectorAll('pre[aria-label="Commands"]');
@@ -97,5 +106,60 @@ describe("dashboard quickstart", () => {
     expect(screen.getAllByRole("tablist")).toHaveLength(1);
     expect(screen.getAllByRole("tab")).toHaveLength(3);
     expect(installBlocks()).toHaveLength(1);
+  });
+});
+
+describe("dashboard live check-in panel", () => {
+  it("listens for every persona while no agent exists", async () => {
+    const { usePersona } = await import("@/lib/persona");
+    for (const persona of ["developer", "security", "executive"] as const) {
+      arrange(0);
+      act(() => usePersona.setState({ persona }));
+      render(<DashboardPage />);
+      await screen.findByText("Secure your first agent");
+      expect(screen.getByText("Listening for the first check-in")).toBeTruthy();
+      cleanup();
+    }
+    act(() => usePersona.setState({ persona: "developer" }));
+  });
+
+  it("listens before the first agent exists and not after", async () => {
+    arrange(1);
+    render(<DashboardPage />);
+    await screen.findByRole("heading", { name: "Quickstart" });
+    expect(screen.queryByText("Listening for the first check-in")).toBeNull();
+    cleanup();
+
+    arrange(0);
+    render(<DashboardPage />);
+    await screen.findByText("Secure your first agent");
+    expect(screen.getByText("Listening for the first check-in")).toBeTruthy();
+  });
+
+  it("fills the overview in on its own when the first agent checks in", async () => {
+    // Only the interval is faked; promises still settle on the real microtask queue.
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      arrange(0);
+      render(<DashboardPage />);
+      await screen.findByText("Secure your first agent");
+      const arrival = { ...agent, createdAt: new Date().toISOString() };
+
+      // The next poll finds the agent; the refetch it triggers sees the new totals.
+      arrange(1);
+      (api.listAgents as Mock).mockResolvedValue({ agents: [arrival] });
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+      });
+
+      await screen.findByText("Your agent checked in and is verified.");
+      expect(screen.getByRole("link", { name: /Open the agent/ }).getAttribute("href")).toBe("/dashboard/agents/a1");
+      await screen.findByRole("heading", { name: "Quickstart" });
+      expect(screen.queryByText("Secure your first agent")).toBeNull();
+      // The panel must survive the refetch it triggered (the overview is non-zero now).
+      expect(screen.getByText("Your agent checked in and is verified.")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

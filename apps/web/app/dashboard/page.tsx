@@ -17,6 +17,7 @@ import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SecurityLens } from "@/components/overview/security-lens";
 import { ExecutiveLens } from "@/components/overview/executive-lens";
+import { LiveCheckinPanel } from "@/components/overview/live-checkin-panel";
 import type { LensData } from "@/components/overview/types";
 import { cn } from "@/lib/utils";
 
@@ -314,7 +315,7 @@ function FirstAgentCard() {
         <div>
           <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Secure your first agent</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
-            Install the SDK, sign in once, wrap your agent. Refresh this page once it has checked in and it appears here with its trust score.
+            Install the SDK, sign in once, wrap your agent. It appears here on its own the moment it checks in.
           </p>
         </div>
       </div>
@@ -365,6 +366,7 @@ function DashboardContent() {
   const [error, setError] = useState<string | null>(null);
   const [lensData, setLensData] = useState<LensData | null>(null);
   const [lensLoading, setLensLoading] = useState(false);
+  const [firstArrival, setFirstArrival] = useState<Agent | null>(null);
 
   const load = useCallback(async () => {
     // A token handed over on the URL (device flow, OAuth) becomes the session.
@@ -401,6 +403,15 @@ function DashboardContent() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Stable so the panel's poll timer is armed once, not on every render.
+  const handleFirstArrival = useCallback(
+    (agent: Agent) => {
+      setFirstArrival(agent);
+      load();
+    },
+    [load]
+  );
 
   const permissions = useMemo(() => getDashboardPermissions(data?.user?.role), [data?.user?.role]);
 
@@ -506,6 +517,9 @@ function DashboardContent() {
           </Link>
         )}
       </div>
+
+      {/* Live first-check-in listener: every persona sees it until the first agent reports. */}
+      {(zero || firstArrival) && <LiveCheckinPanel arrived={firstArrival} onArrived={handleFirstArrival} />}
 
       {!zero && persona !== "developer" && !lensReady && <HomeSkeleton />}
       {!zero && persona === "security" && lensReady && lensData && (
