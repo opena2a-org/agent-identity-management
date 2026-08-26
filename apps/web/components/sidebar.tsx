@@ -30,8 +30,20 @@ export function AimLogo({ size = 30, className }: { size?: number; className?: s
       className={cn("inline-flex items-center justify-center", className)}
       style={{ width: size, height: size }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, no optimization needed */}
-      <img src="/aim-logo.png" alt="" width={size} height={size} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      {/* The simplified shield mark (same as the favicon): solid at small sizes on any
+          background, unlike the detailed brain mark whose white shield face read as a
+          plate in the header. */}
+      <svg viewBox="0 0 32 32" width="100%" height="100%" role="presentation" focusable="false">
+        <defs>
+          <linearGradient id="aim-shield" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#2563EB" />
+            <stop offset="100%" stopColor="#0D9488" />
+          </linearGradient>
+        </defs>
+        <path d="M16 2 L28 8 L28 16 C28 24 22 29 16 30 C10 29 4 24 4 16 L4 8 Z" fill="url(#aim-shield)" />
+        <path d="M16 3.5 L26.5 8.5 L26.5 16 C26.5 23 21 27.5 16 28.5 C11 27.5 5.5 23 5.5 16 L5.5 8.5 Z" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
+        <path d="M16 9 L21 23 L18.5 23 L17.5 20 L14.5 20 L13.5 23 L11 23 Z M15 17.5 L17 17.5 L16 13 Z" fill="#ffffff" />
+      </svg>
     </span>
   );
 }

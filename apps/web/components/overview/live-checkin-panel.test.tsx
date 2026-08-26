@@ -43,6 +43,8 @@ describe("LiveCheckinPanel", () => {
 
     expect(screen.getByText("Listening for the first check-in")).toBeTruthy();
     expect(screen.getByText(`Checks every ${CHECKIN_POLL_MS / 1000} seconds.`)).toBeTruthy();
+    // The encouraging radar: three staggered rings while waiting.
+    expect(document.querySelectorAll(".animate-radar-ring")).toHaveLength(3);
     expect(api.listAgents).toHaveBeenCalledTimes(1);
 
     // Nothing fires before the cadence elapses; the tick lands exactly on it.
@@ -83,7 +85,9 @@ describe("LiveCheckinPanel", () => {
     render(<LiveCheckinPanel arrived={a} onArrived={vi.fn()} />);
 
     expect(screen.getByText("Your agent checked in.")).toBeTruthy();
-    expect(screen.getByText(/trust score 0\.82/)).toBeTruthy();
+    // Whole numbers only on dashboard metrics: 0.82 renders as 82.
+    expect(screen.getByText(/trust score 82\b/)).toBeTruthy();
+    expect(screen.queryByText(/0\.82/)).toBeNull();
     expect(screen.getByRole("link", { name: /Open the agent/ }).getAttribute("href")).toBe("/dashboard/agents/a1");
     expect(api.listAgents).not.toHaveBeenCalled();
   });

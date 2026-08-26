@@ -235,7 +235,7 @@ function ConfidenceScoreBadge({ score }: { score: number }) {
         score
       )}`}
     >
-      {score.toFixed(1)}%
+      {Math.round(score)}%
     </span>
   );
 }

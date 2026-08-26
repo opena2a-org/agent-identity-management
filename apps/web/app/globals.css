@@ -327,6 +327,15 @@
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
   }
+  /* Overlay surfaces (dialogs, menus, popovers) are OPAQUE: an overlay sits on arbitrary
+     busy content, so translucency destroys contrast exactly where focus is needed. */
+  .overlay-surface {
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+    border: 1px solid var(--glass-chrome-border);
+    border-radius: 22px;
+    box-shadow: var(--shadow-chrome);
+  }
   .glass-alert {
     background: var(--red-fill);
     border: 1px solid var(--red-border);

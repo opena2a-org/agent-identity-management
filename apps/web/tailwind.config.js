@@ -170,11 +170,17 @@ module.exports = {
           '70%': { boxShadow: '0 0 0 8px transparent' },
           '100%': { boxShadow: '0 0 0 0 transparent' },
         },
+        // The listening radar on the empty overview: rings emanate and fade.
+        'radar-ring': {
+          '0%': { transform: 'scale(0.35)', opacity: '0.9' },
+          '100%': { transform: 'scale(1)', opacity: '0' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-ring': 'pulse-ring 1.8s ease-out infinite',
+        'radar-ring': 'radar-ring 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite',
       },
     },
   },

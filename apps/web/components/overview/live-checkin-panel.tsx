@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Radar } from "lucide-react";
 import { api, type Agent } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +49,7 @@ export function LiveCheckinPanel({ arrived, onArrived }: { arrived: Agent | null
 
   const waitedLong = !arrived && polls * CHECKIN_POLL_MS >= LONG_WAIT_MS;
   const trust =
-    arrived && typeof arrived.trustScore === "number" ? (arrived.trustScore <= 1 ? arrived.trustScore : arrived.trustScore / 100).toFixed(2) : null;
+    arrived && typeof arrived.trustScore === "number" ? Math.round(arrived.trustScore <= 1 ? arrived.trustScore * 100 : arrived.trustScore) : null;
 
   return (
     <div
@@ -84,16 +84,26 @@ export function LiveCheckinPanel({ arrived, onArrived }: { arrived: Agent | null
         </div>
       ) : (
         <>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-center gap-2.5 text-[13px] font-bold tracking-[-0.02em] text-ink">
-              <span className="h-2 w-2 flex-shrink-0 animate-pulse-ring rounded-full bg-brand" aria-hidden="true" />
-              {pollError ? "Cannot reach the API right now; retrying." : "Listening for the first check-in"}
-            </p>
-            <p className="text-2xs text-ink-tertiary">Checks every {CHECKIN_POLL_MS / 1000} seconds.</p>
+          <div className="flex items-center gap-4">
+            {/* The listening radar: rings emanate while the panel waits. */}
+            <span className="relative inline-flex h-14 w-14 flex-shrink-0 items-center justify-center" aria-hidden="true">
+              <span className="absolute inset-0 rounded-full border-2 border-brand animate-radar-ring motion-reduce:animate-none" />
+              <span className="absolute inset-0 rounded-full border-2 border-brand animate-radar-ring motion-reduce:animate-none [animation-delay:0.8s]" />
+              <span className="absolute inset-0 rounded-full border-2 border-brand animate-radar-ring motion-reduce:animate-none [animation-delay:1.6s]" />
+              <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-brand-text">
+                <Radar className="h-5 w-5" />
+              </span>
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-bold tracking-[-0.02em] text-ink">
+                {pollError ? "Cannot reach the API right now; retrying." : "Listening for the first check-in"}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-secondary">
+                Run the install commands below — the moment your agent calls in, it appears here with its identity and trust score, and this page fills in on its own.
+              </p>
+            </div>
+            <p className="hidden flex-shrink-0 text-2xs text-ink-tertiary sm:block">Checks every {CHECKIN_POLL_MS / 1000} seconds.</p>
           </div>
-          <p className="text-xs leading-relaxed text-ink-tertiary">
-            The moment your agent calls in, this panel shows its identity and the overview fills in on its own.
-          </p>
           {waitedLong && (
             <p className="rounded-inset-sm bg-glass-inset-gray p-2.5 text-2xs leading-relaxed text-ink-secondary">
               Nothing has checked in yet. This panel keeps listening; you can also{" "}

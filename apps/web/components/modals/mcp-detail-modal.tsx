@@ -318,7 +318,7 @@ export function MCPDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[rgba(29,29,31,0.45)] backdrop-blur-sm"
       onClick={handleOverlayClick}
     >
-      <div className="glass-chrome max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="overlay-surface max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-divider">
           <div className="flex items-center gap-3">
@@ -383,8 +383,8 @@ export function MCPDetailModal({
                 }`}
               >
                 {mcp.verificationMethod === "agent_attestation"
-                  ? (mcp.confidenceScore || 0).toFixed(1)
-                  : (mcp.trustScore || 0).toFixed(1)}
+                  ? Math.round(mcp.confidenceScore || 0)
+                  : Math.round(mcp.trustScore || 0)}
                 %
               </span>
             </div>
@@ -889,7 +889,7 @@ export function MCPDetailModal({
                                   <p>Capabilities: {(log.metadata.capabilities_found || log.metadata.capabilitiesFound).length} detected</p>
                                 )}
                                 {log.metadata.confidence_score !== undefined && (
-                                  <p>Confidence: {log.metadata.confidence_score.toFixed(1)}%</p>
+                                  <p>Confidence: {Math.round(log.metadata.confidence_score)}%</p>
                                 )}
                                 {log.metadata.attestation_count !== undefined && (
                                   <p>Total attestations: {log.metadata.attestation_count}</p>

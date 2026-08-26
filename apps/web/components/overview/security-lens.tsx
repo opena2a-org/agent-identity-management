@@ -81,7 +81,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-xs font-medium text-ink-secondary">
                   {hero.isBlocked ? "The action was denied before it ran." : "The action was not blocked; review the agent's policy."}
-                  {typeof hero.trustScoreImpact === "number" && hero.trustScoreImpact !== 0 ? ` Trust impact ${hero.trustScoreImpact > 0 ? "+" : ""}${hero.trustScoreImpact.toFixed(2)}.` : ""}
+                  {typeof hero.trustScoreImpact === "number" && Math.round(Math.abs(hero.trustScoreImpact) * 100) > 0 ? ` Trust impact ${hero.trustScoreImpact > 0 ? "+" : "-"}${Math.round(Math.abs(hero.trustScoreImpact) * 100)} points.` : ""}
                 </p>
                 {canOpenSecurity && (
                   <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-[13px] font-bold text-white shadow-glow hover:bg-brand-hover">

@@ -232,7 +232,7 @@ function VerificationActivityCard({ activity }: { activity: VerificationActivity
       <div className="flex items-center justify-between">
         <h3 className="text-[13.5px] font-bold text-ink">Verification activity</h3>
         {activity.length > 0 && (
-          <span className="text-2xs text-ink-tertiary">last {activity.length} months</span>
+          <span className="text-2xs text-ink-tertiary">last {activity.length} {activity.length === 1 ? "month" : "months"}</span>
         )}
       </div>
       {activity.length === 0 ? (
@@ -290,7 +290,7 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
                 </span>
                 {score !== null && (
                   <>
-                    <span className={cn("text-[13px] font-bold", attention ? "text-danger-text" : "text-brand-text")}>{(pct / 100).toFixed(2)}</span>
+                    <span className={cn("text-[13px] font-bold", attention ? "text-danger-text" : "text-brand-text")}>{pct}</span>
                     <span className="hidden h-[5px] w-[90px] overflow-hidden rounded-[3px] bg-track sm:block" aria-hidden="true">
                       <span className={cn("block h-full rounded-[3px]", attention ? "bg-danger" : "bg-bar")} style={{ width: `${pct}%` }} />
                     </span>
@@ -540,7 +540,7 @@ function DashboardContent() {
         />
         <KpiTile
           label="Avg trust score"
-          value={stats.totalAgents > 0 ? (stats.avgTrustScore <= 1 ? stats.avgTrustScore : stats.avgTrustScore / 100).toFixed(2) : "–"}
+          value={stats.totalAgents > 0 ? String(Math.round(stats.avgTrustScore <= 1 ? stats.avgTrustScore * 100 : stats.avgTrustScore)) : "–"}
           delta={stats.totalAgents > 0 ? `across ${stats.totalAgents.toLocaleString()} ${stats.totalAgents === 1 ? "agent" : "agents"}` : "no agents yet"}
           tone="accent"
         />

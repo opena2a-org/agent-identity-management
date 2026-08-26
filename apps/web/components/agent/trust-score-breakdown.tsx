@@ -266,10 +266,10 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
             <div className="flex items-center justify-between mb-4">
               <div>
                 <div className={`text-4xl font-bold ${getScoreColor(breakdown.overall)}`}>
-                  {(breakdown.overall * 100).toFixed(1)}%
+                  {Math.round(breakdown.overall * 100)}%
                 </div>
                 <p className="text-sm text-ink-secondary mt-1">
-                  Confidence: {(breakdown.confidence * 100).toFixed(1)}%
+                  Confidence: {Math.round(breakdown.confidence * 100)}%
                 </p>
               </div>
               <div className="text-right text-sm text-ink-secondary">
@@ -330,7 +330,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                           <div className="flex items-center gap-1.5">
                             <div className="text-xs font-medium text-ink-tertiary">Impact</div>
                             <div className="px-2 py-0.5 rounded-md bg-brand-soft text-xs font-semibold text-brand-text">
-                              +{(contribution * 100).toFixed(1)}%
+                              +{Math.round(contribution * 100)}%
                             </div>
                           </div>
                         </div>
@@ -340,7 +340,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                     {/* Score badge */}
                     <div className="ml-4 flex shrink-0 flex-col items-end">
                       <div className={`text-2xl font-bold ${getScoreColor(value)}`}>
-                        {(value * 100).toFixed(1)}%
+                        {Math.round(value * 100)}%
                       </div>
                       <div className="text-xs text-ink-tertiary mt-0.5">
                         score
@@ -397,7 +397,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                     <LineChart
                       data={history.history.map(entry => ({
                         timestamp: new Date(entry.timestamp).toLocaleDateString(),
-                        score: (entry.trustScore * 100).toFixed(1),
+                        score: Math.round(entry.trustScore * 100),
                         fullTimestamp: new Date(entry.timestamp).toLocaleString(),
                         reason: entry.reason,
                         changedBy: entry.changedBy,
@@ -480,7 +480,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                             </td>
                             <td className="px-4 py-3 whitespace-nowrap">
                               <span className={`text-sm font-semibold ${getScoreColor(entry.trustScore)}`}>
-                                {(entry.trustScore * 100).toFixed(1)}%
+                                {Math.round(entry.trustScore * 100)}%
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-ink-secondary">

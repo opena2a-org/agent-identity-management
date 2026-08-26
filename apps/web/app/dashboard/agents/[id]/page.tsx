@@ -520,7 +520,7 @@ export default function AgentDetailsPage({
                 <Badge
                   className={getTrustColor((agent.trustScore ?? 0) * 100)}
                 >
-                  Trust: {((agent.trustScore ?? 0) * 100).toFixed(1)}%
+                  Trust: {Math.round((agent.trustScore ?? 0) * 100)}%
                 </Badge>
               </div>
             </div>
@@ -659,7 +659,7 @@ export default function AgentDetailsPage({
             <div
               className={`text-2xl font-bold ${getTrustColor((agent.trustScore ?? 0) * 100).split(" ")[0]}`}
             >
-              {((agent.trustScore ?? 0) * 100).toFixed(1)}%
+              {Math.round((agent.trustScore ?? 0) * 100)}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {(agent.trustScore ?? 0) * 100 >= 80
@@ -788,7 +788,7 @@ export default function AgentDetailsPage({
                       <Badge
                         className={getTrustColor((agent.trustScore ?? 0) * 100)}
                       >
-                        {((agent.trustScore ?? 0) * 100).toFixed(1)}%
+                        {Math.round((agent.trustScore ?? 0) * 100)}%
                       </Badge>
                     </span>
                   </div>
@@ -970,7 +970,7 @@ export default function AgentDetailsPage({
                     const currentScore = change.trustScore;
                     const isIncrease = prevScore !== null && currentScore > prevScore;
                     const isDecrease = prevScore !== null && currentScore < prevScore;
-                    const scoreDiff = prevScore !== null ? ((currentScore - prevScore) * 100).toFixed(1) : null;
+                    const scoreDiff = prevScore !== null ? String(Math.round((currentScore - prevScore) * 100)) : null;
 
                     timelineEvents.push({
                       id: `trust-${change.timestamp}-${idx}`,
@@ -978,8 +978,8 @@ export default function AgentDetailsPage({
                       timestamp: new Date(change.timestamp),
                       title: `Trust Score ${isIncrease ? 'Increased' : isDecrease ? 'Decreased' : 'Updated'}`,
                       description: scoreDiff
-                        ? `${isDecrease ? '' : '+'}${scoreDiff}% → Now at ${(currentScore * 100).toFixed(1)}%${change.reason ? `: ${change.reason}` : ''}`
-                        : `Trust score is ${(currentScore * 100).toFixed(1)}%${change.reason ? `: ${change.reason}` : ''}`,
+                        ? `${isDecrease ? '' : '+'}${scoreDiff}% → Now at ${Math.round(currentScore * 100)}%${change.reason ? `: ${change.reason}` : ''}`
+                        : `Trust score is ${Math.round(currentScore * 100)}%${change.reason ? `: ${change.reason}` : ''}`,
                       icon: isDecrease ? 'trust_down' : isIncrease ? 'trust_up' : 'trust_up',
                       badge: {
                         text: `${(currentScore * 100).toFixed(0)}%`,

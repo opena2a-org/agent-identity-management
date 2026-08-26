@@ -403,7 +403,7 @@ export default function MCPServersPage() {
       // as "75.0" only because the backend was writing the literal 75.0 into
       // a field the calculator defines on [0,1].
       value: mcpServers.length > 0
-        ? `${(stats.avgTrustScore * 100).toFixed(1)}%`
+        ? `${Math.round(stats.avgTrustScore * 100)}%`
         : "—",
       icon: Shield,
     },

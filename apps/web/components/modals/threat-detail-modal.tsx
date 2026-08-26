@@ -364,7 +364,7 @@ export default function ThreatDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(29,29,31,0.45)] backdrop-blur-sm"
       onClick={handleOverlayClick}
     >
-      <div className="glass-chrome max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="overlay-surface max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-divider">
           <div className="flex items-center gap-3">

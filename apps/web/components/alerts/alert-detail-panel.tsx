@@ -216,9 +216,9 @@ export function AlertDetailPanel({
       />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-glass-chrome border-l border-glass-chrome-border shadow-chrome backdrop-blur-chrome z-50 overflow-y-auto animate-in slide-in-from-right duration-200">
+      <div className="fixed right-0 top-0 h-full w-full max-w-xl bg-popover text-popover-foreground border-l border-glass-chrome-border shadow-chrome z-50 overflow-y-auto animate-in slide-in-from-right duration-200">
         {/* Header */}
-        <div className="sticky top-0 bg-glass-chrome backdrop-blur-chrome border-b border-divider px-6 py-4 flex items-start justify-between">
+        <div className="sticky top-0 bg-popover border-b border-divider px-6 py-4 flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Badge
@@ -276,7 +276,7 @@ export function AlertDetailPanel({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-ink-secondary">Current trust score</span>
                   <span className="font-medium text-ink">
-                    {(currentTrustScore * 100).toFixed(1)}%
+                    {Math.round(currentTrustScore * 100)}%
                   </span>
                 </div>
               )}
@@ -619,7 +619,7 @@ export function AlertDetailPanel({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-glass-chrome backdrop-blur-chrome border-t border-divider px-6 py-4 flex gap-3">
+        <div className="sticky bottom-0 bg-popover border-t border-divider px-6 py-4 flex gap-3">
           {!alert.isAcknowledged ? (
             <Button
               className="flex-1"

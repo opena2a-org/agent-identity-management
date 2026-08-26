@@ -204,7 +204,7 @@ export function WebhookDetailModal({
 
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Success Rate</div>
-                    <div className="text-2xl font-bold">{getSuccessRate().toFixed(1)}%</div>
+                    <div className="text-2xl font-bold">{Math.round(getSuccessRate())}%</div>
                   </div>
 
                   <div className="space-y-1">
