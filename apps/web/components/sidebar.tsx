@@ -6,12 +6,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { filterNavigationByRole, type UserRole } from "@/lib/permissions";
 import {
-  filterNavigationByRole,
-  type NavSection,
-  type UserRole,
-} from "@/lib/permissions";
-import { navigationBase, orderNavigationForPersona } from "@/lib/navigation";
+  navigationBase,
+  orderNavigationForPersona,
+  resolveNavHref,
+  type NavEntry,
+} from "@/lib/navigation";
+import { HUB_TABS, navEntryIsActive, visibleHubTabs } from "@/lib/hub-tabs";
 import { usePersona } from "@/lib/persona";
 import { eventEmitter, Events } from "@/lib/events";
 import { PersonaSwitch } from "@/components/persona-switch";
@@ -61,7 +63,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
   const [capabilityRequestCount, setCapabilityRequestCount] =
     useState<number>(0);
   const [verificationCount, setVerificationCount] = useState<number>(0);
-  const [navigation, setNavigation] = useState<NavSection[]>([]);
+  const [navigation, setNavigation] = useState<(NavEntry & { resolvedHref: string })[]>([]);
 
   useEffect(() => {
     // Fetch current user
@@ -122,10 +124,11 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
   }, [router]);
 
   // The navigation is derived from the role filter, the lens order and the live counts.
-  // Badges are matched by href so a label change cannot detach them, and a lens switch
-  // rebuilds the list with the counts it already has.
+  // Badges are matched by href so a label change cannot detach them; an entry aggregates
+  // the counts of its own route plus its hub tabs (the routes that used to be entries).
   useEffect(() => {
     if (!user?.role) return;
+    const role = user.role;
 
     const badges: Record<string, number> = {
       "/dashboard/security": securityAlertCount,
@@ -133,15 +136,16 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
       "/dashboard/admin/capability-requests": capabilityRequestCount,
       "/dashboard/admin/jit-requests": verificationCount,
     };
-    const filteredNav = filterNavigationByRole(navigationBase, user.role).map((section) => ({
-      ...section,
-      items: section.items.map((item) => {
-        const count = badges[item.href];
-        if (count && count > 0) return { ...item, badge: count };
-        const { badge: _badge, ...withoutBadge } = item;
-        return withoutBadge;
-      }),
-    }));
+    const filteredNav = filterNavigationByRole(navigationBase, role).map((entry) => {
+      const resolvedHref = resolveNavHref(entry, role);
+      const hrefs = new Set<string>([resolvedHref]);
+      for (const tab of visibleHubTabs(HUB_TABS[entry.key] ?? [], role)) hrefs.add(tab.href);
+      const count = [...hrefs].reduce((sum, href) => sum + (badges[href] ?? 0), 0);
+      const { badge: _badge, ...entryWithoutBadge } = entry;
+      return count > 0
+        ? { ...entryWithoutBadge, resolvedHref, badge: count }
+        : { ...entryWithoutBadge, resolvedHref };
+    });
     // The lens only reorders what the role filter already allowed (lib/persona.test.ts).
     setNavigation(orderNavigationForPersona(filteredNav, persona));
   }, [user?.role, persona, alertCount, securityAlertCount, capabilityRequestCount, verificationCount]);
@@ -261,63 +265,49 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
     }
   };
 
-  const isActive = (href: string) => {
+  // An entry lights when the pathname sits anywhere under its hub — its own
+  // route or any of its tabs (lib/hub-tabs.ts). Hub paths are disjoint, so at
+  // most one entry is active.
+  const isActive = (entry: { key: string; resolvedHref: string }) => {
     if (!pathname) return false;
-    if (href === "/dashboard") {
-      return pathname === "/dashboard";
-    }
-    // Exact match only for navigation items that have child pages
-    // This prevents /dashboard/mcp from being highlighted when on /dashboard/mcp/discovery
-    const hasChildPages = ["/dashboard/mcp", "/dashboard/admin"];
-    if (hasChildPages.some(parent => href === parent)) {
-      return pathname === href;
-    }
-    // For other items, match exact or children (for dynamic routes like /dashboard/agents/[id])
-    return pathname === href || pathname.startsWith(href + "/");
+    return navEntryIsActive(entry.key, entry.resolvedHref, pathname);
   };
 
   // Sidebar Loading Skeleton
   const NavList = () => (
-    <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-0.5" aria-label="Main">
-      {navigation.map((section, idx) => (
-        <div key={section.title || idx} className="flex flex-col gap-[2px]">
-          {section.title && (
-            <h3 className="text-overline mb-0.5 pl-3">{section.title}</h3>
-          )}
-          {section.items.map((item) => {
-            const active = isActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] transition-colors",
-                  active
-                    ? "bg-nav-active font-bold text-brand-text"
-                    : "font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
-                )}
+    <nav className="flex min-h-0 flex-1 flex-col gap-[2px] overflow-y-auto pr-0.5" aria-label="Main">
+      {navigation.map((item) => {
+        const active = isActive(item);
+        return (
+          <Link
+            key={item.key}
+            href={item.resolvedHref}
+            onClick={() => setMobileOpen(false)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] transition-colors",
+              active
+                ? "bg-nav-active font-bold text-brand-text"
+                : "font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
+            )}
+          >
+            <item.icon
+              className={cn("h-4 w-4 flex-shrink-0", active ? "text-brand-text" : "text-ink-tertiary")}
+              strokeWidth={2}
+              aria-hidden="true"
+            />
+            <span className="flex-1 truncate">{item.name}</span>
+            {item.badge ? (
+              <span
+                className="inline-flex min-w-[20px] items-center justify-center rounded-pill bg-danger px-1.5 py-0.5 text-2xs font-bold text-white"
+                aria-label={`${item.badge} pending`}
               >
-                <item.icon
-                  className={cn("h-4 w-4 flex-shrink-0", active ? "text-brand-text" : "text-ink-tertiary")}
-                  strokeWidth={2}
-                  aria-hidden="true"
-                />
-                <span className="flex-1 truncate">{item.name}</span>
-                {item.badge ? (
-                  <span
-                    className="inline-flex min-w-[20px] items-center justify-center rounded-pill bg-danger px-1.5 py-0.5 text-2xs font-bold text-white"
-                    aria-label={`${item.badge} pending`}
-                  >
-                    {item.badge}
-                  </span>
-                ) : null}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
+                {item.badge}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
     </nav>
   );
 

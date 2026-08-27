@@ -23,6 +23,10 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   "/dashboard/admin/security-policies": ["admin"],
   "/dashboard/admin/capability-requests": ["admin"],
   "/dashboard/security": ["admin", "manager", "member"],
+  // Ships in the same commit as the route's first nav exposure (Developers →
+  // Webhooks tab). Role set traces to the backend gate: MemberMiddleware's
+  // admin/manager/member allow-list on the /webhooks group.
+  "/dashboard/webhooks": ["admin", "manager", "member"],
 };
 
 export const ALL_ROLES: UserRole[] = ["admin", "manager", "member", "viewer"];
