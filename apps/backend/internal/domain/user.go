@@ -19,6 +19,18 @@ const (
 // UserStatus represents user account status
 type UserStatus string
 
+// CanHoldSession reports whether the account may keep or mint a session. It is
+// an allow-list — users.status has no CHECK constraint, so an unrecognised
+// value must fail closed — and a soft-deleted user never qualifies. Used by
+// token refresh and SDK token recovery; pending is admitted because login
+// admits it.
+func (u *User) CanHoldSession() bool {
+	if u == nil || u.DeletedAt != nil {
+		return false
+	}
+	return u.Status == UserStatusActive || u.Status == UserStatusPending
+}
+
 const (
 	UserStatusPending     UserStatus = "pending"     // Awaiting admin approval
 	UserStatusActive      UserStatus = "active"      // Can use system

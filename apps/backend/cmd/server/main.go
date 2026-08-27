@@ -1279,10 +1279,12 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		AuthRefresh: handlers.NewAuthRefreshHandler(
 			jwtService,
 			services.SDKToken,
+			repos.User, // role/email re-read at refresh; never from the token
 		),
 		SDKTokenRecovery: handlers.NewSDKTokenRecoveryHandler(
 			services.SDKToken,
 			jwtService,
+			repos.User,
 		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,

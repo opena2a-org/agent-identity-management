@@ -15,7 +15,7 @@ import (
 // ===========================
 
 func TestNewSDKTokenRecoveryHandler_NilDeps(t *testing.T) {
-	handler := NewSDKTokenRecoveryHandler(nil, nil)
+	handler := NewSDKTokenRecoveryHandler(nil, nil, &refreshTestUserRepo{})
 	assert.NotNil(t, handler)
 }
 
@@ -24,7 +24,7 @@ func TestNewSDKTokenRecoveryHandler_NilDeps(t *testing.T) {
 // ===========================
 
 func TestSDKTokenRecoveryHandler_RecoverRevokedToken_InvalidJSON(t *testing.T) {
-	handler := &SDKTokenRecoveryHandler{}
+	handler := &SDKTokenRecoveryHandler{users: &refreshTestUserRepo{}}
 	app := fiber.New()
 	app.Post("/sdk/recover", handler.RecoverRevokedToken)
 
@@ -39,7 +39,7 @@ func TestSDKTokenRecoveryHandler_RecoverRevokedToken_InvalidJSON(t *testing.T) {
 }
 
 func TestSDKTokenRecoveryHandler_RecoverRevokedToken_EmptyOldRefreshToken(t *testing.T) {
-	handler := &SDKTokenRecoveryHandler{}
+	handler := &SDKTokenRecoveryHandler{users: &refreshTestUserRepo{}}
 	app := fiber.New()
 	app.Post("/sdk/recover", handler.RecoverRevokedToken)
 

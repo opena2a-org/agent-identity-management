@@ -16,15 +16,24 @@ import (
 type SDKTokenRecoveryHandler struct {
 	sdkTokenService *application.SDKTokenService
 	jwtService      *auth.JWTService
+	users           domain.UserRepository
 }
 
+// NewSDKTokenRecoveryHandler builds the recovery handler. The recovered pair's
+// role and email are read from the user record, so the user repository is
+// mandatory (boot-time refusal on nil, no fallback).
 func NewSDKTokenRecoveryHandler(
 	sdkTokenService *application.SDKTokenService,
 	jwtService *auth.JWTService,
+	users domain.UserRepository,
 ) *SDKTokenRecoveryHandler {
+	if users == nil {
+		panic("NewSDKTokenRecoveryHandler: user repository is required")
+	}
 	return &SDKTokenRecoveryHandler{
 		sdkTokenService: sdkTokenService,
 		jwtService:      jwtService,
+		users:           users,
 	}
 }
 
@@ -78,12 +87,27 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
+	// The recovered pair carries the account's CURRENT role and email, read
+	// from the database; an account that may no longer hold a session cannot
+	// recover one.
+	user, err := h.users.GetByID(oldToken.UserID)
+	if err != nil || user == nil || user.OrganizationID != oldToken.OrganizationID {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid or expired refresh token",
+		})
+	}
+	if !user.CanHoldSession() {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Account is not active",
+		})
+	}
+
 	// Generate new SDK token pair for the same user
 	newAccessToken, newRefreshToken, err := h.jwtService.GenerateTokenPair(
 		oldToken.UserID.String(),
 		oldToken.OrganizationID.String(),
-		"", // email will be populated from DB
-		"", // role will be populated from DB
+		user.Email,
+		string(user.Role),
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
