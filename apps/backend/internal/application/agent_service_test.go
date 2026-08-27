@@ -458,6 +458,7 @@ func TestIsValidAgentType(t *testing.T) {
 		{domain.AgentTypeBabyAGI, true},
 		// Generic
 		{domain.AgentTypeCustom, true},
+		{domain.AgentTypeDemo, true},
 		{domain.AgentTypeAI, true},
 		// Invalid type
 		{domain.AgentType("invalid_type"), false},

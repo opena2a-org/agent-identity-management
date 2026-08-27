@@ -200,10 +200,17 @@ The SDK ships with a small CLI for authentication and status:
 ```bash
 aim-sdk login                    # OAuth to AIM Cloud
 aim-sdk login --url <URL>        # OAuth to self-hosted instance
+aim-sdk demo                     # Register a demo agent, watch your dashboard come alive
+aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
+aim-sdk demo --cleanup           # Delete the demo agent again
 aim-sdk logout                   # Clear ~/.aim/sdk_credentials.json
 aim-sdk status                   # Show authentication state
 aim-sdk --version                # Show SDK version
 ```
+
+The demo agent registers in your own organization under agent type `demo`:
+visibly a demo in every list, excluded from adoption and trust analytics,
+and re-runs reconnect to the same agent instead of creating new ones.
 
 For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime), see the separate [opena2a CLI](https://github.com/opena2a-org/opena2a).
 

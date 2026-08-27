@@ -37,6 +37,9 @@ export enum AgentType {
 
   // Generic types
   CUSTOM = 'custom',
+  // Demo agents registered by `aim-sdk demo`: visibly a demo everywhere they
+  // appear, and excluded from adoption/trust analytics by this one value.
+  DEMO = 'demo',
   AI_AGENT = 'ai_agent',
 }
 

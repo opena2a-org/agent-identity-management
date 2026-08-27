@@ -114,6 +114,8 @@ func isValidAgentType(agentType domain.AgentType) bool {
 		domain.AgentTypeBabyAGI: true,
 		// Generic
 		domain.AgentTypeCustom: true,
+		// Demo (registered by `aim-sdk demo`)
+		domain.AgentTypeDemo: true,
 		// Legacy support
 		domain.AgentTypeAI: true,
 	}

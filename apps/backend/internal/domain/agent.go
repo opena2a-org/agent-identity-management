@@ -40,6 +40,10 @@ const (
 	// Generic types
 	AgentTypeCustom AgentType = "custom"
 
+	// Demo agents registered by `aim-sdk demo`: visibly a demo everywhere they
+	// appear, and excluded from adoption/trust analytics by this one value.
+	AgentTypeDemo AgentType = "demo"
+
 	// Legacy support
 	AgentTypeAI AgentType = "ai_agent"
 )
