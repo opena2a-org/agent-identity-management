@@ -1,100 +1,84 @@
 import {
   AlertTriangle,
-  Bell,
-  BookOpen,
-  CheckCircle,
-  CheckSquare,
+  Building2,
   ClipboardCheck,
   Code,
-  GitBranch,
   Home,
-  Key,
-  Link2,
-  Lock,
-  Search,
   Server,
   Shield,
-  ShieldCheck,
-  Tag,
-  UserPlus,
-  Users,
 } from "lucide-react";
-import type { NavSection } from "@/lib/permissions";
+import type { UserRole } from "@/lib/permissions";
 import type { Persona } from "@/lib/persona";
 
-export const SECTION_MAIN = "";
-export const SECTION_BUILD = "Developers";
-export const SECTION_MONITORING = "Security";
-export const SECTION_ACCOUNT = "Organization";
-
 /**
- * Navigation with role-based access control. `roles` is the authorization
- * filter (see filterNavigationByRole); the persona lens only reorders sections.
+ * Top-level navigation: seven flat entries. The
+ * former sections' sub-destinations are tabs on each hub page, defined once in
+ * lib/hub-tabs.ts and walked by the same edge-parity test as this list.
+ * `roles` is the authorization filter (see filterNavigationByRole); the
+ * persona lens only reorders entries.
  */
-export const navigationBase: NavSection[] = [
+export interface NavEntry {
+  /** Stable identity for ordering, active-state and hub-tab lookup — labels may be reworded. */
+  key: string;
+  name: string;
+  href: string;
+  icon: any;
+  roles: UserRole[];
+  /**
+   * Role-specific target: the entry lands different roles on different
+   * existing routes (the mobile tab bar's per-role pattern). The edge-parity
+   * test resolves per role, so a target the edge blocks cannot ship.
+   */
+  hrefByRole?: Partial<Record<UserRole, string>>;
+  badge?: number;
+}
+
+export const navigationBase: NavEntry[] = [
+  { key: "overview", name: "Overview", href: "/dashboard", icon: Home, roles: ["admin", "manager", "member", "viewer"] },
+  { key: "agents", name: "Agents", href: "/dashboard/agents", icon: Shield, roles: ["admin", "manager", "member", "viewer"] },
+  { key: "mcp", name: "MCP servers", href: "/dashboard/mcp", icon: Server, roles: ["admin", "manager", "member"] },
+  { key: "security", name: "Security", href: "/dashboard/security", icon: AlertTriangle, roles: ["admin", "manager"] },
+  // Direct route until the Stage 2 move to /dashboard/compliance (with its gate entry).
+  { key: "compliance", name: "Compliance", href: "/dashboard/admin/compliance", icon: ClipboardCheck, roles: ["admin"] },
+  { key: "developers", name: "Developers", href: "/dashboard/developers", icon: Code, roles: ["admin", "manager", "member", "viewer"] },
+  // Ships as "Organization" until an OSS /settings surface exists.
   {
-    title: SECTION_MAIN,
-    items: [
-      { name: "Overview", href: "/dashboard", icon: Home, roles: ["admin", "manager", "member", "viewer"] },
-      { name: "Agents", href: "/dashboard/agents", icon: Shield, roles: ["admin", "manager", "member", "viewer"] },
-      { name: "MCP servers", href: "/dashboard/mcp", icon: Server, roles: ["admin", "manager", "member"] },
-      { name: "MCP discovery", href: "/dashboard/mcp/discovery", icon: Search, roles: ["admin", "manager"] },
-      { name: "Supply chain", href: "/dashboard/mcp/supply-chain", icon: GitBranch, roles: ["admin", "manager"] },
-      { name: "A2A protocol", href: "/dashboard/a2a", icon: Link2, roles: ["admin", "manager", "member"] },
-    ],
-  },
-  {
-    title: SECTION_BUILD,
-    items: [
-      { name: "API keys", href: "/dashboard/api-keys", icon: Key, roles: ["admin", "manager", "member"] },
-      { name: "SDK tokens", href: "/dashboard/sdk-tokens", icon: Lock, roles: ["admin", "manager", "member"] },
-      { name: "SDK & docs", href: "/dashboard/sdk", icon: Code, roles: ["admin", "manager", "member"] },
-      { name: "Developer guide", href: "/dashboard/developers", icon: BookOpen, roles: ["admin", "manager", "member", "viewer"] },
-    ],
-  },
-  {
-    title: SECTION_MONITORING,
-    items: [
-      { name: "Security", href: "/dashboard/security", icon: AlertTriangle, roles: ["admin", "manager"] },
-      // Interim: the edge gate's /dashboard/admin prefix rule blocks managers from this page
-      // (middleware.ts / proxy.ts intersect all matching prefixes), so the nav must not show it
-      // to managers until the IA move relocates alerts out of the admin prefix.
-      { name: "Alerts", href: "/dashboard/admin/alerts", icon: Bell, roles: ["admin"] },
-    ],
-  },
-  {
-    // Administering your own organization (every signup administers its own account).
-    title: SECTION_ACCOUNT,
-    items: [
-      // The approval queue for new accounts (the registration-pending page points here).
-      { name: "Registrations", href: "/admin/registrations", icon: UserPlus, roles: ["admin"] },
-      { name: "JIT requests", href: "/dashboard/admin/jit-requests", icon: CheckCircle, roles: ["admin"] },
-      { name: "Capability requests", href: "/dashboard/admin/capability-requests", icon: CheckSquare, roles: ["admin"] },
-      { name: "Security policies", href: "/dashboard/admin/security-policies", icon: ShieldCheck, roles: ["admin"] },
-      { name: "Compliance", href: "/dashboard/admin/compliance", icon: ClipboardCheck, roles: ["admin"] },
-      { name: "Users", href: "/dashboard/admin/users", icon: Users, roles: ["admin"] },
-      { name: "Tags", href: "/dashboard/tags", icon: Tag, roles: ["admin", "manager", "member"] },
-    ],
+    key: "organization",
+    name: "Organization",
+    href: "/dashboard/tags",
+    icon: Building2,
+    roles: ["admin", "manager", "member"],
+    hrefByRole: { admin: "/dashboard/admin/users" },
   },
 ];
 
-const SECTION_ORDER: Record<Persona, string[]> = {
-  developer: [SECTION_MAIN, SECTION_BUILD, SECTION_MONITORING, SECTION_ACCOUNT],
-  security: [SECTION_MONITORING, SECTION_MAIN, SECTION_ACCOUNT, SECTION_BUILD],
-  executive: [SECTION_MAIN, SECTION_ACCOUNT, SECTION_MONITORING, SECTION_BUILD],
+/** The route an entry opens for a role. */
+export function resolveNavHref(entry: NavEntry, role: UserRole | undefined): string {
+  return (role && entry.hrefByRole?.[role]) || entry.href;
+}
+
+/**
+ * Entry-level persona ranks: Overview is always
+ * first and Organization always last; the lens orders what sits between.
+ */
+const ENTRY_ORDER: Record<Persona, string[]> = {
+  developer: ["agents", "developers", "mcp", "security", "compliance"],
+  security: ["security", "agents", "mcp", "compliance", "developers"],
+  executive: ["compliance", "security", "agents", "mcp", "developers"],
 };
 
 /**
- * Reorders already-authorized sections for a lens. Pure and lossless: it never
- * adds, removes or renames an item, so authorization stays exactly what the
+ * Reorders already-authorized entries for a lens. Pure and lossless: it never
+ * adds, removes or renames an entry, so authorization stays exactly what the
  * role filter produced (proved by lib/persona.test.ts).
  */
-export function orderNavigationForPersona(sections: NavSection[], persona: Persona): NavSection[] {
-  const order = SECTION_ORDER[persona] ?? SECTION_ORDER.developer;
-  const rank = (title?: string) => {
-    const i = order.indexOf(title ?? SECTION_MAIN);
+export function orderNavigationForPersona<T extends NavEntry>(entries: T[], persona: Persona): T[] {
+  const order = ENTRY_ORDER[persona] ?? ENTRY_ORDER.developer;
+  const rank = (entry: NavEntry) => {
+    if (entry.key === "overview") return -1;
+    if (entry.key === "organization") return order.length + 1;
+    const i = order.indexOf(entry.key);
     return i === -1 ? order.length : i;
   };
-  return [...sections].sort((a, b) => rank(a.title) - rank(b.title));
+  return [...entries].sort((a, b) => rank(a) - rank(b));
 }
-

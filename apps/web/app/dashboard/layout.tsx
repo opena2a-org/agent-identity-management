@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { HubTabs } from "@/components/hub-tabs";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
 import { IdleTimeoutGuard } from "@/components/idle-timeout-guard";
 import { useDeactivationCheck } from "@/hooks/use-deactivation-check";
@@ -44,6 +45,7 @@ export default function DashboardLayout({
         <Sidebar mobileOpen={mobileNavOpen} onMobileOpenChange={setMobileNavOpen} />
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <DashboardHeader />
+          <HubTabs role={role} />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       </div>
