@@ -521,6 +521,18 @@ def version_cmd(args):
     return 0
 
 
+def demo(args):
+    """Run the demo agent (see aim_sdk.demo)."""
+    from .demo import run as run_demo
+
+    return run_demo(
+        interactive=args.interactive,
+        ci=args.ci,
+        cleanup=args.cleanup,
+        url=args.url,
+    )
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -560,6 +572,33 @@ def main():
     # Version command
     version_parser = subparsers.add_parser('version', help='Show SDK version')
     version_parser.set_defaults(func=version_cmd)
+
+    # Demo command
+    demo_parser = subparsers.add_parser(
+        'demo',
+        help='Register a demo agent and watch your dashboard come alive',
+    )
+    demo_parser.add_argument(
+        '--interactive',
+        action='store_true',
+        help='Open the full interactive menu (security demos, JIT, MCP)',
+    )
+    demo_parser.add_argument(
+        '--ci',
+        action='store_true',
+        help='Non-interactive, no delays (for scripted runs)',
+    )
+    demo_parser.add_argument(
+        '--cleanup',
+        action='store_true',
+        help='Delete the demo agent again',
+    )
+    demo_parser.add_argument(
+        '--url',
+        default=None,
+        help='AIM server URL (default: the URL you logged in to)',
+    )
+    demo_parser.set_defaults(func=demo)
 
     args = parser.parse_args()
 

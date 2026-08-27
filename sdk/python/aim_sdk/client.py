@@ -205,6 +205,10 @@ class AgentType:
     # Generic types
     CUSTOM = "custom"
 
+    # Demo agents: registered by `aim-sdk demo`. Visibly a demo everywhere it
+    # appears; excluded from adoption and trust analytics by this one value.
+    DEMO = "demo"
+
     # Legacy support (deprecated, use specific types instead)
     AI_AGENT = "ai_agent"
 
@@ -217,7 +221,7 @@ class AgentType:
             cls.HAYSTACK, cls.SEMANTIC_KERNEL,
             cls.COPILOT, cls.ASSISTANT, cls.CHATBOT,
             cls.AUTOGPT, cls.BABYAGI,
-            cls.CUSTOM, cls.AI_AGENT
+            cls.CUSTOM, cls.DEMO, cls.AI_AGENT
         ]
 
     @classmethod
