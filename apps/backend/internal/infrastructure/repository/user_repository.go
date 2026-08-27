@@ -69,10 +69,14 @@ func (r *UserRepository) Create(user *domain.User) error {
 
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
+	// deleted_at is load-bearing: User.CanHoldSession refuses soft-deleted
+	// accounts at token refresh and recovery, and a predicate whose data path
+	// never feeds the field it checks is a decoy control.
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role,
 		       password_hash, force_password_change, last_login_at,
-		       status, created_at, updated_at, approved_by, approved_at
+		       status, created_at, updated_at, approved_by, approved_at,
+		       deleted_at
 		FROM users
 		WHERE id = $1
 	`
@@ -95,6 +99,7 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		&user.UpdatedAt,
 		&user.ApprovedBy,
 		&user.ApprovedAt,
+		&user.DeletedAt,
 	)
 
 	if err == sql.ErrNoRows {

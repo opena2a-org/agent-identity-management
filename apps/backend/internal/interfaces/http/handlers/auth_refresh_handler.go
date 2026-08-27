@@ -16,14 +16,48 @@ import (
 type AuthRefreshHandler struct {
 	jwtService      *auth.JWTService
 	sdkTokenService *application.SDKTokenService
+	users           domain.UserRepository
 }
 
-// NewAuthRefreshHandler creates a new auth refresh handler
-func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *application.SDKTokenService) *AuthRefreshHandler {
+// NewAuthRefreshHandler creates a new auth refresh handler. A refresh token is
+// an identity handle, not an authorization grant: the new access token's role
+// and email are read from the user record at refresh time, so the user
+// repository is mandatory — a nil one is a boot-time refusal, never a fallback
+// to the token's own claims.
+func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *application.SDKTokenService, users domain.UserRepository) *AuthRefreshHandler {
+	if users == nil {
+		panic("NewAuthRefreshHandler: user repository is required")
+	}
 	return &AuthRefreshHandler{
 		jwtService:      jwtService,
 		sdkTokenService: sdkTokenService,
+		users:           users,
 	}
+}
+
+// refreshPrincipal resolves the account behind a refresh token from the
+// database and decides whether it may still hold a session. It returns the
+// user to mint from, or the 401 reason. No path falls back to the token's
+// embedded role or email.
+func (h *AuthRefreshHandler) refreshPrincipal(claims *auth.JWTClaims) (*domain.User, string) {
+	if claims.TokenType == auth.TokenTypeAccess || claims.Issuer == auth.IssuerService {
+		return nil, "Invalid or expired refresh token"
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return nil, "Invalid or expired refresh token"
+	}
+	user, err := h.users.GetByID(userID)
+	if err != nil || user == nil {
+		return nil, "Invalid or expired refresh token"
+	}
+	if user.OrganizationID.String() != claims.OrganizationID {
+		return nil, "Invalid or expired refresh token"
+	}
+	if !user.CanHoldSession() {
+		return nil, "Account is not active"
+	}
+	return user, ""
 }
 
 // RefreshToken godoc
@@ -94,8 +128,24 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		}
 	}
 
+	// Resolve the principal from the database: role and email come from the
+	// user record, never from the refresh token's claims (login-issued refresh
+	// tokens carry none, and an embedded role would outlive a demotion).
+	claims, err := h.jwtService.ValidateToken(req.RefreshToken)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid or expired refresh token",
+		})
+	}
+	user, refusal := h.refreshPrincipal(claims)
+	if refusal != "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": refusal,
+		})
+	}
+
 	// Validate refresh token and generate new tokens (with rotation)
-	newAccessToken, newRefreshToken, err := h.jwtService.RefreshTokenPair(req.RefreshToken)
+	newAccessToken, newRefreshToken, err := h.jwtService.RefreshTokenPair(req.RefreshToken, user.Email, string(user.Role))
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid or expired refresh token",
