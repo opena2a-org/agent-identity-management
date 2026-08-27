@@ -860,7 +860,7 @@ function SupplyChainPage() {
                 </button>
                 <div
                   id="abom-export-dropdown"
-                  className="hidden absolute right-0 mt-2 w-48 glass-chrome overflow-hidden z-10"
+                  className="hidden absolute right-0 mt-2 w-48 overlay-surface overflow-hidden z-10"
                 >
                   <button
                     onClick={() => {
@@ -2125,7 +2125,7 @@ function SupplyChainPage() {
           {/* Agent Detail Modal */}
           {selectedAgent && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="glass-chrome max-w-2xl w-full max-h-[90vh] overflow-hidden">
+              <div className="overlay-surface max-w-2xl w-full max-h-[90vh] overflow-hidden">
                 {/* Modal Header */}
                 <div className="px-6 py-4 border-b border-divider flex items-center justify-between">
                   <div className="flex items-center gap-3">
