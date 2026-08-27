@@ -13,6 +13,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Security
 
+- `POST /api/v1/auth/refresh` and `POST /api/v1/auth/sdk/recover` minted access tokens
+  from the refresh token's own claims instead of the user record: a reduced role
+  persisted on SDK token chains for up to 90 days, deactivated and soft-deleted
+  accounts could keep refreshing until their refresh token expired, and login-issued
+  sessions lost their role on first refresh (fail-closed 403). Both endpoints now
+  resolve role and email from the user record at every mint and return 401 for
+  accounts that are not active or pending. (#432, GHSA-3hvp-fmvj-6gwx)
 - `GET /api/v1/a2a/cards` returned every organization's agent cards to any
   authenticated caller: `cardUrl`, the full `cardData` agent-card document,
   `agentId` and `attestationSignature`. The only predicate was `is_valid = TRUE`,
