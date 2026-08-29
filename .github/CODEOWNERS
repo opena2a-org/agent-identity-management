@@ -13,4 +13,9 @@
 # Ordinary pull requests are gated by checks alone, and that is deliberate: a
 # reviewer who has to approve everything approves nothing.
 
+# Changes under these paths are authored by the repository's automation
+# identity, never by the code owner: an author cannot approve their own pull
+# request, so a change authored by the sole code owner would have no legal
+# approver.
+
 /.github/ @thebenignhacker
