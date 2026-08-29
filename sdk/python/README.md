@@ -263,6 +263,18 @@ egress-validates technique fields before transmission. Only
 `denied_injection_attempt` indicators are uploaded, to the Registry's public,
 count-only endpoint.
 
+**Producer only, never on the deny path.** Detection output is an inference the
+seam records; it never enters `verify_action` or any policy-decision deny path,
+and the modules that decide allow/deny (`aim_sdk.enforcement`,
+`aim_sdk.decision`) do not import the seam.
+
+**Port stage.** `aim_sdk.telemetry` is stage 1 of 3 of the ARP runtime-protection
+port (roadmap `arp-python-sdk-parity`), ported schema-identical to the TypeScript
+reference in `sdk/typescript/src/telemetry` so both SDKs write the same
+`correlated-events.jsonl`. Stage 2 (the guard-socket client) and stage 3 (the
+engine port: event engine, runtime twin, coordinator, monitors, interceptors)
+are not part of this package -- see the module docstring for the boundary.
+
 ## Manual mode (no OAuth)
 
 For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key:
