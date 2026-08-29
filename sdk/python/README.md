@@ -269,7 +269,7 @@ and the modules that decide allow/deny (`aim_sdk.enforcement`,
 `aim_sdk.decision`) do not import the seam.
 
 **Port stage.** `aim_sdk.telemetry` is stage 1 of 3 of the ARP runtime-protection
-port (roadmap `arp-python-sdk-parity`), ported schema-identical to the TypeScript
+port (tracked in issue #441), ported schema-identical to the TypeScript
 reference in `sdk/typescript/src/telemetry` so both SDKs write the same
 `correlated-events.jsonl`. Stage 2 (the guard-socket client) and stage 3 (the
 engine port: event engine, runtime twin, coordinator, monitors, interceptors)

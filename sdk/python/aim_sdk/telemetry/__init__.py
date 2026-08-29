@@ -11,7 +11,7 @@ Everything here is off the enforcement critical path and best-effort.
 Port stage boundary
 -------------------
 This package is the ARP telemetry seam: **stage 1 of 3** in the recorded build
-order of the ``arp-python-sdk-parity`` roadmap card. It is the correlation
+order of the runtime-protection port (tracked in issue #441). It is the correlation
 envelope, the local correlated record, the joiner, and the ``telemetry.detection``
 input, ported schema-identical to the TypeScript reference
 (``sdk/typescript/src/telemetry``) so both SDKs feed one local log format
