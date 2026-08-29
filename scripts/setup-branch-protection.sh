@@ -41,7 +41,7 @@ gh api -X PUT "repos/$REPO/branches/main/protection" \
     "checks": [
       { "context": "Secret Detection", "app_id": 15368 },
       { "context": "Dependency Audit", "app_id": 15368 },
-      { "context": "Claude Code Review", "app_id": 15368 },
+      { "context": "Automated code review", "app_id": 15368 },
       { "context": "Go Lint (security)", "app_id": 15368 },
       { "context": "CI Gate", "app_id": 15368 }
     ]
@@ -64,7 +64,7 @@ echo "  - PRs required (no direct push)"
 echo "  - 1 approving review required"
 echo "  - Stale reviews dismissed on new push"
 echo "  - Last pusher cannot self-approve"
-echo "  - Required checks: Secret Detection, Dependency Audit, Claude Code Review, Go Lint (security), CI Gate"
+echo "  - Required checks: Secret Detection, Dependency Audit, Automated code review, Go Lint (security), CI Gate"
 echo "  - Strict status checks (branch must be up-to-date)"
 echo "  - Linear history enforced (squash merge)"
 echo "  - Force push and branch deletion blocked"
