@@ -1,0 +1,16 @@
+# Ownership of the merge gate's own configuration.
+#
+# Everything under .github/ is covered: the review workflow, the release
+# workflow, the pinned review action reference, and this file itself. A change
+# to any of them needs an approving review from an account the automation does
+# not hold. Automation can author changes here; it cannot approve them.
+#
+# Why this path and no other: the review workflow runs from the pull request
+# head on same-repo branches, so without this rule a pull request that weakens
+# the reviewing logic is judged by the weakened logic it just introduced.
+#
+# This is the ONLY path in the repository that requires a human approval.
+# Ordinary pull requests are gated by checks alone, and that is deliberate: a
+# reviewer who has to approve everything approves nothing.
+
+/.github/ @thebenignhacker
