@@ -90,7 +90,7 @@ func aim02StripLineComments(src string) string {
 var verificationWrites = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)Verified\s*:\s*true`),
 	regexp.MustCompile(`(?i)\.Verified\s*=\s*true`),
-	regexp.MustCompile(`(?i)VerifiedBy\s*:\s*[^n]`), // anything but nil
+	regexp.MustCompile(`(?i)VerifiedBy\s*:\s*[^n\s]`), // anything but nil ([^n] alone eats the space after the colon and flags `VerifiedBy: nil` itself)
 	regexp.MustCompile(`(?i)\bverified\s*=\s*(true|\$\d+)`),
 	regexp.MustCompile(`(?i)UPDATE\s+isolation_attestations`),
 }
