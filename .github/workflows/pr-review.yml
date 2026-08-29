@@ -1,5 +1,5 @@
 name: PR Review
-# Runs on every PR to main — calls the Claude API for a security-focused code review.
+# Runs on every PR to main — an automated code review (calls the Claude API).
 #
 # The gate fails CLOSED. There are three verdicts: APPROVE passes,
 # REQUEST_CHANGES fails, INCONCLUSIVE fails. Inconclusive covers a missing key,
@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   review:
-    name: Claude Code Review
+    name: Automated code review
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -121,12 +121,14 @@ jobs:
           # combined with --jq.
           #
           # The login filter is the security half: any commenter who quotes
-          # "Claude Code Review" would otherwise be fed back to the model under
+          # "Automated code review" (or the pre-rename header) would otherwise
+          # be fed back to the model under
           # a PREVIOUS REVIEW heading the system prompt instructs it to trust,
           # as the gate's own prior verdict.
           gh api --paginate --slurp "repos/${{ github.repository }}/issues/$PR_NUMBER/comments?per_page=100" 2>/dev/null \
-            | jq -r '[.[][] | select(.user.login == "github-actions[bot]") | select(.body | test("Claude Code Review")) | .body] | last // ""' \
+            | jq -r '[.[][] | select(.user.login == "github-actions[bot]") | select(.body | test("Claude Code Review|Automated code review")) | .body] | last // ""' \
             | sed -e '/^## Claude Code Review/d' \
+                  -e '/^## Automated code review/d' \
                   -e '/^\*\*Verdict:.*\*\*[[:space:]]*$/d' \
                   -e '/^\*Reviewed .*\*[[:space:]]*$/d' \
                   -e '/^\*No review was produced\..*\*[[:space:]]*$/d' \
@@ -256,7 +258,7 @@ jobs:
             cat /tmp/previous_review.txt >> /tmp/user_msg.txt
           fi
 
-      - name: Run Claude review
+      - name: Run automated review
         id: review
         # The model call is shared across the org. It held three defects at once
         # — an anthropic-version the API rejected, an extraction that read only
@@ -366,7 +368,7 @@ jobs:
           esac
 
           {
-            echo "## Claude Code Review — $VERDICT"
+            echo "## Automated code review — $VERDICT"
             echo ""
             cat "$REVIEW_FILE"
             echo ""
