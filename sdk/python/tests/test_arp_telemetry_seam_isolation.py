@@ -242,7 +242,10 @@ def test_AIM_01_AC3_stage_boundary_is_documented():
     assert "stage 1 of 3" in doc
     assert "guard-socket client" in doc          # stage 2, named
     assert "engine port" in doc                  # stage 3, named
-    assert "arp-python-sdk-parity" in doc        # the recorded build order
+    assert "issue #441" in doc                   # the public tracker for stages 2-3
+    # The internal planning slug must NOT ship in a public docstring — the
+    # public issue is the reference external readers can actually follow.
+    assert "arp-python-sdk-parity" not in doc
 
 
 def test_AIM_01_AC3_no_guard_socket_client_in_the_seam():
