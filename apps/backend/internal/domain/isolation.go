@@ -54,6 +54,42 @@ const (
 	ProcessFull     ProcessIsolation = "full" // PID namespace + seccomp + MAC
 )
 
+// IsolationAttestationTTL is the hard expiry on a reported posture: an
+// attestation whose reported_at is older than this counts for nothing and the
+// factor falls back to the no-attestation baseline.
+//
+// It is uniform for verified and unverified rows on purpose. A posture is a
+// statement about a running deployment, and deployments move; a claim made once
+// and never renewed describes a machine that may no longer exist. Exempting
+// verified rows would let a single verification prop the factor up forever,
+// which is the "one-time claim props up the score indefinitely" failure the
+// expiry exists to close. 90 days matches the re-attestation cadence an operator
+// can reasonably hold without the factor becoming a nag.
+const IsolationAttestationTTL = 90 * 24 * time.Hour
+
+// UnverifiedIsolationCeiling is the highest factor-9 score an UNVERIFIED
+// self-report may earn on the read side.
+//
+// It is DERIVED, never a literal: it is exactly the score of the commodity
+// container tier — Docker + network namespace + read-only rootfs + seccomp — the
+// posture a competent operator gets from an ordinary hardened container. The
+// reasoning is that an unverified claim is worth no more than what the claim is
+// cheapest to make about; anything above this tier (a VM, a TEE, an airgap) is a
+// claim about infrastructure AIM cannot see, so it must be earned with
+// verification rather than asserted.
+//
+// Deriving it from ScoreIsolation means a retune of the posture enum weights
+// moves the ceiling with the tier it names instead of stranding a stale
+// constant. TestAIM02_UnverifiedCeiling pins today's value (0.65) so the retune
+// is a conscious edit rather than a silent drift.
+//
+// This is a READ-side cap only. The stored attestation Score stays the honest
+// posture value: the row is a record of what was reported, not of what it was
+// allowed to count for.
+func UnverifiedIsolationCeiling() float64 {
+	return ScoreIsolation(SandboxDocker, NetworkNamespace, FilesystemReadOnly, ProcessSeccomp)
+}
+
 // IsolationAttestation represents an agent's self-reported runtime isolation posture.
 // Agents submit this via SDK; the server scores it as a trust factor.
 type IsolationAttestation struct {
@@ -66,6 +102,31 @@ type IsolationAttestation struct {
 	Score      float64             `json:"score"` // Computed 0-1 isolation score
 	ReportedAt time.Time           `json:"reportedAt"`
 	CreatedAt  time.Time           `json:"createdAt"`
+
+	// Verified reports whether an INDEPENDENT source corroborated this row's
+	// posture. It is bound to the row, not to the agent: verification describes
+	// one report of one deployment at one moment, so a later re-attestation
+	// starts unverified and never carries a predecessor's verification forward.
+	//
+	// Nothing in the codebase sets this true today. There is no verified write
+	// path until an independent source exists (Phase 2, roadmap
+	// aim-isolation-verification); the ingest path hard-sets false and the
+	// repository INSERT writes the literal FALSE. The evidence classes that may
+	// ever set it are TEE attestation and orchestrator/host metadata; an HMA
+	// static scan may NOT (it reads the declared surface, not the running one),
+	// and the SDK may never (it is the self-report being checked).
+	Verified bool `json:"verified"`
+
+	// VerifiedBy names the independent source that corroborated the posture, and
+	// VerifiedAt is when it did. Both are nil while Verified is false.
+	VerifiedBy *string    `json:"verifiedBy,omitempty"`
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+}
+
+// IsExpiredAt reports whether the attestation is past IsolationAttestationTTL
+// relative to now. Uniform for verified and unverified rows.
+func (a *IsolationAttestation) IsExpiredAt(now time.Time) bool {
+	return now.Sub(a.ReportedAt) > IsolationAttestationTTL
 }
 
 // IsolationAttestationRepository defines persistence for isolation attestations

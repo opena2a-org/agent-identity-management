@@ -53,7 +53,7 @@ Not every factor is wired to a live signal source in every AIM deployment. Per A
 | 6 | Age & History | **Live** — bucketed from `agent.CreatedAt` (<7d: 0.30, <30d: 0.50, <90d: 0.75, 90+: 1.0) | N/A (always measured) |
 | 7 | Drift Detection | **Conditional** — requires `alertRepo`; a wired repo with zero drift alerts scores 1.0 (measured absence of drift) | **Excluded** when `alertRepo` is nil OR the agent-alert query errors |
 | 8 | User Feedback | **Conditional** — requires `UserFeedbackRepository` (wired in production `main.go`) AND at least one feedback row (`POST /agents/:id/feedback`) | **Excluded** when un-wired, on query error, or with zero feedback rows |
-| 9 | Execution Isolation | **Conditional** — requires `IsolationAttestationRepository` to be wired; the agent submits a runtime-isolation attestation via the SDK | 0.3 low baseline when wired but no attestation (deliberate incentive, stays in the composite); **excluded** only when the repository is un-wired |
+| 9 | Execution Isolation | **Conditional** — requires `IsolationAttestationRepository` to be wired; the agent submits a runtime-isolation attestation via the SDK. An unverified report is capped at `0.65`, and any report older than 90 days scores the baseline | 0.3 low baseline when wired but no attestation, or when the attestation is stale (both deliberate scoring choices, both stay in the composite); **excluded** only when the repository is un-wired |
 
 Implications:
 
@@ -500,11 +500,24 @@ def submit_user_feedback(agent_id: str, rating: int, comment: str):
 
 **Calculation**: Computed in `calculateExecutionIsolation` from the agent's most recent isolation attestation. With no attestation present (the default), the score is `0.3` — deliberately low so that not reporting isolation costs trust, incentivizing operators to attest.
 
-**Status today**: Conditional. The factor only computes a real signal when `IsolationAttestationRepository` is wired AND the agent has submitted at least one attestation through the SDK. In stock deployments where neither is true, every agent reads `0.3` on this factor.
+Two gates sit between the stored attestation and the score. Both are applied on **read**: the stored row always keeps the honest posture score, because the table records what the agent claimed and the scorer decides what the claim is worth.
 
-**Backend handler gap**: The SDK `attestIsolation` method (`AIMClient.ts:432-465`, `client.py:1677`) POSTs to `/api/v1/sdk-api/agents/<id>/isolation-attestation`. As of 2026-05-24, no backend route handler exists for that path and `TrustCalculator.SetIsolationRepo` is not called outside tests. SDK calls return 404; the `isolation_attestations` table is empty; `calculateExecutionIsolation` returns the `0.3` baseline for every agent. The full reasoning and the proposed external-attestation source hierarchy are in [docs/specs/execution-isolation-v1.md](../specs/execution-isolation-v1.md). The implementation is deferred pending a `[CHIEF-CA]` decision on which attestation tier (TEE, orchestrator, scanner, SDK) Phase 1 supports.
+| Gate | Rule |
+| --- | --- |
+| **Unverified ceiling** | An attestation that no independent source has corroborated scores `min(posture, 0.65)`. |
+| **90-day expiry** | An attestation whose `reported_at` is more than 90 days old scores the `0.3` baseline, verified or not. |
 
-**External attestation only**: An agent claiming "I'm in a hardened container" proves nothing on its own — a compromised agent would claim the same thing. The signal must come from outside the agent (orchestrator security context, TEE attestation, or HMA scan of the deployed surface). The SDK collects the attestation; downstream verification is what makes the score load-bearing.
+**The `0.65` ceiling is derived, not chosen.** It is exactly `ScoreIsolation(docker, namespace, readonly, seccomp)` — the commodity-container tier: `0.20 + 0.15 + 0.20 + 0.10`. An unverified claim is worth no more than the posture it is cheapest to claim; anything above that tier (a VM, a TEE, an airgap) is a statement about infrastructure AIM cannot see, so it has to be earned rather than asserted. Because the ceiling is computed from the posture enum rather than written down, retuning those weights moves the ceiling with the tier it names; a test pins today's value so the move is a deliberate edit.
+
+In practice this means **an agent reporting `firecracker + airgap + readonly + full` scores the same `0.65` as an agent reporting an ordinary hardened container**. Lying about the posture buys nothing. Reporting *honestly and badly* still costs you what it should: the ceiling is a `min()`, so an agent that truthfully reports no isolation keeps its `0.0` and is not lifted anywhere.
+
+**The 90-day expiry is uniform.** A posture describes a running deployment, and deployments move; a claim made once and never renewed describes a machine that may no longer exist. Exempting verified rows would let a single verification prop the factor up indefinitely, which is the failure the expiry exists to close. Expiry is scored as the `0.3` baseline, **not** as a missing-data exclusion — a stale attestation is data we have chosen not to credit, and redistributing the factor's weight would hand the agent back exactly what it lost by letting the attestation rot. Re-attesting restores the score immediately.
+
+**Verification has no write path yet.** `isolation_attestations` carries `verified` / `verified_by` / `verified_at`, and today every row is `verified = false`: the ingest path hard-sets it, the `INSERT` writes the literal `FALSE`, and no endpoint can set it. So the `0.65` ceiling is the effective maximum for this factor for every agent, and will be until an independent verification source ships (Phase 2, roadmap `aim-isolation-verification`). `verified` is bound to the **row**, not the agent: a re-attestation supersedes its predecessor and starts unverified, so verification never carries forward across a redeploy. When a source does arrive, TEE attestation and orchestrator/host metadata may set it; an **HMA static scan may not** (it reads the declared surface, not the running one, so it would launder a second self-report into a verification), and the **SDK never** (it is the self-report under check).
+
+**Known gap — the SDK cannot reach this endpoint.** The SDK `attestIsolation` method (`AIMClient.ts:729`, `client.py`) POSTs to `/api/v1/sdk-api/agents/<id>/isolation-attestation`, while the backend registers `/api/v1/sdk-api/agents/:id/isolation` (`main.go:372`). SDK calls 404 against the path mismatch, so the `isolation_attestations` table is near-empty in practice and most agents read the `0.3` baseline regardless of posture. The route fix is tracked separately; the scoring gates above apply the moment attestations start landing. Background and the external-attestation source hierarchy are in [docs/specs/execution-isolation-v1.md](../specs/execution-isolation-v1.md).
+
+**Why external attestation is still the goal**: an agent claiming "I'm in a hardened container" proves nothing on its own — a compromised agent would claim the same thing. The ceiling bounds what the unproven claim can earn; it does not turn the claim into a measurement. The signal must ultimately come from outside the agent (orchestrator security context or TEE attestation). The SDK collects the attestation; downstream verification is what makes the score load-bearing.
 
 **How to improve**:
 - ✅ Run the agent inside a sandbox (container, VM, or TEE)
@@ -513,6 +526,8 @@ def submit_user_feedback(agent_id: str, rating: int, comment: str):
 - ✅ Apply an egress allowlist limited to declared MCP destinations
 - ✅ Receive credentials through a short-TTL broker rather than long-lived env vars
 - ✅ Submit the isolation attestation through the SDK so the factor stops reading the `0.3` default
+- ✅ Re-submit it at least every 90 days — a posture that expires drops you back to `0.3`
+- ⛔ Do not inflate the posture: everything above the commodity-container tier is capped at `0.65` until it can be verified, so an exaggerated claim scores the same as an accurate one and misleads your own operators
 
 This factor was added as Factor 9 in the 9-factor revision; the 8-factor version of this document predated it. Issue #137 tracks the design of the full external-attestation scoring path that makes this factor's signal trustworthy end to end.
 
