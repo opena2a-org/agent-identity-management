@@ -97,6 +97,42 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Changed
 
+- **Trust factor 9 (execution isolation) no longer takes a self-report at face
+  value.** The factor is fed by an agent's own claim about its sandbox, network,
+  filesystem and process isolation, and it carries 10% of the composite. An agent
+  that typed `firecracker + airgap + readonly + full` scored 1.0 on it — roughly
+  +0.07 of trust over the no-attestation baseline — for the cost of four strings,
+  and the claim counted forever after being made once. Two gates now apply when
+  the factor is read:
+  - An **unverified** attestation scores `min(posture, 0.65)`. The ceiling is
+    derived, not chosen: it is `ScoreIsolation(docker, namespace, readonly,
+    seccomp)`, the commodity-container tier, so retuning the posture weights moves
+    it with the tier it names. A maximal claim now earns exactly what an honest
+    hardened container earns. It is a `min()`, so an agent that truthfully reports
+    no isolation keeps its honest `0.0` rather than being lifted to the ceiling.
+  - A **90-day expiry** on `reported_at`, uniform for verified and unverified
+    rows. A stale attestation scores the `0.3` baseline and is *not* added to the
+    excluded-factor set: staleness is a scoring decision, not missing data, and
+    renormalizing the weight away would return exactly what the agent lost by
+    letting the attestation rot. Re-attesting restores the score.
+
+  Both gates are read-side. The stored row keeps the honest posture score — the
+  table records what was claimed, and the scorer decides what the claim is worth.
+  Migration 108 adds `verified` / `verified_by` / `verified_at` to
+  `isolation_attestations`, and **nothing writes `verified = true`**: the ingest
+  path hard-sets false, the `INSERT` writes the literal `FALSE`, and no endpoint
+  can reach the column, so `0.65` is the effective maximum for every agent today.
+  `verified` is bound to the row rather than the agent, so a re-attestation
+  supersedes its predecessor and starts unverified — verification never carries
+  forward across a redeploy. Independent verification itself is a follow-up
+  (roadmap `aim-isolation-verification` Phase 2); when it lands, TEE attestation
+  and orchestrator/host metadata may set the column, an HMA static scan may not,
+  and the SDK never.
+
+  Unchanged and still broken: both shipped SDKs POST
+  `/api/v1/sdk-api/agents/<id>/isolation-attestation` while the backend registers
+  `/agents/:id/isolation`, so SDK attestations 404 and the table is near-empty.
+  That route fix is tracked separately and is deliberately not folded in here.
 - `AgentRepository.List` now returns an error for a non-positive limit instead of
   reinterpreting it. Returning everything would have traded a silent-empty bug for
   a silent-unbounded one; an error is the only outcome that fails visibly. Callers

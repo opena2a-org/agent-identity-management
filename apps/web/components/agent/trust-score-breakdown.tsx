@@ -141,7 +141,7 @@ const factorMetadata = {
   executionIsolation: {
     icon: Box,
     label: 'Execution isolation',
-    description: 'Self-reported runtime isolation posture (sandbox, network, filesystem, process). Defaults to a low baseline until the agent reports it.',
+    description: 'Self-reported runtime isolation posture (sandbox, network, filesystem, process). Nothing verifies the report, so it is capped at 0.65 — the score of an ordinary hardened container — no matter how strong a posture is claimed. Reports expire after 90 days, and an agent that has never reported sits at a low 0.3 baseline.',
     color: 'text-brand-text',
     bgColor: 'bg-brand-soft',
   },
