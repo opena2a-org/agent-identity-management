@@ -1,0 +1,67 @@
+{
+  "case": "allow-intent-only",
+  "description": "Allowed action with an intent inference and no detection: the seam records allows too, and the indicator reduces to allow_action.",
+  "derivedFrom": "sdk/typescript/src/telemetry/correlated-record.ts",
+  "volatileFields": ["recordId", "createdAt", "triggeredAt"],
+  "input": {
+    "correlationId": "cde_000000002_99aabbccddee",
+    "agentId": "agent-3",
+    "joinedBy": "fallback:window",
+    "joinerVersion": "1.0",
+    "enforcement": {
+      "decision": "allow",
+      "outcome": "ALLOW",
+      "capability": "db:read",
+      "resource": "users",
+      "occurredAt": "2026-06-07T12:10:00.000Z",
+      "source": "aim-pdp"
+    },
+    "intent": {
+      "intentClass": "read",
+      "confidence": 0.9,
+      "blocked": false,
+      "source": "nanomind-intent"
+    }
+  },
+  "expectedRecord": {
+    "schemaVersion": "1.0",
+    "correlationId": "cde_000000002_99aabbccddee",
+    "agentId": "agent-3",
+    "enforcement": {
+      "observed": true,
+      "decision": "allow",
+      "outcome": "ALLOW",
+      "capability": "db:read",
+      "resource": "users",
+      "occurredAt": "2026-06-07T12:10:00.000Z",
+      "source": "aim-pdp"
+    },
+    "intent": {
+      "observed": false,
+      "intentClass": "read",
+      "confidence": 0.9,
+      "blocked": false,
+      "source": "nanomind-intent"
+    },
+    "assembly": {
+      "joinedBy": "fallback:window",
+      "completeness": "partial-missing-detection",
+      "joinerVersion": "1.0"
+    }
+  },
+  "sharedIndicatorContext": {
+    "sensorToken": "sensor-abc",
+    "agentCategory": "backend",
+    "daySinceInstall": 12,
+    "runtimeEnv": "python"
+  },
+  "expectedIndicator": {
+    "schemaVersion": "1.0",
+    "sensorToken": "sensor-abc",
+    "eventType": "allow_action",
+    "enforcementOutcome": "allow",
+    "agentCategory": "backend",
+    "daySinceInstall": 12,
+    "runtimeEnv": "python"
+  }
+}

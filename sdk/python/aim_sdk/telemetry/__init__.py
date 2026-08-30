@@ -7,6 +7,32 @@ Captures why a blocked agent action happened by joining the injection cause
 and stays local; only an anonymized indicator may be shared.
 
 Everything here is off the enforcement critical path and best-effort.
+
+Port stage boundary
+-------------------
+This package is the ARP telemetry seam: **stage 1 of 3** in the recorded build
+order of the runtime-protection port (tracked in issue #441). It is the correlation
+envelope, the local correlated record, the joiner, and the ``telemetry.detection``
+input, ported schema-identical to the TypeScript reference
+(``sdk/typescript/src/telemetry``) so both SDKs feed one local log format
+(``~/.opena2a/correlated-events.jsonl``).
+
+The two later stages are deliberately NOT begun here, and neither exists in this
+SDK -- each stage gates the next:
+
+* **Stage 2 -- the guard-socket client.** JSON-lines over AF_UNIX to the
+  NanoMind-Guard daemon: null on socket-absent (graceful unavailability, never a
+  benign verdict), signed-fields-or-null, never a direct-HF fallback.
+* **Stage 3 -- the engine port.** Event engine (L0), runtime twin (L1),
+  coordinator (L2), monitors, and the interceptors that patch Python primitives
+  (``builtins.open``, ``subprocess``, ``socket``) -- shipped WITH the behavioral
+  suite that guards against drift from the TS reference.
+
+ARP's contract holds at every stage, and this seam is a telemetry PRODUCER only:
+detection output never enters ``verify_action`` or any PDP deny path
+(2026-06-07 CA decision). ``aim_sdk.enforcement`` and ``aim_sdk.decision`` -- the
+modules that decide allow/deny -- do not import this package, and the only
+consumer of a detection part is the client's telemetry recorder.
 """
 from .correlation import (
     CORRELATION_ID_PREFIX,
