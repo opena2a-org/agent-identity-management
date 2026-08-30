@@ -1,11 +1,17 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSensitiveAgentRoutesAreMemberGated is a source-wiring guard.
@@ -62,8 +68,8 @@ func TestSensitiveAgentRoutesAreMemberGated(t *testing.T) {
 	}
 }
 
-// TestSDKVerificationRoutesRequireJustifiedBareMount is a source-wiring guard for
-// the class, not for two routes.
+// TestSDKVerificationRoutesRequireJustifiedBareMount is a guard for the class,
+// not for two routes.
 //
 // The `/api/v1/sdk-api/verifications*` routes are registered on the bare `app`,
 // ABOVE the sdkAPI group. Fiber matches in registration order, so a route
@@ -75,18 +81,97 @@ func TestSensitiveAgentRoutesAreMemberGated(t *testing.T) {
 // Nothing in either tree previously treated "registered on app, above the group"
 // as a condition requiring justification, which is why PR #236 fixed the GET on
 // one line and left the two POSTs on the next two. This guard makes the bare
-// mount an explicit, enumerated decision: every app-level registration under
-// that prefix must appear below with the in-handler control that makes it safe.
-// A new one fails until someone writes down why it does not need the group.
+// mount an explicit, enumerated decision: every route the table marks Bare must
+// appear below with the in-handler control that makes it safe. A new one fails
+// until someone writes down why it does not need the group.
+//
+// AIM-03 moved the registration out of main() into sdkAPIRouteTable, so this is
+// no longer a source scan: it mounts the real table and asks the running app
+// which routes the group's middleware actually reaches. A reordering that put a
+// route above the group's Use chain — the failure the old string-order check
+// existed to catch — now fails as a request that arrives unauthenticated.
 func TestSDKVerificationRoutesRequireJustifiedBareMount(t *testing.T) {
-	// route registration substring -> the in-handler authentication that makes
-	// serving it outside the sdkAPI group acceptable.
+	// "METHOD full-path" -> the in-handler authentication that makes serving it
+	// outside the sdkAPI group acceptable.
 	justifiedBareMounts := map[string]string{
-		`app.Post("/api/v1/sdk-api/verifications"`: "CreateVerification verifies an Ed25519 signature over the request " +
+		"POST /api/v1/sdk-api/verifications": "CreateVerification verifies an Ed25519 signature over the request " +
 			"(verifySignature) and gates on agent.Status before writing.",
-		`app.Get("/api/v1/sdk-api/verifications/:id"`: "read path; the SDK-signature handler GetVerificationSDK verifies three " +
-			"X-AIM-* headers, an Ed25519 signature and event ownership. NOTE: cloud currently mounts GetVerification here, " +
-			"not GetVerificationSDK; that divergence is tracked separately and must not be shipped ahead of this change.",
+		"GET /api/v1/sdk-api/verifications/:id": "read path; the SDK-signature handler GetVerificationSDK verifies three " +
+			"X-AIM-* headers, an Ed25519 signature and event ownership (404, not 403, on mismatch). NOTE: cloud currently " +
+			"mounts GetVerification here, not GetVerificationSDK; that divergence is tracked separately and must not be " +
+			"shipped ahead of this change.",
+	}
+
+	// Mount the real table. The handlers are stand-ins — what a test may
+	// substitute is the handler, never the path — and each middleware records
+	// that it ran, so "is this route authenticated" is answered by a request
+	// rather than by reading the file.
+	const sentinelStatus = http.StatusTeapot
+	var groupMiddlewareRan, bareMiddlewareRan bool
+	app := fiber.New()
+	table := registerSDKAPIRoutes(app, sdkAPIDeps{
+		BareMiddleware: func(c fiber.Ctx) error {
+			bareMiddlewareRan = true
+			return c.Next()
+		},
+		GroupMiddleware: []fiber.Handler{func(c fiber.Ctx) error {
+			groupMiddlewareRan = true
+			return c.Next()
+		}},
+		Handlers: sdkAPITestHandlers(func(c fiber.Ctx) error { return c.SendStatus(sentinelStatus) }),
+	})
+	require.NotEmpty(t, table, "registerSDKAPIRoutes returned no routes")
+
+	for _, route := range table {
+		groupMiddlewareRan, bareMiddlewareRan = false, false
+
+		resp, err := app.Test(httptest.NewRequest(route.Method, concreteSDKAPIPath(route.FullPath()), nil))
+		require.NoError(t, err)
+		status := resp.StatusCode
+		require.NoError(t, resp.Body.Close())
+
+		require.Equal(t, sentinelStatus, status,
+			"%s %s is in the table but the mounted app does not serve it", route.Method, route.FullPath())
+
+		key := route.Method + " " + route.FullPath()
+		if route.Bare {
+			if _, ok := justifiedBareMounts[key]; !ok {
+				t.Errorf("route %s is registered on the bare `app` above the sdkAPI group with no recorded justification.\n\n"+
+					"Routes registered there are NOT reached by the group's Ed25519/JWT middleware — their only middleware is a "+
+					"rate limiter, which authenticates nothing. Either drop Bare so it is served from the group, or add it to "+
+					"justifiedBareMounts in this test naming the in-handler authentication that makes the bare mount safe.", key)
+			}
+			// The security claim behind the justification, asserted rather than
+			// assumed: a bare route really is outside the group's chain.
+			assert.False(t, groupMiddlewareRan,
+				"%s is marked Bare but the group middleware reached it; the Bare/justification split is describing the wrong thing", key)
+			assert.True(t, bareMiddlewareRan, "%s did not run the bare middleware chain", key)
+			continue
+		}
+
+		assert.True(t, groupMiddlewareRan,
+			"%s is served WITHOUT the group's middleware. Fiber applies a group's Use chain only to routes registered "+
+				"after it, so this route is unauthenticated: every sdkAPIDeps.GroupMiddleware must be registered before "+
+				"any grouped route in registerSDKAPIRoutes.", key)
+		if _, ok := justifiedBareMounts[key]; ok {
+			t.Errorf("%s is listed in justifiedBareMounts but is no longer a bare mount — delete the stale justification", key)
+		}
+	}
+
+	// The two verification write routes must be on the group, and the JWT mount
+	// that authenticated a user without checking ownership must not come back.
+	for _, required := range []string{
+		"POST /api/v1/sdk-api/verifications/:id/result",
+		"POST /api/v1/sdk-api/verifications/:id/execution-status",
+	} {
+		var found bool
+		for _, route := range table {
+			if !route.Bare && route.Method+" "+route.FullPath() == required {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "%s is missing: the write routes must be served from the authenticated sdkAPI group", required)
 	}
 
 	_, thisFile, ok := callerFile()
@@ -98,89 +183,34 @@ func TestSDKVerificationRoutesRequireJustifiedBareMount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read main.go: %v", err)
 	}
-
-	const prefix = `"/api/v1/sdk-api/verifications`
-	for _, line := range strings.Split(string(src), "\n") {
-		trimmed := strings.TrimSpace(line)
-		// Comments describe routes; they do not register them.
-		if strings.HasPrefix(trimmed, "//") || !strings.Contains(trimmed, prefix) {
-			continue
-		}
-		// Group-relative registrations (sdkAPI.Post("/verifications/...")) do not
-		// carry the full path, so anything matching here is app-level.
-		if !strings.HasPrefix(trimmed, "app.") {
-			continue
-		}
-		var justified bool
-		for mount := range justifiedBareMounts {
-			if strings.Contains(trimmed, mount) {
-				justified = true
-				break
-			}
-		}
-		if !justified {
-			t.Errorf("route registered on bare `app` above the sdkAPI group with no recorded justification:\n  %s\n\n"+
-				"Routes registered here are NOT reached by the group's Ed25519/JWT middleware — their only middleware is a "+
-				"rate limiter, which authenticates nothing. Either move it onto the sdkAPI group, or add it to "+
-				"justifiedBareMounts in this test naming the in-handler authentication that makes the bare mount safe.",
-				trimmed)
-		}
-	}
-
-	// ORDER, not just presence. Fiber applies a group's Use() chain only to routes
-	// registered AFTER it. Asserting that `sdkAPI.Post("/verifications/:id/result"`
-	// merely EXISTS is satisfied by a file where the three sdkAPI.Use(...) lines sit
-	// BELOW it — which serves the route with no middleware at all and re-opens the
-	// unauthenticated write with this guard still green. The pre-existing guard in
-	// this file avoids the problem by requiring the gate on the same LINE as the
-	// registration; a group chain cannot be expressed that way, so the ordering is
-	// asserted explicitly instead.
-	lines := strings.Split(string(src), "\n")
-	lastUse, firstGuardedRoute := -1, -1
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "//") {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "sdkAPI.Use(") {
-			lastUse = i
-		}
-		if strings.Contains(trimmed, `sdkAPI.Post("/verifications/:id/`) && firstGuardedRoute == -1 {
-			firstGuardedRoute = i
-		}
-	}
-	switch {
-	case lastUse == -1:
-		t.Error("no sdkAPI.Use(...) found: the group carries no middleware, so its routes are unauthenticated")
-	case firstGuardedRoute == -1:
-		t.Error("no sdkAPI.Post(\"/verifications/:id/...\") found: the write routes are not on the group")
-	case firstGuardedRoute < lastUse:
-		t.Errorf("verification write route registered at line %d, BEFORE the last sdkAPI.Use(...) at line %d. "+
-			"Fiber applies a group's middleware only to routes registered after it, so this route is served "+
-			"with no authentication. Move the registration below every sdkAPI.Use(...) line.",
-			firstGuardedRoute+1, lastUse+1)
-	}
-
-	// The two write routes must be on the group, and must not have come back.
 	stripped := stripComments(string(src))
-	for _, forbidden := range []string{
-		`app.Post("/api/v1/sdk-api/verifications/:id/result"`,
-		`app.Post("/api/v1/sdk-api/verifications/:id/execution-status"`,
-		`verifications.Post("/:id/result"`,
-	} {
-		if strings.Contains(stripped, forbidden) {
-			t.Errorf("registration %s must not exist: it bypasses authentication (bare app mount) or "+
-				"authenticates a user without checking ownership (JWT mount)", forbidden)
+
+	if strings.Contains(stripped, `verifications.Post("/:id/result"`) {
+		t.Error(`registration verifications.Post("/:id/result") must not exist: it authenticates a user without checking ownership`)
+	}
+
+	// One table, one place. A path registered anywhere but sdkAPIRouteTable is
+	// invisible to every guard above — which is precisely how the backend came
+	// to serve /agents/:id/isolation while all three SDKs posted
+	// /agents/:id/isolation-attestation.
+	if strings.Contains(stripped, sdkAPIBasePath) {
+		t.Errorf("main.go names %q directly. SDK-API paths belong in sdkAPIRouteTable (sdk_api_routes.go), which main.go "+
+			"and the tests both mount through registerSDKAPIRoutes; a path written anywhere else is one no parity test can see.",
+			sdkAPIBasePath)
+	}
+}
+
+// concreteSDKAPIPath substitutes a real UUID for every :param in a registered
+// path, so a test can call the route it just mounted without restating it.
+func concreteSDKAPIPath(path string) string {
+	const id = "6f1a8f4e-6b6f-4a3a-9a9a-2f2b1c0d4e5f"
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		if strings.HasPrefix(segment, ":") {
+			segments[i] = id
 		}
 	}
-	for _, required := range []string{
-		`sdkAPI.Post("/verifications/:id/result"`,
-		`sdkAPI.Post("/verifications/:id/execution-status"`,
-	} {
-		if !strings.Contains(stripped, required) {
-			t.Errorf("registration %s is missing: the write routes must be served from the authenticated sdkAPI group", required)
-		}
-	}
+	return strings.Join(segments, "/")
 }
 
 func callerFile() (uintptr, string, bool) {

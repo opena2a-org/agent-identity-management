@@ -129,10 +129,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   and orchestrator/host metadata may set the column, an HMA static scan may not,
   and the SDK never.
 
-  Unchanged and still broken: both shipped SDKs POST
-  `/api/v1/sdk-api/agents/<id>/isolation-attestation` while the backend registers
-  `/agents/:id/isolation`, so SDK attestations 404 and the table is near-empty.
-  That route fix is tracked separately and is deliberately not folded in here.
+  Unchanged and still broken at the time of that change: both shipped SDKs POST
+  `/api/v1/sdk-api/agents/<id>/isolation-attestation` while the backend registered
+  `/agents/:id/isolation`, so SDK attestations 404'd and the table was near-empty.
+  That route fix was tracked separately and deliberately not folded in here; it
+  landed afterwards, in the Fixed entry below.
 - `AgentRepository.List` now returns an error for a non-positive limit instead of
   reinterpreting it. Returning everything would have traded a silent-empty bug for
   a silent-unbounded one; an error is the only outcome that fails visibly. Callers
@@ -150,6 +151,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   Remaining `needs review` entries are tracked in #358.
 
 ### Fixed
+
+- **Every SDK isolation attestation was 404ing.** All three shipped clients POST
+  `/api/v1/sdk-api/agents/{id}/isolation-attestation` (`AIMClient.ts:729`,
+  `client.py:2427`, `AIMClient.java:1698`); the backend registered only
+  `/agents/:id/isolation`, so no agent's self-reported isolation posture ever
+  reached `isolation_attestations` and trust factor 9 sat at its `0.3` baseline
+  for every agent in every deployment. Per the [CHIEF-CA] 2026-08-29 ruling the
+  SDK/spec path is canonical: it is now registered on the existing
+  `SubmitIsolationAttestation` handler, and `POST /api/v1/sdk-api/agents/:id/isolation`
+  stays registered as a deprecated alias to the same handler (Binding Decision 6
+  forbids removing a published path). No SDK changed.
+
+  The suite could not see the outage because the integration tests registered the
+  handler at a path they chose themselves, so they agreed with the server about a
+  path no client used. SDK-API route registration now lives in one table
+  (`apps/backend/cmd/server/sdk_api_routes.go`) that `main.go` and the tests both
+  mount through `registerSDKAPIRoutes`: tests may hand-mount handlers, but they
+  take paths from the table the server registers, and a parity test reads the
+  paths back out of the SDK sources.
 
 - **Timestamp columns no longer depend on the writer's time zone.** Every
   `TIMESTAMP` (without time zone) column is now `TIMESTAMPTZ` (migration 106):

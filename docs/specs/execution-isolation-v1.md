@@ -30,7 +30,7 @@ This note records what Factor 9 actually does today, where the gap is between th
 
 | Missing piece | Consequence |
 |---|---|
-| Backend HTTP handler for `POST /api/v1/sdk-api/agents/<id>/isolation-attestation` | SDK calls to `attestIsolation` return 404 today |
+| ~~Backend HTTP handler for `POST /api/v1/sdk-api/agents/<id>/isolation-attestation`~~ | **Closed 2026-08-30 (AIM-03).** The backend registers the canonical SDK path on `SubmitIsolationAttestation` and keeps `POST /api/v1/sdk-api/agents/<id>/isolation` as a deprecated alias, per the [CHIEF-CA] 2026-08-29 ruling. Until then every SDK call to `attestIsolation` returned 404. |
 | Production repository implementation of `IsolationAttestationRepository` | The table exists but no code writes to it from request handling |
 | `TrustCalculator.SetIsolationRepo` is never called outside tests | `c.isolationRepo == nil` is always true in production, so `calculateExecutionIsolation` always returns the `0.3` baseline regardless of agent posture |
 | External attestation ingestion (orchestrator / TEE / scanner) | Even with the SDK path wired, every score would be self-reported and a compromised agent could falsify it |
