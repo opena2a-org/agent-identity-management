@@ -27,7 +27,7 @@ import (
 //	                         surface 404'd. That was CA's lane; fixing it here
 //	                         would have folded an unrelated behaviour change into
 //	                         a scoring change and made both harder to review.
-//	                         CLOSED by AIM-03 ([CHIEF-CA] 2026-08-29 ruling): the
+//	                         CLOSED by AIM-03 (recorded architecture decision of 2026-08-29): the
 //	                         backend now registers the canonical SDK path and
 //	                         keeps /isolation as a deprecated alias, so the
 //	                         assertion that the mismatch is STILL BROKEN was

@@ -18,7 +18,7 @@ import (
 // listens on. Tests may hand-mount handlers (a stub instead of a live service);
 // they may not hand-choose paths.
 //
-// [CHIEF-CA] 2026-08-29 ruling: the canonical path is the SDK/spec path,
+// recorded architecture decision of 2026-08-29: the canonical path is the SDK/spec path,
 // /api/v1/sdk-api/agents/:id/isolation-attestation. The backend gains it on the
 // existing handler, and /agents/:id/isolation stays registered as a deprecated
 // alias to the same handler — Binding Decision 6 forbids removing a shipped
@@ -156,7 +156,7 @@ func sdkAPIRouteTable(h sdkAPIHandlers) []sdkAPIRoute {
 		{
 			Method: http.MethodPost, Path: sdkAPIIsolationAttestationPath,
 			Handler: h.SubmitIsolationAttestation,
-			Note:    "SDK self-report of runtime isolation posture (trust factor 9); canonical path per the [CHIEF-CA] 2026-08-29 ruling",
+			Note:    "SDK self-report of runtime isolation posture (trust factor 9); canonical path per the recorded architecture decision of 2026-08-29",
 		},
 		{
 			Method: http.MethodPost, Path: sdkAPIIsolationAliasPath,

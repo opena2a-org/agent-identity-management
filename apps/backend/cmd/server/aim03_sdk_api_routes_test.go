@@ -34,7 +34,7 @@ import (
 // test suite, because the integration tests hand-registered the handler at the
 // server's own path and so agreed with the server about a path no client used.
 //
-// Per the [CHIEF-CA] 2026-08-29 ruling the SDK/spec path is canonical: the
+// Per the recorded architecture decision of 2026-08-29 the SDK/spec path is canonical: the
 // backend gains it on the existing handler and keeps /agents/:id/isolation as a
 // deprecated alias (BD6 forbids removing a published path).
 //
