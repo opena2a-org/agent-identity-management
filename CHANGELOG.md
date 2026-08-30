@@ -157,7 +157,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `client.py:2427`, `AIMClient.java:1698`); the backend registered only
   `/agents/:id/isolation`, so no agent's self-reported isolation posture ever
   reached `isolation_attestations` and trust factor 9 sat at its `0.3` baseline
-  for every agent in every deployment. Per the [CHIEF-CA] 2026-08-29 ruling the
+  for every agent in every deployment. Per the recorded architecture decision of 2026-08-29 the
   SDK/spec path is canonical: it is now registered on the existing
   `SubmitIsolationAttestation` handler, and `POST /api/v1/sdk-api/agents/:id/isolation`
   stays registered as a deprecated alias to the same handler (Binding Decision 6
