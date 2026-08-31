@@ -20,11 +20,23 @@ func NewIsolationAttestationRepository(db *sql.DB) *IsolationAttestationReposito
 	return &IsolationAttestationRepository{db: db}
 }
 
+// Create persists a self-reported attestation.
+//
+// `verified` is written as the literal FALSE and is NOT taken from the struct
+// field. Every attestation reaching this method is a self-report, and there is
+// no independent verification source to write a TRUE from (roadmap
+// aim-isolation-verification Phase 2). Hard-coding it here means the invariant
+// "no ingest path can produce a verified row" holds structurally: a future
+// caller that builds an IsolationAttestation with Verified set — by mistake or
+// by an attacker-influenced field — still writes an unverified row. When a
+// verifier does exist it gets its own method, so the honest write and the
+// self-report write never share a statement.
 func (r *IsolationAttestationRepository) Create(attestation *domain.IsolationAttestation) error {
 	query := `
 		INSERT INTO isolation_attestations (
-			id, agent_id, sandbox, network, filesystem, process, score, reported_at, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			id, agent_id, sandbox, network, filesystem, process, score, reported_at, created_at,
+			verified, verified_by, verified_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, NULL, NULL)
 	`
 	_, err := r.db.Exec(query,
 		attestation.ID,
@@ -41,8 +53,13 @@ func (r *IsolationAttestationRepository) Create(attestation *domain.IsolationAtt
 }
 
 func (r *IsolationAttestationRepository) GetLatest(agentID uuid.UUID) (*domain.IsolationAttestation, error) {
+	// ORDER BY reported_at DESC is what makes a re-attestation supersede its
+	// predecessor: the newest report wins outright, so a verified older row
+	// stops counting the moment the agent reports again. Verification never
+	// carries forward because the read only ever sees one row.
 	query := `
-		SELECT id, agent_id, sandbox, network, filesystem, process, score, reported_at, created_at
+		SELECT id, agent_id, sandbox, network, filesystem, process, score, reported_at, created_at,
+		       verified, verified_by, verified_at
 		FROM isolation_attestations
 		WHERE agent_id = $1
 		ORDER BY reported_at DESC
@@ -61,7 +78,8 @@ func (r *IsolationAttestationRepository) GetLatest(agentID uuid.UUID) (*domain.I
 
 func (r *IsolationAttestationRepository) GetHistory(agentID uuid.UUID, limit int) ([]*domain.IsolationAttestation, error) {
 	query := `
-		SELECT id, agent_id, sandbox, network, filesystem, process, score, reported_at, created_at
+		SELECT id, agent_id, sandbox, network, filesystem, process, score, reported_at, created_at,
+		       verified, verified_by, verified_at
 		FROM isolation_attestations
 		WHERE agent_id = $1
 		ORDER BY reported_at DESC
@@ -92,6 +110,10 @@ type rowScanner interface {
 func scanIsolationAttestation(s rowScanner) (*domain.IsolationAttestation, error) {
 	var att domain.IsolationAttestation
 	var sandbox, network, filesystem, process string
+	// verified_by / verified_at are NULL on every row today (nothing sets
+	// verified), so they must be scanned through nullable holders.
+	var verifiedBy sql.NullString
+	var verifiedAt sql.NullTime
 	err := s.Scan(
 		&att.ID,
 		&att.AgentID,
@@ -102,6 +124,9 @@ func scanIsolationAttestation(s rowScanner) (*domain.IsolationAttestation, error
 		&att.Score,
 		&att.ReportedAt,
 		&att.CreatedAt,
+		&att.Verified,
+		&verifiedBy,
+		&verifiedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -110,5 +135,11 @@ func scanIsolationAttestation(s rowScanner) (*domain.IsolationAttestation, error
 	att.Network = domain.NetworkIsolation(network)
 	att.Filesystem = domain.FilesystemIsolation(filesystem)
 	att.Process = domain.ProcessIsolation(process)
+	if verifiedBy.Valid {
+		att.VerifiedBy = &verifiedBy.String
+	}
+	if verifiedAt.Valid {
+		att.VerifiedAt = &verifiedAt.Time
+	}
 	return &att, nil
 }

@@ -673,6 +673,26 @@ func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) (float64, s
 // §6.1) that incentivizes agents to report their posture, and issuance
 // surfaces it via IsolationSelfReported. Only an un-wired repository excludes
 // the factor from the composite.
+//
+// Two integrity gates sit between the stored row and the factor score, both
+// read-side only — neither rewrites the attestation, which stays the honest
+// record of what was reported (roadmap aim-isolation-verification, CDS ruling
+// 2026-08-29):
+//
+//	expiry  — a posture older than domain.IsolationAttestationTTL counts for
+//	          nothing and falls back to the baseline, uniformly for verified and
+//	          unverified rows.
+//	ceiling — an unverified self-report is clipped to
+//	          domain.UnverifiedIsolationCeiling(), the commodity-container tier.
+//	          A hostile agent claiming firecracker+airgap+readonly+full now earns
+//	          the same 0.65 as an honest "I'm in a hardened container", so the
+//	          lie buys nothing. min() clips only downward, so an against-interest
+//	          report (all none, 0.0) passes through at its honest low value
+//	          rather than being lifted to the ceiling.
+//
+// Independent verification — the write side that would set Verified — is Phase 2
+// and deliberately does not exist yet. Until it does, every row is unverified and
+// the ceiling is the effective maximum for the factor.
 func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) (float64, string) {
 	if c.isolationRepo == nil {
 		return 0.3, exclReasonNotWired
@@ -683,7 +703,21 @@ func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) (floa
 		return 0.3, "" // No attestation submitted yet: scored low baseline by design
 	}
 
-	// Use the pre-computed score from the attestation
+	// Expired posture is scored, not excluded: the reason stays EMPTY on
+	// purpose. A non-empty reason would enter the AIP §6.1 exclusion set and
+	// redistribute this factor's weight, which is the wrong semantics — a stale
+	// attestation is not missing data, it is data we have decided not to credit.
+	// Excluding it would also hand the agent back the exact weight it lost by
+	// letting the attestation rot.
+	if attestation.IsExpiredAt(time.Now()) {
+		return 0.3, ""
+	}
+
+	if !attestation.Verified {
+		return math.Min(attestation.Score, domain.UnverifiedIsolationCeiling()), ""
+	}
+
+	// Verified and fresh: the posture is corroborated, so it counts in full.
 	return attestation.Score, ""
 }
 
@@ -852,6 +886,18 @@ func (c *TrustCalculator) RecordUserFeedback(ctx context.Context, agentID, orgID
 // cannot inject an arbitrary score, and unrecognized posture values are rejected
 // before anything is written. Independent verification of the reported posture is
 // a separate follow-up (see roadmap aim-isolation-verification).
+//
+// Verified is hard-set false here and takes no input from the caller — the
+// signature carries posture only, so there is no argument through which an
+// ingest path could request verification. A re-attestation is therefore always
+// a new unverified row: it supersedes its predecessor by reported_at and never
+// inherits that predecessor's verification. The repository INSERT writes the
+// literal FALSE as well, so the invariant does not rest on this assignment alone.
+//
+// The stored Score is the HONEST posture value, uncapped. The unverified ceiling
+// is applied when the factor is read (calculateExecutionIsolation), not when the
+// row is written: the table records what the agent claimed, and the scorer
+// decides what the claim is worth.
 func (c *TrustCalculator) RecordIsolationAttestation(ctx context.Context, agentID uuid.UUID, sandbox domain.SandboxType, network domain.NetworkIsolation, filesystem domain.FilesystemIsolation, process domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
 	if c.isolationRepo == nil {
 		return nil, fmt.Errorf("isolation attestation repository not configured")
@@ -871,6 +917,9 @@ func (c *TrustCalculator) RecordIsolationAttestation(ctx context.Context, agentI
 		Score:      domain.ScoreIsolation(sandbox, network, filesystem, process),
 		ReportedAt: now,
 		CreatedAt:  now,
+		Verified:   false, // no verified write path exists until Phase 2
+		VerifiedBy: nil,
+		VerifiedAt: nil,
 	}
 
 	if err := c.isolationRepo.Create(attestation); err != nil {
