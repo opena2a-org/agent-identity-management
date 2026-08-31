@@ -248,3 +248,10 @@ We will not pursue legal action against researchers who:
 - Do not disrupt our services
 
 Thank you for helping keep AIM and our users safe!
+
+## Change control
+
+Changes to the automated review and release configuration (everything under
+`.github/`) require an approving review from a code owner. Automation can
+propose those changes; it cannot approve them. Ordinary pull requests are
+gated by status checks alone.
