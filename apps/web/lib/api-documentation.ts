@@ -31,6 +31,14 @@ export interface APIEndpoint {
   requiresAuth: boolean;
   tags: string[];
   roleRequired?: string;
+  /**
+   * Set on a path that is still served but is no longer the contract. A
+   * deprecated endpoint stays documented — it is still reachable, and callers
+   * that already use it need to find it — but `deprecationNote` must say what
+   * to call instead.
+   */
+  deprecated?: boolean;
+  deprecationNote?: string;
 }
 
 export interface EndpointCategory {
@@ -3036,13 +3044,73 @@ export const apiDocumentation: EndpointCategory[] = [
       },
       {
         method: "POST",
-        path: "/api/v1/sdk-api/agents/:id/isolation",
+        path: "/api/v1/sdk-api/agents/:id/isolation-attestation",
         description:
-          "Self-report the agent's runtime isolation posture (sandbox, network, filesystem, process). The server computes the execution-isolation trust factor from the posture; the agent cannot submit a score directly, and an agent may only attest its own posture. The posture is self-reported and not independently verified.",
+          "Self-report the agent's runtime isolation posture (sandbox, network, filesystem, process). The server computes the execution-isolation trust factor from the posture; the agent cannot submit a score directly, and an agent may only attest its own posture. The posture is self-reported and not independently verified. This is the canonical path and the one every AIM SDK calls.",
         summary: "SDK: Report isolation posture",
         auth: "Ed25519 (Agent Signature)",
         requiresAuth: true,
         tags: ["sdk", "trust", "isolation"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            sandbox: {
+              type: "string",
+              description:
+                "Sandbox type: none, docker, vm, gvisor, firecracker, wasm, kata",
+              required: true,
+            },
+            network: {
+              type: "string",
+              description:
+                "Network isolation: none, firewall, namespace, vpc, airgap",
+              required: true,
+            },
+            filesystem: {
+              type: "string",
+              description:
+                "Filesystem isolation: none, chroot, tmpfs, readonly, overlay",
+              required: true,
+            },
+            process: {
+              type: "string",
+              description:
+                "Process isolation: none, pidns, seccomp, apparmor, selinux, full",
+              required: true,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Attestation record ID" },
+            agentId: { type: "string", description: "Agent ID" },
+            score: {
+              type: "number",
+              description: "Computed isolation score (0-1)",
+            },
+            reportedAt: { type: "string", description: "Report timestamp" },
+          },
+        },
+        example: `{
+  "sandbox": "firecracker",
+  "network": "airgap",
+  "filesystem": "readonly",
+  "process": "full"
+}`,
+      },
+      {
+        method: "POST",
+        path: "/api/v1/sdk-api/agents/:id/isolation",
+        deprecated: true,
+        deprecationNote:
+          "Deprecated alias. Use POST /api/v1/sdk-api/agents/:id/isolation-attestation, which is the canonical path and the one the TypeScript, Python and Java SDKs call. This alias is still served on the same handler and is not scheduled for removal; new integrations should not use it.",
+        description:
+          "Deprecated alias for POST /api/v1/sdk-api/agents/:id/isolation-attestation. Same handler, same request and response, same self-attestation rules — kept so existing callers keep working.",
+        summary: "SDK: Report isolation posture (deprecated alias)",
+        auth: "Ed25519 (Agent Signature)",
+        requiresAuth: true,
+        tags: ["sdk", "trust", "isolation", "deprecated"],
         requestSchema: {
           type: "object",
           properties: {

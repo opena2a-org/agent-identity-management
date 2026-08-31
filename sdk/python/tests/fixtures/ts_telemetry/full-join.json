@@ -1,0 +1,108 @@
+{
+  "case": "full-join",
+  "description": "All three parts joined on the correlation ID, every TS-optional field populated.",
+  "derivedFrom": "sdk/typescript/src/telemetry/correlated-record.ts",
+  "volatileFields": ["recordId", "createdAt", "triggeredAt"],
+  "input": {
+    "correlationId": "cde_000000000_aabbccddeeff",
+    "agentId": "agent-1",
+    "joinedBy": "correlationId",
+    "joinerVersion": "1.0",
+    "enforcement": {
+      "decision": "deny",
+      "outcome": "DENY_INTENT",
+      "deniedBy": "aim-pdp",
+      "deniedReason": "blocked injected exfil",
+      "capability": "fs:write",
+      "resource": "/etc/secret",
+      "scope": "prod",
+      "credentialRef": "ref:db-prod",
+      "policyId": "pol-7",
+      "occurredAt": "2026-06-07T12:00:00.000Z",
+      "traceId": "trace-9",
+      "source": "aim-pdp"
+    },
+    "intent": {
+      "intentClass": "exfil",
+      "confidence": 0.7,
+      "blocked": true,
+      "source": "nanomind-intent",
+      "modelVersion": "nm-1.2.0"
+    },
+    "detection": {
+      "injectionDetected": true,
+      "attackClass": "indirect",
+      "techniqueId": "T-2002",
+      "techniqueSource": "interim-mapping",
+      "confidence": 0.84,
+      "detector": "nanomind-guard",
+      "detectorVersion": "guard-0.9",
+      "inputRef": "sha256:abcd",
+      "detectedAt": "2026-06-07T11:59:59.000Z"
+    }
+  },
+  "expectedRecord": {
+    "schemaVersion": "1.0",
+    "correlationId": "cde_000000000_aabbccddeeff",
+    "agentId": "agent-1",
+    "enforcement": {
+      "observed": true,
+      "decision": "deny",
+      "outcome": "DENY_INTENT",
+      "deniedBy": "aim-pdp",
+      "deniedReason": "blocked injected exfil",
+      "capability": "fs:write",
+      "resource": "/etc/secret",
+      "scope": "prod",
+      "credentialRef": "ref:db-prod",
+      "policyId": "pol-7",
+      "occurredAt": "2026-06-07T12:00:00.000Z",
+      "traceId": "trace-9",
+      "source": "aim-pdp"
+    },
+    "intent": {
+      "observed": false,
+      "intentClass": "exfil",
+      "confidence": 0.7,
+      "blocked": true,
+      "source": "nanomind-intent",
+      "modelVersion": "nm-1.2.0"
+    },
+    "detection": {
+      "observed": false,
+      "attribution": "inferred",
+      "injectionDetected": true,
+      "attackClass": "indirect",
+      "techniqueId": "T-2002",
+      "techniqueSource": "interim-mapping",
+      "confidence": 0.84,
+      "detector": "nanomind-guard",
+      "detectorVersion": "guard-0.9",
+      "inputRef": "sha256:abcd",
+      "detectedAt": "2026-06-07T11:59:59.000Z"
+    },
+    "assembly": {
+      "joinedBy": "correlationId",
+      "completeness": "full",
+      "joinerVersion": "1.0"
+    }
+  },
+  "sharedIndicatorContext": {
+    "sensorToken": "sensor-abc",
+    "agentCategory": "backend",
+    "daySinceInstall": 3,
+    "runtimeEnv": "python"
+  },
+  "expectedIndicator": {
+    "schemaVersion": "1.0",
+    "sensorToken": "sensor-abc",
+    "eventType": "denied_injection_attempt",
+    "techniqueId": "T-2002",
+    "techniqueSource": "interim-mapping",
+    "detectionConfidence": 0.84,
+    "enforcementOutcome": "deny",
+    "agentCategory": "backend",
+    "daySinceInstall": 3,
+    "runtimeEnv": "python"
+  }
+}

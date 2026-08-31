@@ -927,8 +927,19 @@ func TestTrustScoreHandler_SubmitUserFeedback_CrossOrgDenied(t *testing.T) {
 // SubmitIsolationAttestation Tests
 // ===========================
 
+// isolationAttestationRoute is the canonical isolation-attestation path, minus
+// the /api/v1/sdk-api prefix the group supplies in production.
+//
+// These are handler tests: they mount the handler themselves, so they choose
+// this string, and choosing a path is exactly how the backend came to serve a
+// path no SDK called. The registration itself is asserted where it is made —
+// apps/backend/cmd/server/aim03_sdk_api_routes_test.go mounts the real route
+// table and checks it against the paths in the SDK sources. This constant is
+// here so the handler tests at least exercise the same shape the SDKs send.
+const isolationAttestationRoute = "/agents/:id/isolation-attestation"
+
 func submitIsolationRequest(agentID uuid.UUID, jsonBody string) *http.Request {
-	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/isolation", strings.NewReader(jsonBody))
+	req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/isolation-attestation", strings.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }
@@ -942,7 +953,7 @@ func agentAuthIsolationApp(handler fiber.Handler, orgID, authAgentID uuid.UUID) 
 		c.Locals("agent_id", authAgentID)
 		return c.Next()
 	})
-	app.Post("/agents/:id/isolation", handler)
+	app.Post(isolationAttestationRoute, handler)
 	return app
 }
 
@@ -955,7 +966,7 @@ func userAuthIsolationApp(handler fiber.Handler, orgID, userID uuid.UUID) *fiber
 		c.Locals("user_id", userID)
 		return c.Next()
 	})
-	app.Post("/agents/:id/isolation", handler)
+	app.Post(isolationAttestationRoute, handler)
 	return app
 }
 
@@ -1142,7 +1153,7 @@ func TestTrustScoreHandler_SubmitIsolationAttestation_MissingOrgContext(t *testi
 
 	// No locals set at all (neither org nor user) -> unauthenticated.
 	app := fiber.New()
-	app.Post("/agents/:id/isolation", handler.SubmitIsolationAttestation)
+	app.Post(isolationAttestationRoute, handler.SubmitIsolationAttestation)
 
 	resp, err := app.Test(submitIsolationRequest(agentID, `{"sandbox":"docker","network":"none","filesystem":"none","process":"none"}`))
 	require.NoError(t, err)

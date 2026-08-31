@@ -1249,7 +1249,9 @@ func TestTrustCalculator_VerifiedAgentWithIsolation_HigherScore(t *testing.T) {
 	mockAlertRepo.On("GetUnacknowledgedByResourceID", agentID).Return([]*domain.Alert{}, nil).Maybe()
 	mockAlertRepo.On("GetByResourceID", agentID, 100, 0).Return([]*domain.Alert{}, nil).Maybe()
 
-	// Mock isolation repo to return a high-isolation attestation
+	// Mock isolation repo to return a high-isolation attestation. It is a fresh
+	// SELF-REPORT, so the read side clips it to the unverified ceiling: the
+	// stored 1.0 is what the agent claimed, 0.65 is what the claim is worth.
 	mockIsolationRepo.On("GetLatest", agentID).Return(&domain.IsolationAttestation{
 		ID:         uuid.New(),
 		AgentID:    agentID,
@@ -1258,6 +1260,7 @@ func TestTrustCalculator_VerifiedAgentWithIsolation_HigherScore(t *testing.T) {
 		Filesystem: domain.FilesystemReadOnly,
 		Process:    domain.ProcessFull,
 		Score:      1.0, // Max isolation
+		ReportedAt: time.Now(),
 	}, nil)
 
 	// Calculate without isolation repo (defaults to 0.3 baseline)
@@ -1270,13 +1273,13 @@ func TestTrustCalculator_VerifiedAgentWithIsolation_HigherScore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, scoreWith)
 
-	// Agent with perfect isolation should score higher
+	// Agent with reported isolation should score higher
 	assert.Greater(t, scoreWith.Score, scoreWithout.Score,
-		"Agent with perfect isolation (1.0) should score higher than baseline (0.3)")
+		"Agent with a reported isolation posture should score higher than baseline (0.3)")
 
-	// Verify ExecutionIsolation factor is populated
-	assert.Equal(t, 1.0, scoreWith.Factors.ExecutionIsolation,
-		"ExecutionIsolation factor should be 1.0 with max isolation attestation")
+	// Verify ExecutionIsolation factor is populated, at the unverified ceiling
+	assert.Equal(t, domain.UnverifiedIsolationCeiling(), scoreWith.Factors.ExecutionIsolation,
+		"an unverified max-posture attestation is clipped to the ceiling, not scored 1.0")
 	assert.Equal(t, 0.3, scoreWithout.Factors.ExecutionIsolation,
 		"ExecutionIsolation factor should be 0.3 baseline without isolation repo")
 }
@@ -1371,10 +1374,18 @@ func TestTrustCalculator_ExecutionIsolation_WithAttestation(t *testing.T) {
 	agentID := uuid.New()
 	agent := &domain.Agent{ID: agentID}
 
+	// Verified and fresh: the pre-computed score passes through untouched. (The
+	// unverified and stale paths are covered by TestAIM02_* below.)
+	verifier := "orchestrator-metadata"
+	verifiedAt := time.Now()
 	mockIsolationRepo.On("GetLatest", agentID).Return(&domain.IsolationAttestation{
-		ID:      uuid.New(),
-		AgentID: agentID,
-		Score:   0.72,
+		ID:         uuid.New(),
+		AgentID:    agentID,
+		Score:      0.72,
+		ReportedAt: time.Now(),
+		Verified:   true,
+		VerifiedBy: &verifier,
+		VerifiedAt: &verifiedAt,
 	}, nil)
 
 	isolation, reason := calculator.calculateExecutionIsolation(agent)
@@ -1782,8 +1793,10 @@ func TestTrustCalculator_Calculate_FullyWiredWithData_NoExclusions(t *testing.T)
 	calculator.SetUserFeedbackRepo(feedbackRepo)
 
 	isolationRepo := new(MockIsolationAttestationRepository)
+	// Verified and fresh, so factor 9 carries its full 0.72 into the composite.
 	isolationRepo.On("GetLatest", agent.ID).Return(&domain.IsolationAttestation{
 		ID: uuid.New(), AgentID: agent.ID, Score: 0.72,
+		ReportedAt: time.Now(), Verified: true,
 	}, nil)
 	calculator.SetIsolationRepo(isolationRepo)
 

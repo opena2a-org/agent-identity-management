@@ -14,11 +14,20 @@
 # repository secret, and must keep its token read-only apart from checks:write.
 # A tripwire below fails the check if a pull request tries to change that.
 #
-# The verdict is carried twice on purpose: as an explicit check run named
-# "Gate file approval" posted against the head commit (the context branch
-# protection must require), and as the job's own exit status, so that even a
-# misconfigured protection rule that requires the job context instead of the
-# check run still carries the real verdict rather than an always-green job.
+# The verdict lives in the check run named "Gate file approval" posted against
+# the head commit — that is the context branch protection must require, never
+# this job's own context. The states are encoded asymmetrically on purpose:
+# awaiting-owner-approval is the EXPECTED state of a gate-file pull request,
+# so it posts conclusion=action_required, which blocks a required check
+# exactly like failure while the run itself succeeds — the run evaluated and
+# posted its verdict, and the run record says so, with no failure email for a
+# routine state. Only genuine failures (tripwire violation, oversized pull
+# request, unreadable proposed copy) post conclusion=failure AND fail the job,
+# so a workflow-failure email from this workflow always means anomaly or
+# attack, never routine. The job-exit mirror below keeps an accidentally
+# required job context from ever being an always-green bypass; the conclusion
+# "neutral" is forbidden for any blocking state because required checks treat
+# it as passing.
 name: Gate file approval
 
 on:
@@ -40,20 +49,36 @@ concurrency:
 
 jobs:
   evaluate:
-    name: Evaluate gate-file approval
+    name: 'Evaluate gate-file approval (require the "Gate file approval" check, not this job)'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      EVENT_NAME: ${{ github.event_name }}
+      REVIEW_AUTHOR: ${{ github.event.review.user.login }}
     steps:
       - name: Evaluate and post the check run
         run: |
           set -euo pipefail
           # The approver set. Changing it is itself a gate-file change, so the
-          # change is judged by the current set.
+          # change is judged by the current set. This ONE variable feeds both
+          # the review-event early exit and the evaluation filter below — the
+          # two predicates cannot diverge because they share it.
           approvers="thebenignhacker"
+
+          # A review from anyone but the approver is not an input to the
+          # verdict, so re-evaluating on it would produce nothing new. Early
+          # exit posts nothing; the standing check run against the head commit
+          # remains the verdict. Only pull_request_review events may exit
+          # here — every pull_request_target event still evaluates. The
+          # approver's own events (including dismissal of their approval,
+          # whose review author is the approver) always evaluate.
+          if [ "$EVENT_NAME" = "pull_request_review" ] && [ "$REVIEW_AUTHOR" != "$approvers" ]; then
+            echo "Review by $REVIEW_AUTHOR is not an input to the verdict; nothing posted."
+            exit 0
+          fi
 
           # The files listing endpoint is capped at 3000 entries; a gate file
           # hidden past the cap would otherwise pass unseen. Refuse to evaluate
@@ -129,7 +154,11 @@ jobs:
               title="Gate-file change approved"
               summary="This pull request changes files under .github/ and carries an approving review from $approvers on the current head commit."
             else
-              conclusion="failure"
+              # The expected state of a gate-file pull request: evaluated,
+              # verdict posted, a human must act. action_required blocks a
+              # required check like failure, but the run itself succeeds, so
+              # no failure email fires for a routine state.
+              conclusion="action_required"
               title="Gate-file change needs approval"
               summary="This pull request changes files under .github/. It requires an approving review from $approvers on the current head commit ($HEAD_SHA). Automation can author gate-file changes; it cannot approve them."
             fi
@@ -144,6 +173,12 @@ jobs:
             -f 'output[summary]'="$summary" \
             --jq '"check_run id=" + (.id|tostring) + " conclusion=" + .conclusion'
 
-          # Mirror the verdict in the job status so an accidentally required
-          # job context is never an always-green bypass.
-          [ "$conclusion" = "success" ]
+          # Mirror only genuine failures in the job status: exit 0 iff the
+          # conclusion is in the explicit two-value allowlist, so any future
+          # state defaults loud, an accidentally required job context is never
+          # an always-green bypass, and a failure email from this workflow is
+          # a high-signal anomaly, never routine.
+          case "$conclusion" in
+            success|action_required) exit 0 ;;
+            *) exit 1 ;;
+          esac
