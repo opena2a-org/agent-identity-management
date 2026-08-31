@@ -23,10 +23,17 @@ import (
 //	signing keys untouched — keyvault.go and KEYVAULT_MASTER_KEY are adjacent to
 //	                         "attestation" by vocabulary only.
 //	route mismatch left alone — both SDKs POST /isolation-attestation while the
-//	                         backend registers /isolation, so the reporting
-//	                         surface 404s today. That is CA's lane; fixing it
-//	                         here would fold an unrelated behaviour change into
-//	                         a scoring change and make both harder to review.
+//	                         backend registered /isolation, so the reporting
+//	                         surface 404'd. That was CA's lane; fixing it here
+//	                         would have folded an unrelated behaviour change into
+//	                         a scoring change and made both harder to review.
+//	                         CLOSED by AIM-03 (recorded architecture decision of 2026-08-29): the
+//	                         backend now registers the canonical SDK path and
+//	                         keeps /isolation as a deprecated alias, so the
+//	                         assertion that the mismatch is STILL BROKEN was
+//	                         deleted by the lane that fixed it, as its own
+//	                         comment said it would be. The parity guard lives at
+//	                         apps/backend/cmd/server/aim03_sdk_api_routes_test.go.
 //
 // These are source-level assertions. They are coarse by design: a scan cannot
 // prove the absence of every conceivable write, but it does catch the shapes a
@@ -167,23 +174,6 @@ func TestAIM02_BoundedScope(t *testing.T) {
 		keyvault := strings.ToLower(aim02ReadFile(t, root, "apps/backend/internal/crypto/keyvault.go"))
 		assert.NotContains(t, keyvault, "isolationattestation",
 			"keyvault.go is out of scope for AIM-02 and must not have acquired an isolation dependency")
-	})
-
-	t.Run("AIM-02.AC4 the SDK/backend isolation route mismatch is left unfixed", func(t *testing.T) {
-		// The mismatch is real and blocking — the attestation table is near-empty
-		// because both SDKs 404 — but it is a separate lane. Asserting it is
-		// STILL BROKEN is the only way to prove this change did not quietly
-		// touch it, and this test is expected to be deleted by the lane that
-		// fixes it.
-		mainGo := aim02ReadFile(t, root, "apps/backend/cmd/server/main.go")
-		assert.Contains(t, mainGo, `sdkAPI.Post("/agents/:id/isolation"`,
-			"the backend route is unchanged by AIM-02")
-		assert.NotContains(t, mainGo, `"/agents/:id/isolation-attestation"`,
-			"AIM-02 must not add the route the SDKs call — that is CA's lane")
-
-		tsClient := aim02ReadFile(t, root, "sdk/typescript/src/client/AIMClient.ts")
-		assert.Contains(t, tsClient, "/isolation-attestation",
-			"the TypeScript SDK still posts the mismatched path; AIM-02 does not touch the SDKs")
 	})
 
 	t.Run("AIM-02.AC4 the user-facing surfaces describe the ceiling and the expiry", func(t *testing.T) {
