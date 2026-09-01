@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-02
+
+### Added
+
+- `AgentType.DEMO`, the agent type the one-command demo registers (#431).
+
 ### Fixed
 
 - **NetworkMonitor ss parser read the columns of `ss -tpn` while running
