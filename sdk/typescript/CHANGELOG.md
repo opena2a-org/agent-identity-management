@@ -5,6 +5,23 @@ All notable changes to `@opena2a/aim-sdk` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this package adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **NetworkMonitor ss parser read the columns of `ss -tpn` while running
+  `ss -tpn state established`, so the Linux monitor never reported an
+  established connection.** Under the `state established` filter ss omits the
+  `State` column, shifting every field left by one: the peer address was read
+  as the local address and the `users:(...)` process field as the peer, so
+  `remotePort` parsed to `NaN` and no reported connection ever carried the
+  real destination — and because the garbage list was non-empty,
+  `getConnections()` never fell through to the correct `/proc/net/tcp`
+  fallback either. The parser now picks the address columns from the header
+  line (`State` present or not) instead of a fixed index, and no longer drops
+  the non-root shape where ss cannot name the owning process and the data
+  lines end at the peer column.
+
 ## [1.3.0] - 2026-08-24
 
 ### Added
