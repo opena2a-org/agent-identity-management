@@ -33,8 +33,14 @@ export class OAuthTokenManager {
 
   /**
    * Get a valid access token, refreshing if necessary
+   *
+   * @param deadlineAt Optional absolute instant (`Date.now()` ms) by which the
+   *   token fetch must have settled — the enforcement deadline, threaded from
+   *   the verification call so the exchange spends the same budget as the
+   *   verify POST rather than getting a fresh one. When omitted, the fetch is
+   *   unbounded, exactly as before.
    */
-  async getAccessToken(): Promise<string> {
+  async getAccessToken(deadlineAt?: number): Promise<string> {
     // Check if we have a valid cached token
     if (this.cachedToken && this.cachedToken.expiresAt > Date.now() + 60000) {
       return this.cachedToken.accessToken;
@@ -45,7 +51,7 @@ export class OAuthTokenManager {
       return this.refreshPromise;
     }
 
-    this.refreshPromise = this.acquireToken();
+    this.refreshPromise = this.acquireToken(deadlineAt);
     try {
       const token = await this.refreshPromise;
       return token;
@@ -57,7 +63,7 @@ export class OAuthTokenManager {
   /**
    * Acquire a new access token using client credentials grant
    */
-  private async acquireToken(): Promise<string> {
+  private async acquireToken(deadlineAt?: number): Promise<string> {
     const tokenEndpoint = `${this.baseUrl}/oauth/token`;
     const timestamp = Date.now();
 
@@ -87,18 +93,37 @@ export class OAuthTokenManager {
     );
     const clientAssertion = `${header}.${payload}.${signature}`;
 
-    const response = await fetch(tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: this.agentId,
-        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-        client_assertion: clientAssertion,
-      }),
-    });
+    // The abort fires at the time LEFT on the enforcement deadline — the same
+    // deadline the verify POST that follows will finish on, never a fresh
+    // budget for the exchange alone.
+    let signal: AbortSignal | undefined;
+    let abortTimer: ReturnType<typeof setTimeout> | undefined;
+    if (deadlineAt !== undefined) {
+      const controller = new AbortController();
+      abortTimer = setTimeout(() => controller.abort(), Math.max(deadlineAt - Date.now(), 0));
+      signal = controller.signal;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.agentId,
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion: clientAssertion,
+        }),
+        signal,
+      });
+    } finally {
+      if (abortTimer !== undefined) {
+        clearTimeout(abortTimer);
+      }
+    }
 
     if (!response.ok) {
       const error = await response.text();
