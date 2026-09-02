@@ -83,6 +83,73 @@ RATE_LIMIT_RETRY_MAX_DELAY_SECONDS = 5
 # the call cannot raise. UNMEASURED DEFAULT.
 EXECUTION_REPORT_TIMEOUT_SECONDS = 5
 
+# The enforcement deadline. ONE deadline, started when the enforcement call
+# (`verify_capability`) begins, bounds the WHOLE remote verification: the
+# verifications POST, the bounded 429 retry loop, and every poll of the
+# approval wait. It is a deadline over the
+# call, not a per-attempt timeout: with defaults the per-request `timeout`
+# alone left a stalled verification holding the caller for 30s. No production
+# latency distribution for the verification routes has been measured, so the
+# value is a choice, not a finding. UNMEASURED DEFAULT.
+DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS = 5.0
+
+# Environment override for the enforcement deadline, in integer MILLISECONDS.
+# Milliseconds on purpose: the TypeScript SDK's `enforcementTimeout` is in
+# milliseconds and both SDKs read this one spelling, so a single value in one
+# .env means the same thing to both. There is no seconds-spelled variant.
+ENFORCEMENT_TIMEOUT_ENV_VAR = "AIM_ENFORCEMENT_TIMEOUT_MS"
+
+# Warn once per distinct rejected AIM_ENFORCEMENT_TIMEOUT_MS value per process,
+# following the warn-once pattern in strict_mode.py: clients may be constructed
+# per call, and a misconfigured environment must not warn on every construction.
+_enforcement_env_warned = set()
+_enforcement_env_warned_lock = threading.Lock()
+
+
+def _warn_enforcement_env_once(value: str, message: str) -> None:
+    with _enforcement_env_warned_lock:
+        if value in _enforcement_env_warned:
+            return
+        _enforcement_env_warned.add(value)
+    console.warning(message)
+
+
+def reset_enforcement_timeout_warning_state() -> None:
+    """Clear the warn-once memory for the enforcement-deadline env var. For tests only."""
+    with _enforcement_env_warned_lock:
+        _enforcement_env_warned.clear()
+
+
+def _resolve_enforcement_timeout(enforcement_timeout: "Optional[float]") -> float:
+    """
+    Resolve the enforcement deadline, in seconds: the constructor argument,
+    then AIM_ENFORCEMENT_TIMEOUT_MS (integer milliseconds), then the module
+    default. An invalid environment value (non-integer, zero or negative)
+    warns once per process per distinct value and falls back to the default.
+    """
+    if enforcement_timeout is not None:
+        return float(enforcement_timeout)
+    raw = _os.environ.get(ENFORCEMENT_TIMEOUT_ENV_VAR)
+    if raw is None:
+        return DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS
+    stripped = raw.strip()
+    if not stripped:
+        return DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS
+    try:
+        millis = int(stripped)
+    except ValueError:
+        millis = None
+    if millis is None or millis <= 0:
+        _warn_enforcement_env_once(
+            stripped.lower(),
+            f"{ENFORCEMENT_TIMEOUT_ENV_VAR}={stripped} is not a positive integer "
+            f"number of milliseconds and is ignored. Using the default "
+            f"enforcement deadline of {DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS} "
+            f"seconds.",
+        )
+        return DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS
+    return millis / 1000.0
+
 from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
 from .console import console
@@ -328,6 +395,12 @@ class AIMClient:
         private_key: Base64-encoded Ed25519 private key (from AIM registration)
         aim_url: Base URL of AIM server (e.g., https://aim.example.com)
         timeout: HTTP request timeout in seconds (default: 30)
+        enforcement_timeout: Deadline in seconds (float) over a WHOLE enforcement
+            call -- verify_capability from entry to return/raise, covering the
+            verification POST, its bounded 429 retries, and every approval-wait
+            poll. Resolution order: this argument, then the
+            AIM_ENFORCEMENT_TIMEOUT_MS environment variable (integer
+            milliseconds), then 5.0s.
         auto_retry: Whether to automatically retry failed requests (default: True)
         max_retries: Maximum number of retry attempts (default: 3)
 
@@ -352,6 +425,7 @@ class AIMClient:
         aim_url: str = None,
         api_key: str = None,
         timeout: int = 30,
+        enforcement_timeout: Optional[float] = None,
         auto_retry: bool = True,
         max_retries: int = 3,
         sdk_token_id: Optional[str] = None,
@@ -375,6 +449,7 @@ class AIMClient:
         self.aim_url = aim_url.rstrip('/')
         self.api_key = api_key
         self.timeout = timeout
+        self.enforcement_timeout = _resolve_enforcement_timeout(enforcement_timeout)
         self.auto_retry = auto_retry
         self.max_retries = max_retries
         self.oauth_token_manager = oauth_token_manager
@@ -750,6 +825,22 @@ class AIMClient:
             unknown_source=source,
         )
 
+    def _enforcement_deadline_expired(self) -> VerificationDecision:
+        """
+        The decision an enforcement call returns when its deadline expires.
+
+        Classified TRANSPORT, not SERVER_ANSWER: the deadline is the SDK's own
+        clock giving up on the wire, the same class as the per-request
+        ReadTimeout it subsumes. `_undetermined` resolves the mode by reading
+        the cache only -- an expired deadline never refreshes nor evicts the
+        cached enforcement mode.
+        """
+        return self._undetermined(
+            f"Enforcement deadline of {self.enforcement_timeout}s expired before "
+            f"a verification decision was obtained",
+            UnknownSource.TRANSPORT,
+        )
+
     def _decide_capability(
         self,
         capability: str,
@@ -757,6 +848,7 @@ class AIMClient:
         context: Optional[Dict[str, Any]] = None,
         timeout_seconds: int = 300,
         telemetry: Optional[Dict[str, Any]] = None,
+        _deadline: Optional[float] = None,
     ) -> VerificationDecision:
         """
         Ask AIM to decide on a capability, and return a typed three-state decision.
@@ -807,6 +899,16 @@ class AIMClient:
         Raises:
             AuthenticationError: If the agent's credentials were rejected (401)
         """
+        # The enforcement deadline. `verify_capability` starts it on entry and
+        # threads it here; a direct call (tests, future internal callers) gets
+        # the same bound starting now. Monotonic, so a wall-clock step cannot
+        # stretch or collapse it.
+        if _deadline is None:
+            _deadline = time.monotonic() + self.enforcement_timeout
+
+        def _deadline_remaining() -> float:
+            return _deadline - time.monotonic()
+
         # Create verification request payload
         timestamp = datetime.utcnow().isoformat() + 'Z'  # Match backend expected format
 
@@ -871,14 +973,19 @@ class AIMClient:
             headers.update(correlation_headers(correlation_id))
 
             def _send():
+                # Every socket timeout on the enforcement path is the smaller
+                # of the general per-request timeout and the time left on the
+                # enforcement deadline -- never a fresh budget per attempt.
                 return self.session.request(
                     method="POST",
                     url=url,
                     json=request_payload,
                     headers=headers,
-                    timeout=self.timeout
+                    timeout=min(self.timeout, max(_deadline_remaining(), 0.001))
                 )
 
+            if _deadline_remaining() <= 0:
+                return self._enforcement_deadline_expired()
             response = _send()
 
             # CISO-SDK-R6-C2: a 429 is our own rate limiter declining to answer.
@@ -892,12 +999,19 @@ class AIMClient:
                 delay = self._retry_after_seconds(response)
                 if delay > RATE_LIMIT_RETRY_MAX_DELAY_SECONDS or delay > timeout_seconds:
                     break
+                if delay > _deadline_remaining():
+                    # A 429 delay that would cross the enforcement deadline is
+                    # not slept; the 429 is classified below as a server answer.
+                    break
                 attempts += 1
                 console.warning(
                     f"AIM rate-limited this verification (429). Retrying in {delay}s "
                     f"(attempt {attempts} of {RATE_LIMIT_RETRY_ATTEMPTS})."
                 )
                 time.sleep(delay)
+                if _deadline_remaining() <= 0:
+                    # No request is started once the deadline has passed.
+                    return self._enforcement_deadline_expired()
                 response = _send()
 
             # Handle authentication errors
@@ -1105,6 +1219,7 @@ class AIMClient:
                     correlation_id=correlation_id, capability=capability,
                     resource=resource, telemetry=telemetry,
                     fallback_mode=mode, fallback_mode_source=mode_source,
+                    deadline=_deadline,
                 )
 
             # A status we do not recognise is a server answer that carried no
@@ -1311,12 +1426,17 @@ class AIMClient:
             VerificationError: If verification request fails
             AuthenticationError: If the agent's credentials were rejected
         """
+        # ONE deadline over the whole enforcement call, started on entry: it
+        # bounds the verification POST, the bounded 429 retries, and every
+        # approval-wait poll below `timeout_seconds`.
+        deadline = time.monotonic() + self.enforcement_timeout
         decision = self._decide_capability(
             capability=capability,
             resource=resource,
             context=context,
             timeout_seconds=timeout_seconds,
             telemetry=telemetry,
+            _deadline=deadline,
         )
 
         if decision.outcome is Outcome.ALLOW:
@@ -1492,6 +1612,7 @@ class AIMClient:
         telemetry: Optional[Dict[str, Any]] = None,
         fallback_mode: "EnforcementMode" = EnforcementMode.UNKNOWN,
         fallback_mode_source: "ModeSource" = ModeSource.UNAVAILABLE,
+        deadline: Optional[float] = None,
     ) -> VerificationDecision:
         """
         Poll AIM server for verification approval.
@@ -1499,6 +1620,11 @@ class AIMClient:
         Args:
             verification_id: ID of the verification request
             timeout_seconds: Maximum time to wait
+            deadline: the enforcement deadline as a `time.monotonic()` instant,
+                threaded from the enforcement call that created this
+                verification. When it expires, no further poll or sleep is
+                started and the call returns UNKNOWN/TRANSPORT. None (a direct
+                caller) keeps the pre-deadline behaviour.
             fallback_mode: enforcement mode from the request that created this
                 verification, used when a poll response does not carry one.
             fallback_mode_source: where that fallback came from.
@@ -1517,6 +1643,21 @@ class AIMClient:
         """
         start_time = time.time()
         poll_interval = 2  # Start with 2 second polls
+
+        def _deadline_remaining() -> Optional[float]:
+            return None if deadline is None else deadline - time.monotonic()
+
+        def _sleep_within_deadline(seconds: float) -> None:
+            # A sleep never crosses the enforcement deadline: it is clamped to
+            # the time left, and the top-of-loop check expires the call on
+            # wake. No sleep is started once the deadline has passed.
+            remaining = _deadline_remaining()
+            if remaining is not None:
+                seconds = min(seconds, max(remaining, 0.0))
+            if seconds > 0:
+                time.sleep(seconds)
+
+        deadline_expired = False
 
         # Defect #160: this endpoint is signature-authed and agent-scoped.
         # We Ed25519-sign the canonical request and send three headers; the
@@ -1546,6 +1687,11 @@ class AIMClient:
             agent_id_norm = str(self.agent_id).lower()
 
         while time.time() - start_time < timeout_seconds:
+            remaining = _deadline_remaining()
+            if remaining is not None and remaining <= 0:
+                # No poll is started once the enforcement deadline has passed.
+                deadline_expired = True
+                break
             try:
                 url = f"{self.aim_url}/api/v1/sdk-api/verifications/{vid_norm}"
 
@@ -1581,11 +1727,14 @@ class AIMClient:
                 if self.sdk_token_id:
                     headers['X-SDK-Token'] = self.sdk_token_id
 
+                # Each poll's socket timeout is the smaller of the general
+                # per-request timeout and the time left on the deadline.
                 response = self.session.request(
                     method="GET",
                     url=url,
                     headers=headers,
-                    timeout=self.timeout
+                    timeout=self.timeout if remaining is None
+                    else min(self.timeout, max(remaining, 0.001))
                 )
                 
                 # Handle authentication errors
@@ -1616,7 +1765,7 @@ class AIMClient:
                         error_msg = f"{error_msg}: {_sanitize_reason(response.text[:200])}"
                     # Continue polling on transient errors, but log the issue
                     console.warning(f"Error polling verification status: {error_msg}")
-                    time.sleep(poll_interval)
+                    _sleep_within_deadline(poll_interval)
                     poll_interval = min(poll_interval * 1.5, 10)
                     continue
 
@@ -1690,7 +1839,7 @@ class AIMClient:
                     )
 
                 # Still pending, wait and retry
-                time.sleep(poll_interval)
+                _sleep_within_deadline(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)  # Exponential backoff up to 10s
 
             except (AuthenticationError, ActionDeniedError, VerificationError, VerificationUnavailableError):
@@ -1698,18 +1847,28 @@ class AIMClient:
             except requests.exceptions.RequestException as e:
                 # Handle network errors - continue polling on transient network issues
                 console.warning(f"Network error while polling: {type(e).__name__}: {str(e)}")
-                time.sleep(poll_interval)
+                _sleep_within_deadline(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
             except json.JSONDecodeError as e:
                 # Handle JSON parsing errors - continue polling
                 console.warning(f"Invalid JSON response while polling: {str(e)}")
-                time.sleep(poll_interval)
+                _sleep_within_deadline(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
             except Exception as e:
                 # Continue polling on any other transient errors
                 console.warning(f"Unexpected error while polling: {type(e).__name__}: {str(e)}")
-                time.sleep(poll_interval)
+                _sleep_within_deadline(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
+
+        if deadline_expired:
+            # The ENFORCEMENT deadline expired, not the approval wait's own
+            # `timeout_seconds`: UNKNOWN with TRANSPORT (the class the deadline
+            # subsumes), where the exhausted approval wait below stays
+            # SERVER_ANSWER -- there the server kept answering "pending".
+            expired = self._enforcement_deadline_expired()
+            if expired.mode is EnforcementMode.UNKNOWN and fallback_mode is not EnforcementMode.UNKNOWN:
+                return replace(expired, mode=fallback_mode, mode_source=fallback_mode_source)
+            return expired
 
         security_logger.log_authorization(
             AuthzEventType.JIT_TIMEOUT,

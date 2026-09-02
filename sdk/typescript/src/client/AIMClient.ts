@@ -47,7 +47,29 @@ import {
 
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT = 30000;
+// The enforcement deadline. ONE deadline, started when verifyAction's remote
+// call begins, bounds the WHOLE verification: the OAuth token exchange (when
+// one is needed) and the verify POST share the time left on it, never a
+// fresh budget each. No production
+// latency distribution for the verification routes has been measured, so the
+// value is a choice, not a finding. UNMEASURED DEFAULT.
+const DEFAULT_ENFORCEMENT_TIMEOUT = 5000;
 const DEFAULT_ENFORCEMENT_SOURCE = 'aim-pdp';
+
+/**
+ * Read AIM_ENFORCEMENT_TIMEOUT_MS (integer milliseconds — the same spelling
+ * and unit the Python SDK reads, so one .env value means one thing to both
+ * SDKs). A missing, non-integer, zero or negative value yields undefined so
+ * resolution falls through to the default.
+ */
+function envEnforcementTimeout(): number | undefined {
+  const raw = process.env.AIM_ENFORCEMENT_TIMEOUT_MS?.trim();
+  if (!raw || !/^\d+$/.test(raw)) {
+    return undefined;
+  }
+  const millis = Number(raw);
+  return millis > 0 ? millis : undefined;
+}
 
 /**
  * AIM Client for agent identity verification
@@ -117,6 +139,8 @@ export class AIMClient {
       apiKey: config.apiKey ?? process.env.AIM_API_KEY ?? '',
       autoRegister: config.autoRegister ?? true,
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
+      enforcementTimeout:
+        config.enforcementTimeout ?? envEnforcementTimeout() ?? DEFAULT_ENFORCEMENT_TIMEOUT,
       debug: config.debug ?? process.env.AIM_DEBUG === 'true',
       headers: config.headers ?? {},
       telemetry: config.telemetry ?? {},
@@ -179,7 +203,8 @@ export class AIMClient {
     path: string,
     body?: unknown,
     useApiKey = false,
-    extraHeaders?: Record<string, string>
+    extraHeaders?: Record<string, string>,
+    deadlineAt?: number
   ): Promise<T> {
     const url = `${this.config.baseUrl}${path}`;
     const headers: Record<string, string> = {
@@ -195,7 +220,18 @@ export class AIMClient {
     if (useApiKey && this.config.apiKey) {
       headers['X-API-Key'] = this.config.apiKey;
     } else if (this.tokenManager) {
-      const token = await this.tokenManager.getAccessToken();
+      // On the enforcement path the token exchange spends the SAME deadline
+      // the verify POST will finish on; its abort surfaces as the one timeout
+      // error the caller already knows.
+      let token: string;
+      try {
+        token = await this.tokenManager.getAccessToken(deadlineAt);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new NetworkError('Request timed out', error);
+        }
+        throw error;
+      }
       headers['Authorization'] = `Bearer ${token}`;
     } else if (this.config.apiKey) {
       headers['X-API-Key'] = this.config.apiKey;
@@ -218,7 +254,12 @@ export class AIMClient {
     this.log(`${method} ${path}`);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+    // On the enforcement path the abort fires at the time LEFT on the shared
+    // deadline (never a fresh budget per request); every other request keeps
+    // the general per-request timeout exactly as before.
+    const abortAfterMs =
+      deadlineAt === undefined ? this.config.timeout : Math.max(deadlineAt - Date.now(), 0);
+    const timeoutId = setTimeout(() => controller.abort(), abortAfterMs);
 
     try {
       const response = await fetch(url, {
@@ -370,6 +411,11 @@ export class AIMClient {
       return this.verifyActionLocally(options, credential);
     }
 
+    // ONE deadline over the whole remote verification call, started on entry:
+    // the token exchange (when one is needed) and the verify POST are both
+    // aborted by the time left on it.
+    const deadlineAt = Date.now() + this.config.enforcementTimeout;
+
     if (!this.credentials) {
       throw new AuthenticationError('No credentials available. Register an agent first.');
     }
@@ -394,7 +440,8 @@ export class AIMClient {
       '/api/v1/verify',
       payload,
       false,
-      correlationHeaders(correlationId)
+      correlationHeaders(correlationId),
+      deadlineAt
     );
 
     // Record the enforcement outcome (allow OR deny) BEFORE the deny throw, so
