@@ -28,6 +28,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   the non-root shape where ss cannot name the owning process and the data
   lines end at the peer column.
 
+### Known issues
+
+Both reproduce on 1.3.0 and are unchanged by this release; scheduled for 1.3.2.
+
+- The README's Express and Fastify examples answer 401 and never contact AIM unless
+  `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` are all set;
+  the middleware options carry no way to pass credentials
+  ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)).
+- `aimErrorHandler` passes an upstream 5xx to Express's default handler, which renders a
+  stack trace with local paths outside `NODE_ENV=production`; the Fastify plugin answers the
+  same case as JSON ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)).
+
+
 ## [1.3.0] - 2026-08-24
 
 ### Added

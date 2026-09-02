@@ -89,6 +89,8 @@ app.get('/api/profile', (req, res) => {
 app.use(aimErrorHandler);
 ```
 
+The middleware authenticates to AIM as a registered agent. `apiKey` alone does not give it an identity: set `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` in the environment (all four; `loadCredentialsFromEnv()` returns `null` when any is missing). Without them every verified route answers 401 and AIM is never contacted ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)). `aimErrorHandler` answers denial and authentication errors as JSON; other SDK errors, including an upstream 5xx, are passed to Express's default handler, which renders a stack trace outside `NODE_ENV=production` ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)).
+
 ## Fastify Integration
 
 ```typescript
@@ -110,6 +112,8 @@ fastify.post('/api/data', {
   return { success: true };
 });
 ```
+
+The plugin needs the same registered-agent credentials as the Express middleware: `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID`, all four; with `{ baseUrl, apiKey }` alone every verified route answers 401 ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)).
 
 ## Local Credential Verification (offline)
 
