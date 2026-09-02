@@ -216,6 +216,27 @@ jobs:
         # runs build but explicit here for fail-fast on build errors.
         run: npm run build
 
+      - name: Test (a skipped test fails the publish)
+        if: steps.idempotence.outputs.skip != 'true'
+        # The publish event ran no tests until this step: no workflow in this
+        # repository executed the SDK's test files. Run the suite under CI so
+        # the environment-gated cases execute, and refuse to publish when any
+        # test failed, was skipped, or when nothing ran at all.
+        env:
+          CI: "true"
+        run: |
+          npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest-report.json
+          node -e '
+            const r = require("/tmp/vitest-report.json");
+            const total = r.numTotalTests, failed = r.numFailedTests, skipped = r.numPendingTests + (r.numTodoTests || 0);
+            console.log(`tests total=${total} failed=${failed} skipped=${skipped}`);
+            if (!(total > 0) || failed > 0 || skipped > 0) { console.error("refusing to publish: the suite must run with zero failures and zero skips"); process.exit(1); }
+          '
+
+      - name: Typecheck
+        if: steps.idempotence.outputs.skip != 'true'
+        run: npm run typecheck
+
       - name: Publish to npm with provenance
         if: steps.idempotence.outputs.skip != 'true'
         # --provenance is technically redundant under Trusted Publishing
