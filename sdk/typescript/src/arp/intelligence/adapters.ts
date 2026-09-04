@@ -156,16 +156,35 @@ export function createAdapter(type: LLMAdapterType, config?: Record<string, unkn
     case 'openai': return new OpenAIAdapter(config);
     case 'ollama': return new OllamaAdapter(config);
     case 'agent-proxy':
-      // Auto-detect: try Anthropic first, then OpenAI, then Ollama
-      if (process.env.ANTHROPIC_API_KEY) return new AnthropicAdapter(config);
-      if (process.env.OPENAI_API_KEY) return new OpenAIAdapter(config);
-      return new OllamaAdapter(config);
+      // 'agent-proxy' used to read ANTHROPIC_API_KEY, then OPENAI_API_KEY, then fall
+      // back to a local Ollama — so an environment variable set for an unrelated
+      // purpose decided where a security tool sent the events it observed, including
+      // process command lines. The operator never chose that destination, so there was
+      // nothing for them to have consented to.
+      //
+      // The union member is kept rather than removed so that an existing consumer's
+      // build does not break; it now refuses at runtime instead, and the caller in
+      // coordinator.ts turns this into `adapter = null` (L2 withheld, L0/L1 intact).
+      throw new Error(
+        "adapter 'agent-proxy' no longer selects a provider from environment credentials; " +
+          "set intelligence.adapter to 'ollama' (inference stays on this machine), " +
+          "or to 'anthropic' or 'openai' to send event content to that vendor deliberately",
+      );
     default:
       throw new Error(`Unknown LLM adapter type: ${type}`);
   }
 }
 
-/** Auto-detect the best available adapter */
+/**
+ * @deprecated Always throws. There is no automatic adapter selection any more.
+ *
+ * This used to pick a destination from whichever model key was exported in the
+ * environment. Selecting who receives ARP's observations is now an explicit act:
+ * set `intelligence.adapter` to 'ollama', 'anthropic' or 'openai'.
+ *
+ * The export is kept so an existing consumer's build does not break; it refuses at
+ * runtime rather than quietly choosing a vendor.
+ */
 export function autoDetectAdapter(config?: Record<string, unknown>): LLMAdapter {
   return createAdapter('agent-proxy', config);
 }

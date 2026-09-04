@@ -64,7 +64,14 @@ async function startGuard(): Promise<void> {
 
   console.log(`\n  ARP Guard v${VERSION}`);
   console.log(`  Agent: ${config.agentName}`);
-  console.log(`  Intelligence: ${config.intelligence?.enabled !== false ? '3-Layer (L0+L1+L2)' : 'L0+L1 only'}`);
+  // Report what is actually running, which is not the same question as
+  // `enabled !== false`. L2 needs an explicit `enabled: true` AND a named
+  // adapter, so an unconfigured install runs L0+L1 — printing "3-Layer" there
+  // would tell the operator a layer is protecting them when it is not.
+  const l2Adapter = config.intelligence?.enabled === true ? config.intelligence?.adapter : undefined;
+  console.log(
+    `  Intelligence: ${l2Adapter ? `3-Layer (L0+L1+L2 via ${l2Adapter})` : 'L0+L1 only (L2 not configured)'}`,
+  );
   console.log(`  Budget: $${config.intelligence?.budgetUsd ?? 5.00}/month`);
   console.log(`  Monitors: ${Object.entries(config.monitors ?? {}).filter(([, v]) => (v as { enabled: boolean }).enabled).map(([k]) => k).join(', ') || 'all'}`);
   console.log();
