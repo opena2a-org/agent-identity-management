@@ -47,12 +47,22 @@ it predates the ARP module and contains none of this code.
   `'ollama'`, `'anthropic'` or `'openai'`.
 - When L2 is switched on but no adapter is named, ARP says so once on startup and
   runs without L2. L0 and L1 are unaffected and still gate.
-- Even with a remote adapter configured deliberately, matched material no longer
-  travels. `event.data` is rendered through an allowlist, and withheld values are
+- Even with a remote adapter configured deliberately, `event.data` no longer
+  travels raw. It is rendered through an allowlist, and withheld values are
   replaced by a length-and-character-class descriptor. The pattern id and the fact
   of a match still travel, so assessment still works. This closes the sharpest
   case, where check `OL-001` ("API key in output") rendered the matched credential
   into the prompt and posted it to the vendor.
+
+  **Scope of that redaction, stated exactly:** it covers `event.data`. It does
+  **not** cover `event.description`, which the prompt still carries verbatim. Most
+  descriptions are tool-authored text plus an identifier (a pattern id, a hostname,
+  a file path, a tool name), but the process monitor composes descriptions that
+  embed up to 100 characters of the child command line. So an operator who
+  deliberately configures a remote adapter still sends that much command line to
+  their chosen vendor. This is pinned by a test rather than left to be discovered
+  (`l2-egress-default.test.ts`, T6) and is tracked for a follow-up; it does not
+  affect the default configuration, under which L2 makes no outbound call at all.
 
 **If you were relying on the old behaviour**, set both fields explicitly:
 

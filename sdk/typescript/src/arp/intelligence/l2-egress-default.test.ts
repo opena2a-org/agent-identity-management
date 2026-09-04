@@ -236,4 +236,42 @@ describe('when a remote adapter IS configured, raw material still does not trave
     // The fact of the match still travels, so the model can still assess it.
     expect(body).toMatch(/withheld: \d+ chars/);
   });
+
+  it('T6: event.description is NOT redacted — this is the known residual, pinned', async () => {
+    // Honest boundary of the R6 redaction, asserted rather than described.
+    //
+    // The allowlist covers `event.data`. It does NOT cover `event.description`,
+    // which every prompt builder sends verbatim, and the process monitor composes
+    // descriptions like `New child process: PID 123 — <first 100 chars of command>`
+    // (monitors/process.ts). So on a deliberately configured remote adapter, up to
+    // 100 characters of a command line still reach the vendor through the
+    // description, even though `data.command` is withheld.
+    //
+    // This test exists so that stays a KNOWN, tested property instead of a claim
+    // someone later discovers is false. If description redaction lands, this test
+    // should flip to asserting absence — do not simply delete it.
+    const event = criticalEvent({
+      source: 'process',
+      description: `New child process: PID 4242 — ${CANARY_COMMAND}`,
+      data: { pid: 4242, command: CANARY_COMMAND },
+    });
+
+    await runAnalyze(
+      { enabled: true, adapter: 'anthropic', adapterConfig: { apiKey: SYNTHETIC_KEY } },
+      event,
+    );
+
+    expect(requests.length, 'no request captured — nothing was measured').toBeGreaterThan(0);
+    const body = requests.map(r => r.body).join('');
+
+    // data.command IS withheld by the allowlist.
+    expect(body).toMatch(/withheld: \d+ chars/);
+
+    // ...but the same value inside the description is not. Asserting the leak
+    // rather than pretending it is closed.
+    expect(
+      body,
+      'description redaction has landed — update this test and the CHANGELOG claim',
+    ).toContain(CANARY_COMMAND);
+  });
 });

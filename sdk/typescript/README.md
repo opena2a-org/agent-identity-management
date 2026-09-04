@@ -363,8 +363,16 @@ intelligence: {
 `adapter` chooses where inference runs. `'ollama'` keeps it on the machine.
 `'anthropic'` and `'openai'` send event content to that vendor, authenticated
 with your own key and billed to your own account — choose them only if you
-intend that. Even then, matched material is withheld: the pattern id and the
-shape of a match travel, the matched text and command lines do not.
+intend that.
+
+If you do choose a remote adapter, this is what leaves and what does not.
+`event.data` is allowlisted: identifiers and structural facts (pattern id,
+category, direction, tool name, peer agent ids, protocol, port, pid) travel,
+and everything else — matched text, command lines, arguments — is replaced by a
+`<withheld: N chars, classes>` descriptor. The event's `description` is **not**
+redacted and is sent as written; it is normally tool-authored text plus an
+identifier such as a hostname or file path, but process-monitor descriptions
+embed up to 100 characters of the child command line.
 
 If `enabled` is true but no `adapter` is set, L2 does not run and ARP says so
 once on startup; L0 and L1 are unaffected and still gate.
