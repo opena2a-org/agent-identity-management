@@ -229,33 +229,15 @@ func main() {
 		})
 	})
 
-	app.Get("/health/ready", func(c fiber.Ctx) error {
-		// Check database
-		if err := db.Ping(); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"ready": false,
-				"error": "database unavailable",
-			})
+	// Readiness probe (no auth required). Body contract:
+	// apps/backend/contracts/health-ready.schema.json.
+	var redisReadyCheck func(context.Context) error
+	if redisClient != nil {
+		redisReadyCheck = func(ctx context.Context) error {
+			return redisClient.Ping(ctx).Err()
 		}
-
-		// Check Redis (optional - skip if not configured)
-		redisStatus := "not configured"
-		if redisClient != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := redisClient.Ping(ctx).Err(); err != nil {
-				redisStatus = "unavailable (optional)"
-			} else {
-				redisStatus = "connected"
-			}
-		}
-
-		return c.JSON(fiber.Map{
-			"ready":    true,
-			"database": "connected",
-			"redis":    redisStatus,
-		})
-	})
+	}
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck))
 
 	// System status endpoint (no auth required)
 	app.Get("/api/v1/status", func(c fiber.Ctx) error {
