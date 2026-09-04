@@ -141,7 +141,7 @@ describe('the shipped default itself', () => {
 
 describe('L2 sends nothing unless it was configured to', () => {
   it('T1: the shipped default makes no outbound call, even with vendor keys exported', async () => {
-    // The exact acceptance line from the roadmap unit: on a machine exporting
+    // The property this whole suite exists to prove: on a machine exporting
     // ANTHROPIC_API_KEY, a default-config ARP run makes no outbound vendor call.
     await runAnalyze(defaultConfig().intelligence);
     expect(requests, `default config sent: ${JSON.stringify(requests)}`).toEqual([]);
@@ -239,7 +239,7 @@ describe('when a remote adapter IS configured, raw material still does not trave
   });
 
   it('T6: event.description is NOT redacted — this is the known residual, pinned', async () => {
-    // Honest boundary of the R6 redaction, asserted rather than described.
+    // Honest boundary of the event.data redaction, asserted rather than described.
     //
     // The allowlist covers `event.data`. It does NOT cover `event.description`,
     // which every prompt builder sends verbatim, and the process monitor composes
