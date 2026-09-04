@@ -7,6 +7,80 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security — ARP's L2 no longer sends anything to a vendor by default
+
+ARP shipped `intelligence: { enabled: true, adapter: 'agent-proxy' }` as its
+default, and `agent-proxy` chose a destination by reading whichever model key
+happened to be exported: `ANTHROPIC_API_KEY`, else `OPENAI_API_KEY`, else a
+local Ollama. On any machine with one of those set — a developer laptop, a CI
+runner for an agent project — a default-configured ARP therefore sent
+qualifying events to that vendor, authenticated with the operator's own key and
+billed to their own account. Nothing in the README said so.
+
+Measured against a real install of published 1.3.1, with the HTTP layer stubbed
+so no socket is opened and with a synthetic key: one `critical` network event
+under the shipped default produced a single outbound attempt to
+`api.anthropic.com/v1/messages`, headers `x-api-key, anthropic-version,
+content-type, Content-Length`, body 574 bytes — **carrying the planted command
+line verbatim**. A `critical` event bypasses batching, and the network monitor
+emits `critical` and is on by default, so this is the default path rather than
+an edge case.
+
+Affected: **1.0.0 through 1.3.1**, every published version — verified by reading
+`dist/arp/index.js` out of each tarball. `arp-guard@0.3.0` is **not** affected;
+it predates the ARP module and contains none of this code.
+
+**What changes**
+
+- `intelligence.enabled` now defaults to off, and every gate that can start L2
+  requires an explicit `true`. Absent means off. Previously the gates tested
+  `!== false`, so an absent value meant ON — and because config is merged
+  shallowly, an operator who set only `intelligence.budgetUsd` replaced the whole
+  object and armed the vendor channel. **Narrowing the budget, a hardening
+  action, used to switch L2 on.**
+- `intelligence.adapter` has no default and must be named explicitly. There is no
+  automatic provider selection any more.
+- `createAdapter('agent-proxy')` and `autoDetectAdapter()` now throw. The
+  `'agent-proxy'` union member is kept so existing builds still compile; it
+  refuses at runtime rather than guessing a destination. **This is the breaking
+  change**: code that set `adapter: 'agent-proxy'` explicitly must now choose
+  `'ollama'`, `'anthropic'` or `'openai'`.
+- When L2 is switched on but no adapter is named, ARP says so once on startup and
+  runs without L2. L0 and L1 are unaffected and still gate.
+- Even with a remote adapter configured deliberately, matched material no longer
+  travels. `event.data` is rendered through an allowlist, and withheld values are
+  replaced by a length-and-character-class descriptor. The pattern id and the fact
+  of a match still travel, so assessment still works. This closes the sharpest
+  case, where check `OL-001` ("API key in output") rendered the matched credential
+  into the prompt and posted it to the vendor.
+
+**If you were relying on the old behaviour**, set both fields explicitly:
+
+```typescript
+intelligence: { enabled: true, adapter: 'ollama' }   // inference stays local
+```
+
+**Rotation.** Keys sent as `x-api-key` went to their own intended vendor and are
+not an exposure. What may be exposed is material carried in event content:
+operators who ran with the AI layer (`aiLayer.prompt.enabled`, opt-in) should
+treat credentials their agent surfaced in model output as disclosed to the
+configured vendor and rotate those.
+
+### The egress census asks what leaves the process, not what leaves for the registry
+
+`telemetry-egress-census.test.ts` claimed to pin the whole channel set and did
+not: it filtered on `api.oa2a.org`, so the L2 vendor channel was invisible
+because it addresses `api.anthropic.com` — and invisible a second time because it
+sends via `mod.request(...)` through an aliased module handle the matcher did not
+recognise. Widening the host list alone would not have found it.
+
+The census now enumerates every module that transmits off-process, matches
+aliased sends, and carries named positive controls so a matcher that stops seeing
+a known channel fails instead of reporting clean. Modules that transmit because
+the caller asked them to — the AIM client, A2A, OAuth, secrets, CRL fetch, the
+ARP proxy forwarder — are listed with the reason rather than filtered out, so
+they stay in scope if one ever grows an observational side-channel.
+
 ## [1.3.1] - 2026-09-02
 
 ### Added

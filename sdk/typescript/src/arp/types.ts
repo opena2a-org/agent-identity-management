@@ -149,7 +149,17 @@ export interface AlertCondition {
 // --- Intelligence Layer (the innovation) ---
 
 export interface IntelligenceConfig {
-  /** Enable LLM-assisted analysis (default: true) */
+  /**
+   * Enable LLM-assisted analysis (default: **off**).
+   *
+   * Absent means off: L2 starts only on an explicit `true`. It additionally
+   * requires `adapter` to be set explicitly — there is no automatic provider
+   * selection, so nothing is sent anywhere until you say where. See
+   * `LLMAdapterType`.
+   *
+   * Setting this to `false` explicitly also disables the local behavioral twin
+   * (L1's risk source). Leaving it absent does not.
+   */
   enabled?: boolean;
   /**
    * Trusted NanoMind-Guard hybrid public key (Ed25519+ML-DSA-44), JSON-encoded
@@ -258,7 +268,8 @@ export type LLMAdapterType =
   | 'anthropic'   // Direct Anthropic API
   | 'openai'      // Direct OpenAI API
   | 'ollama'      // Local Ollama
-  | 'agent-proxy' // Tap into the agent's own LLM (parasitic mode)
+  | 'agent-proxy' // DEPRECATED: always throws. Kept so existing builds compile.
+                  // It used to resolve a destination from ambient model keys.
   | 'custom';     // User-provided adapter
 
 /** Interface that LLM adapters must implement */

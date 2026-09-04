@@ -347,6 +347,35 @@ runtime protection lives here, inside the agent process. This module is the
 canonical home of the ARP engine; hackmyagent's `./arp` export is being
 converted to a thin re-export of it.
 
+### L2 sends nothing unless you configure it
+
+L0 (rules) and L1 (behavioral twin) run entirely in-process and make no
+outbound connections. **L2 is off by default**, and turning it on takes two
+deliberate settings, not one:
+
+```typescript
+intelligence: {
+  enabled: true,        // absent or false means L2 does not run
+  adapter: 'ollama',    // required: there is no automatic provider selection
+}
+```
+
+`adapter` chooses where inference runs. `'ollama'` keeps it on the machine.
+`'anthropic'` and `'openai'` send event content to that vendor, authenticated
+with your own key and billed to your own account — choose them only if you
+intend that. Even then, matched material is withheld: the pattern id and the
+shape of a match travel, the matched text and command lines do not.
+
+If `enabled` is true but no `adapter` is set, L2 does not run and ARP says so
+once on startup; L0 and L1 are unaffected and still gate.
+
+> **Changed in 1.4.0.** Versions 1.0.0 through 1.3.1 defaulted to
+> `enabled: true` with `adapter: 'agent-proxy'`, which picked a destination from
+> whichever model key was exported in the environment — so a default
+> installation on a machine with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set
+> sent event content to that vendor. `'agent-proxy'` now throws rather than
+> guessing. See the CHANGELOG for the upgrade note.
+
 ```typescript
 import { EventEngine, FilesystemMonitor, EnforcementEngine } from '@opena2a/aim-sdk/arp';
 
