@@ -76,6 +76,25 @@ operators who ran with the AI layer (`aiLayer.prompt.enabled`, opt-in) should
 treat credentials their agent surfaced in model output as disclosed to the
 configured vendor and rotate those.
 
+### The L2 status line reports what is running, and withheld values are coarser
+
+Two follow-ups to the L2 change above, both found by an independent review of it.
+
+The CLI's `Intelligence:` line restated the L2 gate instead of asking it. The first
+version tested `enabled !== false` and kept printing `3-Layer (L0+L1+L2)` after the
+default changed; the replacement tested `enabled === true && adapter`, which is still
+wrong for `adapter: 'agent-proxy'` — that passes both checks and then throws on
+construction, so the line announced a layer that was not running. Neither version had
+a test. The line now calls `describeL2Status()`, which settles it by attempting the
+construction the coordinator attempts, and reports the reason when L2 is not running.
+
+`<withheld: N chars, classes>` reported an exact length. For a small value that pair
+is not a summary, it is the value: `true` rendered as `4 chars, lower` and `false` as
+`5 chars, lower`, so a boolean was recoverable, and short enums from a known set the
+same way. Lengths are now bucketed (`up to 8 chars`, `9-16`, `17-32`, `33-64`,
+`65-128`, `over 128`), and values of 8 characters or fewer carry no class information
+at all.
+
 ### The egress census asks what leaves the process, not what leaves for the registry
 
 `telemetry-egress-census.test.ts` claimed to pin the whole channel set and did

@@ -8,7 +8,7 @@ import { PromptInterceptor } from '../interceptors/prompt';
 import { MCPProtocolInterceptor } from '../interceptors/mcp-protocol';
 import { A2AProtocolInterceptor } from '../interceptors/a2a-protocol';
 import { EventEngine } from '../engine/event-engine';
-import { IntelligenceCoordinator } from '../intelligence/coordinator';
+import { IntelligenceCoordinator, describeL2Status } from '../intelligence/coordinator';
 import { SequenceLogWriter } from '../intelligence/sequence-log-writer';
 import { isOptedOut, enrollSensor, manualEnrollCurl } from '../telemetry/signature';
 import { runTelemetrySubcommand, telemetryHelpText } from './telemetry';
@@ -64,13 +64,15 @@ async function startGuard(): Promise<void> {
 
   console.log(`\n  ARP Guard v${VERSION}`);
   console.log(`  Agent: ${config.agentName}`);
-  // Report what is actually running, which is not the same question as
-  // `enabled !== false`. L2 needs an explicit `enabled: true` AND a named
-  // adapter, so an unconfigured install runs L0+L1 — printing "3-Layer" there
-  // would tell the operator a layer is protecting them when it is not.
-  const l2Adapter = config.intelligence?.enabled === true ? config.intelligence?.adapter : undefined;
+  // Ask the coordinator's own predicate rather than restating it here. A previous
+  // version of this line restated it twice and was wrong both times.
+  const l2 = describeL2Status(config.intelligence);
   console.log(
-    `  Intelligence: ${l2Adapter ? `3-Layer (L0+L1+L2 via ${l2Adapter})` : 'L0+L1 only (L2 not configured)'}`,
+    `  Intelligence: ${
+      l2.running
+        ? `3-Layer (L0+L1+L2 via ${l2.adapter})`
+        : `L0+L1 only (L2 not running: ${l2.reason})`
+    }`,
   );
   console.log(`  Budget: $${config.intelligence?.budgetUsd ?? 5.00}/month`);
   console.log(`  Monitors: ${Object.entries(config.monitors ?? {}).filter(([, v]) => (v as { enabled: boolean }).enabled).map(([k]) => k).join(', ') || 'all'}`);

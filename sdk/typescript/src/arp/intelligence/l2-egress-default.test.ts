@@ -68,6 +68,7 @@ vi.mock('http', () => ({ request: fakeRequest, default: { request: fakeRequest }
 
 import { IntelligenceCoordinator } from './coordinator';
 import { createAdapter } from './adapters';
+import { describeL2Status } from './coordinator';
 import { defaultConfig } from '../config/loader';
 import type { ARPConfig, ARPEvent, IntelligenceConfig } from '../types';
 
@@ -234,7 +235,7 @@ describe('when a remote adapter IS configured, raw material still does not trave
     expect(body, 'the pattern id was stripped too — the redaction is over-broad').toContain('OL-001');
 
     // The fact of the match still travels, so the model can still assess it.
-    expect(body).toMatch(/withheld: \d+ chars/);
+    expect(body).toMatch(/withheld: (empty|up to 8 chars|\d+-\d+ chars|over 128 chars)/);
   });
 
   it('T6: event.description is NOT redacted — this is the known residual, pinned', async () => {
@@ -265,7 +266,7 @@ describe('when a remote adapter IS configured, raw material still does not trave
     const body = requests.map(r => r.body).join('');
 
     // data.command IS withheld by the allowlist.
-    expect(body).toMatch(/withheld: \d+ chars/);
+    expect(body).toMatch(/withheld: (empty|up to 8 chars|\d+-\d+ chars|over 128 chars)/);
 
     // ...but the same value inside the description is not. Asserting the leak
     // rather than pretending it is closed.
@@ -273,5 +274,73 @@ describe('when a remote adapter IS configured, raw material still does not trave
       body,
       'description redaction has landed — update this test and the CHANGELOG claim',
     ).toContain(CANARY_COMMAND);
+  });
+});
+
+describe('what the status line reports is what actually runs', () => {
+  // Regression tests for a line that was wrong twice. It first restated the gate as
+  // `enabled !== false` and kept printing "3-Layer" after the default changed; it was
+  // then rewritten as `enabled === true && adapter`, which is still wrong for
+  // 'agent-proxy' — that passes both checks and throws on construction, so the line
+  // announced a layer that was not running. Neither version had a test.
+
+  it('T7: agent-proxy is reported as NOT running, because constructing it throws', () => {
+    const s = describeL2Status({ enabled: true, adapter: 'agent-proxy' } as IntelligenceConfig);
+    expect(s.running, 'agent-proxy cannot run, so it must not be reported as running').toBe(false);
+    expect(s.reason).toMatch(/no longer selects a provider from environment credentials/);
+  });
+
+  it('T8: the states that should run, do; the states that should not, do not', () => {
+    expect(describeL2Status(defaultConfig().intelligence).running).toBe(false);
+    expect(describeL2Status({ enabled: true } as IntelligenceConfig).running).toBe(false);
+    expect(describeL2Status({ adapter: 'ollama' } as IntelligenceConfig).running).toBe(false);
+    expect(describeL2Status({ enabled: false, adapter: 'ollama' } as IntelligenceConfig).running).toBe(false);
+
+    // POSITIVE CONTROL: a genuinely runnable config reports running, so the four
+    // falses above are a verdict and not a function that always says no.
+    const ok = describeL2Status({ enabled: true, adapter: 'ollama' } as IntelligenceConfig);
+    expect(ok.running, 'a valid local config must report running').toBe(true);
+    expect(ok.adapter).toBe('ollama');
+  });
+});
+
+describe('withheld descriptors do not reconstruct the value', () => {
+  // These go through a real analyze() call and read the REQUEST BODY. They do not
+  // re-implement the descriptor: a test that restates the rule it is checking passes
+  // whenever the copy and the original agree, including when both are wrong.
+
+  const remote = { enabled: true, adapter: 'anthropic', adapterConfig: { apiKey: SYNTHETIC_KEY } } as IntelligenceConfig;
+
+  async function bodyFor(data: Record<string, unknown>): Promise<string> {
+    requests.length = 0;
+    await runAnalyze(remote, criticalEvent({ description: 'fixed text', data }));
+    expect(requests.length, 'no request captured — nothing measured').toBeGreaterThan(0);
+    return requests.map(r => r.body).join('');
+  }
+
+  it('T9: a boolean is not recoverable from its descriptor', async () => {
+    // An exact length plus a class set IS the value for a small value: `true` renders
+    // 4 chars/lower and `false` 5 chars/lower, so the pair reconstructs the boolean.
+    const t = await bodyFor({ secretFlag: true });
+    const f = await bodyFor({ secretFlag: false });
+
+    expect(t, 'the raw value must not appear').not.toContain('true');
+    const tDesc = t.match(/<withheld:[^>]*>/)?.[0];
+    const fDesc = f.match(/<withheld:[^>]*>/)?.[0];
+    expect(tDesc, 'no withheld descriptor found — the allowlist did not fire').toBeTruthy();
+    expect(tDesc, 'true and false must not be distinguishable by descriptor').toBe(fDesc);
+  });
+
+  it('T10: a long value keeps enough shape to assess, and never the value', async () => {
+    const secret = 'A'.repeat(20) + 'b'.repeat(20) + '9';   // 41 chars
+    const body = await bodyFor({ secretBlob: secret });
+
+    expect(body, 'the value itself must not travel').not.toContain(secret);
+    expect(body).toContain('33-64 chars');
+    expect(body).toMatch(/lower/);
+
+    // CONTROL: the bucket is genuinely coarser than the exact length, so the
+    // descriptor cannot be inverted to the value's size.
+    expect(body, 'the exact length leaked').not.toContain('41 chars');
   });
 });

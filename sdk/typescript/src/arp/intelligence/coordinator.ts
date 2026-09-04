@@ -76,6 +76,41 @@ export interface ComplyDecision {
  *
  * 99% of events never reach L2. Cost is ~$0.01/day for most agents.
  */
+/**
+ * Whether L2 would actually run for a given intelligence config, and if not, why.
+ *
+ * This exists so that anything REPORTING L2's state settles it the same way the
+ * coordinator does — by executing the same steps rather than restating them. The
+ * CLI previously re-implemented the predicate as `enabled !== false`, and when the
+ * default changed it went on printing "3-Layer (L0+L1+L2)" for an install where L2
+ * was off. Replacing that with `enabled === true && adapter` fixed the common case
+ * and still lied for `adapter: 'agent-proxy'`, which passes both checks and then
+ * throws on construction.
+ *
+ * A status line that re-derives a predicate drifts from it. This one does not
+ * re-derive: it tries to build the adapter, which is the only thing that settles it.
+ */
+export function describeL2Status(
+  intelligence: IntelligenceConfig | undefined,
+): { running: boolean; adapter?: string; reason?: string } {
+  if (intelligence?.enabled !== true) {
+    return { running: false, reason: 'intelligence.enabled is not true' };
+  }
+  if (!intelligence.adapter) {
+    return { running: false, reason: "no 'intelligence.adapter' is configured" };
+  }
+  try {
+    createAdapter(intelligence.adapter, intelligence.adapterConfig as Record<string, unknown> | undefined);
+    return { running: true, adapter: intelligence.adapter };
+  } catch (error) {
+    return {
+      running: false,
+      adapter: intelligence.adapter,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export class IntelligenceCoordinator {
   private readonly config: IntelligenceConfig;
   private readonly agentContext: string;
@@ -469,12 +504,35 @@ const L2_ALLOWED_DATA_FIELDS = new Set([
  */
 function describeWithheld(value: unknown): string {
   const s = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+
+  // Bucket the length instead of reporting it exactly, and say nothing about the
+  // character classes of a short value.
+  //
+  // An exact length plus a class set is not a summary of a small value, it IS the
+  // value. `true` renders as 4 chars/lower and `false` as 5 chars/lower, which
+  // reconstructs a boolean outright; a short enum from a known set is recovered the
+  // same way, since the set is usually distinguishable by length alone. The
+  // assessment never needed that precision — what it needs is whether the match was
+  // short or long and roughly what it looked like.
+  const n = s.length;
+  const bucket =
+    n === 0 ? 'empty'
+      : n <= 8 ? 'up to 8 chars'
+        : n <= 16 ? '9-16 chars'
+          : n <= 32 ? '17-32 chars'
+            : n <= 64 ? '33-64 chars'
+              : n <= 128 ? '65-128 chars'
+                : 'over 128 chars';
+
+  // Below this, the class set is identifying rather than descriptive.
+  if (n <= 8) return `<withheld: ${bucket}>`;
+
   const classes: string[] = [];
   if (/[a-z]/.test(s)) classes.push('lower');
   if (/[A-Z]/.test(s)) classes.push('upper');
   if (/[0-9]/.test(s)) classes.push('digit');
   if (/[^A-Za-z0-9]/.test(s)) classes.push('symbol');
-  return `<withheld: ${s.length} chars${classes.length ? ', ' + classes.join('+') : ''}>`;
+  return `<withheld: ${bucket}${classes.length ? ', ' + classes.join('+') : ''}>`;
 }
 
 /** Render `event.data` for an L2 prompt, allowlisted and shape-described. */
