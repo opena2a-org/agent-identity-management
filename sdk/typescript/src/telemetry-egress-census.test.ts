@@ -246,10 +246,15 @@ describe('telemetry egress census', () => {
     // `describeL2Status`, which the old pattern never covered. Counting the call
     // sites is what makes the guard above mean what it says.
     const src = readFileSync(join(SRC, 'arp/intelligence/coordinator.ts'), 'utf-8');
-    const calls = src.match(/(?<![\w.])createAdapter\s*\(/g) ?? [];
+    // Every spelling that constructs an adapter, not just the factory: a direct
+    // `new AnthropicAdapter(...)` here would reach the vendor without passing the
+    // gate, and the factory-only count let exactly that mutant through when the
+    // delta review planted it.
+    const calls = src.match(/(?<![\w.])createAdapter\s*\(|new\s+\w*Adapter\s*\(/g) ?? [];
     expect(
       calls.length,
-      `coordinator.ts constructs an adapter at ${calls.length} sites. The census can ` +
+      `coordinator.ts constructs an adapter at ${calls.length} sites (${calls.join(', ')}). ` +
+        'The census can ' +
         'only vouch for the gated one. Route every construction through ' +
         '`resolveL2Adapter`, or this channel is ungated on the extra path.',
     ).toBe(1);

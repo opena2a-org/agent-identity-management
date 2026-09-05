@@ -1,5 +1,9 @@
 /**
- * The CLI's L2 status line must ASK the coordinator, never decide for itself.
+ * The CLI's L2 status line must ASK the coordinator rather than decide for itself.
+ *
+ * Two assertions, deliberately separate: that the call is there, and that the gate
+ * is not restated in any spelling we have seen. The first does not depend on having
+ * enumerated the spellings; the second is a known-shape list, not a proof.
  *
  * #457 replaced a status line that re-derived L2's predicate — `enabled !== false`,
  * then `enabled === true && adapter` — and printed "3-Layer (L0+L1+L2)" for installs
@@ -43,13 +47,26 @@ function startGuardBody(source: string): string {
 }
 
 /**
- * A restatement of L2's gate: `enabled` compared to a boolean literal, or the
- * adapter's presence used as the decision. This is the mutant shape F-1 named.
+ * A restatement of L2's gate, in every spelling we have actually seen.
+ *
+ * The comparison forms were the first cut. They missed the TRUTHINESS spelling
+ * (`ic && ic.enabled && ic.adapter`), which the delta review found surviving
+ * this rule — the mutant was still killed, but by the `describeL2Status` call
+ * assertion below rather than by the rule that names the property. A string
+ * rule needs a rule per spelling, so the conjunction forms are pinned too.
+ *
+ * This is a list of known shapes, not a proof of the invariant. That is why the
+ * call assertion is a separate test rather than a convenience: it is the half
+ * that does not depend on having enumerated the spellings.
  */
 function restatesL2Gate(body: string): boolean {
   return (
     /\benabled\s*(?:===|!==|==|!=)\s*(?:true|false)/.test(body) ||
     /\benabled\s*\?/.test(body) ||
+    /\benabled\b\s*(?:&&|\|\|)/.test(body) ||
+    /(?:&&|\|\|)\s*[\w.?]*\benabled\b/.test(body) ||
+    /\badapter\b\s*(?:&&|\|\|)/.test(body) ||
+    /(?:&&|\|\|)\s*[\w.?]*\badapter\b/.test(body) ||
     /\?\.adapter\s*(?:\?|&&|\|\|)/.test(body)
   );
 }
@@ -71,6 +88,8 @@ describe('the CLI status line asks describeL2Status rather than re-deriving it',
       console.log(\`  Intelligence: \${l2 ? '3-Layer (L0+L1+L2' : 'L0+L1 only (L2 not running'}\`);
     `;
     expect(restatesL2Gate(mutant)).toBe(true);
+    // The truthiness spelling, which the first cut of this rule missed.
+    expect(restatesL2Gate('const on = ic && ic.enabled && ic.adapter;')).toBe(true);
     expect(restatesL2Gate("const l2 = describeL2Status(config.intelligence);")).toBe(false);
   });
 

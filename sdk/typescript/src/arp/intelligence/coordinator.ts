@@ -100,10 +100,16 @@ export function describeL2Status(
     : { running: false, adapter: resolved.name, reason: resolved.reason };
 }
 
-/** Either the adapter L2 will actually use, or the reason there is not one. */
+/**
+ * Either the adapter L2 will actually use, or the reason there is not one.
+ *
+ * `asked` carries whether the operator switched L2 on, so a caller that needs to
+ * distinguish "withheld from someone who wanted it" from "never requested" does
+ * not have to re-test `enabled` and become a second copy of the gate.
+ */
 type L2Resolution =
-  | { adapter: LLMAdapter; name: string; reason?: undefined }
-  | { adapter: null; name?: string; reason: string };
+  | { adapter: LLMAdapter; name: string; asked: true; reason?: undefined }
+  | { adapter: null; name?: string; asked: boolean; reason: string };
 
 /**
  * Settle L2's state ONCE, for every caller that needs to know it.
@@ -120,10 +126,10 @@ type L2Resolution =
  */
 function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resolution {
   if (intelligence?.enabled !== true) {
-    return { adapter: null, reason: 'intelligence.enabled is not true' };
+    return { adapter: null, asked: false, reason: 'intelligence.enabled is not true' };
   }
   if (!intelligence.adapter) {
-    return { adapter: null, reason: "no 'intelligence.adapter' is configured" };
+    return { adapter: null, asked: true, reason: "no 'intelligence.adapter' is configured" };
   }
   try {
     return {
@@ -132,11 +138,13 @@ function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resol
         intelligence.adapterConfig as Record<string, unknown> | undefined,
       ),
       name: intelligence.adapter,
+      asked: true,
     };
   } catch (error) {
     return {
       adapter: null,
       name: intelligence.adapter,
+      asked: true,
       reason: error instanceof Error ? error.message : String(error),
     };
   }
@@ -215,10 +223,12 @@ export class IntelligenceCoordinator {
     // L0 and L1 are unaffected and still gate.
     const resolved = resolveL2Adapter(this.config);
     this.adapter = resolved.adapter;
-    if (resolved.adapter === null && this.config.enabled === true) {
+    if (resolved.adapter === null && resolved.asked) {
       // L2 withheld, L0+L1 still work. Say so once, naming the precondition and the
       // fix, rather than degrading silently — but only to an operator who ASKED for
       // L2. `enabled` absent or false requested nothing, so nothing is unavailable.
+      // `asked` comes from the resolution rather than a second read of `enabled`:
+      // re-testing it here would put a copy of the gate outside the census guard.
       this.reportL2Unavailable(resolved.reason);
     }
   }

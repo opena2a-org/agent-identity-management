@@ -375,7 +375,8 @@ and everything else — matched text, command lines, arguments — is replaced b
 descriptor that buckets the length rather than reporting it: `<withheld: 9-16
 chars, lower+digit>`. At eight characters or fewer the descriptor is
 `<withheld: up to 8 chars>` and names no character classes, because an exact
-length and a class set do not summarise a short value, they reconstruct it. The event's `description` is **not**
+length and a class set do not summarise a short value, they reconstruct it. An
+empty value renders `<withheld: empty>`. The event's `description` is **not**
 redacted and is sent as written; it is normally tool-authored text plus an
 identifier such as a hostname or file path, but process-monitor descriptions
 embed up to 100 characters of the child command line.
