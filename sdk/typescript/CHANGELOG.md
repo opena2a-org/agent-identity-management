@@ -18,13 +18,12 @@ qualifying events to that vendor, authenticated with the operator's own key and
 billed to their own account. Nothing in the README said so.
 
 Measured against a real install of published 1.3.1, with the HTTP layer stubbed
-so no socket is opened and with a synthetic key: one `critical` network event
-under the shipped default produced a single outbound attempt to
-`api.anthropic.com/v1/messages`, headers `x-api-key, anthropic-version,
-content-type, Content-Length`, body 574 bytes — **carrying the planted command
-line verbatim**. A `critical` event bypasses batching, and the network monitor
-emits `critical` and is on by default, so this is the default path rather than
-an edge case.
+so no socket is opened and with a synthetic key: one `critical` event under the
+shipped default produced an outbound attempt to `api.anthropic.com/v1/messages`,
+headers `x-api-key, anthropic-version, content-type`, and the body carried the
+value planted in the event verbatim. A `critical` event bypasses batching, and
+the network monitor emits `critical` and is on by default, so this is the
+default path rather than an edge case.
 
 Affected: **1.0.0 through 1.3.1**, every published version — verified by reading
 `dist/arp/index.js` out of each tarball. `arp-guard@0.3.0` is **not** affected;

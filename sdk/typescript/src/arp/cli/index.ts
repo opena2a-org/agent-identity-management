@@ -198,7 +198,9 @@ async function startProxy(): Promise<void> {
   );
 
   // Resolve the Guard public key for classification annotation. Gated on the
-  // intelligence layer being enabled (default on); the loader already merged
+  // intelligence layer not being switched off EXPLICITLY: an absent `enabled` still
+  // resolves the key, matching the behavioral twin's asymmetry rather than L2's own
+  // gate, which requires `enabled === true`. The loader already merged
   // config + ARP_GUARD_PUBLIC_KEY. When present AND a manifest is configured,
   // the proxy builds the annotator at start() so events carry a cleared
   // classification for DETECTION (the sequence corpus). Absent key → no
@@ -356,7 +358,8 @@ function showHelp(): void {
       L2: LLM-Assisted ($)    Micro-prompts to the agent's LLM
 
     99% of events never reach L2. Default budget: $5/month.
-    Auto-detects Anthropic, OpenAI, or Ollama from environment.
+    L2 is off unless intelligence.enabled is true and intelligence.adapter
+    names a provider. There is no automatic selection from the environment.
 
   AI-LAYER SCANNING (proxy mode)
     Prompt injection, jailbreak, data exfiltration detection

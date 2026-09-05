@@ -93,19 +93,50 @@ export interface ComplyDecision {
 export function describeL2Status(
   intelligence: IntelligenceConfig | undefined,
 ): { running: boolean; adapter?: string; reason?: string } {
+  const resolved = resolveL2Adapter(intelligence);
+  if (resolved.adapter !== null) return { running: true, adapter: resolved.name };
+  return resolved.name === undefined
+    ? { running: false, reason: resolved.reason }
+    : { running: false, adapter: resolved.name, reason: resolved.reason };
+}
+
+/** Either the adapter L2 will actually use, or the reason there is not one. */
+type L2Resolution =
+  | { adapter: LLMAdapter; name: string; reason?: undefined }
+  | { adapter: null; name?: string; reason: string };
+
+/**
+ * Settle L2's state ONCE, for every caller that needs to know it.
+ *
+ * The review of #457 found the gate written twice — here and in the coordinator's
+ * constructor — down to the same reason string in both copies. Sharing the CALL to
+ * `createAdapter` was not enough: what has to be shared is the DECISION, or the next
+ * precondition added to one copy drifts the other, which is the defect the status line
+ * was reported for in the first place.
+ *
+ * It returns the constructed adapter rather than a boolean so the constructor can keep
+ * the object this already built. Asking `describeL2Status` and then constructing again
+ * would build twice, which is a side effect on any adapter that opens something.
+ */
+function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resolution {
   if (intelligence?.enabled !== true) {
-    return { running: false, reason: 'intelligence.enabled is not true' };
+    return { adapter: null, reason: 'intelligence.enabled is not true' };
   }
   if (!intelligence.adapter) {
-    return { running: false, reason: "no 'intelligence.adapter' is configured" };
+    return { adapter: null, reason: "no 'intelligence.adapter' is configured" };
   }
   try {
-    createAdapter(intelligence.adapter, intelligence.adapterConfig as Record<string, unknown> | undefined);
-    return { running: true, adapter: intelligence.adapter };
+    return {
+      adapter: createAdapter(
+        intelligence.adapter,
+        intelligence.adapterConfig as Record<string, unknown> | undefined,
+      ),
+      name: intelligence.adapter,
+    };
   } catch (error) {
     return {
-      running: false,
-      adapter: intelligence.adapter,
+      adapter: null,
+      name: intelligence.adapter,
       reason: error instanceof Error ? error.message : String(error),
     };
   }
@@ -182,19 +213,13 @@ export class IntelligenceCoordinator {
     //
     // When L2 is not configured it does not run at all: not remotely, and not locally.
     // L0 and L1 are unaffected and still gate.
-    if (this.config.enabled === true && this.config.adapter) {
-      try {
-        this.adapter = createAdapter(this.config.adapter, this.config.adapterConfig);
-      } catch (error) {
-        // Adapter could not be constructed — L2 withheld, L0+L1 still work. Say so
-        // once, naming the precondition and the fix, rather than degrading silently.
-        this.adapter = null;
-        this.reportL2Unavailable(error instanceof Error ? error.message : String(error));
-      }
-    } else if (this.config.enabled === true) {
-      this.reportL2Unavailable(
-        "no 'intelligence.adapter' is configured",
-      );
+    const resolved = resolveL2Adapter(this.config);
+    this.adapter = resolved.adapter;
+    if (resolved.adapter === null && this.config.enabled === true) {
+      // L2 withheld, L0+L1 still work. Say so once, naming the precondition and the
+      // fix, rather than degrading silently — but only to an operator who ASKED for
+      // L2. `enabled` absent or false requested nothing, so nothing is unavailable.
+      this.reportL2Unavailable(resolved.reason);
     }
   }
 
