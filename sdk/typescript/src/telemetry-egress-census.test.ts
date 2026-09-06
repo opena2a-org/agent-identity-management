@@ -77,12 +77,19 @@ const GATED_AT_CALLSITE: Record<string, { site: string; guard: RegExp }> = {
   'arp/intelligence/adapters.ts': {
     site: 'arp/intelligence/coordinator.ts',
     // L2 constructs an adapter only when the operator switched it on AND named a
-    // destination. Both halves matter: `enabled === true` (not `!== false`) so an
-    // absent value from a shallow-merged partial config means off, and an explicit
-    // `adapter` so no destination is ever chosen from ambient environment state.
-    // Deleting either half re-opens the default-on vendor egress this guard exists
-    // to prevent, and fails this test.
-    guard: /this\.config\.enabled\s*===\s*true\s*&&\s*this\.config\.adapter/,
+    // destination. Both halves matter: `enabled` must be exactly `true` (not merely
+    // `!== false`) so an absent value from a shallow-merged partial config means off,
+    // and an explicit `adapter` so no destination is ever chosen from ambient
+    // environment state. Deleting either half re-opens the default-on vendor egress
+    // this guard exists to prevent, and fails this test.
+    //
+    // Both halves now live in `resolveL2Adapter`, which is the ONLY caller of
+    // `createAdapter` in this file. That is a tightening, not a move: before #457's
+    // F-2 fix the gate sat in the constructor and `describeL2Status` reached
+    // `createAdapter` down a second path this census never covered. The pattern
+    // therefore pins the ORDER — enabled, then adapter, then construction — so that
+    // dropping a half or hoisting the call above either check fails here.
+    guard: /intelligence\?\.enabled\s*!==\s*true[\s\S]{0,240}?if\s*\(!intelligence\.adapter\)[\s\S]{0,240}?createAdapter\(/,
   },
   'arp/telemetry/gtin.ts': {
     site: 'arp/index.ts',
@@ -228,6 +235,29 @@ describe('telemetry egress census', () => {
     ]) {
       expect(mods, `${expected} fell out of the census`).toContain(expected);
     }
+  });
+
+  it('the gated call site is the ONLY one — a second, ungated construction fails here', () => {
+    // The guard pattern proves that ONE `createAdapter` call is preceded by both
+    // halves of the gate. It cannot prove there is no OTHER call that is not.
+    //
+    // That gap was real, not hypothetical: before #457's F-2 fix this file called
+    // `createAdapter` twice — once behind the constructor's gate, and once inside
+    // `describeL2Status`, which the old pattern never covered. Counting the call
+    // sites is what makes the guard above mean what it says.
+    const src = readFileSync(join(SRC, 'arp/intelligence/coordinator.ts'), 'utf-8');
+    // Every spelling that constructs an adapter, not just the factory: a direct
+    // `new AnthropicAdapter(...)` here would reach the vendor without passing the
+    // gate, and the factory-only count let exactly that mutant through when the
+    // delta review planted it.
+    const calls = src.match(/(?<![\w.])createAdapter\s*\(|new\s+\w*Adapter\s*\(/g) ?? [];
+    expect(
+      calls.length,
+      `coordinator.ts constructs an adapter at ${calls.length} sites (${calls.join(', ')}). ` +
+        'The census can ' +
+        'only vouch for the gated one. Route every construction through ' +
+        '`resolveL2Adapter`, or this channel is ungated on the extra path.',
+    ).toBe(1);
   });
 
   it('every EXCLUDED entry still exists and still sends — stale exemptions do not linger', () => {

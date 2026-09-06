@@ -360,6 +360,9 @@ intelligence: {
 }
 ```
 
+Setting `enabled: false` also switches off the in-process behavioral twin, which
+reads the same flag; leave it absent if you only want L2 off.
+
 `adapter` chooses where inference runs. `'ollama'` keeps it on the machine.
 `'anthropic'` and `'openai'` send event content to that vendor, authenticated
 with your own key and billed to your own account — choose them only if you
@@ -369,7 +372,11 @@ If you do choose a remote adapter, this is what leaves and what does not.
 `event.data` is allowlisted: identifiers and structural facts (pattern id,
 category, direction, tool name, peer agent ids, protocol, port, pid) travel,
 and everything else — matched text, command lines, arguments — is replaced by a
-`<withheld: N chars, classes>` descriptor. The event's `description` is **not**
+descriptor that buckets the length rather than reporting it: `<withheld: 9-16
+chars, lower+digit>`. At eight characters or fewer the descriptor is
+`<withheld: up to 8 chars>` and names no character classes, because an exact
+length and a class set do not summarise a short value, they reconstruct it. An
+empty value renders `<withheld: empty>`. The event's `description` is **not**
 redacted and is sent as written; it is normally tool-authored text plus an
 identifier such as a hostname or file path, but process-monitor descriptions
 embed up to 100 characters of the child command line.

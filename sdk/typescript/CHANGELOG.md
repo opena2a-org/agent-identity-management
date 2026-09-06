@@ -18,13 +18,12 @@ qualifying events to that vendor, authenticated with the operator's own key and
 billed to their own account. Nothing in the README said so.
 
 Measured against a real install of published 1.3.1, with the HTTP layer stubbed
-so no socket is opened and with a synthetic key: one `critical` network event
-under the shipped default produced a single outbound attempt to
-`api.anthropic.com/v1/messages`, headers `x-api-key, anthropic-version,
-content-type, Content-Length`, body 574 bytes — **carrying the planted command
-line verbatim**. A `critical` event bypasses batching, and the network monitor
-emits `critical` and is on by default, so this is the default path rather than
-an edge case.
+so no socket is opened and with a synthetic key: one `critical` event under the
+shipped default produced an outbound attempt to `api.anthropic.com/v1/messages`,
+headers `x-api-key, anthropic-version, content-type`, and the body carried the
+value planted in the event verbatim. A `critical` event bypasses batching, and
+the network monitor emits `critical` and is on by default, so this is the
+default path rather than an edge case.
 
 Affected: **1.0.0 through 1.3.1**, every published version — verified by reading
 `dist/arp/index.js` out of each tarball. `arp-guard@0.3.0` is **not** affected;
@@ -75,6 +74,25 @@ not an exposure. What may be exposed is material carried in event content:
 operators who ran with the AI layer (`aiLayer.prompt.enabled`, opt-in) should
 treat credentials their agent surfaced in model output as disclosed to the
 configured vendor and rotate those.
+
+### The L2 status line reports what is running, and withheld values are coarser
+
+Two follow-ups to the L2 change above, both found by an independent review of it.
+
+The CLI's `Intelligence:` line restated the L2 gate instead of asking it. The first
+version tested `enabled !== false` and kept printing `3-Layer (L0+L1+L2)` after the
+default changed; the replacement tested `enabled === true && adapter`, which is still
+wrong for `adapter: 'agent-proxy'` — that passes both checks and then throws on
+construction, so the line announced a layer that was not running. Neither version had
+a test. The line now calls `describeL2Status()`, which settles it by attempting the
+construction the coordinator attempts, and reports the reason when L2 is not running.
+
+`<withheld: N chars, classes>` reported an exact length. For a small value that pair
+is not a summary, it is the value: `true` rendered as `4 chars, lower` and `false` as
+`5 chars, lower`, so a boolean was recoverable, and short enums from a known set the
+same way. Lengths are now bucketed (`up to 8 chars`, `9-16`, `17-32`, `33-64`,
+`65-128`, `over 128`), and values of 8 characters or fewer carry no class information
+at all.
 
 ### The egress census asks what leaves the process, not what leaves for the registry
 

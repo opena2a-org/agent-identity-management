@@ -76,6 +76,80 @@ export interface ComplyDecision {
  *
  * 99% of events never reach L2. Cost is ~$0.01/day for most agents.
  */
+/**
+ * Whether L2 would actually run for a given intelligence config, and if not, why.
+ *
+ * This exists so that anything REPORTING L2's state settles it the same way the
+ * coordinator does — by executing the same steps rather than restating them. The
+ * CLI previously re-implemented the predicate as `enabled !== false`, and when the
+ * default changed it went on printing "3-Layer (L0+L1+L2)" for an install where L2
+ * was off. Replacing that with `enabled === true && adapter` fixed the common case
+ * and still lied for `adapter: 'agent-proxy'`, which passes both checks and then
+ * throws on construction.
+ *
+ * A status line that re-derives a predicate drifts from it. This one does not
+ * re-derive: it tries to build the adapter, which is the only thing that settles it.
+ */
+export function describeL2Status(
+  intelligence: IntelligenceConfig | undefined,
+): { running: boolean; adapter?: string; reason?: string } {
+  const resolved = resolveL2Adapter(intelligence);
+  if (resolved.adapter !== null) return { running: true, adapter: resolved.name };
+  return resolved.name === undefined
+    ? { running: false, reason: resolved.reason }
+    : { running: false, adapter: resolved.name, reason: resolved.reason };
+}
+
+/**
+ * Either the adapter L2 will actually use, or the reason there is not one.
+ *
+ * `asked` carries whether the operator switched L2 on, so a caller that needs to
+ * distinguish "withheld from someone who wanted it" from "never requested" does
+ * not have to re-test `enabled` and become a second copy of the gate.
+ */
+type L2Resolution =
+  | { adapter: LLMAdapter; name: string; asked: true; reason?: undefined }
+  | { adapter: null; name?: string; asked: boolean; reason: string };
+
+/**
+ * Settle L2's state ONCE, for every caller that needs to know it.
+ *
+ * The review of #457 found the gate written twice — here and in the coordinator's
+ * constructor — down to the same reason string in both copies. Sharing the CALL to
+ * `createAdapter` was not enough: what has to be shared is the DECISION, or the next
+ * precondition added to one copy drifts the other, which is the defect the status line
+ * was reported for in the first place.
+ *
+ * It returns the constructed adapter rather than a boolean so the constructor can keep
+ * the object this already built. Asking `describeL2Status` and then constructing again
+ * would build twice, which is a side effect on any adapter that opens something.
+ */
+function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resolution {
+  if (intelligence?.enabled !== true) {
+    return { adapter: null, asked: false, reason: 'intelligence.enabled is not true' };
+  }
+  if (!intelligence.adapter) {
+    return { adapter: null, asked: true, reason: "no 'intelligence.adapter' is configured" };
+  }
+  try {
+    return {
+      adapter: createAdapter(
+        intelligence.adapter,
+        intelligence.adapterConfig as Record<string, unknown> | undefined,
+      ),
+      name: intelligence.adapter,
+      asked: true,
+    };
+  } catch (error) {
+    return {
+      adapter: null,
+      name: intelligence.adapter,
+      asked: true,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export class IntelligenceCoordinator {
   private readonly config: IntelligenceConfig;
   private readonly agentContext: string;
@@ -147,19 +221,15 @@ export class IntelligenceCoordinator {
     //
     // When L2 is not configured it does not run at all: not remotely, and not locally.
     // L0 and L1 are unaffected and still gate.
-    if (this.config.enabled === true && this.config.adapter) {
-      try {
-        this.adapter = createAdapter(this.config.adapter, this.config.adapterConfig);
-      } catch (error) {
-        // Adapter could not be constructed — L2 withheld, L0+L1 still work. Say so
-        // once, naming the precondition and the fix, rather than degrading silently.
-        this.adapter = null;
-        this.reportL2Unavailable(error instanceof Error ? error.message : String(error));
-      }
-    } else if (this.config.enabled === true) {
-      this.reportL2Unavailable(
-        "no 'intelligence.adapter' is configured",
-      );
+    const resolved = resolveL2Adapter(this.config);
+    this.adapter = resolved.adapter;
+    if (resolved.adapter === null && resolved.asked) {
+      // L2 withheld, L0+L1 still work. Say so once, naming the precondition and the
+      // fix, rather than degrading silently — but only to an operator who ASKED for
+      // L2. `enabled` absent or false requested nothing, so nothing is unavailable.
+      // `asked` comes from the resolution rather than a second read of `enabled`:
+      // re-testing it here would put a copy of the gate outside the census guard.
+      this.reportL2Unavailable(resolved.reason);
     }
   }
 
@@ -469,12 +539,35 @@ const L2_ALLOWED_DATA_FIELDS = new Set([
  */
 function describeWithheld(value: unknown): string {
   const s = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+
+  // Bucket the length instead of reporting it exactly, and say nothing about the
+  // character classes of a short value.
+  //
+  // An exact length plus a class set is not a summary of a small value, it IS the
+  // value. `true` renders as 4 chars/lower and `false` as 5 chars/lower, which
+  // reconstructs a boolean outright; a short enum from a known set is recovered the
+  // same way, since the set is usually distinguishable by length alone. The
+  // assessment never needed that precision — what it needs is whether the match was
+  // short or long and roughly what it looked like.
+  const n = s.length;
+  const bucket =
+    n === 0 ? 'empty'
+      : n <= 8 ? 'up to 8 chars'
+        : n <= 16 ? '9-16 chars'
+          : n <= 32 ? '17-32 chars'
+            : n <= 64 ? '33-64 chars'
+              : n <= 128 ? '65-128 chars'
+                : 'over 128 chars';
+
+  // Below this, the class set is identifying rather than descriptive.
+  if (n <= 8) return `<withheld: ${bucket}>`;
+
   const classes: string[] = [];
   if (/[a-z]/.test(s)) classes.push('lower');
   if (/[A-Z]/.test(s)) classes.push('upper');
   if (/[0-9]/.test(s)) classes.push('digit');
   if (/[^A-Za-z0-9]/.test(s)) classes.push('symbol');
-  return `<withheld: ${s.length} chars${classes.length ? ', ' + classes.join('+') : ''}>`;
+  return `<withheld: ${bucket}${classes.length ? ', ' + classes.join('+') : ''}>`;
 }
 
 /** Render `event.data` for an L2 prompt, allowlisted and shape-described. */
