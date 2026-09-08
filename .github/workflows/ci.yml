@@ -621,6 +621,7 @@ jobs:
         docker-paths-filter,
         sdk-dependency-audit,
         sdk-tests,
+        sdk-python-tests,
         changes,
         backend,
         integration,
@@ -640,17 +641,18 @@ jobs:
           dp='${{ needs.docker-paths-filter.result }}'
           sa='${{ needs.sdk-dependency-audit.result }}'
           st='${{ needs.sdk-tests.result }}'
+          spt='${{ needs.sdk-python-tests.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
           it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
