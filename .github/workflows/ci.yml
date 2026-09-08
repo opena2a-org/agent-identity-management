@@ -367,7 +367,7 @@ jobs:
       # Pinned suite ref. Bump deliberately when the suite grows; the vendored
       # Java fixture copies must be refreshed in the same PR or the drift gate
       # below fails.
-      ATX_CONFORMANCE_REF: f4d40a4e33ac15946e90683ad1f1c59122559407
+      ATX_CONFORMANCE_REF: d2b8376daaec47046e54a3035178d706a5edec1d
     steps:
       - uses: actions/checkout@v4
 
