@@ -4314,6 +4314,8 @@ def register_agent(
     community_intelligence_opt_in: bool = False,
     # Backward compatibility alias
     talks_to: Optional[list] = None,  # DEPRECATED: Use mcp_servers instead
+    *,
+    auto_hooks: bool = True,  # Install the framework instrumentation hooks (LangChain, CrewAI, OpenAI, Anthropic)
 ) -> AIMClient:
     """
     ONE-LINE agent registration with AIM - Radical simplicity meets enterprise security
@@ -4372,6 +4374,7 @@ def register_agent(
             When enabled, anonymized trust factor distributions are periodically shared with the
             OpenA2A Registry to build community benchmarks. No agent IDs or PII are shared.
         talks_to: DEPRECATED - Use mcp_servers instead (kept for backward compatibility)
+        auto_hooks: Install the framework instrumentation hooks for LangChain, CrewAI, OpenAI and Anthropic when those libraries are imported (default: True). Keyword-only. The hooks never raise and enforce nothing.
 
     Security:
         Capability changes on re-registration depend on organization enforcement mode:
@@ -4562,7 +4565,7 @@ def register_agent(
                 # Auto-activate framework hooks (LangChain, CrewAI, OpenAI, Anthropic)
                 try:
                     from .auto_hooks import activate_hooks
-                    hooked = activate_hooks(client)
+                    hooked = activate_hooks(client, auto_hooks=auto_hooks)
                     if hooked:
                         console.info(f"Auto-instrumented: {', '.join(hooked)}")
                 except Exception:
@@ -4758,7 +4761,7 @@ def register_agent(
         # Auto-activate framework hooks (LangChain, CrewAI, OpenAI, Anthropic)
         try:
             from .auto_hooks import activate_hooks
-            hooked = activate_hooks(client)
+            hooked = activate_hooks(client, auto_hooks=auto_hooks)
             if hooked:
                 console.info(f"Auto-instrumented: {', '.join(hooked)}")
         except Exception:

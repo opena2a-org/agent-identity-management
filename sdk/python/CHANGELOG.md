@@ -5,6 +5,85 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-09-08
+
+### Security
+
+- **`PolicyCache.check()` no longer answers allow from an empty cache**
+  ([GHSA-44hm-jvq6-r4gc](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-44hm-jvq6-r4gc)).
+  `PolicyCache`, exported since 0.5.3 and described in its docstring as
+  offline enforcement, fetches `GET /api/v1/agents/{agent_id}/policies`. No
+  released AIM server registers that route, so the cache was always empty,
+  and `check()` treated an empty cache as allow: it returned `True` for every
+  capability, with no warning and no exception. No SDK code path calls it.
+  The decorators, which ask the server on every call and raise
+  `ActionDeniedError` on an explicit denial, are unaffected and were re-tested
+  against the published 2.0.1 wheel.
+
+  `check()` now raises `VerificationUnavailableError` whenever no policy
+  document has been loaded (fetch failed, non-200, or a body that is not a
+  JSON object), naming the URL it tried and stating that no released AIM
+  server serves it. With a document loaded, a matching rule allows only on
+  `action: "allow"`, and with no matching rule only a present `defaultAction`
+  equal to `"allow"` allows. The class stays exported and its docstring now
+  says what it does. Nothing in this release makes it enforce anything:
+  nothing serves it.
+
+  Affected on PyPI: 0.5.3 and 1.22.1 through 2.0.1. The `aim-server`
+  container serves the same SDK as a zip from `GET /api/v1/sdk/download`; a
+  zip named for an affected version carries the defect. The measured table
+  is in the advisory.
+
+  If you call `PolicyCache.check()` today, that call raises from this
+  version on. Remove it; the decorators are the enforcement path.
+
+  On the deprecation window: `check()` previously returned and now raises,
+  and `docs/VERSIONING.md` would normally put a `DeprecationWarning` release
+  in front of a change like that. As with 2.0.0, there is none, because the
+  fix is the raise, and a warning release would ship the fail-open for one
+  more version. A named exception, not a policy change.
+
+- **The OpenAI and Anthropic hooks now emit a local security log event per
+  hooked call**
+  ([GHSA-hg62-664p-89xg](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-hg62-664p-89xg)).
+  Since the hooks landed (0.5.3, 2026-03-21) the wrappers around
+  `chat.completions.create` and `messages.create` named
+  `AgentEventType.AGENT_ACTION`, a member that was never defined. The
+  `AttributeError` was swallowed by the same `except Exception` that keeps a
+  logging failure from blocking a model call, so no hooked model call was
+  recorded in any affected version and nothing said so; the README said each
+  model call was recorded to the audit trail. No test exercised a hooked
+  call.
+
+  `AGENT_ACTION` now exists, and a hooked call emits one event on the
+  `aim.security` logger: a local record, written where
+  `AIM_SECURITY_LOG_FILE` or `AIM_SECURITY_LOG_STDOUT` points it and
+  propagated to the application's root logger, not the server-side audit
+  log. A regression test installs the OpenAI hook and asserts that one
+  hooked call emits exactly one event; it fails on 2.0.1. A second test
+  fails on any `AgentEventType` member the package references without
+  defining. Affected: 0.5.3 and 1.22.1 through 2.0.1, and the `aim-server`
+  container zip named for those versions.
+
+### Changed
+
+- **`secure()` accepts `auto_hooks`** as a keyword-only parameter, default
+  `True`. `secure("my-agent", auto_hooks=False)` installs none of the
+  framework hooks. The README has documented this call; until this release
+  it raised `TypeError`, because the parameter did not exist.
+- `setup.py` declares `license="Apache-2.0"` and the wheel ships the
+  canonical Apache-2.0 LICENSE text.
+
+### Fixed
+
+- **A hook that cannot be installed now logs a warning.** `activate_hooks()`
+  detects LangChain, CrewAI, OpenAI and Anthropic from `sys.modules`; a
+  detected library whose hook failed to install was skipped silently. It is
+  now reported through the `aim_sdk.auto_hooks` logger at WARNING and left
+  untouched. The hooks still never raise; a failure inside an installed hook is still
+  swallowed so the model call proceeds, which is the property that hid the
+  recording defect above, so on that path the regression test is the guard.
+
 ## [2.0.1] - 2026-08-22
 
 Closes both defects 2.0.0 carried as known issues, and hardens every path a
