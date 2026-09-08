@@ -9,7 +9,8 @@ package org.opena2a.aim.atx;
  *                     {@code did:opena2a:authority:opena2a.org#key-1}. When present
  *                     (contains '#'), the key is BOUND to its controller DID and may
  *                     only verify credentials issued by that DID (or, for v1.1, a
- *                     signed issuerChain authority). A key without a '#' fragment is
+ *                     signed issuerChain authority that is also a trusted issuer of
+ *                     the verifier). A key without a '#' fragment is
  *                     unbound and eligible for any issuer (single-issuer back-compat).
  */
 public record AtxPublicKey(String algorithm, String publicKeyHex, String keyId) {
