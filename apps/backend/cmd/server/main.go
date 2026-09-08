@@ -103,6 +103,9 @@ func main() {
 	}
 	log.Println("✅ Database migrations completed successfully")
 
+	// Report how AIM_PLATFORM_ADMINS was read; a mistyped entry is visible, not silent.
+	application.ReportPlatformAdminAllowlist()
+
 	// Override default admin password if ADMIN_PASSWORD env var is set
 	if err := applyAdminPasswordOverride(db); err != nil {
 		log.Printf("⚠️  Failed to apply admin password override: %v", err)
@@ -226,33 +229,15 @@ func main() {
 		})
 	})
 
-	app.Get("/health/ready", func(c fiber.Ctx) error {
-		// Check database
-		if err := db.Ping(); err != nil {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"ready": false,
-				"error": "database unavailable",
-			})
+	// Readiness probe (no auth required). Body contract:
+	// apps/backend/contracts/health-ready.schema.json.
+	var redisReadyCheck func(context.Context) error
+	if redisClient != nil {
+		redisReadyCheck = func(ctx context.Context) error {
+			return redisClient.Ping(ctx).Err()
 		}
-
-		// Check Redis (optional - skip if not configured)
-		redisStatus := "not configured"
-		if redisClient != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := redisClient.Ping(ctx).Err(); err != nil {
-				redisStatus = "unavailable (optional)"
-			} else {
-				redisStatus = "connected"
-			}
-		}
-
-		return c.JSON(fiber.Map{
-			"ready":    true,
-			"database": "connected",
-			"redis":    redisStatus,
-		})
-	})
+	}
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck))
 
 	// System status endpoint (no auth required)
 	app.Get("/api/v1/status", func(c fiber.Ctx) error {
@@ -320,53 +305,49 @@ func main() {
 	// NOTE: Revocation list route moved into setupRoutes() to avoid Fiber v3 beta
 	// route shadowing when the /api/v1 group is registered with middleware.
 
-	// SECURITY: only routes that establish their own caller identity may be
-	// registered here, above the sdkAPI group. Fiber matches in registration
-	// order, so a route registered on this line is not reached by the group's
-	// middleware below — that is exactly how the two write routes below stayed
-	// unauthenticated from 2025-11-06 until this change. Both remaining entries
-	// verify a signature inside the handler:
-	//   CreateVerification  — verifySignature + agent.Status gate
-	//   GetVerificationSDK  — three X-AIM-* headers, an Ed25519 signature, and
-	//                         event ownership (404, not 403, on mismatch)
-	// Anything else belongs in the group. routes_gate_test.go requires every
-	// app-level /api/v1/sdk-api/verifications registration to be listed there
-	// with the control that justifies it, and asserts the group's middleware is
-	// registered before the routes it is supposed to guard.
-	app.Post("/api/v1/sdk-api/verifications", middleware.RateLimitMiddleware(), h.Verification.CreateVerification)
-	// Defect #160: SDK GET is now signature-authed (Ed25519 headers) and
-	// agent-scoped inside the handler. JWT GET continues at /api/v1/verifications/:id.
-	app.Get("/api/v1/sdk-api/verifications/:id", middleware.RateLimitMiddleware(), h.Verification.GetVerificationSDK)
-
-	// ⭐ SDK API routes - MUST be at app level to avoid middleware inheritance
-	// These routes use Ed25519 agent authentication for SDK/programmatic access
-	// Allows both Ed25519 (agent signatures) and JWT (user tokens) authentication
-	sdkAPI := app.Group("/api/v1/sdk-api")
-	sdkAPI.Use(middleware.PQCAgentMiddleware(services.Agent))           // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
-	sdkAPI.Use(middleware.AuthMiddleware(jwtService))                   // Fallback to JWT if Ed25519 not present
-	sdkAPI.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
-	sdkAPI.Use(middleware.RateLimitMiddleware())
-	// Verification WRITE routes. Moved off the bare app registration above: they
-	// authenticated nothing there — a rate limiter was their only middleware, and
-	// neither handler read c.Locals. The group supplies a body-bound canonical
-	// message, a ±30s window and revocation enforcement; the handlers add the
-	// agent-ownership check, because the group authenticates *an* agent and also
-	// falls through to JWT for human callers (pqc_agent_auth.go:39-41, :50-52).
-	sdkAPI.Post("/verifications/:id/result", h.Verification.SubmitVerificationResult)        // Withdrawn: 403 for every caller
-	sdkAPI.Post("/verifications/:id/execution-status", h.Verification.UpdateExecutionStatus) // Agent-owned execution report
-	sdkAPI.Get("/agents/:identifier", h.Agent.GetAgentByIdentifier)                                // Get agent by ID or name (SDK)
-	sdkAPI.Post("/agents/:id/capabilities", h.Capability.GrantCapability)                          // SDK capability reporting (legacy)
-	sdkAPI.Post("/agents/:id/capabilities/register", h.Capability.RegisterCapability)              // SDK capability registration (respects enforcement mode)
-	sdkAPI.Get("/agents/:id/capability-requests", h.CapabilityRequest.ListAgentCapabilityRequests) // SDK list agent's capability requests
-	sdkAPI.Post("/agents/:id/capability-requests", h.CapabilityRequest.CreateCapabilityRequest)    // SDK capability request creation
-	sdkAPI.Post("/agents/:id/mcp-servers", h.MCP.CreateMCPServer)                                  // SDK MCP registration (create new MCP server)
-	sdkAPI.Get("/agents/:id/mcp-servers", h.MCP.ListMCPServers)                                    // SDK list MCP servers for agent's org
-	sdkAPI.Get("/agents/:id/mcp-servers/by-name", h.MCP.GetMCPServerByName)                        // SDK get MCP by name (capability caching)
-	sdkAPI.Post("/agents/:id/mcp-connections", h.MCPAttestation.RecordMCPConnection)               // SDK record agent-MCP connection (use_mcp_tool)
-	sdkAPI.Post("/agents/:id/mcp-usage-report", h.MCPAttestation.RecordMCPUsageReport)             // SDK MCP supply chain usage analytics
-	sdkAPI.Post("/agents/:id/detection/report", h.Detection.ReportDetection)                       // SDK MCP detection and integration reporting
-	sdkAPI.Post("/agents/:id/heartbeat", h.Lifecycle.Heartbeat)                                    // SDK agent heartbeat (liveness)
-	sdkAPI.Post("/agents/:id/isolation", h.TrustScore.SubmitIsolationAttestation)                  // SDK self-report of runtime isolation posture (trust factor 9)
+	// ⭐ SDK API routes.
+	//
+	// The paths themselves live in sdk_api_routes.go — one table, mounted here
+	// and by the tests through the same registerSDKAPIRoutes call. Previously
+	// the registration was inline here and the integration tests re-registered
+	// each handler at a path of their own choosing, so the suite could not see
+	// a backend/SDK path mismatch: POST /agents/:id/isolation-attestation, the
+	// path all three shipped SDKs emit, 404'd in production with a green suite.
+	//
+	// SECURITY: two routes are registered on the bare app, above the group, and
+	// are therefore NOT reached by the group's Ed25519/JWT middleware — that is
+	// exactly how the verification write routes stayed unauthenticated from
+	// 2025-11-06 until they were moved onto the group. sdkAPIRoute.Bare marks
+	// them, and routes_gate_test.go requires each one to be enumerated there
+	// with the in-handler control that justifies it.
+	registerSDKAPIRoutes(app, sdkAPIDeps{
+		BareMiddleware: middleware.RateLimitMiddleware(),
+		GroupMiddleware: []fiber.Handler{
+			middleware.PQCAgentMiddleware(services.Agent),           // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
+			middleware.AuthMiddleware(jwtService),                   // Fallback to JWT if Ed25519 not present
+			middleware.AgentActivityTouchMiddleware(services.Agent), // Touches agents.last_active on agent-authed responses (#167)
+			middleware.RateLimitMiddleware(),
+		},
+		Handlers: sdkAPIHandlers{
+			CreateVerification:          h.Verification.CreateVerification,
+			GetVerificationSDK:          h.Verification.GetVerificationSDK,
+			SubmitVerificationResult:    h.Verification.SubmitVerificationResult,
+			UpdateExecutionStatus:       h.Verification.UpdateExecutionStatus,
+			GetAgentByIdentifier:        h.Agent.GetAgentByIdentifier,
+			GrantCapability:             h.Capability.GrantCapability,
+			RegisterCapability:          h.Capability.RegisterCapability,
+			ListAgentCapabilityRequests: h.CapabilityRequest.ListAgentCapabilityRequests,
+			CreateCapabilityRequest:     h.CapabilityRequest.CreateCapabilityRequest,
+			CreateMCPServer:             h.MCP.CreateMCPServer,
+			ListMCPServers:              h.MCP.ListMCPServers,
+			GetMCPServerByName:          h.MCP.GetMCPServerByName,
+			RecordMCPConnection:         h.MCPAttestation.RecordMCPConnection,
+			RecordMCPUsageReport:        h.MCPAttestation.RecordMCPUsageReport,
+			ReportDetection:             h.Detection.ReportDetection,
+			Heartbeat:                   h.Lifecycle.Heartbeat,
+			SubmitIsolationAttestation:  h.TrustScore.SubmitIsolationAttestation,
+		},
+	})
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
@@ -1276,10 +1257,12 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		AuthRefresh: handlers.NewAuthRefreshHandler(
 			jwtService,
 			services.SDKToken,
+			repos.User, // role/email re-read at refresh; never from the token
 		),
 		SDKTokenRecovery: handlers.NewSDKTokenRecoveryHandler(
 			services.SDKToken,
 			jwtService,
+			repos.User,
 		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,
@@ -1766,8 +1749,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	verifications := v1.Group("/verifications")
 	verifications.Use(middleware.AuthMiddleware(jwtService))
 	verifications.Use(middleware.RateLimitMiddleware())
-	verifications.Post("/", h.Verification.CreateVerification)                 // Request verification for agent action
-	verifications.Get("/:id", h.Verification.GetVerification)                  // Get verification status by ID
+	verifications.Post("/", h.Verification.CreateVerification) // Request verification for agent action
+	verifications.Get("/:id", h.Verification.GetVerification)  // Get verification status by ID
 	// REMOVED: `verifications.Post("/:id/result", ...)`. This mount authenticated a
 	// JWT user but the handler had no ownership check, so any authenticated user of
 	// any organization could rewrite any verification by UUID. It is deleted rather

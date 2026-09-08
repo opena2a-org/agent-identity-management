@@ -37,6 +37,9 @@ export enum AgentType {
 
   // Generic types
   CUSTOM = 'custom',
+  // Demo agents registered by `aim-sdk demo`: visibly a demo everywhere they
+  // appear, and excluded from adoption/trust analytics by this one value.
+  DEMO = 'demo',
   AI_AGENT = 'ai_agent',
 }
 
@@ -74,6 +77,14 @@ export interface AIMClientConfig {
   autoRegister?: boolean;
   /** Request timeout in milliseconds */
   timeout?: number;
+  /**
+   * Deadline in milliseconds over a WHOLE remote verification call:
+   * `verifyAction` from entry until it settles, covering the OAuth token
+   * exchange (when one is needed) and the verify POST under one shared budget.
+   * Resolution order: this option, then the AIM_ENFORCEMENT_TIMEOUT_MS
+   * environment variable (integer milliseconds), then 5000.
+   */
+  enforcementTimeout?: number;
   /** Enable debug logging */
   debug?: boolean;
   /** Custom headers to include in requests */

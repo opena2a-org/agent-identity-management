@@ -60,28 +60,29 @@ function getCategoryIcon(capability: string) {
 function getSeverityStyles(severity: string) {
   switch (severity.toLowerCase()) {
     case "critical":
+      // Critical carries a solid danger border so it reads differently from high.
       return {
-        bg: "bg-red-100 dark:bg-red-900/30",
-        text: "text-red-700 dark:text-red-300",
-        border: "border-red-200 dark:border-red-800",
+        bg: "bg-danger-fill",
+        text: "text-danger-text",
+        border: "border-danger-strong",
       };
     case "high":
       return {
-        bg: "bg-orange-100 dark:bg-orange-900/30",
-        text: "text-orange-700 dark:text-orange-300",
-        border: "border-orange-200 dark:border-orange-800",
+        bg: "bg-danger-fill",
+        text: "text-danger-text",
+        border: "border-danger-border",
       };
     case "medium":
       return {
-        bg: "bg-yellow-100 dark:bg-yellow-900/30",
-        text: "text-yellow-700 dark:text-yellow-300",
-        border: "border-yellow-200 dark:border-yellow-800",
+        bg: "bg-warning-fill",
+        text: "text-warning-text",
+        border: "border-warning-border",
       };
     default:
       return {
-        bg: "bg-blue-100 dark:bg-blue-900/30",
-        text: "text-blue-700 dark:text-blue-300",
-        border: "border-blue-200 dark:border-blue-800",
+        bg: "bg-brand-soft",
+        text: "text-brand-text",
+        border: "border-stroke",
       };
   }
 }
@@ -91,47 +92,47 @@ function ViolationCard({ violation }: { violation: Violation }) {
   const severityStyles = getSeverityStyles(violation.severity);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-all">
+    <div className="glass p-4 hover:-translate-y-0.5 transition-transform">
       <div className="flex items-start gap-4">
         {/* Status Icon */}
-        <div className={`p-2 rounded-lg ${violation.isBlocked ? "bg-red-100 dark:bg-red-900/30" : "bg-yellow-100 dark:bg-yellow-900/30"}`}>
+        <div className={`p-2 rounded-inset-sm ${violation.isBlocked ? "bg-danger-fill" : "bg-warning-fill"}`}>
           {violation.isBlocked ? (
-            <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <XCircle className="h-5 w-5 text-danger-text" />
           ) : (
-            <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+            <AlertTriangle className="h-5 w-5 text-warning-text" />
           )}
         </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-2">
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-pill border ${
               violation.isBlocked
-                ? "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300"
-                : "bg-yellow-100 dark:bg-yellow-900/50 text-yellow-700 dark:text-yellow-300"
+                ? "bg-danger-fill border-danger-border text-danger-text"
+                : "bg-warning-fill border-warning-border text-warning-text"
             }`}>
-              {violation.isBlocked ? "BLOCKED" : "ALLOWED"}
+              {violation.isBlocked ? "Blocked" : "Allowed"}
             </span>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${severityStyles.bg} ${severityStyles.text}`}>
-              {violation.severity.toUpperCase()}
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-pill border ${severityStyles.bg} ${severityStyles.text} ${severityStyles.border}`}>
+              {violation.severity.charAt(0).toUpperCase() + violation.severity.slice(1).toLowerCase()}
             </span>
             <Link
               href={`/dashboard/agents/${violation.agentId}`}
-              className="text-sm font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 truncate"
+              className="text-sm font-medium text-ink hover:text-brand-text truncate"
             >
               {violation.agentName || violation.agentId.slice(0, 8)}
             </Link>
           </div>
 
           <div className="flex items-center gap-2 mb-2">
-            <CategoryIcon className="h-4 w-4 text-gray-400" />
-            <span className="text-sm font-mono text-gray-700 dark:text-gray-300">
+            <CategoryIcon className="h-4 w-4 text-ink-tertiary" />
+            <span className="text-sm font-mono text-ink-body">
               {violation.attemptedCapability}
             </span>
           </div>
 
           <div className="flex items-center justify-between mt-3">
-            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-4 text-xs text-ink-secondary">
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {formatRelativeTime(violation.createdAt)}
@@ -143,16 +144,16 @@ function ViolationCard({ violation }: { violation: Violation }) {
                 </span>
               )}
               {violation.trustScoreImpact !== 0 && (
-                <span className={violation.trustScoreImpact < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}>
+                <span className={violation.trustScoreImpact < 0 ? "text-danger-text" : "text-success-text"}>
                   Trust {violation.trustScoreImpact > 0 ? "+" : ""}{violation.trustScoreImpact}%
                 </span>
               )}
             </div>
             <Link
               href={`/dashboard/agents/${violation.agentId}`}
-              className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-xs text-brand-text hover:underline flex items-center gap-1"
             >
-              View Agent <ChevronRight className="h-3 w-3" />
+              View agent <ChevronRight className="h-3 w-3" />
             </Link>
           </div>
         </div>
@@ -165,13 +166,13 @@ function ViolationsPageSkeleton() {
   return (
     <div className="space-y-4">
       {[...Array(5)].map((_, i) => (
-        <div key={i} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <div key={i} className="glass p-4">
           <div className="flex items-start gap-4">
-            <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-10 w-10 rounded-lg"></div>
+            <div className="animate-pulse bg-track h-10 w-10 rounded-inset-sm"></div>
             <div className="flex-1 space-y-3">
-              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-48 rounded"></div>
-              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-64 rounded"></div>
-              <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-3 w-32 rounded"></div>
+              <div className="animate-pulse bg-track h-4 w-48 rounded"></div>
+              <div className="animate-pulse bg-track h-4 w-64 rounded"></div>
+              <div className="animate-pulse bg-track h-3 w-32 rounded"></div>
             </div>
           </div>
         </div>
@@ -237,48 +238,48 @@ export default function ViolationsPage() {
           <div className="flex items-center gap-4">
             <Link
               href="/dashboard/security"
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="p-2 rounded-nav hover:bg-nav-active transition-colors"
             >
-              <ChevronLeft className="h-5 w-5 text-gray-500" />
+              <ChevronLeft className="h-5 w-5 text-ink-secondary" />
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Shield className="h-6 w-6 text-green-600" />
-                Capability Violations
+              <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink flex items-center gap-2">
+                <Shield className="h-6 w-6 text-success-text" />
+                Capability violations
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-sm text-ink-secondary mt-1">
                 All blocked and flagged agent actions
               </p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{total}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">total violations</p>
+            <p className="text-2xl font-bold tracking-[-0.02em] text-ink">{total}</p>
+            <p className="text-sm text-ink-secondary">total violations</p>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+        <div className="glass p-4">
           <div className="flex flex-col sm:flex-row gap-4">
             {/* Search */}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
               <input
                 type="text"
                 placeholder="Search by capability or agent..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-stroke rounded-inset bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
               />
             </div>
 
             {/* Status Filter */}
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-400" />
+              <Filter className="h-4 w-4 text-ink-tertiary" />
               <select
                 value={filterBlocked}
                 onChange={(e) => setFilterBlocked(e.target.value as any)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-stroke rounded-inset bg-glass-inset text-sm text-ink focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
               >
                 <option value="all">All ({violations.length})</option>
                 <option value="blocked">Blocked ({blockedCount})</option>
@@ -292,23 +293,23 @@ export default function ViolationsPage() {
         {loading ? (
           <ViolationsPageSkeleton />
         ) : error ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-            <AlertTriangle className="h-12 w-12 mx-auto text-red-500 mb-4" />
-            <p className="text-gray-600 dark:text-gray-400">{error}</p>
+          <div className="glass-alert p-8 text-center">
+            <AlertTriangle className="h-12 w-12 mx-auto text-danger-text mb-4" />
+            <p className="text-ink-body">{error}</p>
             <button
               onClick={fetchViolations}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="mt-4 px-4 py-2 rounded-pill bg-brand text-white shadow-glow hover:bg-brand-hover transition-colors"
             >
               Retry
             </button>
           </div>
         ) : filteredViolations.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
-            <div className="p-4 rounded-full bg-green-100 dark:bg-green-900/30 inline-block mb-4">
-              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+          <div className="glass p-12 text-center">
+            <div className="p-4 rounded-pill bg-success-fill inline-block mb-4">
+              <CheckCircle className="h-8 w-8 text-success-text" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white">No Violations Found</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <h3 className="text-lg font-medium text-ink">No violations found</h3>
+            <p className="text-sm text-ink-secondary mt-1">
               {searchQuery || filterBlocked !== "all"
                 ? "No violations match your filters"
                 : "All agent actions are within authorized capabilities"}
@@ -324,25 +325,25 @@ export default function ViolationsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+          <div className="glass flex items-center justify-between px-4 py-3">
+            <p className="text-sm text-ink-secondary">
               Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} violations
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-nav text-ink-secondary hover:bg-nav-active disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              <span className="text-sm text-gray-700 dark:text-gray-300">
+              <span className="text-sm text-ink-body">
                 Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 rounded-nav text-ink-secondary hover:bg-nav-active disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>

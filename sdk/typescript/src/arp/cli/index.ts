@@ -8,25 +8,10 @@ import { PromptInterceptor } from '../interceptors/prompt';
 import { MCPProtocolInterceptor } from '../interceptors/mcp-protocol';
 import { A2AProtocolInterceptor } from '../interceptors/a2a-protocol';
 import { EventEngine } from '../engine/event-engine';
-import { IntelligenceCoordinator } from '../intelligence/coordinator';
+import { IntelligenceCoordinator, describeL2Status } from '../intelligence/coordinator';
 import { SequenceLogWriter } from '../intelligence/sequence-log-writer';
-import {
-  readAuditRecords,
-  auditLogPath,
-  isOptedOut,
-  signatureTelemetryEnabled,
-  resolveRegistryUrl,
-  writeOptOutMarker,
-  clearOptOutMarker,
-  disclosureText,
-  loadSensorId,
-  currentOrgPseudonym,
-  purgeRemoteSignatures,
-  manualPurgeCurl,
-  enrollSensor,
-  manualEnrollCurl,
-  readEnrollmentRecord,
-} from '../telemetry/signature';
+import { isOptedOut, enrollSensor, manualEnrollCurl } from '../telemetry/signature';
+import { runTelemetrySubcommand, telemetryHelpText } from './telemetry';
 import type { SignatureTelemetryConfig } from '../types';
 
 const args = process.argv.slice(2);
@@ -79,7 +64,16 @@ async function startGuard(): Promise<void> {
 
   console.log(`\n  ARP Guard v${VERSION}`);
   console.log(`  Agent: ${config.agentName}`);
-  console.log(`  Intelligence: ${config.intelligence?.enabled !== false ? '3-Layer (L0+L1+L2)' : 'L0+L1 only'}`);
+  // Ask the coordinator's own predicate rather than restating it here. A previous
+  // version of this line restated it twice and was wrong both times.
+  const l2 = describeL2Status(config.intelligence);
+  console.log(
+    `  Intelligence: ${
+      l2.running
+        ? `3-Layer (L0+L1+L2 via ${l2.adapter})`
+        : `L0+L1 only (L2 not running: ${l2.reason})`
+    }`,
+  );
   console.log(`  Budget: $${config.intelligence?.budgetUsd ?? 5.00}/month`);
   console.log(`  Monitors: ${Object.entries(config.monitors ?? {}).filter(([, v]) => (v as { enabled: boolean }).enabled).map(([k]) => k).join(', ') || 'all'}`);
   console.log();
@@ -204,7 +198,9 @@ async function startProxy(): Promise<void> {
   );
 
   // Resolve the Guard public key for classification annotation. Gated on the
-  // intelligence layer being enabled (default on); the loader already merged
+  // intelligence layer not being switched off EXPLICITLY: an absent `enabled` still
+  // resolves the key, matching the behavioral twin's asymmetry rather than L2's own
+  // gate, which requires `enabled === true`. The loader already merged
   // config + ARP_GUARD_PUBLIC_KEY. When present AND a manifest is configured,
   // the proxy builds the annotator at start() so events carry a cleared
   // classification for DETECTION (the sequence corpus). Absent key → no
@@ -269,107 +265,39 @@ async function telemetryCommand(): Promise<void> {
   const config = loadConfig();
   const tcfg = config.signatureTelemetry;
 
-  switch (sub) {
-    case 'log':
-      await telemetryLog();
-      break;
-    case 'status':
-      await telemetryStatus(tcfg);
-      break;
-    case 'register':
-      await telemetryRegister(tcfg);
-      break;
-    case 'disclosure':
-      console.log('\n' + disclosureText(tcfg) + '\n');
-      break;
-    case 'opt-out': {
-      // Write the local marker FIRST — it is what actually stops transmission. The
-      // remote purge below is best-effort cleanup of already-sent data and must
-      // never block or undo the opt-out (fail OPEN).
-      const p = writeOptOutMarker();
-      console.log('\n  OpenA2A telemetry DISABLED (signature, GTIN and fleet-gradient channels).');
-      console.log(`  Marker: ${p}`);
-
-      if (args.includes('--no-purge')) {
-        console.log('  Skipped deleting already-sent signatures (--no-purge).');
-        console.log('  Delete them later with: arp telemetry purge');
-      } else {
-        await runRemotePurge(tcfg);
-      }
-      console.log('  Re-enable with: arp telemetry opt-in\n');
-      break;
+  // `register` is internal-only (see ./telemetry.ts); every other subcommand is
+  // the shared shipped surface, dispatched through the same code path the
+  // `aim-arp` bin uses so the two cannot drift.
+  if (sub === 'register') {
+    // Same contract as runTelemetrySubcommand: a help request is answered
+    // with help, never by running the command — register builds a signed
+    // enrollment proof and POSTs it, the worst possible answer to a question.
+    const rest = args.slice(2);
+    if (rest.some((a) => a === '--help' || a === '-h')) {
+      printTelemetryHelpWithInternal();
+      return;
     }
-    case 'purge': {
-      // Standalone right-to-delete: request the registry delete already-sent
-      // signatures without changing the opt-out state.
-      await runRemotePurge(tcfg);
-      console.log('');
-      break;
-    }
-    case 'opt-in': {
-      clearOptOutMarker();
-      const stillOff = isOptedOut(tcfg);
-      console.log('\n  Opt-out marker removed.');
-      if (stillOff) {
-        console.log('  NOTE: telemetry is still disabled by an env var or config');
-        console.log('  (OPENA2A_TELEMETRY_OPTOUT / ARP_TELEMETRY_DISABLED, or');
-        console.log('  signatureTelemetry.enabled: false). Clear those to re-enable.\n');
-      } else if (signatureTelemetryEnabled(tcfg)) {
-        console.log('  Structural signature telemetry is ON.\n');
-      } else {
-        // Clearing a refusal is not consent. Say so rather than implying the
-        // channel just started.
-        console.log('  This channel stays OFF until you turn it on:');
-        console.log('    AIM_TELEMETRY=1  (or signatureTelemetry.enabled: true)\n');
-      }
-      break;
-    }
-    case undefined:
-    case '--help':
-    case '-h':
-      console.log(`
-  arp telemetry <subcommand>
-
-    status        Show telemetry state, sensor identity, and send counts
-    register      Enroll this sensor with the registry (pending admin approval)
-    log [N]       Show the last N audited payloads sent (default 20)
-    disclosure    Print the full install-time disclosure
-    opt-out       Disable ALL OpenA2A telemetry (also deletes already-sent
-                  signatures from the registry; use --no-purge to skip that)
-    opt-in        Remove the local opt-out marker (does not turn the channel on)
-    purge         Ask the registry to delete already-sent signatures (right-to-delete)
-
-  Structural signatures are OFF unless you turn them on with AIM_TELEMETRY=1
-  or signatureTelemetry.enabled: true. Only the SHAPE of an anomalous
-  behavior is shared, never payloads. Every byte sent is recorded locally
-  first — review it with: arp telemetry log
-`);
-      break;
-    default:
-      console.error(`  Unknown telemetry subcommand: ${sub}`);
-      console.error('  Run: arp telemetry --help');
+    const unknown = rest.find((a) => a.startsWith('-'));
+    if (unknown !== undefined) {
+      console.error(`  Unknown option for register: ${unknown}`);
+      console.error('  Run: arp-guard telemetry --help');
       process.exit(1);
-  }
-}
-
-// runRemotePurge requests the registry delete this sensor's already-sent
-// signatures (G6 right-to-delete). Fails OPEN: any network/registry failure is
-// reported with a manual retry command but never throws — the caller's opt-out
-// (or standalone purge intent) completes regardless.
-async function runRemotePurge(tcfg?: SignatureTelemetryConfig): Promise<void> {
-  console.log('  Requesting deletion of already-sent signatures from the registry...');
-  const result = await purgeRemoteSignatures(tcfg);
-  if (result.ok) {
-    const n = typeof result.deleted === 'number' ? result.deleted : 'unknown';
-    console.log(`  Registry purge complete (deleted: ${n}).`);
+    }
+    await telemetryRegister(tcfg);
     return;
   }
-  // Fail open: the local opt-out still stands; tell the user how to retry the purge.
-  console.log(`  Could not reach the registry to delete sent signatures (${result.error ?? 'unknown error'}).`);
-  console.log('  Your opt-out still took effect locally; no new data will be sent.');
-  console.log('  Retry the deletion later with: arp telemetry purge');
-  console.log('  Or run it directly:');
-  console.log(`    ${manualPurgeCurl(result)}`);
+  if (sub === undefined || sub === '--help' || sub === '-h') {
+    printTelemetryHelpWithInternal();
+    return;
+  }
+  const code = await runTelemetrySubcommand(sub, args.slice(2), tcfg);
+  if (code !== 0) process.exit(code);
+}
+
+function printTelemetryHelpWithInternal(): void {
+  console.log(telemetryHelpText());
+  console.log('  Internal-only (this CLI, not the shipped bin):');
+  console.log('    register      Enroll this sensor with the registry (pending admin approval)\n');
 }
 
 // telemetryRegister enrolls this sensor with the registry (the producer half of the
@@ -381,7 +309,7 @@ async function telemetryRegister(tcfg?: SignatureTelemetryConfig): Promise<void>
   console.log('\n  Enrolling this sensor with the OpenA2A registry...');
   if (isOptedOut(tcfg)) {
     console.log('  NOTE: telemetry is currently opted out, so no reports will be sent');
-    console.log('  even after approval. Re-enable with: arp telemetry opt-in');
+    console.log('  even after approval. Re-enable with: aim-arp telemetry opt-in');
   }
 
   const result = await enrollSensor(tcfg);
@@ -395,86 +323,16 @@ async function telemetryRegister(tcfg?: SignatureTelemetryConfig): Promise<void>
       console.log('  Next step: an OpenA2A admin must approve this enrollment.');
       console.log('  Until then, reports still send at the unverified weight.');
     }
-    console.log('  Check state anytime with: arp telemetry status\n');
+    console.log('  Check state anytime with: aim-arp telemetry status\n');
     return;
   }
 
   // Fail open: enrollment is best-effort; tell the user how to retry by hand.
   console.log(`  Could not reach the registry to enroll (${result.error ?? 'unknown error'}).`);
   console.log('  No verified status was granted; reports (if enabled) still send unverified.');
-  console.log('  Retry later with: arp telemetry register');
+  console.log('  Retry later by re-running: telemetry register');
   console.log('  Or run it directly:');
   console.log(`    ${manualEnrollCurl(result)}\n`);
-}
-
-async function telemetryLog(): Promise<void> {
-  const n = parseInt(args[2], 10) || 20;
-  const records = await readAuditRecords(n);
-  console.log(`\n  Telemetry audit log: ${auditLogPath()}`);
-  if (records.length === 0) {
-    console.log('  No telemetry has been sent yet (or the log is empty).\n');
-    return;
-  }
-  console.log(`  Last ${records.length} record(s) — every byte that left this machine:\n`);
-  for (const r of records) {
-    const phase = r.phase.toUpperCase().padEnd(9);
-    console.log(`  ${r.ts}  ${phase}  ${r.techniqueId.padEnd(10)} ${r.severity}/${r.outcome}`);
-    if (r.body) console.log(`      payload: ${r.body}`);
-    if (r.detail) console.log(`      detail:  ${r.detail}`);
-  }
-  console.log('\n  This is exactly what was transmitted. No payloads, prompts, args,');
-  console.log('  paths, secrets, or identities are present by design.\n');
-}
-
-async function telemetryStatus(tcfg?: import('../types').SignatureTelemetryConfig): Promise<void> {
-  const enabled = signatureTelemetryEnabled(tcfg);
-  const optedOut = isOptedOut(tcfg);
-  const records = await readAuditRecords(100000);
-  const counts: Record<string, number> = {};
-  for (const r of records) counts[r.phase] = (counts[r.phase] ?? 0) + 1;
-
-  console.log('\n  OpenA2A structural signature telemetry');
-  console.log('  ─────────────────────────────────────');
-  // Off-because-refused and off-because-never-enabled are different states and
-  // must not be collapsed: only one of them has a reason to report.
-  console.log(
-    `  State:        ${enabled ? 'ON' : optedOut ? 'OFF (opted out)' : 'OFF (not turned on)'}`,
-  );
-  if (optedOut) {
-    console.log(`  Opted out by: ${optOutReason(tcfg)}`);
-  } else if (!enabled) {
-    console.log('  Turn on with: AIM_TELEMETRY=1 (or signatureTelemetry.enabled: true)');
-  }
-  console.log(`  Registry:     ${resolveRegistryUrl(tcfg)}`);
-  try {
-    console.log(`  Sensor id:    ${loadSensorId()}`);
-    console.log(`  Org pseudonym:${' '}${currentOrgPseudonym()} (rotates monthly)`);
-  } catch {
-    // identity files may not exist until first send; do not fail status
-  }
-  const enrollment = readEnrollmentRecord();
-  if (enrollment) {
-    const label = enrollment.state === 'verified' ? 'verified' : 'pending admin approval';
-    console.log(`  Enrollment:   ${label}`);
-  } else {
-    console.log('  Enrollment:   not enrolled (run: arp telemetry register)');
-  }
-  console.log(`  Audit log:    ${auditLogPath()}`);
-  console.log('  Sent:         ' + (counts['sent'] ?? 0));
-  console.log('  Buffered:     ' + (counts['buffered'] ?? 0));
-  console.log('  Failed:       ' + (counts['failed'] ?? 0));
-  console.log('  Dropped:      ' + (counts['dropped'] ?? 0));
-  console.log('\n  Review payloads: arp telemetry log');
-  console.log('  Disclosure:      arp telemetry disclosure');
-  console.log(
-    `  ${enabled ? 'Opt out:         arp telemetry opt-out' : optedOut ? 'Opt back in:     arp telemetry opt-in' : 'Turn on:         AIM_TELEMETRY=1'}\n`,
-  );
-}
-
-function optOutReason(tcfg?: import('../types').SignatureTelemetryConfig): string {
-  if (tcfg?.enabled === false) return 'config (signatureTelemetry.enabled: false)';
-  if (process.env.OPENA2A_TELEMETRY_OPTOUT || process.env.ARP_TELEMETRY_DISABLED) return 'environment variable';
-  return 'local opt-out marker (arp telemetry opt-in to clear)';
 }
 
 function showHelp(): void {
@@ -500,7 +358,8 @@ function showHelp(): void {
       L2: LLM-Assisted ($)    Micro-prompts to the agent's LLM
 
     99% of events never reach L2. Default budget: $5/month.
-    Auto-detects Anthropic, OpenAI, or Ollama from environment.
+    L2 is off unless intelligence.enabled is true and intelligence.adapter
+    names a provider. There is no automatic selection from the environment.
 
   AI-LAYER SCANNING (proxy mode)
     Prompt injection, jailbreak, data exfiltration detection

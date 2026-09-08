@@ -352,3 +352,23 @@ func TestMemberMiddleware_StillBlocksAPIKey(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode,
 		"API keys must NOT pass plain MemberMiddleware — key-material routes stay JWT-only")
 }
+
+// The registration guard counts users with domain.RoleAdmin as the approvers; the approval
+// routes sit behind this middleware. The two must admit the same role set, or a deployment
+// with a working approver is refused (or one without is not). Every other role is rejected.
+func TestAdminMiddleware_AdmitsExactlyTheRoleTheRegistrationGuardCounts(t *testing.T) {
+	admitted := map[domain.UserRole]bool{}
+	for _, role := range []domain.UserRole{domain.RoleAdmin, domain.RoleManager, domain.RoleMember, domain.RoleViewer} {
+		app := fiber.New()
+		app.Use(func(c fiber.Ctx) error {
+			c.Locals("role", string(role))
+			return c.Next()
+		})
+		app.Use(AdminMiddleware())
+		app.Get("/", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+		resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+		assert.NoError(t, err)
+		admitted[role] = resp.StatusCode == fiber.StatusOK
+	}
+	assert.Equal(t, map[domain.UserRole]bool{domain.RoleAdmin: true, domain.RoleManager: false, domain.RoleMember: false, domain.RoleViewer: false}, admitted)
+}

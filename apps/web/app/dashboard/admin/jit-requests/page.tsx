@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -147,7 +148,8 @@ export default function PendingVerificationsPage() {
         router.replace("/auth/login");
         return;
       }
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const userRole = (payload.role as any) || "viewer";
       setRole(userRole);
       if (userRole !== "admin") {
@@ -401,7 +403,7 @@ export default function PendingVerificationsPage() {
             <AlertDescription className="text-blue-600 dark:text-blue-400">
               All JIT requests are being <strong>auto-approved</strong> because strict mode is disabled.
               To require manual approval for JIT requests, enable{" "}
-              <a href="/dashboard/security/policies" className="underline font-medium hover:text-blue-800">
+              <a href="/dashboard/admin/security-policies" className="underline font-medium hover:text-blue-800">
                 Strict Mode
               </a>{" "}
               in Global Enforcement settings.
@@ -618,7 +620,7 @@ export default function PendingVerificationsPage() {
                             const metadata = verification.context as Record<string, any> | undefined;
                             const score = metadata?.trustScore ?? verification.trustScore;
                             return typeof score === "number" && Number.isFinite(score)
-                              ? `${(score * 100).toFixed(1)}%`
+                              ? `${Math.round(score * 100)}%`
                               : "—";
                           })()}
                         </p>

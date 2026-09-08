@@ -86,9 +86,25 @@ export function defaultConfig(): ARPConfig {
       heartbeat: { enabled: false },
     },
     rules: [],
+    // L2 (LLM-assisted analysis) is OFF unless the operator turns it on and says
+    // WHERE inference runs. Both omissions below are load-bearing.
+    //
+    // `enabled` is ABSENT, not `false`, and the difference matters in two
+    // directions. Every gate that can start L2 tests `enabled === true`, so absent
+    // is off exactly as firmly as false is — the security property does not depend
+    // on which one is written here. But `intelligence.enabled === false` is also a
+    // documented kill switch for the local behavioral twin (see buildRuntimeTwin in
+    // index.ts), so writing an explicit false here would have switched the twin off
+    // for everyone by default, disabling L1's behavioral signal as a side effect of
+    // an egress fix. Absent keeps "the operator switched intelligence off"
+    // distinguishable from "the operator said nothing".
+    //
+    // `adapter` is ABSENT on purpose too. It used to default to 'agent-proxy',
+    // which resolved a destination from whichever model key happened to be exported
+    // (ANTHROPIC_API_KEY, else OPENAI_API_KEY, else a local Ollama). A security
+    // tool must not pick who receives its observations from ambient environment
+    // state. Choosing a destination is now an explicit act.
     intelligence: {
-      enabled: true,
-      adapter: 'agent-proxy',
       budgetUsd: 5.0,
       maxTokensPerCall: 300,
       maxCallsPerHour: 20,

@@ -154,6 +154,7 @@ func TestIsValidAgentTypeForPublicAPI(t *testing.T) {
 		{"BabyAGI", domain.AgentTypeBabyAGI, true},
 		// Generic
 		{"Custom", domain.AgentTypeCustom, true},
+		{"Demo", domain.AgentTypeDemo, true},
 		{"AI", domain.AgentTypeAI, true},
 		// Invalid
 		{"Invalid", domain.AgentType("invalid"), false},

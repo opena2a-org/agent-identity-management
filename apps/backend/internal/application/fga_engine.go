@@ -70,6 +70,7 @@ type FGAEngine struct {
 	asyncDropped  metric.Int64Counter
 	intentChecks  metric.Int64Counter // Step 5 evaluations that reached the daemon
 	intentSkipped metric.Int64Counter // Authorizes where Step 5 was skipped (LOW)
+	contextStatus metric.Int64Counter // Step 3 context-check evaluations by status
 
 	// Async intent-check worker pool. Owned by the engine, drained by
 	// Shutdown. asyncDone is closed exactly once by Shutdown to signal
@@ -96,14 +97,54 @@ type FGARequest struct {
 
 // FGAResult represents the authorization decision.
 type FGAResult struct {
-	Allowed        bool               `json:"allowed"`
-	Outcome        string             `json:"outcome"`            // ALLOW, DENY, DENY_INTENT, DENY_CONTEXT, DENY_CHAIN, DENY_ATTRIBUTE
-	StepsTriggered []string           `json:"stepsTriggered"`     // which steps evaluated
-	DeniedBy       string             `json:"deniedBy,omitempty"` // which step denied
-	DeniedReason   string             `json:"deniedReason,omitempty"`
-	LatencyMs      int64              `json:"latencyMs"`
-	IntentCheck    *IntentCheckResult `json:"intentCheck,omitempty"`
+	Allowed        bool                `json:"allowed"`
+	Outcome        string              `json:"outcome"`            // ALLOW, DENY, DENY_INTENT, DENY_CONTEXT, DENY_CHAIN, DENY_ATTRIBUTE
+	StepsTriggered []string            `json:"stepsTriggered"`     // which steps evaluated
+	DeniedBy       string              `json:"deniedBy,omitempty"` // which step denied
+	DeniedReason   string              `json:"deniedReason,omitempty"`
+	LatencyMs      int64               `json:"latencyMs"`
+	IntentCheck    *IntentCheckResult  `json:"intentCheck,omitempty"`
+	ContextCheck   *ContextCheckResult `json:"contextCheck,omitempty"`
 }
+
+// ContextCheckResult records how Step 3 (context check) reached its verdict,
+// mirroring IntentCheckResult for Step 5. It is set whenever the policy
+// carries a non-empty context-rules document; empty or `{}` rules skip the
+// evaluation and leave the field nil (AIM-08).
+type ContextCheckResult struct {
+	// Status records why Step 3 decided the way it did:
+	//   - "evaluated": an ASC risk summary was present and the rules applied.
+	//   - "unavailable": no ASC risk summary; the onUnavailable decision applied.
+	//   - "invalid": the rules document was unparseable or carried an unknown
+	//     onUnavailable value. Always fail-closed when the summary is missing.
+	Status string `json:"status"`
+	// OnUnavailable is the EFFECTIVE unavailability decision ("deny" or
+	// "allow") after defaulting and validation, not the raw document value:
+	// an absent, unknown, or unparseable onUnavailable is reported as "deny".
+	OnUnavailable string `json:"onUnavailable"`
+	// Blocked is true iff this step denied the request.
+	Blocked bool `json:"blocked"`
+}
+
+// Step 3 context-check outcome statuses. See ContextCheckResult.Status.
+const (
+	contextStatusEvaluated   = "evaluated"
+	contextStatusUnavailable = "unavailable"
+	contextStatusInvalid     = "invalid"
+)
+
+// Admissible contextRules.onUnavailable values. Anything else — including an
+// absent key and an unparseable document — is fail-closed to deny (AIM-08
+// ruling: an unevaluable rule is not satisfied).
+const (
+	contextOnUnavailableDeny  = "deny"
+	contextOnUnavailableAllow = "allow"
+)
+
+// contextUnavailableReason is the pinned DeniedReason for a deny on the
+// unavailable path (no ASC risk summary and the effective onUnavailable is
+// deny). API consumers key on this exact string.
+const contextUnavailableReason = "ASC summary unavailable"
 
 // IntentCheckResult contains NanoMind daemon intent verification results.
 //
@@ -228,6 +269,18 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	if err != nil {
 		logger.Warn("fga intent_skipped counter init failed", "error", err)
 	}
+	// Step 3 observability (AIM-08). One increment per context-rules
+	// evaluation, attributed by status (evaluated / unavailable / invalid) so
+	// operators can see how often the fail-closed unavailable path fires and
+	// which policies carry invalid documents. Policies with empty rules are
+	// not counted — the step is skipped there, as before.
+	contextStatus, err := meter.Int64Counter(
+		"fga.context_status",
+		metric.WithDescription("FGA Step 3 context-rule evaluations, by outcome status (evaluated / unavailable / invalid)"),
+	)
+	if err != nil {
+		logger.Warn("fga context_status counter init failed", "error", err)
+	}
 
 	e := &FGAEngine{
 		db:             db,
@@ -241,6 +294,7 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 		asyncDropped:   asyncDropped,
 		intentChecks:   intentChecks,
 		intentSkipped:  intentSkipped,
+		contextStatus:  contextStatus,
 		asyncQueue:     make(chan asyncIntentJob, fgaAsyncQueueSize),
 		asyncDone:      make(chan struct{}),
 	}
@@ -544,7 +598,13 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 	ctxCtx, ctxSpan := e.tracer.Start(ctx, "fga.context_check",
 		trace.WithAttributes(attribute.String("fga.step", "context_check")),
 	)
-	denied, reason = e.checkContext(ctxCtx, req, policy)
+	var ctxCheck *ContextCheckResult
+	denied, reason, ctxCheck = e.checkContext(ctxCtx, req, policy)
+	result.ContextCheck = ctxCheck
+	e.recordContextStatus(ctx, ctxCheck)
+	if ctxCheck != nil {
+		ctxSpan.SetAttributes(attribute.String("fga.context_status", ctxCheck.Status))
+	}
 	ctxSpan.SetAttributes(attribute.Bool("fga.allowed", !denied))
 	if denied {
 		ctxSpan.SetAttributes(attribute.String("fga.denied_reason", reason))
@@ -857,9 +917,9 @@ func (e *FGAEngine) checkAttributes(req *FGARequest, policy *FGAPolicy) (denied 
 // Step 3: Context Check (reads ASC risk summary)
 // ============================================================================
 
-func (e *FGAEngine) checkContext(ctx context.Context, req *FGARequest, policy *FGAPolicy) (denied bool, reason string) {
+func (e *FGAEngine) checkContext(ctx context.Context, req *FGARequest, policy *FGAPolicy) (denied bool, reason string, check *ContextCheckResult) {
 	if len(policy.ContextRules) == 0 || string(policy.ContextRules) == "{}" {
-		return false, ""
+		return false, "", nil
 	}
 
 	var rules struct {
@@ -867,36 +927,91 @@ func (e *FGAEngine) checkContext(ctx context.Context, req *FGARequest, policy *F
 		RequireScanClean *bool    `json:"requireScanClean"`
 		MaxAlerts        *int     `json:"maxAlerts"`
 		MinTrustLevel    *int     `json:"minTrustLevel"`
+		OnUnavailable    *string  `json:"onUnavailable"`
 	}
 	if err := json.Unmarshal(policy.ContextRules, &rules); err != nil {
+		// Unparseable rules cannot be satisfied: fail closed (AIM-08).
+		// Previously this warned and allowed, so a malformed policy document
+		// silently disabled the context check.
 		e.logger.Warn("failed to parse context rules", "error", err)
-		return false, ""
+		return true, "context rules unparseable", &ContextCheckResult{
+			Status:        contextStatusInvalid,
+			OnUnavailable: contextOnUnavailableDeny,
+			Blocked:       true,
+		}
+	}
+
+	// Resolve the effective onUnavailable decision. Absent defaults to deny;
+	// an unknown value is fail-closed to deny and surfaced as status
+	// "invalid" so the bad document is observable rather than silently
+	// widening the policy.
+	onUnavailable := contextOnUnavailableDeny
+	invalidValue := false
+	if rules.OnUnavailable != nil {
+		switch *rules.OnUnavailable {
+		case contextOnUnavailableDeny, contextOnUnavailableAllow:
+			onUnavailable = *rules.OnUnavailable
+		default:
+			invalidValue = true
+		}
 	}
 
 	// Fetch ASC risk summary from Registry cache
 	summary := e.fetchASCRiskSummary(ctx, req.AgentID)
 	if summary == nil {
-		// No ASC data = cannot enforce context rules, allow (fail open for now)
-		return false, ""
+		// No ASC data = the rules cannot be evaluated; the decision follows
+		// onUnavailable (deny unless the policy explicitly opted into allow).
+		status := contextStatusUnavailable
+		if invalidValue {
+			status = contextStatusInvalid
+		}
+		check = &ContextCheckResult{Status: status, OnUnavailable: onUnavailable}
+		if onUnavailable == contextOnUnavailableAllow {
+			return false, "", check
+		}
+		check.Blocked = true
+		return true, contextUnavailableReason, check
 	}
 
+	status := contextStatusEvaluated
+	if invalidValue {
+		status = contextStatusInvalid
+	}
+	check = &ContextCheckResult{Status: status, OnUnavailable: onUnavailable}
+
 	if rules.MaxDriftScore != nil && summary.DriftScore > *rules.MaxDriftScore {
-		return true, fmt.Sprintf("Drift score %.2f exceeds maximum %.2f", summary.DriftScore, *rules.MaxDriftScore)
+		check.Blocked = true
+		return true, fmt.Sprintf("Drift score %.2f exceeds maximum %.2f", summary.DriftScore, *rules.MaxDriftScore), check
 	}
 
 	if rules.RequireScanClean != nil && *rules.RequireScanClean && summary.ScanVerdict != "clean" {
-		return true, fmt.Sprintf("Scan verdict is '%s', clean required", summary.ScanVerdict)
+		check.Blocked = true
+		return true, fmt.Sprintf("Scan verdict is '%s', clean required", summary.ScanVerdict), check
 	}
 
 	if rules.MaxAlerts != nil && summary.ActiveAlerts > *rules.MaxAlerts {
-		return true, fmt.Sprintf("Active alerts %d exceeds maximum %d", summary.ActiveAlerts, *rules.MaxAlerts)
+		check.Blocked = true
+		return true, fmt.Sprintf("Active alerts %d exceeds maximum %d", summary.ActiveAlerts, *rules.MaxAlerts), check
 	}
 
 	if rules.MinTrustLevel != nil && summary.ATCTrustLevel < *rules.MinTrustLevel {
-		return true, fmt.Sprintf("Trust level %d below minimum %d", summary.ATCTrustLevel, *rules.MinTrustLevel)
+		check.Blocked = true
+		return true, fmt.Sprintf("Trust level %d below minimum %d", summary.ATCTrustLevel, *rules.MinTrustLevel), check
 	}
 
-	return false, ""
+	return false, "", check
+}
+
+// recordContextStatus emits the fga.context_status counter for one Step 3
+// context-rules evaluation. A nil check (empty rules — the step was skipped)
+// or a nil instrument is a no-op.
+func (e *FGAEngine) recordContextStatus(ctx context.Context, check *ContextCheckResult) {
+	if e.contextStatus == nil || check == nil {
+		return
+	}
+	e.contextStatus.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("fga.context_status", check.Status),
+	))
 }
 
 // ============================================================================

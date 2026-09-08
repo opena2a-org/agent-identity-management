@@ -100,12 +100,14 @@ func TestCheckContext_DriftScore(t *testing.T) {
 	// Can't test with real ASC fetch, but test that empty context rules pass
 	emptyPolicy := &FGAPolicy{ContextRules: json.RawMessage(`{}`)}
 	req := &FGARequest{AgentID: uuid.New()}
-	denied, _ := engine.checkContext(nil, req, emptyPolicy)
+	denied, _, _ := engine.checkContext(nil, req, emptyPolicy)
 	assert.False(t, denied)
 
-	// Non-empty rules with no ASC data = fail open
-	denied, _ = engine.checkContext(nil, req, policy)
-	assert.False(t, denied)
+	// Non-empty rules with no ASC data = fail closed by default (AIM-08:
+	// pre-AIM-08 this path failed open; contextRules.onUnavailable now
+	// decides, with deny as the default).
+	denied, _, _ = engine.checkContext(nil, req, policy)
+	assert.True(t, denied)
 }
 
 func TestCheckChain_EmptyRules(t *testing.T) {
@@ -145,4 +147,3 @@ func TestPqArray_Parse(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, arr, 0)
 }
-

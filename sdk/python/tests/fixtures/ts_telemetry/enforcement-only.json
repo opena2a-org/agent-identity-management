@@ -1,0 +1,56 @@
+{
+  "case": "enforcement-only",
+  "description": "The anchor fact alone: neither inference arrived before the window closed, so the intent and detection keys are absent from the emitted line entirely.",
+  "derivedFrom": "sdk/typescript/src/telemetry/correlated-record.ts",
+  "volatileFields": ["recordId", "createdAt", "triggeredAt"],
+  "input": {
+    "correlationId": "cde_000000003_5566778899aa",
+    "agentId": "agent-4",
+    "joinedBy": "fallback:window",
+    "joinerVersion": "1.0",
+    "enforcement": {
+      "decision": "deny",
+      "outcome": "DENY_CONTEXT",
+      "deniedReason": "policy X",
+      "capability": "fs:write",
+      "resource": "/tmp/x",
+      "occurredAt": "2026-06-07T12:15:00.000Z",
+      "source": "aim-pdp"
+    }
+  },
+  "expectedRecord": {
+    "schemaVersion": "1.0",
+    "correlationId": "cde_000000003_5566778899aa",
+    "agentId": "agent-4",
+    "enforcement": {
+      "observed": true,
+      "decision": "deny",
+      "outcome": "DENY_CONTEXT",
+      "deniedReason": "policy X",
+      "capability": "fs:write",
+      "resource": "/tmp/x",
+      "occurredAt": "2026-06-07T12:15:00.000Z",
+      "source": "aim-pdp"
+    },
+    "assembly": {
+      "joinedBy": "fallback:window",
+      "completeness": "partial-missing-both",
+      "joinerVersion": "1.0"
+    }
+  },
+  "sharedIndicatorContext": {
+    "sensorToken": "sensor-abc",
+    "agentCategory": "backend",
+    "daySinceInstall": 1,
+    "runtimeEnv": "python"
+  },
+  "expectedIndicator": {
+    "schemaVersion": "1.0",
+    "sensorToken": "sensor-abc",
+    "eventType": "deny_action",
+    "enforcementOutcome": "deny",
+    "agentCategory": "backend",
+    "daySinceInstall": 1,
+    "runtimeEnv": "python"
+  }
+}

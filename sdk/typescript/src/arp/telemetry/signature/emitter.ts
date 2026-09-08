@@ -15,6 +15,7 @@
 
 import type { ARPEvent } from '../../types';
 import { redactEvent, type OutcomeClass, type RedactedSignal } from './redaction';
+import { sanitizeTerminalText } from './sanitize';
 import { behavioralHash } from './behavioral-hash';
 import { buildSignedSubmission, SIGNATURE_INGEST_PATH } from './wire';
 import { appendAuditRecord, queuedRecord } from './audit-log';
@@ -191,7 +192,7 @@ export class SignatureEmitter {
       await appendAuditRecord({ ...queuedRecord(built.request, built.body, this.endpoint, new Date().toISOString()), phase: 'sent', detail: `HTTP ${res.status}` });
       return true;
     } catch (err) {
-      await appendAuditRecord({ ...queuedRecord(built.request, built.body, this.endpoint, new Date().toISOString()), phase: 'buffered', detail: errMessage(err) });
+      await appendAuditRecord({ ...queuedRecord(built.request, built.body, this.endpoint, new Date().toISOString()), phase: 'buffered', detail: sanitizeTerminalText(errMessage(err)) });
       return false;
     }
   }

@@ -19,6 +19,18 @@ const (
 // UserStatus represents user account status
 type UserStatus string
 
+// CanHoldSession reports whether the account may keep or mint a session. It is
+// an allow-list — users.status has no CHECK constraint, so an unrecognised
+// value must fail closed — and a soft-deleted user never qualifies. Used by
+// token refresh and SDK token recovery; pending is admitted because login
+// admits it.
+func (u *User) CanHoldSession() bool {
+	if u == nil || u.DeletedAt != nil {
+		return false
+	}
+	return u.Status == UserStatusActive || u.Status == UserStatusPending
+}
+
 const (
 	UserStatusPending     UserStatus = "pending"     // Awaiting admin approval
 	UserStatusActive      UserStatus = "active"      // Can use system
@@ -39,8 +51,8 @@ type User struct {
 	Status                 UserStatus `json:"status"`     // pending, active, suspended, deactivated
 	PasswordHash           *string    `json:"-"`          // Never expose in JSON
 	ForcePasswordChange    bool       `json:"forcePasswordChange"`
-	PasswordResetToken     *string    `json:"-"` // Never expose in JSON
-	PasswordResetExpiresAt *time.Time `json:"-"` // Never expose in JSON
+	PasswordResetToken     *string    `json:"-"`                    // Never expose in JSON
+	PasswordResetExpiresAt *time.Time `json:"-"`                    // Never expose in JSON
 	ApprovedBy             *uuid.UUID `json:"approvedBy,omitempty"` // Admin who approved this user
 	ApprovedAt             *time.Time `json:"approvedAt,omitempty"` // When user was approved
 	LastLoginAt            *time.Time `json:"lastLoginAt"`
@@ -61,4 +73,7 @@ type UserRepository interface {
 	UpdateRole(id uuid.UUID, role UserRole) error
 	Delete(id uuid.UUID) error
 	CountActiveUsers(orgID uuid.UUID, withinMinutes int) (int, error)
+	// CountByRoleAndStatus counts users across every organization with the given role and status
+	// (soft-deleted users excluded); the registration path uses it to learn whether anyone can approve.
+	CountByRoleAndStatus(role UserRole, status UserStatus) (int, error)
 }

@@ -350,11 +350,18 @@ export class AgentRuntimeProtection {
       this.monitors.push(new A2AProtocolInterceptor(this.engine, al.a2a.trustedAgents));
     }
 
-    // The master opt-out (env / marker file / config) disables every channel
-    // THIS module produces, so a customer who opts out is not surprised by a
-    // second one. Resolved once here and applied to both channels below; the
-    // third (fleet gradients) applies it in RuntimeTwin itself, at construction
-    // and again before each send.
+    // The master opt-out (env / marker file / config) disables the three
+    // TELEMETRY channels this module produces — the two applied below plus fleet
+    // gradients, which RuntimeTwin applies itself at construction and again
+    // before each send. Resolved once here.
+    //
+    // It does NOT reach the L2 intelligence coordinator. That is not an
+    // oversight left standing: L2 is governed by its own switch, which is now
+    // off by default and additionally requires an explicitly chosen adapter, so
+    // there is no default-on channel for this opt-out to have to catch. Said
+    // plainly because the previous wording here claimed this opt-out disabled
+    // "every channel THIS module produces", which was false while L2 defaulted
+    // to on — and a false comment is how the next reader repeats the mistake.
     //
     // It does NOT govern src/telemetry/relay.ts, which is the AIM client's
     // causal-denial channel with its own switch, default off. That exclusion is
@@ -525,11 +532,20 @@ export class AgentRuntimeProtection {
  * and the default policy is visible in one place.
  *
  * Default policy:
- *   - When `intelligence.enabled === false`: no twin (L2 disabled implies
- *     the behavioral layer is also unwanted).
+ *   - When `intelligence.enabled === false`: no twin (L2 disabled explicitly
+ *     implies the behavioral layer is also unwanted).
  *   - When `intelligence.runtimeTwin.enabled === false`: no twin.
  *   - Otherwise: construct a twin seeded from `config.agentName`, with
  *     fleet federation opt-in from the config (default off).
+ *
+ * Note the asymmetry with the L2 gates, which require `enabled === true`. Here an
+ * ABSENT `enabled` still builds the twin, and that difference is load-bearing:
+ * `defaultConfig()` deliberately leaves `intelligence.enabled` absent rather than
+ * setting it to false, so that "the operator explicitly switched intelligence off"
+ * stays distinguishable from "the operator said nothing". L2 treats both as off.
+ * The twin, which is local and feeds L1's risk signal, only turns off for the
+ * explicit one — otherwise flipping the L2 default would have silently disabled
+ * the behavioral signal for everyone as a side effect of an egress fix.
  */
 function buildRuntimeTwin(config: ARPConfig): RuntimeTwin | null {
   const ic = config.intelligence;

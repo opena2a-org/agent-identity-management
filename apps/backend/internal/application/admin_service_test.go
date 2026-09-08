@@ -126,6 +126,10 @@ func (m *MockUserRepoForAdmin) CountActiveUsers(orgID uuid.UUID, withinMinutes i
 	return count, nil
 }
 
+func (m *MockUserRepoForAdmin) CountByRoleAndStatus(role domain.UserRole, status domain.UserStatus) (int, error) {
+	return 0, nil
+}
+
 // MockOrgRepository implements OrganizationRepository for admin service tests
 type MockOrgRepository struct {
 	orgs       map[uuid.UUID]*domain.Organization

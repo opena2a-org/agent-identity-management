@@ -28,6 +28,7 @@
 import { loadSensorPrivateKey, loadSensorId, publicKeyHex, signCanonicalHex } from './sensor-identity';
 import { generateNonce } from './wire';
 import { resolveRegistryUrl, type SignatureTelemetryConfig } from './config';
+import { sanitizeTerminalText } from './sanitize';
 
 /** The purge canonical schema prefix (distinct from the ingest schema). */
 export const PURGE_SCHEMA_VERSION = 'telemetry-purge-v1';
@@ -134,13 +135,20 @@ export async function purgeRemoteSignatures(
     }
     return { ok: true, status: res.status, deleted, url, body };
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    // Sanitised where it enters the result, not at the print site (#384 class):
+    // fetch error messages can embed response/URL text.
+    const error = sanitizeTerminalText(err instanceof Error ? err.message : String(err));
     return { ok: false, error, url, body };
   }
+}
+
+/** Escape a value for safe inclusion inside a single-quoted shell string. */
+function shellSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /** A copy-pasteable curl the user can run to retry a failed purge by hand. */
 export function manualPurgeCurl(result: PurgeResult): string {
   const json = JSON.stringify(result.body);
-  return `curl -X DELETE '${result.url}' -H 'Content-Type: application/json' -d '${json}'`;
+  return `curl -X DELETE ${shellSingleQuote(result.url)} -H 'Content-Type: application/json' -d ${shellSingleQuote(json)}`;
 }

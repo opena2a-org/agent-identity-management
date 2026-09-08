@@ -1,6 +1,10 @@
 "use client";
 
 import { toast } from "sonner";
+import { normalizeViolation, type SecurityViolation } from "./violations";
+
+/** An Error thrown for a non-2xx response, carrying the status and the backend's code when it sent one. */
+export type ApiRequestError = Error & { status?: number; code?: string };
 
 const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
@@ -682,10 +686,19 @@ class APIClient {
         .json()
         .catch(() => ({ message: "Request failed" }));
 
-      // Backend can return either 'error' or 'message' field
+      // Backend can return either 'error' or 'message'. Some layers (the
+      // panic handler) set `error` to a BOOLEAN with the text in `message`;
+      // only ever surface strings, never a stringified true.
       const errorMessage =
-        error?.error || error?.message || `HTTP ${response.status}`;
-      throw new Error(errorMessage);
+        (typeof error?.error === "string" && error.error) ||
+        (typeof error?.message === "string" && error.message) ||
+        `HTTP ${response.status}`;
+      const requestError = new Error(errorMessage) as ApiRequestError;
+      requestError.status = response.status;
+      if (typeof error?.code === "string") {
+        requestError.code = error.code;
+      }
+      throw requestError;
     }
 
     // Handle 204 No Content responses (e.g., DELETE operations)
@@ -790,11 +803,13 @@ class APIClient {
     success: boolean;
     message: string;
     requestId: string;
+    registrationRequest?: { id: string; status: string };
   }> {
     const response = await this.request<{
       success: boolean;
       message: string;
       requestId: string;
+    registrationRequest?: { id: string; status: string };
     }>("/api/v1/public/register", {
       method: "POST",
       body: JSON.stringify(data),
@@ -2297,26 +2312,21 @@ class APIClient {
     limit: number = 50,
     offset: number = 0
   ): Promise<{
-    violations: Array<{
-      id: string;
-      agentId: string;
-      attemptedCapability: string;
-      registeredCapabilities: string[];
-      severity: string;
-      trustScoreImpact: number;
-      isBlocked: boolean;
-      sourceIp: string;
-      requestMetadata: Record<string, any>;
-      createdAt: string;
-      agentName?: string;
-    }>;
+    violations: SecurityViolation[];
     total: number;
     limit: number;
     offset: number;
   }> {
-    return this.request(
+    // The backend serializes violations with snake_case tags; consumers read camelCase.
+    const raw = await this.request<{ violations?: Array<Record<string, unknown>>; total?: number; limit?: number; offset?: number }>(
       `/api/v1/security/violations?limit=${limit}&offset=${offset}`
     );
+    return {
+      violations: (raw?.violations ?? []).map(normalizeViolation),
+      total: raw?.total ?? 0,
+      limit: raw?.limit ?? limit,
+      offset: raw?.offset ?? offset,
+    };
   }
 
   async getAgentKeyVault(agentId: string): Promise<any> {

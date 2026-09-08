@@ -2,7 +2,9 @@ package domain
 
 import (
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -201,4 +203,39 @@ func TestIsolationPosture_IsValid(t *testing.T) {
 	assert.True(t, ProcessSELinux.IsValid())
 	assert.False(t, SandboxType("bogus").IsValid())
 	assert.False(t, NetworkIsolation("").IsValid())
+}
+
+// TestUnverifiedIsolationCeiling pins today's ceiling and proves it is DERIVED
+// from the commodity-container tier, not a stranded constant: a retune of the
+// posture-enum weights must move both sides of this equality together.
+func TestUnverifiedIsolationCeiling(t *testing.T) {
+	got := UnverifiedIsolationCeiling()
+	assert.Equal(t, ScoreIsolation(SandboxDocker, NetworkNamespace, FilesystemReadOnly, ProcessSeccomp), got,
+		"the ceiling must equal the docker/namespace/readonly/seccomp tier it is derived from")
+	assert.InDelta(t, 0.65, got, 0.001, "today's ceiling is 0.65; a change here is a conscious retune")
+	// A maximal posture must not out-score the ceiling once it is clipped to it,
+	// and the ceiling itself must sit strictly below a fully-hardened score.
+	assert.Less(t, got, ScoreIsolation(SandboxKataVM, NetworkAirgap, FilesystemReadOnly, ProcessSeccomp),
+		"an unverified claim must earn strictly less than a fully-hardened posture")
+}
+
+// TestIsolationAttestation_IsExpiredAt exercises both sides of the 90-day TTL
+// boundary plus the exact edge, uniform for verified and unverified rows.
+func TestIsolationAttestation_IsExpiredAt(t *testing.T) {
+	now := time.Now()
+	mk := func(age time.Duration, verified bool) *IsolationAttestation {
+		return &IsolationAttestation{
+			ID:         uuid.New(),
+			AgentID:    uuid.New(),
+			ReportedAt: now.Add(-age),
+			Verified:   verified,
+		}
+	}
+	assert.False(t, mk(89*24*time.Hour, false).IsExpiredAt(now), "89 days is inside the TTL")
+	assert.False(t, mk(IsolationAttestationTTL, false).IsExpiredAt(now), "exactly at the TTL is not yet past it")
+	assert.True(t, mk(IsolationAttestationTTL+time.Second, false).IsExpiredAt(now), "one second past the TTL is expired")
+	assert.True(t, mk(91*24*time.Hour, false).IsExpiredAt(now), "91 days is expired")
+	// Expiry does not depend on verification.
+	assert.True(t, mk(91*24*time.Hour, true).IsExpiredAt(now), "a verified row expires on the same clock")
+	assert.False(t, mk(1*time.Hour, true).IsExpiredAt(now), "a fresh verified row is not expired")
 }

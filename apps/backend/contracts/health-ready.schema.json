@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opena2a.org/contracts/health-ready.schema.json",
+  "title": "GET /health/ready response body",
+  "description": "One readiness body contract for every OpenA2A HTTP service, served on 200 and 503 alike with Cache-Control: no-store.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ready",
+    "service",
+    "commit",
+    "version",
+    "checkedAt",
+    "degraded",
+    "dependencies"
+  ],
+  "properties": {
+    "ready": {
+      "type": "boolean"
+    },
+    "service": {
+      "enum": [
+        "opena2a-registry",
+        "agent-identity-management",
+        "nanomind-daemon"
+      ]
+    },
+    "commit": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "version": {
+      "type": ["string", "null"]
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "required"],
+        "properties": {
+          "status": {
+            "enum": ["ok", "unavailable", "notConfigured"]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "latencyMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

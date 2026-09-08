@@ -289,29 +289,18 @@ func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return nil, fmt.Errorf("invalid token")
 }
 
-// RefreshAccessToken generates a new access token from a refresh token
-func (s *JWTService) RefreshAccessToken(refreshToken string) (string, error) {
-	claims, err := s.ValidateToken(refreshToken)
-	if err != nil {
-		return "", err
-	}
-
-	// An access token must not be usable to mint another access token. (Empty
-	// TokenType = legacy token issued before this claim; allowed during grace.)
-	if claims.TokenType == TokenTypeAccess {
-		return "", fmt.Errorf("access token cannot be used to refresh")
-	}
-
-	// Generate new access token
-	return s.GenerateAccessToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
-}
-
 // RefreshTokenPair generates new access AND refresh tokens (token rotation)
 // This implements token rotation for enhanced security:
 // - Old refresh token is invalidated after use
 // - New refresh token issued with 90-day expiry
 // Returns: newAccessToken, newRefreshToken, error
-func (s *JWTService) RefreshTokenPair(refreshToken string) (string, string, error) {
+//
+// A refresh token is an identity handle, not an authorization grant: the
+// caller supplies the principal's CURRENT email and role (read from the user
+// record), and nothing here reads the refresh token's own Email or Role
+// claims. Login-issued refresh tokens carry none; an embedded role would
+// outlive a demotion for the refresh lifetime.
+func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string, string, error) {
 	claims, err := s.ValidateToken(refreshToken)
 	if err != nil {
 		return "", "", err
@@ -328,15 +317,15 @@ func (s *JWTService) RefreshTokenPair(refreshToken string) (string, string, erro
 
 	var newAccessToken, newRefreshToken string
 
-	// Generate new access token
-	newAccessToken, err = s.GenerateAccessToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
+	// Generate new access token from the supplied principal
+	newAccessToken, err = s.GenerateAccessToken(claims.UserID, claims.OrganizationID, email, role)
 	if err != nil {
 		return "", "", err
 	}
 
 	// Generate new refresh token (with same type as original)
 	if isSDKToken {
-		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, claims.Email, claims.Role)
+		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, email, role)
 	} else {
 		newRefreshToken, err = s.GenerateRefreshToken(claims.UserID, claims.OrganizationID)
 	}

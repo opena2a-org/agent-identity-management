@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     'arp/index': 'src/arp/index.ts',
+    'arp/cli/aim-arp': 'src/arp/cli/aim-arp.ts',
     'integrations/express': 'src/integrations/express.ts',
     'integrations/fastify': 'src/integrations/fastify.ts',
   },

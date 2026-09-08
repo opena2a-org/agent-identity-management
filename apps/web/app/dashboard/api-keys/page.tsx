@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useDebounce } from "@/hooks/use-debounce";
 import {
   Key,
@@ -27,26 +28,26 @@ interface APIKeyWithAgent extends APIKey {
 
 function StatCard({ stat }: { stat: any }) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+    <div className="glass p-6">
       <div className="flex items-center">
         <div className="flex-shrink-0">
-          <stat.icon className="h-6 w-6 text-gray-400" />
+          <stat.icon className="h-6 w-6 text-ink-tertiary" />
         </div>
         <div className="ml-5 w-0 flex-1">
           <dl>
-            <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+            <dt className="text-sm font-medium text-ink-secondary truncate">
               {stat.name}
             </dt>
             <dd className="flex items-baseline">
-              <div className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+              <div className="text-2xl font-semibold text-ink">
                 {stat.value}
               </div>
               {stat.change && (
                 <div
                   className={`ml-2 flex items-baseline text-sm font-semibold ${
                     stat.changeType === "positive"
-                      ? "text-green-600"
-                      : "text-red-600"
+                      ? "text-success-text"
+                      : "text-danger-text"
                   }`}
                 >
                   {stat.change}
@@ -66,10 +67,10 @@ function APIKeysPageSkeleton() {
       {/* Header Skeleton */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="h-8 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-4 w-64 bg-gray-200 dark:bg-gray-700 rounded mt-2"></div>
+          <div className="h-8 w-32 bg-track rounded"></div>
+          <div className="h-4 w-64 bg-track rounded mt-2"></div>
         </div>
-        <div className="h-10 w-36 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+        <div className="h-10 w-36 bg-track rounded-pill"></div>
       </div>
 
       {/* Stats Cards Skeleton */}
@@ -77,13 +78,13 @@ function APIKeysPageSkeleton() {
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+            className="glass p-6"
           >
             <div className="flex items-center">
-              <div className="h-6 w-6 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              <div className="h-6 w-6 bg-track rounded"></div>
               <div className="ml-5 flex-1">
-                <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
-                <div className="h-8 w-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="h-4 w-20 bg-track rounded mb-2"></div>
+                <div className="h-8 w-12 bg-track rounded"></div>
               </div>
             </div>
           </div>
@@ -91,32 +92,32 @@ function APIKeysPageSkeleton() {
       </div>
 
       {/* Filters Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="glass p-4">
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
-          <div className="h-10 w-40 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+          <div className="flex-1 h-10 bg-track rounded-inset"></div>
+          <div className="h-10 w-40 bg-track rounded-lg"></div>
         </div>
       </div>
 
       {/* Table Skeleton */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="glass overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead className="bg-gray-50 dark:bg-gray-800">
+          <table className="min-w-full divide-y divide-divider">
+            <thead className="bg-glass-inset-gray">
               <tr>
                 {[1, 2, 3, 4, 5, 6, 7].map((i) => (
                   <th key={i} className="px-6 py-3">
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                    <div className="h-4 bg-track rounded w-20"></div>
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-divider">
               {[1, 2, 3, 4, 5].map((i) => (
                 <tr key={i}>
                   {[1, 2, 3, 4, 5, 6, 7].map((j) => (
                     <td key={j} className="px-6 py-4">
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+                      <div className="h-4 bg-track rounded w-24"></div>
                     </td>
                   ))}
                 </tr>
@@ -155,7 +156,8 @@ export default function APIKeysPage() {
     const token = api.getToken();
     if (token) {
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
+        const payload = decodeJwtPayload(token);
+        if (!payload) throw new Error("token payload is not decodable");
         setUserRole((payload.role as UserRole) || "viewer");
       } catch (e) {
         console.error("Failed to decode JWT token:", e);
@@ -225,12 +227,12 @@ export default function APIKeysPage() {
 
   const statCards = [
     {
-      name: "Total Keys",
+      name: "Total keys",
       value: stats.total.toLocaleString(),
       icon: Key,
     },
     {
-      name: "Active Keys",
+      name: "Active keys",
       value: stats.active.toLocaleString(),
       changeType: "positive",
       icon: Check,
@@ -241,7 +243,7 @@ export default function APIKeysPage() {
       icon: Clock,
     },
     {
-      name: "Never Used",
+      name: "Never used",
       value: stats.neverUsed.toLocaleString(),
       icon: AlertCircle,
     },
@@ -392,20 +394,20 @@ export default function APIKeysPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              API Keys
+            <h1 className="text-headline">
+              API keys
             </h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-ink-secondary">
               Manage API keys for agent authentication and authorization.
             </p>
           </div>
           {permissions.canCreateAPIKey && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover transition-colors"
             >
               <Plus className="h-4 w-4" />
-              Create API Key
+              Create API key
             </button>
           )}
         </div>
@@ -418,87 +420,87 @@ export default function APIKeysPage() {
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+        <div className="glass p-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
               <input
                 type="text"
                 placeholder="Search by name, prefix, or agent..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                className="w-full pl-10 pr-4 py-2 rounded-inset border border-stroke bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="pl-10 pr-8 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                className="pl-10 pr-8 py-2 rounded-inset border border-stroke bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="all">All Status</option>
+                <option value="all">All statuses</option>
                 <option value="active">Active</option>
                 <option value="disabled">Disabled</option>
                 <option value="expired">Expired</option>
-                <option value="never-used">Never Used</option>
+                <option value="never-used">Never used</option>
               </select>
             </div>
           </div>
         </div>
 
         {/* API Keys Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="glass overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800">
+            <table className="min-w-full divide-y divide-divider">
+              <thead className="bg-glass-inset-gray">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-overline">
                     Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Key Prefix
+                  <th className="px-6 py-3 text-left text-overline">
+                    Key prefix
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-overline">
                     Agent
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Last Used
+                  <th className="px-6 py-3 text-left text-overline">
+                    Last used
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-overline">
                     Expires
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-overline">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-overline">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-divider">
                 {filteredKeys?.map((key) => (
                   <tr
                     key={key?.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    className="hover:bg-glass-inset-gray transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <div className="text-sm font-medium text-ink">
                         {key?.name}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <code className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                        <code className="text-sm text-ink-code font-mono">
                           {key?.prefix}
                         </code>
                         <button
                           onClick={() => copyToClipboard(key?.prefix, key?.id)}
-                          className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                          className="p-1 text-ink-tertiary hover:text-brand-text transition-colors"
                           title="Copy prefix"
                         >
                           {copiedId === key?.id ? (
-                            <Check className="h-4 w-4 text-green-600" />
+                            <Check className="h-4 w-4 text-success-text" />
                           ) : (
                             <Copy className="h-4 w-4" />
                           )}
@@ -506,30 +508,30 @@ export default function APIKeysPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-gray-100">
+                      <div className="text-sm text-ink">
                         {key?.agentName || "Unknown"}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                      <div className="text-sm text-ink-secondary">
                         {key?.lastUsedAt && formatDate(key.lastUsedAt)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div
-                        className={`text-sm ${key?.expiresAt && isExpired(key.expiresAt) ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}
+                        className={`text-sm ${key?.expiresAt && isExpired(key.expiresAt) ? "text-danger-text" : "text-ink-secondary"}`}
                       >
                         {key?.expiresAt && formatDate(key.expiresAt)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-semibold ${
                           !key?.isActive
-                            ? "bg-gray-100 dark:bg-gray-900/30 text-gray-800 dark:text-gray-300"
+                            ? "border border-glass-inset-border bg-glass-inset-gray text-ink-secondary"
                             : key?.expiresAt && isExpired(key.expiresAt)
-                              ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300"
-                              : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                              ? "border border-danger-border bg-danger-fill text-danger-text"
+                              : "border border-success-border bg-success-fill text-success-text"
                         }`}
                       >
                         {!key?.isActive
@@ -545,7 +547,7 @@ export default function APIKeysPage() {
                         (!key?.expiresAt || !isExpired(key.expiresAt)) ? (
                           <button
                             onClick={() => handleDisableKey(key)}
-                            className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                            className="p-1 text-ink-tertiary hover:text-warning-text transition-colors"
                             title="Disable key"
                           >
                             <Ban className="h-4 w-4" />
@@ -553,7 +555,7 @@ export default function APIKeysPage() {
                         ) : !key?.isActive && permissions.canDeleteAPIKey ? (
                           <button
                             onClick={() => handleDeleteKey(key)}
-                            className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            className="p-1 text-ink-tertiary hover:text-danger-text transition-colors"
                             title="Delete key permanently"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -568,11 +570,11 @@ export default function APIKeysPage() {
           </div>
           {filteredKeys.length === 0 && (
             <div className="text-center py-12">
-              <Key className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+              <Key className="mx-auto h-12 w-12 text-ink-tertiary" />
+              <h3 className="mt-2 text-sm font-medium text-ink">
                 No API keys found
               </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-sm text-ink-secondary">
                 {searchTerm || statusFilter !== "all"
                   ? "Try adjusting your search or filters."
                   : "Get started by creating your first API key."}
@@ -591,7 +593,7 @@ export default function APIKeysPage() {
 
         <ConfirmDialog
           isOpen={showDisableConfirm}
-          title="Disable API Key"
+          title="Disable API key"
           message={`Are you sure you want to disable "${selectedKey?.name}"? The key will be marked as inactive and cannot be used for authentication. You can delete it permanently later.`}
           confirmText="Disable"
           cancelText="Cancel"
@@ -608,7 +610,7 @@ export default function APIKeysPage() {
 
         <ConfirmDialog
           isOpen={showDeleteConfirm}
-          title="Delete API Key"
+          title="Delete API key"
           message={`Are you sure you want to permanently delete "${selectedKey?.name}"? This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"

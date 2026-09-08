@@ -17,7 +17,7 @@ export function formatDate(date: string | Date): string {
 }
 
 export function formatTrustScore(score: number): string {
-  return (score * 100).toFixed(1) + '%'
+  return Math.round(score * 100) + '%'
 }
 
 export function getTrustScoreColor(score: number): string {

@@ -2,15 +2,9 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Define role-based route protection
-const ROUTE_PERMISSIONS: Record<string, string[]> = {
-  '/dashboard/admin': ['admin'],
-  '/dashboard/admin/users': ['admin'],
-  '/dashboard/admin/alerts': ['admin', 'manager'],
-  '/dashboard/admin/audit': ['admin', 'manager'],
-  '/dashboard/admin/security-policies': ['admin'],
-  '/dashboard/admin/capability-requests': ['admin'],
-  '/dashboard/security': ['admin', 'manager', 'member'],
-};
+import { ROUTE_PERMISSIONS } from './lib/route-permissions';
+import { decodeJwtPayload } from './lib/jwt-payload';
+import type { UserRole } from './lib/permissions';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -41,17 +35,18 @@ export function middleware(request: NextRequest) {
   }
 
   try {
-    // Decode JWT to get role (basic check, real validation happens server-side)
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const userRole = payload?.role;
+    // Decode JWT to get role (basic check, real validation happens server-side).
+    const payload = decodeJwtPayload(token);
+    if (!payload) throw new Error('token payload is not decodable');
+    const userRole = payload.role;
 
     // Normalize "pending" role to "viewer"
-    const normalizedRole = userRole === 'pending' ? 'viewer' : userRole;
+    const normalizedRole = (userRole === 'pending' ? 'viewer' : userRole) as UserRole | undefined;
 
     // Check if current route requires specific role
     for (const [route, allowedRoles] of Object.entries(ROUTE_PERMISSIONS)) {
       if (pathname.startsWith(route)) {
-        if (!allowedRoles.includes(normalizedRole)) {
+        if (!normalizedRole || !allowedRoles.includes(normalizedRole)) {
           // User doesn't have required role, redirect to forbidden page
           return NextResponse.redirect(new URL('/dashboard/forbidden', request.url));
         }

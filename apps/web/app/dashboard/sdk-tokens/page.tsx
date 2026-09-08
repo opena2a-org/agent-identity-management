@@ -129,8 +129,8 @@ export default function SDKTokensPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">SDK Tokens</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <h1 className="text-2xl font-bold text-ink">SDK tokens</h1>
+          <p className="text-sm text-ink-secondary mt-1">
             Manage your SDK authentication tokens and monitor their usage
           </p>
         </div>
@@ -139,7 +139,7 @@ export default function SDKTokensPage() {
             variant="outline"
             onClick={() => setIncludeRevoked(!includeRevoked)}
           >
-            {includeRevoked ? "Hide Revoked" : "Show Revoked"}
+            {includeRevoked ? "Hide revoked" : "Show revoked"}
           </Button>
           {activeTokens.length > 0 && (
             <Button
@@ -147,7 +147,7 @@ export default function SDKTokensPage() {
               onClick={() => setShowRevokeAllDialog(true)}
             >
               <Trash2 className="w-4 h-4 mr-2" />
-              Revoke All
+              Revoke all
             </Button>
           )}
         </div>
@@ -165,38 +165,38 @@ export default function SDKTokensPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Active Tokens</CardTitle>
-            <Shield className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium text-ink">Active tokens</CardTitle>
+            <Shield className="h-4 w-4 text-success-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{activeTokens.length}</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Currently valid</p>
+            <div className="text-2xl font-bold text-ink">{activeTokens.length}</div>
+            <p className="text-xs text-ink-secondary">Currently valid</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">Total Usage</CardTitle>
-            <Key className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium text-ink">Total usage</CardTitle>
+            <Key className="h-4 w-4 text-brand-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            <div className="text-2xl font-bold text-ink">
               {tokens.reduce((sum, t) => sum + t.usageCount, 0)}
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">API requests</p>
+            <p className="text-xs text-ink-secondary">API requests</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-900 dark:text-gray-100">
-              Revoked Tokens
+            <CardTitle className="text-sm font-medium text-ink">
+              Revoked tokens
             </CardTitle>
-            <Trash2 className="h-4 w-4 text-red-500" />
+            <Trash2 className="h-4 w-4 text-danger-text" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{revokedTokens.length}</div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">No longer valid</p>
+            <div className="text-2xl font-bold text-ink">{revokedTokens.length}</div>
+            <p className="text-xs text-ink-secondary">No longer valid</p>
           </CardContent>
         </Card>
       </div>
@@ -205,9 +205,9 @@ export default function SDKTokensPage() {
       {tokens.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Key className="h-12 w-12 text-gray-400 mb-4" />
-            <p className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No SDK tokens found</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-md mb-4">
+            <Key className="h-12 w-12 text-ink-tertiary mb-4" />
+            <p className="text-lg font-medium text-ink mb-2">No SDK tokens found</p>
+            <p className="text-sm text-ink-secondary text-center max-w-md mb-4">
               Download the SDK to automatically generate an authentication token
             </p>
             <Button onClick={() => (window.location.href = "/dashboard/sdk")}>
@@ -229,12 +229,12 @@ export default function SDKTokensPage() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <CardTitle className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                          {token.deviceName || "Unknown Device"}
+                        <CardTitle className="text-lg font-medium text-ink">
+                          {token.deviceName || "Unknown device"}
                         </CardTitle>
                         <Badge variant={status.color}>{status.label}</Badge>
                       </div>
-                      <CardDescription className="font-mono text-xs text-gray-500 dark:text-gray-400">
+                      <CardDescription className="font-mono text-xs text-ink-secondary">
                         Token ID: {token.tokenId}
                       </CardDescription>
                     </div>
@@ -257,10 +257,10 @@ export default function SDKTokensPage() {
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                     {/* IP Address */}
                     <div className="flex items-start gap-2">
-                      <MapPin className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                      <MapPin className="w-4 h-4 mt-0.5 text-ink-tertiary" />
                       <div>
-                        <p className="text-sm font-medium">IP Address</p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm font-medium text-ink">IP address</p>
+                        <p className="text-sm text-ink-body">
                           {token.lastIpAddress || token.ipAddress || "Unknown"}
                         </p>
                       </div>
@@ -268,11 +268,11 @@ export default function SDKTokensPage() {
 
                     {/* Device */}
                     <div className="flex items-start gap-2">
-                      <Monitor className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                      <Monitor className="w-4 h-4 mt-0.5 text-ink-tertiary" />
                       <div>
-                        <p className="text-sm font-medium">User Agent</p>
+                        <p className="text-sm font-medium text-ink">User agent</p>
                         <p
-                          className="text-sm text-muted-foreground truncate max-w-[200px]"
+                          className="text-sm text-ink-body truncate max-w-[200px]"
                           title={token.userAgent}
                         >
                           {token.userAgent
@@ -284,10 +284,10 @@ export default function SDKTokensPage() {
 
                     {/* Last Used */}
                     <div className="flex items-start gap-2">
-                      <Clock className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                      <Clock className="w-4 h-4 mt-0.5 text-ink-tertiary" />
                       <div>
-                        <p className="text-sm font-medium">Last Used</p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm font-medium text-ink">Last used</p>
+                        <p className="text-sm text-ink-body">
                           {token.lastUsedAt
                             ? formatDistanceToNow(new Date(token.lastUsedAt), {
                                 addSuffix: true,
@@ -299,10 +299,10 @@ export default function SDKTokensPage() {
 
                     {/* Usage Count */}
                     <div className="flex items-start gap-2">
-                      <Key className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                      <Key className="w-4 h-4 mt-0.5 text-ink-tertiary" />
                       <div>
-                        <p className="text-sm font-medium">Usage Count</p>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm font-medium text-ink">Usage count</p>
+                        <p className="text-sm text-ink-body">
                           {token.usageCount.toLocaleString()} requests
                         </p>
                       </div>
@@ -310,8 +310,8 @@ export default function SDKTokensPage() {
                   </div>
 
                   {/* Additional Info Row */}
-                  <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-6 text-muted-foreground">
+                  <div className="mt-4 pt-4 border-t border-divider flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-6 text-ink-secondary">
                       <span>
                         Created{" "}
                         {formatDistanceToNow(new Date(token.createdAt), {
@@ -326,7 +326,7 @@ export default function SDKTokensPage() {
                       </span>
                     </div>
                     {token.revokedAt && token.revokeReason && (
-                      <div className="text-red-600 text-sm">
+                      <div className="text-danger-text text-sm">
                         Revoked: {token.revokeReason}
                       </div>
                     )}
@@ -342,7 +342,7 @@ export default function SDKTokensPage() {
       <Dialog open={showRevokeDialog} onOpenChange={setShowRevokeDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Revoke SDK Token</DialogTitle>
+            <DialogTitle>Revoke SDK token</DialogTitle>
             <DialogDescription>
               This will immediately invalidate the token. Any applications using
               this token will lose access.
@@ -372,7 +372,7 @@ export default function SDKTokensPage() {
               onClick={handleRevokeToken}
               disabled={!revokeReason.trim() || revoking}
             >
-              {revoking ? "Revoking..." : "Revoke Token"}
+              {revoking ? "Revoking..." : "Revoke token"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -382,7 +382,7 @@ export default function SDKTokensPage() {
       <Dialog open={showRevokeAllDialog} onOpenChange={setShowRevokeAllDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Revoke All SDK Tokens</DialogTitle>
+            <DialogTitle>Revoke all SDK tokens</DialogTitle>
             <DialogDescription>
               This will immediately invalidate all {activeTokens.length} active
               tokens. This action cannot be undone.
@@ -421,7 +421,7 @@ export default function SDKTokensPage() {
             >
               {revoking
                 ? "Revoking..."
-                : `Revoke All ${activeTokens.length} Tokens`}
+                : `Revoke all ${activeTokens.length} tokens`}
             </Button>
           </DialogFooter>
         </DialogContent>

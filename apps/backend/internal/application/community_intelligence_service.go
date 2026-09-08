@@ -226,9 +226,18 @@ func (s *CommunityIntelligenceService) GetCommunityBenchmarks(ctx context.Contex
 
 // buildTrustDistribution computes anonymized trust factor stats for an org
 func (s *CommunityIntelligenceService) buildTrustDistribution(ctx context.Context, orgID uuid.UUID) (*domain.TrustFactorDistribution, error) {
-	agents, err := s.agentRepo.GetByOrganization(orgID)
+	allAgents, err := s.agentRepo.GetByOrganization(orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agents: %w", err)
+	}
+
+	// Demo agents (`aim-sdk demo`) carry synthetic activity; their scores must
+	// not enter the shared cross-org distribution.
+	agents := make([]*domain.Agent, 0, len(allAgents))
+	for _, agent := range allAgents {
+		if agent.AgentType != domain.AgentTypeDemo {
+			agents = append(agents, agent)
+		}
 	}
 
 	if len(agents) == 0 {

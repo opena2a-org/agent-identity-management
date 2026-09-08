@@ -318,7 +318,7 @@ export function ConsensusProgress({
               </div>
               <div className="flex items-center gap-2">
                 <span className={`font-bold ${confidenceMet ? 'text-green-600' : 'text-orange-600'}`}>
-                  {avgConfidence.toFixed(1)}% / {requiredScore}%
+                  {Math.round(avgConfidence)}% / {requiredScore}%
                 </span>
                 {confidenceMet && <CheckCircle className="h-4 w-4 text-green-600" />}
               </div>

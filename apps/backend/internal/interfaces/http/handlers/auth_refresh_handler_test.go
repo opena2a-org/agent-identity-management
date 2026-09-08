@@ -14,9 +14,13 @@ import (
 // NewAuthRefreshHandler Tests
 // ===========================
 
-func TestNewAuthRefreshHandler_NilDeps(t *testing.T) {
-	handler := NewAuthRefreshHandler(nil, nil)
-	assert.NotNil(t, handler)
+func TestNewAuthRefreshHandler_NilUserRepoPanics(t *testing.T) {
+	// A nil user repository must be a boot-time refusal: the alternative is a
+	// silent fallback to the refresh token's own (empty) role claims.
+	assert.Panics(t, func() {
+		NewAuthRefreshHandler(nil, nil, nil)
+	})
+	assert.NotNil(t, NewAuthRefreshHandler(nil, nil, &refreshTestUserRepo{}))
 }
 
 // ===========================
@@ -24,7 +28,7 @@ func TestNewAuthRefreshHandler_NilDeps(t *testing.T) {
 // ===========================
 
 func TestAuthRefreshHandler_RefreshToken_InvalidJSON(t *testing.T) {
-	handler := &AuthRefreshHandler{}
+	handler := &AuthRefreshHandler{users: &refreshTestUserRepo{}}
 	app := fiber.New()
 	app.Post("/auth/refresh", handler.RefreshToken)
 
@@ -39,7 +43,7 @@ func TestAuthRefreshHandler_RefreshToken_InvalidJSON(t *testing.T) {
 }
 
 func TestAuthRefreshHandler_RefreshToken_MissingToken(t *testing.T) {
-	handler := &AuthRefreshHandler{}
+	handler := &AuthRefreshHandler{users: &refreshTestUserRepo{}}
 	app := fiber.New()
 	app.Post("/auth/refresh", handler.RefreshToken)
 
@@ -55,7 +59,7 @@ func TestAuthRefreshHandler_RefreshToken_MissingToken(t *testing.T) {
 }
 
 func TestAuthRefreshHandler_RefreshToken_EmptyToken(t *testing.T) {
-	handler := &AuthRefreshHandler{}
+	handler := &AuthRefreshHandler{users: &refreshTestUserRepo{}}
 	app := fiber.New()
 	app.Post("/auth/refresh", handler.RefreshToken)
 

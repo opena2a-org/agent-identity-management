@@ -568,44 +568,76 @@ func TestUpdateVerificationResultHasOnlyPermittedCallSites(t *testing.T) {
 
 // TestSDKWriteRoutesAreNotRegisteredOnBareApp guards the wiring from inside the
 // handlers package as well as from cmd/server, because the two failure modes are
-// different: cmd/server's guard dies if main.go is restructured, this one dies
-// if the file moves. Fiber matches in registration order, so a bare app.Post
-// registered above the group keeps winning and an "add to the group" change that
-// forgets the delete is a no-op that reviews as done.
+// different: cmd/server's guard dies if the registration is restructured, this
+// one dies if the file moves. Fiber matches in registration order, so a bare
+// app.Post registered above the group keeps winning and an "add to the group"
+// change that forgets the delete is a no-op that reviews as done.
+//
+// AIM-03 moved SDK-API registration out of main() into the route table in
+// cmd/server/sdk_api_routes.go, where a bare mount is the `Bare: true` field on
+// a table entry rather than an `app.Post` call. cmd/server's guard now mounts
+// that table and asserts on the running app; this one stays a source scan of
+// both files, on purpose — it is the copy that survives cmd/server being
+// restructured again.
 func TestSDKWriteRoutesAreNotRegisteredOnBareApp(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
-	mainPath := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..",
-		"cmd", "server", "main.go")
-	src, err := os.ReadFile(filepath.Clean(mainPath))
-	require.NoError(t, err, "locate cmd/server/main.go")
+	serverDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "cmd", "server")
 
 	// Only executable lines count. A comment naming a removed registration — and
 	// main.go now carries one, explaining why the JWT mount was deleted — is
 	// documentation, not a route. Matching it would make the guard fire on its
 	// own explanation and push the next person to delete the explanation.
-	var code []string
-	for _, line := range strings.Split(string(src), "\n") {
-		if trimmed := strings.TrimSpace(line); !strings.HasPrefix(trimmed, "//") {
-			code = append(code, line)
+	executableLines := func(name string) []string {
+		src, err := os.ReadFile(filepath.Clean(filepath.Join(serverDir, name)))
+		require.NoError(t, err, "locate cmd/server/%s", name)
+		var code []string
+		for _, line := range strings.Split(string(src), "\n") {
+			if trimmed := strings.TrimSpace(line); !strings.HasPrefix(trimmed, "//") {
+				code = append(code, line)
+			}
 		}
+		return code
 	}
-	executable := strings.Join(code, "\n")
+
+	mainGo := strings.Join(executableLines("main.go"), "\n")
+	routeTable := strings.Join(executableLines("sdk_api_routes.go"), "\n")
 
 	for _, forbidden := range []string{
 		`app.Post("/api/v1/sdk-api/verifications/:id/result"`,
 		`app.Post("/api/v1/sdk-api/verifications/:id/execution-status"`,
 		`verifications.Post("/:id/result"`,
 	} {
-		assert.NotContains(t, executable, forbidden,
+		assert.NotContains(t, mainGo, forbidden,
+			"route registration %s must not exist: the bare app mount bypasses the sdkAPI group's "+
+				"authentication entirely, and the JWT mount had no ownership check", forbidden)
+		assert.NotContains(t, routeTable, forbidden,
 			"route registration %s must not exist: the bare app mount bypasses the sdkAPI group's "+
 				"authentication entirely, and the JWT mount had no ownership check", forbidden)
 	}
+
+	// In the table, "registered on the group" is the ABSENCE of Bare on the
+	// entry. Each entry is one line, so the assertion is per line: the route has
+	// to be there, and it has to not be bare.
+	tableLines := executableLines("sdk_api_routes.go")
 	for _, required := range []string{
-		`sdkAPI.Post("/verifications/:id/result"`,
-		`sdkAPI.Post("/verifications/:id/execution-status"`,
+		`Path: "/verifications/:id/result"`,
+		`Path: "/verifications/:id/execution-status"`,
 	} {
-		assert.Contains(t, executable, required,
-			"route %s must be registered on the authenticated sdkAPI group", required)
+		var entry string
+		for _, line := range tableLines {
+			if strings.Contains(line, required) {
+				entry = line
+				break
+			}
+		}
+		if !assert.NotEmpty(t, entry,
+			"no route table entry with %s: the write routes must still be registered somewhere the group authenticates", required) {
+			continue
+		}
+		assert.NotContains(t, entry, "Bare: true",
+			"the entry with %s is marked Bare, which registers it above the sdkAPI group where the Ed25519/JWT "+
+				"middleware never runs — that is the unauthenticated write reopening:\n  %s",
+			required, strings.TrimSpace(entry))
 	}
 }

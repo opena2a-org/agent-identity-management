@@ -7,19 +7,6 @@
 
 export type UserRole = "admin" | "manager" | "member" | "viewer";
 
-export interface NavItem {
-  name: string;
-  href: string;
-  icon: any;
-  roles: UserRole[];
-  badge?: number;
-}
-
-export interface NavSection {
-  title?: string;
-  items: NavItem[];
-}
-
 /**
  * Check if a user role has permission to access a specific route
  */
@@ -62,29 +49,14 @@ export function getRoleInfo(role: UserRole) {
 }
 
 /**
- * Filter navigation items based on user role
+ * Filter navigation entries (or any role-carrying list) down to a role.
  */
-export function filterNavigationByRole(
-  navigation: NavSection[],
+export function filterNavigationByRole<T extends { roles: UserRole[] }>(
+  navigation: T[],
   userRole: UserRole | undefined
-): NavSection[] {
+): T[] {
   if (!userRole) return [];
-
-  return navigation
-    .map((section) => {
-      const filteredItems = section.items.filter((item) =>
-        hasPermission(userRole, item.roles)
-      );
-
-      // If section has no accessible items, exclude it
-      if (filteredItems.length === 0) return null;
-
-      return {
-        ...section,
-        items: filteredItems,
-      };
-    })
-    .filter((section) => section !== null) as NavSection[];
+  return navigation.filter((item) => hasPermission(userRole, item.roles));
 }
 
 /**

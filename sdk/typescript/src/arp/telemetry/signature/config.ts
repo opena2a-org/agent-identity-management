@@ -20,7 +20,7 @@
  * ALWAYS beats an opt-in — the switch only ever moves in the safe direction, so
  * a stale env var cannot re-enable a channel someone deliberately disabled:
  *   1. Environment: OPENA2A_TELEMETRY_OPTOUT / ARP_TELEMETRY_DISABLED truthy.
- *   2. A marker file at ~/.opena2a/telemetry-optout (written by `arp telemetry opt-out`).
+ *   2. A marker file at ~/.opena2a/telemetry-optout (written by `aim-arp telemetry opt-out`).
  *   3. Config: `signatureTelemetry.enabled === false`.
  *
  * `isOptedOut` deliberately keeps its original meaning — "has someone actively
@@ -38,7 +38,12 @@ export type { SignatureTelemetryConfig };
 
 const DEFAULT_REGISTRY_URL = 'https://api.oa2a.org';
 
-function envTruthy(name: string): boolean {
+/**
+ * Strict truthiness for opt-out env vars: only 1/true/yes/on count. Exported so
+ * user-facing attribution (`optOutReason`) reads the SAME predicate as the
+ * decision (`isOptedOut`) — a value like `0` must neither opt out nor be blamed.
+ */
+export function envTruthy(name: string): boolean {
   const v = process.env[name];
   if (!v) return false;
   const s = v.trim().toLowerCase();
@@ -63,7 +68,7 @@ function envTruthy(name: string): boolean {
  * That variable is an ecosystem CLI switch, while this SDK is a library inside
  * someone else's production process; opting in stays explicit and AIM-specific.
  */
-function ecosystemOptOut(): boolean {
+export function ecosystemOptOut(): boolean {
   const v = process.env.OPENA2A_TELEMETRY;
   if (v === undefined) return false;
   const s = v.trim().toLowerCase();
@@ -116,7 +121,7 @@ export function resolveRegistryUrl(config?: SignatureTelemetryConfig): string {
   return config?.registryUrl || process.env.OPENA2A_REGISTRY_URL || DEFAULT_REGISTRY_URL;
 }
 
-/** Persist the opt-out marker (used by `arp telemetry opt-out`). Idempotent. */
+/** Persist the opt-out marker (used by `aim-arp telemetry opt-out`). Idempotent. */
 export function writeOptOutMarker(): string {
   const home = opena2aHome();
   if (!existsSync(home)) mkdirSync(home, { recursive: true });
@@ -125,7 +130,7 @@ export function writeOptOutMarker(): string {
   return p;
 }
 
-/** Remove the opt-out marker (used by `arp telemetry opt-in`). Idempotent. */
+/** Remove the opt-out marker (used by `aim-arp telemetry opt-in`). Idempotent. */
 export function clearOptOutMarker(): void {
   const p = homePath(OPTOUT_MARKER_FILE);
   if (existsSync(p)) {

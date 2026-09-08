@@ -10,7 +10,7 @@ import type {
   EventSeverity,
 } from '../types';
 import { BudgetController } from './budget';
-import { autoDetectAdapter, createAdapter } from './adapters';
+import { createAdapter } from './adapters';
 import { AnomalyDetector } from './anomaly';
 import {
   DEFAULT_BEHAVIORAL_RISK_TIMEOUT_MS,
@@ -76,6 +76,80 @@ export interface ComplyDecision {
  *
  * 99% of events never reach L2. Cost is ~$0.01/day for most agents.
  */
+/**
+ * Whether L2 would actually run for a given intelligence config, and if not, why.
+ *
+ * This exists so that anything REPORTING L2's state settles it the same way the
+ * coordinator does — by executing the same steps rather than restating them. The
+ * CLI previously re-implemented the predicate as `enabled !== false`, and when the
+ * default changed it went on printing "3-Layer (L0+L1+L2)" for an install where L2
+ * was off. Replacing that with `enabled === true && adapter` fixed the common case
+ * and still lied for `adapter: 'agent-proxy'`, which passes both checks and then
+ * throws on construction.
+ *
+ * A status line that re-derives a predicate drifts from it. This one does not
+ * re-derive: it tries to build the adapter, which is the only thing that settles it.
+ */
+export function describeL2Status(
+  intelligence: IntelligenceConfig | undefined,
+): { running: boolean; adapter?: string; reason?: string } {
+  const resolved = resolveL2Adapter(intelligence);
+  if (resolved.adapter !== null) return { running: true, adapter: resolved.name };
+  return resolved.name === undefined
+    ? { running: false, reason: resolved.reason }
+    : { running: false, adapter: resolved.name, reason: resolved.reason };
+}
+
+/**
+ * Either the adapter L2 will actually use, or the reason there is not one.
+ *
+ * `asked` carries whether the operator switched L2 on, so a caller that needs to
+ * distinguish "withheld from someone who wanted it" from "never requested" does
+ * not have to re-test `enabled` and become a second copy of the gate.
+ */
+type L2Resolution =
+  | { adapter: LLMAdapter; name: string; asked: true; reason?: undefined }
+  | { adapter: null; name?: string; asked: boolean; reason: string };
+
+/**
+ * Settle L2's state ONCE, for every caller that needs to know it.
+ *
+ * The review of #457 found the gate written twice — here and in the coordinator's
+ * constructor — down to the same reason string in both copies. Sharing the CALL to
+ * `createAdapter` was not enough: what has to be shared is the DECISION, or the next
+ * precondition added to one copy drifts the other, which is the defect the status line
+ * was reported for in the first place.
+ *
+ * It returns the constructed adapter rather than a boolean so the constructor can keep
+ * the object this already built. Asking `describeL2Status` and then constructing again
+ * would build twice, which is a side effect on any adapter that opens something.
+ */
+function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resolution {
+  if (intelligence?.enabled !== true) {
+    return { adapter: null, asked: false, reason: 'intelligence.enabled is not true' };
+  }
+  if (!intelligence.adapter) {
+    return { adapter: null, asked: true, reason: "no 'intelligence.adapter' is configured" };
+  }
+  try {
+    return {
+      adapter: createAdapter(
+        intelligence.adapter,
+        intelligence.adapterConfig as Record<string, unknown> | undefined,
+      ),
+      name: intelligence.adapter,
+      asked: true,
+    };
+  } catch (error) {
+    return {
+      adapter: null,
+      name: intelligence.adapter,
+      asked: true,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export class IntelligenceCoordinator {
   private readonly config: IntelligenceConfig;
   private readonly agentContext: string;
@@ -126,19 +200,54 @@ export class IntelligenceCoordinator {
     // Build agent context for LLM prompts
     this.agentContext = buildAgentContext(arpConfig);
 
-    // Initialize LLM adapter if intelligence is enabled
-    if (this.config.enabled !== false) {
-      try {
-        if (this.config.adapter) {
-          this.adapter = createAdapter(this.config.adapter, this.config.adapterConfig);
-        } else {
-          this.adapter = autoDetectAdapter(this.config.adapterConfig);
-        }
-      } catch {
-        // No adapter available — L2 disabled, L0+L1 still work
-        this.adapter = null;
-      }
+    // Initialize the LLM adapter only when L2 is switched on explicitly.
+    //
+    // Both halves of this condition are deliberate and fail closed:
+    //
+    //   enabled === true   an ABSENT `enabled` must mean off, not on. `loadConfig`
+    //                      merges a parsed config shallowly over the defaults, so an
+    //                      operator who sets only `intelligence.budgetUsd` replaces the
+    //                      whole intelligence object and arrives here with `enabled`
+    //                      undefined. Under the previous `!== false` test that path
+    //                      built an adapter — narrowing the budget, a hardening action,
+    //                      switched L2 on.
+    //
+    //   this.config.adapter  an ABSENT adapter must mean NO adapter. This used to fall
+    //                      back to autoDetectAdapter(), which chose an outbound
+    //                      destination from whichever model key happened to be exported
+    //                      in the environment. That made an unrelated environment
+    //                      variable decide where a security tool sends its observations,
+    //                      which is not a choice the operator ever made.
+    //
+    // When L2 is not configured it does not run at all: not remotely, and not locally.
+    // L0 and L1 are unaffected and still gate.
+    const resolved = resolveL2Adapter(this.config);
+    this.adapter = resolved.adapter;
+    if (resolved.adapter === null && resolved.asked) {
+      // L2 withheld, L0+L1 still work. Say so once, naming the precondition and the
+      // fix, rather than degrading silently — but only to an operator who ASKED for
+      // L2. `enabled` absent or false requested nothing, so nothing is unavailable.
+      // `asked` comes from the resolution rather than a second read of `enabled`:
+      // re-testing it here would put a copy of the gate outside the census guard.
+      this.reportL2Unavailable(resolved.reason);
     }
+  }
+
+  /**
+   * Report, once, that L2 is not running and what would turn it on.
+   *
+   * A precondition a control needs and cannot find is reported with the missing
+   * precondition named and a runnable fix — never a softer verdict and never silence.
+   * L2 is an optional enrichment rather than a security check being skipped, so
+   * withholding it is not a failure of the run: L0 and L1 still gate.
+   */
+  private reportL2Unavailable(reason: string): void {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ARP] L2 intelligence is not running (${reason}). L0 and L1 are unaffected and still gate. ` +
+        "To enable it, set intelligence.enabled to true and choose intelligence.adapter explicitly: " +
+        "'ollama' keeps inference local; 'anthropic' or 'openai' send event content to that vendor.",
+    );
   }
 
   /**
@@ -282,8 +391,10 @@ export class IntelligenceCoordinator {
   }
 
   private shouldEscalateToL2(event: ARPEvent): boolean {
-    // L2 disabled
-    if (this.config.enabled === false) return false;
+    // L2 runs only when it was switched on explicitly. Absent means off, for the same
+    // reason as in the constructor: a shallow-merged partial config arrives here with
+    // `enabled` undefined, and `=== false` would let it through.
+    if (this.config.enabled !== true) return false;
     if (!this.adapter) return false;
 
     // Only escalate if L1 flagged it
@@ -392,6 +503,83 @@ const AI_LAYER_SOURCES = new Set(['prompt', 'mcp-protocol', 'a2a-protocol']);
  * Designed for speed and cost efficiency. No chain-of-thought.
  * Uses specialized templates for AI-layer threats.
  */
+/**
+ * Fields of `event.data` that may travel to an L2 adapter verbatim.
+ *
+ * This is an ALLOWLIST, and that direction is the point: a denylist protects only
+ * the fields someone remembered to name, so the next monitor that adds a field
+ * carrying raw material leaks it by default. Everything not named here is replaced
+ * with a non-reversible shape descriptor.
+ *
+ * What belongs here: identifiers and structural facts that let a model judge whether
+ * a detection is a true positive. What does not: the matched material itself
+ * (`matchedText`), the command line (`command`), file contents, or arguments.
+ */
+const L2_ALLOWED_DATA_FIELDS = new Set([
+  'patternId',
+  'patternCategory',
+  'direction',
+  'toolName',
+  'from',
+  'to',
+  'protocol',
+  'method',
+  'eventType',
+  'port',
+  'pid',
+]);
+
+/**
+ * Describe a value without disclosing it: length and character classes only.
+ *
+ * The model still learns that something matched and roughly what shape it had,
+ * which is what the assessment needs. It does not learn the value. A control that
+ * detects a leaked credential must not transmit the credential to a third party in
+ * order to ask about it.
+ */
+function describeWithheld(value: unknown): string {
+  const s = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+
+  // Bucket the length instead of reporting it exactly, and say nothing about the
+  // character classes of a short value.
+  //
+  // An exact length plus a class set is not a summary of a small value, it IS the
+  // value. `true` renders as 4 chars/lower and `false` as 5 chars/lower, which
+  // reconstructs a boolean outright; a short enum from a known set is recovered the
+  // same way, since the set is usually distinguishable by length alone. The
+  // assessment never needed that precision — what it needs is whether the match was
+  // short or long and roughly what it looked like.
+  const n = s.length;
+  const bucket =
+    n === 0 ? 'empty'
+      : n <= 8 ? 'up to 8 chars'
+        : n <= 16 ? '9-16 chars'
+          : n <= 32 ? '17-32 chars'
+            : n <= 64 ? '33-64 chars'
+              : n <= 128 ? '65-128 chars'
+                : 'over 128 chars';
+
+  // Below this, the class set is identifying rather than descriptive.
+  if (n <= 8) return `<withheld: ${bucket}>`;
+
+  const classes: string[] = [];
+  if (/[a-z]/.test(s)) classes.push('lower');
+  if (/[A-Z]/.test(s)) classes.push('upper');
+  if (/[0-9]/.test(s)) classes.push('digit');
+  if (/[^A-Za-z0-9]/.test(s)) classes.push('symbol');
+  return `<withheld: ${bucket}${classes.length ? ', ' + classes.join('+') : ''}>`;
+}
+
+/** Render `event.data` for an L2 prompt, allowlisted and shape-described. */
+function summarizeEventDataForL2(data: Record<string, unknown> | undefined): string {
+  if (!data) return '{}';
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    out[k] = L2_ALLOWED_DATA_FIELDS.has(k) ? v : describeWithheld(v);
+  }
+  return JSON.stringify(out).slice(0, 500);
+}
+
 function buildMicroPrompt(agentContext: string, event: ARPEvent): string {
   if (AI_LAYER_SOURCES.has(event.source)) {
     return buildAILayerPrompt(agentContext, event);
@@ -403,7 +591,7 @@ ${agentContext}
 
 Event: ${event.source} monitor detected ${event.category} (${event.severity})
 Detail: ${event.description}
-Data: ${JSON.stringify(event.data).slice(0, 500)}
+Data: ${summarizeEventDataForL2(event.data as Record<string, unknown> | undefined)}
 
 Is this behavior consistent with the agent's declared purpose and capabilities?
 Respond in exactly this format:
@@ -444,7 +632,7 @@ ${agentContext}
 
 Detection: ${event.description}
 Context: ${contentContext}
-Matched text: "${String(matchedText).slice(0, 300)}"
+Matched text: ${describeWithheld(matchedText)}
 Pattern: ${patternId} — ${patternCategory}
 Severity: ${event.severity}
 

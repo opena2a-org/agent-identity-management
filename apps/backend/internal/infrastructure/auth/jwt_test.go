@@ -227,40 +227,6 @@ func TestJWTService_ValidateToken_Expired(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestJWTService_RefreshAccessToken(t *testing.T) {
-	cleanup := setupJWTTest(t)
-	defer cleanup()
-
-	service := NewJWTService()
-	userID := uuid.New().String()
-	orgID := uuid.New().String()
-
-	// Generate a refresh token
-	refreshToken, err := service.GenerateRefreshToken(userID, orgID)
-	require.NoError(t, err)
-
-	// Use it to get a new access token
-	newAccessToken, err := service.RefreshAccessToken(refreshToken)
-	require.NoError(t, err)
-	assert.NotEmpty(t, newAccessToken)
-
-	// Validate the new access token
-	claims, err := service.ValidateToken(newAccessToken)
-	require.NoError(t, err)
-	assert.Equal(t, userID, claims.UserID)
-	assert.Equal(t, orgID, claims.OrganizationID)
-}
-
-func TestJWTService_RefreshAccessToken_InvalidToken(t *testing.T) {
-	cleanup := setupJWTTest(t)
-	defer cleanup()
-
-	service := NewJWTService()
-
-	_, err := service.RefreshAccessToken("invalid-token")
-	assert.Error(t, err)
-}
-
 func TestJWTService_RefreshTokenPair(t *testing.T) {
 	cleanup := setupJWTTest(t)
 	defer cleanup()
@@ -274,7 +240,7 @@ func TestJWTService_RefreshTokenPair(t *testing.T) {
 	require.NoError(t, err)
 
 	// Rotate tokens
-	newAccessToken, newRefreshToken, err := service.RefreshTokenPair(refreshToken)
+	newAccessToken, newRefreshToken, err := service.RefreshTokenPair(refreshToken, "test@example.com", "admin")
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccessToken)
 	assert.NotEmpty(t, newRefreshToken)
@@ -302,7 +268,7 @@ func TestJWTService_RefreshTokenPair_RejectsAccessToken(t *testing.T) {
 	accessToken, err := service.GenerateAccessToken(userID, orgID, "test@example.com", "admin")
 	require.NoError(t, err)
 
-	_, _, err = service.RefreshTokenPair(accessToken)
+	_, _, err = service.RefreshTokenPair(accessToken, "test@example.com", "admin")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access token cannot be used to refresh")
 }
@@ -346,7 +312,7 @@ func TestJWTService_RefreshTokenPair_SDKToken(t *testing.T) {
 	require.NoError(t, err)
 
 	// Rotate tokens - should generate new SDK refresh token
-	newAccessToken, newRefreshToken, err := service.RefreshTokenPair(sdkRefreshToken)
+	newAccessToken, newRefreshToken, err := service.RefreshTokenPair(sdkRefreshToken, "sdk@example.com", "admin")
 	require.NoError(t, err)
 	assert.NotEmpty(t, newAccessToken)
 	assert.NotEmpty(t, newRefreshToken)

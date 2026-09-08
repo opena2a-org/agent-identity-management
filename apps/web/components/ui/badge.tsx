@@ -3,24 +3,19 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+// Glasshouse status chips: tinted fill + tinted border + readable text, never white-on-color.
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-2xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
   {
     variants: {
       variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
-        outline: "text-foreground",
-        success:
-          "border-transparent bg-green-500 text-white hover:bg-green-600",
-        warning:
-          "border-transparent bg-yellow-500 text-white hover:bg-yellow-600",
-        info:
-          "border-transparent bg-blue-500 text-white hover:bg-blue-600",
+        default: "border-transparent bg-brand-soft text-brand-text",
+        secondary: "border-glass-inset-border bg-glass-inset-gray text-ink-body",
+        destructive: "border-danger-border bg-danger-fill text-danger-text",
+        outline: "border-stroke text-ink-body",
+        success: "border-success-border bg-success-fill text-success-text",
+        warning: "border-warning-border bg-warning-fill text-warning-text",
+        info: "border-transparent bg-brand-soft text-brand-text",
       },
     },
     defaultVariants: {

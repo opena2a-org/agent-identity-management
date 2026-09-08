@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -30,6 +31,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AGENT_DETAIL_TAB_GROUPS,
+  agentDetailSectionId,
+  resolveAgentDetailTab,
+  type AgentDetailTabGroup,
+} from "@/lib/agent-detail-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { AutoDetectButton } from "@/components/agents/auto-detect-button";
@@ -83,7 +90,9 @@ export default function AgentDetailsPage({
   const [agentId, setAgentId] = useState<string | null>(null);
 
   // URL-based tab persistence
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'connections');
+  const [activeTab, setActiveTab] = useState<AgentDetailTabGroup>(() => resolveAgentDetailTab(searchParams.get("tab")).group);
+  // A pre-grouping ?tab= value names a section inside its group; land on it once the agent has rendered.
+  const initialSection = useRef(resolveAgentDetailTab(searchParams.get("tab")).section);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [allMCPServers, setAllMCPServers] = useState<MCPServer[]>([]);
@@ -232,7 +241,8 @@ export default function AgentDetailsPage({
     const token = api.getToken?.();
     if (!token) return;
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
+      const payload = decodeJwtPayload(token);
+      if (!payload) throw new Error("token payload is not decodable");
       const role = (payload.role as any) || "viewer";
       setUserRole(role);
     } catch {}
@@ -242,9 +252,31 @@ export default function AgentDetailsPage({
     setRefreshKey((prev) => prev + 1);
   };
 
+  // Scroll a deep-linked section into view once the agent (and so the section) has rendered.
+  useEffect(() => {
+    const section = initialSection.current;
+    if (isLoading || !agent || !section) return;
+    // The section can enter the DOM a beat after the agent state settles, so retry briefly.
+    let attempts = 0;
+    let timer: number | undefined;
+    const tryScroll = () => {
+      const el = document.getElementById(agentDetailSectionId(section));
+      if (el) {
+        initialSection.current = null;
+        el.scrollIntoView({ block: "start" });
+        return;
+      }
+      if (attempts++ < 30) timer = window.setTimeout(tryScroll, 100);
+    };
+    tryScroll();
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [agent, isLoading]);
+
   // Handle tab change with URL update
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
+    setActiveTab(resolveAgentDetailTab(tab).group);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', tab);
     router.push(`?${params.toString()}`, { scroll: false });
@@ -311,9 +343,9 @@ export default function AgentDetailsPage({
 
   // Get trust score color
   const getTrustColor = (score: number): string => {
-    if (score >= 80) return "text-green-600 bg-green-500/10";
-    if (score >= 60) return "text-yellow-600 bg-yellow-500/10";
-    return "text-red-600 bg-red-500/10";
+    if (score >= 80) return "text-success-text bg-success-fill";
+    if (score >= 60) return "text-warning-text bg-warning-fill";
+    return "text-danger-text bg-danger-fill";
   };
 
   // Check if agent is verified
@@ -327,14 +359,14 @@ export default function AgentDetailsPage({
   const getStatusBadgeClass = (status: string): string => {
     switch (status) {
       case "verified":
-        return "bg-green-500/10 text-green-600";
+        return "bg-success-fill text-success-text";
       case "pending":
-        return "bg-yellow-500/10 text-yellow-600";
+        return "bg-warning-fill text-warning-text";
       case "suspended":
       case "revoked":
-        return "bg-red-500/10 text-red-600";
+        return "bg-danger-fill text-danger-text";
       default:
-        return "bg-gray-500/10 text-gray-600";
+        return "bg-glass-inset-gray text-ink-secondary";
     }
   };
 
@@ -465,17 +497,17 @@ export default function AgentDetailsPage({
           Back to Agents
         </Button>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/10">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
               <Bot className="h-8 w-8 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-3xl font-bold">{agent.name}</h1>
+                <h1 className="min-w-0 break-words text-3xl font-bold">{agent.name}</h1>
                 {isVerified && (
                   <span title="Verified">
-                    <Shield className="h-6 w-6 text-green-600" />
+                    <Shield className="h-6 w-6 text-success-text" />
                   </span>
                 )}
               </div>
@@ -488,7 +520,7 @@ export default function AgentDetailsPage({
                 <Badge
                   className={getTrustColor((agent.trustScore ?? 0) * 100)}
                 >
-                  Trust: {((agent.trustScore ?? 0) * 100).toFixed(1)}%
+                  Trust: {Math.round((agent.trustScore ?? 0) * 100)}%
                 </Badge>
               </div>
             </div>
@@ -516,7 +548,7 @@ export default function AgentDetailsPage({
               <Button
                 onClick={handleVerify}
                 disabled={verifying || isVerified}
-                className="bg-green-600 hover:bg-green-700"
+                className="rounded-pill"
               >
                 {verifying ? (
                   <>
@@ -526,7 +558,7 @@ export default function AgentDetailsPage({
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-1" />{" "}
-                    {isVerified ? "Verified" : "Verify Agent"}
+                    {isVerified ? "Verified" : "Verify agent"}
                   </>
                 )}
               </Button>
@@ -536,7 +568,7 @@ export default function AgentDetailsPage({
                 variant="outline"
                 onClick={() => setShowSuspendConfirm(true)}
                 disabled={suspending}
-                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                className="rounded-pill border-warning-border text-warning-text hover:bg-warning-fill"
               >
                 {suspending ? (
                   <>
@@ -555,7 +587,7 @@ export default function AgentDetailsPage({
                 variant="outline"
                 onClick={handleReactivate}
                 disabled={reactivating}
-                className="border-green-500 text-green-600 hover:bg-green-50"
+                className="rounded-pill border-success-border text-success-text hover:bg-success-fill"
               >
                 {reactivating ? (
                   <>
@@ -627,7 +659,7 @@ export default function AgentDetailsPage({
             <div
               className={`text-2xl font-bold ${getTrustColor((agent.trustScore ?? 0) * 100).split(" ")[0]}`}
             >
-              {((agent.trustScore ?? 0) * 100).toFixed(1)}%
+              {Math.round((agent.trustScore ?? 0) * 100)}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               {(agent.trustScore ?? 0) * 100 >= 80
@@ -648,9 +680,9 @@ export default function AgentDetailsPage({
           <CardContent>
             <div className="text-2xl font-bold">
               {isVerified ? (
-                <Shield className="h-8 w-8 text-green-600" />
+                <Shield className="h-8 w-8 text-success-text" />
               ) : (
-                <AlertTriangle className="h-8 w-8 text-yellow-600" />
+                <AlertTriangle className="h-8 w-8 text-warning-text" />
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -660,622 +692,600 @@ export default function AgentDetailsPage({
         </Card>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs: four groups; the nine pre-grouping tab names still deep-link (lib/agent-detail-tabs.ts) */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="connections">
-            <ExternalLink className="h-4 w-4 mr-2" />
-            MCPs
-          </TabsTrigger>
-          <TabsTrigger value="capabilities">
-            <Shield className="h-4 w-4 mr-2" />
-            Capabilities
-          </TabsTrigger>
-          <TabsTrigger value="violations">
-            <AlertTriangle className="h-4 w-4 mr-2" />
-            Violations
-          </TabsTrigger>
-          <TabsTrigger value="key-vault">
-            <KeyRound className="h-4 w-4 mr-2" />
-            Identity & Signing
-          </TabsTrigger>
-          <TabsTrigger value="api-keys">
-            <KeyRound className="h-4 w-4 mr-2" />
-            API Keys
-          </TabsTrigger>
-          <TabsTrigger value="tags">
-            <Tag className="h-4 w-4 mr-2" />
-            Tags
-          </TabsTrigger>
-          <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-          <TabsTrigger value="trust">
-            <Shield className="h-4 w-4 mr-2" />
-            Trust Score
-          </TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
+        <TabsList aria-label="Agent sections" className="flex w-full sm:w-auto sm:inline-flex">
+          {AGENT_DETAIL_TAB_GROUPS.map((group) => (
+            <TabsTrigger key={group.value} value={group.value} className="flex-1 px-2 text-xs sm:flex-none sm:px-3.5 sm:text-[13px]">
+              {group.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        <TabsContent value="connections" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>MCP Server Connections</CardTitle>
-              <CardDescription>
-                Manage which MCP servers this agent can communicate with. Shows both manually connected servers and auto-detected servers from SDK runtime.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Manually Connected Servers */}
-              {connectedMCPServers.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Manually Connected</h3>
-                  <MCPServerList
-                    agentId={agent.id}
-                    mcpServers={connectedMCPServers}
-                    serverDetails={connectedMCPServerDetails.map(server => ({
-                      name: server.name,
-                      id: server.id,
-                      capabilities: server.capabilities,
-                      url: server.url
-                    }))}
-                    serverNameToId={serverNameToId}
-                    onUpdate={handleRefresh}
-                    showBulkActions={true}
-                  />
-                </div>
-              )}
-
-              {/* Auto-Detected Servers */}
-              {detectedMCPs.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Auto-Detected by SDK</h3>
-                  <div className="grid gap-3">
-                    {detectedMCPs.map((detection: any) => (
-                      <div key={detection.name} className="p-4 rounded-lg border bg-card">
-                        <div className="flex items-center justify-between gap-4 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-sm truncate">{detection.name}</h4>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <Badge variant="secondary" className="text-xs whitespace-nowrap">
-                              {Math.round(detection.confidenceScore)}% confidence
-                            </Badge>
-                            {detection.detectedBy && detection.detectedBy.length > 0 && (
-                              <Badge variant="outline" className="text-xs whitespace-nowrap min-w-[90px] justify-center">
-                                {detection.detectedBy[0].replace(/_/g, ' ')}
-                              </Badge>
+        <TabsContent value="overview" className="space-y-4">
+          <section id={agentDetailSectionId("details")} aria-label="Details" className="scroll-mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Agent details</CardTitle>
+                <CardDescription>
+                  Detailed information about this agent
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4">
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Agent ID:
+                    </span>
+                    <span className="col-span-2 text-sm font-mono">
+                      {agent.id}
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Name:
+                    </span>
+                    <span className="col-span-2 text-sm">{agent.name}</span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Type:
+                    </span>
+                    <span className="col-span-2 text-sm">{agent.agentType}</span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Description:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      {agent.description}
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Status:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      <Badge className={`capitalize ${getStatusBadgeClass(agent.status)}`}>
+                        {agent.status}
+                      </Badge>
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Verified:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      {isVerified ? (
+                        <Badge className="bg-success-fill text-success-text">
+                          Verified
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Unverified</Badge>
+                      )}
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Protocols Agent Uses:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      <Badge variant="secondary">MCP</Badge>
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Trust Score:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      <Badge
+                        className={getTrustColor((agent.trustScore ?? 0) * 100)}
+                      >
+                        {Math.round((agent.trustScore ?? 0) * 100)}%
+                      </Badge>
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Created:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      {new Date(agent.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Created By:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      {agent.createdByName || agent.createdByEmail ? (
+                        <div className="flex flex-col gap-1">
+                          {agent.createdByName && (
+                            <span className="font-medium">{agent.createdByName}</span>
+                          )}
+                          {agent.createdByEmail && (
+                            <span className="text-muted-foreground">{agent.createdByEmail}</span>
+                          )}
+                          {agent.createdBySdkTokenId && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="p-0 h-auto text-xs text-primary justify-start"
+                              onClick={() => router.push(`/dashboard/sdk-tokens?highlight=${agent.createdBySdkTokenId}`)}
+                            >
+                              <KeyRound className="h-3 w-3 mr-1" />
+                              View SDK Token
+                            </Button>
+                          )}
+                          {agent.createdByApiKeyId && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="p-0 h-auto text-xs text-warning-text justify-start"
+                              onClick={() => router.push(`/dashboard/api-keys?highlight=${agent.createdByApiKeyId}`)}
+                            >
+                              <KeyRound className="h-3 w-3 mr-1" />
+                              View API Key
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">System</span>
+                      )}
+                    </span>
+                  </div>
+                  {agent.updatedByName && (
+                    <>
+                      <Separator />
+                      <div className="grid grid-cols-3 items-center gap-4">
+                        <span className="text-sm font-medium text-muted-foreground">
+                          Last Updated By:
+                        </span>
+                        <span className="col-span-2 text-sm">
+                          <div className="flex flex-col gap-1">
+                            {agent.updatedByName && (
+                              <span className="font-medium">{agent.updatedByName}</span>
+                            )}
+                            {agent.updatedByEmail && (
+                              <span className="text-muted-foreground">{agent.updatedByEmail}</span>
                             )}
                           </div>
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Last Updated:
+                    </span>
+                    <span className="col-span-2 text-sm">
+                      {new Date(agent.updatedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  <Separator />
+                  <div className="grid grid-cols-3 items-center gap-4">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Organization ID:
+                    </span>
+                    <span className="col-span-2 text-sm font-mono">
+                      {agent.organizationId}
+                    </span>
+                  </div>
+                  {agent.metadata && Object.keys(agent.metadata).length > 0 && (
+                    <>
+                      <Separator />
+                      <div className="grid grid-cols-3 items-start gap-4">
+                        <span className="text-sm font-medium text-muted-foreground">
+                          Metadata:
+                        </span>
+                        <div className="col-span-2">
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(agent.metadata).map(([key, value]) => (
+                              <Badge key={key} variant="outline" className="text-xs">
+                                <span className="font-medium">{key}:</span>
+                                <span className="ml-1">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Detected via SDK runtime monitoring
-                          {detection.lastSeen && ` • Last seen ${new Date(detection.lastSeen).toLocaleString()}`}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+          <section id={agentDetailSectionId("trust")} aria-label="Trust score" className="scroll-mt-4 space-y-4">
+            <DriftScoreCard agentId={agent.id} />
+            <TrustScoreBreakdown
+              agentId={agent.id}
+              userRole={userRole}
+              onTrustScoreUpdate={(newScore) => {
+                // Update the agent's displayed trust score for consistency
+                setAgent(prev => prev ? { ...prev, trustScore: newScore } : null);
+              }}
+            />
+          </section>
+          <section id={agentDetailSectionId("activity")} aria-label="Recent activity" className="scroll-mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Activity Timeline
+                </CardTitle>
+                <CardDescription>
+                  Unified view of trust score changes, security alerts, verifications, and agent actions
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Unified Timeline */}
+                {(() => {
+                  // Combine all events into a unified timeline
+                  const timelineEvents: Array<{
+                    id: string;
+                    type: 'alert' | 'trust_change' | 'verification' | 'action';
+                    timestamp: Date;
+                    title: string;
+                    description: string;
+                    severity?: string;
+                    icon: 'alert' | 'trust_up' | 'trust_down' | 'verification' | 'action';
+                    badge?: { text: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' };
+                    metadata?: Record<string, any>;
+                  }> = [];
+
+                  // Add alerts
+                  agentAlerts.forEach((alert: any) => {
+                    timelineEvents.push({
+                      id: `alert-${alert.id}`,
+                      type: 'alert',
+                      timestamp: new Date(alert.createdAt),
+                      title: alert.title,
+                      description: alert.description,
+                      severity: alert.severity,
+                      icon: 'alert',
+                      badge: {
+                        text: alert.severity?.toUpperCase() || 'ALERT',
+                        variant: alert.severity === 'critical' || alert.severity === 'high' ? 'destructive' :
+                                 alert.severity === 'warning' ? 'secondary' : 'outline'
+                      },
+                      metadata: alert.metadata
+                    });
+                  });
+
+                  // Add trust score changes
+                  trustScoreHistory.forEach((change: any, idx: number) => {
+                    const prevScore = idx < trustScoreHistory.length - 1
+                      ? trustScoreHistory[idx + 1]?.trustScore
+                      : null;
+                    const currentScore = change.trustScore;
+                    const isIncrease = prevScore !== null && currentScore > prevScore;
+                    const isDecrease = prevScore !== null && currentScore < prevScore;
+                    const scoreDiff = prevScore !== null ? String(Math.round((currentScore - prevScore) * 100)) : null;
+
+                    timelineEvents.push({
+                      id: `trust-${change.timestamp}-${idx}`,
+                      type: 'trust_change',
+                      timestamp: new Date(change.timestamp),
+                      title: `Trust Score ${isIncrease ? 'Increased' : isDecrease ? 'Decreased' : 'Updated'}`,
+                      description: scoreDiff
+                        ? `${isDecrease ? '' : '+'}${scoreDiff}% → Now at ${Math.round(currentScore * 100)}%${change.reason ? `: ${change.reason}` : ''}`
+                        : `Trust score is ${Math.round(currentScore * 100)}%${change.reason ? `: ${change.reason}` : ''}`,
+                      icon: isDecrease ? 'trust_down' : isIncrease ? 'trust_up' : 'trust_up',
+                      badge: {
+                        text: `${(currentScore * 100).toFixed(0)}%`,
+                        variant: currentScore >= 0.7 ? 'default' : currentScore >= 0.4 ? 'secondary' : 'destructive'
+                      }
+                    });
+                  });
+
+                  // Add verification events
+                  events.forEach((ev: any) => {
+                    timelineEvents.push({
+                      id: `verification-${ev.id}`,
+                      type: 'verification',
+                      timestamp: new Date(ev.startedAt),
+                      title: `Verification: ${ev.verificationType?.replace(/_/g, ' ') || 'Check'}`,
+                      description: `Status: ${ev.status}`,
+                      icon: 'verification',
+                      badge: {
+                        text: ev.status,
+                        variant: ev.status === 'passed' || ev.status === 'success' ? 'default' :
+                                 ev.status === 'failed' ? 'destructive' : 'secondary'
+                      }
+                    });
+                  });
+
+                  // Add agent actions
+                  agentActivity.forEach((activity: any) => {
+                    const meta = activity.metadata || {};
+                    const riskLevel = meta.riskLevel || 'unknown';
+                    const resource = meta.resource || activity.resourceType || 'unknown';
+                    const wasApproved = meta.autoApproved;
+                    const trustScore = meta.trustScore ? `${(meta.trustScore * 100).toFixed(0)}%` : null;
+
+                    // Build a detailed description
+                    let description = `Resource: ${resource}`;
+                    if (riskLevel !== 'unknown') {
+                      description += ` • Risk: ${riskLevel}`;
+                    }
+                    if (trustScore) {
+                      description += ` • Trust: ${trustScore}`;
+                    }
+                    if (wasApproved !== undefined) {
+                      description += wasApproved ? ' • Auto-approved' : ' • Denied';
+                    }
+
+                    timelineEvents.push({
+                      id: `action-${activity.id}`,
+                      type: 'action',
+                      timestamp: new Date(activity.timestamp),
+                      title: activity.action?.replace(/_/g, ' ').replace(/:/g, ':') || 'Action',
+                      description,
+                      icon: 'action',
+                      badge: {
+                        text: riskLevel,
+                        variant: riskLevel === 'high' || riskLevel === 'critical' ? 'destructive' :
+                                 riskLevel === 'medium' ? 'secondary' : 'outline'
+                      },
+                      metadata: meta
+                    });
+                  });
+
+                  // Sort by timestamp (newest first)
+                  timelineEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+                  const hasEvents = timelineEvents.length > 0;
+
+                  if (!hasEvents) {
+                    return (
+                      <div className="text-center py-12">
+                        <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-muted-foreground">No activity recorded for this agent yet.</p>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Activities will appear here when the agent performs actions or security events occur.
                         </p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Empty State */}
-              {connectedMCPServers.length === 0 && detectedMCPs.length === 0 && (
-                <div className="text-center py-12 px-4">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                    <ExternalLink className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">No MCP Servers Detected</h3>
-                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-                    This agent has no MCP servers connected or detected. Use the buttons above to add servers manually or install the AIM SDK to enable auto-detection.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="capabilities">
-          <AgentCapabilities
-            agentId={agent.id}
-            agentCapabilities={agent.capabilities}
-          />
-        </TabsContent>
-
-        <TabsContent value="violations">
-          <ViolationsTab agentId={agent.id} />
-        </TabsContent>
-
-        <TabsContent value="key-vault">
-          <KeyVaultTab agentId={agent.id} />
-        </TabsContent>
-
-        <TabsContent value="api-keys">
-          <APIKeysTab agentId={agent.id} />
-        </TabsContent>
-
-        <TabsContent value="tags">
-          <AgentTagsTab agentId={agent.id} />
-        </TabsContent>
-
-        <TabsContent value="activity">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Activity Timeline
-              </CardTitle>
-              <CardDescription>
-                Unified view of trust score changes, security alerts, verifications, and agent actions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Unified Timeline */}
-              {(() => {
-                // Combine all events into a unified timeline
-                const timelineEvents: Array<{
-                  id: string;
-                  type: 'alert' | 'trust_change' | 'verification' | 'action';
-                  timestamp: Date;
-                  title: string;
-                  description: string;
-                  severity?: string;
-                  icon: 'alert' | 'trust_up' | 'trust_down' | 'verification' | 'action';
-                  badge?: { text: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' };
-                  metadata?: Record<string, any>;
-                }> = [];
-
-                // Add alerts
-                agentAlerts.forEach((alert: any) => {
-                  timelineEvents.push({
-                    id: `alert-${alert.id}`,
-                    type: 'alert',
-                    timestamp: new Date(alert.createdAt),
-                    title: alert.title,
-                    description: alert.description,
-                    severity: alert.severity,
-                    icon: 'alert',
-                    badge: {
-                      text: alert.severity?.toUpperCase() || 'ALERT',
-                      variant: alert.severity === 'critical' || alert.severity === 'high' ? 'destructive' :
-                               alert.severity === 'warning' ? 'secondary' : 'outline'
-                    },
-                    metadata: alert.metadata
-                  });
-                });
-
-                // Add trust score changes
-                trustScoreHistory.forEach((change: any, idx: number) => {
-                  const prevScore = idx < trustScoreHistory.length - 1
-                    ? trustScoreHistory[idx + 1]?.trustScore
-                    : null;
-                  const currentScore = change.trustScore;
-                  const isIncrease = prevScore !== null && currentScore > prevScore;
-                  const isDecrease = prevScore !== null && currentScore < prevScore;
-                  const scoreDiff = prevScore !== null ? ((currentScore - prevScore) * 100).toFixed(1) : null;
-
-                  timelineEvents.push({
-                    id: `trust-${change.timestamp}-${idx}`,
-                    type: 'trust_change',
-                    timestamp: new Date(change.timestamp),
-                    title: `Trust Score ${isIncrease ? 'Increased' : isDecrease ? 'Decreased' : 'Updated'}`,
-                    description: scoreDiff
-                      ? `${isDecrease ? '' : '+'}${scoreDiff}% → Now at ${(currentScore * 100).toFixed(1)}%${change.reason ? `: ${change.reason}` : ''}`
-                      : `Trust score is ${(currentScore * 100).toFixed(1)}%${change.reason ? `: ${change.reason}` : ''}`,
-                    icon: isDecrease ? 'trust_down' : isIncrease ? 'trust_up' : 'trust_up',
-                    badge: {
-                      text: `${(currentScore * 100).toFixed(0)}%`,
-                      variant: currentScore >= 0.7 ? 'default' : currentScore >= 0.4 ? 'secondary' : 'destructive'
-                    }
-                  });
-                });
-
-                // Add verification events
-                events.forEach((ev: any) => {
-                  timelineEvents.push({
-                    id: `verification-${ev.id}`,
-                    type: 'verification',
-                    timestamp: new Date(ev.startedAt),
-                    title: `Verification: ${ev.verificationType?.replace(/_/g, ' ') || 'Check'}`,
-                    description: `Status: ${ev.status}`,
-                    icon: 'verification',
-                    badge: {
-                      text: ev.status,
-                      variant: ev.status === 'passed' || ev.status === 'success' ? 'default' :
-                               ev.status === 'failed' ? 'destructive' : 'secondary'
-                    }
-                  });
-                });
-
-                // Add agent actions
-                agentActivity.forEach((activity: any) => {
-                  const meta = activity.metadata || {};
-                  const riskLevel = meta.riskLevel || 'unknown';
-                  const resource = meta.resource || activity.resourceType || 'unknown';
-                  const wasApproved = meta.autoApproved;
-                  const trustScore = meta.trustScore ? `${(meta.trustScore * 100).toFixed(0)}%` : null;
-
-                  // Build a detailed description
-                  let description = `Resource: ${resource}`;
-                  if (riskLevel !== 'unknown') {
-                    description += ` • Risk: ${riskLevel}`;
-                  }
-                  if (trustScore) {
-                    description += ` • Trust: ${trustScore}`;
-                  }
-                  if (wasApproved !== undefined) {
-                    description += wasApproved ? ' • Auto-approved' : ' • Denied';
+                    );
                   }
 
-                  timelineEvents.push({
-                    id: `action-${activity.id}`,
-                    type: 'action',
-                    timestamp: new Date(activity.timestamp),
-                    title: activity.action?.replace(/_/g, ' ').replace(/:/g, ':') || 'Action',
-                    description,
-                    icon: 'action',
-                    badge: {
-                      text: riskLevel,
-                      variant: riskLevel === 'high' || riskLevel === 'critical' ? 'destructive' :
-                               riskLevel === 'medium' ? 'secondary' : 'outline'
-                    },
-                    metadata: meta
-                  });
-                });
-
-                // Sort by timestamp (newest first)
-                timelineEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-                const hasEvents = timelineEvents.length > 0;
-
-                if (!hasEvents) {
                   return (
-                    <div className="text-center py-12">
-                      <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">No activity recorded for this agent yet.</p>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Activities will appear here when the agent performs actions or security events occur.
-                      </p>
-                    </div>
-                  );
-                }
+                    <div className="space-y-4">
+                      {/* Summary Cards */}
+                      <div className="grid grid-cols-4 gap-4 mb-6">
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <Bell className="h-3 w-3" />
+                            Alerts
+                          </div>
+                          <div className="text-2xl font-bold">{agentAlerts.length}</div>
+                        </div>
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <TrendingDown className="h-3 w-3" />
+                            Trust Changes
+                          </div>
+                          <div className="text-2xl font-bold">{trustScoreHistory.length}</div>
+                        </div>
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <Shield className="h-3 w-3" />
+                            Verifications
+                          </div>
+                          <div className="text-2xl font-bold">{events.length}</div>
+                        </div>
+                        <div className="p-3 rounded-lg border bg-card">
+                          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                            <Bot className="h-3 w-3" />
+                            Performed Actions
+                          </div>
+                          <div className="text-2xl font-bold">{agentActivity.length}</div>
+                        </div>
+                      </div>
 
-                return (
-                  <div className="space-y-4">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-4 gap-4 mb-6">
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                          <Bell className="h-3 w-3" />
-                          Alerts
-                        </div>
-                        <div className="text-2xl font-bold">{agentAlerts.length}</div>
-                      </div>
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                          <TrendingDown className="h-3 w-3" />
-                          Trust Changes
-                        </div>
-                        <div className="text-2xl font-bold">{trustScoreHistory.length}</div>
-                      </div>
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                          <Shield className="h-3 w-3" />
-                          Verifications
-                        </div>
-                        <div className="text-2xl font-bold">{events.length}</div>
-                      </div>
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                          <Bot className="h-3 w-3" />
-                          Performed Actions
-                        </div>
-                        <div className="text-2xl font-bold">{agentActivity.length}</div>
-                      </div>
-                    </div>
+                      {/* Timeline */}
+                      <div className="relative">
+                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
+                        <div className="space-y-4">
+                          {timelineEvents.slice(0, activityPage * ACTIVITY_PAGE_SIZE).map((event) => (
+                            <div key={event.id} className="relative pl-10">
+                              {/* Timeline dot */}
+                              <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
+                                event.type === 'alert' ? 'border-danger' :
+                                event.icon === 'trust_down' ? 'border-warning' :
+                                event.icon === 'trust_up' ? 'border-success' :
+                                event.type === 'verification' ? 'border-brand' :
+                                'border-stroke'
+                              }`} />
 
-                    {/* Timeline */}
-                    <div className="relative">
-                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
-                      <div className="space-y-4">
-                        {timelineEvents.slice(0, activityPage * ACTIVITY_PAGE_SIZE).map((event) => (
-                          <div key={event.id} className="relative pl-10">
-                            {/* Timeline dot */}
-                            <div className={`absolute left-2.5 w-3 h-3 rounded-full border-2 bg-background ${
-                              event.type === 'alert' ? 'border-red-500' :
-                              event.icon === 'trust_down' ? 'border-orange-500' :
-                              event.icon === 'trust_up' ? 'border-green-500' :
-                              event.type === 'verification' ? 'border-blue-500' :
-                              'border-gray-400'
-                            }`} />
-
-                            {/* Event card */}
-                            <div className={`p-3 rounded-lg border ${
-                              event.type === 'alert' ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900' :
-                              event.icon === 'trust_down' ? 'bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900' :
-                              event.icon === 'trust_up' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' :
-                              'bg-card'
-                            }`}>
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex items-start gap-3">
-                                  {/* Icon */}
-                                  <div className={`mt-0.5 ${
-                                    event.type === 'alert' ? 'text-red-500' :
-                                    event.icon === 'trust_down' ? 'text-orange-500' :
-                                    event.icon === 'trust_up' ? 'text-green-500' :
-                                    event.type === 'verification' ? 'text-blue-500' :
-                                    'text-gray-500'
-                                  }`}>
-                                    {event.type === 'alert' && <AlertTriangle className="h-4 w-4" />}
-                                    {event.icon === 'trust_down' && <TrendingDown className="h-4 w-4" />}
-                                    {event.icon === 'trust_up' && event.type === 'trust_change' && <TrendingUp className="h-4 w-4" />}
-                                    {event.type === 'verification' && <Shield className="h-4 w-4" />}
-                                    {event.type === 'action' && <Bot className="h-4 w-4" />}
-                                  </div>
-                                  <div>
-                                    <div className="font-medium text-sm">{event.title}</div>
-                                    <div className="text-sm text-muted-foreground">{event.description}</div>
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {event.timestamp.toLocaleString()}
+                              {/* Event card */}
+                              <div className={`p-3 rounded-lg border ${
+                                event.type === 'alert' ? 'bg-danger-fill border-danger-border' :
+                                event.icon === 'trust_down' ? 'bg-warning-fill border-warning-border' :
+                                event.icon === 'trust_up' ? 'bg-success-fill border-success-border' :
+                                'bg-glass-inset-gray border-divider'
+                              }`}>
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex items-start gap-3">
+                                    {/* Icon */}
+                                    <div className={`mt-0.5 ${
+                                      event.type === 'alert' ? 'text-danger-text' :
+                                      event.icon === 'trust_down' ? 'text-warning-text' :
+                                      event.icon === 'trust_up' ? 'text-success-text' :
+                                      event.type === 'verification' ? 'text-brand-text' :
+                                      'text-ink-secondary'
+                                    }`}>
+                                      {event.type === 'alert' && <AlertTriangle className="h-4 w-4" />}
+                                      {event.icon === 'trust_down' && <TrendingDown className="h-4 w-4" />}
+                                      {event.icon === 'trust_up' && event.type === 'trust_change' && <TrendingUp className="h-4 w-4" />}
+                                      {event.type === 'verification' && <Shield className="h-4 w-4" />}
+                                      {event.type === 'action' && <Bot className="h-4 w-4" />}
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-sm">{event.title}</div>
+                                      <div className="text-sm text-muted-foreground">{event.description}</div>
+                                      <div className="text-xs text-muted-foreground mt-1">
+                                        {event.timestamp.toLocaleString()}
+                                      </div>
                                     </div>
                                   </div>
+                                  {event.badge && (
+                                    <Badge variant={event.badge.variant} className="text-xs whitespace-nowrap">
+                                      {event.badge.text}
+                                    </Badge>
+                                  )}
                                 </div>
-                                {event.badge && (
-                                  <Badge variant={event.badge.variant} className="text-xs whitespace-nowrap">
-                                    {event.badge.text}
-                                  </Badge>
-                                )}
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {timelineEvents.length > 0 && (
-                      <div className="flex items-center justify-between pt-4 border-t">
-                        <div className="text-sm text-muted-foreground">
-                          Showing {Math.min(activityPage * ACTIVITY_PAGE_SIZE, timelineEvents.length)} of {timelineEvents.length} events
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {activityPage > 1 && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setActivityPage(1)}
-                            >
-                              Show Less
-                            </Button>
-                          )}
-                          {activityPage * ACTIVITY_PAGE_SIZE < timelineEvents.length && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setActivityPage(activityPage + 1)}
-                            >
-                              Load More ({Math.min(ACTIVITY_PAGE_SIZE, timelineEvents.length - activityPage * ACTIVITY_PAGE_SIZE)} more)
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="trust" className="space-y-4">
-          <DriftScoreCard agentId={agent.id} />
-          <TrustScoreBreakdown
-            agentId={agent.id}
-            userRole={userRole}
-            onTrustScoreUpdate={(newScore) => {
-              // Update the agent's displayed trust score for consistency
-              setAgent(prev => prev ? { ...prev, trustScore: newScore } : null);
-            }}
-          />
-        </TabsContent>
-
-        <TabsContent value="details" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Agent Details</CardTitle>
-              <CardDescription>
-                Detailed information about this agent
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4">
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Agent ID:
-                  </span>
-                  <span className="col-span-2 text-sm font-mono">
-                    {agent.id}
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Name:
-                  </span>
-                  <span className="col-span-2 text-sm">{agent.name}</span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Type:
-                  </span>
-                  <span className="col-span-2 text-sm">{agent.agentType}</span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Description:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    {agent.description}
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Status:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    <Badge className={`capitalize ${getStatusBadgeClass(agent.status)}`}>
-                      {agent.status}
-                    </Badge>
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Verified:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    {isVerified ? (
-                      <Badge className="bg-green-500/10 text-green-600">
-                        Verified
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Unverified</Badge>
-                    )}
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Protocols Agent Uses:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    <Badge variant="secondary">MCP</Badge>
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Trust Score:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    <Badge
-                      className={getTrustColor((agent.trustScore ?? 0) * 100)}
-                    >
-                      {((agent.trustScore ?? 0) * 100).toFixed(1)}%
-                    </Badge>
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Created:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    {new Date(agent.createdAt).toLocaleString()}
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Created By:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    {agent.createdByName || agent.createdByEmail ? (
-                      <div className="flex flex-col gap-1">
-                        {agent.createdByName && (
-                          <span className="font-medium">{agent.createdByName}</span>
-                        )}
-                        {agent.createdByEmail && (
-                          <span className="text-muted-foreground">{agent.createdByEmail}</span>
-                        )}
-                        {agent.createdBySdkTokenId && (
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="p-0 h-auto text-xs text-primary justify-start"
-                            onClick={() => router.push(`/dashboard/sdk-tokens?highlight=${agent.createdBySdkTokenId}`)}
-                          >
-                            <KeyRound className="h-3 w-3 mr-1" />
-                            View SDK Token
-                          </Button>
-                        )}
-                        {agent.createdByApiKeyId && (
-                          <Button
-                            variant="link"
-                            size="sm"
-                            className="p-0 h-auto text-xs text-orange-600 justify-start"
-                            onClick={() => router.push(`/dashboard/api-keys?highlight=${agent.createdByApiKeyId}`)}
-                          >
-                            <KeyRound className="h-3 w-3 mr-1" />
-                            View API Key
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">System</span>
-                    )}
-                  </span>
-                </div>
-                {agent.updatedByName && (
-                  <>
-                    <Separator />
-                    <div className="grid grid-cols-3 items-center gap-4">
-                      <span className="text-sm font-medium text-muted-foreground">
-                        Last Updated By:
-                      </span>
-                      <span className="col-span-2 text-sm">
-                        <div className="flex flex-col gap-1">
-                          {agent.updatedByName && (
-                            <span className="font-medium">{agent.updatedByName}</span>
-                          )}
-                          {agent.updatedByEmail && (
-                            <span className="text-muted-foreground">{agent.updatedByEmail}</span>
-                          )}
-                        </div>
-                      </span>
-                    </div>
-                  </>
-                )}
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Last Updated:
-                  </span>
-                  <span className="col-span-2 text-sm">
-                    {new Date(agent.updatedAt).toLocaleString()}
-                  </span>
-                </div>
-                <Separator />
-                <div className="grid grid-cols-3 items-center gap-4">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Organization ID:
-                  </span>
-                  <span className="col-span-2 text-sm font-mono">
-                    {agent.organizationId}
-                  </span>
-                </div>
-                {agent.metadata && Object.keys(agent.metadata).length > 0 && (
-                  <>
-                    <Separator />
-                    <div className="grid grid-cols-3 items-start gap-4">
-                      <span className="text-sm font-medium text-muted-foreground">
-                        Metadata:
-                      </span>
-                      <div className="col-span-2">
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(agent.metadata).map(([key, value]) => (
-                            <Badge key={key} variant="outline" className="text-xs">
-                              <span className="font-medium">{key}:</span>
-                              <span className="ml-1">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
-                            </Badge>
                           ))}
                         </div>
                       </div>
+
+                      {timelineEvents.length > 0 && (
+                        <div className="flex items-center justify-between pt-4 border-t">
+                          <div className="text-sm text-muted-foreground">
+                            Showing {Math.min(activityPage * ACTIVITY_PAGE_SIZE, timelineEvents.length)} of {timelineEvents.length} events
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {activityPage > 1 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setActivityPage(1)}
+                              >
+                                Show Less
+                              </Button>
+                            )}
+                            {activityPage * ACTIVITY_PAGE_SIZE < timelineEvents.length && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setActivityPage(activityPage + 1)}
+                              >
+                                Load More ({Math.min(ACTIVITY_PAGE_SIZE, timelineEvents.length - activityPage * ACTIVITY_PAGE_SIZE)} more)
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="connections" className="space-y-4">
+          <section id={agentDetailSectionId("mcp-servers")} aria-label="MCP servers" className="scroll-mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>MCP server connections</CardTitle>
+                <CardDescription>
+                  Manage which MCP servers this agent can communicate with. Shows both manually connected servers and auto-detected servers from SDK runtime.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Manually Connected Servers */}
+                {connectedMCPServers.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Manually connected</h3>
+                    <MCPServerList
+                      agentId={agent.id}
+                      mcpServers={connectedMCPServers}
+                      serverDetails={connectedMCPServerDetails.map(server => ({
+                        name: server.name,
+                        id: server.id,
+                        capabilities: server.capabilities,
+                        url: server.url
+                      }))}
+                      serverNameToId={serverNameToId}
+                      onUpdate={handleRefresh}
+                      showBulkActions={true}
+                    />
+                  </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+
+                {/* Auto-Detected Servers */}
+                {detectedMCPs.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Auto-detected by SDK</h3>
+                    <div className="grid gap-3">
+                      {detectedMCPs.map((detection: any) => (
+                        <div key={detection.name} className="p-4 rounded-lg border bg-card">
+                          <div className="flex items-center justify-between gap-4 mb-2">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-sm truncate">{detection.name}</h4>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                                {Math.round(detection.confidenceScore)}% confidence
+                              </Badge>
+                              {detection.detectedBy && detection.detectedBy.length > 0 && (
+                                <Badge variant="outline" className="text-xs whitespace-nowrap min-w-[90px] justify-center">
+                                  {detection.detectedBy[0].replace(/_/g, ' ')}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Detected via SDK runtime monitoring
+                            {detection.lastSeen && ` • Last seen ${new Date(detection.lastSeen).toLocaleString()}`}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Empty State */}
+                {connectedMCPServers.length === 0 && detectedMCPs.length === 0 && (
+                  <div className="text-center py-12 px-4">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                      <ExternalLink className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">No MCP servers detected</h3>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
+                      This agent has no MCP servers connected or detected. Use the buttons above to add servers manually or install the AIM SDK to enable auto-detection.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+          <section id={agentDetailSectionId("capabilities")} aria-label="Capabilities" className="scroll-mt-4 space-y-4">
+            <AgentCapabilities
+              agentId={agent.id}
+              agentCapabilities={agent.capabilities}
+            />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="security" className="space-y-4">
+          <section id={agentDetailSectionId("violations")} aria-label="Violations" className="scroll-mt-4 space-y-4">
+            <ViolationsTab agentId={agent.id} />
+          </section>
+          <section id={agentDetailSectionId("key-vault")} aria-label="Identity and signing" className="scroll-mt-4 space-y-4">
+            <KeyVaultTab agentId={agent.id} />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="access" className="space-y-4">
+          <section id={agentDetailSectionId("api-keys")} aria-label="API keys" className="scroll-mt-4 space-y-4">
+            <APIKeysTab agentId={agent.id} />
+          </section>
+          <section id={agentDetailSectionId("tags")} aria-label="Tags" className="scroll-mt-4 space-y-4">
+            <AgentTagsTab agentId={agent.id} />
+          </section>
         </TabsContent>
       </Tabs>
 
@@ -1295,7 +1305,7 @@ export default function AgentDetailsPage({
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+            <AlertDialogTitle>Delete agent</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the
               agent "{agent.name}" and remove associated data.
@@ -1305,7 +1315,7 @@ export default function AgentDetailsPage({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="rounded-pill bg-danger hover:brightness-95"
             >
               {deleting ? "Deleting..." : "Delete"}
             </AlertDialogAction>
@@ -1317,7 +1327,7 @@ export default function AgentDetailsPage({
       <AlertDialog open={showSuspendConfirm} onOpenChange={setShowSuspendConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Suspend Agent</AlertDialogTitle>
+            <AlertDialogTitle>Suspend agent</AlertDialogTitle>
             <AlertDialogDescription>
               This will temporarily suspend the agent "{agent.name}". The agent
               will be unable to authenticate or perform actions until
@@ -1328,7 +1338,7 @@ export default function AgentDetailsPage({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleSuspend}
-              className="bg-orange-600 hover:bg-orange-700"
+              className="rounded-pill bg-warning text-warning-foreground hover:opacity-90"
             >
               {suspending ? "Suspending..." : "Suspend"}
             </AlertDialogAction>

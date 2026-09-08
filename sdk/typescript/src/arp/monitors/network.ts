@@ -242,13 +242,20 @@ export class NetworkMonitor implements Monitor {
         { encoding: 'utf-8', timeout: 5000 },
       );
 
-      for (const line of output.trim().split('\n').slice(1)) {
+      const lines = output.trim().split('\n');
+      // Under the `state established` filter ss omits the State column,
+      // shifting every field left by one; the header line says which shape
+      // this run produced. Without root, ss also omits the trailing
+      // `users:(...)` process field, so data lines may end at the peer column.
+      const localIdx = lines[0].startsWith('State') ? 3 : 2;
+
+      for (const line of lines.slice(1)) {
         if (!line) continue;
         const parts = line.split(/\s+/);
-        if (parts.length < 5) continue;
+        if (parts.length < localIdx + 2) continue;
 
-        const local = parts[3]?.split(':') ?? [];
-        const remote = parts[4]?.split(':') ?? [];
+        const local = parts[localIdx]?.split(':') ?? [];
+        const remote = parts[localIdx + 1]?.split(':') ?? [];
 
         connections.push({
           protocol: 'tcp',

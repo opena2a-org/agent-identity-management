@@ -34,11 +34,15 @@ export {
   orgSaltForEpoch,
   computeOrgPseudonym,
   currentOrgPseudonym,
+  peekOrgPseudonym,
 } from './org-pseudonym';
+
+export { sanitizeTerminalText, TERMINAL_TEXT_MAX_CHARS } from './sanitize';
 
 export {
   loadSensorPrivateKey,
   loadSensorId,
+  peekSensorId,
   publicKeyHex,
   signCanonicalHex,
 } from './sensor-identity';
@@ -62,8 +66,10 @@ export type { AuditRecord, AuditPhase } from './audit-log';
 
 export {
   isOptedOut,
-  isOptedIn,
+  ecosystemOptOut,
+  envTruthy,
   optOutMarkerExists,
+  isOptedIn,
   signatureTelemetryEnabled,
   resolveRegistryUrl,
   writeOptOutMarker,

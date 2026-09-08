@@ -1,0 +1,72 @@
+{
+  "case": "deny-detection-only",
+  "description": "Detection inference present, intent missing; every TS-optional field omitted so the omission itself is asserted. Joined by the window fallback.",
+  "derivedFrom": "sdk/typescript/src/telemetry/correlated-record.ts",
+  "volatileFields": ["recordId", "createdAt", "triggeredAt"],
+  "input": {
+    "correlationId": "cde_000000001_00112233ffee",
+    "agentId": "agent-2",
+    "joinedBy": "fallback:window",
+    "joinerVersion": "1.0",
+    "enforcement": {
+      "decision": "deny",
+      "outcome": "DENY",
+      "capability": "net:connect",
+      "resource": "https://evil.example/x",
+      "occurredAt": "2026-06-07T12:05:00.000Z",
+      "source": "aim-pdp"
+    },
+    "detection": {
+      "injectionDetected": true,
+      "techniqueSource": "apia",
+      "confidence": 0.91,
+      "detector": "nanomind-guard",
+      "detectedAt": "2026-06-07T12:04:59.000Z"
+    }
+  },
+  "expectedRecord": {
+    "schemaVersion": "1.0",
+    "correlationId": "cde_000000001_00112233ffee",
+    "agentId": "agent-2",
+    "enforcement": {
+      "observed": true,
+      "decision": "deny",
+      "outcome": "DENY",
+      "capability": "net:connect",
+      "resource": "https://evil.example/x",
+      "occurredAt": "2026-06-07T12:05:00.000Z",
+      "source": "aim-pdp"
+    },
+    "detection": {
+      "observed": false,
+      "attribution": "inferred",
+      "injectionDetected": true,
+      "techniqueSource": "apia",
+      "confidence": 0.91,
+      "detector": "nanomind-guard",
+      "detectedAt": "2026-06-07T12:04:59.000Z"
+    },
+    "assembly": {
+      "joinedBy": "fallback:window",
+      "completeness": "partial-missing-intent",
+      "joinerVersion": "1.0"
+    }
+  },
+  "sharedIndicatorContext": {
+    "sensorToken": "sensor-abc",
+    "agentCategory": "backend",
+    "daySinceInstall": 0,
+    "runtimeEnv": "python"
+  },
+  "expectedIndicator": {
+    "schemaVersion": "1.0",
+    "sensorToken": "sensor-abc",
+    "eventType": "denied_injection_attempt",
+    "techniqueSource": "apia",
+    "detectionConfidence": 0.91,
+    "enforcementOutcome": "deny",
+    "agentCategory": "backend",
+    "daySinceInstall": 0,
+    "runtimeEnv": "python"
+  }
+}

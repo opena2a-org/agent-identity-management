@@ -14,8 +14,10 @@ RUN go mod download
 # Copy source code
 COPY apps/backend/ ./
 
-# Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o aim-server ./cmd/server
+# Build the application, stamping the git commit for GET /health/ready
+# (the deploy passes --build-arg GIT_COMMIT=<sha>; empty means commit: null)
+ARG GIT_COMMIT
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags "-X main.buildCommit=$GIT_COMMIT" -o aim-server ./cmd/server
 
 # Final stage
 FROM alpine:latest

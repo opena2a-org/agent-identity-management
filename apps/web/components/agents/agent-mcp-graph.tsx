@@ -52,7 +52,7 @@ export function AgentMCPGraph({ agents, mcpServers, highlightAgentId }: AgentMCP
     const totalMCPServers = mcpServers.length
     const totalConnections = agents.reduce((sum, agent) => sum + agent.talksTo.length, 0)
     const avgConnectionsPerAgent =
-      totalAgents > 0 ? (totalConnections / totalAgents).toFixed(1) : '0'
+      totalAgents > 0 ? String(Math.round(totalConnections / totalAgents)) : '0'
 
     return {
       totalAgents,
@@ -166,7 +166,7 @@ export function AgentMCPGraph({ agents, mcpServers, highlightAgentId }: AgentMCP
                       <span>
                         <span className="font-medium">Trust Score:</span>{' '}
                         <span className={getTrustColor(agent.trustScore).split(' ')[0]}>
-                          {agent.trustScore.toFixed(1)}%
+                          {Math.round(agent.trustScore)}%
                         </span>
                       </span>
                       <span>
@@ -214,7 +214,7 @@ export function AgentMCPGraph({ agents, mcpServers, highlightAgentId }: AgentMCP
                             <div className="text-xs text-muted-foreground">
                               Trust Score:{' '}
                               <span className={getTrustColor(server.trustScore).split(' ')[0]}>
-                                {server.trustScore.toFixed(1)}%
+                                {Math.round(server.trustScore)}%
                               </span>
                             </div>
                           </div>

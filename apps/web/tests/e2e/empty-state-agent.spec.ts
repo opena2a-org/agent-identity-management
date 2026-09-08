@@ -76,13 +76,19 @@ test.describe('Agent detail page — empty-state rendering on fresh agent', () =
   // Recent Activity panel, so the empty-state branch is unreachable on
   // a freshly-registered fixture. Contract: panel RENDERS, no error
   // boundary, no skeleton lock.
+  //
+  // The nine flat tabs are grouped (lib/agent-detail-tabs.ts); `?tab=activity`
+  // is a pre-grouping name that resolves to the Overview group plus its
+  // "Recent activity" section, so the contract is the group tab selected and
+  // the section region on the page.
   test('activity tab renders without error (registration emits its own event)', async ({
     authedPage,
     registerAgent,
   }) => {
     const agent = await registerAgent();
     await gotoAgentTab(authedPage, agent.id, 'activity');
-    await expect(authedPage.getByRole('tab', { name: /recent activity/i })).toBeVisible();
+    await expect(authedPage.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    await expect(authedPage.getByRole('region', { name: /recent activity/i })).toBeVisible();
     await assertNoErrorState(authedPage);
   });
 
@@ -98,7 +104,8 @@ test.describe('Agent detail page — empty-state rendering on fresh agent', () =
   }) => {
     const agent = await registerAgent();
     await gotoAgentTab(authedPage, agent.id, 'trust');
-    await expect(authedPage.getByRole('tab', { name: /trust/i })).toBeVisible();
+    await expect(authedPage.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    await expect(authedPage.getByRole('region', { name: /trust score/i })).toBeVisible();
     await assertNoErrorState(authedPage);
   });
 

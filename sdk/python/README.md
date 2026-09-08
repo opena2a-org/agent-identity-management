@@ -200,10 +200,17 @@ The SDK ships with a small CLI for authentication and status:
 ```bash
 aim-sdk login                    # OAuth to AIM Cloud
 aim-sdk login --url <URL>        # OAuth to self-hosted instance
+aim-sdk demo                     # Register a demo agent, watch your dashboard come alive
+aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
+aim-sdk demo --cleanup           # Delete the demo agent again
 aim-sdk logout                   # Clear ~/.aim/sdk_credentials.json
 aim-sdk status                   # Show authentication state
 aim-sdk --version                # Show SDK version
 ```
+
+The demo agent registers in your own organization under agent type `demo`:
+visibly a demo in every list, excluded from adoption and trust analytics,
+and re-runs reconnect to the same agent instead of creating new ones.
 
 For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime), see the separate [opena2a CLI](https://github.com/opena2a-org/opena2a).
 
@@ -255,6 +262,18 @@ references, payloads, the correlation key) are never shared, and the relay
 egress-validates technique fields before transmission. Only
 `denied_injection_attempt` indicators are uploaded, to the Registry's public,
 count-only endpoint.
+
+**Producer only, never on the deny path.** Detection output is an inference the
+seam records; it never enters `verify_action` or any policy-decision deny path,
+and the modules that decide allow/deny (`aim_sdk.enforcement`,
+`aim_sdk.decision`) do not import the seam.
+
+**Port stage.** `aim_sdk.telemetry` is stage 1 of 3 of the ARP runtime-protection
+port (tracked in issue #441), ported schema-identical to the TypeScript
+reference in `sdk/typescript/src/telemetry` so both SDKs write the same
+`correlated-events.jsonl`. Stage 2 (the guard-socket client) and stage 3 (the
+engine port: event engine, runtime twin, coordinator, monitors, interceptors)
+are not part of this package -- see the module docstring for the boundary.
 
 ## Manual mode (no OAuth)
 

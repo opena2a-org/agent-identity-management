@@ -16,6 +16,11 @@ public enum AgentType {
     ANTHROPIC("claude"),
     /** Custom agent implementation */
     CUSTOM("custom"),
+    /**
+     * Demo agents registered by {@code aim-sdk demo}: visibly a demo everywhere
+     * they appear, and excluded from adoption/trust analytics by this one value.
+     */
+    DEMO("demo"),
     /** Unknown or unrecognized agent type */
     UNKNOWN("unknown");
 

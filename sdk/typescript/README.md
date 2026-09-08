@@ -89,6 +89,8 @@ app.get('/api/profile', (req, res) => {
 app.use(aimErrorHandler);
 ```
 
+The middleware authenticates to AIM as a registered agent. `apiKey` alone does not give it an identity: set `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` in the environment (all four; `loadCredentialsFromEnv()` returns `null` when any is missing). Without them every verified route answers 401 and AIM is never contacted ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)). `aimErrorHandler` answers denial and authentication errors as JSON; other SDK errors, including an upstream 5xx, are passed to Express's default handler, which renders a stack trace outside `NODE_ENV=production` ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)).
+
 ## Fastify Integration
 
 ```typescript
@@ -110,6 +112,8 @@ fastify.post('/api/data', {
   return { success: true };
 });
 ```
+
+The plugin needs the same registered-agent credentials as the Express middleware: `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID`, all four; with `{ baseUrl, apiKey }` alone every verified route answers 401 ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)).
 
 ## Local Credential Verification (offline)
 
@@ -343,6 +347,50 @@ runtime protection lives here, inside the agent process. This module is the
 canonical home of the ARP engine; hackmyagent's `./arp` export is being
 converted to a thin re-export of it.
 
+### L2 sends nothing unless you configure it
+
+L0 (rules) and L1 (behavioral twin) run entirely in-process and make no
+outbound connections. **L2 is off by default**, and turning it on takes two
+deliberate settings, not one:
+
+```typescript
+intelligence: {
+  enabled: true,        // absent or false means L2 does not run
+  adapter: 'ollama',    // required: there is no automatic provider selection
+}
+```
+
+Setting `enabled: false` also switches off the in-process behavioral twin, which
+reads the same flag; leave it absent if you only want L2 off.
+
+`adapter` chooses where inference runs. `'ollama'` keeps it on the machine.
+`'anthropic'` and `'openai'` send event content to that vendor, authenticated
+with your own key and billed to your own account — choose them only if you
+intend that.
+
+If you do choose a remote adapter, this is what leaves and what does not.
+`event.data` is allowlisted: identifiers and structural facts (pattern id,
+category, direction, tool name, peer agent ids, protocol, port, pid) travel,
+and everything else — matched text, command lines, arguments — is replaced by a
+descriptor that buckets the length rather than reporting it: `<withheld: 9-16
+chars, lower+digit>`. At eight characters or fewer the descriptor is
+`<withheld: up to 8 chars>` and names no character classes, because an exact
+length and a class set do not summarise a short value, they reconstruct it. An
+empty value renders `<withheld: empty>`. The event's `description` is **not**
+redacted and is sent as written; it is normally tool-authored text plus an
+identifier such as a hostname or file path, but process-monitor descriptions
+embed up to 100 characters of the child command line.
+
+If `enabled` is true but no `adapter` is set, L2 does not run and ARP says so
+once on startup; L0 and L1 are unaffected and still gate.
+
+> **Changed in 1.4.0.** Versions 1.0.0 through 1.3.1 defaulted to
+> `enabled: true` with `adapter: 'agent-proxy'`, which picked a destination from
+> whichever model key was exported in the environment — so a default
+> installation on a machine with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set
+> sent event content to that vendor. `'agent-proxy'` now throws rather than
+> guessing. See the CHANGELOG for the upgrade note.
+
 ```typescript
 import { EventEngine, FilesystemMonitor, EnforcementEngine } from '@opena2a/aim-sdk/arp';
 
@@ -379,10 +427,12 @@ one-way hash of structural tokens — is signed and reported to the OpenA2A
 registry (`https://api.oa2a.org`), so an attack shape first seen at one
 deployment can protect others. Prompts, model responses, tool arguments, file
 contents or paths, command lines, environment values, secrets, IP addresses,
-hostnames, and account, tool, agent, and model names are never shared. A
-one-time disclosure is printed before first collection, and every payload is
-appended to a local audit log (`~/.opena2a/telemetry-audit.log`, JSONL) before
-it is sent.
+hostnames, and account, tool, agent, and model names never appear in a report.
+A report does carry a random per-install sensor id and a monthly-rotating org
+pseudonym alongside the structural fields. A one-time disclosure is printed
+before first collection, and every payload is appended to a local audit log
+(`~/.opena2a/telemetry-audit.log`, JSONL) before it is sent — review it with
+`aim-arp telemetry log` (or `npx @opena2a/aim-sdk telemetry log`).
 
 Turn it on with either of:
 
@@ -399,17 +449,19 @@ Turn it off again — an opt-out always wins over an opt-in — with any one of:
   not start a network channel on the strength of an ecosystem-wide CLI setting.
 - `OPENA2A_TELEMETRY_OPTOUT=1` (or `ARP_TELEMETRY_DISABLED=1`) in the
   environment,
-- `signatureTelemetry: { enabled: false }` in your ARP config, or
+- `signatureTelemetry: { enabled: false }` in your ARP config,
+- `aim-arp telemetry opt-out`, the consent CLI this package installs (also asks
+  the registry to delete already-sent signatures), or
 - `writeOptOutMarker()` from `@opena2a/aim-sdk/arp`, which persists
   `~/.opena2a/telemetry-optout` across processes.
 
 Any one of these is the runtime-protection module's master switch: it disables
-every telemetry channel the module can produce - structural signatures, the
+every telemetry channel the module can produce — structural signatures, the
 opt-in legacy GTIN runtime channel, and fleet behavioral gradients. The causal-denial channel above is
 controlled solely by its own `telemetry` client config and is off unless you
-enabled it. To also delete signatures this sensor already shared, call
-`purgeRemoteSignatures()` (right-to-delete; best-effort, never blocks the
-local opt-out).
+enabled it. To also delete signatures this sensor already shared, run
+`aim-arp telemetry purge` (or call `purgeRemoteSignatures()`) — right-to-delete;
+best-effort, never blocks the local opt-out.
 
 ## Configuration
 

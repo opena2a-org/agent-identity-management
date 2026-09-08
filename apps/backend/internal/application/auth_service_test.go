@@ -89,6 +89,11 @@ func (m *MockUserRepository) CountActiveUsers(orgID uuid.UUID, withinMinutes int
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockUserRepository) CountByRoleAndStatus(role domain.UserRole, status domain.UserStatus) (int, error) {
+	args := m.Called(role, status)
+	return args.Int(0), args.Error(1)
+}
+
 // MockOrganizationRepository for testing
 type MockOrganizationRepository struct {
 	mock.Mock

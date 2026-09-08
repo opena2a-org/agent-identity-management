@@ -93,3 +93,26 @@ export function computeOrgPseudonym(orgRootSecret: Buffer, orgId: string, epoch:
 export function currentOrgPseudonym(now: Date = new Date()): string {
   return computeOrgPseudonym(loadOrgRootSecret(), loadOrgId(), epochId(now));
 }
+
+/**
+ * Compute the current org pseudonym WITHOUT creating identity state. Returns
+ * null when the root secret does not exist yet, or when no org id is resolvable
+ * from the environment or disk. Read-only surfaces (`aim-arp telemetry status`)
+ * must use this: reading status must never mint an org root secret.
+ */
+export function peekOrgPseudonym(now: Date = new Date()): string | null {
+  const secretPath = homePath(ORG_ROOT_SECRET_FILE);
+  if (!existsSync(secretPath)) return null;
+  const buf = Buffer.from(readFileSync(secretPath, 'utf8').trim(), 'hex');
+  if (buf.length !== 32) return null;
+
+  const fromEnv = process.env.OPENA2A_ORG_ID;
+  let orgId = fromEnv && fromEnv.trim() ? fromEnv.trim() : null;
+  if (!orgId) {
+    const idPath = homePath(ORG_ID_FILE);
+    if (!existsSync(idPath)) return null;
+    orgId = readFileSync(idPath, 'utf8').trim() || null;
+  }
+  if (!orgId) return null;
+  return computeOrgPseudonym(buf, orgId, epochId(now));
+}
