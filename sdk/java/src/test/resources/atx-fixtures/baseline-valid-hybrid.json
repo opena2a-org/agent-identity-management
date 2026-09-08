@@ -1,7 +1,7 @@
 {
   "$schema": "https://atx.opena2a.org/schemas/fixture-v1.json",
   "name": "atx-v1/baseline-valid-hybrid",
-  "description": "An ATX v1.0 credential carrying both an Ed25519 signature and an ML-DSA-65 signature over the same canonical payload. This is the hybrid signing path the ATX v1.0 spec mandates. A spec-conformant verifier MUST verify BOTH signatures and ACCEPT only when both are valid. NOTE: the current opena2a-registry/pkg/atcverify verifier verifies Ed25519 only and silently ignores ML-DSA-65 signatures; the conformance Go verifier in ../verifiers/go DOES verify both, per spec.",
+  "description": "An ATX v1.0 credential carrying both an Ed25519 signature and an ML-DSA-65 signature over the same canonical payload. This is the hybrid signing path the ATX v1.0 spec mandates. A spec-conformant verifier MUST verify BOTH signatures and ACCEPT only when both are valid. The ML-DSA-65 signature value is a raw FIPS 204 ML-DSA-65 signature (3309 bytes decoded) over the same canonical bytes as the Ed25519 signature; no container or combined-blob framing is used.",
   "spec": [
     {
       "id": "ATX",

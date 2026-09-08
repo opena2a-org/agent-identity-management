@@ -1,7 +1,7 @@
 {
   "$schema": "https://atx.opena2a.org/schemas/fixture-v1.json",
-  "name": "atx-v1_1/cross-issuer-key",
-  "description": "An ATX v1.1 credential issued by the primary authority but signed by a different trusted authority's key (partner.example). The secondary authority is trusted and its key is configured, and the signature is valid over JCS(TBS), but the secondary is neither the issuer nor present in the signed issuerChain. A spec-conformant verifier binds each signature to a key controlled by the issuer, or by an authority that is both named in the signed issuerChain and in the verifier's trusted issuers, and MUST REJECT with a signature-validation reason.",
+  "name": "atx-v1_1/untrusted-chain-authority",
+  "description": "An ATX v1.1 credential whose issuerDid is the primary authority (did:opena2a:authority:opena2a.org) and whose signed issuerChain names the primary authority and an untrusted authority (did:opena2a:authority:attacker.example). It carries one Ed25519 signature made ONLY by the untrusted authority's key over JCS(TBS), so the chain that names the signer is inside the signed bytes. The verifier trusts only the primary authority as an issuer, but the untrusted key is present in its configured public keys under a DID-URL keyId. A verifier that derives the eligible signing authorities from the credential's own issuerChain wrongly ACCEPTs: the chain names the signer's DID and the signer's key is configured. That chain is signed by the very key whose eligibility is in question, so it cannot vouch for that key. A signature verifies only against a key resolved for an authority the verifier trusts for this credential: the issuerDid, or an authority that is both named in the signed issuerChain and in the verifier's trusted issuers. A chain DID that is not a trusted issuer contributes no eligible key, so no configured key verifies the signature and the verifier MUST REJECT with a signature-validation reason.",
   "spec": [
     {
       "id": "ATX",
@@ -33,18 +33,17 @@
       "keyId": "did:opena2a:authority:opena2a.org#key-1"
     },
     {
-      "role": "issuer-secondary",
-      "path": "vectors/issuer-secondary.json",
+      "role": "issuer-untrusted",
+      "path": "vectors/issuer-untrusted.json",
       "algorithm": "Ed25519",
-      "publicKeyHex": "2043fa51c3d9e4a21a535ccb38bdc4fb56083737d22059d69475e7e43c47f582",
-      "keyId": "did:opena2a:authority:partner.example#key-1"
+      "publicKeyHex": "278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e",
+      "keyId": "did:opena2a:authority:attacker.example#key-1"
     }
   ],
   "verifierState": {
     "clockRfc3339": "2026-05-24T00:00:00Z",
     "trustedIssuers": [
-      "did:opena2a:authority:opena2a.org",
-      "did:opena2a:authority:partner.example"
+      "did:opena2a:authority:opena2a.org"
     ],
     "publicKeys": [
       {
@@ -69,11 +68,11 @@
         "keyId": "did:opena2a:authority:opena2a.org#key-3"
       },
       {
-        "role": "issuer-secondary",
-        "path": "vectors/issuer-secondary.json",
+        "role": "issuer-untrusted",
+        "path": "vectors/issuer-untrusted.json",
         "algorithm": "Ed25519",
-        "publicKeyHex": "2043fa51c3d9e4a21a535ccb38bdc4fb56083737d22059d69475e7e43c47f582",
-        "keyId": "did:opena2a:authority:partner.example#key-1"
+        "publicKeyHex": "278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e",
+        "keyId": "did:opena2a:authority:attacker.example#key-1"
       }
     ]
   },
@@ -116,14 +115,14 @@
     "expiresAt": "2099-12-31T23:59:59Z",
     "issuerDid": "did:opena2a:authority:opena2a.org",
     "issuerChain": [
-      "did:opena2a:authority:opena2a.org-root",
-      "did:opena2a:authority:opena2a.org"
+      "did:opena2a:authority:opena2a.org",
+      "did:opena2a:authority:attacker.example"
     ],
     "signatures": [
       {
-        "keyId": "did:opena2a:authority:partner.example#key-1",
+        "keyId": "did:opena2a:authority:attacker.example#key-1",
         "algorithm": "Ed25519",
-        "value": "VIoRLMLXWSQJosyTSMpnORfH1oMv9pfWYoehAwyASHRJ03cL7MuErJ/0vu7jziGur8meBaleSNP3D3ETLTXmBw=="
+        "value": "wckUCFwBI1XfltoMx2NOXK2JhfOHvl4M8plQ/p47e+AKKKdfGiZ/PoQ4dOrGC1b787J1CTZ96/OC9y4PhYc0CQ=="
       }
     ],
     "revoked": false,
