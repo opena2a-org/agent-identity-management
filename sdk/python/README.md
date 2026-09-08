@@ -68,9 +68,9 @@ After `secure()` registers the agent, the SDK installs no-op-on-failure hooks fo
 - OpenAI
 - Anthropic
 
-Each model call (chat completion, embedding, tool call) is recorded to the audit trail. The hooks never raise — a hook failure logs a warning and the call proceeds.
+What the hooks record: with OpenAI, `chat.completions.create` calls, and with Anthropic, `messages.create` calls, each as one local security log event on the `aim.security` logger. That logger writes only where `AIM_SECURITY_LOG_FILE` or `AIM_SECURITY_LOG_STDOUT` points it, and it propagates to your root logger, so any handler attached there receives the event whatever level that logger is set to; under the SDK's own defaults nothing is written. With LangChain, a callback handler sends each tool run to AIM's verification route; with CrewAI, a task callback sends each task completion to it. Other client methods, including embeddings, are not recorded. The hooks never raise. A detected library whose hook cannot be installed is logged as a warning and left untouched; a recording failure inside an installed hook is swallowed and the wrapped call proceeds.
 
-Disable: `secure("my-agent", auto_hooks=False)`.
+Disable: `secure("my-agent", auto_hooks=False)`. The parameter is keyword-only and defaults to `True`; before 2.0.2 it did not exist and this call raised `TypeError`.
 
 ## Capability decorators
 

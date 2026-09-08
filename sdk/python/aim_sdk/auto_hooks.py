@@ -4,9 +4,9 @@ AIM SDK Auto-Hook Activation
 Automatically detects and patches AI frameworks after agent registration.
 Activates existing AIM integration handlers without requiring manual imports.
 
-The hooks installed here record model calls to the audit trail. They consult
-no policy and never raise: a hook that cannot be installed is logged as a
-warning and the framework's calls proceed unchanged.
+The hooks installed here are instrumentation. They consult no policy and
+never raise: a hook that cannot be installed is logged as a warning and the
+framework's calls proceed unchanged.
 """
 
 import logging
@@ -297,7 +297,7 @@ def activate_hooks(client: 'AIMClient', auto_hooks: bool = True) -> List[str]:
             else:
                 logger.warning(
                     "AIM auto-instrumentation: the %s hook could not be installed; "
-                    "its calls proceed without audit-trail recording.",
+                    "its calls proceed uninstrumented.",
                     framework,
                 )
 
