@@ -147,7 +147,8 @@ public final class LocalAtxVerifier {
         }
 
         // Step 4: issuer trust.
-        if (anchors.trustedIssuers() == null || !anchors.trustedIssuers().contains(atx.issuerDid)) {
+        if (atx.issuerDid == null || anchors.trustedIssuers() == null
+                || !anchors.trustedIssuers().contains(atx.issuerDid)) {
             return AtxVerificationResult.reject(
                     RejectCategory.UNTRUSTED_ISSUER, "issuer DID " + atx.issuerDid + " is not trusted");
         }
@@ -163,8 +164,10 @@ public final class LocalAtxVerifier {
         }
 
         // Key-to-issuer binding: a key may verify a signature for this credential
-        // only if its keyId controller DID is one of the credential's authorities.
-        Set<String> authoritySet = authoritySetFor(atx, isV11);
+        // only if its keyId controller DID is one of the credential's authorities:
+        // the issuer, plus (v1.1) the signed issuerChain members this verifier
+        // trusts as issuers.
+        Set<String> authoritySet = authoritySetFor(atx, isV11, anchors.trustedIssuers());
         List<PublicKey> edKeys = new ArrayList<>();
         if (anchors.publicKeys() != null) {
             for (AtxPublicKey k : anchors.publicKeys()) {
@@ -237,16 +240,32 @@ public final class LocalAtxVerifier {
     }
 
     /**
-     * DIDs whose keys may sign this credential: the issuer always, plus the
-     * issuerChain authorities for v1.1 (where issuerChain is covered by the
-     * signature). v1.0 issuerChain is unsigned and therefore forgeable, so it is
-     * NOT trusted as a signer source — only the issuer is.
+     * DIDs whose keys may verify this credential's signatures: the issuer always,
+     * plus, under v1.1 only, each issuerChain authority that is ALSO one of the
+     * verifier's trusted issuers. The v1.1 issuerChain is covered by the
+     * signature, but it is signed by the very key whose eligibility is in
+     * question, so on its own it cannot vouch for that key: a chain DID the
+     * verifier does not trust contributes no eligible key among the keys bound to
+     * a controller by a DID-URL keyId (keyEligible leaves a keyId without a '#'
+     * fragment unbound, so such a key is eligible regardless of this set).
+     * Without the intersection, a signer whose key is configured under a DID-URL
+     * keyId could name its own DID in the chain and sign for a trusted issuer
+     * (atx-conformance fixtures/v1_1-untrusted-chain-authority.json; atx-spec
+     * core.md section 1.3 step 4). The v1.0 issuerChain is unsigned and therefore
+     * forgeable, so it contributes nothing to this set; only the issuer does.
      */
-    private static Set<String> authoritySetFor(Atx atx, boolean isV11) {
+    private static Set<String> authoritySetFor(Atx atx, boolean isV11, List<String> trustedIssuers) {
         Set<String> set = new HashSet<>();
         set.add(atx.issuerDid);
-        if (isV11 && atx.issuerChain != null) {
-            set.addAll(atx.issuerChain);
+        if (!isV11 || atx.issuerChain == null || trustedIssuers == null) {
+            return set;
+        }
+        for (String did : atx.issuerChain) {
+            // A null chain entry is credential-controlled input; List.contains(null)
+            // throws on the immutable lists callers pass as anchors.
+            if (did != null && trustedIssuers.contains(did)) {
+                set.add(did);
+            }
         }
         return set;
     }

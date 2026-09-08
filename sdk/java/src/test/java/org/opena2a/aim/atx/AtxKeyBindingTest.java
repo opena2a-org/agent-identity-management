@@ -117,6 +117,50 @@ class AtxKeyBindingTest {
     }
 
     @Test
+    void rejectsV11ChainAuthorityTheVerifierDoesNotTrust() throws Exception {
+        Key a = genKey();
+        Key b = genKey();
+        // issuer A; the signed issuerChain names B, but the verifier trusts only A as an
+        // issuer. The chain is signed by B's own key, so it cannot vouch for that key:
+        // B contributes no eligible key and the lone B signature must not verify.
+        // Control: acceptsV11CrossOrgCosignatureInSignedChain, the same chain and signer with B trusted.
+        Atx atx = base("1.1", ISSUER_A, List.of(ISSUER_A, ISSUER_B));
+        sign(atx, b.priv(), ISSUER_B + "#key-1");
+        AtxVerificationResult r = new LocalAtxVerifier(anchors(
+                List.of(ISSUER_A),
+                List.of(new AtxPublicKey("Ed25519", a.rawHex(), ISSUER_A + "#key-1"),
+                        new AtxPublicKey("Ed25519", b.rawHex(), ISSUER_B + "#key-1")))).verify(atx);
+        assertFalse(r.valid(), "a chain DID the verifier does not trust must contribute no eligible key");
+        assertEquals(RejectCategory.SIGNATURE_INVALID, r.rejectCategory());
+    }
+
+    @Test
+    void nullChainEntryWithImmutableTrustListReturnsAVerdict() throws Exception {
+        Key a = genKey();
+        // A null entry in a v1.1 issuerChain is attacker-controlled input. The anchors'
+        // trusted list is the immutable List.of shape callers use, whose contains(null)
+        // throws; the verifier must still return a verdict, never propagate.
+        Atx atx = base("1.1", ISSUER_A, java.util.Arrays.asList(ISSUER_A, null));
+        sign(atx, a.priv(), ISSUER_A + "#key-1");
+        AtxVerificationResult r = new LocalAtxVerifier(anchors(
+                List.of(ISSUER_A),
+                List.of(new AtxPublicKey("Ed25519", a.rawHex(), ISSUER_A + "#key-1")))).verify(atx);
+        assertTrue(r.valid(), "expected ACCEPT: the issuer's own key signed, the null entry contributes nothing: " + r.reason());
+    }
+
+    @Test
+    void missingIssuerDidWithImmutableTrustListIsUntrustedIssuer() throws Exception {
+        Key a = genKey();
+        Atx atx = base("1.1", null, List.of(ISSUER_A));
+        sign(atx, a.priv(), ISSUER_A + "#key-1");
+        AtxVerificationResult r = new LocalAtxVerifier(anchors(
+                List.of(ISSUER_A),
+                List.of(new AtxPublicKey("Ed25519", a.rawHex(), ISSUER_A + "#key-1")))).verify(atx);
+        assertFalse(r.valid());
+        assertEquals(RejectCategory.UNTRUSTED_ISSUER, r.rejectCategory());
+    }
+
+    @Test
     void unboundKeyWithoutDidUrlStaysEligible() throws Exception {
         Key a = genKey();
         Atx atx = base("1.0", ISSUER_A, List.of(ISSUER_A));
