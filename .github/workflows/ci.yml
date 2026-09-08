@@ -197,6 +197,50 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+  # The Python SDK had no test job anywhere in CI and the publish job built
+  # the artifact without running a test (measured 2026-09-08), so a regression
+  # test could not prove anything before merge. Not conditioned on CI or on
+  # changed paths: a missing precondition is an error, never a skip.
+  sdk-python-tests:
+    name: SDK tests (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # release.yml's publish job pins 3.12; the gate runs where the artifact is built.
+          python-version: "3.12"
+
+      - name: Install the SDK with its test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,mcp]"
+
+      # The suite must run (total > 0) with zero failures and zero errors.
+      # Skips are reported, not yet refused: the suite carried 34 skip markers
+      # when this job was added; driving them to zero is its own change, after
+      # which the refusal gains `skipped > 0`.
+      - name: Test (the suite must run, with zero failures and zero errors)
+        run: |
+          python -m pytest -q -p no:cacheprovider --junitxml=/tmp/pytest-report.xml
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse("/tmp/pytest-report.xml").getroot()
+          suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
+          total = sum(int(s.get("tests", 0)) for s in suites)
+          failed = sum(int(s.get("failures", 0)) for s in suites)
+          errors = sum(int(s.get("errors", 0)) for s in suites)
+          skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          print(f"tests total={total} failed={failed} errors={errors} skipped={skipped}")
+          if not total > 0 or failed > 0 or errors > 0:
+              print("refusing to pass: the suite must run with zero failures and zero errors", file=sys.stderr)
+              sys.exit(1)
+          PY
+
   # Detect which parts of the monorepo changed
   changes:
     name: Detect Changes
