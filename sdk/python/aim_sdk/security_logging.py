@@ -117,6 +117,7 @@ class AgentEventType(str, Enum):
     AGENT_SUSPENDED = "AGENT_SUSPENDED"
     AGENT_REACTIVATED = "AGENT_REACTIVATED"
     AGENT_STALE_CREDENTIALS = "AGENT_STALE_CREDENTIALS"  # Cached credentials no longer valid
+    AGENT_ACTION = "AGENT_ACTION"  # An action the agent performed, recorded by the framework instrumentation hooks
     TRUST_SCORE_CHANGED = "TRUST_SCORE_CHANGED"
 
 
