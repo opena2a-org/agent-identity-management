@@ -90,3 +90,24 @@ def test_default_allow_allows_an_unlisted_capability(monkeypatch):
     doc = {"defaultAction": "allow", "rules": [{"capability": "payment:refund", "action": "deny"}]}
     cache = _cache_with(monkeypatch, lambda url, **kw: _Resp(200, doc))
     assert cache.check("weather:read") is True
+
+
+def test_default_action_deny_denies_an_unlisted_capability(monkeypatch):
+    """A present defaultAction that is not "allow" denies; only "allow" allows."""
+    doc = {"defaultAction": "deny", "rules": []}
+    cache = _cache_with(monkeypatch, lambda url, **kw: _Resp(200, doc))
+    assert cache.check("weather:read") is False
+
+
+def test_a_rule_with_any_action_but_allow_denies(monkeypatch):
+    """A matching rule decides, and only action "allow" allows; "audit" is a deny."""
+    doc = {"defaultAction": "allow", "rules": [{"capability": "payment:refund", "action": "audit"}]}
+    cache = _cache_with(monkeypatch, lambda url, **kw: _Resp(200, doc))
+    assert cache.check("payment:refund") is False
+
+
+def test_a_malformed_rule_entry_is_ignored_not_matched(monkeypatch):
+    """A rules entry that is not an object cannot match; the document's default decides."""
+    doc = {"rules": ["payment:refund"]}
+    cache = _cache_with(monkeypatch, lambda url, **kw: _Resp(200, doc))
+    assert cache.check("payment:refund") is False

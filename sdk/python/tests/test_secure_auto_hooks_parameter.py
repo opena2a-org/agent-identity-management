@@ -58,3 +58,17 @@ def test_auto_hooks_true_patches_the_detected_framework(monkeypatch):
     assert "openai" in hooked
     assert completions_cls.create is not original
     assert getattr(module, "_aim_hooked", False) is True
+
+
+def test_a_detected_library_whose_hook_cannot_be_installed_logs_a_warning(monkeypatch, caplog):
+    """The README promises a warning for a hook that cannot be installed; this proves it."""
+    import logging
+
+    broken = types.ModuleType("openai")  # detected, but without the attribute path the hook patches
+    monkeypatch.setitem(sys.modules, "openai", broken)
+    with caplog.at_level(logging.WARNING, logger="aim_sdk.auto_hooks"):
+        hooked = activate_hooks(_Client(), auto_hooks=True)
+    assert "openai" not in hooked
+    warnings = [r for r in caplog.records if r.name == "aim_sdk.auto_hooks" and r.levelno == logging.WARNING]
+    assert len(warnings) == 1, "exactly one warning for the one library whose hook could not be installed"
+    assert "openai" in warnings[0].getMessage()
