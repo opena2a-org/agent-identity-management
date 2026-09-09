@@ -387,7 +387,7 @@ class TestLogActionResult:
         assert len(responses.calls) == 1
         request_body = json.loads(responses.calls[0].request.body)
         assert request_body["result"] == "success"
-        assert request_body["result_summary"] == "Operation completed successfully"
+        assert request_body["resultSummary"] == "Operation completed successfully"
 
     @responses.activate
     def test_log_failure(self, aim_client):
@@ -408,7 +408,7 @@ class TestLogActionResult:
         assert len(responses.calls) == 1
         request_body = json.loads(responses.calls[0].request.body)
         assert request_body["result"] == "failure"
-        assert request_body["error_message"] == "Database connection failed"
+        assert request_body["errorMessage"] == "Database connection failed"
 
     @responses.activate
     def test_log_ignores_errors(self, aim_client):
@@ -543,7 +543,7 @@ class TestPerformActionDecorator:
         assert len(responses.calls) == 3  # Auto-registration + Verification + logging
         log_request = json.loads(responses.calls[2].request.body)
         assert log_request["result"] == "failure"
-        assert "Database connection failed" in log_request["error_message"]
+        assert "Database connection failed" in log_request["errorMessage"]
 
 
 class TestContextManager:
