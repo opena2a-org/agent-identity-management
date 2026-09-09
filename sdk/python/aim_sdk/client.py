@@ -1229,24 +1229,34 @@ class AIMClient:
             )
 
         except (AuthenticationError, ActionDeniedError) as e:
+            # A rejected credential is not a policy denial: AIM never verified
+            # anything, so the check renders UNVERIFIED, distinguishable in the
+            # result field from an administrator's deny. An ActionDeniedError
+            # raised through here IS a denial and keeps the DENIED literal.
             security_logger.log_authorization(
                 AuthzEventType.CAPABILITY_CHECK,
                 action=capability,
                 resource=resource,
                 granted=False,
                 agent_id=self.agent_id,
-                error=str(e)
+                error=str(e),
+                result="UNVERIFIED" if isinstance(e, AuthenticationError) else None
             )
             raise
         except requests.exceptions.RequestException as e:
-            # Handle network errors (connection refused, timeout, etc.)
+            # Handle network errors (connection refused, timeout, etc.).
+            # AIM was never asked, so the event must not carry the policy-denial
+            # literal DENIED: a SOC reading DENIED for an action that then ran
+            # (the monitoring/unresolved leniency below) would chase a denial
+            # nobody issued. UNAVAILABLE states what happened: no answer.
             security_logger.log_authorization(
                 AuthzEventType.CAPABILITY_CHECK,
                 action=capability,
                 resource=resource,
                 granted=False,
                 agent_id=self.agent_id,
-                error=f"Network error: {type(e).__name__}: {str(e)}"
+                error=f"Network error: {type(e).__name__}: {str(e)}",
+                result="UNAVAILABLE"
             )
             console.warning(f"Network error during verification: {type(e).__name__}: {str(e)}")
             # THE transport allowlist. UNKNOWN is populated from the transport
@@ -1574,6 +1584,31 @@ class AIMClient:
             warnings.warn(verdict.pending_change, PendingEnforcementChange, stacklevel=3)
 
         return verdict, decision
+
+    def _log_unverified_execution(self, capability: str, resource: Optional[str],
+                                  decision: "VerificationDecision") -> None:
+        """
+        Record locally that an action is executing WITHOUT a completed
+        verification (the enforcement rule's monitoring / unresolved-mode
+        leniency). Without this event the security log showed only the failed
+        check -- rendered DENIED before AIM-14 -- and nothing recording that
+        the action then ran, so "AIM said no" and "AIM was never asked, and
+        the action executed anyway" were indistinguishable to a SOC. The
+        server-side log_capability_result call cannot cover this case: in the
+        unreachable-server scenario it fails on the same dead transport.
+        """
+        security_logger.log_authorization(
+            AuthzEventType.ACTION_EXECUTED,
+            action=capability,
+            resource=resource,
+            granted=False,
+            agent_id=self.agent_id,
+            result="EXECUTED_UNVERIFIED",
+            details={
+                "outcome": decision.outcome.value,
+                "reason": decision.reason,
+            }
+        )
 
     def verify_action(
         self,
@@ -3375,15 +3410,28 @@ class AIMClient:
                 # Auto-register capability on first use (if enabled)
                 if auto_register:
                     try:
-                        self.register_capability(
+                        registration = self.register_capability(
                             capability_type=cap,
                             description=f"Auto-registered by @perform_action decorator for {func.__name__}",
                             risk_level=detected_risk
                         )
-                        console.capability_registered(cap, detected_risk)
                     except Exception as e:
                         # Don't fail the action if registration fails - just log it
                         console.warning(f"Auto-registration of '{cap}' failed: {e}")
+                    else:
+                        # register_capability already spoke for every status it
+                        # resolves itself (granted prints, pending informs, a
+                        # swallowed rejection warns). Announce only the plain
+                        # "registered" success it stays silent on: a 404's
+                        # not_tracked and a 401's error dict return without
+                        # raising, and announcing those claimed a registration
+                        # the server had just rejected.
+                        if (
+                            isinstance(registration, dict)
+                            and registration.get("success")
+                            and registration.get("status") == "registered"
+                        ):
+                            console.capability_registered(cap, detected_risk)
 
                 # Build context with JIT access info
                 merged_context = context.copy() if context else {}
@@ -3410,6 +3458,9 @@ class AIMClient:
                 )
                 if verdict.blocked:
                     raise verdict.error
+                if decision.outcome is not Outcome.ALLOW:
+                    # Running without a completed verification: record it.
+                    self._log_unverified_execution(cap, resource, decision)
 
                 verification_id = decision.verification_id
 
@@ -3523,6 +3574,9 @@ class AIMClient:
                 )
                 if verdict.blocked:
                     raise verdict.error
+                if decision.outcome is not Outcome.ALLOW:
+                    # Running without a completed verification: record it.
+                    self._log_unverified_execution(action, resource, decision)
 
                 verification_id = decision.verification_id
 
@@ -3669,6 +3723,8 @@ class AIMClient:
                     console.jit_approved(action)
                 else:
                     console.jit_unverified(action)
+                    # Running without a completed verification: record it.
+                    self._log_unverified_execution(action, resource, decision)
                 verification_id = decision.verification_id
 
                 try:
@@ -4605,10 +4661,17 @@ def register_agent(
         console.info("Manual Mode: Using API key authentication")
 
     else:
-        # No authentication found
+        # No authentication found. Name the fixes that actually exist for a
+        # pip install: `aim-sdk login` (the README's own step), the dashboard
+        # SDK download, or api_key mode -- which also requires aim_url, so
+        # saying "provide api_key" alone sent users into the very
+        # ConfigurationError raised above.
         raise ConfigurationError(
             "No authentication credentials found.\n"
-            "Either download SDK from dashboard (OAuth mode) or provide api_key parameter (Manual mode)."
+            "Fix one of:\n"
+            "  - Run 'aim-sdk login' to authenticate this machine (works for pip installs), or\n"
+            "  - Download the SDK from the AIM dashboard (OAuth mode), or\n"
+            "  - Pass api_key= together with aim_url= (API key mode requires aim_url)."
         )
 
     # 2.5. Handle backward compatibility: merge talks_to into mcp_servers

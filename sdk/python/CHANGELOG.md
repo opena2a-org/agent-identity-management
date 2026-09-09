@@ -5,6 +5,54 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - Unreleased
+
+The five P2 findings from the 2.0.2 release test, re-measured at head and
+fixed as a batch.
+
+### Fixed
+
+- **`aim-sdk login` is bounded and fails fast on a dead URL.** The command now
+  probes the server before anything else: with an unreachable `--url` it exits
+  non-zero within the 5s probe bound, names the URL it could not reach, and
+  never opens a browser. After a successful browser open, the callback wait is
+  bounded by a 180s deadline; on expiry the command prints a timeout message
+  and exits non-zero. Previously there was no reachability check before
+  `webbrowser.open`, and the wait loop re-entered `handle_request()` after
+  every socket timeout, so "Waiting for authentication... (Ctrl+C to cancel)"
+  waited forever against a closed port.
+- **The README manual-mode example works as written.** `secure(name,
+  api_key=...)` requires `aim_url` — there is no default server URL and no
+  environment-variable fallback in `secure()` — but the README's manual-mode
+  one-liner omitted it, so pasting the documented line raised
+  `ConfigurationError`. The example now carries `aim_url=` beside `api_key=`
+  and the manual-mode prose states the requirement.
+- **The no-credentials error names the real fixes.** The `ConfigurationError`
+  raised when neither SDK credentials nor an `api_key` are present told a pip
+  user to "download SDK from dashboard ... or provide api_key parameter",
+  naming neither the `aim-sdk login` command (the README's own step for a pip
+  install) nor the fact that api_key mode also requires `aim_url`. It now
+  names both.
+- **The security log distinguishes "AIM was never asked" from "AIM said no",
+  and records unverified execution.** Every non-answer used to render as
+  `result: DENIED`: the `CAPABILITY_CHECK` event for a transport failure now
+  carries `result: UNAVAILABLE`, and for a 401 (`AuthenticationError`)
+  `result: UNVERIFIED`; only an actual policy denial renders `DENIED`. And
+  when the enforcement rule executes the wrapped function without a completed
+  verification (monitoring mode or the unresolved-mode transport window), an
+  `ACTION_EXECUTED` event with `result: EXECUTED_UNVERIFIED` now records that
+  the action ran — previously `ACTION_EXECUTED` was defined but emitted
+  nowhere, so the log showed a "denial" followed by nothing.
+- **No success line on a rejected capability registration.** The
+  `@perform_action` auto-registration path announced "Registered ..." whenever
+  `register_capability` returned without raising — including a 404's
+  `not_tracked` result and a 401 swallowed into an `error` result — so a
+  rejected registration printed a success line (on the 401 path, above the
+  failure warning). The wrapper now announces only a plain registered success;
+  `register_capability`'s own per-status output (granted, pending, warnings)
+  is unchanged, a granted registration is announced exactly once instead of
+  twice, and the 500 path still prints only a warning.
+
 ## [2.0.2] - 2026-09-08
 
 ### Security
