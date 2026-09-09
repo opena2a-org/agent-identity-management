@@ -5,6 +5,83 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+The twelve P3 findings from the 2.0.2 fresh-user release test, each fixed
+(none declined, none narrowed to a README note alone unless listed as such):
+
+### Fixed
+
+- **`AIM_SECURITY_LOG_STDOUT` accepts the same spellings as `AIM_STRICT_MODE`**
+  (item 1). `true`/`1`/`yes`/`on` install the stdout handler and
+  `false`/`0`/`no`/`off` do not, case-insensitively with surrounding
+  whitespace stripped, instead of an equality against the single literal
+  `"true"`. `AIM_SECURITY_LOGGING_ENABLED` parses with the same spellings
+  (still enabled by default). The README passage naming the variable now
+  enumerates the accepted true spellings.
+- **README's default-logging claim matches the installed handler** (item 2,
+  narrowed in the README). The package attaches a stderr handler at ERROR
+  level on import by design; the README no longer claims "under the SDK's own
+  defaults nothing is written" and instead states that ERROR-severity records
+  go to stderr and WARNING-severity records do not.
+- **`set_quiet` is exported and documented, and an unreachable verification
+  says each thing once** (item 3). `from aim_sdk import set_quiet` silences
+  the SDK's informational stdout output (info/warning/success lines,
+  registration banners, detection results); the README documents it. The
+  pending-enforcement-change sentence is emitted once, through the typed
+  `PendingEnforcementChange` warning, no longer duplicated onto stdout via
+  the console.
+- **A registration that cannot connect raises a typed, actionable error**
+  (item 4). `secure()` against an unreachable server raises
+  `ConfigurationError` naming the URL and the remedies (correct the URL,
+  start a server, `aim-sdk login --url`), with the `requests`/`urllib3`
+  chain suppressed (`raise ... from None`); a 401 on either registration
+  path raises `AuthenticationError`, the same class the verification path
+  raises for a 401.
+- **No request URL ever carries an absent identifier, and the result body is
+  camelCase** (item 5). `log_capability_result` returns without issuing a
+  request when `verification_id` is absent (the guard
+  `report_execution_status` already had), so the SDK never POSTs to
+  `/verifications/None/result`; its body now sends `resultSummary`/
+  `errorMessage`, the same key convention as the SDK's other write bodies.
+- **Every request to an AIM URL carries `User-Agent: AIM-Python-SDK/<version>`**
+  (item 6), including the agent-exists check, both registration requests,
+  MCP-server registration, and the cached-credential validation probe, which
+  previously went out under the `requests` default.
+- **The PyPI page is self-contained and the classifiers cover
+  `python_requires`** (item 7). Every README link that pointed outside the
+  packaged tree (`../../README.md`, `examples/`, `docs/`, sibling SDKs,
+  LICENSE) is now an absolute GitHub URL; the version pointer is
+  `aim_sdk.__version__` (resolvable from a wheel-only install) instead of
+  "see `VERSION` file"; classifiers now include 3.13 and 3.14 and
+  `python_requires` carries the matching `<3.15` upper bound.
+- **The login banner is rectangular** (item 8): all four lines of
+  `aim_sdk.cli.print_banner` are 61 columns, so the right border is a single
+  column.
+- **One public spelling of the security-logging entry point** (item 9).
+  `configure_security_logging` is now bound in `aim_sdk.security_logging`
+  itself (with `configure_from_environment` kept as a compatibility alias),
+  so both `from aim_sdk import configure_security_logging` and
+  `from aim_sdk.security_logging import configure_security_logging` work,
+  and the module docstring's usage block shows that spelling.
+- **An unreachable AIM costs a bounded, stated amount** (item 10). A refused
+  connection is no longer retried with 1+2+4s exponential backoff (~7s per
+  request); it fails on the first attempt. The README states the worst-case
+  cost of an unreachable server and how to change it (`timeout`,
+  `enforcement_timeout`, `max_retries`, `auto_retry`).
+- **A malformed 200 is named as malformed** (item 11). Both registration
+  paths agree that 200 and 201 are success; a success status whose body
+  lacks the agent's credentials (e.g. `200` with `{}`) raises
+  `ConfigurationError` saying the response was malformed or unexpected and
+  naming the statuses the SDK requires, instead of "Unknown error", and the
+  security event records `body_malformed`.
+- **`PolicyCache` is no longer exported from `aim_sdk`** (item 12). No
+  released AIM server serves the route it fetches, so it cannot answer a
+  check against any released backend; it is removed from `aim_sdk.__all__`
+  and the top-level namespace and remains importable from
+  `aim_sdk.auto_hooks` (unchanged behaviour) for the day a server registers
+  the route.
+
 ## [2.0.3] - 2026-09-09
 
 ### Fixed
