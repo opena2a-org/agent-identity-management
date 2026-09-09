@@ -22,10 +22,11 @@ workflows to the checker and refuses any return of an aggregate expression.
 ## Exclusion statement (release contract)
 
 The gate cannot execute every test in the suite on a hosted runner. The
-exclusions are explicit, file-scoped, and named in the workflow step as
-`--allow-skips=` flags; the checker tolerates status `skipped` **only**
-inside the named files. This section states exactly which cases those are
-and why.
+exclusions are explicit, file-scoped, bounded, and named in the workflow
+step as `--allow-skips=<file>:<bound>` flags; the checker tolerates status
+`skipped` **only** inside the named files and **only** while the file's
+skipped count is at or below its bound. This section states exactly which
+cases those are, how many, and why.
 
 An `--allow-skips` entry matches a test file **only when the file's
 SDK-root-relative path equals the entry exactly**. The SDK root is the
@@ -54,20 +55,43 @@ provisioning the full platform (backend, database, seeded credentials)
 inside them is out of scope for this gate. These 36 cases are therefore
 **excluded from the publish gate** via the workflow's allowlist.
 
+Each `--allow-skips` entry in both workflow steps (`publish-npm` in
+`release.yml`, `sdk-tests` in `ci.yml`) carries the count in the table
+above as its bound:
+
+```
+--allow-skips=src/a2a/A2AClient.integration.test.ts:21
+--allow-skips=src/client/AIMClient.integration.test.ts:13
+--allow-skips=src/auth/oauth.integration.test.ts:2
+```
+
 Compensating controls:
 
 - The exclusion is bounded and reviewable: the allowlist lives in the
   workflow step itself and in committed test assertions that pin it to
-  exactly these three files. Growing it requires a workflow diff and a test
-  change. A skip in **any other file** — including a new `.skip`, `.todo`
-  or an environment probe added elsewhere — still fails the publish.
-- The excluded population stays visible: the checker prints the skipped
-  count in every gate log, so the log line (`skipped=36` today) shows any
-  growth inside the allowlisted files.
+  exactly these three files with exactly these bounds. Growing it requires
+  a workflow diff and a test change. A skip in **any other file** —
+  including a new `.skip`, `.todo` or an environment probe added
+  elsewhere — still fails the publish.
+- Growth inside an allowlisted file fails the gate: a skipped count above
+  the file's bound is refused, and the refusal names the file, the
+  measured count, the bound and the delta (for example
+  `src/a2a/A2AClient.integration.test.ts: 22 skipped, bound 21 (+1)`).
+  Growing a bound is a **gate change**, never a test change: it is a diff
+  to the bound in both workflow steps and to the table above, reviewed as
+  the allowlist itself is. The log's skipped count is no longer the only
+  witness of growth inside an allowlisted file.
+- An entry without a bound, or with a bound that is not an unsigned
+  decimal integer, is refused (exit 2, quoting the entry) before the
+  report is judged. No unbounded form of an entry exists.
+- The excluded population stays visible: the checker prints the per-status
+  counts in every gate log (`skipped=36` today), and when skips remain its
+  ok line lists every entry as `<file> <skipped>/<bound>`.
 - The cases remain runnable on demand: point `AIM_BASE_URL` at a reachable
   backend (for example the docker-compose quickstart stack) with
   credentials configured and run `npx vitest run` in `sdk/typescript`; the
-  same 36 cases then execute instead of skipping.
+  same 36 cases then execute instead of skipping. A skipped count below
+  the bound passes the gate for the same reason.
 
 ### Provided (not excluded): the curl-gated signature block
 
