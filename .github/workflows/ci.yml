@@ -178,21 +178,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # CI=true so the environment-gated cases execute rather than silently
-      # skip; the refusal literal mirrors release.yml's publish-time step —
-      # fail unless the suite ran (total > 0) with zero failures and zero
-      # skips (a skipped test here is a test the gate stopped enforcing).
+      # CI=true so the environment-gated cases execute wherever they can;
+      # the refusal is the committed per-assertion checker shared with
+      # release.yml's publish-time step. It walks every
+      # testResults[].assertionResults[].status in the JSON report — the
+      # aggregate numPendingTests/numTodoTests counters count a
+      # skipIf-skipped case as passed and must never gate again. The
+      # --allow-skips entries are the gate's only tolerated skips: the
+      # environment-gated integration files this runner cannot execute (no
+      # AIM backend, no credentials). Any skip outside them fails the gate.
+      # See docs/testing/sdk-publish-gate.md.
       - name: Test (a skipped test fails the gate)
         env:
           CI: "true"
         run: |
           npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest-report.json
-          node -e '
-            const r = require("/tmp/vitest-report.json");
-            const total = r.numTotalTests, failed = r.numFailedTests, skipped = r.numPendingTests + (r.numTodoTests || 0);
-            console.log(`tests total=${total} failed=${failed} skipped=${skipped}`);
-            if (!(total > 0) || failed > 0 || skipped > 0) { console.error("refusing to pass: the suite must run with zero failures and zero skips"); process.exit(1); }
-          '
+          node scripts/check-vitest-report.mjs /tmp/vitest-report.json \
+            --allow-skips=src/a2a/A2AClient.integration.test.ts \
+            --allow-skips=src/client/AIMClient.integration.test.ts \
+            --allow-skips=src/auth/oauth.integration.test.ts
 
       - name: Typecheck
         run: npm run typecheck
