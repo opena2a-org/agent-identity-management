@@ -35,6 +35,11 @@ Usage:
         details={"token_id": "xyz"}
     )
 
+    # Re-read the AIM_SECURITY_LOG_* environment variables (also importable
+    # as `from aim_sdk import configure_security_logging`)
+    from aim_sdk.security_logging import configure_security_logging
+    configure_security_logging()
+
     # For SIEM integration, enable JSON file logging
     security_logger.configure(
         log_file="/var/log/aim/security.log",
@@ -769,20 +774,48 @@ security_logger = SecurityLogger()
 # ENVIRONMENT-BASED CONFIGURATION
 # =============================================================================
 
-def configure_from_environment():
+def _env_flag(name: str, default: bool) -> bool:
+    """
+    Parse a boolean AIM_* environment variable with the same accepted
+    spellings as AIM_STRICT_MODE (strict_mode.TRUE_VALUES / FALSE_VALUES):
+    true/1/yes/on and false/0/no/off, case-insensitively, surrounding
+    whitespace stripped. Unset, empty, or unrecognised values resolve to
+    ``default``.
+    """
+    # Imported here, not at module top: strict_mode has no import-time side
+    # effects, but keeping the parser's home explicit at the one use site
+    # makes the shared-spelling contract easy to find.
+    from .strict_mode import TRUE_VALUES, FALSE_VALUES
+
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+    return default
+
+
+def configure_security_logging():
     """
     Configure security logging from environment variables.
 
     Environment variables:
     - AIM_SECURITY_LOG_FILE: Path to security log file
     - AIM_SECURITY_LOG_LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    - AIM_SECURITY_LOG_STDOUT: Include stdout logging (true/false)
-    - AIM_SECURITY_LOGGING_ENABLED: Enable/disable security logging (true/false)
+    - AIM_SECURITY_LOG_STDOUT: Include stdout logging. Accepts the same
+      spellings as AIM_STRICT_MODE: true/1/yes/on enable it, false/0/no/off
+      (and unset) do not, case-insensitively with surrounding whitespace
+      stripped.
+    - AIM_SECURITY_LOGGING_ENABLED: Enable/disable security logging entirely
+      (same accepted spellings; default enabled)
     """
     log_file = os.environ.get("AIM_SECURITY_LOG_FILE")
     log_level = os.environ.get("AIM_SECURITY_LOG_LEVEL", "INFO")
-    include_stdout = os.environ.get("AIM_SECURITY_LOG_STDOUT", "false").lower() == "true"
-    enabled = os.environ.get("AIM_SECURITY_LOGGING_ENABLED", "true").lower() != "false"
+    include_stdout = _env_flag("AIM_SECURITY_LOG_STDOUT", default=False)
+    enabled = _env_flag("AIM_SECURITY_LOGGING_ENABLED", default=True)
 
     security_logger.configure(
         log_file=log_file,
@@ -792,5 +825,11 @@ def configure_from_environment():
     )
 
 
+# Backwards-compatible spelling: the function was published under this name
+# before 2.0.3 (aim_sdk re-exported it as configure_security_logging while the
+# module itself bound only configure_from_environment).
+configure_from_environment = configure_security_logging
+
+
 # Auto-configure from environment on import
-configure_from_environment()
+configure_security_logging()

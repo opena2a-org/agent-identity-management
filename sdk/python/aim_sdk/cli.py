@@ -79,11 +79,11 @@ def check_server_reachable(aim_url, timeout):
 
 
 def print_banner():
-    """Print AIM SDK banner."""
+    """Print AIM SDK banner. Every line is 61 columns wide so the ║ borders align."""
     print("""
 ╔═══════════════════════════════════════════════════════════╗
-║                     AIM SDK Login                          ║
-║         Agent Identity Management for AI Agents            ║
+║                       AIM SDK Login                       ║
+║          Agent Identity Management for AI Agents          ║
 ╚═══════════════════════════════════════════════════════════╝
 """)
 

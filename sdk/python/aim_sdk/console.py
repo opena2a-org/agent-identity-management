@@ -439,6 +439,9 @@ class AIMConsole:
 
     def warning(self, message: str):
         """Display warning message."""
+        if self.quiet:
+            return
+
         message = _strip_control_bytes(message)
         if RICH_AVAILABLE:
             self.console.print(f"[yellow]Warning:[/] {message}")
@@ -447,6 +450,9 @@ class AIMConsole:
 
     def info(self, message: str):
         """Display info message."""
+        if self.quiet:
+            return
+
         message = _strip_control_bytes(message)
         if RICH_AVAILABLE:
             self.console.print(f"{message}")
@@ -469,6 +475,9 @@ class AIMConsole:
 
     def success(self, message: str):
         """Display success message."""
+        if self.quiet:
+            return
+
         if RICH_AVAILABLE:
             self.console.print(rf"[bold green]\[OK][/] {message}")
         else:
@@ -490,6 +499,13 @@ console = AIMConsole()
 
 
 def set_quiet(quiet: bool = True):
-    """Set quiet mode to suppress all output."""
+    """
+    Silence the SDK's informational console output.
+
+    With quiet engaged, registration banners, auto-detection results, and
+    info/warning/success lines are suppressed. Errors (``console.error``) stay
+    visible: they accompany raised exceptions and quiet mode is not a reason
+    to hide a failure. Also importable as ``from aim_sdk import set_quiet``.
+    """
     global console
     console.quiet = quiet
