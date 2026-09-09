@@ -46,13 +46,33 @@ the SDK root altogether.
 | `sdk/typescript/src/client/AIMClient.integration.test.ts` | 13 |
 | `sdk/typescript/src/auth/oauth.integration.test.ts` | 2 |
 
-Every one is an `it.skipIf(!backendAvailable || !credentialsAvailable)`
-case that probes `AIM_BASE_URL` (default `http://localhost:8080`) for a
-live AIM backend and looks for API credentials. The hosted runner provides
-neither: there is no backend service in the publish or sdk-tests jobs, and
-provisioning the full platform (backend, database, seeded credentials)
-inside them is out of scope for this gate. These 36 cases are therefore
-**excluded from the publish gate** via the workflow's allowlist.
+Every case is an `it.skipIf(<predicate>)` case gated on one or both of two
+runner probes: `backendAvailable` (a live AIM backend answering at
+`AIM_BASE_URL`, default `http://localhost:8080`) and `credentialsAvailable`
+(API credentials found in the environment or on disk). Not every case
+gates on both. The population splits into two groups by predicate form:
+
+| File | Both predicates | One predicate | Total |
+|---|---|---|---|
+| `sdk/typescript/src/a2a/A2AClient.integration.test.ts` | 19 | 2 (`!backendAvailable`) | 21 |
+| `sdk/typescript/src/client/AIMClient.integration.test.ts` | 10 | 3 (2 on `!backendAvailable` and 1 on `!credentialsAvailable`) | 13 |
+| `sdk/typescript/src/auth/oauth.integration.test.ts` | 0 | 2 (`!backendAvailable`) | 2 |
+| Total | 29 | 7 | 36 |
+
+A both-predicate case is `it.skipIf(!backendAvailable || !credentialsAvailable)`
+and skips when either the backend or the credentials are missing. A
+single-predicate case skips when only that one condition is missing on
+the runner: the six `it.skipIf(!backendAvailable)` cases execute against a
+reachable backend even without credentials, and the one
+`it.skipIf(!credentialsAvailable)` case executes with credentials configured
+even without a backend. The hosted runner provides neither probe: there is
+no backend service in the publish or sdk-tests jobs, and provisioning the
+full platform (backend, database, seeded credentials) inside them is out
+of scope for this gate. These 36 cases are therefore **excluded from the
+publish gate** via the workflow's allowlist. A committed test
+(`sdk/typescript/tests/publish-gate-doc-skipif-groups.test.ts`) derives
+both groups from the three files and refuses a drift between the table
+above and what the files carry.
 
 Compensating controls:
 
