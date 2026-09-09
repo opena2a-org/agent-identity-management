@@ -368,7 +368,7 @@ class OAuthTokenManager:
                                         self.credentials['sdkTokenId'] = new_token_id
 
                                 self.save_credentials(self.credentials)
-                                print("✓ Token recovered automatically! SDK credentials updated.")
+                                print("[OK] Token recovered automatically! SDK credentials updated.")
                                 print("No need to re-download the SDK - everything just works!")
 
                                 # Decode new access token expiry using PyJWT
@@ -527,7 +527,7 @@ class OAuthTokenManager:
             self.access_token = None
             self.access_token_expiry = None
 
-            print("✓ Token revoked and credentials deleted")
+            print("[OK] Token revoked and credentials deleted")
             return True
 
         except Exception as e:

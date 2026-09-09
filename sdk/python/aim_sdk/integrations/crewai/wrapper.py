@@ -141,7 +141,7 @@ class AIMCrewWrapper:
         verification_id = verification_result.get("verification_id")
 
         if self.verbose:
-            print(f"✓ AIM: Crew execution verified (id: {verification_id})")
+            print(f"[OK] AIM: Crew execution verified (id: {verification_id})")
 
         # Execute crew
         try:
@@ -164,7 +164,7 @@ class AIMCrewWrapper:
                         print(f"Warning: AIM result logging error: {e}")
 
             if self.verbose:
-                print("✓ AIM: Crew execution completed and logged")
+                print("[OK] AIM: Crew execution completed and logged")
 
             return result
 
@@ -182,7 +182,7 @@ class AIMCrewWrapper:
                         print(f"Warning: AIM result logging error: {log_error}")
 
             if self.verbose:
-                print(f"✗ AIM: Crew execution failed: {e}")
+                print(f"[FAIL] AIM: Crew execution failed: {e}")
 
             raise
 
@@ -229,7 +229,7 @@ class AIMCrewWrapper:
         verification_id = verification_result.get("verification_id")
 
         if self.verbose:
-            print(f"✓ AIM: Async crew execution verified (id: {verification_id})")
+            print(f"[OK] AIM: Async crew execution verified (id: {verification_id})")
 
         # Execute crew asynchronously
         try:
@@ -252,7 +252,7 @@ class AIMCrewWrapper:
                         print(f"Warning: AIM result logging error: {e}")
 
             if self.verbose:
-                print("✓ AIM: Async crew execution completed and logged")
+                print("[OK] AIM: Async crew execution completed and logged")
 
             return result
 
@@ -270,7 +270,7 @@ class AIMCrewWrapper:
                         print(f"Warning: AIM result logging error: {log_error}")
 
             if self.verbose:
-                print(f"✗ AIM: Async crew execution failed: {e}")
+                print(f"[FAIL] AIM: Async crew execution failed: {e}")
 
             raise
 
