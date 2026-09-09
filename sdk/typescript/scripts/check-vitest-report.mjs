@@ -4,7 +4,7 @@
  * .github/workflows/release.yml (publish-npm) and ci.yml (sdk-tests).
  *
  * Usage:
- *   node scripts/check-vitest-report.mjs <report.json> [--allow-skips=<file>]...
+ *   node scripts/check-vitest-report.mjs <report.json> [--root=<dir>] [--allow-skips=<file>]...
  *
  * The vitest JSON reporter's aggregate counters cannot see skipIf-skipped
  * cases: numPendingTests/numTodoTests stay 0 and numPassedTests absorbs
@@ -15,16 +15,26 @@
  * when anything failed, was skipped, pending or todo, or when nothing
  * ran at all.
  *
- * `--allow-skips=<repo-relative test file>` names an explicit exclusion:
- * a file whose "skipped" assertions are tolerated because the gate's
- * runner cannot provide their environment (see
+ * `--allow-skips=<SDK-root-relative test file>` names an explicit
+ * exclusion: a file whose "skipped" assertions are tolerated because the
+ * gate's runner cannot provide their environment (see
  * docs/testing/sdk-publish-gate.md for the exclusion statement). The
  * allowlist excuses ONLY status "skipped" and only inside the named
  * files: a skip in any other file, a pending or todo anywhere, a failure
  * anywhere, or a run where nothing passed at all still refuses.
+ *
+ * An entry matches a report file only when the file's path, made
+ * relative to the SDK root, EQUALS the entry: there is no suffix match,
+ * so a nested copy such as src/evil/src/a2a/A2AClient.integration.test.ts
+ * is outside the allowlist. The SDK root is `--root=<dir>` when given and
+ * process.cwd() otherwise (both workflow gate steps run this script from
+ * working-directory sdk/typescript and pass no --root). Both sides are
+ * normalised by turning backslashes into slashes and stripping a leading
+ * "./". A report name outside the root is never allowlisted.
  */
 
 import { readFileSync } from 'fs';
+import { isAbsolute, relative, resolve } from 'path';
 
 function refuse(message, code = 1) {
   console.error(message);
@@ -33,9 +43,12 @@ function refuse(message, code = 1) {
 
 const allowSkips = [];
 let reportPath;
+let rootArg;
 for (const arg of process.argv.slice(2)) {
   if (arg.startsWith('--allow-skips=')) {
     allowSkips.push(arg.slice('--allow-skips='.length));
+  } else if (arg.startsWith('--root=')) {
+    rootArg = arg.slice('--root='.length);
   } else if (reportPath === undefined) {
     reportPath = arg;
   } else {
@@ -43,8 +56,12 @@ for (const arg of process.argv.slice(2)) {
   }
 }
 if (reportPath === undefined) {
-  refuse('usage: check-vitest-report.mjs <report.json> [--allow-skips=<file>]...', 2);
+  refuse(
+    'usage: check-vitest-report.mjs <report.json> [--root=<dir>] [--allow-skips=<file>]...',
+    2,
+  );
 }
+const sdkRoot = resolve(rootArg ?? process.cwd());
 
 let report;
 try {
@@ -56,8 +73,27 @@ if (report === null || typeof report !== 'object' || !Array.isArray(report.testR
   refuse(`unreadable vitest report at ${reportPath}: no testResults array`, 2);
 }
 
-const isAllowlisted = (fileName) =>
-  allowSkips.some((allowed) => fileName === allowed || fileName.endsWith(`/${allowed}`));
+// Backslashes become slashes and a leading "./" is dropped, on both the
+// report side and the entry side.
+const normalise = (p) => String(p).replace(/\\/g, '/').replace(/^(\.\/)+/, '');
+
+// The report's testResults[].name made relative to the SDK root. An
+// absolute name outside the root comes back starting with ".." (or still
+// absolute, on a different Windows drive) and can never equal an entry;
+// a name that is not absolute is compared as given.
+const toRootRelative = (fileName) => {
+  const name = normalise(fileName);
+  if (!isAbsolute(name)) return name;
+  const rel = normalise(relative(sdkRoot, name));
+  if (rel === '' || rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return null;
+  return rel;
+};
+
+const allowSkipsNormalised = allowSkips.map(normalise);
+const isAllowlisted = (fileName) => {
+  const rel = toRootRelative(fileName);
+  return rel !== null && allowSkipsNormalised.includes(rel);
+};
 
 const counts = { passed: 0, failed: 0, skipped: 0, pending: 0, todo: 0 };
 let unknown = 0;

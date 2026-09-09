@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { load } from 'js-yaml';
@@ -19,6 +19,14 @@ import { load } from 'js-yaml';
  */
 
 const CHECKER = join(__dirname, '..', 'scripts', 'check-vitest-report.mjs');
+
+/**
+ * The SDK root the fixtures' absolute report names sit under. The checker
+ * compares each name made relative to its root (--root, else its cwd)
+ * exactly against the --allow-skips entries, so every invocation over a
+ * fixture built here passes this root explicitly.
+ */
+const FIXTURE_ROOT = '/repo/sdk/typescript';
 
 let workDir: string;
 
@@ -52,7 +60,7 @@ function buildReport(
     byFile.set(s.file, list);
   }
   const testResults = [...byFile.entries()].map(([file, groups]) => ({
-    name: join('/repo/sdk/typescript', file),
+    name: join(FIXTURE_ROOT, file),
     status: 'passed',
     startTime: 0,
     endTime: 1,
@@ -99,8 +107,21 @@ function writeReport(report: object): string {
   return p;
 }
 
-function runChecker(args: string[]) {
-  const res = spawnSync('node', [CHECKER, ...args], { encoding: 'utf-8' });
+/**
+ * Run the checker over a fixture. The fixture names resolve against
+ * FIXTURE_ROOT, passed as --root unless the caller supplies its own
+ * `root` (an explicit `null` omits --root to exercise the cwd default).
+ */
+function runChecker(
+  args: string[],
+  opts: { root?: string | null; cwd?: string } = {},
+) {
+  const root = opts.root === undefined ? FIXTURE_ROOT : opts.root;
+  const rootArgs = root === null ? [] : [`--root=${root}`];
+  const res = spawnSync('node', [CHECKER, ...args, ...rootArgs], {
+    encoding: 'utf-8',
+    cwd: opts.cwd,
+  });
   return {
     status: res.status,
     stdout: res.stdout ?? '',
@@ -274,6 +295,128 @@ describe('check-vitest-report allowlist: exclusions are explicit and bounded', (
     const res = runChecker([writeReport(report), ...allowFlags]);
     expect(res.status, res.output).not.toBe(0);
     expect(res.stderr).toMatch(/no test ran/i);
+  });
+});
+
+describe('check-vitest-report allowlist: an entry matches its SDK-root-relative path exactly', () => {
+  const allowFlags = INTEGRATION_FILES.map((f) => `--allow-skips=${f}`);
+  const NESTED = 'src/evil/src/a2a/A2AClient.integration.test.ts';
+  const LISTED = 'src/a2a/A2AClient.integration.test.ts';
+
+  interface ReportShape {
+    testResults: { name: string }[];
+  }
+
+  /** The same report with one file's testResults[].name rewritten verbatim. */
+  function renamed(report: object, from: string, to: string): object {
+    const copy = JSON.parse(JSON.stringify(report)) as ReportShape;
+    const hit = copy.testResults.find((r) => r.name === from);
+    expect(hit, `fixture carries ${from}`).toBeDefined();
+    hit!.name = to;
+    return copy;
+  }
+
+  it('AIM-18.AC2 refuses a skipped case under a nested same-suffix path and names it; the same report with the file at the listed path exits 0', () => {
+    const report = buildReport([
+      { file: NESTED, status: 'skipped', n: 1 },
+      { file: 'src/version.test.ts', status: 'passed', n: 10 },
+    ]);
+    const res = runChecker([writeReport(report), ...allowFlags]);
+    expect(res.status, res.output).not.toBe(0);
+    expect(res.stderr).toMatch(/outside the allowlist/);
+    expect(res.stderr).toContain(NESTED);
+
+    const moved = renamed(report, join(FIXTURE_ROOT, NESTED), join(FIXTURE_ROOT, LISTED));
+    const ok = runChecker([writeReport(moved), ...allowFlags]);
+    expect(ok.status, ok.output).toBe(0);
+  });
+
+  it('AIM-18.AC3 refuses an absolute report name outside the root that merely ends with an entry, and tolerates the bare relative entry', () => {
+    const outside = `/elsewhere/${LISTED}`;
+    const report = renamed(
+      buildReport([
+        { file: LISTED, status: 'skipped', n: 1 },
+        { file: 'src/version.test.ts', status: 'passed', n: 10 },
+      ]),
+      join(FIXTURE_ROOT, LISTED),
+      outside,
+    );
+    const res = runChecker([writeReport(report), ...allowFlags]);
+    expect(res.status, res.output).not.toBe(0);
+    expect(res.stderr).toMatch(/outside the allowlist/);
+    expect(res.stderr).toContain(outside);
+
+    const relativeName = renamed(
+      buildReport([
+        { file: LISTED, status: 'skipped', n: 1 },
+        { file: 'src/version.test.ts', status: 'passed', n: 10 },
+      ]),
+      join(FIXTURE_ROOT, LISTED),
+      LISTED,
+    );
+    const ok = runChecker([writeReport(relativeName), ...allowFlags]);
+    expect(ok.status, ok.output).toBe(0);
+  });
+
+  it('AIM-18.AC1 the root defaults to the checker cwd when no --root is given', () => {
+    // Report names under the spawn cwd resolve without --root ...
+    const cwd = join(workDir, 'cwd-root');
+    mkdirSync(cwd, { recursive: true });
+    const report = renamed(
+      buildReport([
+        { file: LISTED, status: 'skipped', n: 1 },
+        { file: 'src/version.test.ts', status: 'passed', n: 10 },
+      ]),
+      join(FIXTURE_ROOT, LISTED),
+      join(cwd, LISTED),
+    );
+    const ok = runChecker([writeReport(report), ...allowFlags], { root: null, cwd });
+    expect(ok.status, ok.output).toBe(0);
+
+    // ... while the same names outside that cwd (the fixture root) do not.
+    const elsewhere = buildReport([
+      { file: LISTED, status: 'skipped', n: 1 },
+      { file: 'src/version.test.ts', status: 'passed', n: 10 },
+    ]);
+    const res = runChecker([writeReport(elsewhere), ...allowFlags], { root: null, cwd });
+    expect(res.status, res.output).not.toBe(0);
+    expect(res.stderr).toContain(join(FIXTURE_ROOT, LISTED));
+  });
+
+  it('AIM-18.AC1 normalises backslashes and a leading ./ on both sides before the exact comparison', () => {
+    const report = renamed(
+      buildReport([
+        { file: LISTED, status: 'skipped', n: 1 },
+        { file: 'src/version.test.ts', status: 'passed', n: 10 },
+      ]),
+      join(FIXTURE_ROOT, LISTED),
+      join(FIXTURE_ROOT, LISTED).replace(/\//g, '\\'),
+    );
+    const res = runChecker([writeReport(report), `--allow-skips=./${LISTED}`]);
+    expect(res.status, res.output).toBe(0);
+  });
+
+  it('AIM-18.AC1 a skip at an exactly-listed path is tolerated and the ok and counts lines keep their text', () => {
+    const report = buildReport([
+      { file: 'src/a2a/A2AClient.integration.test.ts', status: 'skipped', n: 21 },
+      { file: 'src/client/AIMClient.integration.test.ts', status: 'skipped', n: 13 },
+      { file: 'src/auth/oauth.integration.test.ts', status: 'skipped', n: 2 },
+      { file: 'src/version.test.ts', status: 'passed', n: 1158 },
+    ]);
+    const res = runChecker([writeReport(report), ...allowFlags]);
+    expect(res.status, res.output).toBe(0);
+    expect(res.stdout).toContain(
+      'tests passed=1158 failed=0 skipped=36 pending=0 todo=0',
+    );
+    expect(res.stdout).toContain(
+      'ok: 1158 passed; 36 skipped, all inside the allowlisted environment-gated files ' +
+        `(${INTEGRATION_FILES.join(', ')})`,
+    );
+  });
+
+  it('AIM-18.AC1 the matcher carries no suffix arm', () => {
+    const source = readFileSync(CHECKER, 'utf-8');
+    expect(source).not.toMatch(/endsWith\(/);
   });
 });
 
