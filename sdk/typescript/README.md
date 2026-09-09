@@ -50,7 +50,7 @@ console.log(`Trust score: ${result.trustScore}`);
 - **OAuth 2.0**: Automatic token management with client credentials flow
 - **Express Middleware**: Easy integration with Express.js applications
 - **Fastify Plugin**: First-class support for Fastify applications
-- **Automatic Retries**: Built-in retry logic with exponential backoff
+- **Typed HTTP Errors**: Failures surface as a typed error family (`RateLimitError` carries the server's `Retry-After`); the SDK does not retry automatically — retry policy stays with the caller
 - **Local Credential Verification**: Verify signed ATX credentials offline against cached trust anchors, no per-action call to a central service
 - **Delegation Chains**: Create and verify Ed25519 delegation chains (cross-engine interop), with signature, identity, scope-narrowing, and expiry all enforced at verification time
 
@@ -89,7 +89,7 @@ app.get('/api/profile', (req, res) => {
 app.use(aimErrorHandler);
 ```
 
-The middleware authenticates to AIM as a registered agent. `apiKey` alone does not give it an identity: set `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` in the environment (all four; `loadCredentialsFromEnv()` returns `null` when any is missing). Without them every verified route answers 401 and AIM is never contacted ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)). `aimErrorHandler` answers denial and authentication errors as JSON; other SDK errors, including an upstream 5xx, are passed to Express's default handler, which renders a stack trace outside `NODE_ENV=production` ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)).
+The middleware authenticates to AIM as a registered agent. `apiKey` alone does not give it an identity: set `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` in the environment (all four; `loadCredentialsFromEnv()` returns `null` when any is missing, and when only some are set it warns naming the missing variable(s)). Without them every verified route answers 401 and AIM is never contacted ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)). `aimErrorHandler` answers denial and authentication errors as JSON; other SDK errors, including an upstream 5xx, are passed to Express's default handler, which renders a stack trace outside `NODE_ENV=production` ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)).
 
 ## Fastify Integration
 
@@ -219,10 +219,11 @@ const { valid, results } = await verifyDelegationChain([d1, d2]);
 // scope narrowing, chain linkage, trust attenuation, AND temporal validity.
 ```
 
-`verifyDelegation` and `verifyDelegationChain` enforce the delegation's signed
-`createdAt`/`expiresAt` window. An expired delegation is rejected, and verification
-fails closed on a missing, unparseable, or inverted (`createdAt` after `expiresAt`)
-timestamp. A chain is evaluated against a single instant so every hop is judged by
+`verifyDelegation` and `verifyDelegationChain` enforce BOTH bounds of the
+delegation's signed `createdAt`/`expiresAt` window. An expired delegation is
+rejected, a delegation evaluated before its signed `createdAt` is rejected as
+not yet valid, and verification fails closed on a missing, unparseable, or
+inverted (`createdAt` after `expiresAt`) timestamp. A chain is evaluated against a single instant so every hop is judged by
 the same clock, and a child that outlives its parent is rejected even while the
 parent is still live (a delegate cannot hold authority in time beyond its
 delegator). When creating a sub-delegation, pass `parentExpiresAt` so the child's

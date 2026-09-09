@@ -15,6 +15,7 @@ import { homedir, hostname, userInfo } from 'os';
 import { join } from 'path';
 import { ARPEvent, EventCategory } from '../types';
 import { VERSION } from '../index';
+import { resolveRegistryUrl } from './signature/config';
 
 // --- Types ---
 
@@ -260,14 +261,16 @@ export function isAnomalousEvent(event: ARPEvent): boolean {
 /**
  * Submit a single GTIN event to the OpenA2A Registry.
  *
- * POST to https://api.oa2a.org/api/v1/telemetry/runtime
+ * The destination resolves through the same chain as every other telemetry
+ * transport: explicit `registryUrl` argument, else `OPENA2A_REGISTRY_URL`,
+ * else the default registry. POST to <registry>/api/v1/telemetry/runtime.
  * Timeout: 10 seconds. Non-blocking: failures are logged as warnings, never crash.
  */
 export async function submitGTINEvent(
   payload: GTINPayload,
   registryUrl?: string,
 ): Promise<GTINSubmitResult> {
-  const baseUrl = registryUrl || 'https://api.oa2a.org';
+  const baseUrl = resolveRegistryUrl(registryUrl ? { registryUrl } : undefined);
   const url = `${baseUrl}/api/v1/telemetry/runtime`;
 
   try {

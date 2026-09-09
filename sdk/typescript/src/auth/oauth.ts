@@ -4,7 +4,7 @@
 
 import type { TokenResponse, AgentCredentials } from '../types';
 import { createRequestSignature, toBase64, fromBase64 } from '../crypto/ed25519';
-import { ConfigurationError } from '../exceptions';
+import { AuthenticationError, ConfigurationError, parseAPIError } from '../exceptions';
 
 /**
  * Token cache entry
@@ -126,19 +126,45 @@ export class OAuthTokenManager {
     }
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to acquire token: ${response.status} ${error}`);
+      const raw = await response.text().catch(() => '');
+      // Cap the embedded body excerpt: a proxy's HTML error page can run to
+      // kilobytes, and the whole point of the message is the leading context.
+      const excerpt = raw.slice(0, 500);
+      let errorBody: Record<string, unknown> = {};
+      try {
+        errorBody = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        // Non-JSON body; the excerpt in the message is all we can carry.
+      }
+      throw parseAPIError(
+        response.status,
+        { ...errorBody, message: `Failed to acquire token: ${response.status} ${excerpt}` },
+        response.headers
+      );
     }
 
     const tokenResponse = (await response.json()) as TokenResponse;
+    // The server may answer in RFC 6749 snake_case ({"access_token", ...}) or
+    // the SDK's historical camelCase; accept both.
+    const accessToken = tokenResponse.accessToken ?? tokenResponse.access_token;
+    if (typeof accessToken !== 'string' || accessToken === '') {
+      throw new AuthenticationError(
+        'Token endpoint returned no access token (expected "access_token" or "accessToken" in the response)'
+      );
+    }
+    const expiresIn = Number(tokenResponse.expiresIn ?? tokenResponse.expires_in);
+    // A missing or unparseable expiry must not poison the cache into NaN
+    // (which makes every validity check false and forces a refetch per
+    // request); fall back to a conservative 5 minutes.
+    const expiresInSeconds = Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 300;
 
     // Cache the token
     this.cachedToken = {
-      accessToken: tokenResponse.accessToken,
-      expiresAt: Date.now() + tokenResponse.expiresIn * 1000,
+      accessToken,
+      expiresAt: Date.now() + expiresInSeconds * 1000,
     };
 
-    return tokenResponse.accessToken;
+    return accessToken;
   }
 
   /**
@@ -157,23 +183,40 @@ export class OAuthTokenManager {
 }
 
 /**
- * Load credentials from environment variables
+ * Load credentials from environment variables.
+ *
+ * All four of AIM_AGENT_ID, AIM_PRIVATE_KEY, AIM_PUBLIC_KEY and
+ * AIM_ORGANIZATION_ID are required. A clean environment (none set) returns
+ * null silently; a PARTIAL environment also returns null but warns naming the
+ * missing variable(s), so a one-variable typo does not present as the same
+ * "No credentials available" a clean environment does.
  */
 export function loadCredentialsFromEnv(): AgentCredentials | null {
-  const agentId = process.env.AIM_AGENT_ID;
-  const privateKey = process.env.AIM_PRIVATE_KEY;
-  const publicKey = process.env.AIM_PUBLIC_KEY;
-  const organizationId = process.env.AIM_ORGANIZATION_ID;
+  const vars = {
+    AIM_AGENT_ID: process.env.AIM_AGENT_ID,
+    AIM_PRIVATE_KEY: process.env.AIM_PRIVATE_KEY,
+    AIM_PUBLIC_KEY: process.env.AIM_PUBLIC_KEY,
+    AIM_ORGANIZATION_ID: process.env.AIM_ORGANIZATION_ID,
+  };
+  const missing = Object.keys(vars).filter((name) => !vars[name as keyof typeof vars]);
 
-  if (!agentId || !privateKey || !publicKey || !organizationId) {
+  if (missing.length === Object.keys(vars).length) {
+    return null;
+  }
+  if (missing.length > 0) {
+    console.warn(
+      `[AIM] Incomplete agent credentials in environment: missing ${missing.join(', ')} ` +
+        '(all of AIM_AGENT_ID, AIM_PRIVATE_KEY, AIM_PUBLIC_KEY, AIM_ORGANIZATION_ID are ' +
+        'required); loadCredentialsFromEnv() returns null.'
+    );
     return null;
   }
 
   return {
-    agentId,
-    privateKey,
-    publicKey,
-    organizationId,
+    agentId: vars.AIM_AGENT_ID!,
+    privateKey: vars.AIM_PRIVATE_KEY!,
+    publicKey: vars.AIM_PUBLIC_KEY!,
+    organizationId: vars.AIM_ORGANIZATION_ID!,
     createdAt: new Date().toISOString(),
   };
 }

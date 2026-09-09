@@ -109,6 +109,58 @@ the caller asked them to — the AIM client, A2A, OAuth, secrets, CRL fetch, the
 ARP proxy forwarder — are listed with the reason rather than filtered out, so
 they stay in scope if one ever grows an observational side-channel.
 
+### Fixed — 1.3.1 release-test P2 findings
+
+- **Token response shape**: `OAuthTokenManager` now reads both the RFC 6749
+  snake_case token response (`access_token`/`token_type`/`expires_in`) and the
+  historical camelCase form. Previously an RFC-shaped response produced
+  `Authorization: Bearer undefined`. A missing or unparseable expiry no longer
+  poisons the token cache into `NaN` (which silently forced a refetch on every
+  request); it falls back to a conservative 5 minutes, and a response with no
+  access token in either spelling raises `AuthenticationError` instead of
+  caching `undefined`.
+- **Typed `/oauth/token` errors**: a non-2xx from the token endpoint now
+  surfaces as the SDK's typed error family (429 → `RateLimitError`, 401 →
+  `AuthenticationError`, others → `AIMError` with `code` and `statusCode`)
+  instead of a bare `Error`, and the embedded response-body excerpt is capped
+  at 500 characters (a proxy's HTML error page ran to 2095).
+- **Retries claim removed**: the README advertised "Automatic Retries:
+  Built-in retry logic with exponential backoff", but no retry logic exists in
+  the SDK. The Features line now describes what the code does (typed errors,
+  `RateLimitError.retryAfter`); retry policy stays with the caller. Pinned by
+  `src/readme-claims.test.ts` so claim and code cannot diverge again.
+- **`Retry-After` honored**: `RateLimitError.retryAfter` now reflects the
+  server's `Retry-After` response header (seconds or HTTP-date) when present,
+  falling back to the body field then the 60s default only when absent.
+  Previously the header was never read, so `Retry-After: 7` yielded 60.
+- **Enforcement telemetry on wire 403**: a 403 from `POST /api/v1/verify` with
+  telemetry enabled now produces a correlated deny enforcement record, exactly
+  as the 200 `{actionAllowed: false}` path does. Previously the
+  `AuthorizationError` propagated before the recording hook could run, so the
+  403 path recorded nothing. (The allow-path half of this finding — an allowed
+  verify carrying a detection produces a record — was already fixed by the
+  post-1.3.1 correlation-joiner rework; it is now pinned by a test.)
+- **Network-error context**: a connection failure now names the request URL
+  and the underlying errno (e.g. `ECONNREFUSED`), unwrapped from the fetch
+  error's cause chain, with an explicit `baseUrl` too — not only when the
+  localhost default was in play. Previously an explicit-baseUrl failure read
+  just "Network error: fetch failed".
+- **Delegation lower bound**: `verifyDelegation`, `verifyDelegationChain` and
+  `checkDelegationTemporalValidity` now enforce BOTH bounds of the signed
+  window: an evaluation instant before `createdAt` is rejected as not yet
+  valid (lower bound inclusive; expiry stays exclusive). Previously
+  verify-at-epoch against a delegation created in 2026 returned `true`.
+- **GTIN registry destination**: `submitGTINEvent` resolves its registry URL
+  through the same chain as every other telemetry transport — explicit
+  `registryUrl`, else `OPENA2A_REGISTRY_URL`, else the default — instead of
+  hardcoding the production registry, which is how the release test's dummy
+  event reached production.
+- **Env-credential diagnostics**: `loadCredentialsFromEnv()` still returns
+  `null` when any of `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY`,
+  `AIM_ORGANIZATION_ID` is missing, but a PARTIAL environment now warns naming
+  the missing variable(s) instead of presenting exactly like a clean
+  environment. (The README half of this finding was already fixed by #451.)
+
 ## [1.3.1] - 2026-09-02
 
 ### Added

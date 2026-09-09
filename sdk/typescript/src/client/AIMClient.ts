@@ -17,11 +17,13 @@ import { generateKeyPair, toBase64, createRequestSignature, fromBase64 } from '.
 import {
   AIMError,
   AuthenticationError,
+  AuthorizationError,
   ActionDeniedError,
   VerificationError,
   ConfigurationError,
   NetworkError,
   parseAPIError,
+  unwrapErrnoCode,
 } from '../exceptions';
 import { LocalVerifier } from '../local';
 import type { Atx } from '../local';
@@ -273,7 +275,7 @@ export class AIMClient {
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));
-        throw parseAPIError(response.status, errorBody);
+        throw parseAPIError(response.status, errorBody, response.headers);
       }
 
       // Handle empty responses
@@ -294,10 +296,18 @@ export class AIMClient {
         if (error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
         }
+        // Name the target and the cause: Node's fetch reports connection
+        // failures as a bare "fetch failed" with the errno buried in the cause
+        // chain, which is useless without the URL it was aimed at.
+        const errnoCode = unwrapErrnoCode(error);
+        const causeSuffix = errnoCode ? ` [${errnoCode}]` : '';
         const hint = this.usedDefaultBaseUrl
           ? ` (baseUrl defaulted to ${DEFAULT_BASE_URL} — no baseUrl option or AIM_BASE_URL env var was set)`
           : '';
-        throw new NetworkError(`Network error: ${error.message}${hint}`, error);
+        throw new NetworkError(
+          `Network error: ${error.message} (${method} ${url})${causeSuffix}${hint}`,
+          error
+        );
       }
 
       throw new NetworkError('Unknown network error');
@@ -435,14 +445,34 @@ export class AIMClient {
     // best-effort. Minting/headers are skipped entirely when telemetry is off.
     const correlationId = this.telemetryEnabled ? mintCorrelationId() : undefined;
 
-    const result = await this.request<VerificationResult>(
-      'POST',
-      '/api/v1/verify',
-      payload,
-      false,
-      correlationHeaders(correlationId),
-      deadlineAt
-    );
+    let result: VerificationResult;
+    try {
+      result = await this.request<VerificationResult>(
+        'POST',
+        '/api/v1/verify',
+        payload,
+        false,
+        correlationHeaders(correlationId),
+        deadlineAt
+      );
+    } catch (error) {
+      // A wire 403 IS an enforcement deny — the server refused the action at
+      // the HTTP layer instead of answering 200 {actionAllowed:false}. Record
+      // it with the same correlation the in-band deny path gets.
+      if (correlationId && error instanceof AuthorizationError) {
+        this.recordVerificationTelemetry(correlationId, options, {
+          verified: false,
+          agentId: this.credentials.agentId,
+          agentName: '',
+          trustScore: 0,
+          riskLevel: options.riskLevel ?? RiskLevel.LOW,
+          actionAllowed: false,
+          denialReason: error.message,
+          timestamp: new Date().toISOString(),
+        });
+      }
+      throw error;
+    }
 
     // Record the enforcement outcome (allow OR deny) BEFORE the deny throw, so
     // the causal-denial case is captured. Never affects the result below.
