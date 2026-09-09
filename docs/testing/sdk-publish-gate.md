@@ -27,6 +27,17 @@ exclusions are explicit, file-scoped, and named in the workflow step as
 inside the named files. This section states exactly which cases those are
 and why.
 
+An `--allow-skips` entry matches a test file **only when the file's
+SDK-root-relative path equals the entry exactly**. The SDK root is the
+directory the checker runs from (`sdk/typescript` in both workflow steps)
+unless `--root=<dir>` is given; the checker makes each report file name
+relative to that root, turns backslashes into slashes and strips a leading
+`./` on both sides, then compares for equality. There is no suffix match:
+a file under any other directory whose path merely ends with an entry (a
+nested copy such as `src/evil/src/a2a/A2AClient.integration.test.ts`) is
+outside the allowlist and its skips fail the gate, as does a file outside
+the SDK root altogether.
+
 ### Excluded: the 36 environment-gated integration cases
 
 | File | Cases |
