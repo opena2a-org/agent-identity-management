@@ -129,6 +129,11 @@ export function verifyAction(
 
       req.aim.verified = true;
       req.aim.trustScore = result.trustScore;
+      // The verified request knows WHO was verified; a result without an
+      // agentId (older servers) leaves whatever the base middleware resolved.
+      if (result.agentId) {
+        req.aim.agentId = result.agentId;
+      }
 
       next();
     } catch (error) {

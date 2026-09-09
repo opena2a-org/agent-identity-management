@@ -147,11 +147,65 @@ export class SecretsError extends AIMError {
 }
 
 /**
- * Parse API error response
+ * Cap on a server-supplied error message. The body is attacker/outage
+ * controlled and the message lands in logs, terminals, and error trackers
+ * verbatim, so it is type-checked and capped rather than passed through whole.
  */
-export function parseAPIError(statusCode: number, body: unknown): AIMError {
+const MAX_API_ERROR_MESSAGE = 512;
+
+/**
+ * Minimal header lookup — satisfied by the fetch Headers class and by mocks.
+ */
+export interface HeaderLookup {
+  get(name: string): string | null;
+}
+
+/**
+ * Read the response's Retry-After header as seconds. Accepts the delay-seconds
+ * form and the HTTP-date form (converted to seconds from now); returns
+ * undefined when the header is absent or unparseable.
+ */
+function retryAfterSeconds(headers?: HeaderLookup): number | undefined {
+  const raw = headers?.get?.('retry-after')?.trim();
+  if (!raw) return undefined;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  const dateMs = Date.parse(raw);
+  if (!Number.isNaN(dateMs)) return Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
+  return undefined;
+}
+
+/**
+ * Walk an error's cause chain (including AggregateError members, where Node's
+ * fetch buries connection errno) for the first errno-style code.
+ */
+export function unwrapErrnoCode(error: unknown, seen = new Set<unknown>()): string | undefined {
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    const err = current as NodeJS.ErrnoException & { cause?: unknown; errors?: unknown[] };
+    if (typeof err.code === 'string' && err.code !== '') return err.code;
+    if (Array.isArray(err.errors)) {
+      for (const member of err.errors) {
+        const code = unwrapErrnoCode(member, seen);
+        if (code) return code;
+      }
+    }
+    current = err.cause;
+  }
+  return undefined;
+}
+
+/**
+ * Parse API error response. When the response headers are supplied, a 429's
+ * Retry-After header takes precedence over the body's retryAfter field.
+ */
+export function parseAPIError(statusCode: number, body: unknown, headers?: HeaderLookup): AIMError {
   const errorBody = body as Record<string, unknown>;
-  const message = (errorBody?.message ?? errorBody?.error ?? 'Unknown error') as string;
+  const raw = errorBody?.message ?? errorBody?.error;
+  let message = typeof raw === 'string' && raw.length > 0 ? raw : 'Unknown error';
+  if (message.length > MAX_API_ERROR_MESSAGE) {
+    message = `${message.slice(0, MAX_API_ERROR_MESSAGE)}… [truncated]`;
+  }
 
   switch (statusCode) {
     case 401:
@@ -162,7 +216,7 @@ export function parseAPIError(statusCode: number, body: unknown): AIMError {
       return new NotFoundError('resource', message);
     case 429:
       return new RateLimitError(
-        (errorBody?.retryAfter as number) ?? 60,
+        retryAfterSeconds(headers) ?? (errorBody?.retryAfter as number) ?? 60,
         (errorBody?.limit as number) ?? 0,
         (errorBody?.remaining as number) ?? 0
       );

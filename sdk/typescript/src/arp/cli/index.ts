@@ -40,10 +40,12 @@ async function main(): Promise<void> {
     case 'telemetry':
       await telemetryCommand();
       break;
+    case 'version':
     case '--version':
     case '-v':
       console.log(`arp-guard v${VERSION}`);
       break;
+    case 'help':
     case '--help':
     case '-h':
     case undefined:

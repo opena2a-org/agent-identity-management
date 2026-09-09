@@ -154,6 +154,11 @@ export function verifyAction(
 
       request.aim.verified = true;
       request.aim.trustScore = result.trustScore;
+      // The verified request knows WHO was verified; a result without an
+      // agentId (older servers) leaves whatever the onRequest hook resolved.
+      if (result.agentId) {
+        request.aim.agentId = result.agentId;
+      }
     } catch (error) {
       const failure = classifyVerificationFailure(error);
       if (failure) {
