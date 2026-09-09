@@ -771,10 +771,11 @@ class AIMClient:
             raise VerificationError("Request timeout")
 
         except requests.exceptions.ConnectionError:
-            if self.auto_retry and retry_count < self.max_retries:
-                time.sleep(2 ** retry_count)
-                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
-            raise VerificationError("Connection failed")
+            # No retry and no backoff here, unlike the timeout branch above: a
+            # refused or unroutable connection fails immediately and does not
+            # heal in a 1+2+4s sleep, so retrying it only made an unreachable
+            # AIM cost ~7s per request while returning the same error.
+            raise VerificationError(f"Connection failed: could not reach {self.aim_url}")
 
         except requests.exceptions.RequestException as e:
             raise VerificationError(f"Request failed: {e}")
@@ -1580,7 +1581,9 @@ class AIMClient:
         if verdict.warning:
             console.warning(verdict.warning)
         if verdict.pending_change:
-            console.warning(verdict.pending_change)
+            # One stream only: the typed warning (filterable, stderr). Printing
+            # the same sentence through console.warning as well made every
+            # unreachable-AIM verification say it twice, once per stream.
             warnings.warn(verdict.pending_change, PendingEnforcementChange, stacklevel=3)
 
         return verdict, decision
@@ -1945,6 +1948,12 @@ class AIMClient:
             result_summary: Brief summary of the result
             error_message: Error message if execution failed
         """
+        if not verification_id:
+            # Same guard as report_execution_status: with no id there is
+            # nothing to attach the result to, and interpolating the absent
+            # value built a literal /verifications/None/result URL.
+            return
+
         try:
             # Use direct HTTP call to avoid signature issues
             url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}/result"
@@ -1973,9 +1982,11 @@ class AIMClient:
                 method="POST",
                 url=url,
                 json={
+                    # camelCase keys, the convention of every other write body
+                    # this SDK sends (strictMode/executedAt, displayName/agentType).
                     "result": "success" if success else "failure",
-                    "result_summary": result_summary,
-                    "error_message": error_message,
+                    "resultSummary": result_summary,
+                    "errorMessage": error_message,
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 },
                 headers=headers,
@@ -4279,6 +4290,7 @@ def _validate_cached_credentials(
 
         headers = {
             "Content-Type": "application/json",
+            "User-Agent": f"AIM-Python-SDK/{__version__}",
             "X-SDK-Version": __version__,
         }
 
@@ -4602,7 +4614,10 @@ def register_agent(
                 # Register MCP servers even for cached credentials (user may have changed mcp_servers param)
                 if mcp_servers:
                     # Build headers for MCP registration
-                    _headers = {"Content-Type": "application/json"}
+                    _headers = {
+                        "Content-Type": "application/json",
+                        "User-Agent": f"AIM-Python-SDK/{__version__}",
+                    }
                     if api_key:
                         _headers["X-AIM-API-Key"] = api_key
                     # Split raw mcp_servers into names vs full definitions
@@ -4833,7 +4848,16 @@ def register_agent(
         return client
 
     except requests.RequestException as e:
-        raise ConfigurationError(f"Failed to connect to AIM server: {e}")
+        # `from None`: the requests/urllib3 chain beneath this adds host/port
+        # noise ("Max retries exceeded with url: ...") and no remedy; the
+        # remedy is in this message.
+        raise ConfigurationError(
+            f"Could not connect to the AIM server at {aim_url} "
+            f"({type(e).__name__}). Check that the URL is correct and that an "
+            f"AIM server is listening there: start one locally with "
+            f"'docker compose up', or pass aim_url= / run 'aim-sdk login "
+            f"--url <URL>' to point the SDK at your server."
+        ) from None
     except AIMError:
         # The inner helpers (_register_via_oauth / _register_via_api_key) already
         # raise typed, well-messaged errors (e.g. "Registration failed: <reason>").
@@ -4842,6 +4866,93 @@ def register_agent(
         raise
     except Exception as e:
         raise ConfigurationError(f"Registration failed: {e}")
+
+
+# The HTTP statuses BOTH registration endpoints treat as success. Before 2.0.3
+# the API-key path required exactly 201 while the OAuth path accepted 200 or
+# 201, so the same server answer registered on one path and failed on the other.
+REGISTRATION_SUCCESS_STATUSES = (200, 201)
+
+
+def _raise_registration_failure(response, name: str, registration_mode: str):
+    """
+    Turn a non-success registration response into a typed error.
+
+    A 401 raises AuthenticationError — the same class a 401 on the
+    verification path raises — and every other status ConfigurationError. A
+    body with no JSON 'error' field is reported as malformed, naming the
+    statuses the SDK requires, never as the literal "Unknown error".
+    """
+    try:
+        body = response.json()
+    except Exception:
+        body = None
+    error_msg = body.get("error") if isinstance(body, dict) else None
+    body_malformed = not error_msg
+    if body_malformed:
+        error_msg = (
+            f"the AIM server answered HTTP {response.status_code} with a malformed or "
+            f"unexpected body (no JSON 'error' field; the SDK requires HTTP 200 or 201 "
+            f"with the agent's credentials)"
+        )
+    security_logger.log_agent_event(
+        AgentEventType.AGENT_REGISTRATION_FAILED,
+        agent_name=name,
+        error=error_msg,
+        details={
+            "registration_mode": registration_mode,
+            "http_status": response.status_code,
+            "body_malformed": body_malformed,
+        }
+    )
+    if response.status_code == 401:
+        raise AuthenticationError(f"Registration failed: {error_msg}")
+    raise ConfigurationError(f"Registration failed: {error_msg}")
+
+
+def _parse_registration_body(response, name: str, registration_mode: str) -> Dict[str, Any]:
+    """
+    Parse a success-status registration response, raising a malformed-response
+    ConfigurationError (never a bare parse error) when the body is not a JSON
+    object.
+    """
+    try:
+        credentials = response.json()
+    except Exception:
+        credentials = None
+    if not isinstance(credentials, dict):
+        _log_malformed_registration_body(response, name, registration_mode, "not a JSON object")
+    return credentials
+
+
+def _require_registration_fields(credentials: Dict[str, Any], response, name: str,
+                                 registration_mode: str, required: List[str]):
+    """Reject a success-status body that lacks the fields the SDK needs."""
+    missing = [key for key in required if not credentials.get(key)]
+    if missing:
+        got = ", ".join(sorted(credentials)) if credentials else "an empty JSON object"
+        _log_malformed_registration_body(
+            response, name, registration_mode, f"missing {', '.join(missing)} (got {got})"
+        )
+
+
+def _log_malformed_registration_body(response, name: str, registration_mode: str, detail: str):
+    message = (
+        f"Registration failed: the AIM server answered HTTP {response.status_code} "
+        f"(a status the SDK accepts as success; it requires HTTP 200 or 201) but the "
+        f"response body was malformed or unexpected: {detail}."
+    )
+    security_logger.log_agent_event(
+        AgentEventType.AGENT_REGISTRATION_FAILED,
+        agent_name=name,
+        error=message,
+        details={
+            "registration_mode": registration_mode,
+            "http_status": response.status_code,
+            "body_malformed": True,
+        }
+    )
+    raise ConfigurationError(message)
 
 
 def _register_via_oauth(
@@ -4898,6 +5009,7 @@ def _register_via_oauth(
     # Set up headers for API calls
     headers = {
         "Content-Type": "application/json",
+        "User-Agent": f"AIM-Python-SDK/{__version__}",
         "Authorization": f"Bearer {access_token}"
     }
 
@@ -5019,24 +5131,16 @@ def _register_via_oauth(
         timeout=30
     )
 
-    if response.status_code not in [200, 201]:
-        error_msg = response.json().get("error", "Unknown error")
-        security_logger.log_agent_event(
-            AgentEventType.AGENT_REGISTRATION_FAILED,
-            agent_name=name,
-            error=error_msg,
-            details={
-                "registration_mode": "oauth",
-                "http_status": response.status_code
-            }
-        )
-        raise ConfigurationError(f"Registration failed: {error_msg}")
+    if response.status_code not in REGISTRATION_SUCCESS_STATUSES:
+        _raise_registration_failure(response, name, "oauth")
 
-    credentials = response.json()
+    credentials = _parse_registration_body(response, name, "oauth")
 
     # Backend returns 'id' but we need 'agent_id' for consistency
     if "id" in credentials and "agent_id" not in credentials:
         credentials["agent_id"] = credentials["id"]
+
+    _require_registration_fields(credentials, response, name, "oauth", ["agent_id"])
 
     # Add client-side generated private key to credentials (backend doesn't send it back)
     credentials["private_key"] = private_key_b64
@@ -5111,6 +5215,7 @@ def _register_via_api_key(
 
     headers = {
         "Content-Type": "application/json",
+        "User-Agent": f"AIM-Python-SDK/{__version__}",
         "X-AIM-API-Key": api_key
     }
 
@@ -5124,20 +5229,10 @@ def _register_via_api_key(
         timeout=30
     )
 
-    if response.status_code != 201:
-        error_msg = response.json().get("error", "Unknown error")
-        security_logger.log_agent_event(
-            AgentEventType.AGENT_REGISTRATION_FAILED,
-            agent_name=name,
-            error=error_msg,
-            details={
-                "registration_mode": "api_key",
-                "http_status": response.status_code
-            }
-        )
-        raise ConfigurationError(f"Registration failed: {error_msg}")
+    if response.status_code not in REGISTRATION_SUCCESS_STATUSES:
+        _raise_registration_failure(response, name, "api_key")
 
-    credentials = response.json()
+    credentials = _parse_registration_body(response, name, "api_key")
 
     # Map camelCase server response keys to snake_case for SDK consistency
     _camel_to_snake_map = {
@@ -5155,6 +5250,10 @@ def _register_via_api_key(
     # Backend may return 'id' instead of 'agent_id'
     if "id" in credentials and "agent_id" not in credentials:
         credentials["agent_id"] = credentials["id"]
+
+    _require_registration_fields(
+        credentials, response, name, "api_key", ["agent_id", "public_key", "private_key"]
+    )
 
     # Ensure aim_url is present in credentials
     if "aim_url" not in credentials:
@@ -5431,7 +5530,10 @@ def _register_single_mcp(
         json_body_str = json_module.dumps(mcp_data, sort_keys=True)
 
         # Build authentication headers
-        headers = {'Content-Type': 'application/json'}
+        headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': f'AIM-Python-SDK/{__version__}',
+        }
         if client.signing_key and client.public_key:
             # Ed25519 signature authentication
             timestamp = str(int(time.time()))
