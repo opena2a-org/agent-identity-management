@@ -17,8 +17,6 @@ import sys
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
-__version__ = "1.0.0"
-
 
 class ProtocolDetector:
     """
