@@ -5,6 +5,21 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Console output no longer uses U+2713 CHECK MARK / U+2717 BALLOT X**
+  (AIM-15). The 52 lines across 10 modules (`console`, `client`, `oauth`,
+  `credentials`, `secure_storage`, and the CrewAI, LangChain and MCP
+  integrations) that printed those marks now print the plain-text markers
+  `[OK]` and `[FAIL]` instead; where rich is available the markers keep the
+  same green/red markup as before. The no-emoji test suite's package-source
+  walk no longer exempts these characters, so they cannot return; its
+  non-vacuity control now asserts the `[OK]`/`[FAIL]` vocabulary is present
+  instead of the old marks. Documentation prose showing pre-change output is
+  unchanged and out of this change's scope.
+
 ## [2.0.2] - 2026-09-08
 
 ### Security
