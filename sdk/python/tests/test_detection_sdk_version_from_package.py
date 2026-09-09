@@ -243,11 +243,16 @@ def test_AIM_13_AC5_version_moved_past_2_0_2_and_changelog_names_the_fix():
     assert "version=version" in setup_text
 
     changelog = (PYTHON_SDK_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    headings = re.findall(r"^## \[(.+?)\]", changelog, flags=re.MULTILINE)
+    # Keep a Changelog keeps an ``[Unreleased]`` section above the newest release, so the
+    # newest RELEASE heading, not the first heading, must name the installed version, and
+    # the section read is that release's own, wherever it sits.
+    headings = [h for h in re.findall(r"^## \[(.+?)\]", changelog, flags=re.MULTILINE)
+                if h != "Unreleased"]
     assert headings, "CHANGELOG has no release headings"
     assert headings[0] == version
 
-    top_section = re.split(r"^## \[", changelog, flags=re.MULTILINE)[1]
+    sections = re.split(r"^## \[", changelog, flags=re.MULTILINE)[1:]
+    top_section = next(s for s in sections if s.startswith(version + "]"))
     assert "#464" in top_section
     assert "MCP detection" in top_section
     assert "installed package version" in top_section
