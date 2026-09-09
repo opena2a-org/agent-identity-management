@@ -111,6 +111,28 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # The same suite the CI job runs, at the moment the artifact is built.
+      # Unconditional: it runs even when the version is already on PyPI, so a
+      # re-tag cannot skip it.
+      - name: Test before build (the suite must run, with zero failures and zero errors)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,mcp]"
+          python -m pytest -q -p no:cacheprovider --junitxml=/tmp/pytest-report.xml
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse("/tmp/pytest-report.xml").getroot()
+          suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
+          total = sum(int(s.get("tests", 0)) for s in suites)
+          failed = sum(int(s.get("failures", 0)) for s in suites)
+          errors = sum(int(s.get("errors", 0)) for s in suites)
+          skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          print(f"tests total={total} failed={failed} errors={errors} skipped={skipped}")
+          if not total > 0 or failed > 0 or errors > 0:
+              print("refusing to pass: the suite must run with zero failures and zero errors", file=sys.stderr)
+              sys.exit(1)
+          PY
+
       - name: Build sdist + wheel
         if: steps.idempotence.outputs.skip != 'true'
         run: |
@@ -215,6 +237,31 @@ jobs:
         # tsup build (per package.json scripts.build). prepublishOnly also
         # runs build but explicit here for fail-fast on build errors.
         run: npm run build
+
+      - name: Test (a skipped test fails the publish)
+        if: steps.idempotence.outputs.skip != 'true'
+        # The refusal is the committed per-assertion checker shared with
+        # ci.yml's sdk-tests job. It walks every
+        # testResults[].assertionResults[].status in the JSON report — the
+        # aggregate numPendingTests/numTodoTests counters count a
+        # skipIf-skipped case as passed, so an inline aggregate expression
+        # here waved the 1.3.1 publish through over 36 tests that never ran.
+        # The --allow-skips entries are the gate's only tolerated skips: the
+        # environment-gated integration files this runner cannot execute
+        # (no AIM backend, no credentials). Any skip outside them fails the
+        # publish. See docs/testing/sdk-publish-gate.md.
+        env:
+          CI: "true"
+        run: |
+          npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest-report.json
+          node scripts/check-vitest-report.mjs /tmp/vitest-report.json \
+            --allow-skips=src/a2a/A2AClient.integration.test.ts \
+            --allow-skips=src/client/AIMClient.integration.test.ts \
+            --allow-skips=src/auth/oauth.integration.test.ts
+
+      - name: Typecheck
+        if: steps.idempotence.outputs.skip != 'true'
+        run: npm run typecheck
 
       - name: Publish to npm with provenance
         if: steps.idempotence.outputs.skip != 'true'

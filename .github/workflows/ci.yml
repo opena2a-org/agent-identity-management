@@ -147,6 +147,104 @@ jobs:
           # No `|| true`, and no `exit-code: 0`. A finding here fails the gate.
           npm audit --package-lock-only --omit=dev --audit-level=high
 
+  # The TypeScript SDK's vitest suite (78 test files at the time this job
+  # landed) and its typecheck ran in NO pull-request workflow — release.yml
+  # runs them at publish time only, so an SDK regression was caught after
+  # merge at the earliest, on a tag. This job moves that catch to the PR,
+  # with the same zero-skip refusal shape release.yml uses: a green run
+  # must mean the suite actually ran, all of it, and passed.
+  #
+  # Deliberately unconditional (no `if:`, no path filter): the suite
+  # includes tests/ci-gate-workflow-shape.test.ts, which asserts over THIS
+  # file that the gate keeps needing this job and that no escape hatch
+  # (continue-on-error, `|| true`, a skipping `if:`) is ever added — a
+  # guard that only works if the job runs on every PR. No step here may
+  # gain continue-on-error or `|| true`; that test fails the gate if one does.
+  sdk-tests:
+    name: SDK tests (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: sdk/typescript/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # CI=true so the environment-gated cases execute wherever they can;
+      # the refusal is the committed per-assertion checker shared with
+      # release.yml's publish-time step. It walks every
+      # testResults[].assertionResults[].status in the JSON report — the
+      # aggregate numPendingTests/numTodoTests counters count a
+      # skipIf-skipped case as passed and must never gate again. The
+      # --allow-skips entries are the gate's only tolerated skips: the
+      # environment-gated integration files this runner cannot execute (no
+      # AIM backend, no credentials). Any skip outside them fails the gate.
+      # See docs/testing/sdk-publish-gate.md.
+      - name: Test (a skipped test fails the gate)
+        env:
+          CI: "true"
+        run: |
+          npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest-report.json
+          node scripts/check-vitest-report.mjs /tmp/vitest-report.json \
+            --allow-skips=src/a2a/A2AClient.integration.test.ts \
+            --allow-skips=src/client/AIMClient.integration.test.ts \
+            --allow-skips=src/auth/oauth.integration.test.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  # The Python SDK had no test job anywhere in CI and the publish job built
+  # the artifact without running a test (measured 2026-09-08), so a regression
+  # test could not prove anything before merge. Not conditioned on CI or on
+  # changed paths: a missing precondition is an error, never a skip.
+  sdk-python-tests:
+    name: SDK tests (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # release.yml's publish job pins 3.12; the gate runs where the artifact is built.
+          python-version: "3.12"
+
+      - name: Install the SDK with its test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,mcp]"
+
+      # The suite must run (total > 0) with zero failures and zero errors.
+      # Skips are reported, not yet refused: the suite carried 34 skip markers
+      # when this job was added; driving them to zero is its own change, after
+      # which the refusal gains `skipped > 0`.
+      - name: Test (the suite must run, with zero failures and zero errors)
+        run: |
+          python -m pytest -q -p no:cacheprovider --junitxml=/tmp/pytest-report.xml
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse("/tmp/pytest-report.xml").getroot()
+          suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
+          total = sum(int(s.get("tests", 0)) for s in suites)
+          failed = sum(int(s.get("failures", 0)) for s in suites)
+          errors = sum(int(s.get("errors", 0)) for s in suites)
+          skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          print(f"tests total={total} failed={failed} errors={errors} skipped={skipped}")
+          if not total > 0 or failed > 0 or errors > 0:
+              print("refusing to pass: the suite must run with zero failures and zero errors", file=sys.stderr)
+              sys.exit(1)
+          PY
+
   # Detect which parts of the monorepo changed
   changes:
     name: Detect Changes
@@ -317,7 +415,7 @@ jobs:
       # Pinned suite ref. Bump deliberately when the suite grows; the vendored
       # Java fixture copies must be refreshed in the same PR or the drift gate
       # below fails.
-      ATX_CONFORMANCE_REF: f4d40a4e33ac15946e90683ad1f1c59122559407
+      ATX_CONFORMANCE_REF: d2b8376daaec47046e54a3035178d706a5edec1d
     steps:
       - uses: actions/checkout@v4
 
@@ -526,6 +624,8 @@ jobs:
         sync-protect-guard,
         docker-paths-filter,
         sdk-dependency-audit,
+        sdk-tests,
+        sdk-python-tests,
         changes,
         backend,
         integration,
@@ -544,17 +644,19 @@ jobs:
           sp='${{ needs.sync-protect-guard.result }}'
           dp='${{ needs.docker-paths-filter.result }}'
           sa='${{ needs.sdk-dependency-audit.result }}'
+          st='${{ needs.sdk-tests.result }}'
+          spt='${{ needs.sdk-python-tests.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
           it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1

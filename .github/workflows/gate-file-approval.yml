@@ -1,0 +1,184 @@
+# Gate file approval — a path-scoped merge gate for this repository's own CI,
+# review, and release configuration.
+#
+# Any pull request that changes a file under .github/ must carry an approving
+# review from a listed approver, given on the pull request's current head
+# commit. Pull requests that touch nothing under .github/ pass immediately, so
+# ordinary changes stay gated by status checks alone.
+#
+# Why pull_request_target: the workflow definition is read from the BASE
+# branch, so a pull request that modifies this file is judged by the unmodified
+# copy — the gate cannot be weakened by the change it is judging. This job
+# reads only API data (the changed-file list and the review list). It must
+# never check out or execute pull request head content, must never reference a
+# repository secret, and must keep its token read-only apart from checks:write.
+# A tripwire below fails the check if a pull request tries to change that.
+#
+# The verdict lives in the check run named "Gate file approval" posted against
+# the head commit — that is the context branch protection must require, never
+# this job's own context. The states are encoded asymmetrically on purpose:
+# awaiting-owner-approval is the EXPECTED state of a gate-file pull request,
+# so it posts conclusion=action_required, which blocks a required check
+# exactly like failure while the run itself succeeds — the run evaluated and
+# posted its verdict, and the run record says so, with no failure email for a
+# routine state. Only genuine failures (tripwire violation, oversized pull
+# request, unreadable proposed copy) post conclusion=failure AND fail the job,
+# so a workflow-failure email from this workflow always means anomaly or
+# attack, never routine. The job-exit mirror below keeps an accidentally
+# required job context from ever being an always-green bypass; the conclusion
+# "neutral" is forbidden for any blocking state because required checks treat
+# it as passing.
+name: Gate file approval
+
+on:
+  pull_request_target:
+    # edited is required: retargeting the base branch recomputes the diff
+    # without changing the head commit, so the verdict must be re-evaluated.
+    types: [opened, synchronize, reopened, edited]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+
+concurrency:
+  group: gate-file-approval-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: 'Evaluate gate-file approval (require the "Gate file approval" check, not this job)'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      EVENT_NAME: ${{ github.event_name }}
+      REVIEW_AUTHOR: ${{ github.event.review.user.login }}
+    steps:
+      - name: Evaluate and post the check run
+        run: |
+          set -euo pipefail
+          # The approver set. Changing it is itself a gate-file change, so the
+          # change is judged by the current set. This ONE variable feeds both
+          # the review-event early exit and the evaluation filter below — the
+          # two predicates cannot diverge because they share it.
+          approvers="thebenignhacker"
+
+          # A review from anyone but the approver is not an input to the
+          # verdict, so re-evaluating on it would produce nothing new. Early
+          # exit posts nothing; the standing check run against the head commit
+          # remains the verdict. Only pull_request_review events may exit
+          # here — every pull_request_target event still evaluates. The
+          # approver's own events (including dismissal of their approval,
+          # whose review author is the approver) always evaluate.
+          if [ "$EVENT_NAME" = "pull_request_review" ] && [ "$REVIEW_AUTHOR" != "$approvers" ]; then
+            echo "Review by $REVIEW_AUTHOR is not an input to the verdict; nothing posted."
+            exit 0
+          fi
+
+          # The files listing endpoint is capped at 3000 entries; a gate file
+          # hidden past the cap would otherwise pass unseen. Refuse to evaluate
+          # oversized pull requests instead of failing open.
+          changed_count=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq .changed_files)
+          if [ "$changed_count" -ge 3000 ]; then
+            conclusion="failure"
+            title="Too many changed files to evaluate"
+            summary="This pull request changes $changed_count files, at or beyond the 3000-entry listing cap, so the gate cannot see every path. Split the pull request."
+          else
+            conclusion=""
+            title=""
+            summary=""
+          fi
+
+          # Both sides of a rename count: a pull request that renames a file OUT
+          # of .github/ reports the old path only in previous_filename, and a
+          # rename is as much a gate-file change as an edit.
+          files=$(gh api "repos/$REPO/pulls/$PR_NUMBER/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+
+          # grep exit 1 means no match; anything above 1 is an execution error
+          # and must abort rather than read as "no gate files" (fail closed).
+          set +e
+          printf '%s\n' "$files" | grep -q '^\.github/'
+          gate_rc=$?
+          set -e
+          [ "$gate_rc" -le 1 ]
+
+          if [ -z "$conclusion" ] && [ "$gate_rc" -eq 1 ]; then
+            conclusion="success"
+            title="No gate files touched"
+            summary="This pull request changes nothing under .github/, so no gate-file approval is required."
+          fi
+
+          if [ -z "$conclusion" ]; then
+            # Tripwire: if this pull request modifies this workflow, inspect the
+            # proposed copy AS DATA (never executed) and refuse patterns that
+            # would re-arm the pull_request_target attack surface. The patterns
+            # are split so this file cannot match itself. An unreadable proposed
+            # copy is refused too, never waved through.
+            if printf '%s\n' "$files" | grep -qx '\.github/workflows/gate-file-approval\.yml'; then
+              p_checkout='actions/''checkout'
+              p_secret='secrets''[.]'
+              p_write='contents:''[[:space:]]*write'
+              p_writeall='write-''all'
+              head_copy=$(gh api "repos/$REPO/contents/.github/workflows/gate-file-approval.yml?ref=$HEAD_SHA" --jq .content | base64 -d)
+              if [ -z "$head_copy" ]; then
+                conclusion="failure"
+                title="Gate workflow copy unreadable"
+                summary="The proposed gate-file-approval.yml could not be read for inspection (empty contents response). Refused rather than waved through."
+              elif printf '%s\n' "$head_copy" | grep -Eq "$p_checkout|$p_secret|$p_write|$p_writeall"; then
+                conclusion="failure"
+                title="Gate workflow hardening violated"
+                summary="The proposed gate-file-approval.yml checks out head content, references a secret, or widens write permissions. Those are refused regardless of approval."
+              fi
+            fi
+          fi
+
+          if [ -z "$conclusion" ]; then
+            # Latest state-changing review from an approver. A stale approval
+            # (older head commit) does not count: approval must be on the
+            # current head, so it cannot survive a later push.
+            latest=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate \
+              | jq -s -c --arg u "$approvers" 'add
+                  | [.[] | select(.state == "APPROVED" or .state == "CHANGES_REQUESTED" or .state == "DISMISSED")
+                         | select(.user.login == $u)]
+                  | last // empty')
+            state=$(printf '%s' "$latest" | jq -r '.state // empty')
+            commit=$(printf '%s' "$latest" | jq -r '.commit_id // empty')
+            if [ "$state" = "APPROVED" ] && [ "$commit" = "$HEAD_SHA" ]; then
+              conclusion="success"
+              title="Gate-file change approved"
+              summary="This pull request changes files under .github/ and carries an approving review from $approvers on the current head commit."
+            else
+              # The expected state of a gate-file pull request: evaluated,
+              # verdict posted, a human must act. action_required blocks a
+              # required check like failure, but the run itself succeeds, so
+              # no failure email fires for a routine state.
+              conclusion="action_required"
+              title="Gate-file change needs approval"
+              summary="This pull request changes files under .github/. It requires an approving review from $approvers on the current head commit ($HEAD_SHA). Automation can author gate-file changes; it cannot approve them."
+            fi
+          fi
+
+          gh api -X POST "repos/$REPO/check-runs" \
+            -f name='Gate file approval' \
+            -f head_sha="$HEAD_SHA" \
+            -f status=completed \
+            -f conclusion="$conclusion" \
+            -f 'output[title]'="$title" \
+            -f 'output[summary]'="$summary" \
+            --jq '"check_run id=" + (.id|tostring) + " conclusion=" + .conclusion'
+
+          # Mirror only genuine failures in the job status: exit 0 iff the
+          # conclusion is in the explicit two-value allowlist, so any future
+          # state defaults loud, an accidentally required job context is never
+          # an always-green bypass, and a failure email from this workflow is
+          # a high-signal anomaly, never routine.
+          case "$conclusion" in
+            success|action_required) exit 0 ;;
+            *) exit 1 ;;
+          esac
