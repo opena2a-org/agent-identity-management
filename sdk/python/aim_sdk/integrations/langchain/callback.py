@@ -147,7 +147,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
         tool_name = tool_data["tool_name"]
 
         if self.verbose:
-            print(f"✓ AIM: Tool completed - {tool_name}")
+            print(f"[OK] AIM: Tool completed - {tool_name}")
 
         # Log successful tool execution to AIM
         try:
@@ -192,7 +192,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
         tool_name = tool_data["tool_name"]
 
         if self.verbose:
-            print(f"✗ AIM: Tool failed - {tool_name}: {str(error)[:100]}")
+            print(f"[FAIL] AIM: Tool failed - {tool_name}: {str(error)[:100]}")
 
         # Log error to AIM
         if self.log_errors:
@@ -244,7 +244,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
     ) -> Any:
         """Called when a chain ends (optional - for chain-level logging)"""
         if self.verbose:
-            print(f"✓ AIM: Chain completed")
+            print(f"[OK] AIM: Chain completed")
 
     def on_chain_error(
         self,
@@ -255,4 +255,4 @@ class AIMCallbackHandler(BaseCallbackHandler):
     ) -> Any:
         """Called when a chain fails (optional - for chain-level logging)"""
         if self.verbose:
-            print(f"✗ AIM: Chain failed - {str(error)[:100]}")
+            print(f"[FAIL] AIM: Chain failed - {str(error)[:100]}")

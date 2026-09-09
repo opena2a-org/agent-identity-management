@@ -2982,7 +2982,7 @@ class AIMClient:
 
             # SECURITY: Never print private keys - they're saved to secure file storage
             # Credentials are stored in ~/.aim/agents/{name}.json with 0600 permissions
-            print(f"✓ Created agent: {new_agent['id']}")
+            print(f"[OK] Created agent: {new_agent['id']}")
             print(f"Credentials saved to: ~/.aim/agents/{name}.json")
 
         Raises:
@@ -4731,7 +4731,7 @@ def register_agent(
     if capabilities:
         registration_data["capabilities"] = capabilities
     if tags:
-        registration_data["tagIds"] = tags  # ✓ Tags applied during registration
+        registration_data["tagIds"] = tags  # Tags applied during registration
 
     # 5. Register agent (mode-specific endpoint)
     try:
