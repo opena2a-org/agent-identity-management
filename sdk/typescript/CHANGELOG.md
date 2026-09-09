@@ -161,6 +161,49 @@ they stay in scope if one ever grows an observational side-channel.
   the missing variable(s) instead of presenting exactly like a clean
   environment. (The README half of this finding was already fixed by #451.)
 
+### Fixed — 1.3.1 release-test P3 findings
+
+- **The npm package no longer ships the TypeScript source inside its source
+  maps.** `sourcemap: true` embedded ~2.6 MB of full source (doc comments
+  included) as `sourcesContent` in every published tarball while the README
+  promised "source is not shipped in the npm package". Maps still ship for
+  readable stack traces; `sourcesContent` is stripped, and a packaging test
+  now packs the real tarball and pins the invariant.
+- `aim-arp help` and `aim-arp version` (the bare words) now work like
+  `--help`/`--version`, and `aim-arp telemetry --version` answers with the
+  version instead of "Unknown telemetry subcommand". The internal `arp-guard`
+  CLI accepts the bare words too.
+- `aim-arp telemetry log abc` is now an error instead of silently showing 20
+  records, `log 0` is refused (the count must be a positive integer), and
+  extra positional arguments (`log 5 5`, `status extra`) are errors — matching
+  the strictness the option side already had.
+- Every ARP telemetry request identifies its build: sensor enrollment and
+  purge (right-to-delete) requests now send `User-Agent: OpenA2A-ARP/<version>`
+  like the signature emitter (they previously sent none, logging as "node"),
+  and the causal-denial relay's User-Agent now carries the SDK version.
+- The express and fastify `verifyAction`/`verifyRoute` hooks set
+  `req.aim.agentId` from the verification result, so handlers behind the hook
+  can attribute the request to the verified agent without a separate
+  `getAgent()` round trip.
+- `AIMClient` refuses a nonsensical `timeout`/`enforcementTimeout` (negative,
+  zero, NaN, Infinity) with a `ConfigurationError` at construction, and
+  `registerAgent` refuses an empty or non-string `name` before any request is
+  made.
+- `parseAPIError` caps a server-supplied error message at 512 characters and
+  falls back to "Unknown error" when the body's `message` is not a string —
+  the message lands in logs and terminals verbatim and was previously passed
+  through whole.
+- The local correlated-events telemetry log is created `0600` (owner-only),
+  matching the credential writer; it was `0644`.
+- `LocalVerifier` validates the shape of its trust anchors at construction
+  (`trustedIssuers` an array of strings, `publicKeys` an array of key
+  objects) and throws `ConfigurationError` instead of storing a mis-shaped
+  config that would later fail closed with a misleading denial reason.
+- README: documented that `getAgent()` returns `null` and `getTrustScore()`
+  returns `0` when no credentials are loaded (no request is made), and added
+  the previously undocumented exported clients (`A2AClient`, `SecretsClient`,
+  `OAuthTokenManager`, `CrlCache`) to the API reference.
+
 ## [1.3.1] - 2026-09-02
 
 ### Added

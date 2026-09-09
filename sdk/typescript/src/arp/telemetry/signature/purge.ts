@@ -29,6 +29,7 @@ import { loadSensorPrivateKey, loadSensorId, publicKeyHex, signCanonicalHex } fr
 import { generateNonce } from './wire';
 import { resolveRegistryUrl, type SignatureTelemetryConfig } from './config';
 import { sanitizeTerminalText } from './sanitize';
+import { VERSION } from '../../index';
 
 /** The purge canonical schema prefix (distinct from the ingest schema). */
 export const PURGE_SCHEMA_VERSION = 'telemetry-purge-v1';
@@ -115,7 +116,9 @@ export async function purgeRemoteSignatures(
     try {
       res = await doFetch(url, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        // Identify the build like the emitter does; without this the registry
+        // logged the runtime default ("node") for right-to-delete requests.
+        headers: { 'Content-Type': 'application/json', 'User-Agent': `OpenA2A-ARP/${VERSION}` },
         body: JSON.stringify(body),
         signal: controller.signal,
       });

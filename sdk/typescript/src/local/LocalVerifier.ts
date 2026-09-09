@@ -41,6 +41,7 @@ export type {
 } from '@opena2a/atx-verify';
 
 import { CrlCache } from './CrlCache';
+import { ConfigurationError } from '../exceptions';
 export { CrlCache } from './CrlCache';
 export type { CrlData, CrlStalePolicy, CrlCacheConfig, CrlCacheStatus } from './CrlCache';
 
@@ -149,6 +150,26 @@ export class LocalVerifier {
   private verifier: AtxVerifier | null = null;
 
   constructor(config: LocalVerificationConfig) {
+    // Trust anchors of the wrong shape must fail loudly here, not later as a
+    // denial whose reason points at the credential. From JavaScript (or a
+    // mis-cast config) a string where an array belongs was stored silently and
+    // every verification failed closed with a misleading reject.
+    if (
+      !Array.isArray(config.trustedIssuers) ||
+      config.trustedIssuers.some((issuer) => typeof issuer !== 'string')
+    ) {
+      throw new ConfigurationError(
+        'localVerification.trustedIssuers must be an array of issuer DID strings',
+      );
+    }
+    if (
+      !Array.isArray(config.publicKeys) ||
+      config.publicKeys.some((key) => typeof key !== 'object' || key === null)
+    ) {
+      throw new ConfigurationError(
+        'localVerification.publicKeys must be an array of AtxPublicKey objects',
+      );
+    }
     this.anchors = {
       trustedIssuers: config.trustedIssuers,
       publicKeys: config.publicKeys,
