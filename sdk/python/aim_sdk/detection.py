@@ -32,10 +32,19 @@ except ImportError:
         distributions = None
 
 
-__version__ = "1.0.0"
-
 # Global MCP call tracker for runtime detection
 _mcp_call_tracker = {}
+
+
+def _default_sdk_version() -> str:
+    """Resolve the installed package version at call time.
+
+    Imported lazily because aim_sdk/__init__.py imports this module before
+    it assigns the package-level __version__, so a module-scope import (or
+    an import-time default) would either fail or freeze a stale version.
+    """
+    from aim_sdk import __version__
+    return f"aim-sdk-python@{__version__}"
 
 
 class MCPDetector:
@@ -49,7 +58,7 @@ class MCPDetector:
         from aim_sdk import AIMClient, MCPDetector
 
         client = AIMClient(...)
-        detector = MCPDetector(sdk_version="aim-sdk-python@1.0.0")
+        detector = MCPDetector()
 
         # Detect MCP servers
         detections = detector.detect_all()
@@ -59,14 +68,15 @@ class MCPDetector:
         print(f"Found {len(detections)} MCP servers")
     """
 
-    def __init__(self, sdk_version: str = f"aim-sdk-python@{__version__}"):
+    def __init__(self, sdk_version: Optional[str] = None):
         """
         Initialize the MCP detector.
 
         Args:
-            sdk_version: SDK version string to include in detections
+            sdk_version: SDK version string to include in detections.
+                Defaults to the installed package version.
         """
-        self.sdk_version = sdk_version
+        self.sdk_version = sdk_version if sdk_version is not None else _default_sdk_version()
         self._mcp_packages = [
             "@modelcontextprotocol/server-filesystem",
             "@modelcontextprotocol/server-github",
@@ -418,18 +428,22 @@ class MCPDetector:
             _mcp_call_tracker[mcp_server]["tools_used"].add(tool_name)
 
     @staticmethod
-    def get_runtime_detections(sdk_version: str = f"aim-sdk-python@{__version__}") -> List[Dict[str, Any]]:
+    def get_runtime_detections(sdk_version: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get MCP detections from runtime tracking.
 
         Returns MCP servers that were tracked via track_mcp_call().
 
         Args:
-            sdk_version: SDK version string
+            sdk_version: SDK version string. Defaults to the installed
+                package version.
 
         Returns:
             List of detection events with method 'sdk_runtime'
         """
+        if sdk_version is None:
+            sdk_version = _default_sdk_version()
+
         detections = []
 
         for mcp_server, stats in _mcp_call_tracker.items():
@@ -498,7 +512,7 @@ def track_mcp_call(mcp_server: str, tool_name: Optional[str] = None):
 
 
 def auto_detect_mcps(
-    sdk_version: str = f"aim-sdk-python@{__version__}",
+    sdk_version: Optional[str] = None,
     discover_tools: bool = False,
     timeout_per_server: float = 10.0
 ) -> List[Dict[str, Any]]:
@@ -509,7 +523,7 @@ def auto_detect_mcps(
     all detection methods.
 
     Args:
-        sdk_version: SDK version string
+        sdk_version: SDK version string. Defaults to the installed package version.
         discover_tools: If True, dynamically query each MCP server for its tools
         timeout_per_server: Timeout for querying each server (if discover_tools=True)
 
@@ -528,6 +542,9 @@ def auto_detect_mcps(
         detections = auto_detect_mcps(discover_tools=True)
         result = client.report_detections(detections)
     """
+    if sdk_version is None:
+        sdk_version = _default_sdk_version()
+
     detector = MCPDetector(sdk_version=sdk_version)
 
     if discover_tools:
