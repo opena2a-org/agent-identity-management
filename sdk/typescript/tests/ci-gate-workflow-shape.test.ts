@@ -122,17 +122,15 @@ describe('ci.yml runs the SDK suite in a job the CI Gate needs', () => {
       'true',
     );
 
-    // The zero-skip refusal shape release.yml:219-235 uses at publish time:
-    // a JSON reporter, then fail unless numTotalTests > 0 and
-    // numFailedTests == 0 and numPendingTests + numTodoTests == 0.
+    // The zero-skip refusal is the committed per-assertion checker shared
+    // with release.yml's publish-time step: the step writes a JSON report
+    // and hands it to scripts/check-vitest-report.mjs, which walks
+    // testResults[].assertionResults[].status — the aggregate
+    // numPendingTests/numTodoTests counters cannot see skipIf-skipped
+    // cases, so an inline aggregate expression must never come back.
     const testRun = runOf(testStep);
     expect(testRun).toContain('--reporter=json');
-    expect(testRun).toContain('numTotalTests');
-    expect(testRun).toContain('numFailedTests');
-    expect(testRun).toContain('numPendingTests');
-    expect(testRun).toContain('numTodoTests');
-    expect(testRun).toMatch(/!\(total > 0\) \|\| failed > 0 \|\| skipped > 0/);
-    expect(testRun).toContain('process.exit(1)');
+    expect(testRun).toContain('scripts/check-vitest-report.mjs');
   });
 
   it('AIM-05.AC2 the ci-gate needs the SDK test job on top of the twelve baseline entries, and its verify step checks the job result as an unconditional requirement', () => {
