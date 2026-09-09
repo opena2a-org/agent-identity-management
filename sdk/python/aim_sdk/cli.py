@@ -55,11 +55,11 @@ DEFAULT_AIM_URL = "https://aim.opena2a.org"
 
 
 def print_banner():
-    """Print AIM SDK banner."""
+    """Print AIM SDK banner. Every line is 61 columns wide so the ║ borders align."""
     print("""
 ╔═══════════════════════════════════════════════════════════╗
-║                     AIM SDK Login                          ║
-║         Agent Identity Management for AI Agents            ║
+║                       AIM SDK Login                       ║
+║          Agent Identity Management for AI Agents          ║
 ╚═══════════════════════════════════════════════════════════╝
 """)
 
