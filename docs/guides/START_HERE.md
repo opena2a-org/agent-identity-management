@@ -14,7 +14,7 @@ You have a **complete, ready-to-build project** with:
 ### Step 1: Open a New Claude Code Session
 ```bash
 # In your terminal
-cd /Users/decimai/workspace/agent-identity-management
+cd /path/to/agent-identity-management
 code .  # or open in your IDE
 ```
 

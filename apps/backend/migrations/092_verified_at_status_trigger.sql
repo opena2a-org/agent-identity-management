@@ -11,11 +11,9 @@
 --
 -- Closes the verified_at half of #167.
 --
--- Per the [CHIEF-CA] decision in
--- `todo/2026-05-24-counter-drift-cluster-chief-ca.md`:
--- row-internal coupling (two columns on the same row that must move
+-- Row-internal coupling (two columns on the same row that must move
 -- together) uses a BEFORE UPDATE trigger on the parent table; this
--- is the canonical fix pattern for that shape.
+-- is the canonical fix pattern for that shape (decided 2026-05-24).
 
 CREATE OR REPLACE FUNCTION set_verified_at_on_status_change()
 RETURNS TRIGGER AS $$

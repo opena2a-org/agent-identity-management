@@ -65,6 +65,6 @@ Confirmed by grep before drafting:
 - PR self-review via `/review` addressed.
 - Pre-push gate marker present before push.
 
-## Chief call
+## Decision
 
-[CHIEF-CA] DECISION: apply this bump via a dep-only PR on `fix/fiber-v3.1.0-bump` off main, independent of session-68's CI-workflow branch. RATIONALE: CRITICAL CVE on public repo; playbook validated in aim-cloud 24h ago; code surface is 3 files; toolchain floor already 1.25 so no contributor-facing regression. ALTERNATIVES REJECTED: (a) wait for `.sync-protect` reshuffle — leaves CRITICAL exposed; (b) fold into session-68's branch — mixes concerns, blocks either landing; (c) patch-bump `fiber/v3 v3.0.0-beta.2` to a later beta — no beta carries the CVE-2025-66565 fix. ESCALATION: loop in CSR only if Trivy surfaces a new CVE post-bump.
+DECISION: apply this bump via a dep-only PR on `fix/fiber-v3.1.0-bump` off main, independent of session-68's CI-workflow branch. RATIONALE: CRITICAL CVE on public repo; playbook validated in aim-cloud 24h ago; code surface is 3 files; toolchain floor already 1.25 so no contributor-facing regression. ALTERNATIVES REJECTED: (a) wait for `.sync-protect` reshuffle — leaves CRITICAL exposed; (b) fold into session-68's branch — mixes concerns, blocks either landing; (c) patch-bump `fiber/v3 v3.0.0-beta.2` to a later beta — no beta carries the CVE-2025-66565 fix. ESCALATION: loop in CSR only if Trivy surfaces a new CVE post-bump.

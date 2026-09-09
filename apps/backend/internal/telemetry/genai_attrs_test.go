@@ -35,8 +35,8 @@ func recordGenAIAttrs(t *testing.T, s AgentAuthzSignals) map[string]attribute.Va
 }
 
 // TestSetGenAIAgentAttributes_Full asserts all eight gen_ai.agent.* attributes
-// land with the right values, and that each *.method carries the [CHIEF-CA] D2
-// producer-label constant.
+// land with the right values, and that each *.method carries the
+// producer-label constant (decided 2026-06-26).
 func TestSetGenAIAgentAttributes_Full(t *testing.T) {
 	attrs := recordGenAIAttrs(t, AgentAuthzSignals{
 		Capability:    "payments:transfer",

@@ -197,7 +197,7 @@ If your operational requirement is "no agent talks to an MCP that has not been s
 2. Writes the result to a new column (`mcp_servers.last_scan_verdict`, or a new `mcp_scan_results` table).
 3. Gates `agents.talks_to` or the FGA `verify_capability` path on that field.
 
-None of these exist today. Building them is a `[CHIEF-CA]` decision because it requires committing to a specific HMA-AIM integration surface and a policy for what to do when a scan finds new CVEs (alert? auto-degrade trust? auto-revoke verification?).
+None of these exist today. Building them is an architecture decision because it requires committing to a specific HMA-AIM integration surface and a policy for what to do when a scan finds new CVEs (alert? auto-degrade trust? auto-revoke verification?).
 
 Until then, the honest framing for the registration story is: **AIM verifies the agent that registers an MCP, not the MCP itself.**
 

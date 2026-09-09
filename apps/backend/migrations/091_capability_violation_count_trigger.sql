@@ -9,10 +9,9 @@
 -- Closes #168 (capability_violation_count drift) and #166 (count not
 -- ticking on the dashboard, which was a symptom of #168).
 --
--- Per the [CHIEF-CA] decision in
--- `todo/2026-05-24-counter-drift-cluster-chief-ca.md`:
--- aggregate-of-child-rows fields use an AFTER INSERT trigger on the
--- child table; this is the canonical fix pattern for that shape.
+-- Aggregate-of-child-rows fields use an AFTER INSERT trigger on the
+-- child table; this is the canonical fix pattern for that shape
+-- (decided 2026-05-24).
 
 CREATE OR REPLACE FUNCTION bump_capability_violation_count()
 RETURNS TRIGGER AS $$

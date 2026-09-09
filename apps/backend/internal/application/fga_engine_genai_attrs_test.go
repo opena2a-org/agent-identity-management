@@ -16,8 +16,9 @@ import (
 
 // TestEmitSDKVerificationSpan_DualEmitsGenAIAttrs proves the real
 // EmitSDKVerificationSpan call site dual-emits both the legacy agent.* keys and
-// the namespaced gen_ai.agent.* set on the fga.authorize span ([CHIEF-CA] D1),
-// sharing telemetry.SetGenAIAgentAttributes with the /authorize finalizer.
+// the namespaced gen_ai.agent.* set on the fga.authorize span (the dual-emit
+// decision of 2026-06-26), sharing telemetry.SetGenAIAgentAttributes with the
+// /authorize finalizer.
 //
 // db is nil, so fetchASCRiskSummary fails open and the scan/drift signals are
 // absent — exactly the behavior the legacy path has when no ASC row exists.

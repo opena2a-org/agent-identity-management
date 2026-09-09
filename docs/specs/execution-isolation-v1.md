@@ -1,6 +1,6 @@
 # Execution Isolation Trust Factor — Design Note v1.0
 
-**Status:** Draft — implementation deferred pending `[CHIEF-CA]` decision on attestation source hierarchy
+**Status:** Draft — implementation deferred pending an architecture decision on attestation source hierarchy
 **Version:** 1.0.0
 **Date:** 2026-05-24
 **Closes investigation for:** #137
@@ -49,7 +49,7 @@ A compromised agent — or a malicious operator — submits the same payload. Th
 
 This is the position the issue body took, and the position this design note adopts: **Factor 9 should not move above its baseline on the strength of an SDK-submitted attestation alone.**
 
-## 4. Proposed attestation sources (`[CHIEF-CA]` open question)
+## 4. Proposed attestation sources (open question)
 
 In order of trust:
 
@@ -60,14 +60,14 @@ In order of trust:
 | 3 | HackMyAgent scan of the deployed surface | The deployed artifact matches a known-isolated configuration | Bound to scanner identity; static — drifts if runtime configuration changes after scan |
 | 4 | SDK self-attestation (current path) | Agent's process self-reports what it sees from `/proc` | Falsifiable; useful only as a diagnostic, not for scoring |
 
-The open question — and the reason this is `[CHIEF-CA]` rather than a straightforward implementation — is which tier(s) AIM should support as Phase 1, and how the calculator should combine them when multiple sources are present. Specifically:
+The open question — and the reason this is an architecture decision rather than a straightforward implementation — is which tier(s) AIM should support as Phase 1, and how the calculator should combine them when multiple sources are present. Specifically:
 
 - Should missing higher-tier evidence pin the score at baseline (strict), or should a lower tier raise it modestly (lenient)?
 - Where does the source identity (orchestrator URL, TEE measurement root, scanner pubkey) live, and who registers it as trusted?
 - What is the freshness window for an attestation before it decays back to baseline?
 - How are attestations bound to the agent identity such that a valid attestation from agent A is not replayable by agent B?
 
-None of these are answered yet. The architecture decision belongs to `[CHIEF-CA]` and must precede the backend handler implementation.
+None of these are answered yet. The architecture decision must precede the backend handler implementation.
 
 ## 5. Why the existing SDK path is still useful
 
@@ -80,13 +80,13 @@ A reasonable Phase 1 keeps the SDK ingestion endpoint, persists the attestation,
 
 ## 6. Phasing — not a commitment, a shape
 
-Recorded for the `[CHIEF-CA]` review, not as a roadmap:
+Recorded for the architecture review, not as a roadmap:
 
 - **Phase 1 (handler-only).** Implement the backend POST handler so `attestIsolation` stops 404'ing. Persist to `isolation_attestations`. Wire `SetIsolationRepo`. The score still reads from the SDK attestation under this phase, with the caveat that it is self-attested and therefore not adversarially robust. This unlocks the diagnostic use case.
 - **Phase 2 (one external source).** Pick the first non-self source — likely Kubernetes orchestrator context, since most production agents run there — and wire its ingestion. Change `calculateExecutionIsolation` to prefer external evidence over self.
 - **Phase 3 (multi-source combiner).** Add TEE and HMA tiers. Define the combiner. Define the freshness decay.
 
-The choice of Phase 1 alone — that is, "stop the 404 but keep the score self-attested" — is not safe to ship without a clear product disclosure that the factor remains self-attested. The decision to ship Phase 1 alone, or to gate handler enablement on Phase 2 readiness, is the first `[CHIEF-CA]` question.
+The choice of Phase 1 alone — that is, "stop the 404 but keep the score self-attested" — is not safe to ship without a clear product disclosure that the factor remains self-attested. The decision to ship Phase 1 alone, or to gate handler enablement on Phase 2 readiness, is the first architecture question.
 
 ## 7. What this document does NOT do
 

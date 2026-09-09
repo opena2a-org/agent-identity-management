@@ -30,10 +30,9 @@
 --
 -- Closes #164.
 --
--- Per the [CHIEF-CA] decision in
--- `todo/2026-05-24-counter-drift-cluster-chief-ca.md`: denormalized
--- cache from a detail table uses an AFTER INSERT/UPDATE/DELETE
--- trigger on the detail table. Same family as migrations 091
+-- A denormalized cache from a detail table uses an AFTER
+-- INSERT/UPDATE/DELETE trigger on the detail table (decided
+-- 2026-05-24). Same family as migrations 091
 -- (capability_violation_count), 093 (agents.trust_score), 094
 -- (mcp_servers.trust_score), 095 (a2a peer aggregates).
 
