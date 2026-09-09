@@ -191,7 +191,8 @@ class SecurityEvent:
     # Action fields
     action: Optional[str] = None            # Action being performed
     resource: Optional[str] = None          # Resource being accessed
-    result: Optional[str] = None            # SUCCESS, FAILURE, DENIED
+    result: Optional[str] = None            # SUCCESS, FAILURE, GRANTED, DENIED,
+                                            # UNAVAILABLE, UNVERIFIED, EXECUTED_UNVERIFIED
 
     # Network fields
     source_ip: Optional[str] = None         # Client IP address
@@ -490,19 +491,31 @@ class SecurityLogger:
         granted: bool = True,
         agent_id: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        result: Optional[str] = None
     ):
-        """Log authorization events (capability checks, action execution)."""
+        """Log authorization events (capability checks, action execution).
+
+        ``result`` names what actually happened when the GRANTED/DENIED pair
+        derived from ``granted`` would misstate it. DENIED is the policy-denial
+        literal -- AIM answered no -- so a check that never got an answer must
+        not render as DENIED: callers pass UNAVAILABLE (transport failure, AIM
+        never reached), UNVERIFIED (credentials rejected before any decision),
+        or EXECUTED_UNVERIFIED (the enforcement rule ran the action without a
+        completed verification). Left unset, the historical mapping applies.
+        """
         severity = EventSeverity.INFO if granted else EventSeverity.WARNING
         if event_type == AuthzEventType.CAPABILITY_ESCALATION:
             severity = EventSeverity.WARNING
         elif event_type in [AuthzEventType.CAPABILITY_DENIED, AuthzEventType.ACTION_DENIED]:
             severity = EventSeverity.WARNING
 
+        result_value = result or ("GRANTED" if granted else "DENIED")
+
         message = f"Authorization {event_type.value}: {action}"
         if resource:
             message += f" on {resource}"
-        message += f" - {'GRANTED' if granted else 'DENIED'}"
+        message += f" - {result_value}"
 
         event = self._create_event(
             category=EventCategory.AUTHZ,
@@ -512,7 +525,7 @@ class SecurityLogger:
             agent_id=agent_id,
             action=action,
             resource=resource,
-            result="GRANTED" if granted else "DENIED",
+            result=result_value,
             details=details or {},
             error=error
         )
