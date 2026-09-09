@@ -23,6 +23,7 @@ Security Design (RFC 8252 - OAuth for Native Apps):
 import argparse
 import sys
 import os
+import time
 import webbrowser
 import socket
 import secrets
@@ -52,6 +53,29 @@ __version__ = _get_version()
 
 # Default AIM Cloud URL
 DEFAULT_AIM_URL = "https://aim.opena2a.org"
+
+# Bounds for `aim-sdk login`. The pre-flight probe keeps a dead --url from
+# opening a browser at all; the callback deadline keeps "Waiting for
+# authentication..." from waiting forever (the wait loop re-entered
+# handle_request after every socket timeout, so the old per-request timeout
+# bounded nothing).
+LOGIN_PROBE_TIMEOUT_SECONDS = 5
+LOGIN_CALLBACK_TIMEOUT_SECONDS = 180
+
+
+def check_server_reachable(aim_url, timeout):
+    """
+    Pre-flight probe: is anything answering HTTP at aim_url?
+
+    Any HTTP response -- including an error status -- proves the server is
+    reachable; only a transport failure (refused, unroutable, timed out)
+    counts as unreachable.
+    """
+    try:
+        requests.get(aim_url, timeout=timeout, allow_redirects=False)
+        return True
+    except requests.RequestException:
+        return False
 
 
 def print_banner():
@@ -326,6 +350,16 @@ def login(args):
                 return 0
             print()
 
+    # Fail fast on an unreachable server: probing before the browser opens is
+    # what keeps a mistyped or dead --url from parking the user on a login
+    # page that will never call back.
+    if not check_server_reachable(aim_url, LOGIN_PROBE_TIMEOUT_SECONDS):
+        print(f"Error: could not reach the AIM server at {aim_url}")
+        print(f"(no HTTP response within {LOGIN_PROBE_TIMEOUT_SECONDS}s).")
+        print("Check the URL and your network, then retry. For a self-hosted")
+        print("server, pass it explicitly: aim-sdk login --url <your-aim-url>")
+        return 1
+
     # Generate PKCE pair
     code_verifier, code_challenge = generate_pkce_pair()
 
@@ -342,7 +376,10 @@ def login(args):
     PKCECallbackHandler.expected_state = state
 
     server = HTTPServer(('localhost', port), PKCECallbackHandler)
-    server.timeout = 120  # 2 minute timeout
+    # Per-handle_request poll interval, NOT the overall bound: the wait loop
+    # below re-enters handle_request after every timeout, so the real bound is
+    # the LOGIN_CALLBACK_TIMEOUT_SECONDS deadline it checks each iteration.
+    server.timeout = 1
 
     # Build authorization URL with PKCE parameters
     params = urllib.parse.urlencode({
@@ -359,14 +396,21 @@ def login(args):
     print(f"If the browser doesn't open, visit:")
     print(f"  {login_url}")
     print()
-    print("Waiting for authentication... (Ctrl+C to cancel)")
+    print(f"Waiting for authentication... (times out after "
+          f"{LOGIN_CALLBACK_TIMEOUT_SECONDS}s; Ctrl+C to cancel)")
 
     # Open browser
     webbrowser.open(login_url)
 
-    # Wait for callback (with timeout)
+    # Wait for callback, bounded by a deadline
+    deadline = time.monotonic() + LOGIN_CALLBACK_TIMEOUT_SECONDS
     try:
         while PKCECallbackHandler.authorization_code is None and PKCECallbackHandler.error is None:
+            if time.monotonic() >= deadline:
+                print(f"\nAuthentication timed out after "
+                      f"{LOGIN_CALLBACK_TIMEOUT_SECONDS}s: no browser callback "
+                      f"was received. Run aim-sdk login to try again.")
+                return 1
             server.handle_request()
     except KeyboardInterrupt:
         print("\n\nLogin cancelled.")

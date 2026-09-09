@@ -277,10 +277,12 @@ are not part of this package -- see the module docstring for the boundary.
 
 ## Manual mode (no OAuth)
 
-For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key:
+For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key.
+API key mode always requires `aim_url` — there is no default server and no environment-variable
+fallback, so `secure()` raises `ConfigurationError` if `api_key` is passed without it:
 
 ```python
-agent = secure("my-agent", api_key="aim_abc123")
+agent = secure("my-agent", api_key="aim_abc123", aim_url="http://localhost:8080")
 ```
 
 Or supply full credentials:
