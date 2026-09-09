@@ -455,4 +455,4 @@ type AgentCapabilities struct {
 **Last Updated**: October 6, 2025
 **Created By**: Claude Sonnet 4.5
 **Project**: Agent Identity Management (AIM)
-**Repository**: /Users/decimai/workspace/agent-identity-management
+**Repository**: github.com/opena2a-org/agent-identity-management

@@ -47,7 +47,7 @@
 
 ### Step 1: Environment Setup
 ```bash
-cd /Users/decimai/workspace/agent-identity-management
+cd /path/to/agent-identity-management
 
 # Verify .env files exist
 ls -la apps/backend/.env

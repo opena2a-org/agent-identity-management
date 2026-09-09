@@ -35,7 +35,7 @@ type MCPService struct {
 	// what it returns. Required, not optional: a nil calculator leaves every
 	// server at the DB default of 0.0, which reads as "measured and maximally
 	// untrusted" rather than "not scored", and fails every MinTrustScore
-	// policy gate. See the [CHIEF-CDS] decision of 2026-08-04.
+	// policy gate (decided 2026-08-04).
 	trustCalculator *MCPTrustCalculator
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData

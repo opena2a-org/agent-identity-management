@@ -20,8 +20,7 @@
 -- uses: `agents.trust_score` (CHECK 0..1, mig 031), `trust_scores.score`,
 -- and the `MinTrustScore` policy thresholds the evaluator compares against.
 --
--- Per the [CHIEF-CDS] decision + [CHIEF-CA] second opinion of 2026-08-04 in
--- `todo/COUNCIL_LEDGER.md`.
+-- Canonical-scale decision of 2026-08-04.
 
 -- Audit trail: report what is about to be rewritten.
 DO $$

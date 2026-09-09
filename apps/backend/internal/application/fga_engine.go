@@ -463,7 +463,7 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		// SemConv enrichment for the fga.authorize parent span. The legacy
 		// agent.* keys (agent.public_key.algorithm, agent.trust_score,
 		// agent.scan_verdict, agent.drift_score) are emitted alongside the
-		// namespaced gen_ai.agent.* set ([CHIEF-CA] D1: dual-emit until the
+		// namespaced gen_ai.agent.* set (dual-emit, decided 2026-06-26, until the
 		// internal Slide-14 / Grafana dashboards repoint, then retire agent.*).
 		// Both lookups are local indexed reads (agents PK, agent_security_contexts
 		// PK); failures are silent so a missing ASC row or a transient repo blip
@@ -764,7 +764,7 @@ func (e *FGAEngine) EmitSDKVerificationSpan(
 	)
 	defer parent.End()
 
-	// Dual-emit legacy agent.* + namespaced gen_ai.agent.* ([CHIEF-CA] D1),
+	// Dual-emit legacy agent.* + namespaced gen_ai.agent.* (decided 2026-06-26),
 	// sharing telemetry.SetGenAIAgentAttributes with the /authorize path so the
 	// two span sources cannot drift apart.
 	genaiSignals := telemetry.AgentAuthzSignals{Capability: capability}

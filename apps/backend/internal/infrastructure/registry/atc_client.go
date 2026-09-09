@@ -4,7 +4,7 @@
 // an agent's 9-factor behavioral trust score and delegates issuance to the
 // Registry's POST /internal/atc/issue endpoint, which signs (threshold Ed25519 +
 // ML-DSA-65), records the issuance to the RFC 6962 transparency log, and returns
-// the portable credential. See todo/roadmap/aim-atx-issuer.md (CA decision).
+// the portable credential.
 package registry
 
 import (

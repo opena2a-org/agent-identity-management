@@ -162,7 +162,7 @@ describe('CorrelatedRelay', () => {
       ...rec,
       detection: {
         ...rec.detection!,
-        techniqueId: 'T-2002; /Users/v/secret.key; AKIAEXFIL',
+        techniqueId: 'T-2002; /tmp/secret.key; AKIAEXFIL',
         techniqueSource: 'totally-made-up' as never,
       },
     };

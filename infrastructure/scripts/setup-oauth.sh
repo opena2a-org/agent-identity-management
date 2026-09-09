@@ -114,7 +114,7 @@ echo "✅ OAuth Client ID created successfully!"
 echo ""
 
 # Update backend .env file
-ENV_FILE="/Users/decimai/workspace/agent-identity-management/apps/backend/.env"
+ENV_FILE="apps/backend/.env"
 
 echo "📝 Updating backend .env file..."
 

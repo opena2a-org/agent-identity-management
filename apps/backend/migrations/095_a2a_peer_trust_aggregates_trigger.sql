@@ -15,12 +15,10 @@
 --
 -- Closes #169.
 --
--- Per the [CHIEF-CA] decision in
--- `todo/2026-05-24-counter-drift-cluster-chief-ca.md`: aggregate
--- of child rows uses an AFTER INSERT/UPDATE/DELETE trigger on the
--- child table. Same family as migration 091
--- (capability_violation_count) — that one was a COUNT, this one is
--- COUNT(DISTINCT) + AVG.
+-- An aggregate of child rows uses an AFTER INSERT/UPDATE/DELETE
+-- trigger on the child table (decided 2026-05-24). Same family as
+-- migration 091 (capability_violation_count) — that one was a
+-- COUNT, this one is COUNT(DISTINCT) + AVG.
 
 CREATE OR REPLACE FUNCTION recompute_a2a_peer_aggregates()
 RETURNS TRIGGER AS $$

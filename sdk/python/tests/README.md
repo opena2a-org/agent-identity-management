@@ -24,7 +24,7 @@ This directory contains integration tests for the AIM Python SDK.
 
 ### Quick Test (Phase 2 Auto-Verification)
 ```bash
-cd /Users/decimai/workspace/agent-identity-management/sdks/python
+cd sdks/python
 python3 tests/test_phase2_flow.py
 ```
 
