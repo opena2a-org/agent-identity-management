@@ -15,12 +15,11 @@
 --
 -- Closes #170.
 --
--- Per the [CHIEF-CA] decision in
--- `todo/2026-05-24-counter-drift-cluster-chief-ca.md`: denormalized
--- cache derived from a detail table uses an AFTER INSERT/UPDATE
--- trigger on the detail table that maintains the parent cache.
--- Same family as migration 091 (capability_violation_count) and
--- migration 093 (agents.trust_score).
+-- A denormalized cache derived from a detail table uses an AFTER
+-- INSERT/UPDATE trigger on the detail table that maintains the
+-- parent cache (decided 2026-05-24). Same family as migration 091
+-- (capability_violation_count) and migration 093
+-- (agents.trust_score).
 
 CREATE OR REPLACE FUNCTION mirror_mcp_trust_score_to_server()
 RETURNS TRIGGER AS $$

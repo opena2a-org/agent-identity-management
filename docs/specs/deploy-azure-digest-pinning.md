@@ -16,7 +16,7 @@ See memory `feedback_azure_image_tag_deploy_silent_noop.md`.
 
 ## Decision
 
-**[CHIEF-CA] DECISION:** Pin every deploy to a sha256 digest resolved at
+**DECISION:** Pin every deploy to a sha256 digest resolved at
 deploy time, and assign each revision a unique suffix derived from
 `github.sha` + `github.run_number`.
 

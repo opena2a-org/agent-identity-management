@@ -147,6 +147,13 @@ export class SecretsError extends AIMError {
 }
 
 /**
+ * Cap on a server-supplied error message. The body is attacker/outage
+ * controlled and the message lands in logs, terminals, and error trackers
+ * verbatim, so it is type-checked and capped rather than passed through whole.
+ */
+const MAX_API_ERROR_MESSAGE = 512;
+
+/**
  * Minimal header lookup — satisfied by the fetch Headers class and by mocks.
  */
 export interface HeaderLookup {
@@ -194,7 +201,11 @@ export function unwrapErrnoCode(error: unknown, seen = new Set<unknown>()): stri
  */
 export function parseAPIError(statusCode: number, body: unknown, headers?: HeaderLookup): AIMError {
   const errorBody = body as Record<string, unknown>;
-  const message = (errorBody?.message ?? errorBody?.error ?? 'Unknown error') as string;
+  const raw = errorBody?.message ?? errorBody?.error;
+  let message = typeof raw === 'string' && raw.length > 0 ? raw : 'Unknown error';
+  if (message.length > MAX_API_ERROR_MESSAGE) {
+    message = `${message.slice(0, MAX_API_ERROR_MESSAGE)}… [truncated]`;
+  }
 
   switch (statusCode) {
     case 401:

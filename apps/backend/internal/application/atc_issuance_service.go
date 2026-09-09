@@ -31,7 +31,7 @@ type atcOrgReader interface {
 
 // atcTrustScorer computes the agent's 9-factor behavioral trust score. This is
 // the score the credential carries — NOT the Registry's supply-chain package
-// score (see todo/roadmap/aim-atx-issuer.md).
+// score.
 type atcTrustScorer interface {
 	CalculateTrustScore(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 }

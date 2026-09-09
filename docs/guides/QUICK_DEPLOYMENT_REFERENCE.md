@@ -106,13 +106,13 @@ okta apps create
 
 ### Start Backend
 ```bash
-cd /Users/decimai/workspace/agent-identity-management/apps/backend
+cd apps/backend
 go run cmd/server/main.go
 ```
 
 ### Start Frontend
 ```bash
-cd /Users/decimai/workspace/agent-identity-management/apps/web
+cd apps/web
 npm run dev
 ```
 
@@ -357,10 +357,10 @@ ENVIRONMENT=production ./server
 
 ## 🔗 Quick Links
 
-- **Project Root**: `/Users/decimai/workspace/agent-identity-management`
-- **Backend**: `/Users/decimai/workspace/agent-identity-management/apps/backend`
-- **Frontend**: `/Users/decimai/workspace/agent-identity-management/apps/web`
-- **Docs**: `/Users/decimai/workspace/agent-identity-management/docs`
+- **Project Root**: repository root (`agent-identity-management`)
+- **Backend**: `apps/backend`
+- **Frontend**: `apps/web`
+- **Docs**: `docs`
 
 ---
 
@@ -374,7 +374,7 @@ ENVIRONMENT=production ./server
 
 ```bash
 # Day 1: Create missing UI pages (4 hours)
-cd /Users/decimai/workspace/agent-identity-management/apps/web/app/dashboard
+cd apps/web/app/dashboard
 
 # Create api-keys/page.tsx
 mkdir -p api-keys

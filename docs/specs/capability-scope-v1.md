@@ -1,6 +1,6 @@
 # Capability Scope (`capability_scope` JSONB) — Design Note v1.0
 
-**Status:** Draft — design open pending `[CHIEF-CA]` decision on unification with FGA policies
+**Status:** Draft — design open pending an architecture decision on unification with FGA policies
 **Version:** 1.0.0
 **Date:** 2026-05-24
 **Closes investigation for:** #130
@@ -79,7 +79,7 @@ The wildcard prefix matcher honours these (`db:read:*` covers all subtypes), and
 
 For deployments that can move to Path B, write `fga_policies` rows directly. The FGA engine enforces attribute scoping there as designed.
 
-## 4. Open questions (`[CHIEF-CA]`)
+## 4. Open questions
 
 | Question | Why it matters |
 |---|---|
@@ -88,7 +88,7 @@ For deployments that can move to Path B, write `fga_policies` rows directly. The
 | Should `CapabilityService.GrantCapability` reject grants that supply a non-empty `capability_scope` until enforcement lands? | Converts silent bypass into refusal. Has API-contract impact for SDK callers who pass scope today. |
 | What is the canonical migration path off Path A onto Path B for the SDK? | SDK callers use `verify_capability`; Path B is `/authorize`. Either the SDK adopts `/authorize`, or `VerifyCapability` is upgraded to consult `fga_policies` under the hood. |
 
-These are entangled. The decision belongs to `[CHIEF-CA]` and should precede any code change.
+These are entangled. They call for a single architecture decision, which should precede any code change.
 
 ## 5. What this document does NOT do
 

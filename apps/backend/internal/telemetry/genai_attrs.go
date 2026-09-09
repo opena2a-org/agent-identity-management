@@ -10,7 +10,7 @@ import (
 // These are the eight authorization-decision attributes AIM emits on the
 // `fga.authorize` span. They are the namespaced form of the signals AIM has
 // always recorded under the legacy `agent.*` keys; both sets are emitted in
-// parallel ([CHIEF-CA] decision D1, 2026-06-26) until the internal Slide-14 /
+// parallel (dual-emit decision of 2026-06-26) until the internal Slide-14 /
 // Grafana dashboards repoint, after which the `agent.*` set is retired.
 //
 // The names track the OTel GenAI SemConv proposal
@@ -29,7 +29,7 @@ const (
 	GenAIAgentScanMethod    = "gen_ai.agent.scan.method"
 )
 
-// Producer-label method constants ([CHIEF-CA] decision D2, 2026-06-26).
+// Producer-label method constants (decided 2026-06-26).
 //
 // Each `*.method` attribute names HOW the paired signal is derived in AIM. They
 // are stable, honest producer labels — not per-record provenance. In

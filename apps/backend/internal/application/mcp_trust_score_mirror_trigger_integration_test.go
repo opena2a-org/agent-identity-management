@@ -80,7 +80,7 @@ func TestMCPTrustScoreMirrorTrigger_InsertSyncsServerCache(t *testing.T) {
 }
 
 // TestMCPServerTrustScore_RejectsOutOfScaleValue is the structural guard for
-// the [CHIEF-CDS] decision of 2026-08-04: an MCP trust score is a [0,1] value
+// the 2026-08-04 canonical-scale decision: an MCP trust score is a [0,1] value
 // produced by the 8-factor calculator, and the schema — not reviewer
 // attention — is what keeps a literal on some other scale out of the column.
 //

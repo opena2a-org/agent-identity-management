@@ -30,6 +30,7 @@ import {
   optOutMarkerExists,
 } from '../telemetry/signature';
 import type { SignatureTelemetryConfig } from '../types';
+import { SDK_VERSION } from '../../version';
 
 /** The install-facing invocation every user-visible citation uses. */
 export const SHIPPED_INVOCATION = 'aim-arp telemetry';
@@ -268,6 +269,12 @@ export async function runTelemetrySubcommand(
     console.log(telemetryHelpText());
     return 0;
   }
+  // A version request in the subcommand slot is a question about the bin, not
+  // a typo'd subcommand; answer it like the top-level flag does.
+  if (sub === '--version' || sub === '-v') {
+    console.log(`aim-arp v${SDK_VERSION}`);
+    return 0;
+  }
   // A typo'd subcommand is reported as the error even when --help rides
   // along: the typo signal outranks the help shortcut, and nothing executes
   // either way.
@@ -290,9 +297,32 @@ export async function runTelemetrySubcommand(
     console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
     return 1;
   }
+  // Positional arguments are held to the same standard as options. Before
+  // this, `log abc` silently showed 20 records (parseInt || 20 swallowed the
+  // garbage) and `log 5 5` silently ignored the extra argument, while `log -1`
+  // was refused above — garbage left of the dash errored, garbage right of it
+  // was swallowed. `log` takes at most one positional, a positive integer
+  // count; no other subcommand takes any.
+  const positionals = rest.filter((a) => !a.startsWith('-'));
+  if (sub === 'log') {
+    if (positionals.length > 1) {
+      console.error(`  log takes at most one argument, got: ${positionals.join(' ')}`);
+      console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+      return 1;
+    }
+    if (positionals[0] !== undefined && !/^[1-9]\d*$/.test(positionals[0])) {
+      console.error(`  log expects a positive integer count, got: ${positionals[0]}`);
+      console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+      return 1;
+    }
+  } else if (positionals.length > 0) {
+    console.error(`  Unexpected argument for ${sub}: ${positionals[0]}`);
+    console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+    return 1;
+  }
   switch (sub) {
     case 'log':
-      await telemetryLog(rest[0]);
+      await telemetryLog(positionals[0]);
       return 0;
     case 'status':
       await telemetryStatus(tcfg);

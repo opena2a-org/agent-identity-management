@@ -5,6 +5,23 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2026-09-09
+
+### Fixed
+
+- **MCP detection payloads report the installed package version**
+  ([#464](https://github.com/opena2a-org/agent-identity-management/issues/464)).
+  `aim_sdk/detection.py` and `aim_sdk/protocol_detection.py` each carried a
+  stale module-level `__version__ = "1.0.0"`, and the three `sdk_version`
+  parameters (`MCPDetector()`, `MCPDetector.get_runtime_detections()` and
+  `auto_detect_mcps()`) froze `aim-sdk-python@1.0.0` into their defaults at
+  import time, so every detection row built without an explicit `sdk_version`
+  reported `sdkVersion: aim-sdk-python@1.0.0` regardless of the installed
+  release. The module literals are deleted; the three defaults are now `None`
+  and each entry point resolves `aim_sdk.__version__` at call time, so MCP
+  detection payloads report the installed package version. Passing an explicit
+  `sdk_version` argument behaves exactly as before.
+
 ## [2.0.2] - 2026-09-08
 
 ### Security

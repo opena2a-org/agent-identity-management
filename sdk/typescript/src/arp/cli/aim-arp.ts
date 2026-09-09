@@ -15,57 +15,14 @@
  * (single-bin resolution), so `npx @opena2a/aim-sdk telemetry status` works
  * without a global install.
  *
- * Thin auto-running entry, nothing importable: the dispatch logic and command
- * table live in ./telemetry.ts, which is what tests exercise.
+ * Thin auto-running entry, nothing importable: the dispatch lives in
+ * ./aim-arp-main.ts and the command table in ./telemetry.ts, which is what
+ * tests exercise.
  */
 
-import { SDK_VERSION } from '../../version';
-import { loadConfig } from '../index';
-import { runTelemetrySubcommand, TELEMETRY_SUBCOMMANDS } from './telemetry';
+import { runAimArp } from './aim-arp-main';
 
-const argv = process.argv.slice(2);
-
-function showHelp(): void {
-  console.log(`
-  aim-arp v${SDK_VERSION} — OpenA2A telemetry consent CLI
-
-  USAGE
-    aim-arp telemetry <subcommand>
-    npx @opena2a/aim-sdk telemetry <subcommand>
-
-  SUBCOMMANDS
-    ${TELEMETRY_SUBCOMMANDS.join(', ')}
-
-  Run \`aim-arp telemetry --help\` for what each one does.
-`);
-}
-
-async function main(): Promise<number> {
-  const command = argv[0];
-  switch (command) {
-    case 'telemetry': {
-      // loadConfig never throws on a missing config file; the telemetry
-      // commands only need the optional signatureTelemetry block.
-      const config = loadConfig();
-      return runTelemetrySubcommand(argv[1], argv.slice(2), config.signatureTelemetry);
-    }
-    case '--version':
-    case '-v':
-      console.log(`aim-arp v${SDK_VERSION}`);
-      return 0;
-    case '--help':
-    case '-h':
-    case undefined:
-      showHelp();
-      return 0;
-    default:
-      console.error(`Unknown command: ${command}`);
-      showHelp();
-      return 1;
-  }
-}
-
-main()
+runAimArp(process.argv.slice(2))
   .then((code) => {
     process.exitCode = code;
   })
