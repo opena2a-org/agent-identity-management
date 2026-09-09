@@ -77,8 +77,8 @@
     "buildAttestation": "https://slsa.dev/provenance/v1#opena2a-conformance",
     "transparencyLogIndex": 42,
     "capabilities": [
-      "read:public",
-      "write:owned"
+      "db:read",
+      "db:write"
     ],
     "declaredPurpose": {
       "vocabVersion": "1",
@@ -89,10 +89,10 @@
         "billing:refund"
       ],
       "capabilityJustification": {
-        "read:public": [
+        "db:read": [
           "billing:inquiry"
         ],
-        "write:owned": [
+        "db:write": [
           "billing:refund"
         ]
       },
@@ -132,7 +132,7 @@
       {
         "keyId": "did:opena2a:authority:opena2a.org#key-1",
         "algorithm": "Ed25519",
-        "value": "sfxSAtxm3TwrzodrXyjph5dEBGePWAot8lz96WdlCrCDYGlHvuAYhgWF/GCzwsFDxjWXUFYTUX0DN+0ofCvRAw=="
+        "value": "WnNouQbw65svVVSjvE4jNNSvr5cclCZ1NeTOIvXvg6cy9i6Pz/f9TBwH9xjIsmOn507F+EdIskklQyHNH57lBw=="
       }
     ],
     "revoked": false,
