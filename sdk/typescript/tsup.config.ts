@@ -16,6 +16,14 @@ export default defineConfig({
   dts: true,
   splitting: false,
   sourcemap: true,
+  // Maps ship for readable stack traces, but WITHOUT embedded sources:
+  // README.md promises "source is not shipped in the npm package", and
+  // esbuild's default sourcesContent put ~2.6 MB of the full TypeScript
+  // source (doc comments included) into every published tarball.
+  // tests/packaging-sourcemaps.test.ts pins the packed artifact.
+  esbuildOptions(options) {
+    options.sourcesContent = false;
+  },
   clean: true,
   treeshake: true,
   minify: false,

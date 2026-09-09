@@ -37,6 +37,7 @@ import { generateNonce } from './wire';
 import { resolveRegistryUrl, type SignatureTelemetryConfig } from './config';
 import { sanitizeTerminalText } from './sanitize';
 import { opena2aHome, homePath, SENSOR_ENROLLMENT_FILE } from './paths';
+import { VERSION } from '../../index';
 
 /** The enroll canonical schema prefix (distinct from the ingest/purge schemas). */
 export const ENROLL_SCHEMA_VERSION = 'telemetry-enroll-v1';
@@ -157,7 +158,9 @@ export async function enrollSensor(
     try {
       res = await doFetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Identify the build like the emitter does; without this the registry
+        // logged the runtime default ("node") for enrollment requests.
+        headers: { 'Content-Type': 'application/json', 'User-Agent': `OpenA2A-ARP/${VERSION}` },
         body: JSON.stringify(body),
         signal: controller.signal,
       });

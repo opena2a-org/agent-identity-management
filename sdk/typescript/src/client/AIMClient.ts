@@ -148,6 +148,19 @@ export class AIMClient {
       telemetry: config.telemetry ?? {},
     };
 
+    // A nonsensical time budget fails loudly here, at the call site: a
+    // negative, zero, or NaN timeout otherwise surfaces later as an
+    // instantly-aborted (or never-aborted) request that reads like a network
+    // problem.
+    for (const key of ['timeout', 'enforcementTimeout'] as const) {
+      const value = this.config[key];
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+        throw new ConfigurationError(
+          `\`${key}\` must be a positive finite number of milliseconds, got: ${String(value)}`,
+        );
+      }
+    }
+
     const telemetry = this.config.telemetry;
     this.telemetryEnabled = telemetry.enabled === true;
     this.enforcementSource = telemetry.enforcementSource ?? DEFAULT_ENFORCEMENT_SOURCE;
@@ -318,6 +331,12 @@ export class AIMClient {
    * Register a new agent
    */
   async registerAgent(options: RegisterAgentOptions): Promise<Agent> {
+    // The one field the server cannot default is refused here rather than
+    // POSTed for the server to reject (or worse, accept as "").
+    if (typeof options?.name !== 'string' || options.name.trim() === '') {
+      throw new ConfigurationError('registerAgent requires a non-empty string `name`');
+    }
+
     // Generate key pair for the agent
     const keyPair = await generateKeyPair();
     const publicKey = toBase64(keyPair.publicKey);

@@ -571,12 +571,30 @@ client.setCredentials(saved);
 - `verifyActionLocally(options, atx?)` - Verify an action against a locally-held ATX credential, fully offline
 - `setLocalCredential(atx)` - Cache the resolved ATX credential for offline verification (pass `null` to clear)
 - `getLocalVerifier()` - The configured `LocalVerifier`, or `null` when local verification is not enabled
-- `getAgent()` - Get current agent info
+- `getAgent()` - Get current agent info. Returns `null` — without making any
+  request — when no credentials are loaded, and `null` (rather than throwing)
+  when the lookup fails
 - `updateAgent(updates)` - Update agent metadata
 - `reportCapabilities(capabilities)` - Report agent capabilities
-- `getTrustScore()` - Get current trust score
+- `getTrustScore()` - Get current trust score. Returns `0` when the agent
+  cannot be resolved (no credentials, or the lookup failed), so treat `0` as
+  "unknown", not as a measured score of zero
 - `getCredentials()` - Get stored credentials
 - `setCredentials(credentials)` - Set credentials
+
+### Other exported clients
+
+The package exports more than `AIMClient`. The ones you are most likely to
+reach for:
+
+- `A2AClient` / `createA2AClient` - Agent-to-agent protocol client for
+  caller-initiated messages to a peer agent
+- `SecretsClient` - Identity-native secrets client; usually reached through
+  `client.secrets` rather than constructed directly
+- `OAuthTokenManager` - The token acquisition and caching `AIMClient` uses for
+  its authenticated requests, reusable standalone
+- `CrlCache` - Background-refreshed revocation-list cache that feeds
+  `LocalVerifier` for offline credential verification
 
 ### Types
 

@@ -35,6 +35,7 @@ import {
   type SharedIndicatorContext,
 } from './correlated-record';
 import { readCorrelatedRecords } from './local-writer';
+import { SDK_VERSION } from '../version';
 
 /** Default Registry base URL (shared with hackmyagent's GTIN forwarder). */
 export const DEFAULT_REGISTRY_URL = 'https://api.oa2a.org';
@@ -431,7 +432,10 @@ export class CorrelatedRelay {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'OpenA2A-AIM-SDK-Relay',
+          // Versioned so the registry can attribute an indicator to the SDK
+          // build that produced it — the unversioned form repeated the frozen
+          // OpenA2A-ARP/0.2.0 defect (see src/arp/index.ts).
+          'User-Agent': `OpenA2A-AIM-SDK-Relay/${SDK_VERSION}`,
         },
         body: JSON.stringify(body),
         signal: controller.signal,

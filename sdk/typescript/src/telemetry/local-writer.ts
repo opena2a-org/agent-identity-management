@@ -87,7 +87,11 @@ export function writeCorrelatedRecord(
     fs.mkdirSync(dataDir, { recursive: true });
     const filePath = path.join(dataDir, CORRELATED_FILE);
     rotateIfNeeded(filePath);
-    fs.appendFileSync(filePath, serialized + '\n', 'utf-8');
+    // 0600 at creation: the log carries agent ids, denial reasons, and
+    // resource paths, and every other sensitive file this SDK writes
+    // (credentials, the sensor id) is owner-only. Append mode is unchanged
+    // for a file that already exists.
+    fs.appendFileSync(filePath, serialized + '\n', { encoding: 'utf-8', mode: 0o600 });
     return true;
   } catch {
     return false;
