@@ -236,12 +236,20 @@ export interface AgentCredentials {
 }
 
 /**
- * OAuth token response
+ * OAuth token response. The server may answer in the SDK's historical
+ * camelCase or in the RFC 6749 snake_case wire form; both are read, and every
+ * field is optional at the type level because either spelling may be absent.
  */
 export interface TokenResponse {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
+  accessToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
+  /** RFC 6749 wire form of accessToken */
+  access_token?: string;
+  /** RFC 6749 wire form of tokenType */
+  token_type?: string;
+  /** RFC 6749 wire form of expiresIn */
+  expires_in?: number;
   scope?: string;
 }
 

@@ -319,8 +319,10 @@ function resolveVerifyAtMs(verifyAt?: Date | string): number {
  * Evaluate a delegation's signed temporal window (`createdAt`/`expiresAt`)
  * against an evaluation time. Fails closed: a missing or unparseable timestamp,
  * an inverted window (createdAt after expiresAt), or an unparseable evaluation
- * time all return `{ valid: false }`. The expiry bound is exclusive — a
- * delegation is valid strictly before `expiresAt`.
+ * time all return `{ valid: false }`. Both bounds are enforced: an evaluation
+ * instant before `createdAt` is not yet valid (lower bound inclusive), and the
+ * expiry bound is exclusive — a delegation is valid strictly before
+ * `expiresAt`.
  */
 export function checkDelegationTemporalValidity(
   delegation: Pick<Delegation, 'createdAt' | 'expiresAt'>,
@@ -344,6 +346,7 @@ function temporalAtMs(
   if (Number.isNaN(createdMs)) return { valid: false, error: 'Missing or unparseable createdAt timestamp' };
   if (Number.isNaN(expiresMs)) return { valid: false, error: 'Missing or unparseable expiresAt timestamp' };
   if (createdMs > expiresMs) return { valid: false, error: 'Invalid window: createdAt is after expiresAt' };
+  if (atMs < createdMs) return { valid: false, error: 'Delegation is not yet valid (before createdAt)' };
   if (atMs >= expiresMs) return { valid: false, error: 'Delegation has expired' };
   return { valid: true };
 }
