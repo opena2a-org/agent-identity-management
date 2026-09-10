@@ -1,7 +1,7 @@
 {
   "$schema": "https://atx.opena2a.org/schemas/fixture-v1.json",
   "name": "atx-v1_1/tampered-capabilities",
-  "description": "An ATX v1.1 credential whose capabilities were escalated to include admin:all AFTER signing. Because v1.1 signs JCS(TBS), capabilities are covered by the signature; the verifier recomputes the canonical bytes, finds they no longer match, and MUST REJECT with a signature-validation reason. This is the integrity property v1.0 lacked.",
+  "description": "An ATX v1.1 credential whose capabilities were escalated to include system:exec AFTER signing. Because v1.1 signs JCS(TBS), capabilities are covered by the signature; the verifier recomputes the canonical bytes, finds they no longer match, and MUST REJECT with a signature-validation reason. This is the integrity property v1.0 lacked.",
   "spec": [
     {
       "id": "ATX",
@@ -79,9 +79,9 @@
     "buildAttestation": "https://slsa.dev/provenance/v1#opena2a-conformance",
     "transparencyLogIndex": 42,
     "capabilities": [
-      "read:public",
-      "write:owned",
-      "admin:all"
+      "db:read",
+      "db:write",
+      "system:exec"
     ],
     "behavioralProfile": {
       "checksum": "sha256:ghi789",
@@ -109,7 +109,7 @@
       {
         "keyId": "did:opena2a:authority:opena2a.org#key-1",
         "algorithm": "Ed25519",
-        "value": "yzWTRo2drtwsfSdx0RkabNQsRMXFR/KaJPA6lN95CcKbRuNVUN4QEmb/k/A3MGDn7IcSptJJv28KNHaMoL9wBw=="
+        "value": "avfPHRdMUb4tBMWoOJpATKnvsI+aSDkcGWpEznE6D9s19YIDG2jjV/aURzoBsNKphxhdlxu93bMer+TF1y26Cw=="
       }
     ],
     "revoked": false,

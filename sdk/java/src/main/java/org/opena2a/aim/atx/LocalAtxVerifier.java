@@ -1,6 +1,8 @@
 package org.opena2a.aim.atx;
 
 import com.fasterxml.jackson.core.StreamReadFeature;
+import org.opena2a.aim.crypto.pqc.Algorithm;
+import org.opena2a.aim.crypto.pqc.PQCOperations;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 
@@ -20,15 +22,22 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Local, offline ATX verifier. Cryptographically real (Ed25519) and interoperable
- * with the conformance fixtures; trust anchors are injected. Mirrors the
- * {@code @opena2a/atx-verify} (TS), {@code pkg/atcverify} (Go), and Python
- * reference verifiers, including key-to-issuer binding.
+ * Local, offline ATX verifier. Trust anchors are injected; a production
+ * deployment wires the live trusted-issuer and CRL anchors.
  *
- * <p>Scope: Ed25519 is verified fully. ML-DSA-65 presence is recorded but
- * verification is delegated (matches the TS/Python reference verifiers). A
- * production deployment wires the post-quantum half and the live
- * trusted-issuer/CRL anchors.
+ * <p>Both declared signature suites are verified: Ed25519 via the JDK, and
+ * ML-DSA-65 (FIPS 204) via {@link org.opena2a.aim.crypto.pqc.PQCOperations#verifyMLDSA}
+ * on BouncyCastle. Every signature entry the credential declares must verify,
+ * per atx-spec section 13 and AAP section 9.4; a declared entry that does not
+ * verify, or for which no eligible anchor is configured, is
+ * {@code SIGNATURE_INVALID}.
+ *
+ * <p>It shares canonicalization, key-to-issuer binding and reject categories
+ * with the {@code @opena2a/atx-verify} (TS), {@code pkg/atcverify} (Go) and
+ * Python reference verifiers. Whole-verifier equivalence is asserted by the
+ * conformance fixtures, not by this comment: a claim that this verifier matches
+ * a sibling implementation is only as good as that sibling, and citing two that
+ * happened to agree is what let a missing post-quantum check survive here.
  */
 public final class LocalAtxVerifier {
 
@@ -169,14 +178,24 @@ public final class LocalAtxVerifier {
         // trusts as issuers.
         Set<String> authoritySet = authoritySetFor(atx, isV11, anchors.trustedIssuers());
         List<PublicKey> edKeys = new ArrayList<>();
+        // A post-quantum key is not exempt from key-to-issuer binding: the same
+        // eligibility gate applies before its bytes are ever considered.
+        List<byte[]> pqKeys = new ArrayList<>();
         if (anchors.publicKeys() != null) {
             for (AtxPublicKey k : anchors.publicKeys()) {
-                if (!"Ed25519".equals(k.algorithm()) || !keyEligible(k.keyId(), authoritySet)) {
+                if (!keyEligible(k.keyId(), authoritySet)) {
                     continue;
                 }
-                PublicKey pk = ed25519FromRawHex(k.publicKeyHex());
-                if (pk != null) {
-                    edKeys.add(pk);
+                if ("Ed25519".equals(k.algorithm())) {
+                    PublicKey pk = ed25519FromRawHex(k.publicKeyHex());
+                    if (pk != null) {
+                        edKeys.add(pk);
+                    }
+                } else if ("ML-DSA-65".equals(k.algorithm())) {
+                    byte[] raw = mldsa65FromRawHex(k.publicKeyHex());
+                    if (raw != null) {
+                        pqKeys.add(raw);
+                    }
                 }
             }
         }
@@ -208,8 +227,33 @@ public final class LocalAtxVerifier {
                     }
                     edVerified = true;
                 } else if ("ML-DSA-65".equals(sig.algorithm())) {
-                    // Presence recorded; PQC verification delegated. Not silently skipped.
                     mldsaPresent = true;
+                    byte[] pqSigBytes;
+                    try {
+                        pqSigBytes = Base64.getDecoder().decode(sig.value());
+                    } catch (Exception e) {
+                        return AtxVerificationResult.reject(
+                                RejectCategory.SIGNATURE_INVALID,
+                                "signature " + ns(sig.keyId()) + " has invalid base64");
+                    }
+                    if (pqKeys.isEmpty()) {
+                        return AtxVerificationResult.reject(
+                                RejectCategory.SIGNATURE_INVALID,
+                                "no eligible ML-DSA-65 trust anchor for this credential (issuer "
+                                        + atx.issuerDid + ")");
+                    }
+                    boolean pqOk = false;
+                    for (byte[] pqKey : pqKeys) {
+                        if (PQCOperations.verifyMLDSA(Algorithm.ML_DSA_65, pqKey, payload, pqSigBytes)) {
+                            pqOk = true;
+                            break;
+                        }
+                    }
+                    if (!pqOk) {
+                        return AtxVerificationResult.reject(
+                                RejectCategory.SIGNATURE_INVALID,
+                                "ML-DSA-65 signature " + ns(sig.keyId()) + " did not verify");
+                    }
                 } else {
                     // Unknown algorithm: ATX defines only Ed25519 and ML-DSA-65. Reject
                     // (rather than ignore) to block typo / Unicode-lookalike bypasses of
@@ -284,6 +328,26 @@ public final class LocalAtxVerifier {
     }
 
     /** Build a public key from a raw 32-byte Ed25519 public key (hex), or null. */
+    /**
+     * Raw 1952-byte FIPS 204 ML-DSA-65 public key from hex, or null when the hex
+     * is malformed or the wrong length. Null means an unusable anchor, which
+     * leaves the eligible set empty rather than silently accepting.
+     */
+    private static byte[] mldsa65FromRawHex(String hex) {
+        if (hex == null || hex.length() != 3904 || !hex.matches("[0-9a-fA-F]+")) {
+            return null;
+        }
+        try {
+            byte[] out = new byte[hex.length() / 2];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+            }
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private static PublicKey ed25519FromRawHex(String hex) {
         try {
             byte[] raw = hexToBytes(hex);
