@@ -49,6 +49,7 @@ from aim_sdk.integrations.mcp.verification import verify_mcp_action
 from aim_sdk.integrations.mcp.discovery import (
     discover_capabilities,
     auto_discover_capabilities,
+    describe_unusable_server_command,
     is_mcp_sdk_available,
     MCPDiscoveryResult,
     MCPTool,
@@ -68,6 +69,7 @@ __all__ = [
     # Discovery (opt-in feature)
     "discover_capabilities",
     "auto_discover_capabilities",
+    "describe_unusable_server_command",
     "is_mcp_sdk_available",
     "MCPDiscoveryResult",
     "MCPTool",
