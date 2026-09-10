@@ -20,6 +20,13 @@ import inspect
 from typing import List, Set, Optional, Dict, Any, Tuple
 from datetime import datetime, timezone
 
+__all__ = [
+    "CapabilityDetector",
+    "auto_detect_agent_type",
+    "auto_detect_capabilities",
+    "save_capabilities_config",
+]
+
 __version__ = "1.1.0"
 
 

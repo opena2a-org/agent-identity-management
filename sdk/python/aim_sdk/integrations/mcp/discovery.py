@@ -10,7 +10,10 @@ server using the official MCP protocol rather than relying on manual capability 
 """
 
 import asyncio
+import json
+import logging
 import os
+import selectors
 import shlex
 import subprocess
 import sys
@@ -29,6 +32,14 @@ except ImportError:
     ClientSession = None
     StdioServerParameters = None
     stdio_client = None
+
+logger = logging.getLogger(__name__)
+
+# The anyio task group the MCP stdio client runs in collects whatever went
+# wrong into an exception group whose str() is this sentence. It is the shape
+# of the plumbing, not the failure: reported as-is it told an operator whose
+# server command was a typo that there were "unhandled errors in a TaskGroup".
+_TASKGROUP_WRAPPER_TEXT = "unhandled errors in a TaskGroup"
 
 
 def _get_quiet_env() -> Dict[str, str]:
@@ -190,6 +201,208 @@ def parse_mcp_command(mcp_url: str) -> Tuple[str, List[str]]:
     return command, args
 
 
+def _leaf_exceptions(exc: BaseException, depth: int = 0) -> List[BaseException]:
+    """
+    Flatten an exception to the leaves that actually describe the failure.
+
+    A failed stdio session surfaces as an anyio/`BaseExceptionGroup` wrapper
+    around the real error (a FileNotFoundError for a command that is not on
+    PATH, a broken pipe for a process that exited). The wrapper's ``str()``
+    names neither, so it is walked through rather than reported.
+    """
+    if exc is None or depth > 12:
+        return []
+
+    nested = getattr(exc, "exceptions", None)
+    if isinstance(nested, (list, tuple)) and nested:
+        leaves: List[BaseException] = []
+        for sub in nested:
+            leaves.extend(_leaf_exceptions(sub, depth + 1))
+        if leaves:
+            return leaves
+
+    if _TASKGROUP_WRAPPER_TEXT in str(exc):
+        chained = exc.__cause__ or exc.__context__
+        if chained is not None:
+            return _leaf_exceptions(chained, depth + 1)
+
+    return [exc]
+
+
+def describe_exception(exc: BaseException) -> str:
+    """Render an exception (or exception group) as its underlying cause(s)."""
+    described: List[str] = []
+    for leaf in _leaf_exceptions(exc):
+        text = str(leaf).strip()
+        rendered = f"{type(leaf).__name__}: {text}" if text else type(leaf).__name__
+        if rendered not in described:
+            described.append(rendered)
+
+    description = "; ".join(described)
+    if not description or _TASKGROUP_WRAPPER_TEXT in description:
+        # The wrapper carried no sub-exception we can read. Say that, rather
+        # than repeating a sentence about a TaskGroup the caller never asked for.
+        return (
+            f"{type(exc).__name__} while running the MCP session "
+            f"(no underlying error detail available)"
+        )
+    return description
+
+
+def _last_informative_line(raw: bytes) -> Optional[str]:
+    """The most specific line of a child's stderr, if it has one."""
+    if not raw:
+        return None
+    lines = [line.strip() for line in raw.decode("utf-8", "replace").splitlines()]
+    for line in reversed(lines):
+        if not line:
+            continue
+        if "Traceback" in line:
+            # A child's traceback header says nothing the reader needs and is
+            # the one string this SDK promises not to put in front of them.
+            return None
+        return line[:200]
+    return None
+
+
+def _describe_early_exit(
+    proc: "subprocess.Popen", command: str, deadline: float
+) -> str:
+    """Why a server process stopped talking before it answered."""
+    returncode = proc.poll()
+    if returncode is None:
+        try:
+            returncode = proc.wait(timeout=max(deadline - time.monotonic(), 0.2))
+        except subprocess.TimeoutExpired:
+            returncode = None
+
+    detail = ""
+    if returncode is not None and proc.stderr is not None:
+        try:
+            detail = _last_informative_line(proc.stderr.read()) or ""
+        except Exception:
+            detail = ""
+    suffix = f" (stderr: {detail})" if detail else ""
+
+    if returncode is None:
+        return (
+            f"command {command!r} closed its output without answering an MCP "
+            f"initialize request{suffix}"
+        )
+    return (
+        f"command {command!r} exited with status {returncode} without answering "
+        f"an MCP initialize request{suffix}"
+    )
+
+
+def _shut_down(proc: "subprocess.Popen") -> None:
+    """Stop a probed server process and release its pipes."""
+    try:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+    except Exception:
+        pass
+    for stream in (proc.stdin, proc.stdout, proc.stderr):
+        try:
+            if stream is not None:
+                stream.close()
+        except Exception:
+            pass
+
+
+def describe_unusable_server_command(
+    mcp_url: str,
+    timeout_seconds: float = 10.0
+) -> Optional[str]:
+    """
+    Run a configured MCP server command and report why it cannot be used.
+
+    RUNS THE COMMAND. It is started as a child process, sent one MCP
+    ``initialize`` request on stdin, and shut down again.
+
+    This exists so that "why did discovery fail for this server?" has an answer
+    even when the MCP client library is not installed: without it the SDK
+    reported "MCP SDK not installed" for a command that was a typo, a dead path
+    or a process that exits immediately, and the operator had no way to tell
+    those apart.
+
+    Returns:
+        A description of the failure, or None when the command started and
+        answered -- which is as far as this probe goes; enumerating the tools
+        is the MCP client library's job.
+    """
+    try:
+        command, args = parse_mcp_command(mcp_url)
+    except ValueError as exc:
+        return str(exc)
+
+    budget = max(float(timeout_seconds), 0.1)
+    deadline = time.monotonic() + budget
+
+    try:
+        proc = subprocess.Popen(
+            [command] + [str(a) for a in args],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_get_quiet_env(),
+        )
+    except OSError as exc:
+        return f"command {command!r} could not be executed: {exc}"
+
+    try:
+        request = json.dumps({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "aim-sdk", "version": "probe"},
+            },
+        }) + "\n"
+        try:
+            proc.stdin.write(request.encode("utf-8"))
+            proc.stdin.flush()
+        except OSError:
+            # Already gone; the read below reports the exit status.
+            pass
+
+        selector = selectors.DefaultSelector()
+        selector.register(proc.stdout, selectors.EVENT_READ)
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return (
+                        f"command {command!r} did not answer an MCP initialize "
+                        f"request within {budget:g}s"
+                    )
+                if not selector.select(timeout=remaining):
+                    continue
+                # os.read, not readline: a server that writes a partial line
+                # and stalls must not block this probe past its deadline.
+                chunk = os.read(proc.stdout.fileno(), 4096)
+                if chunk:
+                    return None
+                return _describe_early_exit(proc, command, deadline)
+        finally:
+            selector.close()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("MCP command probe failed for %r", mcp_url, exc_info=True)
+        return f"command {command!r} could not be probed: {type(exc).__name__}: {exc}"
+    finally:
+        _shut_down(proc)
+
+
 async def _discover_capabilities_async(
     mcp_url: str,
     timeout_seconds: float = 30.0,
@@ -302,12 +515,17 @@ async def _discover_capabilities_async(
 
     except Exception as e:
         end_time = time.time()
+        # The full chain, with its traceback, goes to an aim_sdk logger at DEBUG
+        # -- not to stderr. A detection run over a config with a broken server
+        # used to print a third-party traceback in the middle of an agent's
+        # startup output; the caller gets the cause as a string instead.
+        logger.debug("MCP discovery failed for %r", mcp_url, exc_info=True)
         return MCPDiscoveryResult(
             server_name="unknown",
             server_version="unknown",
             protocol_version="unknown",
             discovery_time_ms=(end_time - start_time) * 1000,
-            error=str(e)
+            error=describe_exception(e)
         )
 
 
@@ -356,25 +574,37 @@ def discover_capabilities(
 
     # Run the async discovery function
     try:
-        # Try to get existing event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If we're already in an async context, create a new thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    asyncio.run,
+        try:
+            # Try to get existing event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're already in an async context, create a new thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
+                    )
+                    return future.result(timeout=timeout_seconds)
+            else:
+                return loop.run_until_complete(
                     _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
                 )
-                return future.result(timeout=timeout_seconds)
-        else:
-            return loop.run_until_complete(
+        except RuntimeError:
+            # No event loop, create new one
+            return asyncio.run(
                 _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
             )
-    except RuntimeError:
-        # No event loop, create new one
-        return asyncio.run(
-            _discover_capabilities_async(mcp_url, timeout_seconds, quiet)
+    except Exception as e:
+        # Whatever failed outside the async body (loop setup, the executor's own
+        # timeout) is reported in the same shape as a failure inside it, so a
+        # caller never has to catch here to find out what happened.
+        logger.debug("MCP discovery could not run for %r", mcp_url, exc_info=True)
+        return MCPDiscoveryResult(
+            server_name="unknown",
+            server_version="unknown",
+            protocol_version="unknown",
+            error=describe_exception(e)
         )
 
 

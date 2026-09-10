@@ -139,6 +139,117 @@ The twelve P3 findings from the 2.0.2 fresh-user release test, each fixed
   `aim_sdk.auto_hooks` (unchanged behaviour) for the day a server registers
   the route.
 
+The three P2 findings and the seven P3 findings from the 2.0.3 release test
+(AIM-21). P2.1, the `aim-sdk login` pre-flight and bounded callback wait, is
+not repeated here: it is the same defect as AIM-14.AC1 and ships above.
+
+- **Protocol detection never scores what it did not find** (P2.2). With none
+  of the seven indicator environment variables set and no protocol module
+  loaded, `ProtocolDetector.get_detection_confidence` and the `confidence`
+  field of `get_protocol_details` are `0.0` with `indicators_found` empty,
+  instead of the 50.0 "base confidence" that reported a guess as a half-
+  certain detection. A protocol name that is not in the indicator table at
+  all — `get_protocol_details("bogus")` — scores 0.0 for the same reason.
+  `detect_protocol()` still returns `"mcp"` when nothing matched; the default
+  is unchanged, it is simply no longer reported as a 50% detection. Env
+  indicator matches keep their 90+ scores and import matches their 60+.
+- **Transport failures have one shape across every method** (P2.3). A refused
+  connection or a request timeout now raises a `VerificationError` whose
+  message names the host taken from `aim_url`, the failure class (connection
+  refused / timed out, with the exception type beside it) and the next step
+  naming the URL to check — from `_make_request` and therefore from
+  `report_detections`, `report_sdk_integration`, `register_mcp` and every
+  other method routed through it. The verification path builds the same
+  sentence for its `UNKNOWN`/transport reason, so the decision's `reason`,
+  the `VerificationUnavailableError` raised from it under a strict override
+  and the `VerificationError` raised from a reporting call all read alike.
+  Previously the two branches raised the bare literals `"Request timeout"`
+  and `"Connection failed"` while the verification path forwarded the
+  `requests` text verbatim. A failure that DID reach the server keeps saying
+  what the server said: a 4xx/5xx from `raise_for_status` still renders as
+  `Request failed: <status> ...`, not as "could not reach", because sending an
+  operator to check that their server is running because it answered 404 is
+  the same defect pointing the other way.
+- **No raw library chain, and no print beside a raise** (P2.3). No message the
+  SDK raises or returns for a transport failure contains the
+  `requests`/`urllib3` chain text (`HTTPConnectionPool`, `Max retries
+  exceeded`, `NewConnectionError`), and `_decide_capability` no longer prints
+  `Warning: Network error during verification: ...` to stdout immediately
+  before `verify_capability` raises about the same failure. The console
+  warning stays on the path that acts on the decision permissively —
+  `_verify_and_enforce` prints the verdict's warning before it runs the
+  wrapped body — so a monitoring-mode caller is told exactly as before, and a
+  caller who gets an exception gets only the exception. Every other message
+  the SDK composes from a `requests` failure now goes through the same
+  renderer rather than interpolating `str(e)`: `attest_mcp` (which posts with
+  the session directly), the `error` a failed `_register_single_mcp` RETURNS,
+  the CLI's `exchange_code_for_tokens`, the approval-poll warning, the
+  `aim-sdk demo --cleanup` messages, and the best-effort capability/tag
+  warnings. Anything a `requests` exception carries that is really urllib3's
+  chain is dropped in favour of the exception's type name, so no future
+  handler can reintroduce the chain by interpolating it.
+- **Tool discovery reports the real cause and keeps third-party noise off
+  stderr** (P2.4). `details.discoveryError` from `detect_with_tools()` now
+  names the server, the command that was run and the underlying failure — the
+  `OSError` text for a command that is not on PATH, the exit status for a
+  process that stops without speaking MCP — instead of `str()` of an anyio
+  exception group, whose text is "unhandled errors in a TaskGroup". The
+  exception chain and its traceback go to the `aim_sdk` logger at DEBUG
+  level, so nothing containing "Traceback" reaches stderr from a discovery
+  run. Without the MCP client library installed, the configured command is
+  probed directly so the answer is still the real cause rather than "MCP SDK
+  not installed". The docstrings of `detect_with_tools` and `auto_detect_mcps`
+  now state plainly that every configured server command is executed as a
+  child process when `discover_tools` is true.
+- **Nonsense arguments are refused at construction** (P3.1). `AIMClient`
+  raises `ConfigurationError` for a `timeout` that is not a positive number
+  (`0`, `-1`, `"abc"`), for a `max_retries` that is not a non-negative
+  integer (`-1`), and for an `aim_url` with no http/https scheme and host
+  (`"not a url"`). `MCPDetector(sdk_version=...)` raises `TypeError` for a
+  non-string and `ValueError` for an empty string; `None` still resolves the
+  installed version. `agent_id` is deliberately NOT validated as a UUID —
+  API-key mode ids are server-issued strings. Relatedly, an `aimUrl` in a
+  registration response is honoured only when it is a URL the SDK could send
+  a request to; otherwise the URL the caller registered against is kept.
+- **A corrupt Claude Desktop config is reported, not swallowed** (P3.2).
+  `detect_from_claude_config()`, `detect_all()` and `detect_with_tools()`
+  still return `[]` without raising when the config file is not valid JSON,
+  but each now emits exactly one warning naming the file path and the JSON
+  decode error, instead of `except Exception: pass`. The other readers of the
+  same file (`get_mcp_server_config`, `discover_mcp_capabilities`,
+  `discover_mcp_metadata`) go through the same reader.
+- **The config-search docstring and the search agree** (P3.3).
+  `detect_from_claude_config`'s docstring lists exactly the paths
+  `_get_claude_config_path` searches, in search order, and the search now
+  includes `~/.config/Claude/claude_desktop_config.json` — the location
+  Claude Desktop uses on Linux — beside the legacy
+  `~/.claude/claude_desktop_config.json`, with the platform-native macOS and
+  Windows locations first. The docstring also names the locations that are
+  NOT searched (`~/.cursor/mcp.json`, `./.cursor/mcp.json`, `./mcp.json`).
+- **The detection modules declare their public surface** (P3.4).
+  `aim_sdk/detection.py`, `aim_sdk/protocol_detection.py` and
+  `aim_sdk/capability_detection.py` each define `__all__`, so
+  `from aim_sdk.detection import *` no longer binds `json`, `os`, `sys`,
+  `pathlib`, `Optional` or `datetime` into the caller's namespace.
+- **The CLI answers in JSON and knows the word `help`** (P3.5).
+  `aim-sdk status --json` writes exactly one JSON object
+  (`authenticated`, `server`, `user`, `credentialsPath`, `tokenState`) and
+  nothing else, keeping the exit codes (1 when not authenticated);
+  `aim-sdk version --json` writes `{"version": "..."}`; `aim-sdk help` prints
+  the command list and exits 0, where argparse used to reject it as an
+  invalid choice; and a bare `aim-sdk` prints the same help and now exits 0
+  instead of 1.
+- **`docs/testing/release-smoke.md` carries a Python SDK row** (P3.6) in its
+  component smoke matrix, with a run command that asserts an MCP detection's
+  `sdkVersion` is the installed package's version.
+- **`report_sdk_integration` defaults to the installed version, and the client
+  docstring names the replacement API** (P3.7). `sdk_version` is now optional
+  and resolves `aim-sdk-python@<aim_sdk.__version__>` through the same
+  resolver `MCPDetector` uses when it is omitted or `None`; an explicit string
+  is sent unchanged. `AIMClient`'s class docstring names `verify_capability`
+  and `aim_sdk.decision.VerificationDecision`, the two names its deprecation
+  warnings point callers to, instead of only `perform_action`.
+
 ## [2.0.3] - 2026-09-09
 
 ### Fixed

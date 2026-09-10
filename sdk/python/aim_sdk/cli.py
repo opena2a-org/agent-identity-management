@@ -6,12 +6,16 @@ Provides commands for authenticating and managing the SDK:
 - logout: Revoke credentials and clear local storage
 - status: Check current authentication status
 - version: Show SDK version
+- help: Show the command list
 
 Usage:
     aim-sdk login                    # Login to AIM Cloud (aim.opena2a.org)
     aim-sdk login --url http://localhost:8080  # Login to self-hosted
     aim-sdk logout                   # Clear credentials
     aim-sdk status                   # Check authentication status
+    aim-sdk status --json            # ... as one JSON object, for scripts
+    aim-sdk version --json           # {"version": "..."}
+    aim-sdk help                     # Same as `aim-sdk` with no arguments
 
 Security Design (RFC 8252 - OAuth for Native Apps):
 - Uses Authorization Code flow with PKCE (Proof Key for Code Exchange)
@@ -314,7 +318,12 @@ def exchange_code_for_tokens(aim_url: str, code: str, code_verifier: str, redire
                 )
             return {'error': reason}
     except requests.RequestException as e:
-        return {'error': f'Network error: {str(e)}'}
+        # The same rendering the SDK uses everywhere else: the host from the
+        # server URL, the failure class, the URL to check. `str(e)` here was
+        # the urllib3 pool chain, printed to whoever ran `aim-sdk login`.
+        from .client import _request_failure_message
+
+        return {'error': _request_failure_message(e, aim_url)}
 
 
 def login(args):
@@ -508,15 +517,54 @@ def logout(args):
     return 0
 
 
+def _token_state(access_token) -> str:
+    """
+    Classify the stored access token without verifying its signature.
+
+    One classifier for both renderings, so `--json` and the human output can
+    never disagree about the same credentials file.
+
+    Returns one of: "absent" (no token stored), "valid", "expired", "unknown"
+    (a token is stored but its expiry could not be read).
+    """
+    if not access_token:
+        return "absent"
+    try:
+        parts = access_token.split('.')
+        if len(parts) != 3:
+            return "unknown"
+        payload = parts[1]
+        payload += '=' * (-len(payload) % 4)
+        exp = json.loads(base64.urlsafe_b64decode(payload)).get('exp')
+        if not exp:
+            return "unknown"
+        return "valid" if exp > time.time() else "expired"
+    except Exception:
+        return "unknown"
+
+
 def status(args):
     """Check authentication status."""
     from .credentials import load_sdk_credentials, AIM_DIR
 
-    print("Checking authentication status...")
-    print()
-
     creds = load_sdk_credentials()
+    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
+
     if not creds:
+        if getattr(args, 'json', False):
+            # Exactly one JSON object on stdout and nothing else -- this is the
+            # output a wrapper script parses, so a stray banner line would make
+            # `aim-sdk status --json | jq` fail on a working install.
+            print(json.dumps({
+                "authenticated": False,
+                "server": None,
+                "user": None,
+                "credentialsPath": str(creds_file),
+                "tokenState": "absent",
+            }))
+            return 1
+        print("Checking authentication status...")
+        print()
         print("Not authenticated.")
         print()
         print("Run 'aim-sdk login' to authenticate")
@@ -524,43 +572,40 @@ def status(args):
 
     aim_url = creds.get('aimUrl') or creds.get('aim_url', 'Unknown')
     user_email = creds.get('userEmail', 'Unknown')
-    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
+    token_state = _token_state(creds.get('accessToken'))
 
+    if getattr(args, 'json', False):
+        print(json.dumps({
+            "authenticated": True,
+            "server": aim_url,
+            "user": user_email,
+            "credentialsPath": str(creds_file),
+            "tokenState": token_state,
+        }))
+        return 0
+
+    print("Checking authentication status...")
+    print()
     print(f"   Server: {aim_url}")
     print(f"   User: {user_email}")
     print(f"   Credentials: {creds_file}")
     print()
 
-    # Check token validity
-    access_token = creds.get('accessToken')
-    if access_token:
-        # Try to decode JWT to check expiry (without verification)
-        try:
-            import base64
-            parts = access_token.split('.')
-            if len(parts) == 3:
-                # Decode payload
-                payload = parts[1]
-                # Add padding if needed
-                payload += '=' * (4 - len(payload) % 4)
-                decoded = base64.urlsafe_b64decode(payload)
-                import json
-                data = json.loads(decoded)
-                exp = data.get('exp')
-                if exp:
-                    import time
-                    if exp > time.time():
-                        print("Token is valid.")
-                    else:
-                        print("Token may be expired; it will refresh on next SDK use.")
-        except Exception:
-            print("Could not verify token status.")
+    if token_state == "valid":
+        print("Token is valid.")
+    elif token_state == "expired":
+        print("Token may be expired; it will refresh on next SDK use.")
+    elif token_state == "unknown":
+        print("Could not verify token status.")
 
     return 0
 
 
 def version_cmd(args):
     """Show SDK version."""
+    if getattr(args, 'json', False):
+        print(json.dumps({"version": __version__}))
+        return 0
     print(f"aim-sdk {__version__}")
     return 0
 
@@ -611,11 +656,25 @@ def main():
 
     # Status command
     status_parser = subparsers.add_parser('status', help='Check authentication status')
+    status_parser.add_argument(
+        '--json',
+        action='store_true',
+        help='Print one JSON object instead of human-readable text',
+    )
     status_parser.set_defaults(func=status)
 
     # Version command
     version_parser = subparsers.add_parser('version', help='Show SDK version')
+    version_parser.add_argument(
+        '--json',
+        action='store_true',
+        help='Print one JSON object instead of human-readable text',
+    )
     version_parser.set_defaults(func=version_cmd)
+
+    # Help command. `aim-sdk help` is what people type; argparse rejected it as
+    # an invalid choice and printed the usage line to stderr with exit 2.
+    subparsers.add_parser('help', help='Show this help message')
 
     # Demo command
     demo_parser = subparsers.add_parser(
@@ -646,9 +705,13 @@ def main():
 
     args = parser.parse_args()
 
-    if not args.command:
+    # Asking for help, by either spelling, is a successful invocation. Exiting
+    # 1 after printing the help made `aim-sdk` fail every CI step that ran it
+    # to check the tool was installed, and made `aim-sdk help` (rejected by
+    # argparse) exit 2 with only a usage line.
+    if not args.command or args.command == 'help':
         parser.print_help()
-        return 1
+        return 0
 
     return args.func(args)
 

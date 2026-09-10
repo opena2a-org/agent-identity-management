@@ -175,6 +175,194 @@ from .telemetry import (
 DEFAULT_ENFORCEMENT_SOURCE = "aim-sdk"
 
 
+# The requests/urllib3 exception chain -- "HTTPConnectionPool(host='x', port=1):
+# Max retries exceeded with url: /... (Caused by NewConnectionError(...))" -- is
+# the internals of a library the caller did not choose, and it names the pool
+# and the retry machinery rather than the thing that is wrong. Every transport
+# failure the SDK reports is rendered from `_transport_failure_message` instead,
+# which reads the host off `aim_url` (the value the caller configured), states
+# the failure class, and names the URL to check.
+_LIBRARY_CHAIN_MARKERS = (
+    "HTTPConnectionPool",
+    "HTTPSConnectionPool",
+    "Max retries exceeded",
+    "NewConnectionError",
+)
+
+_TRANSPORT_CLASS_MARKERS = (
+    ("timed out", "timed out"),
+    ("timeout", "timed out"),
+    ("refused", "connection refused"),
+    ("name or service not known", "host not found"),
+    ("nodename nor servname", "host not found"),
+    ("temporary failure in name resolution", "host not found"),
+    ("no route to host", "no route to host"),
+    ("network is unreachable", "network unreachable"),
+    ("certificate", "TLS certificate rejected"),
+)
+
+
+def _transport_target(aim_url: str) -> str:
+    """The host (and port) the SDK was configured to reach, from `aim_url`."""
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(aim_url)
+        if parts.hostname:
+            return f"{parts.hostname}:{parts.port}" if parts.port else parts.hostname
+    except Exception:
+        pass
+    return aim_url
+
+
+def _transport_failure_class(exc: BaseException) -> str:
+    """
+    Name what went wrong on the wire, without quoting the library's own chain.
+
+    Falls back to the exception's type name, which is what the caller would see
+    in a traceback and never contains the urllib3 pool text.
+    """
+    if isinstance(exc, requests.exceptions.Timeout):
+        return "timed out"
+    text = str(exc).lower()
+    for marker, label in _TRANSPORT_CLASS_MARKERS:
+        if marker in text:
+            return label
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return "could not connect"
+    return type(exc).__name__
+
+
+def _is_usable_aim_url(aim_url: Any) -> bool:
+    """Whether the SDK could send a request to this value."""
+    if not isinstance(aim_url, str) or not aim_url:
+        return False
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(aim_url)
+    except Exception:
+        return False
+    return parts.scheme in ("http", "https") and bool(parts.hostname)
+
+
+def _validate_aim_url(aim_url: str) -> None:
+    """An aim_url the SDK cannot send a request to is a configuration error."""
+    if not _is_usable_aim_url(aim_url):
+        raise ConfigurationError(
+            f"aim_url must be an http or https URL with a host, e.g. "
+            f"https://aim.example.com -- got {aim_url!r}"
+        )
+
+
+def _validate_timeout(timeout: Any) -> None:
+    """The per-request HTTP timeout must be a positive number of seconds."""
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise ConfigurationError(
+            f"timeout must be a positive number of seconds -- got "
+            f"{timeout!r} ({type(timeout).__name__})"
+        )
+    if timeout <= 0:
+        raise ConfigurationError(
+            f"timeout must be a positive number of seconds -- got {timeout!r}. "
+            f"A zero or negative timeout does not disable the timeout; it makes "
+            f"every request fail immediately."
+        )
+
+
+def _validate_max_retries(max_retries: Any) -> None:
+    """Retry count must be a non-negative integer (0 disables retries)."""
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int):
+        raise ConfigurationError(
+            f"max_retries must be a non-negative integer -- got "
+            f"{max_retries!r} ({type(max_retries).__name__})"
+        )
+    if max_retries < 0:
+        raise ConfigurationError(
+            f"max_retries must be a non-negative integer -- got {max_retries!r}. "
+            f"Pass 0 to disable retries."
+        )
+
+
+def _transport_failure_message(exc: BaseException, aim_url: str) -> str:
+    """
+    ONE shape for every transport failure this SDK reports.
+
+    Whatever method failed and whichever branch caught it, the reader gets the
+    same three things: the host that was contacted, the class of failure, and
+    the next step. Before this, `_make_request` raised the bare literals
+    "Request timeout" and "Connection failed" -- neither naming the server --
+    while the verification path forwarded requests' own text verbatim, so the
+    same unreachable AIM produced three unrelated messages depending on which
+    method the caller happened to be in.
+    """
+    return (
+        f"Could not reach AIM at {_transport_target(aim_url)}: "
+        f"{_transport_failure_class(exc)} ({type(exc).__name__}). "
+        f"Check that the AIM server is running and that the aim_url "
+        f"{aim_url} is correct and reachable from this host."
+    )
+
+
+def _is_transport_failure(exc: BaseException) -> bool:
+    """
+    Whether the request never got an answer.
+
+    A refused connection and a timeout are transport failures; an HTTP error
+    status is NOT -- the server was reached and answered, and telling its
+    operator to "check that the AIM server is running" because it answered 404
+    sends them to look at the wrong thing.
+    """
+    return isinstance(
+        exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+    ) and not isinstance(exc, requests.exceptions.HTTPError)
+
+
+def _without_library_chain(text: str) -> str:
+    """
+    An exception's own text, or "" when it is really urllib3's chain.
+
+    Any exception `requests` raises may carry the pool/retry chain in its
+    ``str()``; the caller gets the type name instead of a sentence about a
+    connection pool they never configured.
+    """
+    text = (text or "").strip()
+    if any(marker in text for marker in _LIBRARY_CHAIN_MARKERS):
+        return ""
+    return text
+
+
+def _request_failure_message(exc: BaseException, aim_url: str) -> str:
+    """
+    THE rendering for every message this SDK builds from a `requests` failure.
+
+    Two shapes, one entry point: a transport failure reads as
+    ``_transport_failure_message`` (host, failure class, next step), and a
+    failure that did reach the server reads as "Request failed: <what the
+    server said>". Neither can carry the requests/urllib3 chain, so no method
+    can reintroduce it by interpolating `str(e)` into its own sentence.
+    """
+    if _is_transport_failure(exc):
+        return _transport_failure_message(exc, aim_url)
+    detail = _without_library_chain(str(exc))
+    return f"Request failed: {detail}" if detail else (
+        f"Request failed: {type(exc).__name__}"
+    )
+
+
+def _render_error(exc: BaseException, aim_url: str) -> str:
+    """
+    For the best-effort handlers that catch bare `Exception`.
+
+    A `requests` failure is rendered like every other one; anything else keeps
+    its own text, because a bug in this SDK's own code is not a transport
+    failure and must not be dressed up as one.
+    """
+    if isinstance(exc, requests.exceptions.RequestException):
+        return _request_failure_message(exc, aim_url)
+    return str(exc)
+
+
 # Capability format validation pattern (namespace:action)
 CAPABILITY_PATTERN = re.compile(r'^[a-z][a-z0-9]*:[a-z][a-z0-9_]*$')
 
@@ -389,12 +577,23 @@ class AIMClient:
     This client handles all cryptographic signing and verification automatically,
     allowing agents to focus on business logic while AIM ensures security compliance.
 
+    The verification entry point is :meth:`verify_capability`. ``verify_action``
+    is a deprecated alias for it and will be removed in a future version. Since
+    2.0.0 ``verify_capability`` returns a dict, and in aim-sdk 3.0.0 it returns a
+    typed :class:`aim_sdk.decision.VerificationDecision` instead -- the same
+    object the deprecation warning on the dict return names. Read
+    ``verification_id``, ``approved_by`` and ``expires_at`` as attributes and
+    the migration is a no-op.
+
     Args:
-        agent_id: UUID of the agent registered with AIM
+        agent_id: Identifier of the agent registered with AIM. A UUID in OAuth
+            mode; a server-issued string in API-key mode. Not validated as a
+            UUID here -- the server owns that format.
         public_key: Base64-encoded Ed25519 public key (from AIM registration)
         private_key: Base64-encoded Ed25519 private key (from AIM registration)
-        aim_url: Base URL of AIM server (e.g., https://aim.example.com)
-        timeout: HTTP request timeout in seconds (default: 30)
+        aim_url: Base URL of AIM server (e.g., https://aim.example.com). Must
+            carry an http/https scheme and a host.
+        timeout: HTTP request timeout in seconds; a positive number (default: 30)
         enforcement_timeout: Deadline in seconds (float) over a WHOLE enforcement
             call -- verify_capability from entry to return/raise, covering the
             verification POST, its bounded 429 retries, and every approval-wait
@@ -402,7 +601,13 @@ class AIMClient:
             AIM_ENFORCEMENT_TIMEOUT_MS environment variable (integer
             milliseconds), then 5.0s.
         auto_retry: Whether to automatically retry failed requests (default: True)
-        max_retries: Maximum number of retry attempts (default: 3)
+        max_retries: Maximum number of retry attempts; a non-negative integer
+            (default: 3)
+
+    Raises:
+        ConfigurationError: If agent_id, aim_url or a credential is missing, if
+            aim_url has no http/https scheme and host, if timeout is not a
+            positive number, or if max_retries is not a non-negative integer.
 
     Example:
         client = AIMClient(
@@ -444,6 +649,17 @@ class AIMClient:
                 "Either api_key OR (public_key + private_key) is required.\n"
                 "Use api_key for SDK API mode or keys for cryptographic signing."
             )
+
+        # Nonsense values are refused here, at construction, rather than at the
+        # first request. `timeout=0` and `max_retries=-1` were accepted and then
+        # surfaced as an unrelated urllib3 failure or as silently-skipped
+        # retries on whatever call happened to run first, sometimes hours later;
+        # `aim_url="not a url"` was accepted and produced a MissingSchema deep
+        # inside requests. agent_id is deliberately NOT validated as a UUID:
+        # API-key mode ids are server-issued strings, not UUIDs.
+        _validate_aim_url(aim_url)
+        _validate_timeout(timeout)
+        _validate_max_retries(max_retries)
 
         self.agent_id = agent_id
         self.aim_url = aim_url.rstrip('/')
@@ -764,21 +980,28 @@ class AIMClient:
             response.raise_for_status()
             return response.json()
 
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as e:
             if self.auto_retry and retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)
                 return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
-            raise VerificationError("Request timeout")
+            raise VerificationError(_transport_failure_message(e, self.aim_url))
 
-        except requests.exceptions.ConnectionError:
+        except requests.exceptions.ConnectionError as e:
             # No retry and no backoff here, unlike the timeout branch above: a
             # refused or unroutable connection fails immediately and does not
             # heal in a 1+2+4s sleep, so retrying it only made an unreachable
             # AIM cost ~7s per request while returning the same error.
-            raise VerificationError(f"Connection failed: could not reach {self.aim_url}")
+            raise VerificationError(_transport_failure_message(e, self.aim_url))
 
         except requests.exceptions.RequestException as e:
-            raise VerificationError(f"Request failed: {e}")
+            # Everything else `requests` can raise. `_request_failure_message`
+            # sorts it: the remaining transport classes get the same shape as
+            # the two branches above, while a failure that DID reach the server
+            # (a 4xx/5xx from raise_for_status, a body that would not parse)
+            # keeps saying what the server said. `str(e)` is never interpolated
+            # raw -- on the common failures it is the urllib3 pool chain, which
+            # names the retry machinery instead of the server.
+            raise VerificationError(_request_failure_message(e, self.aim_url))
 
     @staticmethod
     def _retry_after_seconds(response) -> float:
@@ -1250,23 +1473,34 @@ class AIMClient:
             # literal DENIED: a SOC reading DENIED for an action that then ran
             # (the monitoring/unresolved leniency below) would chase a denial
             # nobody issued. UNAVAILABLE states what happened: no answer.
+            #
+            # The reason is the SAME rendering `_make_request` raises, so the
+            # host, the failure class and the next step read identically
+            # whether the caller was verifying or reporting.
+            transport_reason = _transport_failure_message(e, self.aim_url)
             security_logger.log_authorization(
                 AuthzEventType.CAPABILITY_CHECK,
                 action=capability,
                 resource=resource,
                 granted=False,
                 agent_id=self.agent_id,
-                error=f"Network error: {type(e).__name__}: {str(e)}",
+                error=transport_reason,
                 result="UNAVAILABLE"
             )
-            console.warning(f"Network error during verification: {type(e).__name__}: {str(e)}")
+            # NOT warned on here. This method only produces a decision; whether
+            # that decision is raised or acted on permissively is the caller's
+            # to decide, and printing from here put a "Warning: Network error
+            # during verification: ..." line on stdout immediately before
+            # `verify_capability` raised a VerificationUnavailableError saying
+            # the same thing -- a print beside a raise, with the raw urllib3
+            # chain in it. The permissive path still warns: `_verify_and_enforce`
+            # prints the verdict's warning before it runs the body.
+            #
             # THE transport allowlist. UNKNOWN is populated from the transport
             # exception here and nowhere else -- never from a status code -- so
             # the permissive class cannot grow by someone adding a status to a
             # denylist somewhere.
-            return self._undetermined(
-                f"Network error: {type(e).__name__}: {str(e)}", UnknownSource.TRANSPORT
-            )
+            return self._undetermined(transport_reason, UnknownSource.TRANSPORT)
         except json.JSONDecodeError as e:
             # The server answered; the body was not JSON. It answered, so this is
             # not the transport class and is not permissive.
@@ -1883,8 +2117,14 @@ class AIMClient:
             except (AuthenticationError, ActionDeniedError, VerificationError, VerificationUnavailableError):
                 raise
             except requests.exceptions.RequestException as e:
-                # Handle network errors - continue polling on transient network issues
-                console.warning(f"Network error while polling: {type(e).__name__}: {str(e)}")
+                # Handle network errors - continue polling on transient network
+                # issues. Same rendering as every other transport report, so a
+                # caller watching an approval wait is not shown a urllib3 pool
+                # chain where every other method shows the host and the class.
+                console.warning(
+                    f"Still waiting for approval; "
+                    f"{_request_failure_message(e, self.aim_url)}"
+                )
                 _sleep_within_deadline(poll_interval)
                 poll_interval = min(poll_interval * 1.5, 10)
             except json.JSONDecodeError as e:
@@ -2575,7 +2815,14 @@ class AIMClient:
         except (AuthenticationError, ConfigurationError):
             raise
         except requests.exceptions.RequestException as e:
-            raise VerificationError(f"MCP attestation failed: {e}")
+            # This method posts with `self.session` directly rather than through
+            # `_make_request`, so it needs the rendering explicitly: without it
+            # an unreachable AIM raised "MCP attestation failed: " followed by
+            # the whole urllib3 pool chain, the one method that still did.
+            raise VerificationError(
+                f"MCP attestation failed: "
+                f"{_request_failure_message(e, self.aim_url)}"
+            )
         except Exception as e:
             raise VerificationError(f"MCP attestation failed: {e}")
 
@@ -2888,7 +3135,7 @@ class AIMClient:
 
     def report_sdk_integration(
         self,
-        sdk_version: str,
+        sdk_version: Optional[str] = None,
         platform: str = "python",
         capabilities: Optional[List[str]] = None
     ) -> Dict:
@@ -2899,7 +3146,10 @@ class AIMClient:
         and integrated with the agent, enabling auto-detection features.
 
         Args:
-            sdk_version: SDK version string (e.g., "aim-sdk-python@1.0.0")
+            sdk_version: SDK version string (e.g., "aim-sdk-python@1.0.0").
+                Defaults to the installed package version, resolved by the same
+                function ``MCPDetector`` uses -- so the one caller who has no
+                opinion about the version cannot report a stale one.
             platform: Platform/language (e.g., "python", "javascript", "go")
             capabilities: Optional list of SDK capabilities enabled
 
@@ -2910,10 +3160,8 @@ class AIMClient:
                 - message: str
 
         Example:
-            # Report SDK integration
+            # Report SDK integration with the installed version
             result = client.report_sdk_integration(
-                sdk_version="aim-sdk-python@1.0.0",
-                platform="python",
                 capabilities=["auto_detect_mcps", "capability_detection"]
             )
             print(f"SDK integration reported: {result['message']}")
@@ -2922,6 +3170,13 @@ class AIMClient:
             AuthenticationError: If authentication fails
             VerificationError: If request fails
         """
+        if sdk_version is None:
+            # Lazy import: aim_sdk.detection is imported by the package after
+            # this module, so a module-scope import would be a cycle.
+            from .detection import _default_sdk_version
+
+            sdk_version = _default_sdk_version()
+
         try:
             # Create SDK integration detection event
             detection_event = {
@@ -4151,7 +4406,7 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
             console.info(f"Current capabilities: {list(existing_caps)}")
 
     except Exception as e:
-        console.warning(f"Failed to check capabilities: {e}")
+        console.warning(f"Failed to check capabilities: {_render_error(e, aim_url)}")
 
 
 def _sync_agent_tags(aim_url: str, headers: Dict[str, str], agent_id: str, tags: List[str]):
@@ -4205,7 +4460,7 @@ def _sync_agent_tags(aim_url: str, headers: Dict[str, str], agent_id: str, tags:
             console.warning(f"Failed to apply tags: {error_msg}")
 
     except Exception as e:
-        console.warning(f"Failed to sync tags: {e}")
+        console.warning(f"Failed to sync tags: {_render_error(e, aim_url)}")
 
 
 def _save_credentials(agent_name: str, credentials: Dict[str, Any]):
@@ -5255,8 +5510,12 @@ def _register_via_api_key(
         credentials, response, name, "api_key", ["agent_id", "public_key", "private_key"]
     )
 
-    # Ensure aim_url is present in credentials
-    if "aim_url" not in credentials:
+    # Ensure aim_url is present in credentials. The registration response may
+    # name the server's own canonical URL, which is honoured -- but only when
+    # it is a URL the SDK could actually send a request to. A response carrying
+    # a placeholder there used to become the client's base URL for every later
+    # call, in place of the URL the caller just registered against.
+    if not _is_usable_aim_url(credentials.get("aim_url")):
         credentials["aim_url"] = aim_url
 
     # Save credentials locally
@@ -5582,8 +5841,12 @@ def _register_single_mcp(
                     error_body = response.text[:200]
                 result["error"] = f"HTTP {response.status_code}: {error_body}"
                 return result
-        except requests.Timeout:
-            result["error"] = "timeout"
+        except requests.RequestException as e:
+            # Returned, not raised -- and a returned message is read by exactly
+            # the same person, so it gets the same rendering. The bare "timeout"
+            # this used to return named neither the server nor the URL, and the
+            # `str(e)` beside it returned the urllib3 pool chain.
+            result["error"] = _request_failure_message(e, aim_url)
             return result
         except Exception as e:
             result["error"] = str(e)
