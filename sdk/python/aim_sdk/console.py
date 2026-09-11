@@ -131,7 +131,7 @@ class AIMConsole:
 
         # Build compact output lines
         self.console.print()
-        self.console.print(f"[bold green]✓[/] [bold]Agent registered:[/] [cyan]{name}[/]")
+        self.console.print(rf"[bold green]\[OK][/] [bold]Agent registered:[/] [cyan]{name}[/]")
 
         # Details in a compact grid format
         id_short = f"{agent_id[:8]}...{agent_id[-4:]}"
@@ -160,7 +160,7 @@ class AIMConsole:
         """Simple formatted agent registration output."""
         print()
         print("╭─────────────────────────────────────────────────╮")
-        print("│  ✓ Agent Registered                             │")
+        print("│  [OK] Agent Registered                          │")
         print("├─────────────────────────────────────────────────┤")
         print(f"│  Agent:       {name:<32} │")
         print(f"│  ID:          {agent_id[:8]}...{agent_id[-4:]:<20} │")
@@ -270,9 +270,9 @@ class AIMConsole:
         color = risk_colors.get(risk_level, "white")
 
         if RICH_AVAILABLE:
-            self.console.print(f"  [green]✓[/] Registered [cyan]{capability}[/] [{color}]({risk_level})[/]")
+            self.console.print(rf"  [green]\[OK][/] Registered [cyan]{capability}[/] [{color}]({risk_level})[/]")
         else:
-            print(f"  ✓ Registered {capability} ({risk_level})")
+            print(f"  [OK] Registered {capability} ({risk_level})")
 
     def capability_verified(self, capability: str, status: str, duration_ms: Optional[float] = None):
         """Display capability verification result."""
@@ -283,13 +283,13 @@ class AIMConsole:
 
         if RICH_AVAILABLE:
             if status in ("approved", "auto-approved"):
-                self.console.print(f"  [green]✓[/] [cyan]{capability}[/] verified{duration_str}")
+                self.console.print(rf"  [green]\[OK][/] [cyan]{capability}[/] verified{duration_str}")
             elif status == "denied":
-                self.console.print(f"  [red]✗[/] [cyan]{capability}[/] denied{duration_str}")
+                self.console.print(rf"  [red]\[FAIL][/] [cyan]{capability}[/] denied{duration_str}")
             else:
                 self.console.print(f"  [yellow]○[/] [cyan]{capability}[/] {status}{duration_str}")
         else:
-            icon = "✓" if status in ("approved", "auto-approved") else "✗" if status == "denied" else "○"
+            icon = "[OK]" if status in ("approved", "auto-approved") else "[FAIL]" if status == "denied" else "○"
             print(f"  {icon} {capability} {status}{duration_str}")
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -353,9 +353,9 @@ class AIMConsole:
             return
 
         if RICH_AVAILABLE:
-            self.console.print(f"  [bold green]✓[/] [cyan]{capability}[/] [green]approved[/] - executing...")
+            self.console.print(rf"  [bold green]\[OK][/] [cyan]{capability}[/] [green]approved[/] - executing...")
         else:
-            print(f"  ✓ {capability} approved - executing...")
+            print(f"  [OK] {capability} approved - executing...")
 
     def jit_unverified(self, capability: str):
         """Display that the action is proceeding WITHOUT a completed approval.
@@ -386,9 +386,9 @@ class AIMConsole:
         # sanitised decision.reason, but a future caller may not.
         reason_str = f" - {_strip_control_bytes(reason)}" if reason else ""
         if RICH_AVAILABLE:
-            self.console.print(f"  [bold red]✗[/] [cyan]{capability}[/] [red]denied[/]{reason_str}")
+            self.console.print(rf"  [bold red]\[FAIL][/] [cyan]{capability}[/] [red]denied[/]{reason_str}")
         else:
-            print(f"  ✗ {capability} denied{reason_str}")
+            print(f"  [FAIL] {capability} denied{reason_str}")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # AUTO-DETECTION
@@ -400,9 +400,9 @@ class AIMConsole:
             return
 
         if RICH_AVAILABLE:
-            self.console.print(f"  [green]✓[/] {detection_type}: [bold]{detected}[/] [dim]({reason})[/]")
+            self.console.print(rf"  [green]\[OK][/] {detection_type}: [bold]{detected}[/] [dim]({reason})[/]")
         else:
-            print(f"  ✓ {detection_type}: {detected} ({reason})")
+            print(f"  [OK] {detection_type}: {detected} ({reason})")
 
     def detection_none(self, detection_type: str, fallback: Optional[str] = None):
         """Display when nothing was detected."""
@@ -429,16 +429,19 @@ class AIMConsole:
         message = _strip_control_bytes(message)
         details = _strip_control_bytes(details) if details else details
         if RICH_AVAILABLE:
-            self.console.print(f"[bold red]✗ Error:[/] {message}")
+            self.console.print(rf"[bold red]\[FAIL] Error:[/] {message}")
             if details:
                 self.console.print(f"  [dim]{details}[/]")
         else:
-            print(f"✗ Error: {message}")
+            print(f"[FAIL] Error: {message}")
             if details:
                 print(f"  {details}")
 
     def warning(self, message: str):
         """Display warning message."""
+        if self.quiet:
+            return
+
         message = _strip_control_bytes(message)
         if RICH_AVAILABLE:
             self.console.print(f"[yellow]Warning:[/] {message}")
@@ -447,6 +450,9 @@ class AIMConsole:
 
     def info(self, message: str):
         """Display info message."""
+        if self.quiet:
+            return
+
         message = _strip_control_bytes(message)
         if RICH_AVAILABLE:
             self.console.print(f"{message}")
@@ -469,10 +475,13 @@ class AIMConsole:
 
     def success(self, message: str):
         """Display success message."""
+        if self.quiet:
+            return
+
         if RICH_AVAILABLE:
-            self.console.print(f"[bold green]✓[/] {message}")
+            self.console.print(rf"[bold green]\[OK][/] {message}")
         else:
-            print(f"✓ {message}")
+            print(f"[OK] {message}")
 
     def debug(self, message: str):
         """Display debug message (only when not in quiet mode and DEBUG env is set)."""
@@ -490,6 +499,13 @@ console = AIMConsole()
 
 
 def set_quiet(quiet: bool = True):
-    """Set quiet mode to suppress all output."""
+    """
+    Silence the SDK's informational console output.
+
+    With quiet engaged, registration banners, auto-detection results, and
+    info/warning/success lines are suppressed. Errors (``console.error``) stay
+    visible: they accompany raised exceptions and quiet mode is not a reason
+    to hide a failure. Also importable as ``from aim_sdk import set_quiet``.
+    """
     global console
     console.quiet = quiet

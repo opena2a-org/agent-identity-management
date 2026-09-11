@@ -229,11 +229,11 @@ class MCPActionWrapper:
             verification_id = verification.get("verification_id")
 
             if self.verbose:
-                print(f"✓ AIM: Tool verified (id: {verification_id})")
+                print(f"[OK] AIM: Tool verified (id: {verification_id})")
 
         except Exception as e:
             if self.verbose:
-                print(f"✗ AIM: Verification failed: {e}")
+                print(f"[FAIL] AIM: Verification failed: {e}")
             raise
 
         # Execute tool
@@ -250,7 +250,7 @@ class MCPActionWrapper:
                 )
 
             if self.verbose:
-                print(f"✓ AIM: Tool execution completed and logged")
+                print(f"[OK] AIM: Tool execution completed and logged")
 
             return result
 
@@ -265,6 +265,6 @@ class MCPActionWrapper:
                 )
 
             if self.verbose:
-                print(f"✗ AIM: Tool execution failed: {e}")
+                print(f"[FAIL] AIM: Tool execution failed: {e}")
 
             raise

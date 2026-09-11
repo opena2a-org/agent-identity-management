@@ -4,9 +4,9 @@ Cryptographic identity, capability authorization, and audit trails for Python AI
 
 [![PyPI version](https://img.shields.io/pypi/v/aim-sdk.svg)](https://pypi.org/project/aim-sdk/)
 [![Python](https://img.shields.io/pypi/pyversions/aim-sdk.svg)](https://pypi.org/project/aim-sdk/)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../../LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/opena2a-org/agent-identity-management/blob/main/LICENSE)
 
-Part of [Agent Identity Management (AIM)](../../README.md). Managed hosting at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started); self-host via the [main README](../../README.md#install-aim-self-hosted).
+Part of [Agent Identity Management (AIM)](https://github.com/opena2a-org/agent-identity-management). Managed hosting at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started); self-host via the [main README](https://github.com/opena2a-org/agent-identity-management#install-aim-self-hosted).
 
 ## Upgrading to 2.0.0: a denied action now stops
 
@@ -68,13 +68,27 @@ After `secure()` registers the agent, the SDK installs no-op-on-failure hooks fo
 - OpenAI
 - Anthropic
 
-What the hooks record: with OpenAI, `chat.completions.create` calls, and with Anthropic, `messages.create` calls, each as one local security log event on the `aim.security` logger. That logger writes only where `AIM_SECURITY_LOG_FILE` or `AIM_SECURITY_LOG_STDOUT` points it, and it propagates to your root logger, so any handler attached there receives the event whatever level that logger is set to; under the SDK's own defaults nothing is written. With LangChain, a callback handler sends each tool run to AIM's verification route; with CrewAI, a task callback sends each task completion to it. Other client methods, including embeddings, are not recorded. The hooks never raise. A detected library whose hook cannot be installed is logged as a warning and left untouched; a recording failure inside an installed hook is swallowed and the wrapped call proceeds.
+What the hooks record: with OpenAI, `chat.completions.create` calls, and with Anthropic, `messages.create` calls, each as one local security log event on the `aim.security` logger. That logger writes where `AIM_SECURITY_LOG_FILE` or `AIM_SECURITY_LOG_STDOUT` points it — `AIM_SECURITY_LOG_STDOUT` accepts `true`, `1`, `yes`, or `on` to enable the stdout handler and `false`, `0`, `no`, or `off` (or unset) to leave it off, case-insensitively with surrounding whitespace stripped, the same spellings as `AIM_STRICT_MODE` — and it propagates to your root logger, so any handler attached there receives the event whatever level that logger is set to. Under the SDK's own defaults (no logging environment variable set, no handler of your own attached), ERROR-severity security records — for example a failed agent registration — are written to stderr as JSON; WARNING-severity records and below are not written anywhere. With LangChain, a callback handler sends each tool run to AIM's verification route; with CrewAI, a task callback sends each task completion to it. Other client methods, including embeddings, are not recorded. The hooks never raise. A detected library whose hook cannot be installed is logged as a warning and left untouched; a recording failure inside an installed hook is swallowed and the wrapped call proceeds.
 
 Disable: `secure("my-agent", auto_hooks=False)`. The parameter is keyword-only and defaults to `True`; before 2.0.2 it did not exist and this call raised `TypeError`.
 
+### Quieting SDK output
+
+`secure()` and auto-detection print progress lines to stdout. To silence them — in a library, a pipe, or any context where the SDK should not write to your streams:
+
+```python
+from aim_sdk import set_quiet
+
+set_quiet()        # suppress the SDK's informational stdout output
+agent = secure("my-agent", api_key="aim_abc123")
+set_quiet(False)   # restore
+```
+
+`set_quiet` suppresses registration banners, auto-detection results, and info/warning/success lines. Errors still print (they accompany raised exceptions), and the security log described above is governed by its own environment variables, not by `set_quiet`.
+
 ## Capability decorators
 
-`@agent.perform_action` signs each invocation, runs it through FGA on the server, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`aim_sdk/risk_detector.py`](aim_sdk/risk_detector.py):
+`@agent.perform_action` signs each invocation, runs it through FGA on the server, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`aim_sdk/risk_detector.py`](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/aim_sdk/risk_detector.py):
 
 - **Namespace prefix** maps `payment:`, `admin:`, `system:`, `billing:`, `finance:` to critical; `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` to high; `db:`, `database:`, `file:`, `storage:`, `cache:` to medium; `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` to low.
 - **Action suffix** maps `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` to low; `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` to medium; `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` to high; `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` to critical.
@@ -119,6 +133,10 @@ If the mode cannot be resolved either, a server that answered still blocks, whil
 > Before 2.0.0 this section was inverted, and so was the behaviour: the dashboard setting never reached the Python SDK, and the environment variable was the only lever that produced any enforcement at all. If you are upgrading from an earlier version, read [the 2.0.0 entry in CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md) before deploying.
 
 Everything the SDK enforces happens inside the agent's own process, so it is advisory with respect to that agent. It blocks denied actions for an honest operator and for a compromised agent that still routes through the SDK. It is not a control against a hostile operator.
+
+### Cost of an unreachable AIM
+
+A server that refuses connections — down, wrong port, wrong host — fails in a single connection attempt per request, with no retry and no backoff, so a decorated call against an unreachable AIM makes at most two fast connection attempts (the verification request plus one fire-and-forget status report) and returns control in well under a second on a local network. A server that accepts connections but never answers is bounded by the request timeout instead: up to `timeout` seconds per attempt (default 30; the enforcement path is further capped by `enforcement_timeout`, default 5.0s), and timeouts on non-enforcement routes retry up to `max_retries` times (default 3) with 1+2+4s backoff. Tighten or disable with `AIMClient(timeout=..., enforcement_timeout=..., max_retries=..., auto_retry=False)`.
 
 ## Capability declaration
 
@@ -277,10 +295,12 @@ are not part of this package -- see the module docstring for the boundary.
 
 ## Manual mode (no OAuth)
 
-For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key:
+For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key.
+API key mode always requires `aim_url` — there is no default server and no environment-variable
+fallback, so `secure()` raises `ConfigurationError` if `api_key` is passed without it:
 
 ```python
-agent = secure("my-agent", api_key="aim_abc123")
+agent = secure("my-agent", api_key="aim_abc123", aim_url="http://localhost:8080")
 ```
 
 Or supply full credentials:
@@ -301,18 +321,18 @@ def get_customer(customer_id): ...
 
 ## Examples
 
-Working examples in [`examples/`](examples/):
+Working examples in [`examples/`](https://github.com/opena2a-org/agent-identity-management/tree/main/sdk/python/examples):
 
 | Example | Shows |
 |---|---|
-| [`example.py`](examples/example.py) | Decorator-based verification, manual mode |
-| [`example_auto_detection.py`](examples/example_auto_detection.py) | Framework + MCP auto-discovery (no backend required) |
-| [`example_one_line_setup.py`](examples/example_one_line_setup.py) | Zero-config `secure()` flow (requires backend) |
+| [`example.py`](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/examples/example.py) | Decorator-based verification, manual mode |
+| [`example_auto_detection.py`](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/examples/example_auto_detection.py) | Framework + MCP auto-discovery (no backend required) |
+| [`example_one_line_setup.py`](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/examples/example_one_line_setup.py) | Zero-config `secure()` flow (requires backend) |
 
 Framework integration guides:
-- [LangChain](docs/LANGCHAIN_INTEGRATION.md)
-- [CrewAI](docs/CREWAI_INTEGRATION.md)
-- [MCP servers](docs/MCP_INTEGRATION.md)
+- [LangChain](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/LANGCHAIN_INTEGRATION.md)
+- [CrewAI](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/CREWAI_INTEGRATION.md)
+- [MCP servers](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/MCP_INTEGRATION.md)
 
 ## Requirements
 
@@ -326,23 +346,25 @@ All install via `pip install aim-sdk`.
 
 ## Versioning
 
-[Semantic Versioning 2.0.0](https://semver.org/). Current: see `VERSION` file. The SDK and the backend platform are versioned and released independently — see [docs/VERSIONING.md](docs/VERSIONING.md#backend-api-compatibility).
+[Semantic Versioning 2.0.0](https://semver.org/). Current: `aim_sdk.__version__`, importable from any install:
 
 ```python
 import aim_sdk
 print(aim_sdk.__version__)
 ```
 
-See [CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md) for history, [docs/VERSIONING.md](docs/VERSIONING.md) for the support policy.
+The SDK and the backend platform are versioned and released independently — see [docs/VERSIONING.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/VERSIONING.md#backend-api-compatibility).
+
+See [CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md) for history, [docs/VERSIONING.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/VERSIONING.md) for the support policy.
 
 ## Related
 
-- [Java SDK](../java/README.md) — same API shape, AspectJ-based decoration
-- [TypeScript SDK](../typescript/README.md) — local-or-server mode
+- [Java SDK](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/java/README.md) — same API shape, AspectJ-based decoration
+- [TypeScript SDK](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/typescript/README.md) — local-or-server mode
 - [opena2a CLI](https://github.com/opena2a-org/opena2a) — codebase auditing, credential migration, runtime monitoring
-- [AIM backend](../../README.md) — server, dashboard, deployment
+- [AIM backend](https://github.com/opena2a-org/agent-identity-management) — server, dashboard, deployment
 - [aicomply](https://github.com/opena2a-org/aicomply) — content-compliance companion (`pip install aicomply`); `@guard_io`/`@guard_output` scan the PII, credentials, and regulated data an agent reads and emits, complementing AIM's `@agent.perform_action` capability checks (AIM authorizes the action; aicomply inspects the content)
 
 ## License
 
-Apache-2.0. See [LICENSE](../../LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/opena2a-org/agent-identity-management/blob/main/LICENSE).

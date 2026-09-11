@@ -5,6 +5,251 @@ All notable changes to the AIM Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Console output no longer uses U+2713 CHECK MARK / U+2717 BALLOT X**
+  (AIM-15). The 52 lines across 10 modules (`console`, `client`, `oauth`,
+  `credentials`, `secure_storage`, and the CrewAI, LangChain and MCP
+  integrations) that printed those marks now print the plain-text markers
+  `[OK]` and `[FAIL]` instead; where rich is available the markers keep the
+  same green/red markup as before. The no-emoji test suite's package-source
+  walk no longer exempts these characters, so they cannot return; its
+  non-vacuity control now asserts the `[OK]`/`[FAIL]` vocabulary is present
+  instead of the old marks. Documentation prose showing pre-change output is
+  unchanged and out of this change's scope.
+
+### Fixed
+
+The five P2 findings from the 2.0.2 release test, re-measured at head and
+fixed as a batch.
+
+- **`aim-sdk login` is bounded and fails fast on a dead URL.** The command now
+  probes the server before anything else: with an unreachable `--url` it exits
+  non-zero within the 5s probe bound, names the URL it could not reach, and
+  never opens a browser. After a successful browser open, the callback wait is
+  bounded by a 180s deadline; on expiry the command prints a timeout message
+  and exits non-zero. Previously there was no reachability check before
+  `webbrowser.open`, and the wait loop re-entered `handle_request()` after
+  every socket timeout, so "Waiting for authentication... (Ctrl+C to cancel)"
+  waited forever against a closed port.
+- **The README manual-mode example works as written.** `secure(name,
+  api_key=...)` requires `aim_url` — there is no default server URL and no
+  environment-variable fallback in `secure()` — but the README's manual-mode
+  one-liner omitted it, so pasting the documented line raised
+  `ConfigurationError`. The example now carries `aim_url=` beside `api_key=`
+  and the manual-mode prose states the requirement.
+- **The no-credentials error names the real fixes.** The `ConfigurationError`
+  raised when neither SDK credentials nor an `api_key` are present told a pip
+  user to "download SDK from dashboard ... or provide api_key parameter",
+  naming neither the `aim-sdk login` command (the README's own step for a pip
+  install) nor the fact that api_key mode also requires `aim_url`. It now
+  names both.
+- **The security log distinguishes "AIM was never asked" from "AIM said no",
+  and records unverified execution.** Every non-answer used to render as
+  `result: DENIED`: the `CAPABILITY_CHECK` event for a transport failure now
+  carries `result: UNAVAILABLE`, and for a 401 (`AuthenticationError`)
+  `result: UNVERIFIED`; only an actual policy denial renders `DENIED`. And
+  when the enforcement rule executes the wrapped function without a completed
+  verification (monitoring mode or the unresolved-mode transport window), an
+  `ACTION_EXECUTED` event with `result: EXECUTED_UNVERIFIED` now records that
+  the action ran — previously `ACTION_EXECUTED` was defined but emitted
+  nowhere, so the log showed a "denial" followed by nothing.
+- **No success line on a rejected capability registration.** The
+  `@perform_action` auto-registration path announced "Registered ..." whenever
+  `register_capability` returned without raising — including a 404's
+  `not_tracked` result and a 401 swallowed into an `error` result — so a
+  rejected registration printed a success line (on the 401 path, above the
+  failure warning). The wrapper now announces only a plain registered success;
+  `register_capability`'s own per-status output (granted, pending, warnings)
+  is unchanged, a granted registration is announced exactly once instead of
+  twice, and the 500 path still prints only a warning.
+
+The twelve P3 findings from the 2.0.2 fresh-user release test, each fixed
+(none declined, none narrowed to a README note alone unless listed as such):
+
+- **`AIM_SECURITY_LOG_STDOUT` accepts the same spellings as `AIM_STRICT_MODE`**
+  (item 1). `true`/`1`/`yes`/`on` install the stdout handler and
+  `false`/`0`/`no`/`off` do not, case-insensitively with surrounding
+  whitespace stripped, instead of an equality against the single literal
+  `"true"`. `AIM_SECURITY_LOGGING_ENABLED` parses with the same spellings
+  (still enabled by default). The README passage naming the variable now
+  enumerates the accepted true spellings.
+- **README's default-logging claim matches the installed handler** (item 2,
+  narrowed in the README). The package attaches a stderr handler at ERROR
+  level on import by design; the README no longer claims "under the SDK's own
+  defaults nothing is written" and instead states that ERROR-severity records
+  go to stderr and WARNING-severity records do not.
+- **`set_quiet` is exported and documented, and an unreachable verification
+  says each thing once** (item 3). `from aim_sdk import set_quiet` silences
+  the SDK's informational stdout output (info/warning/success lines,
+  registration banners, detection results); the README documents it. The
+  pending-enforcement-change sentence is emitted once, through the typed
+  `PendingEnforcementChange` warning, no longer duplicated onto stdout via
+  the console.
+- **A registration that cannot connect raises a typed, actionable error**
+  (item 4). `secure()` against an unreachable server raises
+  `ConfigurationError` naming the URL and the remedies (correct the URL,
+  start a server, `aim-sdk login --url`), with the `requests`/`urllib3`
+  chain suppressed (`raise ... from None`); a 401 on either registration
+  path raises `AuthenticationError`, the same class the verification path
+  raises for a 401.
+- **No request URL ever carries an absent identifier, and the result body is
+  camelCase** (item 5). `log_capability_result` returns without issuing a
+  request when `verification_id` is absent (the guard
+  `report_execution_status` already had), so the SDK never POSTs to
+  `/verifications/None/result`; its body now sends `resultSummary`/
+  `errorMessage`, the same key convention as the SDK's other write bodies.
+- **Every request to an AIM URL carries `User-Agent: AIM-Python-SDK/<version>`**
+  (item 6), including the agent-exists check, both registration requests,
+  MCP-server registration, and the cached-credential validation probe, which
+  previously went out under the `requests` default.
+- **The PyPI page is self-contained and the classifiers cover
+  `python_requires`** (item 7). Every README link that pointed outside the
+  packaged tree (`../../README.md`, `examples/`, `docs/`, sibling SDKs,
+  LICENSE) is now an absolute GitHub URL; the version pointer is
+  `aim_sdk.__version__` (resolvable from a wheel-only install) instead of
+  "see `VERSION` file"; classifiers now include 3.13 and 3.14 and
+  `python_requires` carries the matching `<3.15` upper bound.
+- **The login banner is rectangular** (item 8): all four lines of
+  `aim_sdk.cli.print_banner` are 61 columns, so the right border is a single
+  column.
+- **One public spelling of the security-logging entry point** (item 9).
+  `configure_security_logging` is now bound in `aim_sdk.security_logging`
+  itself (with `configure_from_environment` kept as a compatibility alias),
+  so both `from aim_sdk import configure_security_logging` and
+  `from aim_sdk.security_logging import configure_security_logging` work,
+  and the module docstring's usage block shows that spelling.
+- **An unreachable AIM costs a bounded, stated amount** (item 10). A refused
+  connection is no longer retried with 1+2+4s exponential backoff (~7s per
+  request); it fails on the first attempt. The README states the worst-case
+  cost of an unreachable server and how to change it (`timeout`,
+  `enforcement_timeout`, `max_retries`, `auto_retry`).
+- **A malformed 200 is named as malformed** (item 11). Both registration
+  paths agree that 200 and 201 are success; a success status whose body
+  lacks the agent's credentials (e.g. `200` with `{}`) raises
+  `ConfigurationError` saying the response was malformed or unexpected and
+  naming the statuses the SDK requires, instead of "Unknown error", and the
+  security event records `body_malformed`.
+- **`PolicyCache` is no longer exported from `aim_sdk`** (item 12). No
+  released AIM server serves the route it fetches, so it cannot answer a
+  check against any released backend; it is removed from `aim_sdk.__all__`
+  and the top-level namespace and remains importable from
+  `aim_sdk.auto_hooks` (unchanged behaviour) for the day a server registers
+  the route.
+
+The three P2 findings and the seven P3 findings from the 2.0.3 release test
+(AIM-21). P2.1, the `aim-sdk login` pre-flight and bounded callback wait, is
+not repeated here: it is the same defect as AIM-14.AC1 and ships above.
+
+- **Protocol detection never scores what it did not find** (P2.2). With none
+  of the seven indicator environment variables set and no protocol module
+  loaded, `ProtocolDetector.get_detection_confidence` and the `confidence`
+  field of `get_protocol_details` are `0.0` with `indicators_found` empty,
+  instead of the 50.0 "base confidence" that reported a guess as a half-
+  certain detection. A protocol name that is not in the indicator table at
+  all — `get_protocol_details("bogus")` — scores 0.0 for the same reason.
+  `detect_protocol()` still returns `"mcp"` when nothing matched; the default
+  is unchanged, it is simply no longer reported as a 50% detection. Env
+  indicator matches keep their 90+ scores and import matches their 60+.
+- **Transport failures have one shape across every method** (P2.3). A refused
+  connection or a request timeout now raises a `VerificationError` whose
+  message names the host taken from `aim_url`, the failure class (connection
+  refused / timed out, with the exception type beside it) and the next step
+  naming the URL to check — from `_make_request` and therefore from
+  `report_detections`, `report_sdk_integration`, `register_mcp` and every
+  other method routed through it. The verification path builds the same
+  sentence for its `UNKNOWN`/transport reason, so the decision's `reason`,
+  the `VerificationUnavailableError` raised from it under a strict override
+  and the `VerificationError` raised from a reporting call all read alike.
+  Previously the two branches raised the bare literals `"Request timeout"`
+  and `"Connection failed"` while the verification path forwarded the
+  `requests` text verbatim. A failure that DID reach the server keeps saying
+  what the server said: a 4xx/5xx from `raise_for_status` still renders as
+  `Request failed: <status> ...`, not as "could not reach", because sending an
+  operator to check that their server is running because it answered 404 is
+  the same defect pointing the other way.
+- **No raw library chain, and no print beside a raise** (P2.3). No message the
+  SDK raises or returns for a transport failure contains the
+  `requests`/`urllib3` chain text (`HTTPConnectionPool`, `Max retries
+  exceeded`, `NewConnectionError`), and `_decide_capability` no longer prints
+  `Warning: Network error during verification: ...` to stdout immediately
+  before `verify_capability` raises about the same failure. The console
+  warning stays on the path that acts on the decision permissively —
+  `_verify_and_enforce` prints the verdict's warning before it runs the
+  wrapped body — so a monitoring-mode caller is told exactly as before, and a
+  caller who gets an exception gets only the exception. Every other message
+  the SDK composes from a `requests` failure now goes through the same
+  renderer rather than interpolating `str(e)`: `attest_mcp` (which posts with
+  the session directly), the `error` a failed `_register_single_mcp` RETURNS,
+  the CLI's `exchange_code_for_tokens`, the approval-poll warning, the
+  `aim-sdk demo --cleanup` messages, and the best-effort capability/tag
+  warnings. Anything a `requests` exception carries that is really urllib3's
+  chain is dropped in favour of the exception's type name, so no future
+  handler can reintroduce the chain by interpolating it.
+- **Tool discovery reports the real cause and keeps third-party noise off
+  stderr** (P2.4). `details.discoveryError` from `detect_with_tools()` now
+  names the server, the command that was run and the underlying failure — the
+  `OSError` text for a command that is not on PATH, the exit status for a
+  process that stops without speaking MCP — instead of `str()` of an anyio
+  exception group, whose text is "unhandled errors in a TaskGroup". The
+  exception chain and its traceback go to the `aim_sdk` logger at DEBUG
+  level, so nothing containing "Traceback" reaches stderr from a discovery
+  run. Without the MCP client library installed, the configured command is
+  probed directly so the answer is still the real cause rather than "MCP SDK
+  not installed". The docstrings of `detect_with_tools` and `auto_detect_mcps`
+  now state plainly that every configured server command is executed as a
+  child process when `discover_tools` is true.
+- **Nonsense arguments are refused at construction** (P3.1). `AIMClient`
+  raises `ConfigurationError` for a `timeout` that is not a positive number
+  (`0`, `-1`, `"abc"`), for a `max_retries` that is not a non-negative
+  integer (`-1`), and for an `aim_url` with no http/https scheme and host
+  (`"not a url"`). `MCPDetector(sdk_version=...)` raises `TypeError` for a
+  non-string and `ValueError` for an empty string; `None` still resolves the
+  installed version. `agent_id` is deliberately NOT validated as a UUID —
+  API-key mode ids are server-issued strings. Relatedly, an `aimUrl` in a
+  registration response is honoured only when it is a URL the SDK could send
+  a request to; otherwise the URL the caller registered against is kept.
+- **A corrupt Claude Desktop config is reported, not swallowed** (P3.2).
+  `detect_from_claude_config()`, `detect_all()` and `detect_with_tools()`
+  still return `[]` without raising when the config file is not valid JSON,
+  but each now emits exactly one warning naming the file path and the JSON
+  decode error, instead of `except Exception: pass`. The other readers of the
+  same file (`get_mcp_server_config`, `discover_mcp_capabilities`,
+  `discover_mcp_metadata`) go through the same reader.
+- **The config-search docstring and the search agree** (P3.3).
+  `detect_from_claude_config`'s docstring lists exactly the paths
+  `_get_claude_config_path` searches, in search order, and the search now
+  includes `~/.config/Claude/claude_desktop_config.json` — the location
+  Claude Desktop uses on Linux — beside the legacy
+  `~/.claude/claude_desktop_config.json`, with the platform-native macOS and
+  Windows locations first. The docstring also names the locations that are
+  NOT searched (`~/.cursor/mcp.json`, `./.cursor/mcp.json`, `./mcp.json`).
+- **The detection modules declare their public surface** (P3.4).
+  `aim_sdk/detection.py`, `aim_sdk/protocol_detection.py` and
+  `aim_sdk/capability_detection.py` each define `__all__`, so
+  `from aim_sdk.detection import *` no longer binds `json`, `os`, `sys`,
+  `pathlib`, `Optional` or `datetime` into the caller's namespace.
+- **The CLI answers in JSON and knows the word `help`** (P3.5).
+  `aim-sdk status --json` writes exactly one JSON object
+  (`authenticated`, `server`, `user`, `credentialsPath`, `tokenState`) and
+  nothing else, keeping the exit codes (1 when not authenticated);
+  `aim-sdk version --json` writes `{"version": "..."}`; `aim-sdk help` prints
+  the command list and exits 0, where argparse used to reject it as an
+  invalid choice; and a bare `aim-sdk` prints the same help and now exits 0
+  instead of 1.
+- **`docs/testing/release-smoke.md` carries a Python SDK row** (P3.6) in its
+  component smoke matrix, with a run command that asserts an MCP detection's
+  `sdkVersion` is the installed package's version.
+- **`report_sdk_integration` defaults to the installed version, and the client
+  docstring names the replacement API** (P3.7). `sdk_version` is now optional
+  and resolves `aim-sdk-python@<aim_sdk.__version__>` through the same
+  resolver `MCPDetector` uses when it is omitted or `None`; an explicit string
+  is sent unchanged. `AIMClient`'s class docstring names `verify_capability`
+  and `aim_sdk.decision.VerificationDecision`, the two names its deprecation
+  warnings point callers to, instead of only `perform_action`.
+
 ## [2.0.3] - 2026-09-09
 
 ### Fixed
