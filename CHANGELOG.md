@@ -100,7 +100,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   CVE-2026-73646), `nanoid` 3.3.19 (CVE-2026-67213, CVE-2026-67214). `apps/backend/go.mod`:
   `golang.org/x/crypto` v0.55.0 (CVE-2026-56854), `google.golang.org/grpc` v1.83.2
   (CVE-2026-84304, CVE-2026-84445, GHSA-hrxh-6v49-42gf), `github.com/go-jose/go-jose/v4` v4.1.4
-  (CVE-2026-34986), `golang.org/x/text` v0.41.0 (CVE-2026-56852).
+  (CVE-2026-34986), `golang.org/x/text` v0.41.0 (CVE-2026-56852). (#491)
 - `apps/web/next.config.js` closes the self-hosted image optimizer (`images.unoptimized` plus a
   `localPatterns` entry matching no path), so `/_next/image` returns 404. No page uses
   `next/image`, so nothing rendered changes. GHSA-2xp9-vwfh-vxw4 needs a same-origin image
