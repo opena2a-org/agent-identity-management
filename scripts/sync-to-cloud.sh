@@ -304,8 +304,9 @@ sync_backend() {
     fi
   done < <(find "$src_backend" -name '*.go' -print0)
 
-  # Also sync non-Go backend files that matter: schema, scripts, seed, tests
-  for subdir in schema scripts seed tests; do
+  # Also sync non-Go backend files that matter: schema, scripts, seed, tests,
+  # and contracts (response-body schemas that synced tests read from disk).
+  for subdir in schema scripts seed tests contracts; do
     local src_sub="$src_backend/$subdir"
     local dst_sub="$dst_backend/$subdir"
     if [[ -d "$src_sub" ]]; then
@@ -600,6 +601,23 @@ verify_build() {
     echo "========================================="
     echo "BUILD FAILED -- sync introduced errors."
     echo "Review the changes and fix before merging."
+    echo "========================================="
+    exit 1
+  fi
+
+  # `go build` does not compile test files; `go vet` does. A synced test whose
+  # subject is protected in the target (so the subject never arrives) compiles
+  # only here, and this is where it should fail: naming the file in the sync
+  # log, not as a required check two hops later on the sync PR.
+  log_info "--- Verifying Go vet (compiles tests) ---"
+  if (cd "$dst_backend" && go vet ./... 2>&1); then
+    log_info "Vet verification: PASSED"
+  else
+    echo ""
+    echo "========================================="
+    echo "VET FAILED -- a synced test does not compile against the target."
+    echo "Usually a test of a protected subject: list it under"
+    echo "'Upstream-only tests' in the target's .sync-protect."
     echo "========================================="
     exit 1
   fi
