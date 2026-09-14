@@ -43,12 +43,30 @@ func getClientIP(c fiber.Ctx) string {
 			return realIP
 		}
 
-		// Try X-Forwarded-For (first IP in the chain is the original client)
+		// X-Forwarded-For: take the RIGHTMOST entry that is not a trusted proxy.
+		//
+		// SECURITY: every hop APPENDS to this header, so the leftmost entry is
+		// whatever the client sent — a value it picks freely, and can pick a new one
+		// of on every request. Keying the limiter on ips[0] therefore gave any single
+		// caller an unbounded number of rate-limit buckets, which is no rate limit at
+		// all on an unauthenticated route. Only the entries our own ingress appended
+		// are trustworthy, so walk from the right and stop at the first address that
+		// is not one of ours: that entry is the furthest-left one we have any reason
+		// to believe, and it is the address that actually spoke to our infrastructure.
+		// COUNCIL_LEDGER 2026-09-02, CHIEF-CISO.
 		if forwardedFor := c.Get("X-Forwarded-For"); forwardedFor != "" {
 			ips := strings.Split(forwardedFor, ",")
-			if len(ips) > 0 {
-				return strings.TrimSpace(ips[0])
+			for i := len(ips) - 1; i >= 0; i-- {
+				candidate := strings.TrimSpace(ips[i])
+				// An empty entry carries no address, and a trusted-proxy entry was
+				// written by us about the hop before it — neither identifies a client.
+				if candidate == "" || trusted[candidate] {
+					continue
+				}
+				return candidate
 			}
+			// Every entry was a trusted proxy: there is no client address in the
+			// header, so fall through to the direct connection below.
 		}
 	}
 

@@ -300,7 +300,8 @@ func main() {
 
 	// DID Resolution endpoint (no auth required)
 	// Resolves did:aip:aim_<uuid> to a W3C DID Document
-	app.Get("/api/v1/did/*", h.AIP.ResolveDID)
+	// NOTE: DID resolution (/api/v1/did/*) is registered inside setupRoutes() on the v1
+	// group with the shared rate limiter; see the v1.Get("/did/*", ...) line there.
 
 	// NOTE: Revocation list route moved into setupRoutes() to avoid Fiber v3 beta
 	// route shadowing when the /api/v1 group is registered with middleware.
@@ -351,6 +352,13 @@ func main() {
 
 	// API v1 routes (JWT authenticated)
 	v1 := app.Group("/api/v1")
+
+	// Public DID resolver. Unauthenticated by design (AIP discovery), so it
+	// carries the shared rate limiter on its own registration line, and the
+	// handler resolves only verified agents: a pending registration answers
+	// exactly as an unknown DID does, so the endpoint is not an oracle for
+	// "registered but unverified".
+	v1.Get("/did/*", middleware.RateLimitMiddleware(), h.AIP.ResolveDID)
 	setupRoutes(v1, h, services, jwtService, repos.SDKToken, db)
 
 	// Start server
