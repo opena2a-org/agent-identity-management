@@ -94,6 +94,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   middlewares call it, and a failed read there is reported as "Agent not found",
   which is indistinguishable from a revocation denial. An agent created without a
   description could not authenticate and the operator was told it did not exist.
+- Dependency bumps. `package-lock.json`: `next` 16.3.5 (CVE-2026-75604, GHSA-2xp9-vwfh-vxw4,
+  CVE-2026-64641, CVE-2026-64642, CVE-2026-64645, CVE-2026-64649), `sharp` 0.35.4
+  (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c), `postcss` 8.5.18 or later (CVE-2026-45623,
+  CVE-2026-73646), `nanoid` 3.3.19 (CVE-2026-67213, CVE-2026-67214). `apps/backend/go.mod`:
+  `golang.org/x/crypto` v0.55.0 (CVE-2026-56854), `google.golang.org/grpc` v1.83.2
+  (CVE-2026-84304, CVE-2026-84445, GHSA-hrxh-6v49-42gf), `github.com/go-jose/go-jose/v4` v4.1.4
+  (CVE-2026-34986), `golang.org/x/text` v0.41.0 (CVE-2026-56852).
+- `apps/web/next.config.js` closes the self-hosted image optimizer (`images.unoptimized` plus a
+  `localPatterns` entry matching no path), so `/_next/image` returns 404. No page uses
+  `next/image`, so nothing rendered changes. GHSA-2xp9-vwfh-vxw4 needs a same-origin image
+  source, which a default deployment does not have; if a proxy or CDN in front of this app
+  serves user-supplied files on that origin, check your access logs for `/_next/image`.
 
 ### Changed
 

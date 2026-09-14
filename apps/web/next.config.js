@@ -2,6 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone', // Enable standalone output for Docker
+  images: {
+    // No page uses next/image, so the self-hosted image optimizer at /_next/image
+    // only adds attack surface: it decodes attacker-chosen images with sharp/libheif.
+    // unoptimized stops the component from requesting the route; the localPatterns
+    // entry matches no path, so the route itself rejects every source.
+    unoptimized: true,
+    localPatterns: [{ pathname: '/__image-optimizer-closed__/**' }],
+  },
   typescript: {
     // React 19 + recharts v2 type incompatibilities; tracked for recharts v3 upgrade
     ignoreBuildErrors: true,
