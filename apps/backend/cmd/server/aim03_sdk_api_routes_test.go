@@ -483,10 +483,10 @@ func aim03ReadRepoFile(t *testing.T, rel string) string {
 
 	dir := filepath.Dir(thisFile)
 	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "apps")); err == nil {
-				break
-			}
+		// apps/backend/go.mod is the root marker: present in every tree that
+		// carries this backend, including deployments with no root package.json.
+		if _, err := os.Stat(filepath.Join(dir, "apps", "backend", "go.mod")); err == nil {
+			break
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
