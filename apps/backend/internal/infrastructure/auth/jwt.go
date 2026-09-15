@@ -32,12 +32,11 @@ const (
 // Token types. The `typ` claim separates access tokens (valid as a bearer) from
 // refresh tokens (valid only at /auth/refresh), so a refresh token cannot be
 // replayed as a session token.
-// GRACE: tokens minted before this claim existed have an empty TokenType.
-// The access middleware no longer accepts an empty type (retired once all
-// short-lived legacy access tokens had aged out within their TTL). The refresh
-// endpoint still treats an empty type as a legacy refresh/SDK token and allows
-// it, so long-lived (up to 90-day SDK) tokens keep working until they age out.
-// Newly issued tokens always carry a type and are enforced immediately.
+// GRACE (both paths now retired): tokens minted before this claim existed have
+// an empty TokenType. The access middleware grace was retired 2026-06-19, once
+// all short-lived legacy access tokens aged out. The refresh-endpoint grace was
+// retired 2026-09-15, once the 90-day SDK tokens issued before 2026-06-19 aged
+// out. Newly issued tokens always carry a type and are enforced immediately.
 const (
 	TokenTypeAccess  = "access"
 	TokenTypeRefresh = "refresh"
@@ -306,10 +305,15 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 		return "", "", err
 	}
 
-	// An access token must not be replayed at the refresh endpoint. (Empty
-	// TokenType = legacy token issued before this claim; allowed during grace.)
+	// Only refresh and SDK tokens are accepted at the refresh endpoint.
+	// - Access tokens must not be replayed here.
+	// - The legacy empty-typ grace (tokens minted before 2026-06-19) is retired
+	//   as of 2026-09-15: 90-day SDK tokens issued before the rollout have aged out.
 	if claims.TokenType == TokenTypeAccess {
 		return "", "", fmt.Errorf("access token cannot be used to refresh")
+	}
+	if claims.TokenType != TokenTypeRefresh && claims.TokenType != TokenTypeSDK {
+		return "", "", fmt.Errorf("token type %q is not valid for refresh", claims.TokenType)
 	}
 
 	// Check if this is an SDK token (different issuer)

@@ -323,6 +323,41 @@ func TestJWTService_RefreshTokenPair_SDKToken(t *testing.T) {
 	assert.Equal(t, "agent-identity-management-sdk", refreshClaims.Issuer)
 }
 
+// TestJWTService_RefreshTokenPair_RejectsLegacyEmptyTypToken verifies that the
+// refresh-path grace window (empty typ == legacy pre-rollout token) is retired.
+// After 2026-09-15 the 90-day SDK tokens issued before 2026-06-19 have aged out,
+// so an empty-typ token must now be rejected just like any unknown type.
+func TestJWTService_RefreshTokenPair_RejectsLegacyEmptyTypToken(t *testing.T) {
+	cleanup := setupJWTTest(t)
+	defer cleanup()
+
+	service := NewJWTService()
+	userID := uuid.New().String()
+	orgID := uuid.New().String()
+
+	// Mint a legacy token with no typ claim (as issued before the typ separation).
+	legacyClaims := JWTClaims{
+		UserID:         userID,
+		OrganizationID: orgID,
+		// TokenType intentionally omitted — simulates a pre-2026-06-19 token.
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    IssuerUser,
+			Subject:   userID,
+			ID:        uuid.New().String(),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, legacyClaims)
+	legacyToken, err := token.SignedString([]byte("test-secret-key-for-unit-tests-32"))
+	require.NoError(t, err)
+
+	_, _, err = service.RefreshTokenPair(legacyToken, "test@example.com", "admin")
+	assert.Error(t, err, "legacy empty-typ token must be rejected now that the grace window has expired")
+	assert.Contains(t, err.Error(), "not valid for refresh")
+}
+
 func TestJWTService_GetTokenID(t *testing.T) {
 	cleanup := setupJWTTest(t)
 	defer cleanup()
