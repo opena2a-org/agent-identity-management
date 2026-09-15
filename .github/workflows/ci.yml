@@ -186,7 +186,9 @@ jobs:
       # skipIf-skipped case as passed and must never gate again. The
       # --allow-skips entries are the gate's only tolerated skips: the
       # environment-gated integration files this runner cannot execute (no
-      # AIM backend, no credentials). Any skip outside them fails the gate.
+      # AIM backend, no credentials), each bound to that file's it.skipIf
+      # case count. Any skip outside them, or more skips in one of them
+      # than its bound, fails the gate; growing a bound is a gate change.
       # See docs/testing/sdk-publish-gate.md.
       - name: Test (a skipped test fails the gate)
         env:
@@ -194,9 +196,9 @@ jobs:
         run: |
           npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest-report.json
           node scripts/check-vitest-report.mjs /tmp/vitest-report.json \
-            --allow-skips=src/a2a/A2AClient.integration.test.ts \
-            --allow-skips=src/client/AIMClient.integration.test.ts \
-            --allow-skips=src/auth/oauth.integration.test.ts
+            --allow-skips=src/a2a/A2AClient.integration.test.ts:21 \
+            --allow-skips=src/client/AIMClient.integration.test.ts:13 \
+            --allow-skips=src/auth/oauth.integration.test.ts:2
 
       - name: Typecheck
         run: npm run typecheck
