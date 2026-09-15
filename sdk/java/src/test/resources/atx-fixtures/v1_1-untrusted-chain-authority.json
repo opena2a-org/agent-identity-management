@@ -93,8 +93,8 @@
     "buildAttestation": "https://slsa.dev/provenance/v1#opena2a-conformance",
     "transparencyLogIndex": 42,
     "capabilities": [
-      "read:public",
-      "write:owned"
+      "db:read",
+      "db:write"
     ],
     "behavioralProfile": {
       "checksum": "sha256:ghi789",
@@ -122,7 +122,7 @@
       {
         "keyId": "did:opena2a:authority:attacker.example#key-1",
         "algorithm": "Ed25519",
-        "value": "wckUCFwBI1XfltoMx2NOXK2JhfOHvl4M8plQ/p47e+AKKKdfGiZ/PoQ4dOrGC1b787J1CTZ96/OC9y4PhYc0CQ=="
+        "value": "XBzR3R/i1dHz4s5gcW7ui9lS7WKpLcBuQIEBaKGrwtmSnEA6VCBcjwB3jW4ZIlXQwXBwfusryQw1jF/1Mn3lCQ=="
       }
     ],
     "revoked": false,

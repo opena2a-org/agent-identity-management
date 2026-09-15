@@ -11,12 +11,20 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -52,6 +60,14 @@ class LocalAtxVerifierConformanceTest {
             "cross-issuer-key.json,                REJECT, SIGNATURE_INVALID",
             "v1_1-baseline-valid.json,             ACCEPT, ",
             "v1_1-baseline-valid-hybrid.json,      ACCEPT, ",
+            // Forged post-quantum control: the Ed25519 entry is intact and one bit of the
+            // ML-DSA-65 signature is flipped. Every declared signature must verify
+            // (atx-spec section 13, AAP section 9.4), so an intact classical signature
+            // must not carry a forged post-quantum one.
+            "v1_1-hybrid-mldsa-tampered.json,             REJECT, SIGNATURE_INVALID",
+            // transparencyLogIndex is optional: assigned by the log after signing and
+            // outside both signing forms, so omitting it changes no canonical bytes.
+            "v1_1-no-transparency-log-index.json,         ACCEPT, ",
             "v1_1-declared-purpose-valid.json,     ACCEPT, ",
             "v1_1-tampered-capabilities.json,      REJECT, SIGNATURE_INVALID",
             "v1_1-tampered-declared-purpose.json,  REJECT, SIGNATURE_INVALID",
@@ -169,5 +185,51 @@ class LocalAtxVerifierConformanceTest {
             }
         }
         throw new IOException("fixture has no atx member");
+    }
+
+    /**
+     * The row set above MUST equal the vendored fixture set on disk.
+     *
+     * <p>Without this, the two are independent: a fixture can be vendored and
+     * never asserted, so a re-vendor that carries a new MUST-REJECT control
+     * ships green while testing strictly less than before. That is not
+     * hypothetical — the suite grew a forged-post-quantum control and an
+     * optional-field control, and the hand-written rows would have silently
+     * omitted both.
+     *
+     * <p>Both directions are checked. A fixture with no row is an untested
+     * fixture; a row with no fixture is a row asserting nothing.
+     */
+    @Test
+    void everyVendoredFixtureHasARowAndEveryRowHasAFixture() throws Exception {
+        URL dir = getClass().getResource("/atx-fixtures");
+        assertNotNull(dir, "vendored fixture directory not found on the test classpath");
+        Path fixtureDir = Paths.get(dir.toURI());
+
+        Set<String> onDisk;
+        try (Stream<Path> files = Files.list(fixtureDir)) {
+            onDisk = files.map(f -> f.getFileName().toString())
+                    .filter(n -> n.endsWith(".json"))
+                    .collect(Collectors.toCollection(TreeSet::new));
+        }
+
+        CsvSource rows = LocalAtxVerifierConformanceTest.class
+                .getDeclaredMethod("fixture", String.class, String.class, String.class)
+                .getAnnotation(CsvSource.class);
+        assertNotNull(rows, "the fixture test lost its @CsvSource rows");
+        Set<String> asserted = Arrays.stream(rows.value())
+                .map(row -> row.split(",")[0].trim())
+                .collect(Collectors.toCollection(TreeSet::new));
+
+        assertEquals(asserted, onDisk,
+                "the asserted row set and the vendored fixture set have diverged. "
+                        + "Vendored but not asserted: " + minus(onDisk, asserted)
+                        + "; asserted but not vendored: " + minus(asserted, onDisk));
+    }
+
+    private static Set<String> minus(Set<String> a, Set<String> b) {
+        Set<String> out = new TreeSet<>(a);
+        out.removeAll(b);
+        return out;
     }
 }

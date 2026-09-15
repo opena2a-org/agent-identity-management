@@ -1,7 +1,7 @@
 {
   "$schema": "https://atx.opena2a.org/schemas/fixture-v1.json",
-  "name": "atx-v1/revoked",
-  "description": "A previously-valid ATX whose credential-level Revoked flag is set and whose AgentID also appears in the verifier's CRL. Verifier MUST REJECT with revocation reason. Both rejection paths are exercised.",
+  "name": "atx-v1_1/no-transparency-log-index",
+  "description": "An ATX v1.1 credential that omits the optional transparencyLogIndex. The field is assigned by the log after signing and is outside JCS(TBS), so its absence changes no canonical bytes and no signature; this credential's JCS(TBS) is byte-identical to the v1.1 baseline's. Verifier MUST ACCEPT. A verifier that requires the field, or that reads its presence as evidence of transparency-log inclusion, wrongly REJECTs.",
   "spec": [
     {
       "id": "ATX",
@@ -60,29 +60,14 @@
         "publicKeyHex": "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025",
         "keyId": "did:opena2a:authority:opena2a.org#key-3"
       }
-    ],
-    "crl": {
-      "version": 1,
-      "issuedAt": "2026-05-23T12:00:00Z",
-      "nextUpdate": "2026-05-30T12:00:00Z",
-      "entries": [
-        {
-          "agentId": "agent_conformance_test_001",
-          "revokedAt": "2026-05-23T12:00:00Z",
-          "reason": "key compromise (test)"
-        }
-      ],
-      "signature": "TEST_ONLY_UNSIGNED_CRL"
-    }
+    ]
   },
   "expected": {
-    "verifyResult": "REJECT",
-    "rejectCategory": "REVOKED",
-    "reasonContains": "revoked"
+    "verifyResult": "ACCEPT"
   },
   "atx": {
     "id": "00000000-0000-0000-0000-000000000001",
-    "atcVersion": "1.0",
+    "atcVersion": "1.1",
     "agentId": "agent_conformance_test_001",
     "agentDid": "did:opena2a:agent:agent_conformance_test_001",
     "publisher": "opena2a-conformance",
@@ -90,11 +75,15 @@
     "version": "1.0.0",
     "contentHash": "0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff",
     "buildAttestation": "https://slsa.dev/provenance/v1#opena2a-conformance",
-    "transparencyLogIndex": 42,
     "capabilities": [
       "db:read",
       "db:write"
     ],
+    "behavioralProfile": {
+      "checksum": "sha256:ghi789",
+      "generatedAt": "2026-05-19T00:00:00Z",
+      "observationDays": 14
+    },
     "scanSummary": {
       "hma": "passed",
       "criticalFindings": 0,
@@ -109,19 +98,17 @@
     "expiresAt": "2099-12-31T23:59:59Z",
     "issuerDid": "did:opena2a:authority:opena2a.org",
     "issuerChain": [
-      "did:opena2a:authority:opena2a.org",
-      "did:opena2a:authority:opena2a.org-root"
+      "did:opena2a:authority:opena2a.org-root",
+      "did:opena2a:authority:opena2a.org"
     ],
     "signatures": [
       {
         "keyId": "did:opena2a:authority:opena2a.org#key-1",
         "algorithm": "Ed25519",
-        "value": "T+tCrEORj2ipWjPwZIEHxvJUw2qIEWILz6HITxrVEnw9kpnaGmp5a1YGAnKuQZC3Vp4LEmyq6RqkQCIh/C/pAg=="
+        "value": "avfPHRdMUb4tBMWoOJpATKnvsI+aSDkcGWpEznE6D9s19YIDG2jjV/aURzoBsNKphxhdlxu93bMer+TF1y26Cw=="
       }
     ],
-    "revoked": true,
-    "revokedAt": "2026-05-23T12:00:00Z",
-    "revocationReason": "key compromise (test)",
+    "revoked": false,
     "createdAt": "2026-05-23T00:00:00Z"
   }
 }
