@@ -22,7 +22,7 @@ import java.util.Map;
  *
  * <p>To use in a real Spring Boot application:</p>
  * <ol>
- *   <li>Add AIM SDK dependency to pom.xml</li>
+ *   <li>Build the SDK ({@code mvn install} in sdk/java) and add its dependency to pom.xml</li>
  *   <li>Create SecurityConfig class (see below)</li>
  *   <li>Annotate service methods with @SecureAction</li>
  * </ol>

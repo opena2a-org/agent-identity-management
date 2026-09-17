@@ -6,8 +6,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 > Scope: this changelog tracks the **platform** (backend + dashboard), tagged
 > `platform-v<version>`. The SDKs are versioned and released independently
-> (`aim-sdk` on PyPI, `@opena2a/aim-sdk` on npm, `org.opena2a:aim-sdk` on Maven
-> Central) under their own `sdk-*-v<version>` tags.
+> under their own `sdk-*-v<version>` tags (`aim-sdk` on PyPI, `@opena2a/aim-sdk`
+> on npm; the Java SDK is built from source in `sdk/java`).
 
 ## [Unreleased]
 

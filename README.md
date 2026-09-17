@@ -63,7 +63,7 @@ All three share the same audit-event schema. Local agents can push history to a 
 | SDK | Install | Mode | API |
 |---|---|---|---|
 | Python | `pip install aim-sdk` | Server (today) | `secure("name")` + `@perform_action` |
-| Java | `org.opena2a:aim-sdk:1.0.0` | Server | `AIMClient.secure("name")` + `@SecureAction` |
+| Java | `cd sdk/java && mvn install` (from source) | Server | `AIMClient.secure("name")` + `@SecureAction` |
 | TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMClient({ agentId })` |
 
 Working examples for all three live in [`examples/`](examples/).
@@ -92,7 +92,7 @@ public User getCustomer(String customerId) {
 }
 ```
 
-Production-ready at v1.0.0. Same Ed25519 signing, same FGA flow, same audit trail. AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
+Version 1.0.0, built from source. Same Ed25519 signing, same FGA flow, same audit trail. AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
 
 ### TypeScript
 
