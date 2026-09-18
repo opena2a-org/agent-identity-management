@@ -1,5 +1,9 @@
 # Multi-stage build for Next.js frontend
-FROM node:20-alpine AS base
+#
+# Pinned by tag AND digest, and the same node:<major>-alpine<X.Y> the root
+# infrastructure/docker/Dockerfile.frontend builds with, so the node binary the
+# runner copies and the runner's musl/libstdc++ come from one alpine release.
+FROM node:22-alpine3.21@sha256:af8023ec879993821f6d5b21382ed915622a1b0f1cc03dbeb6804afaf01f8885 AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -22,7 +26,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Production image, copy all the files and run next
-FROM base AS runner
+#
+# Rooted on the official alpine image rather than on `base`: the node image
+# bundles the npm CLI, which this image never invokes and which carried every
+# node-pkg finding of the published dashboard.
+FROM alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d AS runner
+
+# The shared libraries the node binary is dynamically linked against
+RUN apk add --no-cache libstdc++
+
+# The node runtime itself, from the pinned builder of the same alpine release
+COPY --from=builder /usr/local/bin/node /usr/local/bin/node
+
 WORKDIR /app
 
 ENV NODE_ENV=production
