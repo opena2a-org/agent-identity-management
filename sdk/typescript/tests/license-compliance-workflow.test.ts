@@ -37,11 +37,21 @@ import { load } from 'js-yaml';
  *   AC2  the tool is pinned by version AND by h1 sum, and the sum is asserted
  *        on the INSTALLED binary before the checker is trusted to run;
  *   AC3  every failure is classified, once, in a fixed order, so a module-proxy
- *        stream error can never again report as a license finding;
+ *        stream error can never again report as a license finding — and every
+ *        allowance in apps/backend/go-licenses-allowlist.tsv is re-measured,
+ *        on every run, against an UNIGNORED `go-licenses report`;
  *   AC4  the Go step and the npm step are gated on their own inputs, so a
  *        frontend-lockfile-only pull request no longer runs the Go check;
  *   AC5  each of those properties refuses a planted regression;
- *   AC6  the workflow's permissions, action set and sibling filters are held.
+ *   AC6  the workflow's permissions, action set and sibling filters are held,
+ *        and the allowlist reads as the ruling that admitted it.
+ *
+ * The allowances exist because the first real run of the fixed gate read the
+ * real dependency set: ten MPL-2.0 HashiCorp modules behind the Vault client
+ * (class Reciprocal) and the apps/backend module itself carrying no license
+ * text. The first was ruled an allowance, by exact path, pinned to MPL-2.0;
+ * the second was a missing file, fixed by apps/backend/LICENSE. Neither is a
+ * loosened class, which is why the class set below is still all four.
  *
  * The workflow assertions are functions over a parsed document and the script
  * assertions are functions over a recorded invocation log, never constants
@@ -76,7 +86,7 @@ const GO_ENV_ESCAPE_HATCHES = [
   'GOINSECURE',
 ];
 
-/** The six phrases the script is allowed to conclude with. */
+/** The phrases the script is allowed to conclude with. */
 const PHRASE = {
   pass: 'no disallowed license found',
   finding: 'disallowed license found',
@@ -84,11 +94,39 @@ const PHRASE = {
   badSum: 'tool checksum mismatch',
   cannotRun: 'checker could not run',
   noVerdict: 'checker failed before a verdict',
+  allowlistMalformed: 'allowlist malformed',
+  allowlistUnused: 'allowlist entry unused',
+  allowlistChanged: 'allowlisted library changed license',
+  allowlistPrefix: 'allowlist prefix covers an unlisted library',
 };
 
 const REPO_ROOT = realpathSync(join(__dirname, '..', '..', '..'));
 const WORKFLOW_PATH = join(REPO_ROOT, '.github', 'workflows', 'security.yml');
 const SCRIPT_PATH = join(REPO_ROOT, 'scripts', 'go-licenses-check.sh');
+const ALLOWLIST_REL = 'apps/backend/go-licenses-allowlist.tsv';
+const ALLOWLIST_PATH = join(REPO_ROOT, 'apps', 'backend', 'go-licenses-allowlist.tsv');
+const ROOT_LICENSE_PATH = join(REPO_ROOT, 'LICENSE');
+const BACKEND_LICENSE_PATH = join(REPO_ROOT, 'apps', 'backend', 'LICENSE');
+
+/**
+ * The ten HashiCorp modules the first real run reported as class Reciprocal,
+ * and the ruling that admitted them. Order is the allowlist's file order,
+ * because the `--ignore` arguments are asserted in that order.
+ */
+const ALLOWLISTED_LIBRARIES = [
+  'github.com/hashicorp/vault/api',
+  'github.com/hashicorp/errwrap',
+  'github.com/hashicorp/go-cleanhttp',
+  'github.com/hashicorp/go-multierror',
+  'github.com/hashicorp/go-retryablehttp',
+  'github.com/hashicorp/go-rootcerts',
+  'github.com/hashicorp/go-secure-stdlib/parseutil',
+  'github.com/hashicorp/go-secure-stdlib/strutil',
+  'github.com/hashicorp/go-sockaddr',
+  'github.com/hashicorp/hcl',
+];
+const ALLOWLISTED_LICENSE = 'MPL-2.0';
+const ALLOWLIST_RULED = '2026-09-19T17:35:11Z';
 
 /** The verbatim proxy failure that failed #493's job. */
 const STREAM_ERROR =
@@ -116,6 +154,63 @@ function scriptSource(): string {
     'scripts/go-licenses-check.sh must exist: it is the step\'s logic',
   ).toBe(true);
   return readFileSync(SCRIPT_PATH, 'utf-8');
+}
+
+function allowlistSource(): string {
+  expect(
+    existsSync(ALLOWLIST_PATH),
+    `${ALLOWLIST_REL} must exist: it is the policy the step applies`,
+  ).toBe(true);
+  return readFileSync(ALLOWLIST_PATH, 'utf-8');
+}
+
+// ── The parsed allowlist ──────────────────────────────────────────────
+
+interface AllowlistRow {
+  library: string;
+  license: string;
+  ruled: string;
+  reason: string;
+}
+
+/**
+ * TAB-separated; `#` comment lines and blank lines ignored. Deliberately
+ * tolerant of a malformed row — the cells that plant one are asserting what
+ * the SCRIPT does with it, so the test's own parse must not be the thing that
+ * refuses it first.
+ */
+function parseAllowlist(text: string): AllowlistRow[] {
+  return text
+    .split('\n')
+    .filter((line) => line.trim().length > 0 && !line.trimStart().startsWith('#'))
+    .map((line) => {
+      const [library = '', license = '', ruled = '', reason = ''] = line.split('\t');
+      return { library, license, ruled, reason };
+    });
+}
+
+/** Libraries the report names that no row admits; none may sit under a row. */
+const UNALLOWLISTED_REPORT_ROWS: Array<[string, string]> = [
+  ['github.com/opena2a-org/agent-identity-management/apps/backend', 'Apache-2.0'],
+  ['github.com/gin-gonic/gin', 'MIT'],
+  ['golang.org/x/crypto', 'BSD-3-Clause'],
+];
+
+/**
+ * `go-licenses report ./...` at v2.0.1: CSV name,licenseURL,licenseName, with
+ * no `--ignore`, which is exactly why it can be used to re-measure what the
+ * `--ignore` arguments silenced.
+ */
+function reportCsv(
+  rows: Array<{ library: string; license: string }>,
+  extra: Array<[string, string]> = UNALLOWLISTED_REPORT_ROWS,
+): string {
+  const line = (name: string, license: string) =>
+    `${name},https://example.invalid/${name}/LICENSE,${license}`;
+  return [
+    ...rows.map((r) => line(r.library, r.license)),
+    ...extra.map(([name, license]) => line(name, license)),
+  ].join('\n');
 }
 
 // ── The parsed workflow document ──────────────────────────────────────
@@ -315,14 +410,24 @@ interface SandboxOptions {
   install?: Plan[];
   /** per-attempt checker outcomes; the last entry repeats. */
   check?: Plan[];
+  /** per-attempt `report` outcomes; defaults to a CSV consistent with the TSV. */
+  report?: Plan[];
   /** the h1 sum the stub's `go version -m` reports. */
   modSum?: string;
   /** false to omit the `mod` line from `go version -m` entirely. */
   emitModLine?: boolean;
   /** run a mutated copy of the script under a mirror repo root instead. */
   scriptSource?: string;
+  /** run against a planted allowlist under a mirror repo root instead. */
+  allowlist?: string;
   /** false to leave GITHUB_STEP_SUMMARY unset. */
   stepSummary?: boolean;
+  /**
+   * false when the cell expects the script to refuse before it touches the
+   * toolchain at all, so an empty invocation log is the result rather than a
+   * sign that the real `go` answered.
+   */
+  reachesToolchain?: boolean;
 }
 
 interface RunResult {
@@ -334,6 +439,7 @@ interface RunResult {
   log: Invocation[];
   installs: Invocation[];
   checks: Invocation[];
+  reports: Invocation[];
   /** the root the script resolved from its own location. */
   repoRoot: string;
   gobin: string;
@@ -414,8 +520,18 @@ function runCheckScript(opts: SandboxOptions = {}): RunResult {
     // What the stub `go install` materialises into GOBIN.
     writeExecutable(join(stubDir, 'go-licenses.stub'), STUB_GO_LICENSES);
 
+    // Whichever allowlist this run is answering for: the delivered one, or a
+    // planted one under a mirror root. The default `report` plan is derived
+    // from it, so "consistent with every row" is the default and a cell only
+    // has to state the INCONSISTENCY it is planting.
+    const allowlistText = opts.allowlist ?? allowlistSource();
     writePlan(stubDir, 'install', opts.install ?? [{ rc: 0, out: '' }]);
     writePlan(stubDir, 'check', opts.check ?? [{ rc: 0, out: '' }]);
+    writePlan(
+      stubDir,
+      'report',
+      opts.report ?? [{ rc: 0, out: reportCsv(parseAllowlist(allowlistText)) }],
+    );
 
     const logPath = join(root, 'invocations.log');
     writeFileSync(logPath, '');
@@ -424,14 +540,19 @@ function runCheckScript(opts: SandboxOptions = {}): RunResult {
 
     let repoRoot = REPO_ROOT;
     let scriptPath = SCRIPT_PATH;
-    if (opts.scriptSource !== undefined) {
-      // A mutated copy gets its own mirror root so that the script's
-      // location-relative resolution still finds an apps/backend to enter.
+    if (opts.scriptSource !== undefined || opts.allowlist !== undefined) {
+      // A mutated script, or a planted allowlist, gets its own mirror root so
+      // that the script's location-relative resolution still finds an
+      // apps/backend to enter — and finds the allowlist this cell planted.
       repoRoot = join(root, 'mirror');
       mkdirSync(join(repoRoot, 'scripts'), { recursive: true });
       mkdirSync(join(repoRoot, 'apps', 'backend'), { recursive: true });
       scriptPath = join(repoRoot, 'scripts', 'go-licenses-check.sh');
-      writeExecutable(scriptPath, opts.scriptSource);
+      writeExecutable(scriptPath, opts.scriptSource ?? scriptSource());
+      writeFileSync(
+        join(repoRoot, 'apps', 'backend', 'go-licenses-allowlist.tsv'),
+        allowlistText,
+      );
     }
     expect(
       existsSync(scriptPath),
@@ -467,12 +588,22 @@ function runCheckScript(opts: SandboxOptions = {}): RunResult {
     ).toBeUndefined();
 
     const log = readLog(logPath);
-    // Every cell reaches `go install` at least once, so an empty log means the
-    // stubs never ran and whatever answered was not under this test's control.
-    expect(
-      log.length,
-      `the stub toolchain recorded nothing, so the real one answered:\n${res.stdout}\n${res.stderr}`,
-    ).toBeGreaterThan(0);
+    if (opts.reachesToolchain ?? true) {
+      // Every other cell reaches `go install` at least once, so an empty log
+      // means the stubs never ran and whatever answered was not under this
+      // test's control.
+      expect(
+        log.length,
+        `the stub toolchain recorded nothing, so the real one answered:\n${res.stdout}\n${res.stderr}`,
+      ).toBeGreaterThan(0);
+    } else {
+      // A refusal that fires before the toolchain is touched at all: the
+      // empty log IS the assertion, so it is checked rather than waived.
+      expect(
+        log,
+        `nothing may run before the allowlist parses:\n${res.stdout}\n${res.stderr}`,
+      ).toEqual([]);
+    }
 
     return {
       status: res.status as number,
@@ -482,6 +613,7 @@ function runCheckScript(opts: SandboxOptions = {}): RunResult {
       log,
       installs: log.filter((i) => i.argv[0] === 'install'),
       checks: log.filter((i) => i.argv[0] === 'check'),
+      reports: log.filter((i) => i.argv[0] === 'report'),
       repoRoot,
       gobin,
     };
@@ -582,6 +714,9 @@ function assertGoDepsFilter(source: string): void {
     'apps/backend/go.mod',
     'apps/backend/go.sum',
     'apps/backend/**/*.go',
+    // The allowlist is policy input to the step, so a pull request that adds
+    // or widens an allowance must run the step under the widened allowance.
+    ALLOWLIST_REL,
     '.github/workflows/security.yml',
     // The script IS the step's logic, so a pull request that edits it must
     // run the step UNDER the edited script.
@@ -743,6 +878,64 @@ function assertSiblingFiltersHeld(source: string): void {
   ]);
 }
 
+// ── Assertions over the delivered allowlist and LICENSE (AC6 cell (r)) ──
+
+/**
+ * The forty first-party findings of the first real run were the checker
+ * correctly reporting that the apps/backend module ships no license text.
+ * The fix is the license text, never an --ignore on the module path or the
+ * org prefix: an --ignore there would silence every future first-party
+ * library too.
+ */
+function assertBackendCarriesTheRepositoryLicense(): void {
+  expect(
+    existsSync(BACKEND_LICENSE_PATH),
+    'apps/backend/LICENSE must exist: go-licenses walks upward only inside the module directory',
+  ).toBe(true);
+  expect(
+    readFileSync(BACKEND_LICENSE_PATH),
+    'apps/backend/LICENSE must be byte-identical to the repository LICENSE, the form sdk/python and sdk/typescript already take',
+  ).toEqual(readFileSync(ROOT_LICENSE_PATH));
+}
+
+function assertAllowlistIsTheRuling(text: string): void {
+  const header = text
+    .split('\n')
+    .filter((l) => l.trimStart().startsWith('#'))
+    .join('\n');
+  for (const column of ['library', 'license', 'ruled', 'reason']) {
+    expect(
+      header,
+      `the allowlist's header comment must name the ${column} column`,
+    ).toContain(column);
+  }
+
+  const rows = parseAllowlist(text);
+  expect(
+    rows.map((r) => r.library),
+    'the allowlist admits exactly the ten HashiCorp modules the ruling named, in that order',
+  ).toEqual(ALLOWLISTED_LIBRARIES);
+
+  for (const row of rows) {
+    expect(
+      row.license,
+      `${row.library} is admitted for one license only`,
+    ).toBe(ALLOWLISTED_LICENSE);
+    expect(
+      row.ruled,
+      `${row.library} must carry the UTC stamp of the ruling that admitted it`,
+    ).toBe(ALLOWLIST_RULED);
+    expect(
+      row.ruled,
+      'the ruled column is a UTC stamp and nothing else — this repository is public',
+    ).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(
+      row.reason.trim().length,
+      `${row.library} must say why it was admitted`,
+    ).toBeGreaterThan(0);
+  }
+}
+
 // ── Assertions over the invocation log ────────────────────────────────
 
 function assertDisallowedTypesArgv(log: Invocation[]): void {
@@ -761,6 +954,50 @@ function assertDisallowedTypesArgv(log: Invocation[]): void {
       value.split(',').map((c) => c.trim()).sort(),
       'the class set must be exactly forbidden, unknown, restricted, reciprocal',
     ).toEqual(DISALLOWED_TYPES);
+  }
+}
+
+/**
+ * AC1 cell (q). `--ignore` is a blunt instrument — it silences a path prefix —
+ * so what it silences has to be exactly the ruled set, in the ruled order, and
+ * read from the argv the checker actually received rather than from the text
+ * of the script.
+ */
+function assertIgnoreArgvIsTheAllowlist(
+  log: Invocation[],
+  allowlistText: string,
+): void {
+  const expected = parseAllowlist(allowlistText).map((r) => r.library);
+  const checks = log.filter((i) => i.argv[0] === 'check');
+  expect(checks.length, 'the checker must have been invoked').toBeGreaterThan(0);
+  for (const inv of checks) {
+    const ignores = inv.argv.filter((a) => a.startsWith('--ignore'));
+    expect(
+      ignores.map((a) => a.replace(/^--ignore=?/, '')),
+      'the ignored libraries must be exactly the allowlist library column, in file order',
+    ).toEqual(expected);
+    for (const flag of ignores) {
+      expect(
+        flag,
+        'each ignore must be one --ignore=<library>, so the argv says what it silences',
+      ).toMatch(/^--ignore=/);
+    }
+  }
+}
+
+/** The unignored re-measurement: `report ./...` with no --ignore at all. */
+function assertReportIsUnignored(log: Invocation[]): void {
+  const reports = log.filter((i) => i.argv[0] === 'report');
+  expect(
+    reports.length,
+    'a passing check must be followed by `report ./...`, or the allowances are never measured',
+  ).toBeGreaterThan(0);
+  for (const inv of reports) {
+    expect(inv.argv, 'the report must be pointed at ./...').toContain('./...');
+    expect(
+      inv.argv.filter((a) => a.startsWith('--ignore')),
+      'the report must ignore nothing: it is what re-measures what check ignored',
+    ).toEqual([]);
   }
 }
 
@@ -926,6 +1163,18 @@ function mutateAddFourthUsesStep(source: string): string {
   return lines.join('\n');
 }
 
+/** (10) the policy the step applies dropped from the filter that gates it. */
+function mutateDropAllowlistFromGoDeps(source: string): string {
+  const lines = source.split('\n');
+  const i = lineIndex(
+    lines,
+    (l) => l.trim() === `- '${ALLOWLIST_REL}'`,
+    'the go_deps entry for the allowlist',
+  );
+  lines.splice(i, 1);
+  return lines.join('\n');
+}
+
 /** (9) class `unknown` quietly dropped from the checker's class set. */
 function mutateScriptDropUnknownClass(source: string): string {
   const needle = 'forbidden,unknown,restricted,reciprocal';
@@ -949,6 +1198,12 @@ describe('the Go license verdict is the checker exit status', () => {
     assertCheckerRanInAppsBackend(run.log, run.repoRoot);
   });
 
+  it('QGF-251.AC1 (q) the recorded --ignore arguments are exactly the allowlist library column, in file order, and nothing else is ignored', () => {
+    const run = runCheckScript();
+    assertIgnoreArgvIsTheAllowlist(run.log, allowlistSource());
+    assertReportIsUnignored(run.log);
+  });
+
   it('QGF-251.AC1 a planted reciprocal license the base grep would have missed makes the script exit 1', () => {
     const run = runCheckScript({ check: [{ rc: 1, out: PLANTED_FINDING }] });
     expect(run.status, `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`).toBe(1);
@@ -956,7 +1211,7 @@ describe('the Go license verdict is the checker exit status', () => {
     expect(run.summary).toContain("example.com/planted");
   });
 
-  it('QGF-251.AC1 a zero checker exit yields 0 and a non-zero checker exit never yields 0, whatever the text says', () => {
+  it('QGF-251.AC1 a non-zero checker exit never yields 0, and a zero checker exit yields 0 only while every allowance holds', () => {
     expect(runCheckScript({ check: [{ rc: 0, out: '' }] }).status).toBe(0);
     for (const out of [
       PLANTED_FINDING,
@@ -970,6 +1225,13 @@ describe('the Go license verdict is the checker exit status', () => {
         `a non-zero checker exit must never yield 0 (output: ${JSON.stringify(out)})`,
       ).not.toBe(0);
     }
+
+    // A zero checker exit only means nothing OUTSIDE the ignored paths is
+    // disallowed; the allowances are what is left to measure.
+    const stale = runCheckScript({
+      report: [{ rc: 0, out: reportCsv([]) }],
+    });
+    expect(stale.status, stale.stdout).toBe(1);
   });
 });
 
@@ -1137,6 +1399,161 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.summary, 'no summary file must have been written').toBe('');
     expect(run.checks).toHaveLength(1);
   });
+
+  it('QGF-251.AC3 (k) an allowlisted library whose reported license differs: exit 1, allowlisted library changed license', () => {
+    const rows = parseAllowlist(allowlistSource());
+    const drifted = rows.map((r, i) =>
+      i === rows.length - 1 ? { ...r, license: 'MPL-1.1' } : r,
+    );
+    const run = runCheckScript({ report: [{ rc: 0, out: reportCsv(drifted) }] });
+    expect(run.status, run.stdout).toBe(1);
+    expect(run.summary).toContain(
+      `License Compliance (Go): ${PHRASE.allowlistChanged}`,
+    );
+    expect(run.summary).toContain(rows[rows.length - 1].library);
+    expect(run.checks).toHaveLength(1);
+    expect(run.reports).toHaveLength(1);
+  });
+
+  it('QGF-251.AC3 (l) a row the report never names: exit 1, allowlist entry unused', () => {
+    const rows = parseAllowlist(allowlistSource());
+    const absent = rows[0];
+    const run = runCheckScript({
+      report: [{ rc: 0, out: reportCsv(rows.filter((r) => r !== absent)) }],
+    });
+    expect(run.status, run.stdout).toBe(1);
+    expect(run.summary).toContain(
+      `License Compliance (Go): ${PHRASE.allowlistUnused}`,
+    );
+    expect(run.summary).toContain(absent.library);
+    expect(run.reports).toHaveLength(1);
+  });
+
+  it('QGF-251.AC3 (m) a reported library carrying a row\'s path as a strict prefix and not itself a row: exit 1, allowlist prefix covers an unlisted library', () => {
+    const rows = parseAllowlist(allowlistSource());
+    const covered = `${rows[rows.length - 1].library}/v2/hclsyntax`;
+    const run = runCheckScript({
+      report: [
+        {
+          rc: 0,
+          out: reportCsv(rows, [
+            ...UNALLOWLISTED_REPORT_ROWS,
+            [covered, 'MPL-2.0'],
+          ]),
+        },
+      ],
+    });
+    expect(run.status, run.stdout).toBe(1);
+    expect(run.summary).toContain(
+      `License Compliance (Go): ${PHRASE.allowlistPrefix}`,
+    );
+    expect(run.summary).toContain(covered);
+    expect(run.reports).toHaveLength(1);
+  });
+
+  it('QGF-251.AC3 (n) a malformed allowlist row: exit 2, allowlist malformed, zero check invocations', () => {
+    const malformed = [
+      '# library\tlicense\truled\treason',
+      'github.com/hashicorp/hcl\tMPL-2.0\t2026-09-19T17:35:11Z',
+      '',
+    ].join('\n');
+    const run = runCheckScript({ allowlist: malformed, reachesToolchain: false });
+    expect(run.status, run.stdout).toBe(2);
+    expect(run.summary).toContain(
+      `License Compliance (Go): ${PHRASE.allowlistMalformed}`,
+    );
+    expect(
+      run.checks,
+      'a malformed row must never reach an --ignore argument',
+    ).toEqual([]);
+    expect(run.reports).toEqual([]);
+  });
+
+  it('QGF-251.AC3 (n) an allowlist library outside ^[A-Za-z0-9._/~-]+$: exit 2, allowlist malformed, zero check invocations', () => {
+    const run = runCheckScript({
+      allowlist:
+        'github.com/hashicorp/*\tMPL-2.0\t2026-09-19T17:35:11Z\ta glob is not a library path\n',
+      reachesToolchain: false,
+    });
+    expect(run.status, run.stdout).toBe(2);
+    expect(run.summary).toContain(
+      `License Compliance (Go): ${PHRASE.allowlistMalformed}`,
+    );
+    expect(run.checks).toEqual([]);
+  });
+
+  it('QGF-251.AC3 (o) the checker exits 0 and the report is consistent with every row: exit 0, ten allowlisted lines', () => {
+    const run = runCheckScript();
+    expect(run.status, run.stdout).toBe(0);
+    expect(run.summary).toContain(
+      `License Compliance (Go): ${PHRASE.pass}; ${ALLOWLISTED_LIBRARIES.length} allowlisted`,
+    );
+
+    const exercised = run.summary
+      .split('\n')
+      .filter((l) => l.startsWith('allowlisted: '));
+    expect(
+      exercised,
+      'every allowance that was exercised must be written where the verdict is written',
+    ).toEqual(
+      ALLOWLISTED_LIBRARIES.map(
+        (library) => `allowlisted: ${library} ${ALLOWLISTED_LICENSE} (${ALLOWLIST_RULED})`,
+      ),
+    );
+    expect(run.checks).toHaveLength(1);
+    expect(run.reports).toHaveLength(1);
+  });
+
+  it('QGF-251.AC3 (p) a finding for a library no row admits, with the allowlist present: exit 1, disallowed license found', () => {
+    const run = runCheckScript({ check: [{ rc: 1, out: PLANTED_FINDING }] });
+    expect(run.status, run.stdout).toBe(1);
+    expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.finding}`);
+    for (const phrase of [
+      PHRASE.allowlistUnused,
+      PHRASE.allowlistChanged,
+      PHRASE.allowlistPrefix,
+      PHRASE.pass,
+    ]) {
+      expect(
+        run.summary,
+        `an allowance must never absorb a finding (saw ${phrase})`,
+      ).not.toContain(phrase);
+    }
+    expect(run.checks).toHaveLength(1);
+    expect(
+      run.reports,
+      'a finding is the verdict: nothing is re-measured after it',
+    ).toEqual([]);
+  });
+
+  it('QGF-251.AC3 the report is classified by the same network-class and unclassified rules as the check', () => {
+    const retried = runCheckScript({
+      report: [
+        { rc: 1, out: 'go: dial tcp: i/o timeout' },
+        { rc: 0, out: reportCsv(parseAllowlist(allowlistSource())) },
+      ],
+    });
+    expect(retried.status, retried.stdout).toBe(0);
+    expect(retried.reports).toHaveLength(2);
+
+    const twice = runCheckScript({
+      report: [{ rc: 1, out: 'go: dial tcp: i/o timeout' }],
+    });
+    expect(twice.status).toBe(2);
+    expect(twice.summary).toContain(
+      `License Compliance (Go): ${PHRASE.cannotRun}`,
+    );
+    expect(twice.reports).toHaveLength(2);
+
+    const unclassified = runCheckScript({
+      report: [{ rc: 1, out: 'go: error loading module requirements' }],
+    });
+    expect(unclassified.status).toBe(2);
+    expect(unclassified.summary).toContain(
+      `License Compliance (Go): ${PHRASE.noVerdict}`,
+    );
+    expect(unclassified.reports).toHaveLength(1);
+  });
 });
 
 // ══ AC4 ═══════════════════════════════════════════════════════════════
@@ -1229,6 +1646,14 @@ describe('each bound property refuses a planted regression', () => {
     expect(() => assertDisallowedTypesArgv(run.log)).toThrow();
   });
 
+  it('QGF-251.AC5 (10) dropping apps/backend/go-licenses-allowlist.tsv from go_deps is refused', () => {
+    const mutated = mutateDropAllowlistFromGoDeps(workflowSource());
+    // The mutation must have landed, or the throw below would only be the
+    // mutation failing to find its line.
+    expect(filterPatterns(mutated, 'go_deps')).not.toContain(ALLOWLIST_REL);
+    expect(() => assertGoDepsFilter(mutated)).toThrow();
+  });
+
   it('QGF-251.AC5 none of those assertions throws on the delivered files', () => {
     const source = workflowSource();
     assertGoStepRunsOnlyTheScript(source);
@@ -1244,9 +1669,13 @@ describe('each bound property refuses a planted regression', () => {
     assertTopLevelPermissions(source);
     assertLicenseCheckActionSet(source);
     assertSiblingFiltersHeld(source);
+    assertBackendCarriesTheRepositoryLicense();
+    assertAllowlistIsTheRuling(allowlistSource());
 
     const run = runCheckScript();
     assertDisallowedTypesArgv(run.log);
+    assertIgnoreArgvIsTheAllowlist(run.log, allowlistSource());
+    assertReportIsUnignored(run.log);
     assertCheckerRanInAppsBackend(run.log, run.repoRoot);
     assertInstallArgv(run.log);
     assertCheckerRanFromGobin(run.log, run.gobin);
@@ -1275,5 +1704,13 @@ describe('the workflow permissions, action set and sibling filters are held', ()
       statSync(SCRIPT_PATH).mode & 0o111,
       'scripts/go-licenses-check.sh must be mode 100755: the step execs it',
     ).toBe(0o111);
+  });
+
+  it('QGF-251.AC6 (r) apps/backend/LICENSE is byte-identical to the repository LICENSE', () => {
+    assertBackendCarriesTheRepositoryLicense();
+  });
+
+  it('QGF-251.AC6 (r) the allowlist admits exactly the ten ruled HashiCorp modules, each pinned to MPL-2.0 under the ruling stamp', () => {
+    assertAllowlistIsTheRuling(allowlistSource());
   });
 });

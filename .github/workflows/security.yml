@@ -78,11 +78,15 @@ jobs:
             # scripts/go-licenses-check.sh is a go_deps input for the reason
             # given above for security.yml itself: the script IS the Go step's
             # logic, so a pull request that edits it must run the step UNDER
-            # the edited script, not under the old one.
+            # the edited script, not under the old one. So is
+            # apps/backend/go-licenses-allowlist.tsv: it is the policy the
+            # step applies, so a pull request that adds or widens an allowance
+            # must run the step under the widened allowance.
             go_deps:
               - 'apps/backend/go.mod'
               - 'apps/backend/go.sum'
               - 'apps/backend/**/*.go'
+              - 'apps/backend/go-licenses-allowlist.tsv'
               - '.github/workflows/security.yml'
               - 'scripts/go-licenses-check.sh'
             npm_deps:
@@ -306,8 +310,10 @@ jobs:
       # GPL|AGPL|SSPL, which let through every restricted or reciprocal
       # license not spelled that way and dropped any line naming both LGPL and
       # AGPL. Classifying a FAILURE is the script's job; text never decides
-      # the verdict. See scripts/go-licenses-check.sh for the class set and
-      # the six summary phrases.
+      # the verdict. See scripts/go-licenses-check.sh for the class set, the
+      # summary phrases, and how apps/backend/go-licenses-allowlist.tsv turns
+      # a ruled allowance into an --ignore that is re-asserted, every run,
+      # against an unignored report.
       - name: Check Go licenses
         if: github.event_name == 'schedule' || needs.changes.outputs.go_deps == 'true'
         run: ./scripts/go-licenses-check.sh
