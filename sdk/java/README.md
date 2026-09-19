@@ -2,7 +2,6 @@
 
 Cryptographic identity, capability authorization, and audit trails for Java AI agents. Apache 2.0.
 
-[![Maven Central](https://img.shields.io/maven-central/v/org.opena2a/aim-sdk.svg)](https://search.maven.org/artifact/org.opena2a/aim-sdk)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../../LICENSE)
 
 Part of [Agent Identity Management (AIM)](../../README.md). Managed hosting at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started); self-host via the [main README](../../README.md#install-aim-self-hosted).
@@ -44,18 +43,21 @@ public class UserService {
 
 ### Maven
 
+The SDK is not on Maven Central. Build it from source, from the repository root:
+
+```bash
+cd sdk/java
+mvn install
+```
+
+`mvn install` compiles the SDK, runs its tests and places `org.opena2a:aim-sdk:1.0.0` in your local Maven repository. Then add the dependency to your `pom.xml`:
+
 ```xml
 <dependency>
     <groupId>org.opena2a</groupId>
     <artifactId>aim-sdk</artifactId>
     <version>1.0.0</version>
 </dependency>
-```
-
-### Gradle
-
-```groovy
-implementation 'org.opena2a:aim-sdk:1.0.0'
 ```
 
 ### Configure credentials
@@ -289,7 +291,7 @@ Credential files are written with mode 0600. Agent private keys are returned **o
 ## Requirements
 
 - Java 17 or higher
-- Maven 3.6+ or Gradle 7+
+- Maven 3.6+ to build the SDK
 
 ## Versioning
 
