@@ -620,35 +620,7 @@ func (s *A2AService) ComputeA2ATrustScore(ctx context.Context, agentID uuid.UUID
 	}
 
 	// Compute overall A2A trust score
-	// Formula: 0.4 * success_rate + 0.3 * peer_trust + 0.2 * response_quality + 0.1 * account_age
-	var a2aScore float64 = 0.5 // Default
-
-	// Success rate component (40%)
-	total := score.TasksCompleted + score.TasksFailed
-	if total > 0 {
-		successRate := float64(score.TasksCompleted) / float64(total)
-		a2aScore = 0.4 * successRate
-	}
-
-	// Peer trust component (30%)
-	a2aScore += 0.3 * peerAvg
-
-	// Response quality component (20%) - based on response time
-	if score.AvgResponseTimeMs != nil {
-		// Lower response time = better score. Cap at 5000ms
-		responseScore := 1.0 - float64(*score.AvgResponseTimeMs)/5000.0
-		if responseScore < 0 {
-			responseScore = 0
-		}
-		a2aScore += 0.2 * responseScore
-	} else {
-		a2aScore += 0.1 // Neutral if no data
-	}
-
-	// Account age component (10%) - would need agent creation time
-	a2aScore += 0.1 // Assume established
-
-	score.A2ATrustScore = &a2aScore
+	score.A2ATrustScore = composeA2ATrustScore(score, peerAvg)
 	now := time.Now().UTC()
 	score.ComputedAt = &now
 
@@ -891,6 +863,41 @@ func (s *A2AService) ListAllConsents(ctx context.Context, orgID uuid.UUID, limit
 
 // ListAllTrustScores lists A2A trust scores for agents in orgID. SECURITY:
 // orgID is required; see ListAllConsents.
+// composeA2ATrustScore folds the recorded task, peer and response figures into
+// the composite. Extracted verbatim from ComputeA2ATrustScore so the formula
+// can be tested without a database.
+// Formula: 0.4 * success_rate + 0.3 * peer_trust + 0.2 * response_quality + 0.1 * account_age
+func composeA2ATrustScore(score *domain.A2ATrustScore, peerAvg float64) *float64 {
+	var a2aScore float64 = 0.5 // Default
+
+	// Success rate component (40%)
+	total := score.TasksCompleted + score.TasksFailed
+	if total > 0 {
+		successRate := float64(score.TasksCompleted) / float64(total)
+		a2aScore = 0.4 * successRate
+	}
+
+	// Peer trust component (30%)
+	a2aScore += 0.3 * peerAvg
+
+	// Response quality component (20%) - based on response time
+	if score.AvgResponseTimeMs != nil {
+		// Lower response time = better score. Cap at 5000ms
+		responseScore := 1.0 - float64(*score.AvgResponseTimeMs)/5000.0
+		if responseScore < 0 {
+			responseScore = 0
+		}
+		a2aScore += 0.2 * responseScore
+	} else {
+		a2aScore += 0.1 // Neutral if no data
+	}
+
+	// Account age component (10%) - would need agent creation time
+	a2aScore += 0.1 // Assume established
+
+	return &a2aScore
+}
+
 func (s *A2AService) ListAllTrustScores(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.A2ATrustScore, int, error) {
 	return s.trustScoreRepo.ListAll(ctx, orgID, limit, offset)
 }
