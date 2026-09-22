@@ -146,7 +146,11 @@ export interface RegisterAgentOptions {
   talksTo?: string[];
   /** Additional metadata */
   metadata?: Record<string, unknown>;
-  /** Enable anonymous community intelligence telemetry (default: false) */
+  /**
+   * @deprecated Ignored. The community intelligence channel no longer exists:
+   * nothing is shared with the Registry on behalf of an organization, so this
+   * option is not sent. It stays on the type so existing callers compile.
+   */
   communityIntelligenceOptIn?: boolean;
 }
 

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `register_agent(community_intelligence_opt_in=...)` is deprecated and ignored: the
+  community intelligence channel no longer exists on the platform, so the flag is not sent.
+  The parameter is still accepted so existing calls keep working.
+
+### Changed
+
 - **Console output no longer uses U+2713 CHECK MARK / U+2717 BALLOT X**
   (AIM-15). The 52 lines across 10 modules (`console`, `client`, `oauth`,
   `credentials`, `secure_storage`, and the CrewAI, LangChain and MCP

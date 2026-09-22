@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — the community-intelligence push, which posted into a Registry route that does not exist
+
+The backend ran a six-hourly job that posted anonymized trust-factor distributions of
+opted-in organizations to `/api/v1/aim/community-intelligence` on the Registry. The
+Registry never registered that route: every push was a silent 404, so the organization
+opt-in promised a channel that discarded contributions. The job, the service, the
+opt-in routes (`/api/v1/community-intelligence/enable`, `/disable`, `/status`,
+`/benchmarks`) and the admin push trigger are removed; the `organizations` opt-in
+column and migration 085 stay in place and are no longer read. A test now pins the
+Registry's route table (`apps/backend/testdata/registry-routes.txt`,
+`scripts/pin-registry-routes.py`) and fails on any backend sender that targets a route
+the Registry lacks.
+
 ### Security
 
 - `POST /api/v1/auth/refresh` and `POST /api/v1/auth/sdk/recover` minted access tokens

@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `RegisterAgentOptions.communityIntelligenceOptIn` is deprecated and ignored: the
+  community intelligence channel no longer exists on the platform, so the option is not
+  sent. It stays on the type so existing callers compile.
+
 ### Security — ARP's L2 no longer sends anything to a vendor by default
 
 ARP shipped `intelligence: { enabled: true, adapter: 'agent-proxy' }` as its

@@ -4693,9 +4693,10 @@ def register_agent(
             Requires explicit opt-in for privacy - set to True to scan Claude config files.
         force_new: Force new registration even if credentials exist
         sdk_token_id: SDK token for usage tracking (auto-loaded if available)
-        community_intelligence_opt_in: Enable anonymous community intelligence telemetry (default: False).
-            When enabled, anonymized trust factor distributions are periodically shared with the
-            OpenA2A Registry to build community benchmarks. No agent IDs or PII are shared.
+        community_intelligence_opt_in: Deprecated and ignored. The community intelligence
+            channel no longer exists: nothing is shared with the OpenA2A Registry on behalf of
+            an organization, so this flag is not sent. It is accepted so existing callers keep
+            working.
         talks_to: DEPRECATED - Use mcp_servers instead (kept for backward compatibility)
         auto_hooks: Install the framework instrumentation hooks for LangChain, CrewAI, OpenAI and Anthropic when those libraries are imported (default: True). Keyword-only. The hooks never raise and enforce nothing.
 
@@ -5011,7 +5012,9 @@ def register_agent(
         "version": version  # Always include version (defaults to "1.0.0")
     }
 
-    registration_data["communityIntelligenceOptIn"] = community_intelligence_opt_in
+    # community_intelligence_opt_in is deliberately not sent: the channel it
+    # opted into no longer exists (see the SDK changelog).
+    del community_intelligence_opt_in
 
     if metadata:
         registration_data["metadata"] = metadata
