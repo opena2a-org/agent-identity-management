@@ -1895,7 +1895,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Post("/sign", h.A2A.SignRequestAlt)
 	a2a.Post("/verify", h.A2A.VerifyRequest) // SDK verify request endpoint
 	a2a.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
-	a2a.Put("/trust/:id", h.A2A.UpdateTrustScore)               // SDK update trust score
+	a2a.Put("/trust/:id", h.A2A.RefuseTrustScoreWrite)          // 405: the composite is measured, not asserted
 	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction) // SDK record interaction
 	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
 	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                        // Java SDK expects POST
