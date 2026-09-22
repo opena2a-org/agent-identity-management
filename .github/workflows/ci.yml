@@ -107,6 +107,30 @@ jobs:
       - name: Every COPY source is covered by the docker filter
         run: ./scripts/lint-docker-paths-filter.sh
 
+  # The automated review's input. pr-review.yml hands the model a diff and a
+  # full-file list composed by scripts/pr-review-generated-files.mjs: generated
+  # lockfiles excluded at any depth, npm lockfile hunks replaced by a
+  # placeholder carrying a deterministic predicate's verdict, and that verdict
+  # enforced from the instrument's own report. Those properties, and the
+  # workflow wiring that carries them, are asserted by node:test cells under
+  # scripts/ over fixture trees the cells write to a temporary directory.
+  # Unconditional and needed by the gate, with no escape hatch of any kind:
+  # the cells assert over THIS file that the gate keeps needing this job, a
+  # guard that only works if the job runs on every PR. The cells live under
+  # scripts/ rather than sdk/typescript/tests/ because `sdk/**` is inside
+  # docker-publish.yml's release filter, and this guard must never be the
+  # reason an image ships.
+  pr-review-input-guard:
+    name: PR review input guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: The review input composer and its predicate hold their contract
+        run: node --test scripts/test-pr-review-generated-files.mjs
+
   # A BLOCKING audit of the SDK's shipped dependency tree.
   #
   # Why this exists, and why it is separate from security.yml's "Dependency Audit":
@@ -626,6 +650,7 @@ jobs:
         sdk-dependency-audit,
         sdk-tests,
         sdk-python-tests,
+        pr-review-input-guard,
         changes,
         backend,
         integration,
@@ -646,17 +671,18 @@ jobs:
           sa='${{ needs.sdk-dependency-audit.result }}'
           st='${{ needs.sdk-tests.result }}'
           spt='${{ needs.sdk-python-tests.result }}'
+          pg='${{ needs.pr-review-input-guard.result }}'
           ch='${{ needs.changes.result }}'
           be='${{ needs.backend.result }}'
           it='${{ needs.integration.result }}'
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
