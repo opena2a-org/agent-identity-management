@@ -1,10 +1,12 @@
 # Gate file approval — a path-scoped merge gate for this repository's own CI,
 # review, and release configuration.
 #
-# Any pull request that changes a file under .github/ must carry an approving
-# review from a listed approver, given on the pull request's current head
-# commit. Pull requests that touch nothing under .github/ pass immediately, so
-# ordinary changes stay gated by status checks alone.
+# Any pull request that changes a file under .github/, or the review gate's
+# instrument scripts/pr-review-generated-files.mjs (pr-review.yml runs the pull
+# request's own copy of it on the merge ref), must carry an approving review
+# from a listed approver, given on the pull request's current head commit.
+# Pull requests that touch no gate file pass immediately, so ordinary changes
+# stay gated by status checks alone.
 #
 # Why pull_request_target: the workflow definition is read from the BASE
 # branch, so a pull request that modifies this file is judged by the unmodified
@@ -102,8 +104,14 @@ jobs:
 
           # grep exit 1 means no match; anything above 1 is an execution error
           # and must abort rather than read as "no gate files" (fail closed).
+          #
+          # scripts/pr-review-generated-files.mjs is a gate file: pr-review.yml
+          # runs on the merge ref, so it executes the pull request's own copy of
+          # that script, the code that decides what the reviewer is handed and
+          # what fails the review job. One approval covers the workflow and the
+          # instrument it runs.
           set +e
-          printf '%s\n' "$files" | grep -q '^\.github/'
+          printf '%s\n' "$files" | grep -q -E '^\.github/|^scripts/pr-review-generated-files\.mjs$'
           gate_rc=$?
           set -e
           [ "$gate_rc" -le 1 ]
@@ -111,7 +119,7 @@ jobs:
           if [ -z "$conclusion" ] && [ "$gate_rc" -eq 1 ]; then
             conclusion="success"
             title="No gate files touched"
-            summary="This pull request changes nothing under .github/, so no gate-file approval is required."
+            summary="This pull request changes nothing under .github/ and not scripts/pr-review-generated-files.mjs, so no gate-file approval is required."
           fi
 
           if [ -z "$conclusion" ]; then
@@ -152,7 +160,7 @@ jobs:
             if [ "$state" = "APPROVED" ] && [ "$commit" = "$HEAD_SHA" ]; then
               conclusion="success"
               title="Gate-file change approved"
-              summary="This pull request changes files under .github/ and carries an approving review from $approvers on the current head commit."
+              summary="This pull request changes a gate file (under .github/ or scripts/pr-review-generated-files.mjs) and carries an approving review from $approvers on the current head commit."
             else
               # The expected state of a gate-file pull request: evaluated,
               # verdict posted, a human must act. action_required blocks a
@@ -160,7 +168,7 @@ jobs:
               # no failure email fires for a routine state.
               conclusion="action_required"
               title="Gate-file change needs approval"
-              summary="This pull request changes files under .github/. It requires an approving review from $approvers on the current head commit ($HEAD_SHA). Automation can author gate-file changes; it cannot approve them."
+              summary="This pull request changes a gate file (under .github/ or scripts/pr-review-generated-files.mjs). It requires an approving review from $approvers on the current head commit ($HEAD_SHA). Automation can author gate-file changes; it cannot approve them."
             fi
           fi
 
