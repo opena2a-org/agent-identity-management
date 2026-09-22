@@ -9,9 +9,9 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `RegisterAgentOptions.communityIntelligenceOptIn` is deprecated and ignored: the
-  community intelligence channel no longer exists on the platform, so the option is not
-  sent. It stays on the type so existing callers compile.
+- `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
+  because the A2A trust score is measured from recorded interactions, not asserted.
+  A routed agent's `trustScore` is `null` while its composite is unscored.
 
 ### Security — ARP's L2 no longer sends anything to a vendor by default
 

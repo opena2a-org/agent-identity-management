@@ -11,18 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
-### Removed — the community-intelligence push, which posted into a Registry route that does not exist
+### Changed — the A2A composite no longer scores an agent it has no data for, and its PUT refuses
 
-The backend ran a six-hourly job that posted anonymized trust-factor distributions of
-opted-in organizations to `/api/v1/aim/community-intelligence` on the Registry. The
-Registry never registered that route: every push was a silent 404, so the organization
-opt-in promised a channel that discarded contributions. The job, the service, the
-opt-in routes (`/api/v1/community-intelligence/enable`, `/disable`, `/status`,
-`/benchmarks`) and the admin push trigger are removed; the `organizations` opt-in
-column and migration 085 stay in place and are no longer read. A test now pins the
-Registry's route table (`apps/backend/testdata/registry-routes.txt`,
-`scripts/pin-registry-routes.py`) and fails on any backend sender that targets a route
-the Registry lacks.
+The A2A trust score started every agent at 0.5 and credited 0.1 for a missing response
+time and 0.1 for account age, so an agent with no task at all read 0.7 while an agent
+with a perfect task record, no peers and no response figures read 0.6. An agent with no
+completed or failed task is now UNSCORED: `a2aTrustScore` is absent and `scoreStatus`
+reads `unscored` on `GET /api/v1/a2a/agents/:id/trust-score`, `GET /api/v1/a2a/trust/:id`
+and the compute route; missing response data earns nothing. Routing by intent no longer
+defaults a missing score to 0.5: an unscored agent never passes a positive threshold,
+ranks last, and is listed with `trustScore: null` only when no threshold is asked for.
+`PUT /api/v1/a2a/trust/:id`, which bound a body and discarded it, now answers 405 with the
+reason: the score is measured, not asserted. No migration: the column was already nullable.
 
 ### Security
 
