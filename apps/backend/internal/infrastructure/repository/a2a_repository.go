@@ -519,8 +519,12 @@ func (r *A2ASkillRepository) Search(ctx context.Context, query string, limit int
 
 // SearchByIntent performs intent-based agent discovery using PostgreSQL full-text search.
 // Returns agents with matching skills, ranked by relevance and trust score.
-func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, minTrustScore float64, limit int) ([]*domain.RoutedAgent, error) {
-	query := `
+// An agent whose A2A composite is unscored (no row, or a NULL score) never
+// passes a positive trust threshold and ranks below every measured agent; it
+// is listed only when no threshold is asked for, with a null score. The query
+// used to COALESCE a missing score to 0.5, which let an agent nobody had
+// measured outrank measured ones and pass thresholds up to 0.5.
+const searchByIntentSQL = `
 		SELECT
 			s.id as skill_uuid,
 			s.agent_id,
@@ -529,18 +533,31 @@ func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, 
 			s.description as skill_description,
 			a.name as agent_name,
 			a.status as agent_status,
-			COALESCE(t.a2a_trust_score, 0.5) as trust_score,
+			t.a2a_trust_score as trust_score,
 			ts_rank(s.search_vector, plainto_tsquery('english', $1)) as relevance
 		FROM a2a_skills s
 		JOIN agents a ON a.id = s.agent_id
 		LEFT JOIN a2a_trust_scores t ON t.agent_id = s.agent_id
 		WHERE s.search_vector @@ plainto_tsquery('english', $1)
-		  AND COALESCE(t.a2a_trust_score, 0.5) >= $2
+		  AND ($2 <= 0 OR t.a2a_trust_score >= $2)
 		  AND a.status = 'verified'
 		ORDER BY ts_rank(s.search_vector, plainto_tsquery('english', $1))
-		       * COALESCE(t.a2a_trust_score, 0.5) DESC
+		       * COALESCE(t.a2a_trust_score, 0) DESC
 		LIMIT $3
 	`
+
+const countByIntentSQL = `
+		SELECT COUNT(DISTINCT s.agent_id)
+		FROM a2a_skills s
+		JOIN agents a ON a.id = s.agent_id
+		LEFT JOIN a2a_trust_scores t ON t.agent_id = s.agent_id
+		WHERE s.search_vector @@ plainto_tsquery('english', $1)
+		  AND ($2 <= 0 OR t.a2a_trust_score >= $2)
+		  AND a.status = 'verified'
+	`
+
+func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, minTrustScore float64, limit int) ([]*domain.RoutedAgent, error) {
+	query := searchByIntentSQL
 
 	rows, err := r.db.QueryContext(ctx, query, intent, minTrustScore, limit)
 	if err != nil {
@@ -551,6 +568,7 @@ func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, 
 	results := make([]*domain.RoutedAgent, 0)
 	for rows.Next() {
 		ra := &domain.RoutedAgent{}
+		var trust sql.NullFloat64
 		err := rows.Scan(
 			&ra.SkillUUID,
 			&ra.AgentID,
@@ -559,11 +577,14 @@ func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, 
 			&ra.SkillDescription,
 			&ra.AgentName,
 			&ra.AgentStatus,
-			&ra.TrustScore,
+			&trust,
 			&ra.Relevance,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan routed agent: %w", err)
+		}
+		if trust.Valid {
+			ra.TrustScore = &trust.Float64
 		}
 		results = append(results, ra)
 	}
@@ -573,15 +594,7 @@ func (r *A2ASkillRepository) SearchByIntent(ctx context.Context, intent string, 
 
 // CountByIntent returns the number of agents matching an intent
 func (r *A2ASkillRepository) CountByIntent(ctx context.Context, intent string, minTrustScore float64) (int, error) {
-	query := `
-		SELECT COUNT(DISTINCT s.agent_id)
-		FROM a2a_skills s
-		JOIN agents a ON a.id = s.agent_id
-		LEFT JOIN a2a_trust_scores t ON t.agent_id = s.agent_id
-		WHERE s.search_vector @@ plainto_tsquery('english', $1)
-		  AND COALESCE(t.a2a_trust_score, 0.5) >= $2
-		  AND a.status = 'verified'
-	`
+	query := countByIntentSQL
 
 	var count int
 	err := r.db.QueryRowContext(ctx, query, intent, minTrustScore).Scan(&count)

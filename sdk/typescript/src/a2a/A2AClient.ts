@@ -285,7 +285,11 @@ export class A2AClient {
   }
 
   /**
-   * Update trust score for another agent.
+   * @deprecated The server refuses this write with 405: the A2A trust score is
+   * measured from recorded interactions (recordInteraction, the task path) and
+   * recomputed by the server, not asserted by a caller. Kept so existing code
+   * still compiles; it now surfaces the server's refusal instead of returning a
+   * score that ignored its input.
    */
   async updateTrustScore(
     targetAgentId: string,

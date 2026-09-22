@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `A2ATrustScore.a2a_trust_score` is `None` while the agent is unscored (no task data
+  yet) and `score_status` reads `unscored`; responses are no longer parsed with a `0.0`
+  default that read as a measurement.
+- `A2AClient.update_trust_score` is deprecated: the server refuses the write with 405
+  because the A2A trust score is measured from recorded interactions, not asserted.
+
+### Changed
+
 - **Console output no longer uses U+2713 CHECK MARK / U+2717 BALLOT X**
   (AIM-15). The 52 lines across 10 modules (`console`, `client`, `oauth`,
   `credentials`, `secure_storage`, and the CrewAI, LangChain and MCP

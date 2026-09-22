@@ -1787,48 +1787,25 @@ func isValidTaskState(state domain.A2ATaskState) bool {
 // SDK Compatibility Handlers
 // ============================================================================
 
-// UpdateTrustScore updates the trust score for an agent
-// PUT /api/v1/a2a/trust/:id
-func (h *A2AHandler) UpdateTrustScore(c fiber.Ctx) error {
-	targetAgentID, err := uuid.Parse(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
-	}
+// A2ATrustScoreNotAsserted is the one-line reason a write to the composite
+// is refused: the score is measured from recorded interactions, never set.
+const A2ATrustScoreNotAsserted = "the A2A trust score is measured from recorded interactions, not asserted; there is no write for it"
 
-	var req struct {
-		Score      float64 `json:"score"`
-		Confidence float64 `json:"confidence"`
-		Reason     string  `json:"reason"`
-	}
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	// SECURITY (A3d-vii.a): tenant-scope the path agent AFTER body
-	// validation (preserves 400-shape contract for _InvalidJSON tests).
-	// Trust-score writes have integrity impact across the trust graph;
-	// LoadOwned confines the write to agents in caller's org.
-	orgID, err := RequireOrganizationID(c)
-	if err != nil {
-		return err
-	}
-	if h.loadOwnedAgent(c, targetAgentID, orgID) == nil {
-		return nil
-	}
-
-	// Compute and return the updated trust score
-	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), targetAgentID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update trust score: " + err.Error(),
-		})
-	}
-
-	return c.JSON(score)
+// RefuseTrustScoreWrite answers PUT /api/v1/a2a/trust/:id with 405.
+//
+// The route used to bind a {score, confidence, reason} body, tenant-scope the
+// target and then recompute the composite from recorded data, discarding the
+// body: an accepted-and-ignored write contract. The composite has no write:
+// its inputs arrive through POST /trust/:id/interaction and the task path, and
+// a recompute is POST /agents/:id/trust-score/compute. A caller that sends a
+// score now hears so instead of receiving a 200 that did not mean it.
+func (h *A2AHandler) RefuseTrustScoreWrite(c fiber.Ctx) error {
+	c.Set("Allow", "GET")
+	return c.Status(fiber.StatusMethodNotAllowed).JSON(fiber.Map{
+		"error":  A2ATrustScoreNotAsserted,
+		"read":   "GET /api/v1/a2a/trust/:id",
+		"record": "POST /api/v1/a2a/trust/:id/interaction",
+	})
 }
 
 // RecordInteraction records an interaction (success or failure) with a peer agent
