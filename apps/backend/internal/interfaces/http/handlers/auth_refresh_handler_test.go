@@ -111,4 +111,5 @@ func TestRefreshTokenResponse_DefaultValues(t *testing.T) {
 	assert.Empty(t, resp.RefreshToken)
 	assert.Empty(t, resp.TokenType)
 	assert.Equal(t, 0, resp.ExpiresIn)
+	assert.False(t, resp.Rotated)
 }

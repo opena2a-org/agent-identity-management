@@ -246,4 +246,7 @@ type RefreshTokenResponse struct {
 	RefreshToken string `json:"refreshToken"` // New refresh token (token rotation)
 	TokenType    string `json:"tokenType"`
 	ExpiresIn    int    `json:"expiresIn"`
+	// Rotated is true only when the presented refresh token was retired and a
+	// new one issued; false means RefreshToken is the presented token, unchanged.
+	Rotated bool `json:"rotated"`
 }
