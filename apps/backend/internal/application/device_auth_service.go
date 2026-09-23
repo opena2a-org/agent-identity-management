@@ -169,6 +169,15 @@ func (s *DeviceAuthService) PollToken(ctx context.Context, deviceCode string) (*
 			return nil, fmt.Errorf("failed to retrieve user for token generation: %w", err)
 		}
 
+		// The approval was recorded earlier; the account may have been
+		// suspended, deactivated or deleted since. Apply the same rule the
+		// refresh path applies, so no pair is minted for an account that can
+		// no longer hold a session. The window between approval and poll is
+		// closed here; the access token's own lifetime starts only after this.
+		if !user.CanHoldSession() {
+			return nil, ErrAccessDenied
+		}
+
 		accessToken, refreshToken, err := s.jwtService.GenerateTokenPair(
 			dc.UserID.String(),
 			dc.OrganizationID.String(),
