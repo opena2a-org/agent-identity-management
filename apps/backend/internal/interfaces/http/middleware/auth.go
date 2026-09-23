@@ -133,6 +133,11 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		c.Locals("organization_id", organizationID)
 		c.Locals("email", claims.Email)
 		c.Locals("role", claims.Role)
+		// The acting token's session (family) and id: a credential-minting route
+		// refuses a revoked session before it mints. Empty for a token minted
+		// before sessions carried a family.
+		c.Locals("sid", claims.AccessFamilyID())
+		c.Locals("jti", claims.ID)
 
 		return c.Next()
 	}

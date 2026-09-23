@@ -15,7 +15,7 @@ import (
 // ===========================
 
 func TestNewSDKTokenRecoveryHandler_NilDeps(t *testing.T) {
-	handler := NewSDKTokenRecoveryHandler(nil, nil, &refreshTestUserRepo{})
+	handler := NewSDKTokenRecoveryHandler(nil, nil, &refreshTestUserRepo{}, nil)
 	assert.NotNil(t, handler)
 }
 
