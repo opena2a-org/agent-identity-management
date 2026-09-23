@@ -105,8 +105,12 @@ func TestDeviceVerificationPageAndURI(t *testing.T) {
 		assert.True(t, strings.Contains(pub[1], `'/device'`),
 			"/device must render before login so the user code on the URL survives the redirect")
 	})
-	t.Run("the dashboard has a device approval page", func(t *testing.T) {
+	t.Run("the dashboard has a device approval page that approves through the api client", func(t *testing.T) {
 		page := aim03ReadRepoFile(t, "apps/web/app/device/page.tsx")
-		assert.True(t, strings.Contains(page, "/api/v1/oauth/device/approve"), "the page must call the approve route")
+		assert.True(t, strings.Contains(page, "api.approveDevice("), "the page must approve through the api client, not a raw fetch")
+		assert.False(t, strings.Contains(page, "document.cookie"), "the page reads the session from the api client, never from document.cookie")
+		client := aim03ReadRepoFile(t, "apps/web/lib/api.ts")
+		assert.True(t, strings.Contains(client, `"/api/v1/oauth/device/approve"`), "the api client must post the approve route")
+		assert.True(t, strings.Contains(client, "/api/v1/oauth/device/verify?user_code="), "the api client must read the pending request")
 	})
 }

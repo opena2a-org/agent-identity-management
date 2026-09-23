@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `aim-sdk login` authenticates through the OAuth 2.0 device grant (RFC 8628): the CLI
+  prints a short code and opens your dashboard's `/device` page, you sign in and approve
+  the code there, and the same access and refresh tokens the dashboard login issues are
+  stored at `~/.aim/sdk_credentials.json`. The browser-callback flow it replaces posted an
+  authorization code to `/api/v1/auth/token`, a route only AIM Cloud served, so a stack
+  built from this repository never completed the login (measured 2026-09-22). The local
+  callback server, the redirect URI and the PKCE parameters are gone; `--url`, `--force`,
+  the exit codes and the credentials file are unchanged.
 - `A2ATrustScore.a2a_trust_score` is `None` while the agent is unscored (no task data
   yet) and `score_status` reads `unscored`; responses are no longer parsed with a `0.0`
   default that read as a measurement.
