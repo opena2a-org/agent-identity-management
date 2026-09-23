@@ -1362,7 +1362,11 @@ func (s *AgentService) VerifyCapability(
 
 		// capability_violation_count is bumped by an AFTER INSERT trigger
 		// on capability_violations (migration 091); no application-layer
-		// increment needed.
+		// write needed. The agent row in hand was loaded before that insert,
+		// so its count is one behind: the evaluation below reads the count
+		// to decide whether the score is evaluable at all, and it must see
+		// the violation just recorded.
+		agent.CapabilityViolationCount++
 
 		// Evaluate trust score policy enforcement (alerts and suspension)
 		previousScore := agent.TrustScore // Store before updating

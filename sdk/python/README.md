@@ -38,7 +38,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Login uses OAuth 2.0 with PKCE. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
+Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
 
 ## Framework auto-detection
 
@@ -221,7 +221,7 @@ aim-sdk login --url <URL>        # OAuth to self-hosted instance
 aim-sdk demo                     # Register a demo agent, watch your dashboard come alive
 aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
 aim-sdk demo --cleanup           # Delete the demo agent again
-aim-sdk logout                   # Clear ~/.aim/sdk_credentials.json
+aim-sdk logout                   # Revoke the session on the server, clear ~/.aim/sdk_credentials.json
 aim-sdk status                   # Show authentication state
 aim-sdk --version                # Show SDK version
 ```
@@ -300,8 +300,17 @@ API key mode always requires `aim_url` — there is no default server and no env
 fallback, so `secure()` raises `ConfigurationError` if `api_key` is passed without it:
 
 ```python
-agent = secure("my-agent", api_key="aim_abc123", aim_url="http://localhost:8080")
+agent = secure("my-agent", api_key="aim_live_...", aim_url="http://localhost:8080")
 ```
+
+The key is an agent API key issued for an agent that already exists in your organization:
+the `apiKey.key` value the server returns once when an agent is created from the dashboard
+(or with `POST /api/v1/agents` and a member's access token), or a key minted with
+`POST /api/v1/api-keys` (dashboard: API keys). `secure()` registers a new agent in that
+organization through `POST /api/v1/agents` with the key in `X-API-Key`; the agent's keypair
+is generated locally and saved in the local credential store, so no private key travels.
+Requires a self-hosted backend built on or after 2026-08-26 (the published `edge` image
+qualifies).
 
 Or supply full credentials:
 

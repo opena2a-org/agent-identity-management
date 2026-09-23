@@ -495,49 +495,85 @@ class OAuthTokenManager:
 
     def revoke_token(self) -> bool:
         """
-        Revoke the current refresh token.
+        Revoke the stored pair through the server's logout route and delete
+        the local credentials.
 
-        This should be called when the user wants to log out
-        or revoke SDK access.
+        Posts ``POST {aim_url}/api/v1/auth/logout`` once, with the stored
+        access token as the bearer (when the file holds one) and the refresh
+        token in the JSON body. The server answers ``revoked.refreshToken``
+        true only when it wrote the token's id to its denylist; anything else
+        (a refusal, an unreachable server, an older backend or one without
+        revocation configured) is reported as unconfirmed, with the refresh
+        token's expiry, because the token then stays usable until it expires.
+        The local file is deleted on every path. Never raises.
 
         Returns:
-            True if revocation successful
+            True only when the server confirmed the refresh token's revocation.
         """
-        # Support both camelCase and snake_case for backward compatibility
         has_refresh_token = 'refreshToken' in self.credentials or 'refresh_token' in self.credentials if self.credentials else False
         if not self.credentials or not has_refresh_token:
             return False
 
         aim_url = self.credentials.get('aimUrl') or self.credentials.get('aim_url', 'http://localhost:8080')
         refresh_token = self.credentials.get('refreshToken') or self.credentials.get('refresh_token')
+        access_token = self.credentials.get('accessToken') or self.credentials.get('access_token')
 
+        headers = {"Content-Type": "application/json"}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+
+        confirmed = False
+        reason = None
         try:
-            # Call token revocation endpoint (if implemented)
             response = requests.post(
-                f"{aim_url.rstrip('/')}/api/v1/auth/revoke",
+                f"{aim_url.rstrip('/')}/api/v1/auth/logout",
                 json={"refreshToken": refresh_token},
-                timeout=10
+                headers=headers,
+                timeout=10,
             )
+            try:
+                body = response.json() if response.content else {}
+            except ValueError:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            if response.status_code == 200:
+                report = body.get('revoked')
+                if isinstance(report, dict) and report.get('refreshToken') is True:
+                    confirmed = True
+                elif report is None:
+                    reason = ("the server answered 200 without a revocation report: the backend is "
+                              "older than this SDK, or revocation is disabled on the server (no Redis; "
+                              "its startup log says 'Token revocation disabled')")
+                else:
+                    reason = "the server did not confirm the refresh token's revocation"
+            else:
+                detail = body.get('error') or body.get('message') or ''
+                reason = f"the server answered HTTP {response.status_code}" + (f" ({detail})" if detail else "")
+        except requests.RequestException as e:
+            reason = f"the server was unreachable ({type(e).__name__})"
+        except Exception as e:  # noqa: BLE001 - logout must never raise
+            reason = f"the request failed ({type(e).__name__})"
 
-            # Delete local credentials regardless of server response
+        # Delete local credentials regardless of the server's answer.
+        try:
             if self.credentials_path.exists():
                 self.credentials_path.unlink()
+        except OSError:
+            pass
+        self.credentials = None
+        self.access_token = None
+        self.access_token_expiry = None
 
-            self.credentials = None
-            self.access_token = None
-            self.access_token_expiry = None
-
-            print("[OK] Token revoked and credentials deleted")
-            return True
-
-        except Exception as e:
-            print(f"Warning: Token revocation failed: {e}")
-            # Still delete local credentials for safety
-            if self.credentials_path.exists():
-                self.credentials_path.unlink()
-
-            return False
-
+        if not confirmed:
+            expiry = "until it expires (JWT_REFRESH_TTL, 7 days by default)"
+            claims = decode_jwt_claims(refresh_token) if refresh_token else None
+            exp = claims.get('exp') if isinstance(claims, dict) else None
+            if isinstance(exp, (int, float)):
+                expiry = "until " + time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(exp))
+            print(f"Revocation not confirmed: {reason}. The refresh token stays usable {expiry}; "
+                  f"the local credentials were deleted.")
+        return confirmed
 
 def load_sdk_credentials(use_secure_storage: bool = True) -> Optional[Dict[str, Any]]:
     """Load SDK credentials from the JSON single source of truth.

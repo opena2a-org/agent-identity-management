@@ -11,6 +11,48 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a reused refresh token ends the sign-in, and logout ends the whole session
+
+- Presenting a login refresh token that was already rotated out ends that sign-in: every
+  refresh token issued from it by rotation is refused from then on (RFC 9700 section 4.14.2,
+  refresh token reuse detection), and the event is recorded in the organization's audit log
+  (`refresh_token_reuse` for the presentation that ended the session, `refresh_session_revoked`
+  for each later member refused) and as a `SECURITY` line in the backend log, with identifiers
+  only. A rotated-out token used to be refused on its own while the chain that grew from it
+  stayed valid, so whoever rotated first kept a working session. A legitimate client that
+  replays its own old token (two tabs, two processes on one credentials file) now signs in
+  again; a refusal carries the same answer as before.
+- Logging out ends the whole session. A browser's `refresh_token` cookie is set once at login,
+  so after any refresh the dashboard's logout (including the idle and eight-hour automatic
+  logouts) revoked a token that was already retired and left the refreshed token valid until it
+  expired. `POST /api/v1/auth/logout` now ends the sign-in the presented refresh token belongs
+  to, and reports `revoked.refreshToken: true` only when that write succeeded.
+- Login refresh tokens carry the registered `sid` claim naming their sign-in (the login token's
+  own id, copied on every rotation). Tokens are opaque to clients and no client changes; a token
+  minted before this change is the root of its own session and joins on its first rotation.
+  `POST /api/v1/auth/refresh` reads the revocation store directly (no in-process cache) so a
+  replay is never served from a stale entry; a store that does not answer records nothing.
+
+### Fixed — a rotated-out login refresh token is refused on its next use
+
+- `POST /api/v1/auth/refresh` retires the presented login-issued refresh token (its id is written
+  to the revocation denylist for its remaining lifetime) before answering with the new one, so a
+  refresh token that has been rotated is refused with 401 on its next use; it used to stay usable
+  until its own expiry although the code claimed otherwise. A refresh token is rotated only when
+  the old one was actually retired: without a revocation store (no Redis), or when the store
+  refuses the write, the answer carries a fresh access token and the presented refresh token
+  unchanged, and the new `rotated` field reports it, so a login session on such a stack ends at
+  `JWT_REFRESH_TTL`. SDK-download tokens keep their row-based rotation. A refresh answered after a
+  lost response now requires signing in again, which is the cost of single-use refresh tokens.
+
+### Fixed — logout revokes a refresh token sent in the body and reports what it revoked
+
+- `POST /api/v1/auth/logout` also reads the refresh token from a JSON body (`{"refreshToken": ...}`,
+  the body wins over the `refresh_token` cookie), so a client that holds the pair outside a browser
+  can revoke it, and answers a `revoked` report (`accessToken`, `refreshToken`) that is `true` only
+  when the token's id was written to the denylist; a server without revocation configured reports
+  `false` instead of a silent no-op. The route, the cookie channel and the message are unchanged.
+
 ### Changed — the A2A composite no longer scores an agent it has no data for, and its PUT refuses
 
 The A2A trust score started every agent at 0.5 and credited 0.1 for a missing response

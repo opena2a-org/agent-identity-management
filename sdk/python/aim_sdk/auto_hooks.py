@@ -77,9 +77,10 @@ class PolicyCache:
             url = self._policy_url()
             try:
                 import requests
+                from .client import API_KEY_HEADER
                 headers: Dict[str, str] = {"Content-Type": "application/json"}
                 if getattr(self._client, 'api_key', None):
-                    headers["X-AIM-API-Key"] = self._client.api_key
+                    headers[API_KEY_HEADER] = self._client.api_key
                 elif getattr(self._client, 'oauth_token_manager', None):
                     token = self._client.oauth_token_manager.get_access_token()
                     if token:
