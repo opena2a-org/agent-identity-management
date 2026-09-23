@@ -76,18 +76,32 @@ func (s *JWTService) IsRevoked(ctx context.Context, jti string) bool {
 // RevokeToken denylists the given token (by its jti) for its remaining lifetime.
 // Best-effort: an invalid/expired token or a missing revoker is a no-op.
 func (s *JWTService) RevokeToken(ctx context.Context, tokenString string) error {
+	_, err := s.RevokeTokenChecked(ctx, tokenString)
+	return err
+}
+
+// RevokeTokenChecked is RevokeToken that says what it did: revoked is true
+// only when the token validated as this issuer's and its jti was written to
+// the denylist. A missing revoker, an empty, invalid or expired token is a
+// no-op reported as false with no error; a store failure is reported as an
+// error. A caller that answers a client "revoked" must use this form, so a
+// degraded path never reports the healthy value.
+func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string) (bool, error) {
 	if s.revoker == nil || tokenString == "" {
-		return nil
+		return false, nil
 	}
 	claims, err := s.ValidateToken(tokenString)
 	if err != nil || claims.ExpiresAt == nil {
-		return nil
+		return false, nil
 	}
 	ttl := time.Until(claims.ExpiresAt.Time)
 	if ttl <= 0 {
-		return nil
+		return false, nil
 	}
-	return s.revoker.Revoke(ctx, claims.ID, ttl)
+	if err := s.revoker.Revoke(ctx, claims.ID, ttl); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // NewJWTService creates a new JWT service.

@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — logout revokes a refresh token sent in the body and reports what it revoked
+
+- `POST /api/v1/auth/logout` also reads the refresh token from a JSON body (`{"refreshToken": ...}`,
+  the body wins over the `refresh_token` cookie), so a client that holds the pair outside a browser
+  can revoke it, and answers a `revoked` report (`accessToken`, `refreshToken`) that is `true` only
+  when the token's id was written to the denylist; a server without revocation configured reports
+  `false` instead of a silent no-op. The route, the cookie channel and the message are unchanged.
+
 ### Changed — the A2A composite no longer scores an agent it has no data for, and its PUT refuses
 
 The A2A trust score started every agent at 0.5 and credited 0.1 for a missing response

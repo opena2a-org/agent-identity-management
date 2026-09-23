@@ -102,10 +102,18 @@ POST /api/v1/auth/logout
 Authorization: Bearer <access_token>
 ```
 
-**Response:**
+**Body (optional):** a client that holds the token pair outside a browser (the Python SDK after `aim-sdk login`) sends its refresh token here; a browser sends it as the `refresh_token` cookie instead. The body wins when both are present.
 ```json
 {
-  "message": "Logged out successfully"
+  "refreshToken": "<refresh_token>"
+}
+```
+
+**Response:** `revoked` reports what was written to the server's denylist. A value is `true` only when that token was presented, validated, and its id was denylisted; it is `false` when the token was absent or invalid, or when revocation is not configured on the server (no Redis).
+```json
+{
+  "message": "Logged out successfully",
+  "revoked": { "accessToken": true, "refreshToken": true }
 }
 ```
 
