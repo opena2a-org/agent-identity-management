@@ -407,18 +407,9 @@ func TestA2AHandler_AgentScoped_CrossOrgReturns404(t *testing.T) {
 			},
 			requestPath: "/a2a/trust/" + pathID.String(),
 		},
-		{
-			name:   "UpdateTrustScore_CrossOrgTarget",
-			method: "PUT",
-			mount: func(app *fiber.App) {
-				app.Put("/a2a/trust/:id", func(c fiber.Ctx) error {
-					setLocals(c)
-					return handler.UpdateTrustScore(c)
-				})
-			},
-			requestPath: "/a2a/trust/" + pathID.String(),
-			body:        `{"score":0.5,"confidence":0.5,"reason":"x"}`,
-		},
+		// PUT /a2a/trust/:id is no longer a write: it answers 405 before any
+		// lookup (a2a_trust_write_refused_test.go), so it can neither reach a
+		// cross-org agent nor leak whether one exists.
 		{
 			name:   "RecordInteraction_CrossOrgTarget",
 			method: "POST",

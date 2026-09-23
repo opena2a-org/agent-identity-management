@@ -21,6 +21,7 @@ export function useDeactivationCheck() {
       "/auth/register",
       "/auth/callback",
       "/auth/registration-pending",
+      "/device",
     ];
     if (publicRoutes.some((route) => pathname?.startsWith(route))) {
       return;

@@ -12,13 +12,14 @@ import (
 
 // SecurityPolicyService handles security policy evaluation and management
 type SecurityPolicyService struct {
-	policyRepo         domain.SecurityPolicyRepository
-	alertRepo          domain.AlertRepository
-	auditLogRepo       domain.AuditLogRepository
-	agentRepo          domain.AgentRepository             // For suspending agents on critical trust score
-	behaviorAnalysis   *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
-	dataTransferRepo   domain.DataTransferRepository      // For data exfiltration detection
-	exfiltrationConfig domain.DataExfiltrationConfig      // Exfiltration detection thresholds
+	policyRepo            domain.SecurityPolicyRepository
+	alertRepo             domain.AlertRepository
+	auditLogRepo          domain.AuditLogRepository
+	agentRepo             domain.AgentRepository             // For suspending agents on critical trust score
+	behaviorAnalysis      *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
+	dataTransferRepo      domain.DataTransferRepository      // For data exfiltration detection
+	verificationEventRepo domain.VerificationEventRepository // For the not-evaluable branch (no allowed action)
+	exfiltrationConfig    domain.DataExfiltrationConfig      // Exfiltration detection thresholds
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -49,6 +50,55 @@ func (s *SecurityPolicyService) SetAgentRepository(agentRepo domain.AgentReposit
 
 // SetDataTransferRepository sets the data transfer repository for exfiltration detection
 // This uses setter injection to break circular dependency between services
+// SetVerificationEventRepo wires the verification-event repository the trust
+// calculator reads, so the service can tell whether an agent's trust score
+// rests on any allowed action. Nil keeps today's behaviour: every agent is
+// evaluable.
+func (s *SecurityPolicyService) SetVerificationEventRepo(repo domain.VerificationEventRepository) {
+	s.verificationEventRepo = repo
+}
+
+// trustScoreEvaluable says whether a trust-score threshold means anything for
+// this agent. A score computed from no allowed action cannot discriminate:
+// the lifecycle refusals a pending agent collects drive the verification,
+// uptime and success-rate factors to zero, so a threshold on that number is
+// a comparison against noise. The predicate reads the same window the trust
+// calculator reads (the last 30 days of verification events) and answers
+// false only when no verification in it succeeded AND the agent has no
+// capability violation on record. A capability violation is evidence the
+// server produced against the agent's own attempt, not lifecycle noise: an
+// agent with one is evaluated like any other. The count is the agent row's
+// lifetime count (kept by the capability_violations insert trigger), so a
+// violation outside the calculator's window still makes the agent evaluable;
+// that errs toward evaluation. A nil repository, or a repository error,
+// answers true: the evaluators keep their behaviour rather than silently
+// exempting agents on a broken read.
+//
+// Measured 2026-09-22 on a self-hosted stack: a fresh agent refused twice
+// while pending read 0.26 after verification, was blocked on its granted call
+// by 'Critical Trust Score Block', and was suspended at 0.1661 after a
+// recalculation, having never run anything.
+func (s *SecurityPolicyService) trustScoreEvaluable(agent *domain.Agent) bool {
+	if s.verificationEventRepo == nil || agent == nil {
+		return true
+	}
+	if agent.CapabilityViolationCount > 0 {
+		return true
+	}
+	endTime := time.Now()
+	startTime := endTime.AddDate(0, 0, -30) // the trust calculator's window
+	stats, err := s.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
+	if err != nil || stats == nil {
+		return true
+	}
+	if stats.SuccessCount == 0 {
+		fmt.Printf("ℹ️  Trust score not evaluable for agent %s: no allowed action and no capability violation in the window (%d verifications, 0 successes)\n",
+			agent.Name, stats.TotalVerifications)
+		return false
+	}
+	return true
+}
+
 func (s *SecurityPolicyService) SetDataTransferRepository(repo domain.DataTransferRepository) {
 	s.dataTransferRepo = repo
 	s.exfiltrationConfig = domain.DefaultDataExfiltrationConfig()
@@ -293,6 +343,9 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 
 		// Trigger if agent trust score is below threshold
 		if agent.TrustScore < threshold {
+			if !s.trustScoreEvaluable(agent) {
+				continue
+			}
 			fmt.Printf("✅ Trust Score Policy '%s' triggered for agent %s (score: %.2f < %.2f)\n",
 				policy.Name, agent.Name, agent.TrustScore, threshold)
 
@@ -353,6 +406,10 @@ func (s *SecurityPolicyService) EvaluateTrustScoreOnUpdate(
 	}
 
 	// Check for critical threshold breach (< 50%)
+	if !s.trustScoreEvaluable(agent) {
+		return result, nil
+	}
+
 	if currentScore < TrustScoreThresholdCritical {
 		result.ShouldAlert = true
 		result.ShouldSuspend = true

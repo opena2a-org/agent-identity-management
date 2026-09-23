@@ -315,6 +315,20 @@ type A2AConsentRecord struct {
 // ============================================================================
 
 // A2ATrustScore represents aggregated A2A trust metrics for an agent
+// A2A composite score states, on the wire as `scoreStatus`.
+const (
+	A2AScoreMeasured = "measured"
+	A2AScoreUnscored = "unscored"
+)
+
+// A2AScoreStatusOf names the state of a composite: unscored while nil.
+func A2AScoreStatusOf(score *float64) string {
+	if score == nil {
+		return A2AScoreUnscored
+	}
+	return A2AScoreMeasured
+}
+
 type A2ATrustScore struct {
 	AgentID uuid.UUID `json:"agentId"`
 
@@ -330,8 +344,11 @@ type A2ATrustScore struct {
 	P95ResponseTimeMs *int `json:"p95ResponseTimeMs,omitempty"`
 	AvgTaskDurationMs *int `json:"avgTaskDurationMs,omitempty"`
 
-	// Trust components
+	// Trust components. A2ATrustScore is nil while the agent has no task data:
+	// the composite is then UNSCORED and ScoreStatus says so, rather than a
+	// default number standing in for a measurement.
 	A2ATrustScore    *float64 `json:"a2aTrustScore,omitempty"`
+	ScoreStatus      string   `json:"scoreStatus,omitempty"` // "measured" | "unscored"; not stored, derived on read
 	PeerTrustAverage *float64 `json:"peerTrustAverage,omitempty"`
 	UniquePeersCount int      `json:"uniquePeersCount"`
 
@@ -437,8 +454,10 @@ type RoutedAgent struct {
 	SkillDescription string    `json:"skillDescription,omitempty"`
 	AgentName        string    `json:"agentName"`
 	AgentStatus      string    `json:"agentStatus"`
-	TrustScore       float64   `json:"trustScore"`
-	Relevance        float64   `json:"relevance"`
+	// TrustScore is null for an agent whose A2A composite is unscored; it is
+	// never a default standing in for a measurement.
+	TrustScore *float64 `json:"trustScore"`
+	Relevance  float64  `json:"relevance"`
 }
 
 // RouteIntentRequest represents a request to route by intent

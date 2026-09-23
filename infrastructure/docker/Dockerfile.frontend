@@ -1,5 +1,11 @@
 # Build stage
-FROM node:20-alpine AS builder
+#
+# Pinned by tag AND digest: a floating `node:20-alpine` is what put the npm
+# CLI's tar and the alpine OpenSSL pair into every released aim-dashboard
+# digest. The builder is `node:<major>-alpine<X.Y>` for the SAME alpine <X.Y>
+# the runtime stage roots on, so the node binary copied below and the runtime's
+# musl/libstdc++ come from one alpine release.
+FROM node:22-alpine3.21@sha256:af8023ec879993821f6d5b21382ed915622a1b0f1cc03dbeb6804afaf01f8885 AS builder
 
 # Accept build argument
 ARG NEXT_PUBLIC_API_URL
@@ -20,7 +26,25 @@ COPY apps/web/ ./
 RUN npm run build
 
 # Runtime stage - optimized for standalone output
-FROM node:20-alpine
+#
+# Rooted on the official alpine image, never a node image: all 20 node-pkg
+# findings of the published dashboard sat under
+# /usr/local/lib/node_modules/npm/, the npm CLI the node image bundles and this
+# image never invokes. Removing the component removes the class by
+# construction; deleting it in an upper layer would leave the vulnerable bytes
+# in a pullable lower layer of the released digest.
+FROM alpine:3.21@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
+
+# The shared libraries the node binary is dynamically linked against
+# (libstdc++ brings libgcc; musl is in the base). No upgrade, no base package:
+# the alpine findings are cleared by the base digest above, not by a layer.
+# The digest is alpine 3.21.8 (openssl 3.3.7-r1); 3.21.7 carried
+# CVE-2026-45447 in libcrypto3/libssl3 3.3.7-r0. A digest pin freezes the
+# base's CVE state, so moving it is the only way to take a base fix.
+RUN apk add --no-cache libstdc++
+
+# The node runtime itself, from the pinned builder of the same alpine release
+COPY --from=builder /usr/local/bin/node /usr/local/bin/node
 
 # SECURITY: Run as non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

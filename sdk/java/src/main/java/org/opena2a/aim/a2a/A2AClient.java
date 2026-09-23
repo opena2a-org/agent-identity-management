@@ -449,6 +449,11 @@ public class A2AClient {
     /**
      * Update trust score for another agent.
      *
+     * @deprecated The server refuses this write with 405: the A2A trust score is
+     * measured from recorded interactions (recordInteraction, the task path) and
+     * recomputed by the server, not asserted by a caller. Kept so existing code
+     * still compiles; it now throws the server's refusal instead of returning a
+     * score that ignored its input.
      * @param targetAgentId The target agent ID
      * @param score New trust score (0.0 to 1.0)
      * @param confidence Confidence in the score (0.0 to 1.0)
@@ -456,6 +461,7 @@ public class A2AClient {
      * @return Updated trust score
      * @throws A2AException if update fails
      */
+    @Deprecated
     public A2ATrustScore updateTrustScore(String targetAgentId, double score, double confidence,
                                            Map<String, Double> factors) throws A2AException {
         try {

@@ -79,7 +79,8 @@ class A2ARequestSignature:
 class A2ATrustScore:
     """A2A-specific trust score for an agent."""
     agent_id: str
-    a2a_trust_score: float
+    a2a_trust_score: Optional[float]  # None while the agent is unscored (no task data yet)
+    score_status: str = "unscored"  # "measured" | "unscored"
     peer_trust_average: Optional[float] = None
     unique_peers_count: int = 0
     tasks_completed: int = 0
@@ -552,7 +553,8 @@ class A2AClient:
 
         return A2ATrustScore(
             agent_id=target_id,
-            a2a_trust_score=response.get("a2aTrustScore", 0.0),
+            a2a_trust_score=response.get("a2aTrustScore"),
+            score_status=response.get("scoreStatus", "measured" if response.get("a2aTrustScore") is not None else "unscored"),
             peer_trust_average=response.get("peerTrustAverage"),
             unique_peers_count=response.get("uniquePeersCount", 0),
             tasks_completed=response.get("tasksCompleted", 0),
@@ -578,7 +580,8 @@ class A2AClient:
 
         return A2ATrustScore(
             agent_id=self.agent_id,
-            a2a_trust_score=response.get("a2aTrustScore", 0.0),
+            a2a_trust_score=response.get("a2aTrustScore"),
+            score_status=response.get("scoreStatus", "measured" if response.get("a2aTrustScore") is not None else "unscored"),
             peer_trust_average=response.get("peerTrustAverage"),
             unique_peers_count=response.get("uniquePeersCount", 0),
             tasks_completed=response.get("tasksCompleted", 0),
@@ -1212,7 +1215,11 @@ class A2AClient:
         factors: Optional[Dict[str, float]] = None
     ) -> A2ATrustScore:
         """
-        Update the trust score for a target agent.
+        Deprecated: the server refuses this write with 405. The A2A trust score is
+        measured from recorded interactions (record_interaction, the task path) and
+        recomputed by the server; it is not asserted by a caller. Kept so existing
+        code still imports; it now raises the server's refusal instead of returning
+        a score that ignored its input.
 
         Args:
             target_agent_id: ID of the agent to update trust for
@@ -1245,7 +1252,8 @@ class A2AClient:
 
         return A2ATrustScore(
             agent_id=target_agent_id,
-            a2a_trust_score=response.get("a2aTrustScore", score),
+            a2a_trust_score=response.get("a2aTrustScore"),
+            score_status=response.get("scoreStatus", "unscored"),
             peer_trust_average=response.get("peerTrustAverage"),
             unique_peers_count=response.get("uniquePeersCount", 0),
             tasks_completed=response.get("tasksCompleted", 0),
@@ -1291,7 +1299,8 @@ class A2AClient:
 
         return A2ATrustScore(
             agent_id=target_agent_id,
-            a2a_trust_score=response.get("a2aTrustScore", 0.0),
+            a2a_trust_score=response.get("a2aTrustScore"),
+            score_status=response.get("scoreStatus", "measured" if response.get("a2aTrustScore") is not None else "unscored"),
             peer_trust_average=response.get("peerTrustAverage"),
             unique_peers_count=response.get("uniquePeersCount", 0),
             tasks_completed=response.get("tasksCompleted", 0),
@@ -1337,7 +1346,8 @@ class A2AClient:
 
         return A2ATrustScore(
             agent_id=target_agent_id,
-            a2a_trust_score=response.get("a2aTrustScore", 0.0),
+            a2a_trust_score=response.get("a2aTrustScore"),
+            score_status=response.get("scoreStatus", "measured" if response.get("a2aTrustScore") is not None else "unscored"),
             peer_trust_average=response.get("peerTrustAverage"),
             unique_peers_count=response.get("uniquePeersCount", 0),
             tasks_completed=response.get("tasksCompleted", 0),

@@ -246,24 +246,36 @@ def test_AIM_14_AC1_dead_url_exits_nonzero_fast_names_url_and_opens_no_browser(
     assert opened == [], "webbrowser.open must not be called when the pre-flight probe fails"
 
 
-def test_AIM_14_AC1_callback_wait_is_bounded_and_times_out_nonzero(
+def test_AIM_14_AC1_device_login_wait_is_bounded_by_the_code_lifetime_and_times_out_nonzero(
     monkeypatch, capsys, server_factory
 ):
-    server = server_factory(lambda method, path: (200, {}, "{}"))
+    # The server issues a device code that lives 2 s and never approves it: the
+    # CLI must stop when the code's lifetime ends, non-zero, with a message.
+    def handler(method, path):
+        if path.endswith("/api/v1/oauth/device/code"):
+            return (200, {}, json.dumps({
+                "deviceCode": "d" * 40, "userCode": "BCDF-GHJK",
+                "verificationUri": "http://127.0.0.1:1/device",
+                "verificationUriComplete": "http://127.0.0.1:1/device?user_code=BCDF-GHJK",
+                "expiresIn": 2, "interval": 1,
+            }))
+        if path.endswith("/api/v1/oauth/device/token"):
+            return (403, {}, json.dumps({"error": "authorization_pending"}))
+        return (200, {}, "{}")
+
+    server = server_factory(handler)
     opened = []
     monkeypatch.setattr(cli.webbrowser, "open", lambda *a, **k: opened.append(a) or True)
     monkeypatch.setattr("aim_sdk.credentials.load_sdk_credentials", lambda *a, **k: None)
-    # Shrink the deadline so the green run is quick; at base the attribute does
-    # not exist and the wait re-enters handle_request forever.
-    monkeypatch.setattr(cli, "LOGIN_CALLBACK_TIMEOUT_SECONDS", 2, raising=False)
+    monkeypatch.setattr("aim_sdk.credentials.save_sdk_credentials", lambda c: (_ for _ in ()).throw(AssertionError("nothing may be stored")))
 
     finished, rc = _run_login_bounded(_login_args(server.url), 15)
     out = capsys.readouterr().out
 
-    assert finished, "the callback wait must be bounded by a deadline"
+    assert finished, "the poll loop must be bounded by the code's lifetime"
     assert opened, "control: with a reachable server the browser open is reached"
-    assert rc != 0, "an expired callback wait must exit non-zero"
-    assert "timed out" in out.lower(), f"expected a timeout message, got: {out!r}"
+    assert rc != 0, "an expired code must exit non-zero"
+    assert "timed out" in out.lower() or "expired" in out.lower(), f"expected a timeout message, got: {out!r}"
 
 
 # --------------------------------------------------------------------------- #

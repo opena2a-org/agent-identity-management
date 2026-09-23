@@ -595,9 +595,7 @@ def _transport_messages_the_sdk_builds(url, monkeypatch=None):
         detected_capabilities={},
     )["error"]
 
-    messages["exchange_code_for_tokens"] = cli.exchange_code_for_tokens(
-        url, "code", "verifier", "http://127.0.0.1:1/callback"
-    )["error"]
+    messages["request_device_code"] = cli.request_device_code(url)["error"]
 
     messages["_decide_capability"] = client._decide_capability("db:read").reason
 

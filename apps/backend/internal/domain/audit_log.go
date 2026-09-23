@@ -13,6 +13,12 @@ const (
 	// Auth actions
 	AuditActionLogin  AuditAction = "login"
 	AuditActionLogout AuditAction = "logout"
+	// AuditActionRefreshTokenReuse: a login refresh token that had already been
+	// rotated out was presented again; the whole session was revoked.
+	AuditActionRefreshTokenReuse AuditAction = "refresh_token_reuse"
+	// AuditActionRefreshSessionRevoked: a member of a revoked session was
+	// presented and refused.
+	AuditActionRefreshSessionRevoked AuditAction = "refresh_session_revoked"
 
 	// Agent actions
 	AuditActionCreate AuditAction = "create"

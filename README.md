@@ -19,8 +19,10 @@ Install the SDK and authenticate:
 
 ```bash
 pip install aim-sdk
-aim-sdk login                    # OAuth to aim.opena2a.org, or --url for self-hosted
+aim-sdk login                    # OAuth to aim.opena2a.org
 ```
+
+Self-hosted: create the agent under Agents in your dashboard first and run the SDK with the credentials it issues; `aim-sdk login --url` and `secure(..., api_key=...)` do not yet complete against a self-hosted backend (measured 2026-09-22 on the published images; tracked for a fix).
 
 Then protect any function with a capability grant:
 
@@ -36,17 +38,37 @@ def get_customer(customer_id):
 
 `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
 
+Now call something the agent was not granted. `my-first-agent` holds `db:read` only:
+
+```python
+@agent.perform_action(capability="db:write")
+def delete_customer(customer_id):
+    return db.execute("DELETE FROM customers WHERE id = ?", customer_id)
+
+delete_customer(42)
+```
+
+AIM refuses it before the function body runs, and says why:
+
+```
+Capability 'db:write' pending admin approval (strict mode)
+  ✓ Registered db:write (medium)
+aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
+```
+
+Output copied from aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server image `edge`, commit ce68f10): the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. Two things a new agent meets first, also measured on that stack: an agent starts `pending` and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard, and an `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+
 New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
 
 Auditing an existing codebase instead of integrating? The [opena2a CLI](#operations-the-opena2a-cli) provides a 6-phase review with no server required.
 
 ## See it work
 
-Same agent code, run twice. The injection lands on both. On the AIM-protected run, the outbound exfil is denied at the tool-call boundary because `http:post` is outside the agent's declared capability grant.
+The two calls above are the whole model: every decorated call is checked against the agent's grant and logged; a capability the agent was not granted is refused before the function body executes, with the reason. Nothing in your code changes between the two, only the grant.
 
-![AIM A/B: same code, AIM denies the outbound exfil on the protected agent](docs/images/aim-ab-demo.gif)
+The agent's audit log in the dashboard records each decision: the denied `db:write` above appears with `denialReason` set to the same text, the capability, the risk level and the time (that row was read back through the API on the measured run). Open `http://localhost:3000` (self-hosted) or the AIM Cloud dashboard, then Agents, then your agent, then its activity. To permit `db:write`, grant it to the agent there.
 
-This is the [RAGBot-AIM A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent) from [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent), the intentionally vulnerable agent platform. Break an agent there, then watch AIM stop the same attack — no server, no API key, no network; identity, capability policy, and audit log live on disk.
+Want to see the same boundary stop a real attack? The [Demos](#demos) below end with an intentionally vulnerable agent run with and without AIM.
 
 ## Three deployment modes
 
@@ -63,7 +85,7 @@ All three share the same audit-event schema. Local agents can push history to a 
 | SDK | Install | Mode | API |
 |---|---|---|---|
 | Python | `pip install aim-sdk` | Server (today) | `secure("name")` + `@perform_action` |
-| Java | `org.opena2a:aim-sdk:1.0.0` | Server | `AIMClient.secure("name")` + `@SecureAction` |
+| Java | `cd sdk/java && mvn install` (from source) | Server | `AIMClient.secure("name")` + `@SecureAction` |
 | TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMClient({ agentId })` |
 
 Working examples for all three live in [`examples/`](examples/).
@@ -92,7 +114,7 @@ public User getCustomer(String customerId) {
 }
 ```
 
-Production-ready at v1.0.0. Same Ed25519 signing, same FGA flow, same audit trail. AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
+Version 1.0.0, built from source. Same Ed25519 signing, same FGA flow, same audit trail. AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
 
 ### TypeScript
 
@@ -222,7 +244,7 @@ cd agent-identity-management
 docker compose up -d aim-postgres aim-redis aim-backend aim-frontend
 
 # Health check
-curl -fsS localhost:8080/healthz
+curl -fsS localhost:8080/health
 
 # Python SDK editable for examples
 pip install -e sdk/python
@@ -299,6 +321,8 @@ Four runnable demos in [`examples/`](examples/):
 | [`langchain-crud-agent`](examples/langchain-crud-agent/) | LangChain agent secured by `@perform_action` | Python + LangChain + AIM server |
 | [`mcp-server-demo`](examples/mcp-server-demo/) | MCP server with Ed25519 signing | Python + Flask + PyNaCl |
 | [`a2a-multi-agent-demo`](examples/a2a-multi-agent-demo/) | A2A collaboration: discovery, GDPR consent, request signing, skill attestation | Python + Java + AIM server |
+
+Same code, run twice, with and without AIM: the [RAGBot-AIM A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent) in [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent), the intentionally vulnerable agent platform, lands a prompt injection on both runs and shows AIM deny the outbound exfil on the protected one because `http:post` is outside the grant ([recording](docs/images/aim-ab-demo.gif)).
 
 ## Use cases
 
