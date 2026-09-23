@@ -185,6 +185,15 @@ func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string)
 	return true, nil
 }
 
+// RetireTokenChecked is RevokeTokenChecked for a rotation: retired says the
+// jti was written to the denylist by this call, lost says another
+// presentation of the same token retired it first (a set-if-absent store
+// only), and a store failure is reported as an error.
+func (s *JWTService) RetireTokenChecked(ctx context.Context, tokenString string) (retired, lost bool, err error) {
+	revoked, err := s.RevokeTokenChecked(ctx, tokenString)
+	return revoked, false, err
+}
+
 // NewJWTService creates a new JWT service.
 // Access tokens default to 2h (JWT_ACCESS_TTL); refresh tokens to 7d
 // (JWT_REFRESH_TTL) with rotation. The client enforces a shorter idle timeout
