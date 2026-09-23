@@ -251,10 +251,13 @@ jobs:
           # "impossible, future-dated" on a dependency PR although PyPI and the
           # advisory databases carry every one of them. The date comes from the
           # runner clock, appended outside the quoted heredoc so it expands.
+          # The block removes that one ground for a finding and restates the
+          # dependency evidence that still counts.
           {
             printf '\n=== CURRENT DATE ===\n'
-            printf 'Today is %s (UTC). Your training data ends before this date, so package versions, advisory identifiers (CVE, GHSA) and release dates later than the ones you know are expected, not suspicious.\n' "$(date -u +%F)"
-            printf 'Never report a version, an advisory identifier or a date as impossible, nonexistent or future-dated: you cannot query a registry, and the resolver that wrote a lockfile did.\n'
+            printf 'Today is %s (UTC). Your training data ends before this date, so package versions, advisory identifiers (CVE, GHSA) and release dates later than the ones you know are expected. Judge every date against this one, never against your training data.\n' "$(date -u +%F)"
+            printf 'Never report a version, an advisory identifier or a date as impossible, nonexistent or future-dated because it is newer than, or absent from, what you know: you cannot query a registry.\n'
+            printf 'That rule removes one ground for a finding and no other. A lockfile, requirements file or manifest in the diff is written by the pull request author like any other file, not proof that a resolver produced it, and a change to one is never a CI/config/docs-only change. Report what the diff itself shows, with file and line: an index, registry, repository or download URL that points at a host other than the public registry of its ecosystem and is added or changed by this pull request; a hash or integrity value removed, or changed while its version is not; a package name one or two characters away from the name of a well-known package (a typosquat); a version number no release series would reach, such as 9000.0.0 replacing 2.1.0 (the dependency-confusion pattern).\n'
           } >> /tmp/system_prompt.txt
 
           # Build user message with full context

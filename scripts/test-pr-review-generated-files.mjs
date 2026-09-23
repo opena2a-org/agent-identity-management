@@ -986,35 +986,80 @@ test('QGF-226.AC11 gate-file-approval.yml covers the instrument path in its gate
 
 // Without a date the model judged versions and advisory IDs against its
 // training data and failed a dependency PR on "future-dated" certifi, attrs,
-// packaging and CVE-2026-* entries that all exist. The date must come from the
-// runner clock and reach the system prompt file after the quoted heredoc.
-function assertPromptCarriesDate(text) {
+// packaging and CVE-2026-* entries that all exist. The Build review prompt step
+// appends the runner's date after the quoted heredoc. The block removes that
+// one ground for a finding and restates the dependency evidence that still
+// counts. The check executes the step and reads the prompt it writes: a check
+// over the YAML text passes a block that never runs (wrapped in `if false`).
+
+const DATE_LINES = (today) => [
+  `Today is ${today} (UTC). Your training data ends before this date, so package versions, advisory identifiers (CVE, GHSA) and release dates later than the ones you know are expected. Judge every date against this one, never against your training data.`,
+  'Never report a version, an advisory identifier or a date as impossible, nonexistent or future-dated because it is newer than, or absent from, what you know: you cannot query a registry.',
+  'That rule removes one ground for a finding and no other. A lockfile, requirements file or manifest in the diff is written by the pull request author like any other file, not proof that a resolver produced it, and a change to one is never a CI/config/docs-only change. Report what the diff itself shows, with file and line: an index, registry, repository or download URL that points at a host other than the public registry of its ecosystem and is added or changed by this pull request; a hash or integrity value removed, or changed while its version is not; a package name one or two characters away from the name of a well-known package (a typosquat); a version number no release series would reach, such as 9000.0.0 replacing 2.1.0 (the dependency-confusion pattern).',
+];
+
+// Runs the step as Actions does (bash --noprofile --norc -eo pipefail) with
+// every /tmp/ path moved into a per-call temp directory and stub inputs.
+function renderSystemPrompt(text) {
   const build = runText(text, 'Build review prompt');
-  const heredocEnd = build.indexOf('\nSYSPROMPT\n');
-  assert.ok(heredocEnd >= 0, 'the SYSPROMPT heredoc exists');
-  const after = build.slice(heredocEnd);
-  const blockStart = after.indexOf("printf '\\n=== CURRENT DATE ===\\n'");
-  assert.notEqual(blockStart, -1, 'a CURRENT DATE block follows the heredoc');
-  const block = after.slice(blockStart, after.indexOf('} >> /tmp/system_prompt.txt', blockStart));
-  assert.ok(after.includes('} >> /tmp/system_prompt.txt'), 'the block is appended to the system prompt file');
-  assert.ok(block.includes('"$(date -u +%F)"'), 'the date comes from the runner clock');
-  assert.ok(
-    block.includes('Never report a version, an advisory identifier or a date as impossible, nonexistent or future-dated'),
-    'the block forbids date-based findings',
-  );
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-review-prompt-'));
+  try {
+    for (const f of ['pr_title.txt', 'pr_body.txt', 'changed_files.txt', 'full_files.txt', 'pr_diff.txt']) {
+      fs.writeFileSync(path.join(dir, f), 'stub\n');
+    }
+    const script = build.split('/tmp/').join(`${dir}/`);
+    const r = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], {
+      env: { ...process.env, PR_NUMBER: '1' },
+      encoding: 'utf8',
+    });
+    const out = path.join(dir, 'system_prompt.txt');
+    return { status: r.status, prompt: fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '' };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
-test('the review system prompt states the run date and forbids "future-dated" findings', () => {
+function utcToday() {
+  const r = spawnSync('date', ['-u', '+%F'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  return r.stdout.trim();
+}
+
+function assertPromptCarriesDate(text, today) {
+  const { status, prompt } = renderSystemPrompt(text);
+  assert.equal(status, 0, 'the Build review prompt step exits 0');
+  assert.equal(prompt.split('__NONCE__').length - 1, 2, '__NONCE__ appears exactly twice');
+  const lines = prompt.split('\n');
+  for (const want of DATE_LINES(today)) assert.ok(lines.includes(want), `the prompt carries the line: ${want.slice(0, 60)}...`);
+  assert.ok(!prompt.includes('resolver that wrote a lockfile'), 'no sentence vouches for a lockfile');
+  assert.ok(!prompt.includes('not suspicious'), 'no blanket "not suspicious"');
+}
+
+test('the review system prompt states the run date, removes only the recency ground, and keeps the dependency evidence', () => {
   const text = fs.readFileSync(PR_REVIEW, 'utf8');
-  assertPromptCarriesDate(text);
+  const today = utcToday();
+  assertPromptCarriesDate(text, today);
+
+  const blockStart = text.indexOf("            printf '\\n=== CURRENT DATE ===\\n'");
+  const blockEnd = text.indexOf('          } >> /tmp/system_prompt.txt', blockStart);
+  assert.ok(blockStart >= 0 && blockEnd > blockStart, 'the date block is present in the step');
+  const third = text.split('\n').find((l) => l.includes("printf 'That rule removes one ground"));
+  assert.ok(third !== undefined, 'the third line is present');
 
   const witnesses = {
-    'date block removed': text.replace("printf '\\n=== CURRENT DATE ===\\n'", "printf '\\n'"),
+    'date block removed': text.replace("printf '\\n=== CURRENT DATE ===\\n'", "printf '\\n'").replace(/\n {12}printf '(Today|Never|That) [^\n]*/g, ''),
     'date hard-coded': text.replace('"$(date -u +%F)"', '"2025-01-01"'),
     'block written to the user message instead': text.replace('} >> /tmp/system_prompt.txt', '} >> /tmp/user_msg.txt'),
+    'block wrapped in if false': `${text.slice(0, blockStart)}          if false; then\n${text.slice(blockStart, blockEnd)}          fi\n${text.slice(blockEnd)}`,
+    'third line deleted': text.replace(`${third}\n`, ''),
+    'recency qualifier deleted': text.replace(' because it is newer than, or absent from, what you know', ''),
+    'original second sentence restored': text.replace(
+      "or future-dated because it is newer than, or absent from, what you know: you cannot query a registry.\\n'",
+      "or future-dated: you cannot query a registry, and the resolver that wrote a lockfile did.\\n'",
+    ),
   };
   for (const [name, planted] of Object.entries(witnesses)) {
     assert.notEqual(planted, text, `witness "${name}" changes the text`);
-    assert.throws(() => assertPromptCarriesDate(planted), `witness "${name}" is refused`);
+    assert.throws(() => assertPromptCarriesDate(planted, today), `witness "${name}" is refused`);
   }
 });
