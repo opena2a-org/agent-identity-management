@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — logouts are recorded in the audit log
+
+- `POST /api/v1/auth/logout` wrote its audit row from a request value that the public auth route
+  never set, so no logout was ever recorded. The row now comes from the presented token's own
+  claims (the bearer access token, or the refresh token a command line sends): one `logout` row per
+  logout with a valid token, carrying the user, organisation, client address, user agent, the
+  token's id and its session; garbage tokens record nothing.
+
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
 - Presenting a login refresh token that was already rotated out ends that sign-in: every

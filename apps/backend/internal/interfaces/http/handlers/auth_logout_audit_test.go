@@ -45,7 +45,7 @@ func TestAuthHandler_Logout_AuditRowFromTheBearer(t *testing.T) {
 	require.NotNil(t, row.UserID)
 	assert.Equal(t, userID, *row.UserID)
 	assert.Equal(t, orgID, row.OrganizationID)
-	assert.NotEmpty(t, row.UserAgent)
+	assert.Equal(t, "logout-cell/1", row.UserAgent, "the request's user agent")
 	assert.Equal(t, "access", row.Metadata["token"])
 	assert.NotContains(t, marshalled(t, row.Metadata), "eyJ", "no token in the row")
 }
