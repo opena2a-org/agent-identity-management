@@ -161,7 +161,7 @@ func main() {
 		jwtService.SetRevoker(auth.NewTokenRevoker(cacheService, failOpen))
 		log.Printf("ℹ️  Token revocation enabled (fail-open=%v)", failOpen)
 	} else {
-		log.Println("ℹ️  Token revocation disabled (no Redis configured)")
+		log.Println("ℹ️  Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke")
 	}
 
 	// Initialize email service

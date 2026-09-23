@@ -302,10 +302,11 @@ func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return nil, fmt.Errorf("invalid token")
 }
 
-// RefreshTokenPair generates new access AND refresh tokens (token rotation)
-// This implements token rotation for enhanced security:
-// - Old refresh token is invalidated after use
-// - New refresh token issued with 90-day expiry
+// RefreshTokenPair mints a new access token and a new refresh token of the
+// presented token's kind (a login refresh token carries JWT_REFRESH_TTL, 168h
+// by default; an SDK token 90 days). It retires nothing itself: the refresh
+// handler denylists a login token's jti (and returns the presented token
+// unchanged when it cannot) and revokes an SDK token's sdk_tokens row by hash.
 // Returns: newAccessToken, newRefreshToken, error
 //
 // A refresh token is an identity handle, not an authorization grant: the

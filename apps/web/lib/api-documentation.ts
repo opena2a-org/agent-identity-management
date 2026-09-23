@@ -152,7 +152,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/auth/refresh",
         description:
-          "Obtain new access token using refresh token. Implements token rotation for security.",
+          "Obtain a new access token using a refresh token. The presented refresh token is retired and a new one issued (rotated: true); when the server cannot retire it (no revocation store), the presented token is returned unchanged with rotated: false.",
         summary: "Refresh access token",
         auth: "Refresh Token",
         requiresAuth: true,
@@ -170,10 +170,14 @@ export const apiDocumentation: EndpointCategory[] = [
         responseSchema: {
           type: "object",
           properties: {
-            token: { type: "string", description: "New JWT access token" },
+            accessToken: { type: "string", description: "New JWT access token" },
             refreshToken: {
               type: "string",
-              description: "New refresh token (token rotation)",
+              description: "The new refresh token, or the presented one unchanged when rotated is false",
+            },
+            rotated: {
+              type: "boolean",
+              description: "True only when the presented refresh token was retired and a new one issued",
             },
           },
         },
