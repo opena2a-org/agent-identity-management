@@ -150,8 +150,25 @@ func (r *TokenRevoker) RevokeFamily(ctx context.Context, family string, ttl time
 // presentation retired the token first. On a store without set-if-absent the
 // write cannot tell, and lost is always false.
 func (r *TokenRevoker) Retire(ctx context.Context, jti string, ttl time.Duration) (retired, lost bool, err error) {
-	if err := r.Revoke(ctx, jti, ttl); err != nil {
+	if r == nil || r.store == nil || jti == "" || ttl <= 0 {
+		return false, false, nil
+	}
+	nx, ok := r.store.(RevocationStoreNX)
+	if !ok {
+		if err := r.Revoke(ctx, jti, ttl); err != nil {
+			return false, false, err
+		}
+		return true, false, nil
+	}
+	r.mu.Lock()
+	delete(r.negCache, jti)
+	r.mu.Unlock()
+	written, err := nx.SetWithNX(ctx, revokedKeyPrefix+jti, "1", ttl)
+	if err != nil {
 		return false, false, err
+	}
+	if !written {
+		return false, true, nil
 	}
 	return true, false, nil
 }

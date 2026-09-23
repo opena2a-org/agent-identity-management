@@ -190,8 +190,18 @@ func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string)
 // presentation of the same token retired it first (a set-if-absent store
 // only), and a store failure is reported as an error.
 func (s *JWTService) RetireTokenChecked(ctx context.Context, tokenString string) (retired, lost bool, err error) {
-	revoked, err := s.RevokeTokenChecked(ctx, tokenString)
-	return revoked, false, err
+	if s.revoker == nil || tokenString == "" {
+		return false, false, nil
+	}
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil || claims.ExpiresAt == nil {
+		return false, false, nil
+	}
+	ttl := time.Until(claims.ExpiresAt.Time)
+	if ttl <= 0 {
+		return false, false, nil
+	}
+	return s.revoker.Retire(ctx, claims.ID, ttl)
 }
 
 // NewJWTService creates a new JWT service.
