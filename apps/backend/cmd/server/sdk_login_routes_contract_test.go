@@ -68,13 +68,16 @@ func TestSDKLoginRoutesContract(t *testing.T) {
 	})
 
 	cli := aim03ReadRepoFile(t, "sdk/python/aim_sdk/cli.py")
-	t.Run("every aim_url-rooted URL in cli.py is a registered route", func(t *testing.T) {
+	oauth := aim03ReadRepoFile(t, "sdk/python/aim_sdk/oauth.py")
+	t.Run("every aim_url-rooted URL the SDK builds is a registered route", func(t *testing.T) {
 		urlRe := regexp.MustCompile(`f"\{aim_url(?:\.rstrip\('/'\))?\}(/[^"?{]*)`)
-		found := urlRe.FindAllStringSubmatch(cli, -1)
-		require.NotEmpty(t, found, "cli.py must build at least one URL on aim_url")
-		for _, m := range found {
-			assert.True(t, routeServed(routes, m[1]),
-				"cli.py builds %s on aim_url but main.go registers no such route", m[1])
+		for name, src := range map[string]string{"cli.py": cli, "oauth.py": oauth} {
+			found := urlRe.FindAllStringSubmatch(src, -1)
+			require.NotEmpty(t, found, "%s must build at least one URL on aim_url", name)
+			for _, m := range found {
+				assert.True(t, routeServed(routes, m[1]),
+					"%s builds %s on aim_url but main.go registers no such route", name, m[1])
+			}
 		}
 	})
 	t.Run("the login is the device grant by name", func(t *testing.T) {
@@ -83,6 +86,8 @@ func TestSDKLoginRoutesContract(t *testing.T) {
 		assert.True(t, strings.Contains(cli, "urn:ietf:params:oauth:grant-type:device_code"), "RFC 8628 grant type")
 		assert.False(t, strings.Contains(cli, "/api/v1/auth/token"), "the exchange route no backend registers must be gone")
 		assert.False(t, strings.Contains(cli, "code_challenge"), "PKCE has no server side in this repository")
+		assert.True(t, strings.Contains(oauth, "/api/v1/auth/logout"), "logout must post the logout route the backend serves")
+		assert.False(t, strings.Contains(oauth, "/api/v1/auth/revoke"), "no backend registers /api/v1/auth/revoke")
 	})
 }
 
