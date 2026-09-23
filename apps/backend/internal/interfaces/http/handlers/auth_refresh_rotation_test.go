@@ -30,12 +30,18 @@ import (
 
 // rotationStore is a RevocationStore double whose writes can be made to fail.
 type rotationStore struct {
-	data   map[string]bool
-	setErr error
-	writes int
+	data      map[string]bool
+	setErr    error
+	existsErr error
+	writes    int
 }
 
-func (s *rotationStore) Exists(_ context.Context, key string) (bool, error) { return s.data[key], nil }
+func (s *rotationStore) Exists(_ context.Context, key string) (bool, error) {
+	if s.existsErr != nil {
+		return false, s.existsErr
+	}
+	return s.data[key], nil
+}
 func (s *rotationStore) Set(_ context.Context, key string, _ interface{}, _ time.Duration) error {
 	if s.setErr != nil {
 		return s.setErr
@@ -121,11 +127,14 @@ func TestRefreshToken_RotatedLoginTokenIsRefused(t *testing.T) {
 	assert.Contains(t, body, "Token has been revoked or is invalid")
 	assert.NotContains(t, body, "accessToken")
 
+	// The reuse ended the whole session: the token that was live is refused too.
 	_, status = postRefresh(t, app, out.RefreshToken)
-	assert.Equal(t, fiber.StatusOK, status, "the new token works")
+	assert.Equal(t, fiber.StatusUnauthorized, status, "after a reuse, the family is refused")
 }
 
-// R2: rotation chains, and every retired token stays dead.
+// R2: rotation chains; every retired token is denylisted and the newest one
+// is live until it is itself presented. A retired token presented again ends
+// the chain: the newest token is refused after it.
 func TestRefreshToken_RotationChainsAndEachOldTokenDies(t *testing.T) {
 	store := &rotationStore{}
 	app, jwtSvc, p1 := rotationApp(t, store, false)
@@ -134,15 +143,16 @@ func TestRefreshToken_RotationChainsAndEachOldTokenDies(t *testing.T) {
 	out3, status := postRefresh(t, app, out2.RefreshToken)
 	require.Equal(t, fiber.StatusOK, status)
 
+	assert.True(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, p1)))
+	assert.True(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out2.RefreshToken)))
+	assert.False(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out3.RefreshToken)), "the newest token is live")
+	out4, status := postRefresh(t, app, out3.RefreshToken)
+	require.Equal(t, fiber.StatusOK, status)
+
 	_, status = postRefresh(t, app, p1)
-	assert.Equal(t, fiber.StatusUnauthorized, status)
-	_, status = postRefresh(t, app, out2.RefreshToken)
-	assert.Equal(t, fiber.StatusUnauthorized, status)
-	// The newest token is live until it is itself presented and rotated.
-	assert.False(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out3.RefreshToken)))
-	_, status = postRefresh(t, app, out3.RefreshToken)
-	assert.Equal(t, fiber.StatusOK, status)
-	assert.True(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out3.RefreshToken)), "and retired once presented")
+	assert.Equal(t, fiber.StatusUnauthorized, status, "a retired token is refused")
+	_, status = postRefresh(t, app, out4.RefreshToken)
+	assert.Equal(t, fiber.StatusUnauthorized, status, "and its reuse ended the chain")
 }
 
 // R3: without a revocation store nothing can be retired, so nothing is

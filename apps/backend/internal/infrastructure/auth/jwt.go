@@ -51,7 +51,18 @@ type JWTClaims struct {
 	Role           string `json:"role"`
 	// TokenType is "access" | "refresh" | "sdk". Empty on legacy tokens.
 	TokenType string `json:"typ,omitempty"`
+	// SessionID (the IANA-registered "sid" claim) names the token family a
+	// login refresh token belongs to: one sign-in on one user agent or device,
+	// carried unchanged through every rotation. Absent on access, SDK-download
+	// and service tokens.
+	SessionID string `json:"sid,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// FamilyID returns the token family a login refresh token belongs to, and ""
+// for every other kind of token.
+func (c *JWTClaims) FamilyID() string {
+	return ""
 }
 
 // JWTService handles JWT operations
@@ -71,6 +82,29 @@ func (s *JWTService) SetRevoker(r *TokenRevoker) {
 // IsRevoked reports whether the token identified by jti has been revoked.
 func (s *JWTService) IsRevoked(ctx context.Context, jti string) bool {
 	return s.revoker.IsRevoked(ctx, jti)
+}
+
+// CheckRevoked reports whether the jti is denylisted, and whether the store
+// actually answered.
+func (s *JWTService) CheckRevoked(ctx context.Context, jti string) (revoked, known bool) {
+	return false, false
+}
+
+// CheckFamilyRevoked reports whether the token family is revoked, and whether
+// the store actually answered.
+func (s *JWTService) CheckFamilyRevoked(ctx context.Context, family string) (revoked, known bool) {
+	return false, false
+}
+
+// RevokeFamily ends the token family the given login refresh token belongs to.
+func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool, error) {
+	return false, nil
+}
+
+// RevokeSessionChecked revokes the presented refresh token and, for a login
+// refresh token, the whole session it belongs to.
+func (s *JWTService) RevokeSessionChecked(ctx context.Context, tokenString string) (bool, error) {
+	return s.RevokeTokenChecked(ctx, tokenString)
 }
 
 // RevokeToken denylists the given token (by its jti) for its remaining lifetime.

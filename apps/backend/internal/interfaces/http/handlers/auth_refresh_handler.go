@@ -18,6 +18,7 @@ type AuthRefreshHandler struct {
 	jwtService      *auth.JWTService
 	sdkTokenService *application.SDKTokenService
 	users           domain.UserRepository
+	audit           *application.AuditService
 }
 
 // NewAuthRefreshHandler creates a new auth refresh handler. A refresh token is
@@ -25,7 +26,7 @@ type AuthRefreshHandler struct {
 // and email are read from the user record at refresh time, so the user
 // repository is mandatory — a nil one is a boot-time refusal, never a fallback
 // to the token's own claims.
-func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *application.SDKTokenService, users domain.UserRepository) *AuthRefreshHandler {
+func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *application.SDKTokenService, users domain.UserRepository, audit *application.AuditService) *AuthRefreshHandler {
 	if users == nil {
 		panic("NewAuthRefreshHandler: user repository is required")
 	}
@@ -33,6 +34,7 @@ func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *applica
 		jwtService:      jwtService,
 		sdkTokenService: sdkTokenService,
 		users:           users,
+		audit:           audit,
 	}
 }
 
