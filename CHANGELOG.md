@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — an unused password-reset handler that would have put the email address in the reset link
+
+- An unused password-reset handler that was never routed and would have put the account's email
+  address in the reset link. The live reset link carries only the token.
+
+### Fixed — the reset-mail failure log records the account id, not the recipient's address
+
+- The reset-mail failure log records the account id instead of the recipient's address, and the mail
+  provider's error is redacted before it is written, since an SMTP reply often echoes the recipient.
+
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
 - Presenting a login refresh token that was already rotated out ends that sign-in: every
