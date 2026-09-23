@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the SDK credential recovery route mints only for the account that is signed in
+
+- `POST /api/v1/auth/sdk/recover` minted a fresh login pair for the owner of any revoked SDK token
+  it was given, whoever was signed in: any account that could hold a session could turn another
+  user's revoked SDK credential into a live session for that user. The route now mints only when
+  the signed-in user and organisation are the token's owner; any other account is answered exactly
+  as if the token did not exist. No shipped SDK reaches this route as written.
+
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
 - Presenting a login refresh token that was already rotated out ends that sign-in: every
