@@ -17,6 +17,7 @@ type SDKTokenRecoveryHandler struct {
 	sdkTokenService *application.SDKTokenService
 	jwtService      *auth.JWTService
 	users           domain.UserRepository
+	audit           *application.AuditService
 }
 
 // NewSDKTokenRecoveryHandler builds the recovery handler. The recovered pair's
@@ -26,6 +27,7 @@ func NewSDKTokenRecoveryHandler(
 	sdkTokenService *application.SDKTokenService,
 	jwtService *auth.JWTService,
 	users domain.UserRepository,
+	audit *application.AuditService,
 ) *SDKTokenRecoveryHandler {
 	if users == nil {
 		panic("NewSDKTokenRecoveryHandler: user repository is required")
@@ -34,6 +36,7 @@ func NewSDKTokenRecoveryHandler(
 		sdkTokenService: sdkTokenService,
 		jwtService:      jwtService,
 		users:           users,
+		audit:           audit,
 	}
 }
 
@@ -59,6 +62,11 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
+	// A revoked session cannot recover an SDK credential with its still-valid access token.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "sdk_recover") {
+		return nil
+	}
+
 	// Validate old token and extract user info (even if revoked)
 	tokenID, err := h.jwtService.GetTokenID(req.OldRefreshToken)
 	if err != nil || tokenID == "" {
@@ -81,6 +89,19 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 	}
 
 	// Verify the old token was actually revoked (not just expired)
+	// The route mints only for the acting principal: the bearer's user and
+	// organisation, set by the auth middleware, must be the revoked token's
+	// owner. Any other account, or no principal at all, is answered exactly as
+	// not-found, so the route can neither resurrect another user's credential
+	// nor reveal which tokens exist.
+	actingUser, _ := c.Locals("user_id").(uuid.UUID)
+	actingOrg, _ := c.Locals("organization_id").(uuid.UUID)
+	if actingUser == uuid.Nil || actingUser != oldToken.UserID || actingOrg != oldToken.OrganizationID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Token not found - it may have been deleted",
+		})
+	}
+
 	if oldToken.RevokedAt == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Token is still valid - use /auth/refresh instead",
@@ -146,7 +167,7 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		CreatedAt:         time.Now(),
 		ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
 		Metadata: map[string]interface{}{
-			"source":          "token_recovery",
+			"source":         "token_recovery",
 			"recoveredFrom":  tokenID,
 			"recoveryReason": "token_revoked",
 		},

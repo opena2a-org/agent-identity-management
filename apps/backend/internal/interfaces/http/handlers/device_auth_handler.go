@@ -7,17 +7,22 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 // DeviceAuthHandler handles HTTP endpoints for the OAuth Device Authorization Grant (RFC 8628).
 type DeviceAuthHandler struct {
 	deviceAuthService *application.DeviceAuthService
+	jwtService        *auth.JWTService
+	audit             *application.AuditService
 }
 
 // NewDeviceAuthHandler creates a new DeviceAuthHandler.
-func NewDeviceAuthHandler(deviceAuthService *application.DeviceAuthService) *DeviceAuthHandler {
+func NewDeviceAuthHandler(deviceAuthService *application.DeviceAuthService, jwtService *auth.JWTService, audit *application.AuditService) *DeviceAuthHandler {
 	return &DeviceAuthHandler{
 		deviceAuthService: deviceAuthService,
+		jwtService:        jwtService,
+		audit:             audit,
 	}
 }
 
@@ -152,6 +157,11 @@ func (h *DeviceAuthHandler) ApproveDevice(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "User code is required",
 		})
+	}
+
+	// A revoked browser session cannot approve a new sign-in for a command line.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "device_approve") {
+		return nil
 	}
 
 	// Get authenticated user from context (set by auth middleware)
