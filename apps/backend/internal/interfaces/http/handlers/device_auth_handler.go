@@ -159,6 +159,11 @@ func (h *DeviceAuthHandler) ApproveDevice(c fiber.Ctx) error {
 		})
 	}
 
+	// A revoked browser session cannot approve a new sign-in for a command line.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "device_approve") {
+		return nil
+	}
+
 	// Get authenticated user from context (set by auth middleware)
 	userIDValue := c.Locals("user_id")
 	if userIDValue == nil {

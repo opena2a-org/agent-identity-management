@@ -79,7 +79,10 @@ func (c *JWTClaims) FamilyID() string {
 // only: FamilyID() stays "" for access tokens, so no access token can ever
 // drive a family write (RevokeFamily, reuse detection, logout).
 func (c *JWTClaims) AccessFamilyID() string {
-	return ""
+	if c == nil || c.TokenType != TokenTypeAccess || c.Issuer != IssuerUser {
+		return ""
+	}
+	return c.SessionID
 }
 
 // familyRevocationSlack is added to a family key's lifetime so a member
@@ -275,20 +278,23 @@ func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) 
 	return token.SignedString(s.secret)
 }
 
-// GenerateTokenPair generates access and refresh tokens
+// GenerateTokenPair generates a login pair. The refresh token starts a new
+// family (its sid is its own jti) and the access token carries that same
+// family, so a credential-minting route can refuse an access token whose
+// session was revoked.
 func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (accessToken, refreshToken string, err error) {
-	// Generate access token
-	accessToken, err = s.GenerateAccessToken(userID, orgID, email, role)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Generate refresh token
 	refreshToken, err = s.GenerateRefreshToken(userID, orgID)
 	if err != nil {
 		return "", "", err
 	}
-
+	family, err := s.GetTokenID(refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+	accessToken, err = s.generateAccessToken(userID, orgID, email, role, family)
+	if err != nil {
+		return "", "", err
+	}
 	return accessToken, refreshToken, nil
 }
 
@@ -309,6 +315,7 @@ func (s *JWTService) generateAccessToken(userID, orgID, email, role, family stri
 		Email:          email,
 		Role:           role,
 		TokenType:      TokenTypeAccess,
+		SessionID:      family,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -448,8 +455,9 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 
 	var newAccessToken, newRefreshToken string
 
-	// Generate new access token from the supplied principal
-	newAccessToken, err = s.GenerateAccessToken(claims.UserID, claims.OrganizationID, email, role)
+	// Generate new access token from the supplied principal, in the presented
+	// token's family (none for an SDK-download token)
+	newAccessToken, err = s.generateAccessToken(claims.UserID, claims.OrganizationID, email, role, claims.FamilyID())
 	if err != nil {
 		return "", "", err
 	}

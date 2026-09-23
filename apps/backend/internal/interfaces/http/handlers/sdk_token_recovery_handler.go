@@ -62,6 +62,11 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
+	// A revoked session cannot recover an SDK credential with its still-valid access token.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "sdk_recover") {
+		return nil
+	}
+
 	// Validate old token and extract user info (even if revoked)
 	tokenID, err := h.jwtService.GetTokenID(req.OldRefreshToken)
 	if err != nil || tokenID == "" {
@@ -149,7 +154,7 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		CreatedAt:         time.Now(),
 		ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
 		Metadata: map[string]interface{}{
-			"source":          "token_recovery",
+			"source":         "token_recovery",
 			"recoveredFrom":  tokenID,
 			"recoveryReason": "token_revoked",
 		},

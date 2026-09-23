@@ -67,7 +67,9 @@ func (f *mintFixture) acting(family string, next fiber.Handler) fiber.Handler {
 	}
 }
 
-func (f *mintFixture) revokeFamily() { f.store.Set(context.Background(), "revoked:fam:"+f.family, "1", time.Hour) }
+func (f *mintFixture) revokeFamily() {
+	f.store.Set(context.Background(), "revoked:fam:"+f.family, "1", time.Hour)
+}
 
 func (f *mintFixture) familyWrites() int { return familyKeyWrites(f.store) }
 
@@ -197,7 +199,7 @@ func (r *mintDeviceRepo) Approve(_ context.Context, u string, _ uuid.UUID, _ uui
 	r.approved = append(r.approved, u)
 	return nil
 }
-func (r *mintDeviceRepo) Deny(context.Context, string) error           { return nil }
+func (r *mintDeviceRepo) Deny(context.Context, string) error            { return nil }
 func (r *mintDeviceRepo) CleanupExpired(context.Context) (int64, error) { return 0, nil }
 
 func deviceApproveApp(f *mintFixture, family string) (*fiber.App, *mintDeviceRepo) {

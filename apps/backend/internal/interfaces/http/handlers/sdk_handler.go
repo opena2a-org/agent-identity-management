@@ -41,18 +41,18 @@ func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepo
 // These are stored in .aim/sdk_credentials.json (NOT credentials.json)
 // This separation prevents collisions with agent credentials
 type SDKCredentials struct {
-	SchemaVersion string `json:"schemaVersion"`       // Schema version for future evolution
-	Type          string `json:"type"`                // Credential type: "sdk_oauth"
+	SchemaVersion string `json:"schemaVersion"` // Schema version for future evolution
+	Type          string `json:"type"`          // Credential type: "sdk_oauth"
 	AIMUrl        string `json:"aimUrl"`
 	RefreshToken  string `json:"refreshToken"`
-	SDKTokenID    string `json:"sdkTokenId"`          // For usage tracking via X-SDK-Token header
+	SDKTokenID    string `json:"sdkTokenId"` // For usage tracking via X-SDK-Token header
 	UserID        string `json:"userId"`
 	// The user's email is emitted under BOTH keys for cross-SDK compatibility:
 	// the Python SDK reads "userEmail" (aim_sdk/cli.py) — emitting only "email"
 	// was why `aim-sdk status` showed `User: Unknown` — while the Java SDK's
 	// CredentialManager reads "email". Populate both from the same value.
-	UserEmail     string `json:"userEmail"`
-	Email         string `json:"email"`
+	UserEmail string `json:"userEmail"`
+	Email     string `json:"email"`
 }
 
 // DownloadSDK generates a pre-configured SDK with embedded credentials
@@ -85,6 +85,12 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// Get authenticated user from context (set by AuthMiddleware)
+	// A revoked session cannot turn its still-valid access token into a
+	// 90-day SDK credential.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "sdk_download") {
+		return nil
+	}
+
 	userID, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -157,7 +163,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		UserAgent:         &userAgent,
 		CreatedAt:         time.Now(),
 		ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
-		Metadata:          map[string]interface{}{
+		Metadata: map[string]interface{}{
 			"source": "sdk_download",
 		},
 	}
@@ -181,11 +187,11 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// Create credentials object with schema version and type
 	// These fields help the SDK distinguish between SDK credentials and agent credentials
 	credentials := SDKCredentials{
-		SchemaVersion: "1.0",      // Schema version for future evolution
+		SchemaVersion: "1.0",       // Schema version for future evolution
 		Type:          "sdk_oauth", // Explicitly mark as SDK OAuth credentials
 		AIMUrl:        aimURL,
 		RefreshToken:  refreshToken,
-		SDKTokenID:    tokenID,    // Include SDK token ID for usage tracking
+		SDKTokenID:    tokenID, // Include SDK token ID for usage tracking
 		UserID:        userID.String(),
 		UserEmail:     email, // read by the Python SDK
 		Email:         email, // read by the Java SDK
