@@ -194,3 +194,34 @@ def test_login_gives_up_when_the_code_expires_before_approval(stack, monkeypatch
     assert "expired" in out.lower() or "timed out" in out.lower()
     assert 0 < 50 - len(stack.polls) < 10, "the loop polled a few times, then stopped at the code's lifetime"
     assert stack.saved == {}
+
+
+# The verification URI the CLI prints and the one it hands to the browser are
+# both server-chosen strings. Only http(s) may be opened; anything else exits
+# before webbrowser.open and stores nothing.
+@pytest.mark.parametrize("complete", ["javascript:alert(1)", "file:///etc/passwd"])
+def test_login_refuses_to_open_a_non_http_complete_uri(stack, complete):
+    stack.code = (200, dict(DEVICE, verificationUriComplete=complete))
+    rc, out = _login(stack)
+    assert rc == 1
+    assert stack.opened == []
+    assert stack.saved == {}
+    assert "http" in out.lower()
+
+
+def test_login_refuses_a_non_http_verification_uri(stack):
+    stack.code = (200, dict(DEVICE, verificationUri="javascript:alert(1)", verificationUriComplete=None))
+    rc, out = _login(stack)
+    assert rc == 1
+    assert stack.opened == []
+    assert stack.saved == {}
+
+
+def test_login_tolerates_a_non_numeric_interval(stack):
+    """A server answer with a malformed interval is refused or defaulted, never a traceback."""
+    stack.code = (200, dict(DEVICE, interval="abc"))
+    rc, out = _login(stack)
+    assert rc in (0, 1)
+    assert "Traceback" not in out
+    if rc == 0:
+        assert all(s >= 5 for s in stack.sleeps), stack.sleeps
