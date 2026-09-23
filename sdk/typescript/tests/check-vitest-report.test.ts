@@ -131,9 +131,9 @@ function runChecker(
 }
 
 const INTEGRATION_FILES = [
-  'src/a2a/A2AClient.integration.test.ts',
-  'src/client/AIMClient.integration.test.ts',
-  'src/auth/oauth.integration.test.ts',
+  'src/a2a/A2AClient.integration.test.ts:21',
+  'src/client/AIMClient.integration.test.ts:13',
+  'src/auth/oauth.integration.test.ts:2',
 ];
 
 describe('check-vitest-report walks per-assertion statuses', () => {
@@ -392,7 +392,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
       join(FIXTURE_ROOT, LISTED),
       join(FIXTURE_ROOT, LISTED).replace(/\//g, '\\'),
     );
-    const res = runChecker([writeReport(report), `--allow-skips=./${LISTED}`]);
+    const res = runChecker([writeReport(report), `--allow-skips=./${LISTED}:1`]);
     expect(res.status, res.output).toBe(0);
   });
 
