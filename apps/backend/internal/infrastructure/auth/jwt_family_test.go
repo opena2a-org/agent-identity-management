@@ -118,8 +118,10 @@ func TestFamily_LoginRefreshTokenCarriesSid(t *testing.T) {
 	_, hasSid := payloadOf(t, refresh)["sid"]
 	assert.True(t, hasSid, "the payload carries the sid key")
 
+	ac := validated(t, svc, access)
+	assert.Equal(t, claims.ID, ac.SessionID, "the pair's access token carries the same family as its refresh token")
 	_, hasSid = payloadOf(t, access)["sid"]
-	assert.False(t, hasSid, "access tokens carry no sid")
+	assert.True(t, hasSid, "the access token's payload carries the sid key")
 	sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "j1@example.com", "admin")
 	require.NoError(t, err)
 	_, hasSid = payloadOf(t, sdk)["sid"]
@@ -153,6 +155,51 @@ func TestFamily_RotationCopiesTheSid(t *testing.T) {
 	require.NoError(t, err)
 	_, hasSid := payloadOf(t, s2)["sid"]
 	assert.False(t, hasSid, "an SDK token rotated through RefreshTokenPair carries no sid")
+
+	// the rotated login access token carries the presented family; the SDK path's access token none
+	a2, _, err := svc.RefreshTokenPair(p2, "j2@example.com", "admin")
+	require.NoError(t, err)
+	assert.Equal(t, c1.ID, validated(t, svc, a2).SessionID, "a rotated login access token carries the family")
+	sa, _, err := svc.RefreshTokenPair(s2, "j2@example.com", "admin")
+	require.NoError(t, err)
+	assert.Empty(t, validated(t, svc, sa).SessionID, "an SDK-path access token carries no family")
+}
+
+// A1: AccessFamilyID reads a login access token's family and nothing else's.
+func TestFamily_AccessFamilyIDReadsOnlyLoginAccessTokens(t *testing.T) {
+	svc := familyTestService(t, "168h")
+	userID, orgID := uuid.New().String(), uuid.New().String()
+	access, refresh, err := svc.GenerateTokenPair(userID, orgID, "a1@example.com", "admin")
+	require.NoError(t, err)
+	rc := validated(t, svc, refresh)
+	assert.Equal(t, rc.ID, validated(t, svc, access).AccessFamilyID(), "a login access token's family is its pair's sid")
+	assert.Equal(t, "", rc.AccessFamilyID(), "a refresh token has no access family")
+	sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "a1@example.com", "admin")
+	require.NoError(t, err)
+	assert.Equal(t, "", validated(t, svc, sdk).AccessFamilyID())
+	service, err := svc.GenerateServiceToken(uuid.New().String(), orgID)
+	require.NoError(t, err)
+	assert.Equal(t, "", validated(t, svc, service).AccessFamilyID())
+	// a pre-change access token: typ access, iss user, no sid
+	now := time.Now()
+	pre := signClaims(t, JWTClaims{UserID: userID, OrganizationID: orgID, TokenType: TokenTypeAccess, RegisteredClaims: jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)), IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now), Issuer: IssuerUser, Subject: userID, ID: uuid.New().String()}})
+	assert.Equal(t, "", validated(t, svc, pre).AccessFamilyID(), "a pre-change access token presents no family")
+	// the write-side accessor stays "" for every access token
+	assert.Equal(t, "", validated(t, svc, access).FamilyID(), "FamilyID never names an access token's family")
+}
+
+// A2 (pin): a standalone access token belongs to no family.
+func TestFamily_StandaloneAccessTokenHasNoFamily(t *testing.T) {
+	svc := familyTestService(t, "168h")
+	access, err := svc.GenerateAccessToken(uuid.New().String(), uuid.New().String(), "a2@example.com", "admin")
+	require.NoError(t, err)
+	c := validated(t, svc, access)
+	assert.Empty(t, c.SessionID)
+	assert.Equal(t, "", c.AccessFamilyID())
+	assert.Equal(t, "", c.FamilyID())
+	_, hasSid := payloadOf(t, access)["sid"]
+	assert.False(t, hasSid)
 }
 
 // J3: a login refresh token minted before this change is the root of its own

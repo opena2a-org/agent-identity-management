@@ -1,0 +1,6 @@
+# Lines a rehearsal may type that the root README's Quick start does not contain
+# yet. Each is a gap the README fix closes; a counted render types none of them.
+# The self-hosted login: the SDK README documents it, the root README does not.
+aim-sdk login --url http://localhost:8080
+# The README's example defines get_customer but never calls it.
+get_customer(42)

@@ -27,7 +27,7 @@ func withSDKContext(handler func(c fiber.Ctx) error) fiber.Handler {
 // ===========================
 
 func TestNewSDKHandler_NilDeps(t *testing.T) {
-	handler := NewSDKHandler(nil, nil)
+	handler := NewSDKHandler(nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

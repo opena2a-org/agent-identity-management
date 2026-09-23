@@ -1,0 +1,10 @@
+{
+  "name": "aim-demo-browser",
+  "private": true,
+  "description": "Playwright walkthrough recorder for the AIM demo videos (docs/demo).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.55.0"
+  }
+}

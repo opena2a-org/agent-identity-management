@@ -118,3 +118,6 @@ sdk-page
 apps/backend/internal/interfaces/http/middleware/request_logger.go
 test_mcp_server.py
 apps/backend/aim-server
+
+# Demo recordings, generated secrets and build output of docs/demo (never committed)
+docs/demo/out/
