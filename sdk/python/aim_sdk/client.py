@@ -919,7 +919,7 @@ class AIMClient:
 
         # Add API key authentication if available (fallback)
         elif self.api_key:
-            additional_headers['X-API-Key'] = self.api_key
+            additional_headers[API_KEY_HEADER] = self.api_key
 
         # Add OAuth authorization if token manager is available (fallback)
         elif self.oauth_token_manager:
@@ -1187,7 +1187,7 @@ class AIMClient:
 
             # Add API key header for API-key-only mode
             if self.api_key and not self.signing_key:
-                headers['X-API-Key'] = self.api_key
+                headers[API_KEY_HEADER] = self.api_key
 
             # Add SDK token header if available (for usage tracking only, not auth)
             if self.sdk_token_id:
@@ -1987,7 +1987,7 @@ class AIMClient:
                 # SDK token / api key / oauth tokens are accepted but no longer
                 # gate this endpoint; kept for telemetry continuity.
                 if self.api_key:
-                    headers['X-API-Key'] = self.api_key
+                    headers[API_KEY_HEADER] = self.api_key
                 elif self.oauth_token_manager:
                     try:
                         access_token = self.oauth_token_manager.get_access_token()
@@ -2205,7 +2205,7 @@ class AIMClient:
             }
 
             if self.api_key:
-                headers['X-API-Key'] = self.api_key
+                headers[API_KEY_HEADER] = self.api_key
             elif self.oauth_token_manager:
                 try:
                     access_token = self.oauth_token_manager.get_access_token()
@@ -2276,7 +2276,7 @@ class AIMClient:
             }
 
             if self.api_key:
-                headers['X-API-Key'] = self.api_key
+                headers[API_KEY_HEADER] = self.api_key
             elif self.oauth_token_manager:
                 try:
                     access_token = self.oauth_token_manager.get_access_token()
@@ -4551,7 +4551,7 @@ def _validate_cached_credentials(
 
         # Add API key if provided
         if api_key:
-            headers["X-API-Key"] = api_key
+            headers[API_KEY_HEADER] = api_key
 
         # Try to use SDK OAuth credentials for auth if available
         sdk_creds = load_sdk_credentials()
@@ -4655,13 +4655,24 @@ def register_agent(
 
     **MANUAL MODE** (pip install):
         from aim_sdk import secure
-        agent = secure("my-agent", api_key="aim_abc123")
+        agent = secure("my-agent", aim_url="http://localhost:8080", api_key="aim_live_...")
         # Still auto-detects agent type, capabilities + MCPs
+
+        api_key is an agent API key issued for an agent that already exists in
+        your organization: the apiKey.key value the server returns once when an
+        agent is created from the dashboard or with POST /api/v1/agents and a
+        member's access token, or a key minted with POST /api/v1/api-keys
+        (dashboard: API keys). The key registers a new agent in that
+        organization through POST /api/v1/agents (header X-API-Key); the
+        agent's keypair is generated locally and saved in the local credential
+        store. Requires a self-hosted backend built on or after 2026-08-26
+        (the published edge image qualifies). aim_url is required.
 
     Args:
         name: Agent name (unique identifier)
         aim_url: AIM server URL (auto-detected from SDK credentials if available)
-        api_key: AIM API key (only required if no SDK credentials found)
+        api_key: AIM agent API key (aim_live_...) issued for an existing agent in your
+            organization; only required if no SDK credentials are found. Requires aim_url.
         display_name: Human-readable display name (defaults to name)
         description: Agent description (defaults to auto-generated)
         agent_type: Type of agent. Use AgentType constants for type safety.
@@ -4875,7 +4886,7 @@ def register_agent(
                         "User-Agent": f"AIM-Python-SDK/{__version__}",
                     }
                     if api_key:
-                        _headers["X-AIM-API-Key"] = api_key
+                        _headers[API_KEY_HEADER] = api_key
                     # Split raw mcp_servers into names vs full definitions
                     _mcp_names = []
                     _mcp_defs = []
@@ -5131,6 +5142,10 @@ def register_agent(
 # 201, so the same server answer registered on one path and failed on the other.
 REGISTRATION_SUCCESS_STATUSES = (200, 201)
 
+# The header the backend reads for an API key (apps/backend/.../middleware/api_key.go,
+# after "Authorization: Bearer"). One name, every site; the TypeScript SDK sends the same.
+API_KEY_HEADER = "X-API-Key"
+
 
 def _raise_registration_failure(response, name: str, registration_mode: str):
     """
@@ -5164,6 +5179,14 @@ def _raise_registration_failure(response, name: str, registration_mode: str):
         }
     )
     if response.status_code == 401:
+        if registration_mode == "api_key":
+            raise AuthenticationError(
+                f"Registration failed: the API key was not accepted ({error_msg}). "
+                "api_key= takes an agent API key issued for an existing agent in your "
+                "organization: the apiKey.key value returned once when an agent is "
+                "created, or a key from POST /api/v1/api-keys (dashboard: API keys). "
+                "A revoked, expired or foreign key is refused the same way."
+            )
         raise AuthenticationError(f"Registration failed: {error_msg}")
     raise ConfigurationError(f"Registration failed: {error_msg}")
 
@@ -5467,14 +5490,27 @@ def _register_via_api_key(
     mcp_server_names: List[str],
     mcp_full_definitions: List[Dict[str, Any]]
 ) -> AIMClient:
-    """Register agent using API key (manual mode)"""
-    # Call public registration endpoint
-    url = f"{aim_url.rstrip('/')}/api/v1/public/agents/register"
+    """Register agent using API key (manual mode).
+
+    Posts to the authenticated registration route, ``POST /api/v1/agents``,
+    which admits an agent API key in ``X-API-Key`` (the same route and header
+    the TypeScript SDK uses). ``/api/v1/public/agents/register`` reads only a
+    JWT, so a key sent there registers nothing. The route never returns a
+    private key: the agent's Ed25519 keypair is generated here and only the
+    public half is sent, as the OAuth path does.
+    """
+    signing_key = SigningKey.generate()
+    private_key_bytes = bytes(signing_key) + bytes(signing_key.verify_key)
+    private_key_b64 = base64.b64encode(private_key_bytes).decode('utf-8')
+    public_key_b64 = base64.b64encode(bytes(signing_key.verify_key)).decode('utf-8')
+    registration_data["publicKey"] = public_key_b64
+
+    url = f"{aim_url.rstrip('/')}/api/v1/agents"
 
     headers = {
         "Content-Type": "application/json",
         "User-Agent": f"AIM-Python-SDK/{__version__}",
-        "X-AIM-API-Key": api_key
+        API_KEY_HEADER: api_key
     }
 
     if sdk_token_id:
@@ -5509,9 +5545,13 @@ def _register_via_api_key(
     if "id" in credentials and "agent_id" not in credentials:
         credentials["agent_id"] = credentials["id"]
 
-    _require_registration_fields(
-        credentials, response, name, "api_key", ["agent_id", "public_key", "private_key"]
-    )
+    # The private key is the one generated above and never travels. The
+    # backend's stored public key is the source of truth when it answers with
+    # one; AIMClient refuses a pair that does not match.
+    credentials["private_key"] = private_key_b64
+    if not credentials.get("public_key"):
+        credentials["public_key"] = public_key_b64
+    _require_registration_fields(credentials, response, name, "api_key", ["agent_id"])
 
     # Ensure aim_url is present in credentials. The registration response may
     # name the server's own canonical URL, which is honoured -- but only when
@@ -5808,7 +5848,7 @@ def _register_single_mcp(
             headers['X-Public-Key'] = client.public_key
         elif client.api_key:
             # API-key-only authentication
-            headers['X-API-Key'] = client.api_key
+            headers[API_KEY_HEADER] = client.api_key
 
         try:
             response = requests.post(url, data=json_body_str, headers=headers, timeout=15)

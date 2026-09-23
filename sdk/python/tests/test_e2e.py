@@ -134,25 +134,35 @@ def test_api_key_registration():
     private_key_64bytes = seed + bytes(verify_key)  # 64 bytes total
     private_key_b64 = base64.b64encode(private_key_64bytes).decode('utf-8')
 
+    # POST /api/v1/agents stores the public key the SDK sends and never
+    # returns a private key: the mock answers as that route does, echoing
+    # the request's publicKey. The keypair above is a stand-in the SDK does
+    # not use; its own is generated inside _register_via_api_key.
     mock_registration_response = {
         "agent_id": "660e8400-e29b-41d4-a716-446655440001",
         "name": "test-agent-manual",
-        "public_key": public_key_b64,
-        "private_key": private_key_b64,
+        "public_key": None,  # filled from the request below
         "aim_url": "https://aim-test.example.com",
         "status": "pending_verification",
         "trust_score": 70.0,
         "message": "Agent registered successfully via API key"
     }
+    seen = {}
+
+    def fake_post(url, **kwargs):
+        seen["url"] = url
+        seen["headers"] = kwargs.get("headers", {})
+        body = dict(mock_registration_response)
+        body["public_key"] = kwargs["json"]["publicKey"]
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.json.return_value = body
+        return mock_response
 
     with patch('aim_sdk.client.load_sdk_credentials', return_value=None):
         with patch('aim_sdk.client._load_credentials', return_value=None):  # No existing creds
             with patch('aim_sdk.client._save_credentials'):  # Don't save to disk
-                with patch('aim_sdk.client.requests.post') as mock_post:
-                    mock_response = MagicMock()
-                    mock_response.status_code = 201
-                    mock_response.json.return_value = mock_registration_response
-                    mock_post.return_value = mock_response
+                with patch('aim_sdk.client.requests.post', side_effect=fake_post):
 
                     with patch.object(sys.modules['aim_sdk.client'].AIMClient, 'report_detections'):
                         print("   🔑 Manual Mode: API key authentication")
@@ -169,6 +179,9 @@ def test_api_key_registration():
                 print(f"      Status: {mock_registration_response['status']}")
 
     assert agent.agent_id == mock_registration_response["agent_id"]
+    assert seen["url"] == "https://aim-test.example.com/api/v1/agents"
+    assert seen["headers"]["X-API-Key"] == "aim_test_api_key_12345"
+    assert "X-AIM-API-Key" not in seen["headers"]
     print("\n✅ API key registration works correctly!\n")
     return True
 

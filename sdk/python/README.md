@@ -300,8 +300,17 @@ API key mode always requires `aim_url` — there is no default server and no env
 fallback, so `secure()` raises `ConfigurationError` if `api_key` is passed without it:
 
 ```python
-agent = secure("my-agent", api_key="aim_abc123", aim_url="http://localhost:8080")
+agent = secure("my-agent", api_key="aim_live_...", aim_url="http://localhost:8080")
 ```
+
+The key is an agent API key issued for an agent that already exists in your organization:
+the `apiKey.key` value the server returns once when an agent is created from the dashboard
+(or with `POST /api/v1/agents` and a member's access token), or a key minted with
+`POST /api/v1/api-keys` (dashboard: API keys). `secure()` registers a new agent in that
+organization through `POST /api/v1/agents` with the key in `X-API-Key`; the agent's keypair
+is generated locally and saved in the local credential store, so no private key travels.
+Requires a self-hosted backend built on or after 2026-08-26 (the published `edge` image
+qualifies).
 
 Or supply full credentials:
 
