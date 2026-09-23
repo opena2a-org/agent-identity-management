@@ -1,0 +1,7 @@
+# A2A Multi-Agent Demo Dependencies
+# Install the AIM SDK from the parent directory
+-e ../../../sdk/python
+
+# Additional dependencies
+requests>=2.28.0
+python-dotenv>=1.0.0
