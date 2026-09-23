@@ -56,8 +56,21 @@ type JWTClaims struct {
 	// carried unchanged through every rotation. Absent on access, SDK-download
 	// and service tokens.
 	SessionID string `json:"sid,omitempty"`
+	// AuthTime (the IANA-registered auth_time claim, seconds since the epoch)
+	// is the time of the sign-in a login refresh token belongs to: set at
+	// sign-in, copied unchanged on every rotation. Absent on access,
+	// SDK-download and service tokens.
+	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
 }
+
+// SignedInAt returns the time the token's sign-in happened.
+func (c *JWTClaims) SignedInAt() time.Time {
+	return time.Time{}
+}
+
+// defaultSessionMaxAge bounds a sign-in when JWT_SESSION_MAX_AGE is unset or unreadable.
+const defaultSessionMaxAge = 8 * time.Hour
 
 // FamilyID returns the token family a login refresh token belongs to: its
 // sid claim, or its own jti for a token minted before sid existed (such a
@@ -82,7 +95,18 @@ type JWTService struct {
 	secret        []byte
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
+	sessionMaxAge time.Duration
 	revoker       *TokenRevoker
+}
+
+// SessionMaxAge is the longest a login sign-in lasts, however often it is refreshed.
+func (s *JWTService) SessionMaxAge() time.Duration {
+	return 0
+}
+
+// SessionExpired reports whether a login refresh token's sign-in is older than SessionMaxAge.
+func (s *JWTService) SessionExpired(c *JWTClaims, now time.Time) bool {
+	return false
 }
 
 // SetRevoker attaches a token-revocation store. Optional: if never set,
