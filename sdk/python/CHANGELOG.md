@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `secure(name, aim_url=..., api_key=...)` registers through `POST /api/v1/agents` with the
+  key in `X-API-Key` and a locally generated keypair, the route and header the backend admits
+  and the TypeScript SDK already uses. It used to post to `/api/v1/public/agents/register`
+  with `X-AIM-API-Key`, a header no backend reads, and failed with 400 on every self-hosted
+  stack. `X-AIM-API-Key` is retired; every API-key site sends `X-API-Key`. Requires a backend
+  built on or after 2026-08-26 (the published `edge` image qualifies). A 401 in api-key mode
+  now names the credential and where a valid one comes from.
+
 ### Changed
 
 - `A2ATrustScore.a2a_trust_score` is `None` while the agent is unscored (no task data
