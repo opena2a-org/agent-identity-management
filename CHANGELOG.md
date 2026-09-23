@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a reused refresh token ends the sign-in, and logout ends the whole session
+
+- Presenting a login refresh token that was already rotated out ends that sign-in: every
+  refresh token issued from it by rotation is refused from then on (RFC 9700 section 4.14.2,
+  refresh token reuse detection), and the event is recorded in the organization's audit log
+  (`refresh_token_reuse` for the presentation that ended the session, `refresh_session_revoked`
+  for each later member refused) and as a `SECURITY` line in the backend log, with identifiers
+  only. A rotated-out token used to be refused on its own while the chain that grew from it
+  stayed valid, so whoever rotated first kept a working session. A legitimate client that
+  replays its own old token (two tabs, two processes on one credentials file) now signs in
+  again; a refusal carries the same answer as before.
+- Logging out ends the whole session. A browser's `refresh_token` cookie is set once at login,
+  so after any refresh the dashboard's logout (including the idle and eight-hour automatic
+  logouts) revoked a token that was already retired and left the refreshed token valid until it
+  expired. `POST /api/v1/auth/logout` now ends the sign-in the presented refresh token belongs
+  to, and reports `revoked.refreshToken: true` only when that write succeeded.
+- Login refresh tokens carry the registered `sid` claim naming their sign-in (the login token's
+  own id, copied on every rotation). Tokens are opaque to clients and no client changes; a token
+  minted before this change is the root of its own session and joins on its first rotation.
+  `POST /api/v1/auth/refresh` reads the revocation store directly (no in-process cache) so a
+  replay is never served from a stale entry; a store that does not answer records nothing.
+
 ### Fixed — a rotated-out login refresh token is refused on its next use
 
 - `POST /api/v1/auth/refresh` retires the presented login-issued refresh token (its id is written

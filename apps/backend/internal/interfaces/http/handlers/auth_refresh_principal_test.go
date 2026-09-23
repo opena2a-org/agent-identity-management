@@ -83,7 +83,7 @@ func newRefreshTestApp(t *testing.T, users domain.UserRepository, sdkRepo domain
 	if sdkRepo == nil {
 		sdkRepo = &refreshTestSDKRepo{}
 	}
-	h := NewAuthRefreshHandler(jwtSvc, application.NewSDKTokenService(sdkRepo), users)
+	h := NewAuthRefreshHandler(jwtSvc, application.NewSDKTokenService(sdkRepo), users, application.NewAuditService(&familyAuditRepo{}))
 	app := fiber.New()
 	app.Post("/auth/refresh", h.RefreshToken)
 	return app, jwtSvc
