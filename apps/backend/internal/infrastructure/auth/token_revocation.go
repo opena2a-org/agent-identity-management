@@ -31,6 +31,14 @@ type RevocationStore interface {
 	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
 }
 
+// RevocationStoreNX is the optional set-if-absent form of the store. A store
+// that has it makes retirement atomic: two presentations of one refresh token
+// within a request's duration cannot both retire it, so the loser is a reuse
+// instead of a second live chain. *cache.RedisCache satisfies it structurally.
+type RevocationStoreNX interface {
+	SetWithNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error)
+}
+
 // TokenRevoker maintains a jti denylist in a shared store (Redis) with a small
 // in-process negative cache. On a store error it fails CLOSED by default
 // (treats the token as revoked) unless failOpen is set.
@@ -134,6 +142,35 @@ func (r *TokenRevoker) RevokeFamily(ctx context.Context, family string, ttl time
 		return nil
 	}
 	return r.store.Set(ctx, revokedFamilyKeyPrefix+family, "1", ttl)
+}
+
+// Retire denylists a jti as Revoke does and says whether this call was the
+// one that retired it. lost is true when the key was already present at the
+// moment of the write, which on a set-if-absent store means another
+// presentation retired the token first. On a store without set-if-absent the
+// write cannot tell, and lost is always false.
+func (r *TokenRevoker) Retire(ctx context.Context, jti string, ttl time.Duration) (retired, lost bool, err error) {
+	if r == nil || r.store == nil || jti == "" || ttl <= 0 {
+		return false, false, nil
+	}
+	nx, ok := r.store.(RevocationStoreNX)
+	if !ok {
+		if err := r.Revoke(ctx, jti, ttl); err != nil {
+			return false, false, err
+		}
+		return true, false, nil
+	}
+	r.mu.Lock()
+	delete(r.negCache, jti)
+	r.mu.Unlock()
+	written, err := nx.SetWithNX(ctx, revokedKeyPrefix+jti, "1", ttl)
+	if err != nil {
+		return false, false, err
+	}
+	if !written {
+		return false, true, nil
+	}
+	return true, false, nil
 }
 
 // Revoke denylists a jti until ttl elapses. Best-effort: a nil receiver/store

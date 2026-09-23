@@ -11,6 +11,54 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the SDK credential recovery route mints only for the account that is signed in
+
+- `POST /api/v1/auth/sdk/recover` minted a fresh login pair for the owner of any revoked SDK token
+  it was given, whoever was signed in: any account that could hold a session could turn another
+  user's revoked SDK credential into a live session for that user. The route now mints only when
+  the signed-in user and organisation are the token's owner; any other account is answered exactly
+  as if the token did not exist. No shipped SDK reaches this route as written.
+
+### Security — a revoked session cannot mint a new credential with its still-valid access token
+
+- After a session is revoked (a reused refresh token, or logout), the browser's or command line's
+  access token stays valid until it expires (`JWT_ACCESS_TTL`, 2 h by default). In that window it
+  could download an SDK (a 90-day credential), approve a device sign-in for a command line, or
+  recover an SDK credential. `GET /api/v1/sdk/download`, `POST /api/v1/oauth/device/approve` and
+  `POST /api/v1/auth/sdk/recover` now read the session's revocation directly (no cache) before
+  minting and refuse a revoked session with the same 401 the refresh route answers; a confirmed
+  refusal is recorded in the organization's audit log as `credential_mint_refused` (identifiers
+  only) and as a `SECURITY` line. Login access tokens carry their session's `sid` for this; a
+  token minted before this change carries none and is not checked. No client change is needed.
+  Other authenticated routes keep serving a revoked session's access token until it expires; that
+  window is `JWT_ACCESS_TTL`, and closing it on every request is a separate, measured change.
+
+### Security — two presentations of one refresh token in the same instant no longer both rotate
+
+- Retiring a login refresh token on `POST /api/v1/auth/refresh` is now a set-if-absent write when
+  the revocation store supports it (Redis does, with no configuration): two presentations of one
+  token within a request's duration both used to read "not revoked" and both rotate, leaving two
+  live chains in one session that only a later reuse would end. Now the presentation that loses
+  the write is refused as a reuse (the session is revoked and the reuse recorded) and receives no
+  tokens. A store without set-if-absent keeps the previous behaviour; a failed write still returns
+  the presented token unchanged with `rotated: false`. The 401 answer, `rotated` and the SDK-download
+  path are unchanged.
+
+### Fixed — logouts are recorded in the audit log
+
+- `POST /api/v1/auth/logout` wrote its audit row from a request value that the public auth route
+  never set, so no logout was ever recorded. The row now comes from the presented token's own
+  claims (the bearer access token, or the refresh token a command line sends): one `logout` row per
+  logout with a valid token, carrying the user, organisation, client address, user agent, the
+  token's id and its session; garbage tokens record nothing.
+
+### Fixed — a new dashboard session never keeps the previous account's refresh token
+
+- The dashboard's API client stored a refresh token only when the caller passed one, so a new
+  session started with an access token alone kept the refresh token of whoever was signed in
+  before, and the next silent refresh ran as that account. A new session without a refresh token
+  now clears the stored one; a token refresh without one keeps the current token, as before.
+
 ### Removed — an unused password-reset handler that would have put the email address in the reset link
 
 - An unused password-reset handler that was never routed and would have put the account's email

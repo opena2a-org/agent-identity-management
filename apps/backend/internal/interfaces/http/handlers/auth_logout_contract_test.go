@@ -76,6 +76,7 @@ func postLogout(t *testing.T, h *AuthHandler, bearer, body, cookie string) (*fib
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("User-Agent", "logout-cell/1")
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}

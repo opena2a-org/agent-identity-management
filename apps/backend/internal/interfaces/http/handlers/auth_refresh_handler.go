@@ -247,9 +247,20 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	// SDK-download tokens are retired by row in sdk_tokens below. Minting
 	// before retiring means a signing failure leaves the client with the token
 	// it still holds; only a response lost after the write costs a re-login.
+	// The retirement is atomic on a store with set-if-absent: two presentations
+	// of one token within a request's duration cannot both retire it. The one
+	// that loses the write is a reuse (the same token presented twice), so the
+	// family is revoked, the reuse recorded, and the minted tokens are not
+	// handed out.
 	rotated := false
 	if claims.Issuer == auth.IssuerUser {
-		retired, revokeErr := h.jwtService.RevokeTokenChecked(c.Context(), req.RefreshToken)
+		retired, lost, revokeErr := h.jwtService.RetireTokenChecked(c.Context(), req.RefreshToken)
+		if lost {
+			h.reuseDetected(c, req.RefreshToken)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked or is invalid",
+			})
+		}
 		if retired {
 			rotated = true
 		} else {

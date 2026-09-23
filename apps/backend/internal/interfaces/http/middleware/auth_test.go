@@ -569,3 +569,44 @@ func TestOptionalAuthMiddleware_ValidToken(t *testing.T) {
 	assert.True(t, hasUserID, "user_id should be set with valid token")
 	assert.Equal(t, userID, capturedUserID)
 }
+
+// M1: the middleware hands the acting token's family and id to the handlers
+// (a credential-minting route reads them to refuse a revoked session); an
+// access token with no family yields an empty family. The revocation check
+// itself is unchanged.
+func TestAuthMiddleware_ExposesTheActingTokensFamilyAndID(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+	userID, orgID := uuid.New(), uuid.New()
+	accessToken, refreshToken, err := jwtService.GenerateTokenPair(userID.String(), orgID.String(), "m1@example.com", "admin")
+	require.NoError(t, err)
+	family, err := jwtService.GetTokenID(refreshToken)
+	require.NoError(t, err)
+	standalone, err := jwtService.GenerateAccessToken(userID.String(), orgID.String(), "m1@example.com", "admin")
+	require.NoError(t, err)
+
+	var seenSid, seenJTI string
+	app := fiber.New()
+	app.Use(AuthMiddleware(jwtService))
+	app.Get("/protected", func(c fiber.Ctx) error {
+		seenSid, _ = c.Locals("sid").(string)
+		seenJTI, _ = c.Locals("jti").(string)
+		return c.JSON(fiber.Map{"ok": true})
+	})
+	call := func(token string) int {
+		req := httptest.NewRequest("GET", "/protected", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	assert.Equal(t, fiber.StatusOK, call(accessToken))
+	assert.Equal(t, family, seenSid, "the pair's access token exposes its family")
+	jti, err := jwtService.GetTokenID(accessToken)
+	require.NoError(t, err)
+	assert.Equal(t, jti, seenJTI, "and its own id")
+
+	assert.Equal(t, fiber.StatusOK, call(standalone))
+	assert.Equal(t, "", seenSid, "a token with no family exposes an empty family")
+}
