@@ -8,9 +8,10 @@ import { toast } from "sonner";
 // Session-timeout policy (CSR/CPO, 2026-06-19):
 //   - 30 min of inactivity -> auto-logout, with a 2-min warning beforehand.
 //   - 8 h absolute cap regardless of activity.
-// These are CLIENT-side convenience boundaries; the real security boundaries
-// are the server access-token exp and the refresh-token expiry. Values are
-// overridable via env for testing.
+// These are CLIENT-side convenience boundaries; the server enforces its own:
+// the access-token exp, the refresh-token expiry and the maximum session age
+// (JWT_SESSION_MAX_AGE, 8h by default). Values are overridable via env for
+// testing.
 const num = (v: string | undefined, fallback: number) => {
   const n = v ? Number(v) : NaN;
   return Number.isFinite(n) && n > 0 ? n : fallback;
