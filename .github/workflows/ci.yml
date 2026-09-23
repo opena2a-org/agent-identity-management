@@ -343,7 +343,8 @@ jobs:
             # Built in its own commands so a git failure stops the job instead of
             # yielding an empty list that would pass the loop below vacuously.
             git ls-files -- "$d" > "$out/tracked.txt"
-            awk -v re="$manifest_re" '$0 ~ re' "$out/tracked.txt" | sort -u > "$list"
+            # ENVIRON, not -v: awk -v processes backslash escapes, turning \. into "any character".
+            MANIFEST_RE="$manifest_re" awk '$0 ~ ENVIRON["MANIFEST_RE"]' "$out/tracked.txt" | sort -u > "$list"
             if [ ! -s "$list" ]; then
               echo "::error::no tracked manifest found under $d; the inventory is broken, so coverage cannot be shown"
               exit 1
