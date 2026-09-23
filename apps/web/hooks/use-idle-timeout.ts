@@ -96,7 +96,7 @@ export function useIdleTimeout(): IdleState & { stayActive: () => void } {
   useEffect(() => {
     if (isPublicRoute) return;
     // Only run for an authenticated session.
-    if (!readLS(TOKEN_KEY)) return;
+    if (!api.getToken()) return;
 
     // Seed activity + absolute-session start if absent. (api.setToken also
     // resets these on login so a stale window can't carry across sessions.)
@@ -150,7 +150,7 @@ export function useIdleTimeout(): IdleState & { stayActive: () => void } {
 
     const interval = setInterval(() => {
       // If the token vanished (logged out in this or another tab), bail out.
-      if (!readLS(TOKEN_KEY)) {
+      if (!api.getToken()) {
         redirectToLogin();
         return;
       }

@@ -30,7 +30,7 @@ export function useDeactivationCheck() {
     const checkUserStatus = async () => {
       try {
         // Check if user is logged in before making API call
-        const token = localStorage.getItem('auth_token');
+        const token = api.getToken();
         if (!token) {
           return; // No token, user is not logged in, skip check
         }
@@ -54,7 +54,7 @@ export function useDeactivationCheck() {
         }
       } catch (error) {
         // Only log errors if we actually have a token (user should be logged in)
-        const token = localStorage.getItem('auth_token');
+        const token = api.getToken();
         if (token) {
           console.error("User status check failed:", error);
         }

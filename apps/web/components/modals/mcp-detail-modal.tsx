@@ -1,5 +1,6 @@
 "use client";
 
+import { api } from "@/lib/api";
 import {
   X,
   Shield,
@@ -153,7 +154,7 @@ export function MCPDetailModal({
     if (!mcp) return;
     setLoadingAttestations(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = api.getToken();
       // Dynamic API URL based on environment
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ||
         (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -180,7 +181,7 @@ export function MCPDetailModal({
     if (!mcp) return;
     setLoadingAuditLogs(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = api.getToken();
       // Dynamic API URL based on environment
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ||
         (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
