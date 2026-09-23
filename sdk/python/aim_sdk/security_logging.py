@@ -35,6 +35,11 @@ Usage:
         details={"token_id": "xyz"}
     )
 
+    # Re-read the AIM_SECURITY_LOG_* environment variables (also importable
+    # as `from aim_sdk import configure_security_logging`)
+    from aim_sdk.security_logging import configure_security_logging
+    configure_security_logging()
+
     # For SIEM integration, enable JSON file logging
     security_logger.configure(
         log_file="/var/log/aim/security.log",
@@ -191,7 +196,8 @@ class SecurityEvent:
     # Action fields
     action: Optional[str] = None            # Action being performed
     resource: Optional[str] = None          # Resource being accessed
-    result: Optional[str] = None            # SUCCESS, FAILURE, DENIED
+    result: Optional[str] = None            # SUCCESS, FAILURE, GRANTED, DENIED,
+                                            # UNAVAILABLE, UNVERIFIED, EXECUTED_UNVERIFIED
 
     # Network fields
     source_ip: Optional[str] = None         # Client IP address
@@ -490,19 +496,31 @@ class SecurityLogger:
         granted: bool = True,
         agent_id: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        result: Optional[str] = None
     ):
-        """Log authorization events (capability checks, action execution)."""
+        """Log authorization events (capability checks, action execution).
+
+        ``result`` names what actually happened when the GRANTED/DENIED pair
+        derived from ``granted`` would misstate it. DENIED is the policy-denial
+        literal -- AIM answered no -- so a check that never got an answer must
+        not render as DENIED: callers pass UNAVAILABLE (transport failure, AIM
+        never reached), UNVERIFIED (credentials rejected before any decision),
+        or EXECUTED_UNVERIFIED (the enforcement rule ran the action without a
+        completed verification). Left unset, the historical mapping applies.
+        """
         severity = EventSeverity.INFO if granted else EventSeverity.WARNING
         if event_type == AuthzEventType.CAPABILITY_ESCALATION:
             severity = EventSeverity.WARNING
         elif event_type in [AuthzEventType.CAPABILITY_DENIED, AuthzEventType.ACTION_DENIED]:
             severity = EventSeverity.WARNING
 
+        result_value = result or ("GRANTED" if granted else "DENIED")
+
         message = f"Authorization {event_type.value}: {action}"
         if resource:
             message += f" on {resource}"
-        message += f" - {'GRANTED' if granted else 'DENIED'}"
+        message += f" - {result_value}"
 
         event = self._create_event(
             category=EventCategory.AUTHZ,
@@ -512,7 +530,7 @@ class SecurityLogger:
             agent_id=agent_id,
             action=action,
             resource=resource,
-            result="GRANTED" if granted else "DENIED",
+            result=result_value,
             details=details or {},
             error=error
         )
@@ -756,20 +774,48 @@ security_logger = SecurityLogger()
 # ENVIRONMENT-BASED CONFIGURATION
 # =============================================================================
 
-def configure_from_environment():
+def _env_flag(name: str, default: bool) -> bool:
+    """
+    Parse a boolean AIM_* environment variable with the same accepted
+    spellings as AIM_STRICT_MODE (strict_mode.TRUE_VALUES / FALSE_VALUES):
+    true/1/yes/on and false/0/no/off, case-insensitively, surrounding
+    whitespace stripped. Unset, empty, or unrecognised values resolve to
+    ``default``.
+    """
+    # Imported here, not at module top: strict_mode has no import-time side
+    # effects, but keeping the parser's home explicit at the one use site
+    # makes the shared-spelling contract easy to find.
+    from .strict_mode import TRUE_VALUES, FALSE_VALUES
+
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+    return default
+
+
+def configure_security_logging():
     """
     Configure security logging from environment variables.
 
     Environment variables:
     - AIM_SECURITY_LOG_FILE: Path to security log file
     - AIM_SECURITY_LOG_LEVEL: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    - AIM_SECURITY_LOG_STDOUT: Include stdout logging (true/false)
-    - AIM_SECURITY_LOGGING_ENABLED: Enable/disable security logging (true/false)
+    - AIM_SECURITY_LOG_STDOUT: Include stdout logging. Accepts the same
+      spellings as AIM_STRICT_MODE: true/1/yes/on enable it, false/0/no/off
+      (and unset) do not, case-insensitively with surrounding whitespace
+      stripped.
+    - AIM_SECURITY_LOGGING_ENABLED: Enable/disable security logging entirely
+      (same accepted spellings; default enabled)
     """
     log_file = os.environ.get("AIM_SECURITY_LOG_FILE")
     log_level = os.environ.get("AIM_SECURITY_LOG_LEVEL", "INFO")
-    include_stdout = os.environ.get("AIM_SECURITY_LOG_STDOUT", "false").lower() == "true"
-    enabled = os.environ.get("AIM_SECURITY_LOGGING_ENABLED", "true").lower() != "false"
+    include_stdout = _env_flag("AIM_SECURITY_LOG_STDOUT", default=False)
+    enabled = _env_flag("AIM_SECURITY_LOGGING_ENABLED", default=True)
 
     security_logger.configure(
         log_file=log_file,
@@ -779,5 +825,11 @@ def configure_from_environment():
     )
 
 
+# Backwards-compatible spelling: the function was published under this name
+# before 2.0.3 (aim_sdk re-exported it as configure_security_logging while the
+# module itself bound only configure_from_environment).
+configure_from_environment = configure_security_logging
+
+
 # Auto-configure from environment on import
-configure_from_environment()
+configure_security_logging()

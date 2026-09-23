@@ -60,7 +60,7 @@ class SecureCredentialStorage:
                 missing.append("keyring")
 
             raise RuntimeError(
-                f"✗ SECURITY ERROR: Required packages not installed: {', '.join(missing)}\n"
+                f"SECURITY ERROR: Required packages not installed: {', '.join(missing)}\n"
                 f"   AIM SDK REQUIRES secure credential storage.\n"
                 f"   Install with: pip install {' '.join(missing)}\n"
                 f"   We do NOT support insecure plaintext storage."
@@ -98,7 +98,7 @@ class SecureCredentialStorage:
 
         except Exception as e:
             raise RuntimeError(
-                f"✗ SECURITY ERROR: Failed to access system keyring: {e}\n"
+                f"SECURITY ERROR: Failed to access system keyring: {e}\n"
                 f"   AIM SDK requires secure credential storage.\n"
                 f"   Please check your system keyring configuration."
             )
@@ -146,7 +146,7 @@ class SecureCredentialStorage:
                 return credentials
             except Exception as e:
                 raise RuntimeError(
-                    f"✗ SECURITY ERROR: Failed to decrypt credentials: {e}\n"
+                    f"SECURITY ERROR: Failed to decrypt credentials: {e}\n"
                     f"   Credentials may be corrupted or encryption key changed.\n"
                     f"   You may need to re-register with AIM."
                 )
@@ -164,7 +164,7 @@ class SecureCredentialStorage:
                 self.save_credentials(credentials)
 
                 # Plaintext file already deleted by save_credentials()
-                print(f"✓ Credentials migrated successfully to encrypted storage.")
+                print(f"[OK] Credentials migrated successfully to encrypted storage.")
 
                 return credentials
 
@@ -223,11 +223,11 @@ class SecureCredentialStorage:
             # Save encrypted
             self.save_credentials(credentials)
 
-            print("✓ Successfully migrated credentials to encrypted storage")
+            print("[OK] Successfully migrated credentials to encrypted storage")
             return True
 
         except Exception as e:
-            print(f"✗ Failed to migrate credentials: {e}")
+            print(f"[FAIL] Failed to migrate credentials: {e}")
             return False
 
 

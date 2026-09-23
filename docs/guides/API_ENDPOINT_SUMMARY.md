@@ -68,7 +68,7 @@ POST /api/v1/agents/agent_123/verify-capability
 |--------|----------|-------------|----------------|
 | GET | `/api/v1/auth/login/:provider` | OAuth2 login (Google, Microsoft, Okta) | None |
 | GET | `/api/v1/auth/callback/:provider` | OAuth2 callback handler | None |
-| POST | `/api/v1/auth/logout` | User logout | None |
+| POST | `/api/v1/auth/logout` | User logout; revokes the bearer and the refresh token (cookie or JSON body), reports what was revoked | None |
 | GET | `/api/v1/auth/me` | Get current user info | JWT Required |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/auth_handler.go`

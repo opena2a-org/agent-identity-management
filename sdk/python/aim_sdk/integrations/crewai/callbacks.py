@@ -84,7 +84,7 @@ class AIMTaskCallback:
             output: Task output/result
         """
         if self.verbose:
-            print(f"✓ AIM: Task completed")
+            print(f"[OK] AIM: Task completed")
 
         # Log to AIM
         try:
@@ -109,7 +109,7 @@ class AIMTaskCallback:
             )
 
             if self.verbose:
-                print("✓ AIM: Task completion logged")
+                print("[OK] AIM: Task completion logged")
 
         except Exception as e:
             if self.verbose:
@@ -127,7 +127,7 @@ class AIMTaskCallback:
             task_desc = "unknown task"
             if task:
                 task_desc = getattr(task, 'description', 'unknown task')
-            print(f"✗ AIM: Task failed - {task_desc[:50]}: {error}")
+            print(f"[FAIL] AIM: Task failed - {task_desc[:50]}: {error}")
 
         # Log error to AIM
         try:
@@ -144,7 +144,7 @@ class AIMTaskCallback:
             )
 
             if self.verbose:
-                print("✓ AIM: Task failure logged")
+                print("[OK] AIM: Task failure logged")
 
         except Exception as e:
             if self.verbose:

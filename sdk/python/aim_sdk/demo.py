@@ -864,7 +864,10 @@ def _cleanup(url_override: Optional[str]) -> int:
     try:
         lookup = requests.get(f"{aim_url}/api/v1/sdk-api/agents/{DEMO_AGENT_NAME}", headers=headers, timeout=30)
     except requests.RequestException as e:
-        print(f"Could not reach the server: {e}")
+        # One shape everywhere: `{e}` here was the urllib3 pool chain.
+        from .client import _request_failure_message
+
+        print(_request_failure_message(e, aim_url))
         print(f"Check the server is reachable: {aim_url}/health")
         return 1
 
@@ -886,7 +889,9 @@ def _cleanup(url_override: Optional[str]) -> int:
     try:
         resp = requests.delete(f"{aim_url}/api/v1/agents/{agent_id}", headers=headers, timeout=30)
     except requests.RequestException as e:
-        print(f"Could not reach the server: {e}")
+        from .client import _request_failure_message
+
+        print(_request_failure_message(e, aim_url))
         return 1
     if resp.status_code not in (200, 204):
         print(f"Delete failed (HTTP {resp.status_code}).")

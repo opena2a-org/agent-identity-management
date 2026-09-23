@@ -3430,6 +3430,28 @@ class APIClient {
       };
     }
   }
+  // ---------------------------------------------------------------------------
+  // CLI device login (RFC 8628): the consent page reads the pending request and
+  // approves it with the signed-in user's bearer. Both go through request(), so
+  // the session model is the dashboard's (bearer in storage, cookies HttpOnly).
+  // ---------------------------------------------------------------------------
+
+  async getDeviceVerification(userCode: string): Promise<{
+    userCode: string;
+    clientId: string;
+    scope: string;
+    status: string;
+    expiresAt: string;
+  }> {
+    return this.request(`/api/v1/oauth/device/verify?user_code=${encodeURIComponent(userCode)}`);
+  }
+
+  async approveDevice(userCode: string): Promise<{ message: string }> {
+    return this.request("/api/v1/oauth/device/approve", {
+      method: "POST",
+      body: JSON.stringify({ userCode }),
+    });
+  }
 }
 
 // Lazy singleton instance - created ONLY on first access in browser
@@ -3441,6 +3463,7 @@ function getAPIClient(): APIClient {
     _apiInstance = new APIClient();
   }
   return _apiInstance;
+
 }
 
 // Export a Proxy that lazily creates the real APIClient on first property access

@@ -119,7 +119,15 @@ from .isolation import (
     score_isolation,
     auto_detect_isolation,
 )
-from .auto_hooks import PolicyCache, activate_hooks
+# PolicyCache is deliberately NOT re-exported here: no released AIM server
+# serves the route it fetches, so it cannot answer a check against any released
+# backend (see its docstring in aim_sdk/auto_hooks.py). It remains importable
+# from aim_sdk.auto_hooks for the day a server registers the route.
+from .auto_hooks import activate_hooks
+
+# Console quieting: silences the SDK's informational stdout output
+# (registration banners, auto-detection results, info/warning lines).
+from .console import set_quiet
 
 # Credential management utilities
 from .credentials import (
@@ -137,7 +145,7 @@ from .security_logging import (
     SecurityLogger,
     SecurityEvent,
     security_logger,
-    configure_from_environment as configure_security_logging,
+    configure_security_logging,
     # Event types for custom logging
     EventCategory,
     EventSeverity,
@@ -233,8 +241,9 @@ __all__ = [
     "auto_detect_protocol",
     "AttestationCache",
     # Auto-hook activation
-    "PolicyCache",
     "activate_hooks",
+    # Console quieting
+    "set_quiet",
     # Credential management
     "load_sdk_credentials",
     "save_sdk_credentials",

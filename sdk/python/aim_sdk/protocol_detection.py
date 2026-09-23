@@ -17,6 +17,8 @@ import sys
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
+__all__ = ["ProtocolDetector", "auto_detect_protocol"]
+
 
 class ProtocolDetector:
     """
@@ -82,6 +84,11 @@ class ProtocolDetector:
         2. Environment variables (strongest signal)
         3. Imported packages (MCP/A2A libraries)
         4. Default to "mcp" if no indicators found
+
+        The step-4 default is a guess, not a detection: when nothing matched,
+        ``get_detection_confidence`` on the returned name is 0.0 and
+        ``get_protocol_details`` reports no indicators. Read the confidence
+        before treating this return value as evidence.
 
         Args:
             explicit_protocol: User-provided protocol override
@@ -168,19 +175,25 @@ class ProtocolDetector:
         Calculate confidence score for detected protocol (0-100).
 
         Confidence factors:
-        - Explicit declaration: 100%
-        - Environment variable match: 90%
-        - Multiple indicators: 80%
-        - Single import match: 60%
-        - Default (mcp): 50%
+        - Environment variable match: 90%, +2% per additional match
+        - Single import match: 60%, +5% per additional match
+        - Nothing found: 0%
+
+        The no-indicator score is 0, not a base score. ``detect_protocol()``
+        still falls back to "mcp" when it finds nothing, but a fallback is a
+        guess, not a detection: reporting the guess as 50% confidence made a
+        dashboard show a half-certain finding for a protocol the SDK never saw
+        any evidence of, indistinguishable from a real weak signal. A protocol
+        name that is not in the indicator table at all scores 0 for the same
+        reason -- there is nothing to match, so nothing was found.
 
         Args:
             protocol: Detected protocol name
 
         Returns:
-            Confidence score (0-100)
+            Confidence score (0-100). 0.0 when no indicator matched.
         """
-        confidence = 50.0  # Base confidence (default)
+        confidence = 0.0  # Nothing found yet
 
         # Check environment variables
         env_matches = sum(
@@ -209,7 +222,9 @@ class ProtocolDetector:
             protocol: Protocol name
 
         Returns:
-            Dict with protocol details including indicators found
+            Dict with protocol details including indicators found. When
+            ``indicators_found`` is empty -- nothing was detected, or the name
+            is not one this detector knows -- ``confidence`` is 0.0.
         """
         indicators_found = []
 

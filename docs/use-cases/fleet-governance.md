@@ -329,6 +329,8 @@ Code Reviewer: aim_2d8f5a3c
 
 ### Java
 
+The Java SDK is built from source (`cd sdk/java && mvn install`), which places this dependency in your local Maven repository:
+
 ```xml
 <dependency>
     <groupId>org.opena2a</groupId>

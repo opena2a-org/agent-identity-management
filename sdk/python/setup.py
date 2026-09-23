@@ -36,8 +36,12 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
-    python_requires=">=3.8",
+    # Keep the upper bound in step with the classifier list above: every minor
+    # version this range admits must carry a classifier.
+    python_requires=">=3.8,<3.15",
     install_requires=[
         "requests>=2.28.0",
         "PyNaCl>=1.5.0",  # Ed25519 signing

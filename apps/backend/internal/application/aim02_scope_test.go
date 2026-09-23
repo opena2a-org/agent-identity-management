@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -39,30 +38,6 @@ import (
 // prove the absence of every conceivable write, but it does catch the shapes a
 // later change would actually take, and it fails loudly next to the code it
 // constrains rather than in a reviewer's memory.
-
-// aim02RepoRoot resolves the repository root from this file's own location, so
-// the scan does not depend on the working directory `go test` was invoked from.
-func aim02RepoRoot(t *testing.T) string {
-	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller must resolve this test file's path")
-
-	dir := filepath.Dir(thisFile)
-	for i := 0; i < 12; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "package.json")); err == nil {
-			if _, err := os.Stat(filepath.Join(dir, "apps")); err == nil {
-				return dir
-			}
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	t.Fatalf("could not locate repository root above %s", thisFile)
-	return ""
-}
 
 func aim02ReadFile(t *testing.T, root, rel string) string {
 	t.Helper()
@@ -103,7 +78,7 @@ var verificationWrites = []*regexp.Regexp{
 }
 
 func TestAIM02_BoundedScope(t *testing.T) {
-	root := aim02RepoRoot(t)
+	root := repoRoot(t)
 
 	t.Run("AIM-02.AC4 no backend source writes verified on an isolation attestation", func(t *testing.T) {
 		// Scan every non-test Go and SQL file in the backend that mentions the

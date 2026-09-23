@@ -31,7 +31,8 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       docker: ${{ steps.filter.outputs.docker }}
-      deps: ${{ steps.filter.outputs.deps }}
+      go_deps: ${{ steps.filter.outputs.go_deps }}
+      npm_deps: ${{ steps.filter.outputs.npm_deps }}
       crypto: ${{ steps.filter.outputs.crypto }}
     steps:
       - uses: actions/checkout@v4
@@ -66,11 +67,32 @@ jobs:
               - 'apps/web/**'
               - 'sdk/**'
               - '.github/workflows/security.yml'
-            deps:
+            # Split out of a single `deps` filter that listed the Go module
+            # files BESIDE apps/web's manifests. License Compliance has two
+            # steps reading two ecosystems, so one filter gated both: a pull
+            # request whose only change was apps/web/package-lock.json ran the
+            # Go check, and the transient module-proxy error it hit there
+            # reported as a license failure (#493). Each step is gated on its
+            # own inputs now.
+            #
+            # scripts/go-licenses-check.sh is a go_deps input for the reason
+            # given above for security.yml itself: the script IS the Go step's
+            # logic, so a pull request that edits it must run the step UNDER
+            # the edited script, not under the old one. So is
+            # apps/backend/go-licenses-allowlist.tsv: it is the policy the
+            # step applies, so a pull request that adds or widens an allowance
+            # must run the step under the widened allowance.
+            go_deps:
               - 'apps/backend/go.mod'
               - 'apps/backend/go.sum'
+              - 'apps/backend/**/*.go'
+              - 'apps/backend/go-licenses-allowlist.tsv'
+              - '.github/workflows/security.yml'
+              - 'scripts/go-licenses-check.sh'
+            npm_deps:
               - 'apps/web/package.json'
               - 'apps/web/package-lock.json'
+              - '.github/workflows/security.yml'
             crypto:
               - 'apps/backend/internal/crypto/**'
               - 'apps/backend/internal/infrastructure/auth/**'
@@ -255,8 +277,20 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'schedule' ||
-      (github.event_name == 'pull_request' && needs.changes.outputs.deps == 'true')
+      (github.event_name == 'pull_request' &&
+      (needs.changes.outputs.go_deps == 'true' ||
+      needs.changes.outputs.npm_deps == 'true'))
     runs-on: ubuntu-latest
+    env:
+      # go-licenses v2.0.1 was released 2025-09-08; this version and its h1
+      # sum were measured 2026-09-17 from sum.golang.org. The sum is asserted
+      # on the INSTALLED binary by scripts/go-licenses-check.sh (via
+      # `go version -m`) before the checker is allowed to run, so a
+      # substituted build fails the step instead of scanning. The step
+      # previously installed `@latest` from the v1 module path, which silently
+      # meant v1.6.0 of 2023-01-18 and left no record of what had run.
+      GO_LICENSES_VERSION: v2.0.1
+      GO_LICENSES_SUM: h1:ti+9bi5o7DKbeeg5eBb/uZTgsaPNoJaLCh93cRcXsW8=
     steps:
       - uses: actions/checkout@v4
 
@@ -269,18 +303,23 @@ jobs:
         with:
           node-version: "20"
 
+      # The verdict is this step's exit status, which is the script's, which is
+      # the checker's. No pipe, no tee, no grep: the step used to pipe the
+      # checker into `tee` — discarding its exit status, since this file sets
+      # no pipefail — and then decide pass or fail by grepping the report for
+      # GPL|AGPL|SSPL, which let through every restricted or reciprocal
+      # license not spelled that way and dropped any line naming both LGPL and
+      # AGPL. Classifying a FAILURE is the script's job; text never decides
+      # the verdict. See scripts/go-licenses-check.sh for the class set, the
+      # summary phrases, and how apps/backend/go-licenses-allowlist.tsv turns
+      # a ruled allowance into an --ignore that is re-asserted, every run,
+      # against an unignored report.
       - name: Check Go licenses
-        working-directory: apps/backend
-        run: |
-          go install github.com/google/go-licenses@latest
-          go-licenses check ./... --disallowed_types=restricted,reciprocal 2>&1 | tee license-report.txt
-          # Fail on GPL/AGPL/SSPL
-          if grep -iE 'GPL|AGPL|SSPL' license-report.txt | grep -iv 'LGPL'; then
-            echo "::error::Copyleft license detected in Go dependencies"
-            exit 1
-          fi
+        if: github.event_name == 'schedule' || needs.changes.outputs.go_deps == 'true'
+        run: ./scripts/go-licenses-check.sh
 
       - name: Check npm licenses
+        if: github.event_name == 'schedule' || needs.changes.outputs.npm_deps == 'true'
         working-directory: apps/web
         run: |
           npm ci

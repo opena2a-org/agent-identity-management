@@ -6,10 +6,65 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 > Scope: this changelog tracks the **platform** (backend + dashboard), tagged
 > `platform-v<version>`. The SDKs are versioned and released independently
-> (`aim-sdk` on PyPI, `@opena2a/aim-sdk` on npm, `org.opena2a:aim-sdk` on Maven
-> Central) under their own `sdk-*-v<version>` tags.
+> under their own `sdk-*-v<version>` tags (`aim-sdk` on PyPI, `@opena2a/aim-sdk`
+> on npm; the Java SDK is built from source in `sdk/java`).
 
 ## [Unreleased]
+
+### Security — a reused refresh token ends the sign-in, and logout ends the whole session
+
+- Presenting a login refresh token that was already rotated out ends that sign-in: every
+  refresh token issued from it by rotation is refused from then on (RFC 9700 section 4.14.2,
+  refresh token reuse detection), and the event is recorded in the organization's audit log
+  (`refresh_token_reuse` for the presentation that ended the session, `refresh_session_revoked`
+  for each later member refused) and as a `SECURITY` line in the backend log, with identifiers
+  only. A rotated-out token used to be refused on its own while the chain that grew from it
+  stayed valid, so whoever rotated first kept a working session. A legitimate client that
+  replays its own old token (two tabs, two processes on one credentials file) now signs in
+  again; a refusal carries the same answer as before.
+- Logging out ends the whole session. A browser's `refresh_token` cookie is set once at login,
+  so after any refresh the dashboard's logout (including the idle and eight-hour automatic
+  logouts) revoked a token that was already retired and left the refreshed token valid until it
+  expired. `POST /api/v1/auth/logout` now ends the sign-in the presented refresh token belongs
+  to, and reports `revoked.refreshToken: true` only when that write succeeded.
+- Login refresh tokens carry the registered `sid` claim naming their sign-in (the login token's
+  own id, copied on every rotation). Tokens are opaque to clients and no client changes; a token
+  minted before this change is the root of its own session and joins on its first rotation.
+  `POST /api/v1/auth/refresh` reads the revocation store directly (no in-process cache) so a
+  replay is never served from a stale entry; a store that does not answer records nothing.
+
+### Fixed — a rotated-out login refresh token is refused on its next use
+
+- `POST /api/v1/auth/refresh` retires the presented login-issued refresh token (its id is written
+  to the revocation denylist for its remaining lifetime) before answering with the new one, so a
+  refresh token that has been rotated is refused with 401 on its next use; it used to stay usable
+  until its own expiry although the code claimed otherwise. A refresh token is rotated only when
+  the old one was actually retired: without a revocation store (no Redis), or when the store
+  refuses the write, the answer carries a fresh access token and the presented refresh token
+  unchanged, and the new `rotated` field reports it, so a login session on such a stack ends at
+  `JWT_REFRESH_TTL`. SDK-download tokens keep their row-based rotation. A refresh answered after a
+  lost response now requires signing in again, which is the cost of single-use refresh tokens.
+
+### Fixed — logout revokes a refresh token sent in the body and reports what it revoked
+
+- `POST /api/v1/auth/logout` also reads the refresh token from a JSON body (`{"refreshToken": ...}`,
+  the body wins over the `refresh_token` cookie), so a client that holds the pair outside a browser
+  can revoke it, and answers a `revoked` report (`accessToken`, `refreshToken`) that is `true` only
+  when the token's id was written to the denylist; a server without revocation configured reports
+  `false` instead of a silent no-op. The route, the cookie channel and the message are unchanged.
+
+### Changed — the A2A composite no longer scores an agent it has no data for, and its PUT refuses
+
+The A2A trust score started every agent at 0.5 and credited 0.1 for a missing response
+time and 0.1 for account age, so an agent with no task at all read 0.7 while an agent
+with a perfect task record, no peers and no response figures read 0.6. An agent with no
+completed or failed task is now UNSCORED: `a2aTrustScore` is absent and `scoreStatus`
+reads `unscored` on `GET /api/v1/a2a/agents/:id/trust-score`, `GET /api/v1/a2a/trust/:id`
+and the compute route; missing response data earns nothing. Routing by intent no longer
+defaults a missing score to 0.5: an unscored agent never passes a positive threshold,
+ranks last, and is listed with `trustScore: null` only when no threshold is asked for.
+`PUT /api/v1/a2a/trust/:id`, which bound a body and discarded it, now answers 405 with the
+reason: the score is measured, not asserted. No migration: the column was already nullable.
 
 ### Security
 
@@ -94,6 +149,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   middlewares call it, and a failed read there is reported as "Agent not found",
   which is indistinguishable from a revocation denial. An agent created without a
   description could not authenticate and the operator was told it did not exist.
+- Dependency bumps. `package-lock.json`: `next` 16.3.5 (CVE-2026-75604, GHSA-2xp9-vwfh-vxw4,
+  CVE-2026-64641, CVE-2026-64642, CVE-2026-64645, CVE-2026-64649), `sharp` 0.35.4
+  (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c), `postcss` 8.5.18 or later (CVE-2026-45623,
+  CVE-2026-73646), `nanoid` 3.3.19 (CVE-2026-67213, CVE-2026-67214). `apps/backend/go.mod`:
+  `golang.org/x/crypto` v0.55.0 (CVE-2026-56854), `google.golang.org/grpc` v1.83.2
+  (CVE-2026-84304, CVE-2026-84445, GHSA-hrxh-6v49-42gf), `github.com/go-jose/go-jose/v4` v4.1.4
+  (CVE-2026-34986), `golang.org/x/text` v0.41.0 (CVE-2026-56852). (#491)
+- `apps/web/next.config.js` closes the self-hosted image optimizer (`images.unoptimized` plus a
+  `localPatterns` entry matching no path), so `/_next/image` returns 404. No page uses
+  `next/image`, so nothing rendered changes. GHSA-2xp9-vwfh-vxw4 needs a same-origin image
+  source, which a default deployment does not have; if a proxy or CDN in front of this app
+  serves user-supplied files on that origin, check your access logs for `/_next/image`.
 
 ### Changed
 

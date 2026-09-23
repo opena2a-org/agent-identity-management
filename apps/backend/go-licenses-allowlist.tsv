@@ -1,0 +1,16 @@
+# Go dependency license allowances for apps/backend. Each row admits ONE license on ONE library,
+# by exact path. scripts/go-licenses-check.sh passes each library to `go-licenses check --ignore`
+# and then asserts, from `go-licenses report`, that the library is still in the graph, still
+# carries exactly this license, and that no unlisted library shares its path as a prefix.
+# Adding a row is a policy change: it needs a recorded security-policy ruling (its UTC stamp) in the `ruled` column.
+# library	license	ruled	reason
+github.com/hashicorp/vault/api	MPL-2.0	2026-09-19T17:35:11Z	direct dependency: HashiCorp Vault secrets backend (internal/infrastructure/secrets/hashicorp_vault.go); consumed unmodified (go.sum)
+github.com/hashicorp/errwrap	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-cleanhttp	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-multierror	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-retryablehttp	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-rootcerts	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-secure-stdlib/parseutil	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-secure-stdlib/strutil	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/go-sockaddr	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified
+github.com/hashicorp/hcl	MPL-2.0	2026-09-19T17:35:11Z	indirect via github.com/hashicorp/vault/api (go mod why -m); consumed unmodified

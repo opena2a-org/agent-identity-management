@@ -8,10 +8,17 @@ import (
 
 const (
 	revokedKeyPrefix = "revoked:jti:"
+	// revokedFamilyKeyPrefix denylists a whole token family (one sign-in on one
+	// user agent or device, named by its login refresh token's jti): written
+	// when a rotated-out member is presented again, or on logout.
+	revokedFamilyKeyPrefix = "revoked:fam:"
 	// negCacheTTL bounds how long a "not revoked" result is cached in-process.
 	// It also bounds cross-instance revocation lag (a token revoked on another
 	// instance is honored within this window) and the blast radius of a store
-	// outage (cached tokens are served without touching the store).
+	// outage (cached tokens are served without touching the store). The cache
+	// serves the request middleware only; the refresh route reads uncached
+	// (CheckJTI, CheckFamily), because every refresh token is presented once
+	// and a stale "not revoked" entry there would serve a replay.
 	negCacheTTL    = 30 * time.Second
 	negCacheMaxLen = 50000
 )
@@ -85,6 +92,48 @@ func (r *TokenRevoker) IsRevoked(ctx context.Context, jti string) bool {
 	}
 	r.mu.Unlock()
 	return false
+}
+
+// lookup reads one denylist key with no cache. revoked says whether the key
+// exists, or, when the store did not answer, whether the fail-closed setting
+// treats the token as revoked; known says whether the store answered. A
+// caller that records evidence (a reuse event, a family revocation) acts only
+// on a known result, so a store fault is never recorded as a reuse.
+func (r *TokenRevoker) lookup(ctx context.Context, key string) (revoked, known bool) {
+	if r == nil || r.store == nil || key == "" {
+		return false, false
+	}
+	exists, err := r.store.Exists(ctx, key)
+	if err != nil {
+		return !r.failOpen, false
+	}
+	return exists, true
+}
+
+// CheckJTI is the uncached form of IsRevoked, with the store's answer status.
+func (r *TokenRevoker) CheckJTI(ctx context.Context, jti string) (revoked, known bool) {
+	if jti == "" {
+		return false, false
+	}
+	return r.lookup(ctx, revokedKeyPrefix+jti)
+}
+
+// CheckFamily reports whether a token family is revoked, uncached, with the
+// store's answer status.
+func (r *TokenRevoker) CheckFamily(ctx context.Context, family string) (revoked, known bool) {
+	if family == "" {
+		return false, false
+	}
+	return r.lookup(ctx, revokedFamilyKeyPrefix+family)
+}
+
+// RevokeFamily denylists a token family until ttl elapses. A nil
+// receiver/store, an empty id or a non-positive ttl is a no-op.
+func (r *TokenRevoker) RevokeFamily(ctx context.Context, family string, ttl time.Duration) error {
+	if r == nil || r.store == nil || family == "" || ttl <= 0 {
+		return nil
+	}
+	return r.store.Set(ctx, revokedFamilyKeyPrefix+family, "1", ttl)
 }
 
 // Revoke denylists a jti until ttl elapses. Best-effort: a nil receiver/store

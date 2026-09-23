@@ -455,8 +455,9 @@ def charge_credit_card(amount):
 # ✅ RECOMMENDED - Zero config (OAuth credentials embedded in SDK)
 agent = secure("my-agent")
 
-# 🔧 ADVANCED - Manual mode with API key (if needed)
-agent = secure("my-agent", api_key="aim_abc123")
+# 🔧 ADVANCED - Manual mode with an agent API key (issued for an existing agent
+# in your organization; aim_url is required)
+agent = secure("my-agent", aim_url="http://localhost:8080", api_key="aim_live_...")
 ```
 
 ### Tip 2: Declare Capabilities with Decorators

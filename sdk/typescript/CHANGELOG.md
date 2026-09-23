@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
+  because the A2A trust score is measured from recorded interactions, not asserted.
+  A routed agent's `trustScore` is `null` while its composite is unscored.
+
 ### Security — ARP's L2 no longer sends anything to a vendor by default
 
 ARP shipped `intelligence: { enabled: true, adapter: 'agent-proxy' }` as its

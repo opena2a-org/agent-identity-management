@@ -345,7 +345,7 @@ func TestAIM08FailClosedCannotBeWidenedByData(t *testing.T) {
 }
 
 func TestAIM08Migration110(t *testing.T) {
-	root := aim02RepoRoot(t)
+	root := repoRoot(t)
 	migrationsDir := filepath.Join(root, "apps", "backend", "migrations")
 
 	t.Run("AIM-08.AC3 migration 110 carries the CHECK and documents the camelCase keys", func(t *testing.T) {
@@ -360,11 +360,14 @@ func TestAIM08Migration110(t *testing.T) {
 		}
 	})
 
-	t.Run("AIM-08.AC3 110 is the only migration this change adds and 109 stays free for aim-cloud", func(t *testing.T) {
+	t.Run("AIM-08.AC3 exactly one migration carries number 110", func(t *testing.T) {
 		entries, err := os.ReadDir(migrationsDir)
 		require.NoError(t, err)
 		numRe := regexp.MustCompile(`^(\d+)_`)
-		highest := 0
+		// Only the count at 110 is asserted. Neither "110 is the highest" nor
+		// "109 is free" holds in every tree that runs this test: the deployed
+		// tree carries its own 109 and, once later migrations land, numbers
+		// above 110. Both pins would fail there for reasons unrelated to AIM-08.
 		count110 := 0
 		for _, entry := range entries {
 			m := numRe.FindStringSubmatch(entry.Name())
@@ -373,17 +376,10 @@ func TestAIM08Migration110(t *testing.T) {
 			}
 			n, err := strconv.Atoi(m[1])
 			require.NoError(t, err)
-			if n > highest {
-				highest = n
-			}
-			switch n {
-			case 109:
-				t.Errorf("migration %s occupies 109, which belongs to aim-cloud's row-level-security migration", entry.Name())
-			case 110:
+			if n == 110 {
 				count110++
 			}
 		}
-		assert.Equal(t, 110, highest, "110 must be the highest migration in this tree")
 		assert.Equal(t, 1, count110, "exactly one migration file may carry number 110")
 	})
 }

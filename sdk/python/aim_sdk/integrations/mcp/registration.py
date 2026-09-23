@@ -575,7 +575,7 @@ def attest_mcp_server(
             # Use discovered capabilities
             capabilities_found = discovery_result.tool_names
             connection_latency_ms = discovery_result.connection_latency_ms
-            print(f"✓ Discovered {len(capabilities_found)} tools: {capabilities_found}")
+            print(f"[OK] Discovered {len(capabilities_found)} tools: {capabilities_found}")
 
     # Validate capabilities are provided
     if not capabilities_found:
@@ -642,9 +642,9 @@ def attest_mcp_server(
     )
 
     if challenge:
-        print(f"✓ Attestation submitted with proof of key possession")
+        print(f"[OK] Attestation submitted with proof of key possession")
     else:
-        print(f"✓ Attestation submitted (legacy mode, no challenge)")
+        print(f"[OK] Attestation submitted (legacy mode, no challenge)")
 
     # Add discovery information to response if auto_discover was used
     if discovery_result and not discovery_result.error:

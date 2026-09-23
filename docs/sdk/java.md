@@ -16,28 +16,28 @@ The AIM SDK comes with your embedded credentials - zero configuration required.
 3. **Click** "Download Java SDK" button
 4. **Extract** the downloaded ZIP file to your project directory
 
-### Add Maven Dependency
+### Build the SDK and add the dependency
 
-Add to your `pom.xml`:
+The SDK is not on Maven Central. Build it with Maven, in the extracted SDK directory or in `sdk/java` of a clone of the repository:
+
+```bash
+mvn install
+```
+
+`mvn install` compiles the SDK, runs its tests and places `org.opena2a:aim-sdk:1.0.0` in your local Maven repository. Then add the dependency to your `pom.xml`:
 
 ```xml
 <dependency>
     <groupId>org.opena2a</groupId>
     <artifactId>aim-sdk</artifactId>
-    <version>1.1.0</version>
+    <version>1.0.0</version>
 </dependency>
-```
-
-Or for Gradle (`build.gradle`):
-
-```groovy
-implementation 'org.opena2a:aim-sdk:1.1.0'
 ```
 
 ### Requirements
 
 - Java 17+
-- Maven 3.6+ or Gradle 7+
+- Maven 3.6+ to build the SDK
 
 ### Dependencies
 

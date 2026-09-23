@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,7 +83,7 @@ func newRefreshTestApp(t *testing.T, users domain.UserRepository, sdkRepo domain
 	if sdkRepo == nil {
 		sdkRepo = &refreshTestSDKRepo{}
 	}
-	h := NewAuthRefreshHandler(jwtSvc, application.NewSDKTokenService(sdkRepo), users)
+	h := NewAuthRefreshHandler(jwtSvc, application.NewSDKTokenService(sdkRepo), users, application.NewAuditService(&familyAuditRepo{}))
 	app := fiber.New()
 	app.Post("/auth/refresh", h.RefreshToken)
 	return app, jwtSvc
@@ -218,6 +219,39 @@ func TestRefreshToken_OrgMismatchRefused(t *testing.T) {
 
 	_, status := postRefresh(t, app, refresh)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
+}
+
+// H8: a legacy token with no typ claim must be rejected now that the 90-day
+// refresh-path grace window has expired (P1-phase-2, retired 2026-09-15).
+// Tokens minted before 2026-06--19 had no typ claim; after that date every
+// token carries one and empty-typ is treated as an unknown type.
+func TestRefreshToken_LegacyEmptyTypRejected(t *testing.T) {
+	userID, orgID := uuid.New(), uuid.New()
+	users := &refreshTestUserRepo{getByID: func(uuid.UUID) (*domain.User, error) {
+		return activeUser(userID, orgID, domain.RoleMember, "user@example.com"), nil
+	}}
+	app, _ := newRefreshTestApp(t, users, nil)
+
+	// Mint a legacy token with no typ claim (TokenType intentionally omitted).
+	legacyClaims := auth.JWTClaims{
+		UserID:         userID.String(),
+		OrganizationID: orgID.String(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    auth.IssuerUser,
+			Subject:   userID.String(),
+			ID:        uuid.New().String(),
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, legacyClaims)
+	legacyToken, err := tok.SignedString([]byte("test-secret-key-for-unit-tests-32"))
+	require.NoError(t, err)
+
+	out, status := postRefresh(t, app, legacyToken)
+	assert.Equal(t, fiber.StatusUnauthorized, status)
+	assert.Empty(t, out.AccessToken, "legacy empty-typ token must be refused after grace window expired")
 }
 
 // H7: a service-principal token can never traverse the human refresh path.

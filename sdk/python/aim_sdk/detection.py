@@ -13,9 +13,11 @@ Detection results can be reported to AIM using client.report_detections()
 """
 
 import json
+import logging
 import os
 import pathlib
 import sys
+import warnings
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime, timezone
@@ -31,6 +33,18 @@ except ImportError:
     except ImportError:
         distributions = None
 
+__all__ = [
+    "MCPDetector",
+    "MCPServerMetadata",
+    "track_mcp_call",
+    "auto_detect_mcps",
+    "discover_mcp_capabilities",
+    "discover_mcp_metadata",
+    "get_mcp_server_config",
+]
+
+logger = logging.getLogger(__name__)
+
 
 # Global MCP call tracker for runtime detection
 _mcp_call_tracker = {}
@@ -45,6 +59,49 @@ def _default_sdk_version() -> str:
     """
     from aim_sdk import __version__
     return f"aim-sdk-python@{__version__}"
+
+
+def _read_claude_config(config_path: pathlib.Path) -> Optional[Dict[str, Any]]:
+    """
+    Read and parse a Claude Desktop config, warning instead of swallowing.
+
+    Every reader of the config used to sit behind ``except Exception: pass``,
+    so a config file with a trailing comma made auto-detection return an empty
+    list that was indistinguishable from "you have no MCP servers configured".
+    The read still never raises -- detection must not break agent execution --
+    but exactly one warning naming the file and the parse error is emitted, so
+    the difference is visible.
+
+    Returns:
+        The parsed config dict, or None when it could not be read or parsed.
+    """
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        _warn_unreadable_config(config_path, f"invalid JSON: {e}")
+    except OSError as e:
+        _warn_unreadable_config(config_path, f"could not be read: {e}")
+    except Exception as e:  # pragma: no cover - defensive
+        _warn_unreadable_config(config_path, f"{type(e).__name__}: {e}")
+    return None
+
+
+def _warn_unreadable_config(config_path: pathlib.Path, detail: str) -> None:
+    """
+    Emit THE one warning for an unusable Claude Desktop config.
+
+    One channel on purpose: a Python warning, which is filterable per call site
+    and reaches logging too for anyone who calls
+    ``logging.captureWarnings(True)``. Emitting a log record beside it would
+    make one unreadable file announce itself twice.
+    """
+    warnings.warn(
+        f"AIM MCP detection skipped the Claude Desktop config at "
+        f"{config_path}: {detail}",
+        UserWarning,
+        stacklevel=3,
+    )
 
 
 class MCPDetector:
@@ -75,7 +132,27 @@ class MCPDetector:
         Args:
             sdk_version: SDK version string to include in detections.
                 Defaults to the installed package version.
+
+        Raises:
+            TypeError: If sdk_version is neither None nor a string. It is
+                copied verbatim into the ``sdkVersion`` field of every
+                detection this detector reports; a non-string reached the
+                server as whatever json.dumps made of it.
+            ValueError: If sdk_version is an empty string. An empty
+                ``sdkVersion`` is not "use the default", it is a row claiming
+                the SDK has no version.
         """
+        if sdk_version is not None:
+            if not isinstance(sdk_version, str):
+                raise TypeError(
+                    f"sdk_version must be a string or None -- got "
+                    f"{sdk_version!r} ({type(sdk_version).__name__})"
+                )
+            if not sdk_version.strip():
+                raise ValueError(
+                    "sdk_version must be a non-empty string; pass None to use "
+                    "the installed package version"
+                )
         self.sdk_version = sdk_version if sdk_version is not None else _default_sdk_version()
         self._mcp_packages = [
             "@modelcontextprotocol/server-filesystem",
@@ -111,8 +188,24 @@ class MCPDetector:
         """
         Detect MCP servers from Claude Desktop configuration.
 
-        Reads ~/.claude/claude_desktop_config.json and extracts MCP server
-        configurations.
+        Reads the first of these that exists, in this order, and extracts its
+        MCP server configurations -- the same list, in the same order, that
+        ``_get_claude_config_path`` searches:
+
+        1. ``~/Library/Application Support/Claude/claude_desktop_config.json``
+           (macOS only)
+        2. ``%APPDATA%\\Claude\\claude_desktop_config.json`` (Windows only)
+        3. ``~/.config/Claude/claude_desktop_config.json``
+        4. ``~/.claude/claude_desktop_config.json`` (legacy)
+
+        NOT searched: ``~/.cursor/mcp.json``, ``./.cursor/mcp.json`` and
+        ``./mcp.json``. Cursor's MCP configuration is a different file in a
+        different format, and project-local config is not read at all -- an
+        agent's working directory is not a trustworthy source of server
+        commands this SDK may later execute.
+
+        An unreadable or malformed config yields an empty list and one warning
+        naming the file and the parse error; it never raises.
 
         Returns:
             List of detection events with method 'claude_config'
@@ -123,31 +216,27 @@ class MCPDetector:
         if not config_path or not config_path.exists():
             return detections
 
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
+        config = _read_claude_config(config_path)
+        if config is None:
+            return detections
 
-            # Extract MCP servers from config
-            mcp_servers = config.get("mcpServers", {})
+        # Extract MCP servers from config
+        mcp_servers = config.get("mcpServers", {}) if isinstance(config, dict) else {}
 
-            for server_name, server_config in mcp_servers.items():
-                detection = {
-                    "mcpServer": server_name,
-                    "detectionMethod": "claude_config",
-                    "confidence": 100.0,  # Config file is definitive
-                    "details": {
-                        "configPath": str(config_path),
-                        "command": server_config.get("command", ""),
-                        "args": server_config.get("args", [])
-                    },
-                    "sdkVersion": self.sdk_version,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-                detections.append(detection)
-
-        except Exception as e:
-            # Silently fail - don't break agent execution
-            pass
+        for server_name, server_config in mcp_servers.items():
+            detection = {
+                "mcpServer": server_name,
+                "detectionMethod": "claude_config",
+                "confidence": 100.0,  # Config file is definitive
+                "details": {
+                    "configPath": str(config_path),
+                    "command": server_config.get("command", ""),
+                    "args": server_config.get("args", [])
+                },
+                "sdkVersion": self.sdk_version,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            detections.append(detection)
 
         return detections
 
@@ -207,8 +296,9 @@ class MCPDetector:
         """
         Dynamically discover tools from an MCP server using the official MCP protocol.
 
-        This method uses the existing MCP integration to query the server for
-        its available tools, resources, and prompts.
+        RUNS THE SERVER. This method executes ``server_config["command"]`` with
+        its configured arguments as a child process and speaks MCP to it over
+        stdio. It is not a config read.
 
         Args:
             server_name: Name of the MCP server
@@ -216,7 +306,11 @@ class MCPDetector:
             timeout: Maximum time to wait for response (seconds)
 
         Returns:
-            Tuple of (list of tool names, error message if any)
+            Tuple of (list of tool names, error message if any). The error
+            names the server, the command that was run, and what actually went
+            wrong -- never the anyio wrapper text "unhandled errors in a
+            TaskGroup", which is what a failed stdio session raises and which
+            says nothing about the server that failed.
 
         Example:
             tools, error = detector.discover_mcp_tools(
@@ -233,25 +327,62 @@ class MCPDetector:
             return [], f"No command specified for server {server_name}"
 
         # Build the MCP command string for discovery
-        mcp_command = f"{command} {' '.join(args)}"
+        mcp_command = f"{command} {' '.join(str(a) for a in args)}"
+
+        def _failure(detail: str) -> Tuple[List[str], str]:
+            return [], (
+                f"MCP server '{server_name}' (command: {mcp_command}): {detail}"
+            )
 
         try:
             # Use the existing MCP integration for discovery
-            from aim_sdk.integrations.mcp.discovery import discover_capabilities
+            from aim_sdk.integrations.mcp.discovery import (
+                describe_unusable_server_command,
+                discover_capabilities,
+                is_mcp_sdk_available,
+            )
+
+            if not is_mcp_sdk_available():
+                # Without the MCP client library this SDK cannot complete a
+                # session -- but it can still say whether the configured
+                # command is even runnable, which is the answer the caller
+                # actually needs when the command is a typo or a dead path.
+                problem = describe_unusable_server_command(
+                    mcp_command, timeout_seconds=timeout
+                )
+                if problem:
+                    return _failure(problem)
+                return _failure(
+                    "the MCP client library is not installed, so its tools "
+                    "could not be listed. Install with: pip install mcp"
+                )
 
             result = discover_capabilities(mcp_command, timeout_seconds=timeout)
 
             if result.error:
-                return [], result.error
+                # Ask the command itself why, so the two branches of this
+                # method answer identically. The MCP client library reports a
+                # failed session; it does not report that the command was a
+                # typo or that the process exited before saying anything, and
+                # those are the cases an operator can act on. The extra start
+                # happens only on the failure path and is bounded by the same
+                # timeout; when the probe finds nothing wrong with starting
+                # the server, the session error stands as the cause.
+                problem = describe_unusable_server_command(
+                    mcp_command, timeout_seconds=timeout
+                )
+                return _failure(problem or result.error)
 
             # Return all discovered capability names (tools + resources + prompts)
             return result.all_capability_names, None
 
-        except ImportError:
-            # MCP SDK not available, try fallback
-            return [], "MCP SDK not installed. Install with: pip install mcp"
         except Exception as e:
-            return [], f"Error discovering capabilities: {str(e)}"
+            # The third-party detail belongs in a log the operator can turn on,
+            # not on stderr as a traceback beside a detection result.
+            logger.debug(
+                "MCP discovery for %r failed: %s", mcp_command, e, exc_info=True
+            )
+            return _failure(f"{type(e).__name__}: {e}")
 
     def detect_with_tools(
         self,
@@ -265,12 +396,24 @@ class MCPDetector:
         queries each one to discover its available tools/capabilities using
         the official MCP protocol.
 
+        EXECUTES EVERY CONFIGURED SERVER COMMAND when ``discover_tools`` is
+        true. The MCP protocol has no way to list a stdio server's tools
+        without running it, so each ``command``/``args`` pair in the config is
+        launched as a child process, asked for its tools, and shut down. Pass
+        ``discover_tools=False`` to read the config without running anything.
+
+        The config file searched is the one ``detect_from_claude_config``
+        documents. An unreadable or malformed config yields an empty list and
+        one warning; it never raises.
+
         Args:
-            discover_tools: Whether to query servers for their tools
+            discover_tools: Whether to run and query servers for their tools
             timeout_per_server: Timeout for each server query
 
         Returns:
-            List of detection events with 'capabilities' field populated
+            List of detection events with 'capabilities' field populated. On a
+            server that could not be queried, ``details.discoveryError`` names
+            the server, the command that was run and the real cause.
 
         Example:
             detector = MCPDetector()
@@ -284,70 +427,92 @@ class MCPDetector:
         if not config_path or not config_path.exists():
             return detections
 
-        try:
-            with open(config_path, 'r') as f:
-                config = json.load(f)
+        config = _read_claude_config(config_path)
+        if config is None:
+            return detections
 
-            mcp_servers = config.get("mcpServers", {})
+        mcp_servers = config.get("mcpServers", {}) if isinstance(config, dict) else {}
 
-            for server_name, server_config in mcp_servers.items():
-                capabilities = []
-                discovery_error = None
+        for server_name, server_config in mcp_servers.items():
+            capabilities = []
+            discovery_error = None
 
-                # Try to discover tools if enabled
-                if discover_tools:
-                    capabilities, discovery_error = self.discover_mcp_tools(
-                        server_name,
-                        server_config,
-                        timeout=timeout_per_server
-                    )
+            # Try to discover tools if enabled
+            if discover_tools:
+                capabilities, discovery_error = self.discover_mcp_tools(
+                    server_name,
+                    server_config,
+                    timeout=timeout_per_server
+                )
 
-                detection = {
-                    "mcpServer": server_name,
-                    "detectionMethod": "claude_config",
-                    "confidence": 100.0,
-                    "details": {
-                        "configPath": str(config_path),
-                        "command": server_config.get("command", ""),
-                        "args": server_config.get("args", []),
-                        "capabilities": capabilities,  # Actual discovered tools
-                        "toolCount": len(capabilities),
-                        "discoveryError": discovery_error
-                    },
-                    "sdkVersion": self.sdk_version,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-                detections.append(detection)
-
-        except Exception as e:
-            pass  # Silently fail
+            detection = {
+                "mcpServer": server_name,
+                "detectionMethod": "claude_config",
+                "confidence": 100.0,
+                "details": {
+                    "configPath": str(config_path),
+                    "command": server_config.get("command", ""),
+                    "args": server_config.get("args", []),
+                    "capabilities": capabilities,  # Actual discovered tools
+                    "toolCount": len(capabilities),
+                    "discoveryError": discovery_error
+                },
+                "sdkVersion": self.sdk_version,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            detections.append(detection)
 
         return detections
 
     def _get_claude_config_path(self) -> Optional[pathlib.Path]:
-        """Get path to Claude Desktop config file."""
-        home = pathlib.Path.home()
+        """
+        Get path to Claude Desktop config file: the first of the searched
+        locations that exists, or None.
 
-        # macOS path (Application Support)
-        if sys.platform == 'darwin':
-            config_path = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        The search order is the list ``detect_from_claude_config``'s docstring
+        publishes, and the two must stay in step -- the docstring named only
+        ``~/.claude/claude_desktop_config.json`` while the search tried three
+        other places, so a user whose config was found somewhere else had no
+        way to know which file the SDK had read.
+
+        Platform-native first, then the cross-platform locations, so a machine
+        carrying both a real Claude Desktop config and a stale legacy one reads
+        the one Claude Desktop actually writes.
+        """
+        for config_path in self._claude_config_search_paths():
             if config_path.exists():
                 return config_path
 
-        # Linux path (older Claude CLI style)
-        config_path = home / ".claude" / "claude_desktop_config.json"
-        if config_path.exists():
-            return config_path
+        return None
 
-        # Windows path
+    @staticmethod
+    def _claude_config_search_paths() -> List[pathlib.Path]:
+        """The Claude Desktop config locations searched, in search order."""
+        home = pathlib.Path.home()
+        paths: List[pathlib.Path] = []
+
+        # macOS (Claude Desktop's own location)
+        if sys.platform == 'darwin':
+            paths.append(
+                home / "Library" / "Application Support" / "Claude"
+                / "claude_desktop_config.json"
+            )
+
+        # Windows (Claude Desktop's own location)
         if os.name == 'nt':
             appdata = os.getenv('APPDATA')
             if appdata:
-                config_path = pathlib.Path(appdata) / "Claude" / "claude_desktop_config.json"
-                if config_path.exists():
-                    return config_path
+                paths.append(
+                    pathlib.Path(appdata) / "Claude" / "claude_desktop_config.json"
+                )
 
-        return None
+        # XDG-style config directory (Claude Desktop on Linux)
+        paths.append(home / ".config" / "Claude" / "claude_desktop_config.json")
+
+        # Legacy Claude CLI style, searched on every platform
+        paths.append(home / ".claude" / "claude_desktop_config.json")
+
+        return paths
 
     def _is_mcp_module(self, module_name: str) -> bool:
         """Check if a module name is MCP-related."""
@@ -522,9 +687,16 @@ def auto_detect_mcps(
     This is a helper function that creates an MCPDetector and runs
     all detection methods.
 
+    With ``discover_tools=True`` this EXECUTES EVERY SERVER COMMAND in the
+    Claude Desktop config: each configured ``command``/``args`` pair is
+    launched as a child process, asked for its tools over stdio, and shut
+    down. The default (``discover_tools=False``) reads the config and the
+    loaded Python modules and runs nothing.
+
     Args:
         sdk_version: SDK version string. Defaults to the installed package version.
-        discover_tools: If True, dynamically query each MCP server for its tools
+        discover_tools: If True, run each configured MCP server and query it
+            for its tools
         timeout_per_server: Timeout for querying each server (if discover_tools=True)
 
     Returns:
@@ -608,11 +780,12 @@ def discover_mcp_capabilities(
     if not config_path or not config_path.exists():
         return result
 
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
+    config = _read_claude_config(config_path)
+    if config is None:
+        return result
 
-        mcp_servers = config.get("mcpServers", {})
+    try:
+        mcp_servers = config.get("mcpServers", {}) if isinstance(config, dict) else {}
 
         # Filter to requested servers if specified
         if server_names:
@@ -646,8 +819,8 @@ def discover_mcp_capabilities(
                     # Skip failed servers silently
                     pass
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("MCP capability discovery failed: %s", e, exc_info=True)
 
     return result
 
@@ -674,23 +847,20 @@ def get_mcp_server_config(server_name: str) -> Optional[Dict[str, Any]]:
     if not config_path or not config_path.exists():
         return None
 
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
+    config = _read_claude_config(config_path)
+    if config is None:
+        return None
 
-        mcp_servers = config.get("mcpServers", {})
+    mcp_servers = config.get("mcpServers", {}) if isinstance(config, dict) else {}
 
-        # Direct match
-        if server_name in mcp_servers:
-            return mcp_servers[server_name]
+    # Direct match
+    if server_name in mcp_servers:
+        return mcp_servers[server_name]
 
-        # Partial match (case-insensitive)
-        for name, cfg in mcp_servers.items():
-            if server_name.lower() in name.lower():
-                return cfg
-
-    except Exception:
-        pass
+    # Partial match (case-insensitive)
+    for name, cfg in mcp_servers.items():
+        if server_name.lower() in name.lower():
+            return cfg
 
     return None
 
@@ -778,11 +948,12 @@ def discover_mcp_metadata(
     if not config_path or not config_path.exists():
         return result
 
-    try:
-        with open(config_path, 'r') as f:
-            config = json.load(f)
+    config = _read_claude_config(config_path)
+    if config is None:
+        return result
 
-        mcp_servers = config.get("mcpServers", {})
+    try:
+        mcp_servers = config.get("mcpServers", {}) if isinstance(config, dict) else {}
 
         # Filter to requested servers if specified
         if server_names:
@@ -816,7 +987,7 @@ def discover_mcp_metadata(
                     # Skip failed servers silently
                     pass
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("MCP metadata discovery failed: %s", e, exc_info=True)
 
     return result
