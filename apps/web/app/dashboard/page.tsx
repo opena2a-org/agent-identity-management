@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ArrowRight, Bell, ExternalLink, Server, ShieldCheck, ShieldPlus } from "lucide-react";
@@ -359,7 +358,6 @@ function HomeSkeleton() {
  * ------------------------------------------------------------------------- */
 
 function DashboardContent() {
-  const searchParams = useSearchParams();
   const persona = usePersona((s) => s.persona);
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -369,12 +367,6 @@ function DashboardContent() {
   const [firstArrival, setFirstArrival] = useState<Agent | null>(null);
 
   const load = useCallback(async () => {
-    // A token handed over on the URL (device flow, OAuth) becomes the session.
-    const token = searchParams.get("token");
-    if (token) {
-      api.setToken(token, undefined, "new-session");
-      window.history.replaceState({}, "", "/dashboard");
-    }
     setLoading(true);
     setError(null);
     const [stats, verification, activity, agents, user] = await Promise.allSettled([
@@ -398,7 +390,7 @@ function DashboardContent() {
       user: { name: user.status === "fulfilled" ? firstName(user.value) : "", role },
     });
     setLoading(false);
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     load();
