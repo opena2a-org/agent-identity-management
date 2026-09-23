@@ -979,3 +979,42 @@ test('QGF-226.AC11 gate-file-approval.yml covers the instrument path in its gate
   const summary = lines.slice(titleIdx + 1).find((l) => l.startsWith('summary='));
   assert.ok(summary !== undefined && summary.includes('scripts/pr-review-generated-files.mjs'), `summary names the instrument: ${summary}`);
 });
+
+// ---------------------------------------------------------------------------
+// The system prompt carries the run date
+// ---------------------------------------------------------------------------
+
+// Without a date the model judged versions and advisory IDs against its
+// training data and failed a dependency PR on "future-dated" certifi, attrs,
+// packaging and CVE-2026-* entries that all exist. The date must come from the
+// runner clock and reach the system prompt file after the quoted heredoc.
+function assertPromptCarriesDate(text) {
+  const build = runText(text, 'Build review prompt');
+  const heredocEnd = build.indexOf('\nSYSPROMPT\n');
+  assert.ok(heredocEnd >= 0, 'the SYSPROMPT heredoc exists');
+  const after = build.slice(heredocEnd);
+  const blockStart = after.indexOf("printf '\\n=== CURRENT DATE ===\\n'");
+  assert.notEqual(blockStart, -1, 'a CURRENT DATE block follows the heredoc');
+  const block = after.slice(blockStart, after.indexOf('} >> /tmp/system_prompt.txt', blockStart));
+  assert.ok(after.includes('} >> /tmp/system_prompt.txt'), 'the block is appended to the system prompt file');
+  assert.ok(block.includes('"$(date -u +%F)"'), 'the date comes from the runner clock');
+  assert.ok(
+    block.includes('Never report a version, an advisory identifier or a date as impossible, nonexistent or future-dated'),
+    'the block forbids date-based findings',
+  );
+}
+
+test('the review system prompt states the run date and forbids "future-dated" findings', () => {
+  const text = fs.readFileSync(PR_REVIEW, 'utf8');
+  assertPromptCarriesDate(text);
+
+  const witnesses = {
+    'date block removed': text.replace("printf '\\n=== CURRENT DATE ===\\n'", "printf '\\n'"),
+    'date hard-coded': text.replace('"$(date -u +%F)"', '"2025-01-01"'),
+    'block written to the user message instead': text.replace('} >> /tmp/system_prompt.txt', '} >> /tmp/user_msg.txt'),
+  };
+  for (const [name, planted] of Object.entries(witnesses)) {
+    assert.notEqual(planted, text, `witness "${name}" changes the text`);
+    assert.throws(() => assertPromptCarriesDate(planted), `witness "${name}" is refused`);
+  }
+});

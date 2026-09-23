@@ -245,6 +245,18 @@ jobs:
           # `sed` here — substituting first would consume the placeholder and the
           # action would refuse the prompt for not carrying one.
 
+          # The model has no clock. Without the date it judges versions, advisory
+          # IDs and release dates against its training data: it reported
+          # certifi 2026.7.22, attrs 26.1.0, packaging 26.3 and CVE-2026-* IDs as
+          # "impossible, future-dated" on a dependency PR although PyPI and the
+          # advisory databases carry every one of them. The date comes from the
+          # runner clock, appended outside the quoted heredoc so it expands.
+          {
+            printf '\n=== CURRENT DATE ===\n'
+            printf 'Today is %s (UTC). Your training data ends before this date, so package versions, advisory identifiers (CVE, GHSA) and release dates later than the ones you know are expected, not suspicious.\n' "$(date -u +%F)"
+            printf 'Never report a version, an advisory identifier or a date as impossible, nonexistent or future-dated: you cannot query a registry, and the resolver that wrote a lockfile did.\n'
+          } >> /tmp/system_prompt.txt
+
           # Build user message with full context
           {
             printf 'PR #%s: %s\n\nDescription:\n' "$PR_NUMBER" "$PR_TITLE"
