@@ -138,9 +138,11 @@ func TestRefreshToken_RotationChainsAndEachOldTokenDies(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	_, status = postRefresh(t, app, out2.RefreshToken)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
+	// The newest token is live until it is itself presented and rotated.
+	assert.False(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out3.RefreshToken)))
 	_, status = postRefresh(t, app, out3.RefreshToken)
 	assert.Equal(t, fiber.StatusOK, status)
-	assert.False(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out3.RefreshToken)))
+	assert.True(t, jwtSvc.IsRevoked(context.Background(), jtiOfToken(t, jwtSvc, out3.RefreshToken)), "and retired once presented")
 }
 
 // R3: without a revocation store nothing can be retired, so nothing is
