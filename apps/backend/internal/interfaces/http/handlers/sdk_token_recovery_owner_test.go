@@ -39,7 +39,7 @@ func newRecoveryOwnerFixture(t *testing.T, acting func(c fiber.Ctx)) *recoveryOw
 	users := &refreshTestUserRepo{getByID: func(id uuid.UUID) (*domain.User, error) {
 		return activeUser(owner, org, domain.RoleAdmin, "owner@example.com"), nil
 	}}
-	h := NewSDKTokenRecoveryHandler(application.NewSDKTokenService(repo), svc, users)
+	h := NewSDKTokenRecoveryHandler(application.NewSDKTokenService(repo), svc, users, nil)
 	app := fiber.New()
 	app.Post("/auth/sdk/recover", func(c fiber.Ctx) error {
 		if acting != nil {

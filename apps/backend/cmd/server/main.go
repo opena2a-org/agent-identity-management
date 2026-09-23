@@ -1238,6 +1238,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		SDK: handlers.NewSDKHandler(
 			jwtService,
 			repos.SDKToken,
+			services.Audit,
 		),
 		SDKToken: handlers.NewSDKTokenHandler(
 			services.SDKToken,
@@ -1252,6 +1253,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.SDKToken,
 			jwtService,
 			repos.User,
+			services.Audit,
 		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,
@@ -1294,6 +1296,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		DeviceAuth: handlers.NewDeviceAuthHandler(
 			services.DeviceAuth,
+			jwtService,
+			services.Audit,
 		),
 		RegistryBridge: handlers.NewRegistryBridgeHandler(
 			services.RegistryBridge,

@@ -19,6 +19,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the signed-in user and organisation are the token's owner; any other account is answered exactly
   as if the token did not exist. No shipped SDK reaches this route as written.
 
+### Security — a revoked session cannot mint a new credential with its still-valid access token
+
+- After a session is revoked (a reused refresh token, or logout), the browser's or command line's
+  access token stays valid until it expires (`JWT_ACCESS_TTL`, 2 h by default). In that window it
+  could download an SDK (a 90-day credential), approve a device sign-in for a command line, or
+  recover an SDK credential. `GET /api/v1/sdk/download`, `POST /api/v1/oauth/device/approve` and
+  `POST /api/v1/auth/sdk/recover` now read the session's revocation directly (no cache) before
+  minting and refuse a revoked session with the same 401 the refresh route answers; a confirmed
+  refusal is recorded in the organization's audit log as `credential_mint_refused` (identifiers
+  only) and as a `SECURITY` line. Login access tokens carry their session's `sid` for this; a
+  token minted before this change carries none and is not checked. No client change is needed.
+  Other authenticated routes keep serving a revoked session's access token until it expires; that
+  window is `JWT_ACCESS_TTL`, and closing it on every request is a separate, measured change.
+
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
 - Presenting a login refresh token that was already rotated out ends that sign-in: every
