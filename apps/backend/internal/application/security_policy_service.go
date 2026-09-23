@@ -60,13 +60,19 @@ func (s *SecurityPolicyService) SetVerificationEventRepo(repo domain.Verificatio
 
 // trustScoreEvaluable says whether a trust-score threshold means anything for
 // this agent. A score computed from no allowed action cannot discriminate:
-// two status refusals and ten capability violations both drive the
-// verification, uptime and success-rate factors to zero, so a threshold on
-// that number is a comparison against noise. The predicate reads the same
-// window the trust calculator reads (the last 30 days of verification
-// events) and answers false when no verification in it succeeded. A nil
-// repository, or a repository error, answers true: the evaluators keep their
-// behaviour rather than silently exempting agents on a broken read.
+// the lifecycle refusals a pending agent collects drive the verification,
+// uptime and success-rate factors to zero, so a threshold on that number is
+// a comparison against noise. The predicate reads the same window the trust
+// calculator reads (the last 30 days of verification events) and answers
+// false only when no verification in it succeeded AND the agent has no
+// capability violation on record. A capability violation is evidence the
+// server produced against the agent's own attempt, not lifecycle noise: an
+// agent with one is evaluated like any other. The count is the agent row's
+// lifetime count (kept by the capability_violations insert trigger), so a
+// violation outside the calculator's window still makes the agent evaluable;
+// that errs toward evaluation. A nil repository, or a repository error,
+// answers true: the evaluators keep their behaviour rather than silently
+// exempting agents on a broken read.
 //
 // Measured 2026-09-22 on a self-hosted stack: a fresh agent refused twice
 // while pending read 0.26 after verification, was blocked on its granted call
@@ -76,6 +82,9 @@ func (s *SecurityPolicyService) trustScoreEvaluable(agent *domain.Agent) bool {
 	if s.verificationEventRepo == nil || agent == nil {
 		return true
 	}
+	if agent.CapabilityViolationCount > 0 {
+		return true
+	}
 	endTime := time.Now()
 	startTime := endTime.AddDate(0, 0, -30) // the trust calculator's window
 	stats, err := s.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
@@ -83,7 +92,7 @@ func (s *SecurityPolicyService) trustScoreEvaluable(agent *domain.Agent) bool {
 		return true
 	}
 	if stats.SuccessCount == 0 {
-		fmt.Printf("ℹ️  Trust score not evaluable for agent %s: no allowed action in the window (%d verifications, 0 successes)\n",
+		fmt.Printf("ℹ️  Trust score not evaluable for agent %s: no allowed action and no capability violation in the window (%d verifications, 0 successes)\n",
 			agent.Name, stats.TotalVerifications)
 		return false
 	}
