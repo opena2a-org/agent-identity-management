@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -490,6 +491,14 @@ func (s *RegistrationService) RejectRegistrationRequest(
 }
 
 // RequestPasswordReset generates a password reset token for a user and sends a reset email
+// emailAddressPattern matches anything shaped like an email address, so a mail provider's error
+// (an SMTP RCPT reply often echoes the recipient) can be logged without the address.
+var emailAddressPattern = regexp.MustCompile(`[^\s<>"'(),;:@\[\]]+@[^\s<>"'(),;:@\[\]]+`)
+
+func redactEmailAddresses(s string) string {
+	return emailAddressPattern.ReplaceAllString(s, "[address]")
+}
+
 func (s *RegistrationService) RequestPasswordReset(
 	ctx context.Context,
 	email string,
@@ -552,8 +561,9 @@ func (s *RegistrationService) RequestPasswordReset(
 		}
 
 		if err := s.emailService.SendTemplatedEmail(domain.TemplatePasswordReset, user.Email, templateData); err != nil {
-			// Log error but don't fail the request (email is non-critical)
-			fmt.Printf("⚠️ Failed to send password reset email to %s: %v\n", email, err)
+			// Log error but don't fail the request (email is non-critical). The account id names
+			// the user; the provider's error is redacted since an SMTP reply often echoes the recipient.
+			fmt.Printf("password reset email not sent for user %s: %s\n", user.ID, redactEmailAddresses(err.Error()))
 		}
 	}
 
