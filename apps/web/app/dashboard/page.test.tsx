@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 
 // One stable instance, as Next returns: a fresh object per render would change the
 // page's load callback identity and refetch (back to the skeleton) on every click.
-const searchParams = new URLSearchParams();
+let searchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({ useSearchParams: () => searchParams }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -68,7 +68,27 @@ function arrange(totalAgents: number) {
 
 const installBlocks = () => document.querySelectorAll('pre[aria-label="Commands"]');
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  searchParams = new URLSearchParams();
+  window.history.replaceState({}, "", "/");
+});
+
+describe("dashboard session", () => {
+  it("never takes a bearer from the URL query as the session", async () => {
+    // A token in a URL is logged by proxies, kept in history and sent as a
+    // referrer; no path in this repository issues /dashboard?token=, so the
+    // page must not adopt one.
+    arrange(0);
+    searchParams = new URLSearchParams("token=header.eyJyb2xlIjoiYWRtaW4ifQ.sig");
+    // Feed the token through the browser location too, so a re-introduction that
+    // bypasses the Next hook is caught as well.
+    window.history.replaceState({}, "", "/dashboard?token=header.eyJyb2xlIjoiYWRtaW4ifQ.sig");
+    render(<DashboardPage />);
+    await screen.findByText("Secure your first agent");
+    expect(api.setToken).not.toHaveBeenCalled();
+  });
+});
 
 describe("dashboard quickstart", () => {
   it("shows one tabbed quickstart, and no side panel, before the first agent exists", async () => {
