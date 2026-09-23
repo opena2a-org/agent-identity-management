@@ -33,6 +33,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   Other authenticated routes keep serving a revoked session's access token until it expires; that
   window is `JWT_ACCESS_TTL`, and closing it on every request is a separate, measured change.
 
+### Security — two presentations of one refresh token in the same instant no longer both rotate
+
+- Retiring a login refresh token on `POST /api/v1/auth/refresh` is now a set-if-absent write when
+  the revocation store supports it (Redis does, with no configuration): two presentations of one
+  token within a request's duration both used to read "not revoked" and both rotate, leaving two
+  live chains in one session that only a later reuse would end. Now the presentation that loses
+  the write is refused as a reuse (the session is revoked and the reuse recorded) and receives no
+  tokens. A store without set-if-absent keeps the previous behaviour; a failed write still returns
+  the presented token unchanged with `rotated: false`. The 401 answer, `rotated` and the SDK-download
+  path are unchanged.
+
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
 - Presenting a login refresh token that was already rotated out ends that sign-in: every
