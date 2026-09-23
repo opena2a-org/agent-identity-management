@@ -222,6 +222,18 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 			})
 		}
 	}
+
+	// A sign-in lasts at most JWT_SESSION_MAX_AGE however often it rotates.
+	// Past it the presented token is answered like an expired token, before
+	// the account lookup, so an ended sign-in learns nothing about the
+	// account; the refusal is logged with identifiers only.
+	if h.jwtService.SessionExpired(claims, time.Now()) {
+		log.Printf("Refresh: sign-in past the maximum session age refused user=%s org=%s family=%s signedIn=%s ip=%s ua=%q",
+			claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt().UTC().Format(time.RFC3339), c.IP(), c.Get("User-Agent"))
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid or expired refresh token",
+		})
+	}
 	user, refusal := h.refreshPrincipal(claims)
 	if refusal != "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -247,9 +259,20 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	// SDK-download tokens are retired by row in sdk_tokens below. Minting
 	// before retiring means a signing failure leaves the client with the token
 	// it still holds; only a response lost after the write costs a re-login.
+	// The retirement is atomic on a store with set-if-absent: two presentations
+	// of one token within a request's duration cannot both retire it. The one
+	// that loses the write is a reuse (the same token presented twice), so the
+	// family is revoked, the reuse recorded, and the minted tokens are not
+	// handed out.
 	rotated := false
 	if claims.Issuer == auth.IssuerUser {
-		retired, revokeErr := h.jwtService.RevokeTokenChecked(c.Context(), req.RefreshToken)
+		retired, lost, revokeErr := h.jwtService.RetireTokenChecked(c.Context(), req.RefreshToken)
+		if lost {
+			h.reuseDetected(c, req.RefreshToken)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked or is invalid",
+			})
+		}
 		if retired {
 			rotated = true
 		} else {

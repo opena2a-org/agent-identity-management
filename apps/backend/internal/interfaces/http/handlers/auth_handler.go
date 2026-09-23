@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"os"
 	"strings"
 
@@ -255,45 +256,34 @@ func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
 
 // Logout clears authentication
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
-	// Get user info for audit logging (if authenticated)
-	userID, _ := c.Locals("user_id").(uuid.UUID)
-	orgID, _ := c.Locals("organization_id").(uuid.UUID)
-
-	// Audit log logout
-	if userID != uuid.Nil {
-		h.auditService.LogAction(
-			c.Context(),
-			orgID,
-			userID,
-			domain.AuditActionLogout,
-			"user",
-			userID,
-			c.IP(),
-			c.Get("User-Agent"),
-			fiber.Map{},
-		)
-	}
-
-	// SECURITY: revoke the presented tokens server-side so they cannot be reused
-	// before they expire. Best-effort: no-op if revocation isn't configured or the
-	// token is absent/invalid. Covers the access token (header or cookie) and the
-	// refresh token, which a browser sends as the refresh_token cookie and a
-	// client that holds the pair outside a browser (the Python SDK after
-	// aim-sdk login) sends as {"refreshToken": ...} in the JSON body; the body
-	// wins when both are present. A malformed or absent body is "no body token".
-	// A login refresh token ends its whole session (every refresh token of that
-	// sign-in): a browser's refresh_token cookie is set once at login, so after
-	// any rotation it holds a retired token, and revoking that jti alone ended
-	// nothing. The answer reports what was actually written to the denylist,
-	// so a client can tell a revocation from a no-op (revocation not
-	// configured, a token that did not validate, or a session write that
-	// failed).
+	// The audit row. This route sits in the public auth group, so no
+	// middleware sets the principal; the row comes from the presented token's
+	// own claims: the bearer access token, or the refresh token a client
+	// outside a browser sends in the body (a browser sends the cookie). One
+	// row per logout with a valid token; garbage tokens record nothing. The
+	// row carries identifiers only, never a token.
 	var req LogoutRequest
 	_ = c.Bind().JSON(&req)
 	refreshToken := req.RefreshToken
 	if refreshToken == "" {
 		refreshToken = c.Cookies("refresh_token")
 	}
+	if h.auditService != nil && h.jwtService != nil {
+		if claims, source := h.logoutPrincipal(bearerToken(c), refreshToken); claims != nil {
+			userID, err1 := uuid.Parse(claims.UserID)
+			orgID, err2 := uuid.Parse(claims.OrganizationID)
+			if err1 == nil && err2 == nil {
+				meta := fiber.Map{"token": source, "jti": claims.ID}
+				if family := claims.FamilyID(); family != "" {
+					meta["familyId"] = family
+				}
+				if err := h.auditService.LogAction(c.Context(), orgID, userID, domain.AuditActionLogout, "user", userID, c.IP(), c.Get("User-Agent"), meta); err != nil {
+					log.Printf("⚠️  Logout: audit row not written: %v", err)
+				}
+			}
+		}
+	}
+
 	revoked := fiber.Map{"accessToken": false, "refreshToken": false}
 	if accessToken := bearerToken(c); accessToken != "" && h.jwtService != nil {
 		ok, _ := h.jwtService.RevokeTokenChecked(c.Context(), accessToken)
@@ -342,4 +332,20 @@ func bearerToken(c fiber.Ctx) string {
 		}
 	}
 	return c.Cookies("access_token")
+}
+
+// logoutPrincipal returns the claims the logout row is written from: the
+// bearer access token when it validates, else the refresh token when it does.
+func (h *AuthHandler) logoutPrincipal(bearer, refresh string) (*auth.JWTClaims, string) {
+	if bearer != "" {
+		if claims, err := h.jwtService.ValidateToken(bearer); err == nil && claims.TokenType == auth.TokenTypeAccess {
+			return claims, "access"
+		}
+	}
+	if refresh != "" {
+		if claims, err := h.jwtService.ValidateToken(refresh); err == nil && claims.TokenType != auth.TokenTypeAccess {
+			return claims, "refresh"
+		}
+	}
+	return nil, ""
 }
