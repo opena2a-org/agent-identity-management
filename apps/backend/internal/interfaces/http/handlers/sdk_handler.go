@@ -15,21 +15,25 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 // SDKHandler handles SDK download operations
 type SDKHandler struct {
-	jwtService      *auth.JWTService
-	sdkTokenRepo    domain.SDKTokenRepository
+	jwtService   *auth.JWTService
+	sdkTokenRepo domain.SDKTokenRepository
+	audit        *application.AuditService
 }
 
-// NewSDKHandler creates a new SDK handler
-func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository) *SDKHandler {
+// NewSDKHandler creates a new SDK handler. The audit service records a
+// download refused because the acting session was revoked.
+func NewSDKHandler(jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, audit *application.AuditService) *SDKHandler {
 	return &SDKHandler{
 		jwtService:   jwtService,
 		sdkTokenRepo: sdkTokenRepo,
+		audit:        audit,
 	}
 }
 

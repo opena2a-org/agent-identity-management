@@ -73,6 +73,15 @@ func (c *JWTClaims) FamilyID() string {
 	return c.ID
 }
 
+// AccessFamilyID returns the token family a login access token belongs to
+// (the sid its login pair carries), and "" for every other kind of token and
+// for an access token minted before sid existed. It is a read-side accessor
+// only: FamilyID() stays "" for access tokens, so no access token can ever
+// drive a family write (RevokeFamily, reuse detection, logout).
+func (c *JWTClaims) AccessFamilyID() string {
+	return ""
+}
+
 // familyRevocationSlack is added to a family key's lifetime so a member
 // minted by a refresh in flight at the moment of the write is still covered.
 const familyRevocationSlack = time.Minute
@@ -283,8 +292,16 @@ func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (acces
 	return accessToken, refreshToken, nil
 }
 
-// GenerateAccessToken generates an access token
+// GenerateAccessToken generates a standalone access token that belongs to no
+// family (sid absent). Access tokens minted with a login pair carry the pair's
+// family through generateAccessToken.
 func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (string, error) {
+	return s.generateAccessToken(userID, orgID, email, role, "")
+}
+
+// generateAccessToken mints an access token in the given family; an empty
+// family mints one that belongs to no family.
+func (s *JWTService) generateAccessToken(userID, orgID, email, role, family string) (string, error) {
 	now := time.Now()
 	claims := JWTClaims{
 		UserID:         userID,

@@ -7,17 +7,22 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 // DeviceAuthHandler handles HTTP endpoints for the OAuth Device Authorization Grant (RFC 8628).
 type DeviceAuthHandler struct {
 	deviceAuthService *application.DeviceAuthService
+	jwtService        *auth.JWTService
+	audit             *application.AuditService
 }
 
 // NewDeviceAuthHandler creates a new DeviceAuthHandler.
-func NewDeviceAuthHandler(deviceAuthService *application.DeviceAuthService) *DeviceAuthHandler {
+func NewDeviceAuthHandler(deviceAuthService *application.DeviceAuthService, jwtService *auth.JWTService, audit *application.AuditService) *DeviceAuthHandler {
 	return &DeviceAuthHandler{
 		deviceAuthService: deviceAuthService,
+		jwtService:        jwtService,
+		audit:             audit,
 	}
 }
 

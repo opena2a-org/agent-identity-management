@@ -27,7 +27,7 @@ func newRecoveryTestApp(t *testing.T, users domain.UserRepository, sdkRepo domai
 	t.Helper()
 	t.Setenv("JWT_SECRET", "test-secret-key-for-unit-tests-32")
 	jwtSvc := auth.NewJWTService()
-	h := NewSDKTokenRecoveryHandler(application.NewSDKTokenService(sdkRepo), jwtSvc, users)
+	h := NewSDKTokenRecoveryHandler(application.NewSDKTokenService(sdkRepo), jwtSvc, users, nil)
 	app := fiber.New()
 	app.Post("/auth/sdk/recover", h.RecoverRevokedToken)
 	return app, jwtSvc
@@ -99,6 +99,6 @@ func TestRecoverRevokedToken_RefusedForInactiveAccount(t *testing.T) {
 // The nil-users boot refusal mirrors the refresh handler's.
 func TestNewSDKTokenRecoveryHandler_NilUserRepoPanics(t *testing.T) {
 	assert.Panics(t, func() {
-		NewSDKTokenRecoveryHandler(nil, nil, nil)
+		NewSDKTokenRecoveryHandler(nil, nil, nil, nil)
 	})
 }

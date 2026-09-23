@@ -17,6 +17,7 @@ type SDKTokenRecoveryHandler struct {
 	sdkTokenService *application.SDKTokenService
 	jwtService      *auth.JWTService
 	users           domain.UserRepository
+	audit           *application.AuditService
 }
 
 // NewSDKTokenRecoveryHandler builds the recovery handler. The recovered pair's
@@ -26,6 +27,7 @@ func NewSDKTokenRecoveryHandler(
 	sdkTokenService *application.SDKTokenService,
 	jwtService *auth.JWTService,
 	users domain.UserRepository,
+	audit *application.AuditService,
 ) *SDKTokenRecoveryHandler {
 	if users == nil {
 		panic("NewSDKTokenRecoveryHandler: user repository is required")
@@ -34,6 +36,7 @@ func NewSDKTokenRecoveryHandler(
 		sdkTokenService: sdkTokenService,
 		jwtService:      jwtService,
 		users:           users,
+		audit:           audit,
 	}
 }
 

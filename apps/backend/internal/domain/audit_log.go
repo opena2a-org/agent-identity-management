@@ -19,6 +19,11 @@ const (
 	// AuditActionRefreshSessionRevoked: a member of a revoked session was
 	// presented and refused.
 	AuditActionRefreshSessionRevoked AuditAction = "refresh_session_revoked"
+	// AuditActionCredentialMintRefused: an access token whose session was
+	// revoked asked a credential-minting route (an SDK download, a device
+	// sign-in approval, an SDK credential recovery) for a new credential and
+	// was refused.
+	AuditActionCredentialMintRefused AuditAction = "credential_mint_refused"
 
 	// Agent actions
 	AuditActionCreate AuditAction = "create"
