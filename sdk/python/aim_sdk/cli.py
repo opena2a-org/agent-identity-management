@@ -247,11 +247,17 @@ def login(args):
     user_code = device.get('userCode', '')
     verification_uri = device.get('verificationUri', '')
     verification_uri_complete = device.get('verificationUriComplete') or verification_uri
-    if not (verification_uri.startswith('http://') or verification_uri.startswith('https://')):
-        print(f"\nCould not start the device login: the server sent a verification URI that is not "
-              f"an http(s) URL ({verification_uri!r}); check the server's FRONTEND_URL.")
-        return 1
-    interval = device.get('interval') or 5
+    # Both URLs are server-chosen strings: the one printed and the one handed
+    # to the browser. Only http(s) is opened; anything else stops here.
+    for candidate in (verification_uri, verification_uri_complete):
+        if not (str(candidate).startswith('http://') or str(candidate).startswith('https://')):
+            print(f"\nCould not start the device login: the server sent a verification URI that is not "
+                  f"an http(s) URL ({candidate!r}); check the server's FRONTEND_URL.")
+            return 1
+    try:
+        interval = int(device.get('interval') or 5)
+    except (TypeError, ValueError):
+        interval = 5
     try:
         expires_in = int(device.get('expiresIn') or LOGIN_MAX_WAIT_SECONDS)
     except (TypeError, ValueError):

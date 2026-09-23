@@ -272,7 +272,7 @@ function DevicePageContent() {
       </div>
 
       <p className="mt-5 text-center text-xs text-ink-tertiary">
-        Approving grants that command line your account&apos;s access until you sign it out.
+        Approving signs that command line in as you. Only approve a code you asked for.
       </p>
     </>
   );

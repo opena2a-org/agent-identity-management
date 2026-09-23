@@ -19,7 +19,7 @@ export function middleware(request: NextRequest) {
   // '/device' is the CLI device-login consent page: it renders before login so the
   // user code on the URL survives, and sends the visitor to login itself.
   const publicRoutes = ['/login', '/auth/callback', '/auth/login', '/auth/register', '/auth/registration-pending', '/auth/forgot-password', '/auth/change-password', '/auth/reset-password', '/get-started', '/device']
-  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route))
+  const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))
 
   // If accessing a public route, allow it
   if (isPublicRoute) {
