@@ -4,7 +4,7 @@
  * .github/workflows/release.yml (publish-npm) and ci.yml (sdk-tests).
  *
  * Usage:
- *   node scripts/check-vitest-report.mjs <report.json> [--root=<dir>] [--allow-skips=<file>]...
+ *   node scripts/check-vitest-report.mjs <report.json> [--root=<dir>] [--allow-skips=<file>:<bound>]...
  *
  * The vitest JSON reporter's aggregate counters cannot see skipIf-skipped
  * cases: numPendingTests/numTodoTests stay 0 and numPassedTests absorbs
@@ -15,19 +15,28 @@
  * when anything failed, was skipped, pending or todo, or when nothing
  * ran at all.
  *
- * `--allow-skips=<SDK-root-relative test file>` names an explicit
- * exclusion: a file whose "skipped" assertions are tolerated because the
- * gate's runner cannot provide their environment (see
- * docs/testing/sdk-publish-gate.md for the exclusion statement). The
- * allowlist excuses ONLY status "skipped" and only inside the named
- * files: a skip in any other file, a pending or todo anywhere, a failure
- * anywhere, or a run where nothing passed at all still refuses.
+ * `--allow-skips=<SDK-root-relative test file>:<bound>` names an explicit,
+ * bounded exclusion: a file whose "skipped" assertions are tolerated
+ * because the gate's runner cannot provide their environment (see
+ * docs/testing/sdk-publish-gate.md for the exclusion statement), and the
+ * number of skips tolerated there. <bound> is a decimal integer of one or
+ * more digits with no sign; an entry without a bound, or with anything
+ * else as its bound, is refused (exit 2) before the report is judged, so
+ * no unbounded form of an entry exists. The allowlist excuses ONLY status
+ * "skipped", only inside the named files, and only while the file's
+ * skipped count is at or below its bound: a count above the bound refuses
+ * naming the file, the count, the bound and the delta. A count below the
+ * bound passes (the environment-gated cases execute instead of skipping
+ * when their backend and credentials are reachable). A skip in any other
+ * file, a pending or todo anywhere, a failure anywhere, or a run where
+ * nothing passed at all still refuses.
  *
  * An entry matches a report file only when the file's path, made
- * relative to the SDK root, EQUALS the entry: there is no suffix match,
- * so a nested copy such as src/evil/src/a2a/A2AClient.integration.test.ts
- * is outside the allowlist. The SDK root is `--root=<dir>` when given and
- * process.cwd() otherwise (both workflow gate steps run this script from
+ * relative to the SDK root, EQUALS the entry's file: there is no suffix
+ * match, so a nested copy such as
+ * src/evil/src/a2a/A2AClient.integration.test.ts is outside the
+ * allowlist. The SDK root is `--root=<dir>` when given and process.cwd()
+ * otherwise (both workflow gate steps run this script from
  * working-directory sdk/typescript and pass no --root). Both sides are
  * normalised by turning backslashes into slashes and stripping a leading
  * "./". A report name outside the root is never allowlisted.
@@ -41,12 +50,36 @@ function refuse(message, code = 1) {
   process.exit(code);
 }
 
+const USAGE =
+  'usage: check-vitest-report.mjs <report.json> [--root=<dir>] [--allow-skips=<file>:<bound>]...';
+
+/**
+ * Parse one --allow-skips entry into { file, bound }. The bound is the
+ * text after the last ':' and must be one or more decimal digits with no
+ * sign; everything else (no ':', an empty file, a non-integer or signed
+ * bound) is refused with exit 2, quoting the entry.
+ */
+function parseAllowSkips(entry) {
+  const sep = entry.lastIndexOf(':');
+  const file = sep === -1 ? entry : entry.slice(0, sep);
+  const boundText = sep === -1 ? '' : entry.slice(sep + 1);
+  if (sep === -1 || file === '' || !/^[0-9]+$/.test(boundText)) {
+    refuse(
+      `refusing --allow-skips entry "${entry}": every entry must have the form ` +
+        '--allow-skips=<file>:<bound> with <bound> an unsigned decimal integer ' +
+        '(the number of skipped assertions tolerated in that file)',
+      2,
+    );
+  }
+  return { file, bound: Number.parseInt(boundText, 10), skipped: 0 };
+}
+
 const allowSkips = [];
 let reportPath;
 let rootArg;
 for (const arg of process.argv.slice(2)) {
   if (arg.startsWith('--allow-skips=')) {
-    allowSkips.push(arg.slice('--allow-skips='.length));
+    allowSkips.push(parseAllowSkips(arg.slice('--allow-skips='.length)));
   } else if (arg.startsWith('--root=')) {
     rootArg = arg.slice('--root='.length);
   } else if (reportPath === undefined) {
@@ -56,10 +89,7 @@ for (const arg of process.argv.slice(2)) {
   }
 }
 if (reportPath === undefined) {
-  refuse(
-    'usage: check-vitest-report.mjs <report.json> [--root=<dir>] [--allow-skips=<file>]...',
-    2,
-  );
+  refuse(USAGE, 2);
 }
 const sdkRoot = resolve(rootArg ?? process.cwd());
 
@@ -89,10 +119,14 @@ const toRootRelative = (fileName) => {
   return rel;
 };
 
-const allowSkipsNormalised = allowSkips.map(normalise);
-const isAllowlisted = (fileName) => {
+// Each entry keeps its file as written (for messages) and its normalised
+// form (for the exact comparison).
+for (const entry of allowSkips) {
+  entry.key = normalise(entry.file);
+}
+const allowEntryFor = (fileName) => {
   const rel = toRootRelative(fileName);
-  return rel !== null && allowSkipsNormalised.includes(rel);
+  return rel === null ? undefined : allowSkips.find((entry) => entry.key === rel);
 };
 
 const counts = { passed: 0, failed: 0, skipped: 0, pending: 0, todo: 0 };
@@ -107,8 +141,13 @@ for (const fileResult of report.testResults) {
     } else {
       unknown += 1;
     }
-    if (status === 'skipped' && !isAllowlisted(fileName)) {
-      unlistedSkips.push(`${fileName} > ${assertion.fullName ?? assertion.title ?? '(untitled)'}`);
+    if (status === 'skipped') {
+      const entry = allowEntryFor(fileName);
+      if (entry === undefined) {
+        unlistedSkips.push(`${fileName} > ${assertion.fullName ?? assertion.title ?? '(untitled)'}`);
+      } else {
+        entry.skipped += 1;
+      }
     }
   }
 }
@@ -140,15 +179,33 @@ if (unlistedSkips.length > 0) {
       unlistedSkips.map((s) => `  - ${s}`).join('\n'),
   );
 }
+const overBound = allowSkips.filter((entry) => entry.skipped > entry.bound);
+if (overBound.length > 0) {
+  refuse(
+    `refusing: ${overBound.length} allowlisted file(s) skipped more than their bound:\n` +
+      overBound
+        .map(
+          (entry) =>
+            `  - ${entry.file}: ${entry.skipped} skipped, bound ${entry.bound} ` +
+            `(+${entry.skipped - entry.bound}); growing the bound is a gate change, ` +
+            'see docs/testing/sdk-publish-gate.md',
+        )
+        .join('\n'),
+  );
+}
 if (counts.passed === 0) {
   // Only allowlisted skips remain: nothing actually ran green.
   refuse('refusing: no test ran green — the report holds allowlisted skips only');
 }
 
 if (counts.skipped > 0) {
+  // The entries as configured, then the measured skipped/bound per file.
   console.log(
     `ok: ${counts.passed} passed; ${counts.skipped} skipped, all inside the ` +
-      `allowlisted environment-gated files (${allowSkips.join(', ')})`,
+      'allowlisted environment-gated files (' +
+      allowSkips.map((entry) => `${entry.file}:${entry.bound}`).join(', ') +
+      ') and within their bounds: ' +
+      allowSkips.map((entry) => `${entry.file} ${entry.skipped}/${entry.bound}`).join(', '),
   );
 } else {
   console.log(`ok: ${counts.passed} passed, nothing skipped`);
