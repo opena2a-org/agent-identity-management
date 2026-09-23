@@ -64,8 +64,19 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// SignedInAt returns the time the token's sign-in happened.
+// SignedInAt returns the time the token's sign-in happened: its auth_time
+// claim, or its own iat for a token minted before the claim existed, or the
+// zero time when it carries neither.
 func (c *JWTClaims) SignedInAt() time.Time {
+	if c == nil {
+		return time.Time{}
+	}
+	if c.AuthTime != nil {
+		return c.AuthTime.Time
+	}
+	if c.IssuedAt != nil {
+		return c.IssuedAt.Time
+	}
 	return time.Time{}
 }
 
@@ -99,14 +110,29 @@ type JWTService struct {
 	revoker       *TokenRevoker
 }
 
-// SessionMaxAge is the longest a login sign-in lasts, however often it is refreshed.
+// SessionMaxAge is the longest a login sign-in lasts, however often it is
+// refreshed (JWT_SESSION_MAX_AGE, 8h by default).
 func (s *JWTService) SessionMaxAge() time.Duration {
-	return 0
+	if s.sessionMaxAge <= 0 {
+		return defaultSessionMaxAge
+	}
+	return s.sessionMaxAge
 }
 
-// SessionExpired reports whether a login refresh token's sign-in is older than SessionMaxAge.
+// SessionExpired reports whether a login refresh token's sign-in is older
+// than SessionMaxAge. Only login refresh tokens (typ refresh, the user
+// issuer) have a maximum session age: access, SDK-download and service
+// tokens never expire here. A login refresh token whose sign-in time cannot
+// be read (neither auth_time nor iat) is expired: fail closed.
 func (s *JWTService) SessionExpired(c *JWTClaims, now time.Time) bool {
-	return false
+	if c == nil || c.TokenType != TokenTypeRefresh || c.Issuer != IssuerUser {
+		return false
+	}
+	at := c.SignedInAt()
+	if at.IsZero() {
+		return true
+	}
+	return now.Sub(at) > s.SessionMaxAge()
 }
 
 // SetRevoker attaches a token-revocation store. Optional: if never set,
@@ -211,8 +237,9 @@ func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string)
 
 // NewJWTService creates a new JWT service.
 // Access tokens default to 2h (JWT_ACCESS_TTL); refresh tokens to 7d
-// (JWT_REFRESH_TTL) with rotation. The client enforces a shorter idle timeout
-// on top of the absolute access-token expiry.
+// (JWT_REFRESH_TTL) with rotation; a sign-in lasts at most 8h however often
+// it is refreshed (JWT_SESSION_MAX_AGE). The client enforces a shorter idle
+// timeout on top of the absolute access-token expiry.
 func NewJWTService() *JWTService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -240,11 +267,17 @@ func NewJWTService() *JWTService {
 		log.Printf("WARNING: invalid JWT_REFRESH_TTL, using default 168h: %v", err)
 		refreshExpiry = defaultRefreshExpiry
 	}
+	sessionMaxAge, err := time.ParseDuration(getEnv("JWT_SESSION_MAX_AGE", "8h"))
+	if err != nil || sessionMaxAge <= 0 {
+		log.Printf("WARNING: JWT_SESSION_MAX_AGE must be a positive duration, using default 8h")
+		sessionMaxAge = defaultSessionMaxAge
+	}
 
 	return &JWTService{
 		secret:        []byte(secret),
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
+		sessionMaxAge: sessionMaxAge,
 	}
 }
 
@@ -369,22 +402,28 @@ func (s *JWTService) GenerateServiceToken(agentID, orgID string) (string, error)
 // GenerateRefreshToken generates a login refresh token that starts a new
 // token family (its sid is its own jti).
 func (s *JWTService) GenerateRefreshToken(userID, orgID string) (string, error) {
-	return s.generateRefreshToken(userID, orgID, "")
+	return s.generateRefreshToken(userID, orgID, "", time.Time{})
 }
 
 // generateRefreshToken mints a login refresh token in the given family; an
-// empty family starts a new one named by the new token's jti.
-func (s *JWTService) generateRefreshToken(userID, orgID, family string) (string, error) {
+// empty family starts a new one named by the new token's jti. signedIn is the
+// sign-in's time carried as auth_time; the zero time means this token is the
+// sign-in and auth_time equals its iat.
+func (s *JWTService) generateRefreshToken(userID, orgID, family string, signedIn time.Time) (string, error) {
 	now := time.Now()
 	id := uuid.New().String()
 	if family == "" {
 		family = id
+	}
+	if signedIn.IsZero() {
+		signedIn = now
 	}
 	claims := JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
 		TokenType:      TokenTypeRefresh,
 		SessionID:      family,
+		AuthTime:       jwt.NewNumericDate(signedIn),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -422,8 +461,9 @@ func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 // RefreshTokenPair mints a new access token and a new refresh token of the
 // presented token's kind (a login refresh token carries JWT_REFRESH_TTL, 168h
 // by default; an SDK token 90 days). A new login refresh token carries the
-// presented token's family (sid), so the sign-in stays one family across
-// rotations. It retires nothing itself: the refresh handler denylists a login
+// presented token's family (sid) and sign-in time (auth_time), so the sign-in
+// stays one family, with one start, across rotations. It retires nothing
+// itself: the refresh handler denylists a login
 // token's jti (and returns the presented token unchanged when it cannot) and
 // revokes an SDK token's sdk_tokens row by hash.
 // Returns: newAccessToken, newRefreshToken, error
@@ -465,7 +505,7 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 	if isSDKToken {
 		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, email, role)
 	} else {
-		newRefreshToken, err = s.generateRefreshToken(claims.UserID, claims.OrganizationID, claims.FamilyID())
+		newRefreshToken, err = s.generateRefreshToken(claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt())
 	}
 	if err != nil {
 		return "", "", err

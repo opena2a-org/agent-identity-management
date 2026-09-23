@@ -222,6 +222,18 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 			})
 		}
 	}
+
+	// A sign-in lasts at most JWT_SESSION_MAX_AGE however often it rotates.
+	// Past it the presented token is answered like an expired token, before
+	// the account lookup, so an ended sign-in learns nothing about the
+	// account; the refusal is logged with identifiers only.
+	if h.jwtService.SessionExpired(claims, time.Now()) {
+		log.Printf("Refresh: sign-in past the maximum session age refused user=%s org=%s family=%s signedIn=%s ip=%s ua=%q",
+			claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt().UTC().Format(time.RFC3339), c.IP(), c.Get("User-Agent"))
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid or expired refresh token",
+		})
+	}
 	user, refusal := h.refreshPrincipal(claims)
 	if refusal != "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{

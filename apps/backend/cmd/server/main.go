@@ -151,6 +151,7 @@ func main() {
 
 	// Initialize infrastructure services
 	jwtService := auth.NewJWTService()
+	log.Printf("Session maximum age: %s (JWT_SESSION_MAX_AGE)", jwtService.SessionMaxAge())
 
 	// Wire server-side token revocation (logout / denylist) to Redis when
 	// available. Fails CLOSED on a store outage by default; set
