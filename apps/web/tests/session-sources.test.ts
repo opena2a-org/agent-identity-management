@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
-// Tripwire: the session store is read and written in lib/api.ts only, no
-// dashboard request sends cookies, and no edge file makes session decisions.
+// Tripwire: the session store is read and written in lib/api.ts only and no
+// dashboard request sends cookies. The edge-file cell lives in ../routing.test.ts.
 // The behaviour is pinned by the shell and store cells; this catches a new
 // reader or writer at review time.
 
@@ -48,10 +48,5 @@ describe("session sources", () => {
 
   it("no dashboard request sends cookies", () => {
     expect(hits(/credentials:\s*["']include["']/)).toEqual([]);
-  });
-
-  it("no edge file makes session decisions", () => {
-    const edge = ["middleware.ts", "middleware.js", "proxy.ts", "proxy.js"].filter((f) => existsSync(join(root, f)));
-    expect(edge).toEqual([]);
   });
 });

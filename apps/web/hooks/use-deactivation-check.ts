@@ -1,31 +1,21 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 /**
  * Hook to check if the current user is deactivated
- * If deactivated, logs them out and redirects to login with a toast message
+ * If deactivated, logs them out and redirects to login with a toast message.
+ * This hook runs only inside the dashboard shell, so every page it sees is a gated
+ * page; there is no public-route skip list here.
  */
 export function useDeactivationCheck() {
   const router = useRouter();
-  const pathname = usePathname();
   const hasChecked = useRef(false);
   useEffect(() => {
     if (hasChecked.current) return;
-
-    const publicRoutes = [
-      "/auth/login",
-      "/auth/register",
-      "/auth/callback",
-      "/auth/registration-pending",
-      "/device",
-    ];
-    if (publicRoutes.some((route) => pathname?.startsWith(route))) {
-      return;
-    }
 
     const checkUserStatus = async () => {
       try {
@@ -62,5 +52,5 @@ export function useDeactivationCheck() {
     };
 
     checkUserStatus();
-  }, [router, pathname]);
+  }, [router]);
 }

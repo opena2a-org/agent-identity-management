@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -103,12 +105,18 @@ func TestDeviceVerificationPageAndURI(t *testing.T) {
 		assert.True(t, strings.Contains(ctor[1], "cfg.Server.FrontendURL"),
 			"the device verification URI must be built from FRONTEND_URL (the dashboard), not the API origin")
 	})
-	t.Run("/device is public in the edge middleware", func(t *testing.T) {
-		mw := aim03ReadRepoFile(t, "apps/web/middleware.ts")
-		pub := regexp.MustCompile(`const publicRoutes = \[([^\]]*)\]`).FindStringSubmatch(mw)
-		require.Len(t, pub, 2, "middleware.ts publicRoutes must be found")
-		assert.True(t, strings.Contains(pub[1], `'/device'`),
-			"/device must render before login so the user code on the URL survives the redirect")
+	t.Run("/device renders outside the gated shell", func(t *testing.T) {
+		// The dashboard has no edge file: a page is gated only by the dashboard shell's
+		// layout, so a page outside that shell renders before login. /device stays
+		// outside it so the user code on the URL survives the redirect to sign-in.
+		root := aim03RepoRoot(t)
+		for _, edge := range []string{"apps/web/middleware.ts", "apps/web/proxy.ts"} {
+			_, err := os.Stat(filepath.Join(root, edge))
+			assert.True(t, os.IsNotExist(err), "%s must not exist: routing decisions belong to the dashboard shell", edge)
+		}
+		layouts, err := filepath.Glob(filepath.Join(root, "apps", "web", "app", "device", "layout.*"))
+		require.NoError(t, err)
+		assert.Empty(t, layouts, "/device must have no layout of its own that could gate it before login")
 	})
 	t.Run("the dashboard has a device approval page that approves through the api client", func(t *testing.T) {
 		page := aim03ReadRepoFile(t, "apps/web/app/device/page.tsx")
