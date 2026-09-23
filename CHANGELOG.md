@@ -52,6 +52,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   logout with a valid token, carrying the user, organisation, client address, user agent, the
   token's id and its session; garbage tokens record nothing.
 
+### Fixed — a new dashboard session never keeps the previous account's refresh token
+
+- The dashboard's API client stored a refresh token only when the caller passed one, so a new
+  session started with an access token alone kept the refresh token of whoever was signed in
+  before, and the next silent refresh ran as that account. A new session without a refresh token
+  now clears the stored one; a token refresh without one keeps the current token, as before.
+
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
 - Presenting a login refresh token that was already rotated out ends that sign-in: every
