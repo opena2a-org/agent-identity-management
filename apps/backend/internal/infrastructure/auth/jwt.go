@@ -59,11 +59,23 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// FamilyID returns the token family a login refresh token belongs to, and ""
-// for every other kind of token.
+// FamilyID returns the token family a login refresh token belongs to: its
+// sid claim, or its own jti for a token minted before sid existed (such a
+// token is the root of its own family, and its first rotation carries the
+// family on). "" for every other kind of token.
 func (c *JWTClaims) FamilyID() string {
-	return ""
+	if c == nil || c.TokenType != TokenTypeRefresh || c.Issuer != IssuerUser {
+		return ""
+	}
+	if c.SessionID != "" {
+		return c.SessionID
+	}
+	return c.ID
 }
+
+// familyRevocationSlack is added to a family key's lifetime so a member
+// minted by a refresh in flight at the moment of the write is still covered.
+const familyRevocationSlack = time.Minute
 
 // JWTService handles JWT operations
 type JWTService struct {
@@ -85,26 +97,61 @@ func (s *JWTService) IsRevoked(ctx context.Context, jti string) bool {
 }
 
 // CheckRevoked reports whether the jti is denylisted, and whether the store
-// actually answered.
+// actually answered. Unlike IsRevoked it never serves the in-process cache;
+// the refresh route reads through it. With no revoker nothing is known.
 func (s *JWTService) CheckRevoked(ctx context.Context, jti string) (revoked, known bool) {
-	return false, false
+	return s.revoker.CheckJTI(ctx, jti)
 }
 
 // CheckFamilyRevoked reports whether the token family is revoked, and whether
-// the store actually answered.
+// the store actually answered. Uncached, like CheckRevoked.
 func (s *JWTService) CheckFamilyRevoked(ctx context.Context, family string) (revoked, known bool) {
-	return false, false
+	return s.revoker.CheckFamily(ctx, family)
 }
 
-// RevokeFamily ends the token family the given login refresh token belongs to.
+// RevokeFamily ends the token family the given login refresh token belongs
+// to, for the longer of the configured refresh lifetime and the token's own
+// lifetime, plus a minute: every member minted before the write expires
+// within that, and one minted by a refresh in flight is covered by the
+// slack. Reports true only when the key was written; a missing revoker or a
+// token with no family is a no-op reported as false with no error.
 func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool, error) {
-	return false, nil
+	if s.revoker == nil || claims == nil {
+		return false, nil
+	}
+	family := claims.FamilyID()
+	if family == "" {
+		return false, nil
+	}
+	ttl := s.refreshExpiry
+	if claims.ExpiresAt != nil && claims.IssuedAt != nil {
+		if lifetime := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time); lifetime > ttl {
+			ttl = lifetime
+		}
+	}
+	if err := s.revoker.RevokeFamily(ctx, family, ttl+familyRevocationSlack); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // RevokeSessionChecked revokes the presented refresh token and, for a login
-// refresh token, the whole session it belongs to.
+// refresh token, the whole session it belongs to (every refresh token of that
+// sign-in). Reports true only when every applicable write succeeded, so a
+// logout answer never claims an ended session that is not ended.
 func (s *JWTService) RevokeSessionChecked(ctx context.Context, tokenString string) (bool, error) {
-	return s.RevokeTokenChecked(ctx, tokenString)
+	revoked, err := s.RevokeTokenChecked(ctx, tokenString)
+	if !revoked {
+		return false, err
+	}
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil {
+		return false, nil
+	}
+	if claims.FamilyID() == "" {
+		return true, nil
+	}
+	return s.RevokeFamily(ctx, claims)
 }
 
 // RevokeToken denylists the given token (by its jti) for its remaining lifetime.
@@ -295,20 +342,32 @@ func (s *JWTService) GenerateServiceToken(agentID, orgID string) (string, error)
 	return token.SignedString(s.secret)
 }
 
-// GenerateRefreshToken generates a refresh token
+// GenerateRefreshToken generates a login refresh token that starts a new
+// token family (its sid is its own jti).
 func (s *JWTService) GenerateRefreshToken(userID, orgID string) (string, error) {
+	return s.generateRefreshToken(userID, orgID, "")
+}
+
+// generateRefreshToken mints a login refresh token in the given family; an
+// empty family starts a new one named by the new token's jti.
+func (s *JWTService) generateRefreshToken(userID, orgID, family string) (string, error) {
 	now := time.Now()
+	id := uuid.New().String()
+	if family == "" {
+		family = id
+	}
 	claims := JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
 		TokenType:      TokenTypeRefresh,
+		SessionID:      family,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    IssuerUser,
 			Subject:   userID,
-			ID:        uuid.New().String(),
+			ID:        id,
 		},
 	}
 
@@ -338,9 +397,11 @@ func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 
 // RefreshTokenPair mints a new access token and a new refresh token of the
 // presented token's kind (a login refresh token carries JWT_REFRESH_TTL, 168h
-// by default; an SDK token 90 days). It retires nothing itself: the refresh
-// handler denylists a login token's jti (and returns the presented token
-// unchanged when it cannot) and revokes an SDK token's sdk_tokens row by hash.
+// by default; an SDK token 90 days). A new login refresh token carries the
+// presented token's family (sid), so the sign-in stays one family across
+// rotations. It retires nothing itself: the refresh handler denylists a login
+// token's jti (and returns the presented token unchanged when it cannot) and
+// revokes an SDK token's sdk_tokens row by hash.
 // Returns: newAccessToken, newRefreshToken, error
 //
 // A refresh token is an identity handle, not an authorization grant: the
@@ -380,7 +441,7 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 	if isSDKToken {
 		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, email, role)
 	} else {
-		newRefreshToken, err = s.GenerateRefreshToken(claims.UserID, claims.OrganizationID)
+		newRefreshToken, err = s.generateRefreshToken(claims.UserID, claims.OrganizationID, claims.FamilyID())
 	}
 	if err != nil {
 		return "", "", err

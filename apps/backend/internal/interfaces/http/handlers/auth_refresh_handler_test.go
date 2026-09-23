@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -20,7 +21,10 @@ func TestNewAuthRefreshHandler_NilUserRepoPanics(t *testing.T) {
 	assert.Panics(t, func() {
 		NewAuthRefreshHandler(nil, nil, nil, nil)
 	})
-	assert.NotNil(t, NewAuthRefreshHandler(nil, nil, &refreshTestUserRepo{}, nil))
+	assert.Panics(t, func() {
+		NewAuthRefreshHandler(nil, nil, &refreshTestUserRepo{}, nil)
+	}, "the audit service is mandatory too")
+	assert.NotNil(t, NewAuthRefreshHandler(nil, nil, &refreshTestUserRepo{}, application.NewAuditService(&familyAuditRepo{})))
 }
 
 // ===========================

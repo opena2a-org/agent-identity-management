@@ -319,6 +319,7 @@ func TestRefreshToken_SDKPathHasNoFamily(t *testing.T) {
 	assert.Contains(t, body, familyRefusal)
 	assert.Empty(t, audit.rows, "a revoked SDK row records no reuse")
 
+	sdkRepo.token = nil // login tokens are not tracked in sdk_tokens
 	_, p1, err := jwtSvc.GenerateTokenPair(userID.String(), orgID.String(), "sdk@example.com", "admin")
 	require.NoError(t, err)
 	_, status = postRefresh(t, app, p1)

@@ -141,7 +141,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/auth/logout",
         description:
-          "Invalidate the current session: revokes the bearer access token and the refresh token (the refresh_token cookie, or refreshToken in the JSON body for clients outside a browser), clears the cookies, and reports which tokens were revoked.",
+          "Invalidate the current session: revokes the bearer access token and the refresh token (the refresh_token cookie, or refreshToken in the JSON body for clients outside a browser), ends the whole sign-in that refresh token belongs to (every refresh token issued from it by rotation), clears the cookies, and reports which tokens were revoked; revoked.refreshToken is true only when the session was ended.",
         summary: "Logout current session",
         auth: "None (Public)",
         requiresAuth: false,
@@ -152,7 +152,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/auth/refresh",
         description:
-          "Obtain a new access token using a refresh token. The presented refresh token is retired and a new one issued (rotated: true); when the server cannot retire it (no revocation store), the presented token is returned unchanged with rotated: false.",
+          "Obtain a new access token using a refresh token. The presented refresh token is retired and a new one issued (rotated: true); when the server cannot retire it (no revocation store), the presented token is returned unchanged with rotated: false. Presenting a refresh token that was already rotated out ends the whole sign-in: every refresh token of that sign-in is refused from then on and the event is recorded in the audit log.",
         summary: "Refresh access token",
         auth: "Refresh Token",
         requiresAuth: true,

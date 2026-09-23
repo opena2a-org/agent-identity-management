@@ -281,9 +281,13 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	// client that holds the pair outside a browser (the Python SDK after
 	// aim-sdk login) sends as {"refreshToken": ...} in the JSON body; the body
 	// wins when both are present. A malformed or absent body is "no body token".
-	// The answer reports what was actually written to the denylist, so a client
-	// can tell a revocation from a no-op (revocation not configured, or a token
-	// that did not validate).
+	// A login refresh token ends its whole session (every refresh token of that
+	// sign-in): a browser's refresh_token cookie is set once at login, so after
+	// any rotation it holds a retired token, and revoking that jti alone ended
+	// nothing. The answer reports what was actually written to the denylist,
+	// so a client can tell a revocation from a no-op (revocation not
+	// configured, a token that did not validate, or a session write that
+	// failed).
 	var req LogoutRequest
 	_ = c.Bind().JSON(&req)
 	refreshToken := req.RefreshToken
@@ -296,7 +300,7 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 		revoked["accessToken"] = ok
 	}
 	if refreshToken != "" && h.jwtService != nil {
-		ok, _ := h.jwtService.RevokeTokenChecked(c.Context(), refreshToken)
+		ok, _ := h.jwtService.RevokeSessionChecked(c.Context(), refreshToken)
 		revoked["refreshToken"] = ok
 	}
 
