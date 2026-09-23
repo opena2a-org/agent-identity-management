@@ -296,13 +296,10 @@ def test_AIM_16_AC3_set_quiet_is_importable_and_documented():
 def test_AIM_16_AC3_quiet_secure_api_key_mode_prints_nothing(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
-    pub, priv = _keypair()
     fake = fake_aim_factory({
-        ("POST", "/api/v1/public/agents/register"): (201, {
+        ("POST", "/api/v1/agents"): (201, {
             "id": "11111111-1111-1111-1111-111111111111",
             "agentId": "11111111-1111-1111-1111-111111111111",
-            "publicKey": pub,
-            "privateKey": priv,
             "aimUrl": "unused",
             "trustScore": 80,
         }),
@@ -392,7 +389,7 @@ def test_AIM_16_AC4_registration_401_and_verification_401_raise_the_same_class(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     fake = fake_aim_factory({
-        ("POST", "/api/v1/public/agents/register"): (401, {"error": "bad api key"}),
+        ("POST", "/api/v1/agents"): (401, {"error": "bad api key"}),
         ("POST", "/api/v1/sdk-api/some-route"): (401, {"error": "bad creds"}),
     })
 
@@ -479,12 +476,9 @@ EXPECTED_UA = f"AIM-Python-SDK/{aim_sdk.__version__}"
 def test_AIM_16_AC6_api_key_registration_carries_the_sdk_user_agent(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
-    pub, priv = _keypair()
     fake = fake_aim_factory({
-        ("POST", "/api/v1/public/agents/register"): (201, {
+        ("POST", "/api/v1/agents"): (201, {
             "id": "22222222-2222-2222-2222-222222222222",
-            "publicKey": pub,
-            "privateKey": priv,
             "trustScore": 80,
         }),
     })
@@ -705,7 +699,7 @@ def test_AIM_16_AC11_a_200_with_an_empty_body_is_reported_as_malformed(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     fake = fake_aim_factory({
-        ("POST", "/api/v1/public/agents/register"): (200, {}),
+        ("POST", "/api/v1/agents"): (200, {}),
     })
     with pytest.raises(ConfigurationError) as excinfo:
         aim_sdk.secure(
@@ -724,12 +718,9 @@ def test_AIM_16_AC11_both_registration_paths_accept_200_and_201(
 ):
     # The OAuth path accepted 200 at base; the API-key path required exactly
     # 201. A well-formed 200 must now register on the API-key path too.
-    pub, priv = _keypair()
     fake = fake_aim_factory({
-        ("POST", "/api/v1/public/agents/register"): (200, {
+        ("POST", "/api/v1/agents"): (200, {
             "id": "66666666-6666-6666-6666-666666666666",
-            "publicKey": pub,
-            "privateKey": priv,
             "trustScore": 80,
         }),
     })
