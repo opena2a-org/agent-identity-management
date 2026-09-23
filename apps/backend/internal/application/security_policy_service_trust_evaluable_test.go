@@ -32,7 +32,7 @@ func criticalTrustScoreBlockPolicy() *domain.SecurityPolicy {
 		AppliesTo:         "trust_score_below:0.3",
 		IsEnabled:         true,
 		// The seeded rules carry "threshold": 50; the evaluator reads
-		// "trust_threshold" and falls back to 0.3 (the CA's unit).
+		// "trust_threshold" and falls back to 0.3 (filed separately).
 		Rules: map[string]interface{}{"threshold": 50.0, "auto_disable": true},
 	}
 }
@@ -123,5 +123,51 @@ func TestSecurityPolicyService_EvaluateTrustScoreLow_NoRepoWired_Evaluable(t *te
 	blocked, _, name, err := service.EvaluateTrustScoreLow(context.Background(), agent, "db:read", "", uuid.New())
 	assert.NoError(t, err)
 	assert.True(t, blocked)
+	assert.Equal(t, "Critical Trust Score Block", name)
+}
+
+// A capability violation is evidence the server produced against the agent's
+// own attempt; it is not the lifecycle noise the branch exists to ignore. An
+// agent with a violation on record is evaluated like any other, whatever its
+// verification rows say.
+
+// C1(a): the update-time evaluator suspends a never-allowed agent that has
+// one capability violation on record.
+func TestSecurityPolicyService_EvaluateTrustScoreOnUpdate_NoAllowedAction_WithViolation_Suspends(t *testing.T) {
+	mockAlertRepo := new(MockAlertRepoForPolicies)
+	mockAgentRepo := new(MockAgentRepository)
+	service := NewSecurityPolicyService(nil, mockAlertRepo, nil)
+	service.SetAgentRepository(mockAgentRepo)
+	agent := neverAllowedAgent()
+	agent.CapabilityViolationCount = 1
+	service.SetVerificationEventRepo(statsMock(agent.ID, 2, 0))
+	mockAlertRepo.On("GetByOrganization", agent.OrganizationID, 50, 0).Return([]*domain.Alert{}, nil)
+	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+
+	result, err := service.EvaluateTrustScoreOnUpdate(context.Background(), agent, 0.26, 0.16)
+	assert.NoError(t, err)
+	assert.True(t, result.ShouldSuspend, "a violation on record makes the agent evaluable")
+	assert.True(t, result.ShouldAlert)
+	assert.Equal(t, domain.SeverityCritical, result.AlertSeverity)
+	assert.Equal(t, domain.AgentStatusSuspended, agent.Status)
+	mockAlertRepo.AssertNumberOfCalls(t, "Create", 1)
+	mockAgentRepo.AssertCalled(t, "Update", mock.AnythingOfType("*domain.Agent"))
+}
+
+// C1(b): the low-trust policy blocks the same agent on its next call.
+func TestSecurityPolicyService_EvaluateTrustScoreLow_NoAllowedAction_WithViolation_Blocks(t *testing.T) {
+	mockPolicyRepo := new(MockSecurityPolicyRepository)
+	service := NewSecurityPolicyService(mockPolicyRepo, nil, nil)
+	agent := neverAllowedAgent()
+	agent.CapabilityViolationCount = 1
+	service.SetVerificationEventRepo(statsMock(agent.ID, 2, 0))
+	mockPolicyRepo.On("GetByType", agent.OrganizationID, domain.PolicyTypeTrustScoreLow).
+		Return([]*domain.SecurityPolicy{criticalTrustScoreBlockPolicy()}, nil)
+
+	blocked, alert, name, err := service.EvaluateTrustScoreLow(context.Background(), agent, "db:read", "", uuid.New())
+	assert.NoError(t, err)
+	assert.True(t, blocked, "a violation on record makes the agent evaluable")
+	assert.True(t, alert)
 	assert.Equal(t, "Critical Trust Score Block", name)
 }
