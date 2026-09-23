@@ -346,29 +346,38 @@ def login(args):
 
 
 def logout(args):
-    """Logout and clear credentials."""
-    from .credentials import load_sdk_credentials, AIM_DIR, SDK_CREDENTIALS_FILE
+    """Revoke the stored pair on the server and clear the local credentials."""
+    from .credentials import load_sdk_credentials, AIM_DIR
     from .oauth import OAuthTokenManager
 
     print("Logging out...")
 
-    # Try to revoke token on server
+    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
+    had_file = creds_file.exists()
+    if not had_file and not load_sdk_credentials():
+        print("No credentials to clear")
+        return 0
+
+    # revoke_token posts the server's logout route, prints why when the server
+    # did not confirm the revocation, and deletes the local file on every path.
+    confirmed = False
     try:
         token_manager = OAuthTokenManager()
         if token_manager.has_credentials():
-            token_manager.revoke_token()
+            confirmed = token_manager.revoke_token()
     except Exception:
-        pass  # Ignore revocation errors
+        confirmed = False
 
-    # Delete local credentials
-    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
+    # Belt and braces: the file must be gone whatever the token manager did.
     if creds_file.exists():
         creds_file.unlink()
-        print("Credentials cleared.")
-    else:
-        print("No credentials to clear")
 
-    return 0
+    if confirmed:
+        print("Signed out: the server revoked the session and the local credentials were cleared.")
+        return 0
+    print("Signed out locally only: the local credentials were cleared, but the server did not "
+          "confirm the revocation (see above). Verify with: aim-sdk status")
+    return 1
 
 
 def _token_state(access_token) -> str:
