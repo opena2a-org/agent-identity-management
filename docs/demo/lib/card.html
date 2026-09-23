@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Title and end cards of the demo videos, rendered by the browser image to a
+     1920x1080 PNG. The text comes from narration.md and the stamp from the
+     sidecar (render.sh fills the data-* attributes); nothing here is retyped. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; background: #0f172a; color: #cdd6f4; font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; }
+  .card { width: 1920px; height: 1080px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 28px; text-align: center; padding: 0 160px; box-sizing: border-box; }
+  .rule { width: 220px; height: 6px; border-radius: 3px; background: #06b6d4; }
+  .rule.end { background: #f59e0b; }
+  h1 { font-size: 72px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  p { font-size: 38px; margin: 0; line-height: 1.35; max-width: 1500px; }
+  p.url { color: #f59e0b; font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; font-size: 40px; }
+  p.mono { font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; }
+  .stamp { position: absolute; bottom: 48px; left: 0; right: 0; text-align: center; font-size: 24px; color: #a6adc8; font-family: "DejaVu Sans Mono", "Liberation Mono", monospace; }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="rule" id="rule"></div>
+  <h1 id="title"></h1>
+  <div id="lines"></div>
+</div>
+<div class="stamp" id="stamp"></div>
+<script>
+  // Filled by render.sh through the query string: ?kind=title|end&title=...&lines=...(\n-separated)&stamp=...
+  const q = new URLSearchParams(location.search);
+  document.getElementById("title").textContent = q.get("title") || "";
+  document.getElementById("stamp").textContent = q.get("stamp") || "";
+  if (q.get("kind") === "end") document.getElementById("rule").classList.add("end");
+  const lines = (q.get("lines") || "").split("\n").filter(Boolean);
+  const box = document.getElementById("lines");
+  for (const line of lines) {
+    const p = document.createElement("p");
+    if (/^(https?:\/\/|github\.com\/)/.test(line)) p.className = "url";
+    else if (/^(pip |aim-sdk |python)/.test(line)) p.className = "mono";
+    p.textContent = line;
+    box.appendChild(p);
+  }
+</script>
+</body>
+</html>

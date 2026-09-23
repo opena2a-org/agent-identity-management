@@ -89,6 +89,19 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 	}
 
 	// Verify the old token was actually revoked (not just expired)
+	// The route mints only for the acting principal: the bearer's user and
+	// organisation, set by the auth middleware, must be the revoked token's
+	// owner. Any other account, or no principal at all, is answered exactly as
+	// not-found, so the route can neither resurrect another user's credential
+	// nor reveal which tokens exist.
+	actingUser, _ := c.Locals("user_id").(uuid.UUID)
+	actingOrg, _ := c.Locals("organization_id").(uuid.UUID)
+	if actingUser == uuid.Nil || actingUser != oldToken.UserID || actingOrg != oldToken.OrganizationID {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Token not found - it may have been deleted",
+		})
+	}
+
 	if oldToken.RevokedAt == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Token is still valid - use /auth/refresh instead",
