@@ -58,6 +58,38 @@ func (s *SecurityPolicyService) SetVerificationEventRepo(repo domain.Verificatio
 	s.verificationEventRepo = repo
 }
 
+// trustScoreEvaluable says whether a trust-score threshold means anything for
+// this agent. A score computed from no allowed action cannot discriminate:
+// two status refusals and ten capability violations both drive the
+// verification, uptime and success-rate factors to zero, so a threshold on
+// that number is a comparison against noise. The predicate reads the same
+// window the trust calculator reads (the last 30 days of verification
+// events) and answers false when no verification in it succeeded. A nil
+// repository, or a repository error, answers true: the evaluators keep their
+// behaviour rather than silently exempting agents on a broken read.
+//
+// Measured 2026-09-22 on a self-hosted stack: a fresh agent refused twice
+// while pending read 0.26 after verification, was blocked on its granted call
+// by 'Critical Trust Score Block', and was suspended at 0.1661 after a
+// recalculation, having never run anything.
+func (s *SecurityPolicyService) trustScoreEvaluable(agent *domain.Agent) bool {
+	if s.verificationEventRepo == nil || agent == nil {
+		return true
+	}
+	endTime := time.Now()
+	startTime := endTime.AddDate(0, 0, -30) // the trust calculator's window
+	stats, err := s.verificationEventRepo.GetAgentStatistics(agent.ID, startTime, endTime)
+	if err != nil || stats == nil {
+		return true
+	}
+	if stats.SuccessCount == 0 {
+		fmt.Printf("ℹ️  Trust score not evaluable for agent %s: no allowed action in the window (%d verifications, 0 successes)\n",
+			agent.Name, stats.TotalVerifications)
+		return false
+	}
+	return true
+}
+
 func (s *SecurityPolicyService) SetDataTransferRepository(repo domain.DataTransferRepository) {
 	s.dataTransferRepo = repo
 	s.exfiltrationConfig = domain.DefaultDataExfiltrationConfig()
@@ -302,6 +334,9 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 
 		// Trigger if agent trust score is below threshold
 		if agent.TrustScore < threshold {
+			if !s.trustScoreEvaluable(agent) {
+				continue
+			}
 			fmt.Printf("✅ Trust Score Policy '%s' triggered for agent %s (score: %.2f < %.2f)\n",
 				policy.Name, agent.Name, agent.TrustScore, threshold)
 
@@ -362,6 +397,10 @@ func (s *SecurityPolicyService) EvaluateTrustScoreOnUpdate(
 	}
 
 	// Check for critical threshold breach (< 50%)
+	if !s.trustScoreEvaluable(agent) {
+		return result, nil
+	}
+
 	if currentScore < TrustScoreThresholdCritical {
 		result.ShouldAlert = true
 		result.ShouldSuspend = true
