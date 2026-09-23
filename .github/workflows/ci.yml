@@ -171,6 +171,213 @@ jobs:
           # No `|| true`, and no `exit-code: 0`. A finding here fails the gate.
           npm audit --package-lock-only --omit=dev --audit-level=high
 
+  # Blocking dependency scan over the manifests readers install from outside the
+  # hosted build: every example under examples/ and the Java SDK. Before this job,
+  # no workflow read either tree. The Java demo shipped bcprov 1.79 (two critical
+  # advisories) and jackson-databind 2.16.1 while every check stayed green, and the
+  # four example requirements.txt files held version floors that a scanner reads
+  # as zero packages.
+  #
+  # The job can only go green by proving it read its input:
+  #   - Trivy is fetched from the upstream release and checked against the
+  #     sha256 below before extraction. No trivy-action or setup-trivy: they
+  #     fetch by version, so no digest would sit in this reviewed file, and they
+  #     were the delivery vector of GHSA-69fq-xp46-6x23.
+  #     Pin: v0.74.0 (released 2026-08-14, immutable release), sigstore
+  #     signature verified at pin time against aquasecurity/trivy's
+  #     reusable-release.yaml@refs/tags/v0.74.0.
+  #   - Positive controls, one per manifest class (pom.xml, requirements.txt),
+  #     run first with the same binary, flags, config and exception file. A
+  #     control passes only on the findings exit code (3) AND its expected
+  #     advisory ID in the JSON. A scanner crash (FATAL) exits 1, so it cannot
+  #     pass as a detected control, and it fails with its own message.
+  #   - Coverage: every tracked manifest under the scanned trees must appear in
+  #     Trivy's output as a target with at least one package (for a declaration
+  #     with a lock beside it, the lock). A manifest the scanner cannot read
+  #     fails the job; it is never reported as clean.
+  #   - Config isolation: Trivy reads a config file this job writes and the
+  #     exception file below, both passed explicitly, so a .trivyignore or
+  #     trivy.yaml added by a pull request cannot suppress a finding.
+  #   - Exceptions: only lines in .github/trivy-exceptions.txt, each
+  #     `<ID> exp:<YYYY-MM-DD>` at most 30 days out, directly under a
+  #     `# reason: ... owner: ...` comment. Changing that file needs gate-file
+  #     approval.
+  #   - Offline scan (--offline-scan) with an empty HOME: Maven Central
+  #     rate-limits Trivy's POM resolution (429 measured), so the scan reads
+  #     declared dependencies, deterministically. Transitive Maven closures
+  #     are a known gap, tracked separately.
+  #
+  # Unconditional (no `if:`, no path filter), no continue-on-error, no `|| true`;
+  # tests/ci-gate-workflow-shape.test.ts in sdk/typescript asserts that.
+  example-java-manifest-audit:
+    name: Example and Java SDK manifest audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TRIVY_VERSION: 0.74.0
+      TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+      SCAN_DIRS: examples sdk/java
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Exception file holds only expiring, attributed entries
+        run: |
+          set -euo pipefail
+          f=.github/trivy-exceptions.txt
+          test -f "$f" || { echo "::error file=$f::exception file is missing"; exit 1; }
+          max=$(date -u -d '+30 days' +%F)
+          today=$(date -u +%F)
+          prev='' ; n=0 ; bad=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            n=$((n + 1))
+            case "$line" in
+              ''|'#'*) prev=$line; continue ;;
+            esac
+            if ! [[ "$line" =~ ^[A-Za-z0-9._:-]+\ exp:([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
+              echo "::error file=$f,line=$n::exception line must be '<ID> exp:<YYYY-MM-DD>': $line"; bad=1
+            else
+              exp=${BASH_REMATCH[1]}
+              if [[ "$exp" > "$max" || "$exp" < "$today" ]]; then
+                echo "::error file=$f,line=$n::exp:$exp must be between $today and $max"; bad=1
+              fi
+              if ! [[ "$prev" == '# reason:'*'owner:'* ]]; then
+                echo "::error file=$f,line=$n::the line above must be '# reason: ... owner: ...'"; bad=1
+              fi
+            fi
+            prev=$line
+          done < "$f"
+          exit "$bad"
+
+      - name: Install Trivy (sha256-verified release binary)
+        run: |
+          set -euo pipefail
+          tgz="$RUNNER_TEMP/trivy.tgz"
+          curl -fsSL --retry 3 -o "$tgz" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  ${tgz}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/trivy-bin" "$RUNNER_TEMP/trivy-home"
+          tar -xzf "$tgz" -C "$RUNNER_TEMP/trivy-bin" trivy
+          # The only config Trivy reads: written here, never from the checkout.
+          printf '# written by the example-java-manifest-audit job\n' > "$RUNNER_TEMP/trivy-config.yaml"
+          "$RUNNER_TEMP/trivy-bin/trivy" --version
+
+      - name: Positive controls, then scan and coverage
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/trivy-bin/trivy"
+          out="$RUNNER_TEMP/trivy-out"
+          mkdir -p "$out"
+          trivy_fs() { # <dir> <json-out> [extra flags...]
+            local dir=$1 json=$2; shift 2
+            HOME="$RUNNER_TEMP/trivy-home" "$T" fs --scanners vuln --severity CRITICAL,HIGH \
+              --offline-scan --list-all-pkgs --format json --exit-code 3 \
+              --cache-dir "$RUNNER_TEMP/trivy-cache" \
+              --config "$RUNNER_TEMP/trivy-config.yaml" \
+              --ignorefile "$GITHUB_WORKSPACE/.github/trivy-exceptions.txt" \
+              --output "$json" "$@" "$dir"
+          }
+
+          # One DB download per run; every scan below reads the same DB.
+          HOME="$RUNNER_TEMP/trivy-home" "$T" fs --download-db-only --no-progress \
+            --cache-dir "$RUNNER_TEMP/trivy-cache" --config "$RUNNER_TEMP/trivy-config.yaml"
+          HOME="$RUNNER_TEMP/trivy-home" "$T" version --cache-dir "$RUNNER_TEMP/trivy-cache" --format json \
+            | jq -r '"Vulnerability DB: version \(.VulnerabilityDB.Version), UpdatedAt \(.VulnerabilityDB.UpdatedAt)"'
+
+          # Positive controls. Written to the temp dir, never committed, so no
+          # vulnerable manifest appears in the repository's dependency graph.
+          ctl="$RUNNER_TEMP/controls"
+          mkdir -p "$ctl/pom" "$ctl/pip"
+          cat > "$ctl/pom/pom.xml" <<'POM'
+          <project xmlns="http://maven.apache.org/POM/4.0.0">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>control</groupId>
+            <artifactId>control</artifactId>
+            <version>1</version>
+            <dependencies>
+              <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.9.8</version>
+              </dependency>
+            </dependencies>
+          </project>
+          POM
+          printf 'PyYAML==5.3\n' > "$ctl/pip/requirements.txt"
+          fail=0
+          for c in "pom:pom.xml:CVE-2019-14379" "pip:requirements.txt:CVE-2020-14343"; do
+            IFS=: read -r cls target id <<< "$c"
+            rc=0; trivy_fs "$ctl/$cls" "$out/control-$cls.json" --skip-db-update || rc=$?
+            if [ "$rc" -ne 3 ]; then
+              echo "::error::control $cls: Trivy exited $rc, expected 3 (findings). A scanner error or a clean read means the scan cannot be trusted."
+              fail=1; continue
+            fi
+            if ! jq -e --arg t "$target" --arg id "$id" \
+                '[.Results[]? | select(.Target == $t) | .Vulnerabilities[]?.VulnerabilityID] | index($id)' \
+                "$out/control-$cls.json" > /dev/null; then
+              echo "::error::control $cls: $id not reported on $target"
+              fail=1; continue
+            fi
+            echo "control $cls: detected $id on $target"
+          done
+          [ "$fail" -eq 0 ] || exit 1
+
+          # The real scan.
+          found=0
+          for d in $SCAN_DIRS; do
+            rc=0; trivy_fs "$d" "$out/scan-${d//\//_}.json" --skip-db-update || rc=$?
+            case "$rc" in
+              0) ;;
+              3) found=1 ;;
+              *) echo "::error::Trivy failed on $d (exit $rc); this is a scanner error, not a finding"; exit 1 ;;
+            esac
+          done
+
+          # Coverage: every tracked manifest must have been read.
+          manifest_re='(^|/)(pom\.xml|requirements[^/]*\.txt|package\.json|package-lock\.json|go\.mod|pyproject\.toml|setup\.py|Pipfile|Pipfile\.lock|poetry\.lock|uv\.lock|build\.gradle|build\.gradle\.kts|gradle\.lockfile)$'
+          for d in $SCAN_DIRS; do
+            json="$out/scan-${d//\//_}.json"
+            list="$out/manifests-${d//\//_}.txt"
+            # Built in its own commands so a git failure stops the job instead of
+            # yielding an empty list that would pass the loop below vacuously.
+            git ls-files -- "$d" > "$out/tracked.txt"
+            awk -v re="$manifest_re" '$0 ~ re' "$out/tracked.txt" | sort -u > "$list"
+            if [ ! -s "$list" ]; then
+              echo "::error::no tracked manifest found under $d; the inventory is broken, so coverage cannot be shown"
+              exit 1
+            fi
+            while IFS= read -r m; do
+              dir=$(dirname "$m"); base=$(basename "$m"); need=$m
+              lock=''
+              case "$base" in
+                package.json) lock=package-lock.json ;;
+                pyproject.toml) if [ -f "$dir/uv.lock" ]; then lock=uv.lock; else lock=poetry.lock; fi ;;
+                Pipfile) lock=Pipfile.lock ;;
+                build.gradle|build.gradle.kts) lock=gradle.lockfile ;;
+              esac
+              if [ -n "$lock" ] && [ -f "$dir/$lock" ]; then need="$dir/$lock"; fi
+              rel=${need#"$d"/}
+              pkgs=$(jq --arg t "$rel" '[.Results[]? | select(.Target == $t) | .Packages[]?] | length' "$json")
+              echo "manifest $m -> $need: $pkgs packages"
+              if [ "$pkgs" -lt 1 ]; then
+                echo "::error file=$m::the scanner read no packages from $need. Pin exact versions (for Python: requirements.in plus a uv pip compile lock) so it can be scanned."
+                fail=1
+              fi
+            done < "$list"
+          done
+
+          # Findings, one line each, with a local reproduce command.
+          for d in $SCAN_DIRS; do
+            jq -r --arg d "$d" '.Results[]? | .Target as $t | .Vulnerabilities[]? |
+              "::error file=\($d)/\($t)::\(.PkgName) \(.InstalledVersion) \(.VulnerabilityID) \(.Severity), fixed in \(.FixedVersion // "no fixed release"). Reproduce: trivy fs --scanners vuln --severity CRITICAL,HIGH --offline-scan \($d)"' \
+              "$out/scan-${d//\//_}.json"
+          done
+          [ "$found" -eq 0 ] || fail=1
+          [ "$fail" -eq 0 ] || exit 1
+          echo "No high or critical advisories; every manifest was read; both controls detected."
+
   # The TypeScript SDK's vitest suite (78 test files at the time this job
   # landed) and its typecheck ran in NO pull-request workflow — release.yml
   # runs them at publish time only, so an SDK regression was caught after
@@ -648,6 +855,7 @@ jobs:
         sync-protect-guard,
         docker-paths-filter,
         sdk-dependency-audit,
+        example-java-manifest-audit,
         sdk-tests,
         sdk-python-tests,
         pr-review-input-guard,
@@ -669,6 +877,7 @@ jobs:
           sp='${{ needs.sync-protect-guard.result }}'
           dp='${{ needs.docker-paths-filter.result }}'
           sa='${{ needs.sdk-dependency-audit.result }}'
+          ea='${{ needs.example-java-manifest-audit.result }}'
           st='${{ needs.sdk-tests.result }}'
           spt='${{ needs.sdk-python-tests.result }}'
           pg='${{ needs.pr-review-input-guard.result }}'
@@ -678,11 +887,11 @@ jobs:
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa example-java-manifest-audit=$ea sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "example-java-manifest-audit:$ea" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1

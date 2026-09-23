@@ -1,0 +1,8 @@
+# Exceptions for the example-java-manifest-audit job in .github/workflows/ci.yml.
+#
+# Each exception is two lines: a comment giving the reason and the owner, then
+# the advisory ID with an expiry at most 30 days out. The job fails on any other
+# shape, and Trivy stops honouring an entry once it expires.
+#
+#   # reason: <why the finding cannot be fixed yet> owner: <github handle>
+#   CVE-YYYY-NNNNN exp:YYYY-MM-DD
