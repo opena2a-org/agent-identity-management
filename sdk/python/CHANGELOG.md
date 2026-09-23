@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk logout` revokes the stored session on the server: it posts `POST /api/v1/auth/logout`
+  with the access token as the bearer and the refresh token in the body, and prints a confirmed
+  sign-out only when the server reports the refresh token revoked; otherwise it names the reason
+  and the token's expiry, still clears `~/.aim/sdk_credentials.json`, and exits 1. It used to post
+  `/api/v1/auth/revoke`, a route no backend registers, and print `[OK] Token revoked` whatever the
+  server answered, so the refresh token stayed usable for up to seven days after a logout.
+  Requires a backend that reports `revoked` on logout (this repository from this change; the
+  published `edge` image once it carries it).
 - `secure(name, aim_url=..., api_key=...)` registers through `POST /api/v1/agents` with the
   key in `X-API-Key` and a locally generated keypair, the route and header the backend admits
   and the TypeScript SDK already uses. It used to post to `/api/v1/public/agents/register`

@@ -141,12 +141,12 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/auth/logout",
         description:
-          "Invalidate current session and JWT token. Clears authentication state.",
+          "Invalidate the current session: revokes the bearer access token and the refresh token (the refresh_token cookie, or refreshToken in the JSON body for clients outside a browser), clears the cookies, and reports which tokens were revoked.",
         summary: "Logout current session",
         auth: "None (Public)",
         requiresAuth: false,
         tags: ["auth"],
-        example: "{}",
+        example: '{"refreshToken": "<refresh token, optional; browsers send the cookie instead>"}',
       },
       {
         method: "POST",

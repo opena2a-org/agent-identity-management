@@ -221,7 +221,7 @@ aim-sdk login --url <URL>        # OAuth to self-hosted instance
 aim-sdk demo                     # Register a demo agent, watch your dashboard come alive
 aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
 aim-sdk demo --cleanup           # Delete the demo agent again
-aim-sdk logout                   # Clear ~/.aim/sdk_credentials.json
+aim-sdk logout                   # Revoke the session on the server, clear ~/.aim/sdk_credentials.json
 aim-sdk status                   # Show authentication state
 aim-sdk --version                # Show SDK version
 ```
