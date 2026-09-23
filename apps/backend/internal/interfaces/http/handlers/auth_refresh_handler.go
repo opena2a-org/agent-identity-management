@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -152,10 +153,32 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		})
 	}
 
-	// If this is a tracked SDK token, revoke old token and create new one
-	// SECURITY: Old refresh tokens MUST be invalidated after rotation to prevent
-	// token theft attacks. Each device/SDK instance gets its own independent token
-	// via the download flow — rotation only affects the specific token being refreshed.
+	// Rotation, in this order: validate, mint, retire, answer. A new refresh
+	// token is handed out only when the presented one was actually retired, so
+	// a login chain never holds two live refresh tokens. A login-issued token
+	// is retired by writing its jti to the denylist for its remaining lifetime;
+	// when that cannot happen (no revocation store, or the store refused the
+	// write, under either fail-open setting) the presented token goes back
+	// unchanged with a fresh access token, and the answer says so (rotated).
+	// SDK-download tokens are retired by row in sdk_tokens below. Minting
+	// before retiring means a signing failure leaves the client with the token
+	// it still holds; only a response lost after the write costs a re-login.
+	rotated := false
+	if claims.Issuer == auth.IssuerUser {
+		retired, revokeErr := h.jwtService.RevokeTokenChecked(c.Context(), req.RefreshToken)
+		if retired {
+			rotated = true
+		} else {
+			newRefreshToken = req.RefreshToken
+			if revokeErr != nil {
+				log.Printf("⚠️  Refresh: denylist write failed for jti %s; the presented refresh token was returned unchanged: %v", tokenID, revokeErr)
+			}
+		}
+	}
+
+	// SDK-download tokens (a different issuer) are tracked by row: the old
+	// token's row is revoked by hash and a new row is created for the new
+	// token. Rotation is reported only when that revocation succeeded.
 	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
@@ -171,7 +194,13 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		// SECURITY: Revoke the old refresh token after rotation
 		// Each SDK instance has its own token from the download flow, so revoking
 		// one instance's old token doesn't affect other instances.
-		_ = h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation")
+		if revokeErr := h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation"); revokeErr == nil {
+			if claims.Issuer == auth.IssuerSDK {
+				rotated = true
+			}
+		} else {
+			log.Printf("⚠️  Refresh: sdk_tokens revocation failed for token id %s: %v", tokenID, revokeErr)
+		}
 
 		// Save the new rotated SDK token to database
 		if oldToken != nil {
@@ -233,6 +262,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    h.jwtService.AccessTTLSeconds(),
+		Rotated:      rotated,
 	})
 }
 
@@ -246,4 +276,7 @@ type RefreshTokenResponse struct {
 	RefreshToken string `json:"refreshToken"` // New refresh token (token rotation)
 	TokenType    string `json:"tokenType"`
 	ExpiresIn    int    `json:"expiresIn"`
+	// Rotated is true only when the presented refresh token was retired and a
+	// new one issued; false means RefreshToken is the presented token, unchanged.
+	Rotated bool `json:"rotated"`
 }

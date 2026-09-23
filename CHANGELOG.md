@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a rotated-out login refresh token is refused on its next use
+
+- `POST /api/v1/auth/refresh` retires the presented login-issued refresh token (its id is written
+  to the revocation denylist for its remaining lifetime) before answering with the new one, so a
+  refresh token that has been rotated is refused with 401 on its next use; it used to stay usable
+  until its own expiry although the code claimed otherwise. A refresh token is rotated only when
+  the old one was actually retired: without a revocation store (no Redis), or when the store
+  refuses the write, the answer carries a fresh access token and the presented refresh token
+  unchanged, and the new `rotated` field reports it, so a login session on such a stack ends at
+  `JWT_REFRESH_TTL`. SDK-download tokens keep their row-based rotation. A refresh answered after a
+  lost response now requires signing in again, which is the cost of single-use refresh tokens.
+
 ### Fixed — logout revokes a refresh token sent in the body and reports what it revoked
 
 - `POST /api/v1/auth/logout` also reads the refresh token from a JSON body (`{"refreshToken": ...}`,
