@@ -3,6 +3,8 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -17,21 +19,28 @@ type AuthRefreshHandler struct {
 	jwtService      *auth.JWTService
 	sdkTokenService *application.SDKTokenService
 	users           domain.UserRepository
+	audit           *application.AuditService
 }
 
 // NewAuthRefreshHandler creates a new auth refresh handler. A refresh token is
 // an identity handle, not an authorization grant: the new access token's role
 // and email are read from the user record at refresh time, so the user
 // repository is mandatory — a nil one is a boot-time refusal, never a fallback
-// to the token's own claims.
-func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *application.SDKTokenService, users domain.UserRepository) *AuthRefreshHandler {
+// to the token's own claims. The audit service records every refused
+// presentation of a revoked token (a reuse, or a member of a revoked
+// session) in the tenant's audit log; it is mandatory too.
+func NewAuthRefreshHandler(jwtService *auth.JWTService, sdkTokenService *application.SDKTokenService, users domain.UserRepository, audit *application.AuditService) *AuthRefreshHandler {
 	if users == nil {
 		panic("NewAuthRefreshHandler: user repository is required")
+	}
+	if audit == nil {
+		panic("NewAuthRefreshHandler: audit service is required")
 	}
 	return &AuthRefreshHandler{
 		jwtService:      jwtService,
 		sdkTokenService: sdkTokenService,
 		users:           users,
+		audit:           audit,
 	}
 }
 
@@ -58,6 +67,54 @@ func (h *AuthRefreshHandler) refreshPrincipal(claims *auth.JWTClaims) (*domain.U
 		return nil, "Account is not active"
 	}
 	return user, ""
+}
+
+// recordRefusal records one refused presentation of a revoked token: a
+// SECURITY log line (the operator's record, kept even when the audit insert
+// fails) and one audit row in the tenant's log. Both carry identifiers only
+// (user, organization, family, jti, client address and user agent), never a
+// token. nil-safe on the audit service for handlers built by struct literal.
+func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, action domain.AuditAction, familyRevoked *bool) {
+	family, jti := claims.FamilyID(), claims.ID
+	ip, ua := c.IP(), c.Get("User-Agent")
+	meta := map[string]interface{}{"familyId": family, "jti": jti}
+	extra := ""
+	if familyRevoked != nil {
+		meta["familyRevoked"] = *familyRevoked
+		extra = fmt.Sprintf(" familyRevoked=%t", *familyRevoked)
+	}
+	log.Printf("SECURITY %s user=%s org=%s family=%s jti=%s%s ip=%s ua=%q", action, claims.UserID, claims.OrganizationID, family, jti, extra, ip, ua)
+	if h.audit == nil {
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return
+	}
+	orgID, err := uuid.Parse(claims.OrganizationID)
+	if err != nil {
+		return
+	}
+	if err := h.audit.LogAction(c.Context(), orgID, userID, action, "user", userID, ip, ua, meta); err != nil {
+		log.Printf("⚠️  Refresh: audit row %s for family %s not written: %v", action, family, err)
+	}
+}
+
+// reuseDetected handles a login refresh token that is denylisted and was
+// presented again (RFC 9700 section 4.14.2): whoever holds the chain that
+// grew from it cannot be told apart from the legitimate client, so the whole
+// family is revoked and the event recorded. Tokens without a family (SDK
+// download tokens, which are retired by row) record nothing here.
+func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
+	claims, err := h.jwtService.ValidateToken(token)
+	if err != nil || claims.FamilyID() == "" {
+		return
+	}
+	familyRevoked, revokeErr := h.jwtService.RevokeFamily(c.Context(), claims)
+	if revokeErr != nil {
+		log.Printf("⚠️  Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
+	}
+	h.recordRefusal(c, claims, domain.AuditActionRefreshTokenReuse, &familyRevoked)
 }
 
 // RefreshToken godoc
@@ -89,12 +146,25 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	// Check if this is an SDK token and verify it's not revoked BEFORE rotating
 	tokenID, err := h.jwtService.GetTokenID(req.RefreshToken)
 
-	// SECURITY: a refresh token revoked on logout must not be able to mint new
-	// tokens. (SDK tokens are additionally checked against the DB table below.)
-	if err == nil && tokenID != "" && h.jwtService.IsRevoked(c.Context(), tokenID) {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Token has been revoked or is invalid",
-		})
+	// SECURITY: a refresh token revoked on logout or retired by rotation must
+	// not be able to mint new tokens. (SDK tokens are additionally checked
+	// against the DB table below.) The read is uncached: every refresh token
+	// is presented once, so a stale "not revoked" entry would only ever serve
+	// a replay. A presentation the store confirmed as revoked is a reuse of a
+	// rotated-out token (a logged-out token is denylisted the same way): the
+	// whole family is revoked and the event recorded. When the store did not
+	// answer, enforcement follows the fail-open setting and nothing is
+	// recorded, since there is no evidence.
+	if err == nil && tokenID != "" {
+		revoked, known := h.jwtService.CheckRevoked(c.Context(), tokenID)
+		if revoked {
+			if known {
+				h.reuseDetected(c, req.RefreshToken)
+			}
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked or is invalid",
+			})
+		}
 	}
 
 	if err == nil && tokenID != "" {
@@ -137,6 +207,21 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 			"error": "Invalid or expired refresh token",
 		})
 	}
+
+	// A member of a revoked family (a sign-in ended by a reuse, or by logout)
+	// is refused before the principal lookup, with the same answer as a
+	// revoked token, so the refusal tells the presenter nothing more.
+	if family := claims.FamilyID(); family != "" {
+		revoked, known := h.jwtService.CheckFamilyRevoked(c.Context(), family)
+		if revoked {
+			if known {
+				h.recordRefusal(c, claims, domain.AuditActionRefreshSessionRevoked, nil)
+			}
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked or is invalid",
+			})
+		}
+	}
 	user, refusal := h.refreshPrincipal(claims)
 	if refusal != "" {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -152,10 +237,32 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		})
 	}
 
-	// If this is a tracked SDK token, revoke old token and create new one
-	// SECURITY: Old refresh tokens MUST be invalidated after rotation to prevent
-	// token theft attacks. Each device/SDK instance gets its own independent token
-	// via the download flow — rotation only affects the specific token being refreshed.
+	// Rotation, in this order: validate, mint, retire, answer. A new refresh
+	// token is handed out only when the presented one was actually retired, so
+	// a login chain never holds two live refresh tokens. A login-issued token
+	// is retired by writing its jti to the denylist for its remaining lifetime;
+	// when that cannot happen (no revocation store, or the store refused the
+	// write, under either fail-open setting) the presented token goes back
+	// unchanged with a fresh access token, and the answer says so (rotated).
+	// SDK-download tokens are retired by row in sdk_tokens below. Minting
+	// before retiring means a signing failure leaves the client with the token
+	// it still holds; only a response lost after the write costs a re-login.
+	rotated := false
+	if claims.Issuer == auth.IssuerUser {
+		retired, revokeErr := h.jwtService.RevokeTokenChecked(c.Context(), req.RefreshToken)
+		if retired {
+			rotated = true
+		} else {
+			newRefreshToken = req.RefreshToken
+			if revokeErr != nil {
+				log.Printf("⚠️  Refresh: denylist write failed for jti %s; the presented refresh token was returned unchanged: %v", tokenID, revokeErr)
+			}
+		}
+	}
+
+	// SDK-download tokens (a different issuer) are tracked by row: the old
+	// token's row is revoked by hash and a new row is created for the new
+	// token. Rotation is reported only when that revocation succeeded.
 	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
@@ -171,7 +278,13 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		// SECURITY: Revoke the old refresh token after rotation
 		// Each SDK instance has its own token from the download flow, so revoking
 		// one instance's old token doesn't affect other instances.
-		_ = h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation")
+		if revokeErr := h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation"); revokeErr == nil {
+			if claims.Issuer == auth.IssuerSDK {
+				rotated = true
+			}
+		} else {
+			log.Printf("⚠️  Refresh: sdk_tokens revocation failed for token id %s: %v", tokenID, revokeErr)
+		}
 
 		// Save the new rotated SDK token to database
 		if oldToken != nil {
@@ -233,6 +346,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    h.jwtService.AccessTTLSeconds(),
+		Rotated:      rotated,
 	})
 }
 
@@ -246,4 +360,7 @@ type RefreshTokenResponse struct {
 	RefreshToken string `json:"refreshToken"` // New refresh token (token rotation)
 	TokenType    string `json:"tokenType"`
 	ExpiresIn    int    `json:"expiresIn"`
+	// Rotated is true only when the presented refresh token was retired and a
+	// new one issued; false means RefreshToken is the presented token, unchanged.
+	Rotated bool `json:"rotated"`
 }

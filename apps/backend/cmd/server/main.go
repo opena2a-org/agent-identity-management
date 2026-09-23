@@ -161,7 +161,7 @@ func main() {
 		jwtService.SetRevoker(auth.NewTokenRevoker(cacheService, failOpen))
 		log.Printf("ℹ️  Token revocation enabled (fail-open=%v)", failOpen)
 	} else {
-		log.Println("ℹ️  Token revocation disabled (no Redis configured)")
+		log.Println("ℹ️  Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke")
 	}
 
 	// Initialize email service
@@ -173,7 +173,7 @@ func main() {
 	}
 
 	// Initialize application services
-	services, keyVault := initServices(db, repos, cacheService, oauthRepo, jwtService, emailService)
+	services, keyVault := initServices(cfg, db, repos, cacheService, oauthRepo, jwtService, emailService)
 
 	// Initialize handlers
 	h := initHandlers(services, repos, jwtService, keyVault, cfg, db)
@@ -619,7 +619,7 @@ type Services struct {
 	ATCIssuance       *application.ATCIssuanceService       // Issues Registry-signed ATCs carrying AIM's behavioral score
 }
 
-func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
+func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
 	// ✅ Initialize KeyVault for secure private key storage
 	keyVault, err := crypto.NewKeyVaultFromEnv()
 	if err != nil {
@@ -877,16 +877,15 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		keyVault,
 	)
 
-	// Device Authorization Grant (RFC 8628) for CLI login
-	aimBaseURL := os.Getenv("AIM_BASE_URL")
-	if aimBaseURL == "" {
-		aimBaseURL = "http://localhost:8080"
-	}
+	// Device Authorization Grant (RFC 8628) for CLI login. The verification URI
+	// the CLI prints is a dashboard page (/device), so its base is the dashboard
+	// origin, FRONTEND_URL, the same base registration and password-reset links
+	// use. AIM_BASE_URL is the API origin and serves no page.
 	deviceAuthService := application.NewDeviceAuthService(
 		repos.DeviceCode,
 		jwtService,
 		authService,
-		aimBaseURL,
+		cfg.Server.FrontendURL,
 	)
 
 	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry
@@ -1247,6 +1246,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			jwtService,
 			services.SDKToken,
 			repos.User, // role/email re-read at refresh; never from the token
+			services.Audit,
 		),
 		SDKTokenRecovery: handlers.NewSDKTokenRecoveryHandler(
 			services.SDKToken,

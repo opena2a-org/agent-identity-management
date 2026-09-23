@@ -75,6 +75,15 @@ describe("edge gate", () => {
     expect(verdict(middleware(request("/dashboard/agents", t))).kind).toBe("pass");
   });
 
+  it("serves the CLI device-login consent page before login, code on the URL intact", () => {
+    // The CLI prints /device?user_code=XXXX-XXXX; a redirect to login would drop the query.
+    expect(verdict(middleware(request("/device?user_code=BCDF-GHJK"))).kind).toBe("pass");
+    expect(verdict(middleware(request("/device"))).kind).toBe("pass");
+    // Only the page itself is public: a sibling path that merely starts with the
+    // same letters stays gated.
+    expect(verdict(middleware(request("/devices"))).kind).toBe("redirect");
+  });
+
   it("leaves public and backend-proxied routes alone without a cookie", () => {
     for (const p of ["/auth/login", "/auth/register", "/auth/reset-password", "/api/v1/agents", "/health"]) {
       expect(verdict(middleware(request(p))).kind, p).toBe("pass");

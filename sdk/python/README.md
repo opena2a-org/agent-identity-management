@@ -38,7 +38,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Login uses OAuth 2.0 with PKCE. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
+Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
 
 ## Framework auto-detection
 
@@ -221,7 +221,7 @@ aim-sdk login --url <URL>        # OAuth to self-hosted instance
 aim-sdk demo                     # Register a demo agent, watch your dashboard come alive
 aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
 aim-sdk demo --cleanup           # Delete the demo agent again
-aim-sdk logout                   # Clear ~/.aim/sdk_credentials.json
+aim-sdk logout                   # Revoke the session on the server, clear ~/.aim/sdk_credentials.json
 aim-sdk status                   # Show authentication state
 aim-sdk --version                # Show SDK version
 ```
