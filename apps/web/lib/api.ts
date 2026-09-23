@@ -554,6 +554,13 @@ class APIClient {
       if (refreshToken) {
         this.refreshToken = refreshToken;
         localStorage.setItem("refresh_token", refreshToken);
+      } else if (sessionKind === "new-session") {
+        // A new session never inherits the previous account's refresh token:
+        // without one of its own, the stored one is cleared, so the next silent
+        // refresh cannot run as whoever was signed in before. A token refresh
+        // keeps the current refresh token when the answer carries none.
+        this.refreshToken = null;
+        localStorage.removeItem("refresh_token");
       }
       // Default is "new-session": a caller that forgets to say gets a usable
       // session rather than a login loop. The cap is a client-side convenience
