@@ -633,6 +633,7 @@ func initServices(db *sql.DB, repos *Repositories, cacheService *cache.RedisCach
 		repos.Alert,
 		repos.AuditLog,
 	)
+	securityPolicyService.SetVerificationEventRepo(repos.VerificationEvent) // the not-evaluable branch reads the calculator's window
 
 	// Create services
 	authService := application.NewAuthService(
