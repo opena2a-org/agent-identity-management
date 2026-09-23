@@ -12,13 +12,14 @@ import (
 
 // SecurityPolicyService handles security policy evaluation and management
 type SecurityPolicyService struct {
-	policyRepo         domain.SecurityPolicyRepository
-	alertRepo          domain.AlertRepository
-	auditLogRepo       domain.AuditLogRepository
-	agentRepo          domain.AgentRepository             // For suspending agents on critical trust score
-	behaviorAnalysis   *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
-	dataTransferRepo   domain.DataTransferRepository      // For data exfiltration detection
-	exfiltrationConfig domain.DataExfiltrationConfig      // Exfiltration detection thresholds
+	policyRepo            domain.SecurityPolicyRepository
+	alertRepo             domain.AlertRepository
+	auditLogRepo          domain.AuditLogRepository
+	agentRepo             domain.AgentRepository             // For suspending agents on critical trust score
+	behaviorAnalysis      *BehaviorAnalysisService           // Intelligent behavioral anomaly detection
+	dataTransferRepo      domain.DataTransferRepository      // For data exfiltration detection
+	verificationEventRepo domain.VerificationEventRepository // For the not-evaluable branch (no allowed action)
+	exfiltrationConfig    domain.DataExfiltrationConfig      // Exfiltration detection thresholds
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -49,6 +50,14 @@ func (s *SecurityPolicyService) SetAgentRepository(agentRepo domain.AgentReposit
 
 // SetDataTransferRepository sets the data transfer repository for exfiltration detection
 // This uses setter injection to break circular dependency between services
+// SetVerificationEventRepo wires the verification-event repository the trust
+// calculator reads, so the service can tell whether an agent's trust score
+// rests on any allowed action. Nil keeps today's behaviour: every agent is
+// evaluable.
+func (s *SecurityPolicyService) SetVerificationEventRepo(repo domain.VerificationEventRepository) {
+	s.verificationEventRepo = repo
+}
+
 func (s *SecurityPolicyService) SetDataTransferRepository(repo domain.DataTransferRepository) {
 	s.dataTransferRepo = repo
 	s.exfiltrationConfig = domain.DefaultDataExfiltrationConfig()
