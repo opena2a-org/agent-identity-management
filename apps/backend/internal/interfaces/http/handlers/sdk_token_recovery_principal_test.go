@@ -23,13 +23,19 @@ import (
 // pair now carries the account's CURRENT role and email, and an account that
 // may not hold a session cannot recover one.
 
-func newRecoveryTestApp(t *testing.T, users domain.UserRepository, sdkRepo domain.SDKTokenRepository) (*fiber.App, *auth.JWTService) {
+// newRecoveryTestAppAs builds the recovery route with the acting principal the
+// auth middleware would set: the route mints only for the token's owner.
+func newRecoveryTestAppAs(t *testing.T, users domain.UserRepository, sdkRepo domain.SDKTokenRepository, actingUser, actingOrg uuid.UUID) (*fiber.App, *auth.JWTService) {
 	t.Helper()
 	t.Setenv("JWT_SECRET", "test-secret-key-for-unit-tests-32")
 	jwtSvc := auth.NewJWTService()
 	h := NewSDKTokenRecoveryHandler(application.NewSDKTokenService(sdkRepo), jwtSvc, users)
 	app := fiber.New()
-	app.Post("/auth/sdk/recover", h.RecoverRevokedToken)
+	app.Post("/auth/sdk/recover", func(c fiber.Ctx) error {
+		c.Locals("user_id", actingUser)
+		c.Locals("organization_id", actingOrg)
+		return h.RecoverRevokedToken(c)
+	})
 	return app, jwtSvc
 }
 
@@ -67,7 +73,7 @@ func TestRecoverRevokedToken_MintsRoleAndEmailFromUserRecord(t *testing.T) {
 	sdkRepo := &refreshTestSDKRepo{getByTokenHash: func(string) (*domain.SDKToken, error) {
 		return revokedSDKToken(userID, orgID), nil
 	}}
-	app, jwtSvc := newRecoveryTestApp(t, users, sdkRepo)
+	app, jwtSvc := newRecoveryTestAppAs(t, users, sdkRepo, userID, orgID)
 	oldRefresh, err := jwtSvc.GenerateSDKRefreshToken(userID.String(), orgID.String(), "old@example.com", "admin")
 	require.NoError(t, err)
 
@@ -87,7 +93,7 @@ func TestRecoverRevokedToken_RefusedForInactiveAccount(t *testing.T) {
 	sdkRepo := &refreshTestSDKRepo{getByTokenHash: func(string) (*domain.SDKToken, error) {
 		return revokedSDKToken(userID, orgID), nil
 	}}
-	app, jwtSvc := newRecoveryTestApp(t, users, sdkRepo)
+	app, jwtSvc := newRecoveryTestAppAs(t, users, sdkRepo, userID, orgID)
 	oldRefresh, err := jwtSvc.GenerateSDKRefreshToken(userID.String(), orgID.String(), "old@example.com", "admin")
 	require.NoError(t, err)
 
