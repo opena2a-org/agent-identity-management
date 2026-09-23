@@ -19,10 +19,10 @@ Install the SDK and authenticate:
 
 ```bash
 pip install aim-sdk
-aim-sdk login                    # AIM Cloud by default; --url <API URL> for self-hosted
+aim-sdk login                    # OAuth to aim.opena2a.org
 ```
 
-Self-hosted: `aim-sdk login --url http://localhost:8080` prints a code and opens your dashboard's device page (`http://localhost:3000/device`); sign in there and approve the code, and the credentials land in `~/.aim/`. For CI, create the agent under Agents, mint an API key for it, and pass `api_key=` together with `aim_url=` (measured 2026-09-23 with aim-sdk 2.0.3 built from this repository at 68bdb9c, against a backend and dashboard built from the same commit).
+Self-hosted: create the agent under Agents in your dashboard first and run the SDK with the credentials it issues; `aim-sdk login --url` and `secure(..., api_key=...)` do not yet complete against a self-hosted backend (measured 2026-09-22 on the published images; tracked for a fix).
 
 Then protect any function with a capability grant:
 
