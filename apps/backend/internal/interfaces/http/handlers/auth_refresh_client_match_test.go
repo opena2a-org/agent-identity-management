@@ -48,6 +48,7 @@ var cmMarkRE = regexp.MustCompile(`^v1:[0-9a-f]{32}$`)
 type valueStore struct {
 	data       map[string]string
 	blindReads int
+	nxLost     int // set-if-absent writes that found the key present
 }
 
 func (s *valueStore) Exists(_ context.Context, key string) (bool, error) {
@@ -74,6 +75,7 @@ func (s *valueStore) Set(_ context.Context, key string, value interface{}, _ tim
 
 func (s *valueStore) SetWithNX(_ context.Context, key string, value interface{}, _ time.Duration) (bool, error) {
 	if _, ok := s.data[key]; ok {
+		s.nxLost++
 		return false, nil
 	}
 	s.put(key, value)
@@ -200,6 +202,8 @@ func TestCA9933_RaceLoserFromTheSameClientIsSameClient(t *testing.T) {
 	require.Equal(t, fiber.StatusOK, s1)
 	_, body, s2 := cmRefresh(t, f, f.p1, cmAddrA, cmUA)
 	assertRefusedAsReuse(t, f, body, s2, jti, "sameClient")
+	assert.Zero(t, store.blindReads, "both presentations read past the denylist")
+	assert.Equal(t, 1, store.nxLost, "the second presentation lost the retirement write")
 }
 
 // M2: a later replay of a rotated-out token by the client that rotated it.
@@ -392,4 +396,48 @@ func TestCA9933_SessionRevokedRecordsCarryNoClassification(t *testing.T) {
 // Redis classifies reuses without configuration.
 func TestCA9933_RedisCacheIsAReadableStore(t *testing.T) {
 	var _ auth.RevocationStoreReader = (*cache.RedisCache)(nil)
+}
+
+// M15: presenting an already-rotated token at logout does not replace the
+// mark of the client that rotated it. Rotated from B, logged out from A, then
+// replayed from A: differentClient, not a false sameClient. Holds on a plain
+// store too.
+func TestCA9933_LogoutKeepsTheRotatingClientsMark(t *testing.T) {
+	for name, mk := range map[string]func(*valueStore) auth.RevocationStore{
+		"setIfAbsent": func(vs *valueStore) auth.RevocationStore { return vs },
+		"plain":       func(vs *valueStore) auth.RevocationStore { return readerPlainStore{plainValueStore{vs: vs}} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			vs := &valueStore{}
+			f := cmApp(t, mk(vs))
+			jti := jtiOfToken(t, f.svc, f.p1)
+			_, _, status := cmRefresh(t, f, f.p1, cmAddrB, cmUA)
+			require.Equal(t, fiber.StatusOK, status)
+			rotated := vs.value("revoked:jti:" + jti)
+			require.Regexp(t, cmMarkRE, rotated)
+
+			body, status := cmPost(t, f.app, "/auth/logout", fmt.Sprintf(`{"refreshToken":%q}`, f.p1), cmAddrA, cmUA)
+			require.Equal(t, fiber.StatusOK, status, body)
+			assert.Equal(t, rotated, vs.value("revoked:jti:"+jti), "logout kept the first mark")
+
+			_, body, status = cmRefresh(t, f, f.p1, cmAddrA, cmUA)
+			assertRefusedAsReuse(t, f, body, status, jti, "differentClient")
+		})
+	}
+}
+
+// M16: a forwarded address that does not parse is not recorded; the
+// connecting address is, so the value cannot add fields to the SECURITY line.
+func TestCA9933_AnUnparsableForwardedAddressIsNotRecorded(t *testing.T) {
+	f := cmApp(t, &valueStore{})
+	cmRefresh(t, f, f.p1, cmAddrA, cmUA)
+	logs := captureLog(t)
+	forged := "1.2.3.4 clientMatch=sameClient"
+	cmRefresh(t, f, f.p1, forged, cmUA)
+	assert.NotContains(t, logs.String(), forged)
+	assert.Contains(t, logs.String(), "clientMatch=unknown ip=0.0.0.0")
+	rows := reuseRows(f)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "0.0.0.0", rows[0].IPAddress)
+	assert.Equal(t, "unknown", rows[0].Metadata["clientMatch"])
 }

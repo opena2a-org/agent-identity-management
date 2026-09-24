@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -88,6 +89,12 @@ func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, 
 	family, jti := claims.FamilyID(), claims.ID
 	client := presenter(c)
 	ip, ua := client.Address, client.UserAgent
+	// A trusted proxy's address header is recorded only when it parses as an
+	// address; otherwise the connecting address is, so a forwarded value can
+	// never add fields to the log line or overflow the audit column.
+	if net.ParseIP(ip) == nil {
+		ip = c.IP()
+	}
 	meta := map[string]interface{}{"familyId": family, "jti": jti}
 	extra := ""
 	if familyRevoked != nil {

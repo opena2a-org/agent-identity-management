@@ -197,6 +197,33 @@ func (r *TokenRevoker) revokeWith(ctx context.Context, jti string, ttl time.Dura
 	return r.store.Set(ctx, revokedKeyPrefix+jti, value, ttl)
 }
 
+// revokeKeepFirst denylists a jti like revokeWith but never replaces a value
+// already stored: the first writer's client mark stands. Logout uses it, so
+// presenting an already-rotated token at logout cannot overwrite the mark of
+// the client that rotated it (which would turn a later replay into a false
+// sameClient). On a set-if-absent store the write is atomic; on a plain store
+// an existing key is left as it is. Either way the jti is denylisted.
+func (r *TokenRevoker) revokeKeepFirst(ctx context.Context, jti string, ttl time.Duration, value string) error {
+	if r == nil || r.store == nil || jti == "" || ttl <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	delete(r.negCache, jti)
+	r.mu.Unlock()
+	if nx, ok := r.store.(RevocationStoreNX); ok {
+		_, err := nx.SetWithNX(ctx, revokedKeyPrefix+jti, value, ttl)
+		return err
+	}
+	exists, err := r.store.Exists(ctx, revokedKeyPrefix+jti)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return r.store.Set(ctx, revokedKeyPrefix+jti, value, ttl)
+}
+
 // readJTI returns the value stored for a denylisted jti, uncached. ok is false
 // when the store has no read, the read fails or misses, or the value is not a
 // string; the caller then classifies nothing.

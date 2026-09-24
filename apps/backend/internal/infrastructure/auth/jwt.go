@@ -207,7 +207,9 @@ func (s *JWTService) RevokeSessionChecked(ctx context.Context, tokenString strin
 
 // RevokeSessionCheckedFrom is RevokeSessionChecked recording which client
 // logged out: the refresh token's denylist value is that client's mark, so a
-// later replay of the logged-out token can be classified (ClassifyReuse).
+// later replay of the logged-out token can be classified (ClassifyReuse). A
+// value already stored (the token was rotated, or logged out, before) is
+// kept, so the mark always names the client that retired the token first.
 func (s *JWTService) RevokeSessionCheckedFrom(ctx context.Context, tokenString string, client Client) (bool, error) {
 	revoked, err := s.revokeTokenChecked(ctx, tokenString, &client)
 	if !revoked {
@@ -254,11 +256,15 @@ func (s *JWTService) revokeTokenChecked(ctx context.Context, tokenString string,
 	if ttl <= 0 {
 		return false, nil
 	}
-	value := legacyRevokedValue
 	if client != nil {
-		value = s.clientMark(claims.ID, *client)
+		// The first mark stands: a rotated-out token presented at logout keeps
+		// the mark of the client that rotated it.
+		if err := s.revoker.revokeKeepFirst(ctx, claims.ID, ttl, s.clientMark(claims.ID, *client)); err != nil {
+			return false, err
+		}
+		return true, nil
 	}
-	if err := s.revoker.revokeWith(ctx, claims.ID, ttl, value); err != nil {
+	if err := s.revoker.revokeWith(ctx, claims.ID, ttl, legacyRevokedValue); err != nil {
 		return false, err
 	}
 	return true, nil
