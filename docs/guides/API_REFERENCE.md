@@ -102,7 +102,7 @@ POST /api/v1/auth/logout
 Authorization: Bearer <access_token>
 ```
 
-**Body (optional):** a client that holds the token pair outside a browser (the Python SDK after `aim-sdk login`) sends its refresh token here; a browser sends it as the `refresh_token` cookie instead. The body wins when both are present.
+**Body (optional):** the refresh token to revoke. The dashboard and the Python SDK (after `aim-sdk login`) both send it here. The API reads no cookie: a `refresh_token` cookie is not revoked, though the answer still clears the session cookies that earlier versions set.
 ```json
 {
   "refreshToken": "<refresh_token>"

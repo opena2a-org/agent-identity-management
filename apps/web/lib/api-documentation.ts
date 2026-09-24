@@ -141,12 +141,12 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/auth/logout",
         description:
-          "Invalidate the current session: revokes the bearer access token and the refresh token (the refresh_token cookie, or refreshToken in the JSON body for clients outside a browser), ends the whole sign-in that refresh token belongs to (every refresh token issued from it by rotation), clears the cookies, and reports which tokens were revoked; revoked.refreshToken is true only when the session was ended.",
+          "Invalidate the current session: revokes the bearer access token and the refresh token sent as refreshToken in the JSON body, ends the whole sign-in that refresh token belongs to (every refresh token issued from it by rotation), clears any session cookies an earlier version set, and reports which tokens were revoked; revoked.refreshToken is true only when the session was ended.",
         summary: "Logout current session",
         auth: "None (Public)",
         requiresAuth: false,
         tags: ["auth"],
-        example: '{"refreshToken": "<refresh token, optional; browsers send the cookie instead>"}',
+        example: '{"refreshToken": "<refresh token, optional>"}',
       },
       {
         method: "POST",
