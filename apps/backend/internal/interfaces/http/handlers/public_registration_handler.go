@@ -367,21 +367,6 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 		Message:      "Login successful",
 	}
 
-	// Set cookies for web clients
-	c.Cookie(&fiber.Cookie{
-		Name:     "access_token",
-		Value:    accessToken,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
-
 	return c.JSON(response)
 }
 
@@ -410,21 +395,6 @@ func (h *PublicRegistrationHandler) generatePasswordChangeRequiredResponse(c fib
 		RequiresPasswordChange: true,
 		Message:                "You must change your password before continuing",
 	}
-
-	// Set cookies for web clients
-	c.Cookie(&fiber.Cookie{
-		Name:     "access_token",
-		Value:    accessToken,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		HTTPOnly: true,
-		SameSite: "Lax",
-	})
 
 	return c.JSON(response)
 }

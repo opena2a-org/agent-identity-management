@@ -18,10 +18,10 @@ import (
 )
 
 // The logout contract for a client that holds the user pair outside a
-// browser (the Python SDK after `aim-sdk login`): the refresh token travels
-// in a JSON body, the route revokes it the same way it revokes the cookie a
-// browser sends, and the answer reports what was written to the denylist so
-// the client can tell the truth about it.
+// browser (the Python SDK after `aim-sdk login`), and now for the dashboard too:
+// the refresh token travels in a JSON body, the route revokes it together with
+// the bearer, and the answer reports what was written to the denylist so the
+// client can tell the truth about it.
 
 // logoutMemStore is a test double for auth.RevocationStore.
 type logoutMemStore struct{ m map[string]bool }
@@ -133,25 +133,46 @@ func TestAuthHandler_Logout_ThenRefreshIs401(t *testing.T) {
 	assert.Contains(t, string(raw), "Token has been revoked or is invalid")
 }
 
-// C3: the browser's cookie channel is unchanged, and the cookies are cleared.
-func TestAuthHandler_Logout_CookieChannelUnchanged(t *testing.T) {
-	svc := logoutTestService(t, true)
-	access, refresh := logoutTestPair(t, svc)
+// C3: cookies are not credentials. A logout that presents the pair only as the
+// access_token and refresh_token cookies revokes nothing, and the cookie's refresh
+// token still refreshes. Both cookies are still cleared, for browsers that kept
+// them from an earlier version. Control in the same test: the bearer plus the body
+// revokes both.
+func TestAuthHandler_Logout_CookiesAreNotCredentialsButAreCleared(t *testing.T) {
+	store := &logoutMemStore{}
+	svc, refreshApp, access, refresh := logoutFamilyFixture(t, store)
 	h := &AuthHandler{jwtService: svc}
 
-	_, rec, out, status := postLogout(t, h, access, "", refresh)
+	app := fiber.New()
+	app.Post("/api/v1/auth/logout", h.Logout)
+	req := httptest.NewRequest("POST", "/api/v1/auth/logout", nil)
+	req.Header.Set("Cookie", "access_token="+access+"; refresh_token="+refresh)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	raw, _ := io.ReadAll(resp.Body)
+	var out logoutAnswer
+	require.NoError(t, json.Unmarshal(raw, &out))
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.False(t, out.Revoked["accessToken"], "a cookie is not a credential")
+	assert.False(t, out.Revoked["refreshToken"], "a cookie is not a credential")
+	assert.False(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, access)))
+	assert.False(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, refresh)))
+	setCookies := strings.Join(resp.Header.Values("Set-Cookie"), "\n")
+	assert.Contains(t, setCookies, "access_token=", "the earlier access_token cookie is cleared")
+	assert.Contains(t, setCookies, "refresh_token=", "the earlier refresh_token cookie is cleared")
+
+	refreshed, status := postRefresh(t, refreshApp, refresh)
+	require.Equal(t, fiber.StatusOK, status, "the cookie's refresh token still refreshes")
+
+	_, _, control, status := postLogout(t, h, refreshed.AccessToken, `{"refreshToken":"`+refreshed.RefreshToken+`"}`, "")
 	assert.Equal(t, fiber.StatusOK, status)
-	assert.True(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, access)))
-	assert.True(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, refresh)))
-	assert.True(t, out.Revoked["accessToken"])
-	assert.True(t, out.Revoked["refreshToken"])
-	setCookies := strings.Join(rec.Header().Values("Set-Cookie"), "\n")
-	assert.Contains(t, setCookies, "access_token=")
-	assert.Contains(t, setCookies, "refresh_token=")
+	assert.True(t, control.Revoked["accessToken"], "control: the bearer is revoked")
+	assert.True(t, control.Revoked["refreshToken"], "control: the body refresh token is revoked")
 }
 
-// C4: the body token wins over the cookie; nothing else is revoked.
-func TestAuthHandler_Logout_BodyFirstCookieFallback(t *testing.T) {
+// C4: the refresh token in a cookie is ignored; only the body's is revoked.
+func TestAuthHandler_Logout_CookieRefreshTokenIsIgnored(t *testing.T) {
 	svc := logoutTestService(t, true)
 	access, fromBody := logoutTestPair(t, svc)
 	_, fromCookie := logoutTestPair(t, svc)
@@ -191,14 +212,17 @@ func TestAuthHandler_Logout_ReportsFalseWhenNothingWasRevoked(t *testing.T) {
 	})
 }
 
-// C6: a malformed body is "no body token", not an error; the cookie still counts.
+// C6: a malformed body is "no body token", not an error: the bearer is still
+// revoked and no refresh token is.
 func TestAuthHandler_Logout_MalformedBodyIsNotAnError(t *testing.T) {
 	svc := logoutTestService(t, true)
 	access, refresh := logoutTestPair(t, svc)
 	h := &AuthHandler{jwtService: svc}
 
-	_, _, out, status := postLogout(t, h, access, `{not json`, refresh)
+	_, _, out, status := postLogout(t, h, access, `{not json`, "")
 	assert.Equal(t, fiber.StatusOK, status)
-	assert.True(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, refresh)))
-	assert.True(t, out.Revoked["refreshToken"])
+	assert.True(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, access)))
+	assert.True(t, out.Revoked["accessToken"])
+	assert.False(t, svc.IsRevoked(context.Background(), jtiOf(t, svc, refresh)))
+	assert.False(t, out.Revoked["refreshToken"])
 }
