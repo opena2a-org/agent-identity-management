@@ -39,7 +39,8 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			return c.Next()
 		}
 
-		// Try to get token from Authorization header first
+		// The session is read only from the Authorization header. The access_token
+		// cookie that sign-in sets is not a credential for the API.
 		authHeader := c.Get("Authorization")
 		var token string
 
@@ -53,9 +54,6 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 					"error": "Invalid authorization header format",
 				})
 			}
-		} else {
-			// Fallback to cookie
-			token = c.Cookies("access_token")
 		}
 
 		if token == "" {
@@ -147,7 +145,8 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 // Useful for endpoints that work both authenticated and unauthenticated
 func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Try to get token
+		// The session is read only from the Authorization header; a cookie leaves
+		// the request anonymous.
 		authHeader := c.Get("Authorization")
 		var token string
 
@@ -156,8 +155,6 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			if len(parts) == 2 && parts[0] == "Bearer" {
 				token = parts[1]
 			}
-		} else {
-			token = c.Cookies("access_token")
 		}
 
 		// If no token, continue without setting context

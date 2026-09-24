@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -113,7 +114,7 @@ function DevelopersPageContent() {
 
   // Check authentication status and initialize on mount
   useEffect(() => {
-    const token = localStorage.getItem("auth_token");
+    const token = api.getToken();
     if (token) {
       setIsAuthenticated(true);
       setUserToken(token);
@@ -739,10 +740,14 @@ function DevelopersPageContent() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => {
+                            onClick={async () => {
                               setIsAuthenticated(false);
                               setUserToken("");
-                              localStorage.removeItem("auth_token");
+                              try {
+                                await api.logout();
+                              } catch {
+                                api.clearToken();
+                              }
                             }}
                           >
                             Logout

@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the API accepts a sign-in only from the Authorization header
+
+- The API authenticates a request only from the `Authorization: Bearer` header on every route
+  behind its session middleware; the `access_token` cookie no longer stands in for the header there.
+  Dashboards already send the header and are unaffected; a client that sent only the cookie now gets
+  401 and should send the header. Sign-in still sets the `access_token` and `refresh_token` cookies,
+  and sign-out, which sits outside the session middleware, still reads both to revoke them; both go
+  together with the dashboard change.
+
 ### Security — the SDK credential recovery route mints only for the account that is signed in
 
 - `POST /api/v1/auth/sdk/recover` minted a fresh login pair for the owner of any revoked SDK token
@@ -51,6 +60,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   claims (the bearer access token, or the refresh token a command line sends): one `logout` row per
   logout with a valid token, carrying the user, organisation, client address, user agent, the
   token's id and its session; garbage tokens record nothing.
+
+### Fixed — the dashboard keeps its sign-in in one place
+
+- The dashboard kept two copies of a sign-in: a cookie that decided which pages opened, and a
+  stored token that API requests used. The two could belong to different accounts. Pages now
+  open or redirect from the same stored sign-in that API requests use, and the dashboard no
+  longer sends cookies to the API.
+- Signing out sends the current refresh token, so the whole session ends even after a refresh.
+- A tab showing one account reloads when another tab signs in as a different account.
+- The MCP server details view read the sign-in from a key nothing wrote, so attestations and
+  recent audit entries never loaded. It now uses the signed-in session.
+- The API explorer's Log out button now signs you out of the dashboard.
 
 ### Fixed — a new dashboard session never keeps the previous account's refresh token
 
