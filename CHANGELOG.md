@@ -52,6 +52,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   logout with a valid token, carrying the user, organisation, client address, user agent, the
   token's id and its session; garbage tokens record nothing.
 
+### Fixed — the dashboard keeps its sign-in in one place
+
+- The dashboard kept two copies of a sign-in: a cookie that decided which pages opened, and a
+  stored token that API requests used. The two could belong to different accounts. Pages now
+  open or redirect from the same stored sign-in that API requests use, and the dashboard no
+  longer sends cookies to the API.
+- Signing out sends the current refresh token, so the whole session ends even after a refresh.
+- A tab showing one account reloads when another tab signs in as a different account.
+- The MCP server details view read the sign-in from a key nothing wrote, so attestations and
+  recent audit entries never loaded. It now uses the signed-in session.
+- The API explorer's Log out button now signs you out of the dashboard.
+
 ### Fixed — a new dashboard session never keeps the previous account's refresh token
 
 - The dashboard's API client stored a refresh token only when the caller passed one, so a new
