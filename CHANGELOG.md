@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the API accepts a sign-in only from the Authorization header
+
+- The API authenticates a request only from the `Authorization: Bearer` header on every route
+  behind its session middleware; the `access_token` cookie no longer stands in for the header there.
+  Dashboards already send the header and are unaffected; a client that sent only the cookie now gets
+  401 and should send the header. Sign-in still sets the `access_token` and `refresh_token` cookies,
+  and sign-out, which sits outside the session middleware, still reads both to revoke them; both go
+  together with the dashboard change.
+
 ### Security — the SDK credential recovery route mints only for the account that is signed in
 
 - `POST /api/v1/auth/sdk/recover` minted a fresh login pair for the owner of any revoked SDK token
