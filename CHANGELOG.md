@@ -11,14 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the API no longer uses cookies for sign-in
+
+- Sign-in no longer sets `access_token` or `refresh_token` cookies, and the API no longer accepts
+  them in place of the `Authorization` header. This covers password sign-in, a sign-in that must
+  change its password, and the local sign-in route. A sign-in form posted from another site
+  therefore no longer leaves a session in the browser.
+- Sign-out revokes the bearer and the refresh token sent in the JSON body (`refreshToken`); a
+  refresh token held only in a cookie is not revoked. Clients that send `Authorization: Bearer` and
+  put the refresh token in the request body are unaffected. Sign-out still clears the cookies that
+  earlier versions set.
+- Upgrade the dashboard with or before the API: every earlier dashboard opens pages only when the
+  `access_token` cookie is present and sends visitors back to sign-in without it.
+
 ### Security — the API accepts a sign-in only from the Authorization header
 
 - The API authenticates a request only from the `Authorization: Bearer` header on every route
   behind its session middleware; the `access_token` cookie no longer stands in for the header there.
   Dashboards already send the header and are unaffected; a client that sent only the cookie now gets
-  401 and should send the header. Sign-in still sets the `access_token` and `refresh_token` cookies,
-  and sign-out, which sits outside the session middleware, still reads both to revoke them; both go
-  together with the dashboard change.
+  401 and should send the header. The sign-in cookies themselves are removed in the entry above.
 
 ### Security — the SDK credential recovery route mints only for the account that is signed in
 

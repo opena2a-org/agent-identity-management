@@ -167,11 +167,13 @@ OAUTH_REDIRECT_URL=http://localhost:3000/auth/callback
 - Go to: Azure Portal → App Registrations
 - Check redirect URIs match your configuration
 
-#### 3. Clear Browser Cookies
+#### 3. Clear the Stored Sign-in
+
+The dashboard keeps its sign-in in the browser's site storage, not in cookies. Sign out, or clear the site data for the dashboard's address (for example localhost:3000):
 
 ```bash
 # Chrome: Cmd+Shift+Delete (Mac) or Ctrl+Shift+Delete (Windows)
-# Clear cookies for localhost:3000
+# Choose "Cookies and other site data" for localhost:3000
 ```
 
 #### 4. Check Backend Logs
