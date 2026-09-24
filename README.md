@@ -215,7 +215,7 @@ Capability authorization (deny-before-execute, FGA, intent classification) requi
 
 ## Install AIM (self-hosted)
 
-> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing. To deploy by digest instead, use advisory [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr): it shows how to read which digest a tag names today, and gives the `cosign verify` command to run before deploying the fixed `aim-dashboard` build it names by digest.
+> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing.
 
 ### Docker
 
@@ -232,7 +232,7 @@ Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastr
 
 New accounts wait for an administrator's approval. To bootstrap the first administrator, set `AIM_PLATFORM_ADMINS` (comma-separated emails) before starting the backend: accounts on that list are approved automatically and approve everyone else from the dashboard's admin area. Until a listed address has registered, or some administrator exists, other sign-ups are refused with an error that says so; nothing is queued. The backend logs how the variable was read at startup, so a mistyped entry is visible there.
 
-The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0` are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The dashboard images behind them bundle a Next.js version affected by a critical vulnerability; [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) names the dashboard image to run instead.
+The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0`, and the `aim-server` tags `1.22` and `1.22.0`, are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The images behind them bundle components with critical-rated vulnerabilities, described in [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) for the dashboard and [GHSA-fxfm-hhhw-3mgf](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-fxfm-hhhw-3mgf) for the server. The dashboard images are also affected by [GHSA-638x-gwq7-xfh7](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-638x-gwq7-xfh7), rated high. Each of these advisories lists the images it affects and shows how to check a deployment.
 
 ### From source
 
