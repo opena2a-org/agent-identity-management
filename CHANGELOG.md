@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a reused refresh token is recorded as the same client or a different one
+
+- A refresh token presented again after it was rotated or logged out is still refused, and its
+  sign-in still ends. Its `refresh_token_reuse` audit row and `SECURITY` log line now also say
+  whether the presenter looks like the client that retired it: `clientMatch` is `sameClient` (for
+  example two browser tabs or two SDK processes racing with one token), `differentClient`, or
+  `unknown`.
+- To compare, rotation and sign-out store a keyed, truncated hash of the token's id, the client's
+  address (IPv4 exactly, IPv6 by its /64) and its user agent as the value of the token's denylist
+  entry, for the token's remaining lifetime. The key is derived from `JWT_SECRET`; neither the
+  address nor the user agent is stored in clear there. Signing out with a token that was already
+  rotated keeps the mark of the client that rotated it, so a sign-out cannot make a later replay
+  look like the same client.
+- `unknown` means the comparison could not be made: an entry written before this version, a
+  revocation store that cannot read values back, or a client address that does not parse.
+- Both refusal records use the client address the rate limiter uses: the address a proxy named in
+  `TRUSTED_PROXIES` reports, and otherwise the connecting address as before. A reported address
+  that does not parse is not recorded; the connecting address is recorded instead.
+
 ### Security — the API no longer uses cookies for sign-in
 
 - Sign-in no longer sets `access_token` or `refresh_token` cookies, and the API no longer accepts

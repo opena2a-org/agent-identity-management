@@ -141,7 +141,7 @@ func (r *TokenRevoker) RevokeFamily(ctx context.Context, family string, ttl time
 	if r == nil || r.store == nil || family == "" || ttl <= 0 {
 		return nil
 	}
-	return r.store.Set(ctx, revokedFamilyKeyPrefix+family, "1", ttl)
+	return r.store.Set(ctx, revokedFamilyKeyPrefix+family, legacyRevokedValue, ttl)
 }
 
 // Retire denylists a jti as Revoke does and says whether this call was the
@@ -150,12 +150,18 @@ func (r *TokenRevoker) RevokeFamily(ctx context.Context, family string, ttl time
 // presentation retired the token first. On a store without set-if-absent the
 // write cannot tell, and lost is always false.
 func (r *TokenRevoker) Retire(ctx context.Context, jti string, ttl time.Duration) (retired, lost bool, err error) {
+	return r.retireWith(ctx, jti, ttl, legacyRevokedValue)
+}
+
+// retireWith is Retire writing value (a client mark, or "1") as the key's
+// value, in the same write that retires the token.
+func (r *TokenRevoker) retireWith(ctx context.Context, jti string, ttl time.Duration, value string) (retired, lost bool, err error) {
 	if r == nil || r.store == nil || jti == "" || ttl <= 0 {
 		return false, false, nil
 	}
 	nx, ok := r.store.(RevocationStoreNX)
 	if !ok {
-		if err := r.Revoke(ctx, jti, ttl); err != nil {
+		if err := r.revokeWith(ctx, jti, ttl, value); err != nil {
 			return false, false, err
 		}
 		return true, false, nil
@@ -163,7 +169,7 @@ func (r *TokenRevoker) Retire(ctx context.Context, jti string, ttl time.Duration
 	r.mu.Lock()
 	delete(r.negCache, jti)
 	r.mu.Unlock()
-	written, err := nx.SetWithNX(ctx, revokedKeyPrefix+jti, "1", ttl)
+	written, err := nx.SetWithNX(ctx, revokedKeyPrefix+jti, value, ttl)
 	if err != nil {
 		return false, false, err
 	}
@@ -177,11 +183,60 @@ func (r *TokenRevoker) Retire(ctx context.Context, jti string, ttl time.Duration
 // or non-positive ttl is a no-op. Evicts any local "not revoked" cache entry so
 // the revocation is enforced immediately on this instance.
 func (r *TokenRevoker) Revoke(ctx context.Context, jti string, ttl time.Duration) error {
+	return r.revokeWith(ctx, jti, ttl, legacyRevokedValue)
+}
+
+// revokeWith is Revoke writing value as the key's value.
+func (r *TokenRevoker) revokeWith(ctx context.Context, jti string, ttl time.Duration, value string) error {
 	if r == nil || r.store == nil || jti == "" || ttl <= 0 {
 		return nil
 	}
 	r.mu.Lock()
 	delete(r.negCache, jti)
 	r.mu.Unlock()
-	return r.store.Set(ctx, revokedKeyPrefix+jti, "1", ttl)
+	return r.store.Set(ctx, revokedKeyPrefix+jti, value, ttl)
+}
+
+// revokeKeepFirst denylists a jti like revokeWith but never replaces a value
+// already stored: the first writer's client mark stands. Logout uses it, so
+// presenting an already-rotated token at logout cannot overwrite the mark of
+// the client that rotated it (which would turn a later replay into a false
+// sameClient). On a set-if-absent store the write is atomic; on a plain store
+// an existing key is left as it is. Either way the jti is denylisted.
+func (r *TokenRevoker) revokeKeepFirst(ctx context.Context, jti string, ttl time.Duration, value string) error {
+	if r == nil || r.store == nil || jti == "" || ttl <= 0 {
+		return nil
+	}
+	r.mu.Lock()
+	delete(r.negCache, jti)
+	r.mu.Unlock()
+	if nx, ok := r.store.(RevocationStoreNX); ok {
+		_, err := nx.SetWithNX(ctx, revokedKeyPrefix+jti, value, ttl)
+		return err
+	}
+	exists, err := r.store.Exists(ctx, revokedKeyPrefix+jti)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return r.store.Set(ctx, revokedKeyPrefix+jti, value, ttl)
+}
+
+// readJTI returns the value stored for a denylisted jti, uncached. ok is false
+// when the store has no read, the read fails or misses, or the value is not a
+// string; the caller then classifies nothing.
+func (r *TokenRevoker) readJTI(ctx context.Context, jti string) (value string, ok bool) {
+	if r == nil || r.store == nil || jti == "" {
+		return "", false
+	}
+	reader, can := r.store.(RevocationStoreReader)
+	if !can {
+		return "", false
+	}
+	if err := reader.Get(ctx, revokedKeyPrefix+jti, &value); err != nil {
+		return "", false
+	}
+	return value, true
 }

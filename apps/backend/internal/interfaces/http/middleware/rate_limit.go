@@ -74,6 +74,13 @@ func getClientIP(c fiber.Ctx) string {
 	return directIP
 }
 
+// ClientIP is the client address a route records and compares: the direct
+// peer, or, only when TRUSTED_PROXIES names the peer, the address the trusted
+// proxy reports (getClientIP). Without TRUSTED_PROXIES it equals c.IP().
+func ClientIP(c fiber.Ctx) string {
+	return getClientIP(c)
+}
+
 // rateLimitMax returns the max requests per minute based on environment.
 // Development mode uses higher limits to avoid interfering with integration tests.
 func rateLimitMax(defaultMax int) int {
