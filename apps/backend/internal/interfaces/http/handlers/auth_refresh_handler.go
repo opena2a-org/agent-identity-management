@@ -12,6 +12,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // AuthRefreshHandler handles token refresh operations
@@ -69,19 +70,33 @@ func (h *AuthRefreshHandler) refreshPrincipal(claims *auth.JWTClaims) (*domain.U
 	return user, ""
 }
 
+// presenter is the client presenting a token on this request: the
+// trusted-proxy client address (identical to c.IP() when TRUSTED_PROXIES is
+// unset) and the raw User-Agent header.
+func presenter(c fiber.Ctx) auth.Client {
+	return auth.Client{Address: middleware.ClientIP(c), UserAgent: c.Get("User-Agent")}
+}
+
 // recordRefusal records one refused presentation of a revoked token: a
 // SECURITY log line (the operator's record, kept even when the audit insert
 // fails) and one audit row in the tenant's log. Both carry identifiers only
 // (user, organization, family, jti, client address and user agent), never a
-// token. nil-safe on the audit service for handlers built by struct literal.
-func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, action domain.AuditAction, familyRevoked *bool) {
+// token or a client mark. clientMatch, when not empty, is the reuse's
+// classification (sameClient, differentClient or unknown). nil-safe on the
+// audit service for handlers built by struct literal.
+func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, action domain.AuditAction, familyRevoked *bool, clientMatch string) {
 	family, jti := claims.FamilyID(), claims.ID
-	ip, ua := c.IP(), c.Get("User-Agent")
+	client := presenter(c)
+	ip, ua := client.Address, client.UserAgent
 	meta := map[string]interface{}{"familyId": family, "jti": jti}
 	extra := ""
 	if familyRevoked != nil {
 		meta["familyRevoked"] = *familyRevoked
 		extra = fmt.Sprintf(" familyRevoked=%t", *familyRevoked)
+	}
+	if clientMatch != "" {
+		meta["clientMatch"] = clientMatch
+		extra += " clientMatch=" + clientMatch
 	}
 	log.Printf("SECURITY %s user=%s org=%s family=%s jti=%s%s ip=%s ua=%q", action, claims.UserID, claims.OrganizationID, family, jti, extra, ip, ua)
 	if h.audit == nil {
@@ -103,18 +118,21 @@ func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, 
 // reuseDetected handles a login refresh token that is denylisted and was
 // presented again (RFC 9700 section 4.14.2): whoever holds the chain that
 // grew from it cannot be told apart from the legitimate client, so the whole
-// family is revoked and the event recorded. Tokens without a family (SDK
-// download tokens, which are retired by row) record nothing here.
+// family is revoked and the event recorded. The record says whether the
+// presenter is the client that retired the token (a race with itself) or not
+// (auth.ClassifyReuse); enforcement is the same either way. Tokens without a
+// family (SDK download tokens, which are retired by row) record nothing here.
 func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil || claims.FamilyID() == "" {
 		return
 	}
+	clientMatch := h.jwtService.ClassifyReuse(c.Context(), claims.ID, presenter(c))
 	familyRevoked, revokeErr := h.jwtService.RevokeFamily(c.Context(), claims)
 	if revokeErr != nil {
 		log.Printf("⚠️  Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
 	}
-	h.recordRefusal(c, claims, domain.AuditActionRefreshTokenReuse, &familyRevoked)
+	h.recordRefusal(c, claims, domain.AuditActionRefreshTokenReuse, &familyRevoked, clientMatch)
 }
 
 // RefreshToken godoc
@@ -215,7 +233,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		revoked, known := h.jwtService.CheckFamilyRevoked(c.Context(), family)
 		if revoked {
 			if known {
-				h.recordRefusal(c, claims, domain.AuditActionRefreshSessionRevoked, nil)
+				h.recordRefusal(c, claims, domain.AuditActionRefreshSessionRevoked, nil, "")
 			}
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Token has been revoked or is invalid",
@@ -266,7 +284,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	// handed out.
 	rotated := false
 	if claims.Issuer == auth.IssuerUser {
-		retired, lost, revokeErr := h.jwtService.RetireTokenChecked(c.Context(), req.RefreshToken)
+		retired, lost, revokeErr := h.jwtService.RetireTokenCheckedFrom(c.Context(), req.RefreshToken, presenter(c))
 		if lost {
 			h.reuseDetected(c, req.RefreshToken)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{

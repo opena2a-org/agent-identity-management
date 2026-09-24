@@ -202,7 +202,14 @@ func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool,
 // sign-in). Reports true only when every applicable write succeeded, so a
 // logout answer never claims an ended session that is not ended.
 func (s *JWTService) RevokeSessionChecked(ctx context.Context, tokenString string) (bool, error) {
-	revoked, err := s.RevokeTokenChecked(ctx, tokenString)
+	return s.RevokeSessionCheckedFrom(ctx, tokenString, Client{})
+}
+
+// RevokeSessionCheckedFrom is RevokeSessionChecked recording which client
+// logged out: the refresh token's denylist value is that client's mark, so a
+// later replay of the logged-out token can be classified (ClassifyReuse).
+func (s *JWTService) RevokeSessionCheckedFrom(ctx context.Context, tokenString string, client Client) (bool, error) {
+	revoked, err := s.revokeTokenChecked(ctx, tokenString, &client)
 	if !revoked {
 		return false, err
 	}
@@ -230,6 +237,12 @@ func (s *JWTService) RevokeToken(ctx context.Context, tokenString string) error 
 // error. A caller that answers a client "revoked" must use this form, so a
 // degraded path never reports the healthy value.
 func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string) (bool, error) {
+	return s.revokeTokenChecked(ctx, tokenString, nil)
+}
+
+// revokeTokenChecked writes the client's mark as the denylist value when a
+// client is given, and "1" otherwise (an access token, an unknown presenter).
+func (s *JWTService) revokeTokenChecked(ctx context.Context, tokenString string, client *Client) (bool, error) {
 	if s.revoker == nil || tokenString == "" {
 		return false, nil
 	}
@@ -241,7 +254,11 @@ func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string)
 	if ttl <= 0 {
 		return false, nil
 	}
-	if err := s.revoker.Revoke(ctx, claims.ID, ttl); err != nil {
+	value := legacyRevokedValue
+	if client != nil {
+		value = s.clientMark(claims.ID, *client)
+	}
+	if err := s.revoker.revokeWith(ctx, claims.ID, ttl, value); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -252,6 +269,14 @@ func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string)
 // presentation of the same token retired it first (a set-if-absent store
 // only), and a store failure is reported as an error.
 func (s *JWTService) RetireTokenChecked(ctx context.Context, tokenString string) (retired, lost bool, err error) {
+	return s.RetireTokenCheckedFrom(ctx, tokenString, Client{})
+}
+
+// RetireTokenCheckedFrom is RetireTokenChecked recording which client rotated
+// the token: its mark is the denylist value, written in the same write that
+// retires the token, so the presentation that loses a race reads the
+// winner's mark back.
+func (s *JWTService) RetireTokenCheckedFrom(ctx context.Context, tokenString string, client Client) (retired, lost bool, err error) {
 	if s.revoker == nil || tokenString == "" {
 		return false, false, nil
 	}
@@ -263,7 +288,7 @@ func (s *JWTService) RetireTokenChecked(ctx context.Context, tokenString string)
 	if ttl <= 0 {
 		return false, false, nil
 	}
-	return s.revoker.Retire(ctx, claims.ID, ttl)
+	return s.revoker.retireWith(ctx, claims.ID, ttl, s.clientMark(claims.ID, client))
 }
 
 // NewJWTService creates a new JWT service.
