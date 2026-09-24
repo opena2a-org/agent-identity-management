@@ -175,7 +175,8 @@ examples/
 ├── flight-search-agent/     # Complete flight search example
 │   ├── flight_agent.py      # Main agent code
 │   ├── README.md            # Comprehensive docs
-│   └── requirements.txt
+│   ├── requirements.in
+│   └── requirements.txt   # generated lock
 ├── langchain-crud-agent/    # LangChain integration
 │   ├── langchain_crud_agent.py
 │   └── requirements.txt
@@ -189,7 +190,10 @@ examples/
 
 1. Create a new directory under `examples/`
 2. Include a README.md explaining the use case
-3. Add requirements.txt with dependencies
+3. List direct dependencies in `requirements.in`, then generate the exact lock the examples install from:
+   `uv pip compile requirements.in --universal --python-version 3.11 -o requirements.txt`.
+   The lock is what readers install, and it is what a dependency scanner can read: a
+   `requirements.txt` of version floors reads as zero packages.
 4. Update this README with your example
 
 ## 🔧 Troubleshooting
