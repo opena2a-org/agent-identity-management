@@ -152,7 +152,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/auth/refresh",
         description:
-          "Obtain a new access token using a refresh token. The presented refresh token is retired and a new one issued (rotated: true); when the server cannot retire it (no revocation store), the presented token is returned unchanged with rotated: false. Presenting a refresh token that was already rotated out ends the whole sign-in: every refresh token of that sign-in is refused from then on and the event is recorded in the audit log.",
+          "Obtain a new access token using a refresh token. The presented refresh token is retired and a new one issued (rotated: true); when the server cannot retire it (no revocation store), the presented token is returned unchanged with rotated: false. Presenting a refresh token that was already rotated out ends the whole sign-in: every refresh token of that sign-in is refused from then on and the event is recorded in the audit log. A sign-in lasts at most the server's maximum session age (JWT_SESSION_MAX_AGE, 8 hours by default), however often it is refreshed; past it this route answers 401 and the client signs in again.",
         summary: "Refresh access token",
         auth: "Refresh Token",
         requiresAuth: true,

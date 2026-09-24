@@ -1,16 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
 // Session-timeout policy (CSR/CPO, 2026-06-19):
 //   - 30 min of inactivity -> auto-logout, with a 2-min warning beforehand.
 //   - 8 h absolute cap regardless of activity.
-// These are CLIENT-side convenience boundaries; the real security boundaries
-// are the server access-token exp and the refresh-token expiry. Values are
-// overridable via env for testing.
+// These are CLIENT-side convenience boundaries; the server enforces its own:
+// the access-token exp, the refresh-token expiry and the maximum session age
+// (JWT_SESSION_MAX_AGE, 8h by default). Values are overridable via env for
+// testing.
 const num = (v: string | undefined, fallback: number) => {
   const n = v ? Number(v) : NaN;
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -25,14 +26,6 @@ const ACTIVITY_THROTTLE_MS = 5 * 1000;
 const TOKEN_KEY = "auth_token";
 const LAST_ACTIVITY_KEY = "last_activity";
 const SESSION_START_KEY = "session_start";
-
-const PUBLIC_ROUTE_PREFIXES = [
-  "/auth/login",
-  "/auth/register",
-  "/auth/callback",
-  "/auth/registration-pending",
-  "/auth/error",
-];
 
 type IdleState = { showWarning: boolean; secondsLeft: number };
 
@@ -54,13 +47,10 @@ function readLS(key: string): string | null {
  */
 export function useIdleTimeout(): IdleState & { stayActive: () => void } {
   const router = useRouter();
-  const pathname = usePathname();
   const [state, setState] = useState<IdleState>({ showWarning: false, secondsLeft: 0 });
   const lastWriteRef = useRef(0);
   const warningActiveRef = useRef(false);
   const loggingOutRef = useRef(false);
-
-  const isPublicRoute = PUBLIC_ROUTE_PREFIXES.some((p) => pathname?.startsWith(p));
 
   const clearWarning = useCallback(() => {
     if (warningActiveRef.current) {
@@ -94,9 +84,9 @@ export function useIdleTimeout(): IdleState & { stayActive: () => void } {
   }, [clearWarning, recordActivity]);
 
   useEffect(() => {
-    if (isPublicRoute) return;
-    // Only run for an authenticated session.
-    if (!readLS(TOKEN_KEY)) return;
+    // This hook runs only inside the dashboard shell (through IdleTimeoutGuard), so
+    // there is no public-route skip list here. Only run for an authenticated session.
+    if (!api.getToken()) return;
 
     // Seed activity + absolute-session start if absent. (api.setToken also
     // resets these on login so a stale window can't carry across sessions.)
@@ -150,7 +140,7 @@ export function useIdleTimeout(): IdleState & { stayActive: () => void } {
 
     const interval = setInterval(() => {
       // If the token vanished (logged out in this or another tab), bail out.
-      if (!readLS(TOKEN_KEY)) {
+      if (!api.getToken()) {
         redirectToLogin();
         return;
       }
@@ -182,7 +172,7 @@ export function useIdleTimeout(): IdleState & { stayActive: () => void } {
       activityEvents.forEach((e) => window.removeEventListener(e, recordActivity));
       window.removeEventListener("storage", onStorage);
     };
-  }, [isPublicRoute, recordActivity, clearWarning, router]);
+  }, [recordActivity, clearWarning, router]);
 
   return { ...state, stayActive };
 }

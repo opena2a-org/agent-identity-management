@@ -52,12 +52,54 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   logout with a valid token, carrying the user, organisation, client address, user agent, the
   token's id and its session; garbage tokens record nothing.
 
+### Fixed — the dashboard keeps its sign-in in one place
+
+- The dashboard kept two copies of a sign-in: a cookie that decided which pages opened, and a
+  stored token that API requests used. The two could belong to different accounts. Pages now
+  open or redirect from the same stored sign-in that API requests use, and the dashboard no
+  longer sends cookies to the API.
+- Signing out sends the current refresh token, so the whole session ends even after a refresh.
+- A tab showing one account reloads when another tab signs in as a different account.
+- The MCP server details view read the sign-in from a key nothing wrote, so attestations and
+  recent audit entries never loaded. It now uses the signed-in session.
+- The API explorer's Log out button now signs you out of the dashboard.
+
 ### Fixed — a new dashboard session never keeps the previous account's refresh token
 
 - The dashboard's API client stored a refresh token only when the caller passed one, so a new
   session started with an access token alone kept the refresh token of whoever was signed in
   before, and the next silent refresh ran as that account. A new session without a refresh token
   now clears the stored one; a token refresh without one keeps the current token, as before.
+
+### Removed — an unused password-reset handler that would have put the email address in the reset link
+
+- An unused password-reset handler that was never routed and would have put the account's email
+  address in the reset link. The live reset link carries only the token.
+
+### Fixed — the reset-mail failure log records the account id, not the recipient's address
+
+- The reset-mail failure log records the account id instead of the recipient's address, and the mail
+  provider's error is redacted before it is written, since an SMTP reply often echoes the recipient.
+
+### Security — a sign-in ends a fixed time after it began, however often it is refreshed
+
+- A login refresh token now records when its sign-in happened (the registered `auth_time` claim),
+  and every refresh copies it unchanged. `POST /api/v1/auth/refresh` refuses a sign-in older than
+  `JWT_SESSION_MAX_AGE` (8 hours by default) with the existing
+  `401 {"error":"Invalid or expired refresh token"}`, and the dashboard asks the user to sign in
+  again. Before this, a refresh token that kept being refreshed never reached an end, so a stolen
+  one could outlive the sign-in it came from.
+- The limit holds with or without a revocation store. Refresh tokens issued before this release
+  count from the time they were issued, so every existing sign-in ends within
+  `JWT_SESSION_MAX_AGE` of the upgrade.
+- SDK-download tokens keep their 90-day lifetime and rotation. Access tokens are unchanged: the
+  last one issued before the limit stays valid until its own expiry (`JWT_ACCESS_TTL`, 2 hours by
+  default).
+- `JWT_SESSION_MAX_AGE` takes a duration such as `8h` or `24h`. A missing, unreadable or
+  non-positive value uses 8 hours and logs a warning; the value in effect is logged at startup.
+- `apps/backend/.env.example` and `docs/DEPLOYMENT.md` listed `JWT_EXPIRY` and `JWT_EXPIRATION`,
+  which nothing reads; they now list `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL` and
+  `JWT_SESSION_MAX_AGE`.
 
 ### Security — a reused refresh token ends the sign-in, and logout ends the whole session
 
@@ -90,7 +132,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the old one was actually retired: without a revocation store (no Redis), or when the store
   refuses the write, the answer carries a fresh access token and the presented refresh token
   unchanged, and the new `rotated` field reports it, so a login session on such a stack ends at
-  `JWT_REFRESH_TTL`. SDK-download tokens keep their row-based rotation. A refresh answered after a
+  `JWT_REFRESH_TTL`, or `JWT_SESSION_MAX_AGE` after sign-in if that is sooner. SDK-download tokens keep their row-based rotation. A refresh answered after a
   lost response now requires signing in again, which is the cost of single-use refresh tokens.
 
 ### Fixed — logout revokes a refresh token sent in the body and reports what it revoked

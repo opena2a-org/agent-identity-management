@@ -97,38 +97,16 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(register);
   },
 
-  // authedPage seeds BOTH the cookie (for middleware.ts:34 which gates every
-  // dashboard route on `access_token` in cookies) AND localStorage.auth_token
-  // (for the client-side useAuth() hook which calls api.getToken()).
-  //
-  // Playwright's `request` fixture lives in its own APIRequestContext with a
-  // separate cookie jar from the browser's BrowserContext, so cookies set by
-  // /api/v1/auth/login/local do NOT propagate to `page`. We write them onto
-  // page.context() explicitly.
+  // authedPage seeds the session store the dashboard reads: localStorage
+  // auth_token and refresh_token. The shell's route gate and the API client
+  // both read that store; no cookie is involved.
   authedPage: async ({ page, adminAuth }, use) => {
-    await page.context().addCookies([
-      {
-        name: 'access_token',
-        value: adminAuth.accessToken,
-        domain: 'localhost',
-        path: '/',
-        httpOnly: true,
-        secure: false,
-        sameSite: 'Lax',
-      },
-      {
-        name: 'refresh_token',
-        value: adminAuth.refreshToken,
-        domain: 'localhost',
-        path: '/',
-        httpOnly: true,
-        secure: false,
-        sameSite: 'Lax',
-      },
-    ]);
-    await page.addInitScript((token) => {
-      try { window.localStorage.setItem('auth_token', token); } catch {}
-    }, adminAuth.accessToken);
+    await page.addInitScript(({ accessToken, refreshToken }) => {
+      try {
+        window.localStorage.setItem('auth_token', accessToken);
+        window.localStorage.setItem('refresh_token', refreshToken);
+      } catch {}
+    }, { accessToken: adminAuth.accessToken, refreshToken: adminAuth.refreshToken });
     await use(page);
   },
 });

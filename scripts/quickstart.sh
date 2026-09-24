@@ -5,7 +5,6 @@ set -euo pipefail
 #
 # Recommended (download, inspect, then run — no pipe to shell):
 #   curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
-#   shasum -a 256 quickstart.sh   # compare against the SHA published in the release notes / README
 #   bash quickstart.sh
 #
 # We deliberately do NOT recommend piping a network download straight

@@ -188,7 +188,9 @@ ENVIRONMENT=production  # development | production | testing
 
 # JWT Configuration
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
-JWT_EXPIRATION=24h
+JWT_ACCESS_TTL=2h            # Access token lifetime
+JWT_REFRESH_TTL=168h         # A refresh token unused this long expires; each refresh issues a new one
+JWT_SESSION_MAX_AGE=8h       # Longest a sign-in lasts, however often it is refreshed
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
