@@ -7,8 +7,8 @@ export default defineConfig({
   // Only the empty-state suite is wired into CI under this PR. The existing
   // landing-page / dashboard / agent-registration specs predate this work,
   // use mocked routes + a fake JWT, and were never run by any CI job — under
-  // the real middleware (apps/web/middleware.ts) they redirect to /auth/login
-  // before any mocked route fires. Rehabilitating them is out of scope here;
+  // the dashboard shell's route gate (apps/web/components/route-gate.tsx) they
+  // redirect to /auth/login before any mocked route fires. Rehabilitating them is out of scope here;
   // a follow-up PR can refit them to the aim-test-stack fixture pattern.
   testMatch: '**/empty-state-*.spec.ts',
   fullyParallel: true,

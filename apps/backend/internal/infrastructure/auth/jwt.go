@@ -56,8 +56,32 @@ type JWTClaims struct {
 	// carried unchanged through every rotation. Absent on access, SDK-download
 	// and service tokens.
 	SessionID string `json:"sid,omitempty"`
+	// AuthTime (the IANA-registered auth_time claim, seconds since the epoch)
+	// is the time of the sign-in a login refresh token belongs to: set at
+	// sign-in, copied unchanged on every rotation. Absent on access,
+	// SDK-download and service tokens.
+	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
 }
+
+// SignedInAt returns the time the token's sign-in happened: its auth_time
+// claim, or its own iat for a token minted before the claim existed, or the
+// zero time when it carries neither.
+func (c *JWTClaims) SignedInAt() time.Time {
+	if c == nil {
+		return time.Time{}
+	}
+	if c.AuthTime != nil {
+		return c.AuthTime.Time
+	}
+	if c.IssuedAt != nil {
+		return c.IssuedAt.Time
+	}
+	return time.Time{}
+}
+
+// defaultSessionMaxAge bounds a sign-in when JWT_SESSION_MAX_AGE is unset or unreadable.
+const defaultSessionMaxAge = 8 * time.Hour
 
 // FamilyID returns the token family a login refresh token belongs to: its
 // sid claim, or its own jti for a token minted before sid existed (such a
@@ -73,6 +97,18 @@ func (c *JWTClaims) FamilyID() string {
 	return c.ID
 }
 
+// AccessFamilyID returns the token family a login access token belongs to
+// (the sid its login pair carries), and "" for every other kind of token and
+// for an access token minted before sid existed. It is a read-side accessor
+// only: FamilyID() stays "" for access tokens, so no access token can ever
+// drive a family write (RevokeFamily, reuse detection, logout).
+func (c *JWTClaims) AccessFamilyID() string {
+	if c == nil || c.TokenType != TokenTypeAccess || c.Issuer != IssuerUser {
+		return ""
+	}
+	return c.SessionID
+}
+
 // familyRevocationSlack is added to a family key's lifetime so a member
 // minted by a refresh in flight at the moment of the write is still covered.
 const familyRevocationSlack = time.Minute
@@ -82,7 +118,33 @@ type JWTService struct {
 	secret        []byte
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
+	sessionMaxAge time.Duration
 	revoker       *TokenRevoker
+}
+
+// SessionMaxAge is the longest a login sign-in lasts, however often it is
+// refreshed (JWT_SESSION_MAX_AGE, 8h by default).
+func (s *JWTService) SessionMaxAge() time.Duration {
+	if s.sessionMaxAge <= 0 {
+		return defaultSessionMaxAge
+	}
+	return s.sessionMaxAge
+}
+
+// SessionExpired reports whether a login refresh token's sign-in is older
+// than SessionMaxAge. Only login refresh tokens (typ refresh, the user
+// issuer) have a maximum session age: access, SDK-download and service
+// tokens never expire here. A login refresh token whose sign-in time cannot
+// be read (neither auth_time nor iat) is expired: fail closed.
+func (s *JWTService) SessionExpired(c *JWTClaims, now time.Time) bool {
+	if c == nil || c.TokenType != TokenTypeRefresh || c.Issuer != IssuerUser {
+		return false
+	}
+	at := c.SignedInAt()
+	if at.IsZero() {
+		return true
+	}
+	return now.Sub(at) > s.SessionMaxAge()
 }
 
 // SetRevoker attaches a token-revocation store. Optional: if never set,
@@ -185,10 +247,30 @@ func (s *JWTService) RevokeTokenChecked(ctx context.Context, tokenString string)
 	return true, nil
 }
 
+// RetireTokenChecked is RevokeTokenChecked for a rotation: retired says the
+// jti was written to the denylist by this call, lost says another
+// presentation of the same token retired it first (a set-if-absent store
+// only), and a store failure is reported as an error.
+func (s *JWTService) RetireTokenChecked(ctx context.Context, tokenString string) (retired, lost bool, err error) {
+	if s.revoker == nil || tokenString == "" {
+		return false, false, nil
+	}
+	claims, err := s.ValidateToken(tokenString)
+	if err != nil || claims.ExpiresAt == nil {
+		return false, false, nil
+	}
+	ttl := time.Until(claims.ExpiresAt.Time)
+	if ttl <= 0 {
+		return false, false, nil
+	}
+	return s.revoker.Retire(ctx, claims.ID, ttl)
+}
+
 // NewJWTService creates a new JWT service.
 // Access tokens default to 2h (JWT_ACCESS_TTL); refresh tokens to 7d
-// (JWT_REFRESH_TTL) with rotation. The client enforces a shorter idle timeout
-// on top of the absolute access-token expiry.
+// (JWT_REFRESH_TTL) with rotation; a sign-in lasts at most 8h however often
+// it is refreshed (JWT_SESSION_MAX_AGE). The client enforces a shorter idle
+// timeout on top of the absolute access-token expiry.
 func NewJWTService() *JWTService {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -216,11 +298,17 @@ func NewJWTService() *JWTService {
 		log.Printf("WARNING: invalid JWT_REFRESH_TTL, using default 168h: %v", err)
 		refreshExpiry = defaultRefreshExpiry
 	}
+	sessionMaxAge, err := time.ParseDuration(getEnv("JWT_SESSION_MAX_AGE", "8h"))
+	if err != nil || sessionMaxAge <= 0 {
+		log.Printf("WARNING: JWT_SESSION_MAX_AGE must be a positive duration, using default 8h")
+		sessionMaxAge = defaultSessionMaxAge
+	}
 
 	return &JWTService{
 		secret:        []byte(secret),
 		accessExpiry:  accessExpiry,
 		refreshExpiry: refreshExpiry,
+		sessionMaxAge: sessionMaxAge,
 	}
 }
 
@@ -266,25 +354,36 @@ func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) 
 	return token.SignedString(s.secret)
 }
 
-// GenerateTokenPair generates access and refresh tokens
+// GenerateTokenPair generates a login pair. The refresh token starts a new
+// family (its sid is its own jti) and the access token carries that same
+// family, so a credential-minting route can refuse an access token whose
+// session was revoked.
 func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (accessToken, refreshToken string, err error) {
-	// Generate access token
-	accessToken, err = s.GenerateAccessToken(userID, orgID, email, role)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Generate refresh token
 	refreshToken, err = s.GenerateRefreshToken(userID, orgID)
 	if err != nil {
 		return "", "", err
 	}
-
+	family, err := s.GetTokenID(refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+	accessToken, err = s.generateAccessToken(userID, orgID, email, role, family)
+	if err != nil {
+		return "", "", err
+	}
 	return accessToken, refreshToken, nil
 }
 
-// GenerateAccessToken generates an access token
+// GenerateAccessToken generates a standalone access token that belongs to no
+// family (sid absent). Access tokens minted with a login pair carry the pair's
+// family through generateAccessToken.
 func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (string, error) {
+	return s.generateAccessToken(userID, orgID, email, role, "")
+}
+
+// generateAccessToken mints an access token in the given family; an empty
+// family mints one that belongs to no family.
+func (s *JWTService) generateAccessToken(userID, orgID, email, role, family string) (string, error) {
 	now := time.Now()
 	claims := JWTClaims{
 		UserID:         userID,
@@ -292,6 +391,7 @@ func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (str
 		Email:          email,
 		Role:           role,
 		TokenType:      TokenTypeAccess,
+		SessionID:      family,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -345,22 +445,28 @@ func (s *JWTService) GenerateServiceToken(agentID, orgID string) (string, error)
 // GenerateRefreshToken generates a login refresh token that starts a new
 // token family (its sid is its own jti).
 func (s *JWTService) GenerateRefreshToken(userID, orgID string) (string, error) {
-	return s.generateRefreshToken(userID, orgID, "")
+	return s.generateRefreshToken(userID, orgID, "", time.Time{})
 }
 
 // generateRefreshToken mints a login refresh token in the given family; an
-// empty family starts a new one named by the new token's jti.
-func (s *JWTService) generateRefreshToken(userID, orgID, family string) (string, error) {
+// empty family starts a new one named by the new token's jti. signedIn is the
+// sign-in's time carried as auth_time; the zero time means this token is the
+// sign-in and auth_time equals its iat.
+func (s *JWTService) generateRefreshToken(userID, orgID, family string, signedIn time.Time) (string, error) {
 	now := time.Now()
 	id := uuid.New().String()
 	if family == "" {
 		family = id
+	}
+	if signedIn.IsZero() {
+		signedIn = now
 	}
 	claims := JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
 		TokenType:      TokenTypeRefresh,
 		SessionID:      family,
+		AuthTime:       jwt.NewNumericDate(signedIn),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -398,8 +504,9 @@ func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 // RefreshTokenPair mints a new access token and a new refresh token of the
 // presented token's kind (a login refresh token carries JWT_REFRESH_TTL, 168h
 // by default; an SDK token 90 days). A new login refresh token carries the
-// presented token's family (sid), so the sign-in stays one family across
-// rotations. It retires nothing itself: the refresh handler denylists a login
+// presented token's family (sid) and sign-in time (auth_time), so the sign-in
+// stays one family, with one start, across rotations. It retires nothing
+// itself: the refresh handler denylists a login
 // token's jti (and returns the presented token unchanged when it cannot) and
 // revokes an SDK token's sdk_tokens row by hash.
 // Returns: newAccessToken, newRefreshToken, error
@@ -431,8 +538,9 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 
 	var newAccessToken, newRefreshToken string
 
-	// Generate new access token from the supplied principal
-	newAccessToken, err = s.GenerateAccessToken(claims.UserID, claims.OrganizationID, email, role)
+	// Generate new access token from the supplied principal, in the presented
+	// token's family (none for an SDK-download token)
+	newAccessToken, err = s.generateAccessToken(claims.UserID, claims.OrganizationID, email, role, claims.FamilyID())
 	if err != nil {
 		return "", "", err
 	}
@@ -441,7 +549,7 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 	if isSDKToken {
 		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, email, role)
 	} else {
-		newRefreshToken, err = s.generateRefreshToken(claims.UserID, claims.OrganizationID, claims.FamilyID())
+		newRefreshToken, err = s.generateRefreshToken(claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt())
 	}
 	if err != nil {
 		return "", "", err

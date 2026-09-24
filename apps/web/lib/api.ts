@@ -507,8 +507,9 @@ export interface GetAgentMCPServersResponse {
 }
 
 class APIClient {
-  private token: string | null = null;
-  private refreshToken: string | null = null;
+  // The session lives in one place, the localStorage pair auth_token and
+  // refresh_token, written and cleared here and read fresh on every use; the
+  // client keeps no copy in the tab, so two tabs never disagree on the account.
   private _baseURL: string | null = null;
 
   constructor() {
@@ -548,12 +549,16 @@ class APIClient {
     refreshToken?: string,
     sessionKind: "new-session" | "token-refresh" = "new-session"
   ) {
-    this.token = token;
     if (typeof window !== "undefined") {
       localStorage.setItem("auth_token", token);
       if (refreshToken) {
-        this.refreshToken = refreshToken;
         localStorage.setItem("refresh_token", refreshToken);
+      } else if (sessionKind === "new-session") {
+        // A new session never inherits the previous account's refresh token:
+        // without one of its own, the stored one is cleared, so the next silent
+        // refresh cannot run as whoever was signed in before. A token refresh
+        // keeps the current refresh token when the answer carries none.
+        localStorage.removeItem("refresh_token");
       }
       // Default is "new-session": a caller that forgets to say gets a usable
       // session rather than a login loop. The cap is a client-side convenience
@@ -568,7 +573,6 @@ class APIClient {
   }
 
   getToken(): string | null {
-    if (this.token) return this.token;
     if (typeof window !== "undefined") {
       return localStorage.getItem("auth_token");
     }
@@ -576,7 +580,6 @@ class APIClient {
   }
 
   getRefreshToken(): string | null {
-    if (this.refreshToken) return this.refreshToken;
     if (typeof window !== "undefined") {
       return localStorage.getItem("refresh_token");
     }
@@ -584,8 +587,6 @@ class APIClient {
   }
 
   clearToken() {
-    this.token = null;
-    this.refreshToken = null;
     if (typeof window !== "undefined") {
       localStorage.removeItem("auth_token");
       localStorage.removeItem("refresh_token");
@@ -612,7 +613,7 @@ class APIClient {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
+        credentials: "omit", // the session travels only in the Authorization header
         body: JSON.stringify({ refreshToken }),
       });
 
@@ -653,7 +654,7 @@ class APIClient {
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...options,
       headers,
-      credentials: "include", // Send cookies with requests
+      credentials: "omit", // the session travels only in the Authorization header
     });
 
     if (response.status === 401) {
@@ -736,7 +737,13 @@ class APIClient {
   }
 
   async logout(): Promise<void> {
-    await this.request("/api/v1/auth/logout", { method: "POST" });
+    // The stored refresh token goes in the body, so the whole sign-in ends
+    // even after a refresh has rotated it; the API reads no cookie.
+    const refreshToken = this.getRefreshToken();
+    await this.request("/api/v1/auth/logout", {
+      method: "POST",
+      ...(refreshToken ? { body: JSON.stringify({ refreshToken }) } : {}),
+    });
     this.clearToken();
   }
 
@@ -766,7 +773,7 @@ class APIClient {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
+        credentials: "omit", // the session travels only in the Authorization header
         body: JSON.stringify(payload),
       }
     );
@@ -2397,6 +2404,7 @@ class APIClient {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "omit", // the session travels only in the Authorization header
       });
     };
 
@@ -2664,7 +2672,7 @@ class APIClient {
     const response = await fetch(`${this.baseURL}/api/v1/admin/audit-logs/export?format=csv`, {
       method: "GET",
       headers,
-      credentials: "include",
+      credentials: "omit", // the session travels only in the Authorization header
     });
 
     if (!response.ok) {
@@ -2890,7 +2898,7 @@ class APIClient {
     const response = await fetch(`${this.baseURL}/api/v1/compliance/export?${params.toString()}`, {
       method: "GET",
       headers,
-      credentials: "include",
+      credentials: "omit", // the session travels only in the Authorization header
     });
 
     if (!response.ok) {

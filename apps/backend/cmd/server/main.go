@@ -151,6 +151,7 @@ func main() {
 
 	// Initialize infrastructure services
 	jwtService := auth.NewJWTService()
+	log.Printf("Session maximum age: %s (JWT_SESSION_MAX_AGE)", jwtService.SessionMaxAge())
 
 	// Wire server-side token revocation (logout / denylist) to Redis when
 	// available. Fails CLOSED on a store outage by default; set
@@ -1238,6 +1239,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		SDK: handlers.NewSDKHandler(
 			jwtService,
 			repos.SDKToken,
+			services.Audit,
 		),
 		SDKToken: handlers.NewSDKTokenHandler(
 			services.SDKToken,
@@ -1252,6 +1254,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.SDKToken,
 			jwtService,
 			repos.User,
+			services.Audit,
 		),
 		Capability: handlers.NewCapabilityHandler(
 			services.Capability,
@@ -1294,6 +1297,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		DeviceAuth: handlers.NewDeviceAuthHandler(
 			services.DeviceAuth,
+			jwtService,
+			services.Audit,
 		),
 		RegistryBridge: handlers.NewRegistryBridgeHandler(
 			services.RegistryBridge,

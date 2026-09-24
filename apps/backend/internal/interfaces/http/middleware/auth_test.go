@@ -146,7 +146,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	assert.Equal(t, "admin", capturedRole)
 }
 
-func TestAuthMiddleware_TokenFromCookie(t *testing.T) {
+func TestAuthMiddleware_CookieIsNotACredential(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()
 
@@ -162,22 +162,96 @@ func TestAuthMiddleware_TokenFromCookie(t *testing.T) {
 	require.NoError(t, err)
 
 	var capturedUserID uuid.UUID
+	handlerCalls := 0
 
 	app := fiber.New()
 	app.Use(AuthMiddleware(jwtService))
 	app.Get("/protected", func(c fiber.Ctx) error {
+		handlerCalls++
 		capturedUserID = c.Locals("user_id").(uuid.UUID)
 		return c.JSON(fiber.Map{"message": "success"})
 	})
 
-	req := httptest.NewRequest("GET", "/protected", nil)
-	req.AddCookie(&http.Cookie{Name: "access_token", Value: accessToken})
+	// A valid token presented only as the access_token cookie is not a credential:
+	// the request is refused exactly as if no token had been sent.
+	cookieReq := httptest.NewRequest("GET", "/protected", nil)
+	cookieReq.AddCookie(&http.Cookie{Name: "access_token", Value: accessToken})
 
-	resp, err := app.Test(req)
+	cookieResp, err := app.Test(cookieReq)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer cookieResp.Body.Close()
 
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.Equal(t, fiber.StatusUnauthorized, cookieResp.StatusCode)
+	assert.Equal(t, 0, handlerCalls, "the handler must not run for a cookie-only request")
+
+	body, _ := io.ReadAll(cookieResp.Body)
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	assert.Equal(t, "No authentication token provided", result["error"])
+
+	// The same token in the Authorization header signs the request in as its user.
+	headerReq := httptest.NewRequest("GET", "/protected", nil)
+	headerReq.Header.Set("Authorization", "Bearer "+accessToken)
+
+	headerResp, err := app.Test(headerReq)
+	require.NoError(t, err)
+	defer headerResp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, headerResp.StatusCode)
+	assert.Equal(t, 1, handlerCalls)
+	assert.Equal(t, userID, capturedUserID)
+}
+
+func TestOptionalAuthMiddleware_CookieIsNotACredential(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+
+	userID := uuid.New()
+	orgID := uuid.New()
+
+	accessToken, _, err := jwtService.GenerateTokenPair(
+		userID.String(),
+		orgID.String(),
+		"test@example.com",
+		"member",
+	)
+	require.NoError(t, err)
+
+	var capturedUserID uuid.UUID
+	var hasUserID bool
+
+	app := fiber.New()
+	app.Use(OptionalAuthMiddleware(jwtService))
+	app.Get("/public", func(c fiber.Ctx) error {
+		hasUserID = false
+		if uid := c.Locals("user_id"); uid != nil {
+			capturedUserID = uid.(uuid.UUID)
+			hasUserID = true
+		}
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	// A valid token presented only as the access_token cookie leaves the request anonymous.
+	cookieReq := httptest.NewRequest("GET", "/public", nil)
+	cookieReq.AddCookie(&http.Cookie{Name: "access_token", Value: accessToken})
+
+	cookieResp, err := app.Test(cookieReq)
+	require.NoError(t, err)
+	defer cookieResp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, cookieResp.StatusCode)
+	assert.False(t, hasUserID, "a cookie-only request must not carry a user_id")
+
+	// The same token in the Authorization header identifies the user.
+	headerReq := httptest.NewRequest("GET", "/public", nil)
+	headerReq.Header.Set("Authorization", "Bearer "+accessToken)
+
+	headerResp, err := app.Test(headerReq)
+	require.NoError(t, err)
+	defer headerResp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, headerResp.StatusCode)
+	assert.True(t, hasUserID, "the header must sign the request in")
 	assert.Equal(t, userID, capturedUserID)
 }
 
@@ -568,4 +642,45 @@ func TestOptionalAuthMiddleware_ValidToken(t *testing.T) {
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 	assert.True(t, hasUserID, "user_id should be set with valid token")
 	assert.Equal(t, userID, capturedUserID)
+}
+
+// M1: the middleware hands the acting token's family and id to the handlers
+// (a credential-minting route reads them to refuse a revoked session); an
+// access token with no family yields an empty family. The revocation check
+// itself is unchanged.
+func TestAuthMiddleware_ExposesTheActingTokensFamilyAndID(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+	userID, orgID := uuid.New(), uuid.New()
+	accessToken, refreshToken, err := jwtService.GenerateTokenPair(userID.String(), orgID.String(), "m1@example.com", "admin")
+	require.NoError(t, err)
+	family, err := jwtService.GetTokenID(refreshToken)
+	require.NoError(t, err)
+	standalone, err := jwtService.GenerateAccessToken(userID.String(), orgID.String(), "m1@example.com", "admin")
+	require.NoError(t, err)
+
+	var seenSid, seenJTI string
+	app := fiber.New()
+	app.Use(AuthMiddleware(jwtService))
+	app.Get("/protected", func(c fiber.Ctx) error {
+		seenSid, _ = c.Locals("sid").(string)
+		seenJTI, _ = c.Locals("jti").(string)
+		return c.JSON(fiber.Map{"ok": true})
+	})
+	call := func(token string) int {
+		req := httptest.NewRequest("GET", "/protected", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	assert.Equal(t, fiber.StatusOK, call(accessToken))
+	assert.Equal(t, family, seenSid, "the pair's access token exposes its family")
+	jti, err := jwtService.GetTokenID(accessToken)
+	require.NoError(t, err)
+	assert.Equal(t, jti, seenJTI, "and its own id")
+
+	assert.Equal(t, fiber.StatusOK, call(standalone))
+	assert.Equal(t, "", seenSid, "a token with no family exposes an empty family")
 }
