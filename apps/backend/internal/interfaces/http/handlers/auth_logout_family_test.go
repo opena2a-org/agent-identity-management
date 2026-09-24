@@ -50,8 +50,8 @@ func logoutFamilyFixture(t *testing.T, store auth.RevocationStore) (*auth.JWTSer
 	return svc, app, access, refresh
 }
 
-// L1: a dashboard-shaped logout (bearer plus the login cookie, no body) after
-// one refresh ends the session: the refreshed token is refused.
+// L1: a dashboard-shaped logout (bearer plus the refreshed token in the body, no
+// cookie) after one refresh ends the session: the refreshed token is refused.
 func TestAuthHandler_Logout_EndsTheWholeSession(t *testing.T) {
 	store := &logoutMemStore{}
 	svc, app, _, p1 := logoutFamilyFixture(t, store)
@@ -60,7 +60,7 @@ func TestAuthHandler_Logout_EndsTheWholeSession(t *testing.T) {
 	require.True(t, out.Rotated)
 	p2, a2 := out.RefreshToken, out.AccessToken
 
-	_, _, answer, status := postLogout(t, &AuthHandler{jwtService: svc}, a2, "", p1)
+	_, _, answer, status := postLogout(t, &AuthHandler{jwtService: svc}, a2, `{"refreshToken":"`+p2+`"}`, "")
 	require.Equal(t, fiber.StatusOK, status)
 	assert.True(t, answer.Revoked["refreshToken"])
 

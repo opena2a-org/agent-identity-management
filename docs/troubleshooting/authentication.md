@@ -48,7 +48,7 @@ An agent needs BOTH:
 1. User logs in via OAuth (Google/Microsoft)
    → Backend issues access_token (1 hour TTL)
    → Backend issues refresh_token (90 days TTL)
-   → Tokens stored in session/cookies
+   → Tokens kept in the dashboard's site storage and sent as `Authorization: Bearer` (not cookies)
 
 2. User downloads SDK
    → SDK includes current refresh_token

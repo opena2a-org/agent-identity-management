@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"log"
-	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -118,25 +117,6 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 			"error": "Failed to generate tokens",
 		})
 	}
-
-	// SECURITY: Set Secure flag based on environment
-	isProduction := strings.EqualFold(os.Getenv("ENVIRONMENT"), "production")
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "access_token",
-		Value:    accessToken,
-		HTTPOnly: true,
-		Secure:   isProduction,
-		SameSite: "Lax",
-	})
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		HTTPOnly: true,
-		Secure:   isProduction,
-		SameSite: "Lax",
-	})
 
 	// Audit log successful login
 	h.auditService.LogAction(
@@ -258,16 +238,13 @@ func (h *AuthHandler) GetCurrentOrganization(c fiber.Ctx) error {
 func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	// The audit row. This route sits in the public auth group, so no
 	// middleware sets the principal; the row comes from the presented token's
-	// own claims: the bearer access token, or the refresh token a client
-	// outside a browser sends in the body (a browser sends the cookie). One
-	// row per logout with a valid token; garbage tokens record nothing. The
-	// row carries identifiers only, never a token.
+	// own claims: the bearer access token, or the refresh token the client
+	// sends in the body. Cookies are not credentials here. One row per logout
+	// with a valid token; garbage tokens record nothing. The row carries
+	// identifiers only, never a token.
 	var req LogoutRequest
 	_ = c.Bind().JSON(&req)
 	refreshToken := req.RefreshToken
-	if refreshToken == "" {
-		refreshToken = c.Cookies("refresh_token")
-	}
 	if h.auditService != nil && h.jwtService != nil {
 		if claims, source := h.logoutPrincipal(bearerToken(c), refreshToken); claims != nil {
 			userID, err1 := uuid.Parse(claims.UserID)
@@ -294,7 +271,8 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 		revoked["refreshToken"] = ok
 	}
 
-	// Clear cookies
+	// Clear the session cookies that earlier versions set at sign-in. They are
+	// not read as credentials; this only removes them from the browser.
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    "",
@@ -316,14 +294,14 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 }
 
 // LogoutRequest is the optional JSON body of POST /api/v1/auth/logout: the
-// refresh token to revoke, for clients that hold the pair outside a browser.
-// No validation tag: a browser posts no body and must keep logging out.
+// refresh token to revoke. No validation tag: a request without a body must
+// keep logging out (the bearer is still revoked).
 type LogoutRequest struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
-// bearerToken extracts the JWT from the Authorization header ("Bearer <token>")
-// or, failing that, the access_token cookie.
+// bearerToken extracts the JWT from the Authorization header ("Bearer <token>").
+// The access_token cookie is not a credential.
 func bearerToken(c fiber.Ctx) string {
 	if authHeader := c.Get("Authorization"); authHeader != "" {
 		parts := strings.Split(authHeader, " ")
@@ -331,7 +309,7 @@ func bearerToken(c fiber.Ctx) string {
 			return parts[1]
 		}
 	}
-	return c.Cookies("access_token")
+	return ""
 }
 
 // logoutPrincipal returns the claims the logout row is written from: the
