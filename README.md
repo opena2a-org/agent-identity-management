@@ -215,7 +215,7 @@ Capability authorization (deny-before-execute, FGA, intent classification) requi
 
 ## Install AIM (self-hosted)
 
-> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below. Before deploying an image, verify its signature with the `cosign verify` command given in advisory [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr). The advisory also shows how to read which digest a tag names today; pin the digest, not a tag.
+> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing. To deploy by digest instead, use advisory [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr): it shows how to read which digest a tag names today, and gives the `cosign verify` command to run before deploying the fixed `aim-dashboard` build it names by digest.
 
 ### Docker
 
