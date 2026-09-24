@@ -215,6 +215,8 @@ Capability authorization (deny-before-execute, FGA, intent classification) requi
 
 ## Install AIM (self-hosted)
 
+> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below. Before deploying an image, verify its signature with the `cosign verify` command given in advisory [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr). The advisory also shows how to read which digest a tag names today; pin the digest, not a tag.
+
 ### Docker
 
 The quickstart script is fetched from `main`. On a first run it downloads [`docker-compose.quickstart.yml`](docker-compose.quickstart.yml), also from `main`, and starts `aim-server` and `aim-dashboard` at their `latest` tags, which move with every build of `main` and are not pinned to a platform release. PostgreSQL (the TimescaleDB image) and Redis start at floating upstream tags. Nothing on this path is pinned or verified: read [the script](scripts/quickstart.sh) and the compose file it fetches before running it. Published security advisories are on the repository's [security advisories page](https://github.com/opena2a-org/agent-identity-management/security/advisories).

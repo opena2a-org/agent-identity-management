@@ -1,9 +1,10 @@
 /**
- * Role requirements for dashboard routes, enforced at the edge (middleware.ts in the OSS
- * build, proxy.ts on the hosted product). Kept in one module so the navigation tests can
- * assert that nothing the navigation renders is blocked by the edge.
+ * Role requirements for dashboard routes, enforced by the dashboard shell's route gate
+ * (components/route-gate.tsx, which reads the session store the API client sends; proxy.ts on
+ * the hosted product until it is brought to the same model). Kept in one module so the
+ * navigation tests can assert that nothing the navigation renders is blocked by the gate.
  *
- * Matching semantics (mirrors the edge loop exactly): every entry whose path is a prefix of
+ * Matching semantics (mirrors the gate loop exactly): every entry whose path is a prefix of
  * the requested pathname applies, and access requires the role to be in EVERY matching
  * entry — an intersection, because the loop denies on any failing match and does not break.
  * Consequence worth knowing: a specific entry cannot WIDEN what a broader prefix allows

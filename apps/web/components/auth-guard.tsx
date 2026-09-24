@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -34,7 +35,7 @@ export function AuthGuard({ children, requireAuth = true }: AuthGuardProps) {
     }
 
     // Check for authentication token
-    const token = localStorage.getItem("auth_token");
+    const token = api.getToken();
 
     if (!token) {
       // No token found, redirect to login with return URL
