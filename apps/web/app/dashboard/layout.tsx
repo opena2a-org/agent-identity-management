@@ -6,6 +6,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { HubTabs } from "@/components/hub-tabs";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
 import { IdleTimeoutGuard } from "@/components/idle-timeout-guard";
+import { RouteGate } from "@/components/route-gate";
 import { useDeactivationCheck } from "@/hooks/use-deactivation-check";
 import { api } from "@/lib/api";
 import type { UserRole } from "@/lib/permissions";
@@ -37,6 +38,7 @@ export default function DashboardLayout({
   }, []);
 
   return (
+    <RouteGate>
     <div className="glass-page glass-page--layered relative min-h-screen">
       <div className="glass-page-wash" aria-hidden="true" />
       {/* Idle / absolute session timeout (30m idle, 8h cap) */}
@@ -51,5 +53,6 @@ export default function DashboardLayout({
       </div>
       <MobileTabBar role={role} onOpenMenu={() => setMobileNavOpen(true)} />
     </div>
+    </RouteGate>
   );
 }
