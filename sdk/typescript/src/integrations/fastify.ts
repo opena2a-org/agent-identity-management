@@ -11,7 +11,8 @@ import type {
 } from 'fastify';
 import fp from 'fastify-plugin';
 import { AIMClient } from '../client/AIMClient';
-import type { AIMClientConfig, VerifyActionOptions } from '../types';
+import { clientFromOptions, type IntegrationClientOptions } from './client-options';
+import type { VerifyActionOptions } from '../types';
 import { classifyVerificationFailure } from './verification-outcome';
 
 /**
@@ -31,7 +32,7 @@ declare module 'fastify' {
 /**
  * Plugin options
  */
-export interface AIMPluginOptions extends AIMClientConfig {
+export interface AIMPluginOptions extends IntegrationClientOptions {
   /** Skip verification for certain paths */
   skipPaths?: string[];
 }
@@ -41,7 +42,7 @@ const aimPluginCallback: FastifyPluginCallback<AIMPluginOptions> = (
   options: AIMPluginOptions,
   done: (err?: Error) => void
 ) => {
-  const client = new AIMClient(options);
+  const client = clientFromOptions(options);
   const skipPaths = new Set(options.skipPaths ?? ['/health', '/ready', '/metrics']);
 
   // Decorate request with AIM context

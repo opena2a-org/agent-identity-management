@@ -7,6 +7,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The Express middleware and the Fastify plugin accept the agent identity in their options. `createAIMMiddleware`
+  and `aimPlugin` take `credentials` (an `AgentCredentials` object) or a ready `client`; the README examples, which
+  passed only `{ baseUrl, apiKey }`, answered 401 on every verified route without contacting AIM. Passing both
+  options is refused. When the environment holds three of the four `AIM_*` agent variables, the "No credentials
+  available" error now names the missing one (for example `AIM_ORGANIZATION_ID`), which reaches the 401 body. A test
+  drives both README examples with a real client against a fake AIM server and asserts the action is verified
+  there (#449).
+
 ### Changed
 
 - `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405

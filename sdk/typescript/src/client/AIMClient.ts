@@ -12,7 +12,7 @@ import type {
 } from '../types';
 import { RiskLevel } from '../types';
 import { SDK_VERSION } from '../version';
-import { OAuthTokenManager, loadCredentialsFromEnv } from '../auth/oauth';
+import { OAuthTokenManager, loadCredentialsFromEnv, missingAgentCredentialEnvVars } from '../auth/oauth';
 import { generateKeyPair, toBase64, createRequestSignature, fromBase64 } from '../crypto/ed25519';
 import {
   AIMError,
@@ -204,6 +204,24 @@ export class AIMClient {
   /**
    * Log debug message if debug mode is enabled
    */
+  /**
+   * The error for a call that needs an agent identity the client does not
+   * have. When the environment is one variable short of a complete identity,
+   * it names the variable: "No credentials available" alone reads the same as
+   * a clean environment, which sent users hunting for a registration step when
+   * AIM_ORGANIZATION_ID was the only thing missing (#449).
+   */
+  private noCredentialsError(): AuthenticationError {
+    const missing = missingAgentCredentialEnvVars();
+    if (missing.length > 0) {
+      return new AuthenticationError(
+        `No credentials available: the environment is missing ${missing.join(', ')} ` +
+          '(AIM_AGENT_ID, AIM_PRIVATE_KEY, AIM_PUBLIC_KEY and AIM_ORGANIZATION_ID are all required).',
+      );
+    }
+    return new AuthenticationError('No credentials available. Register an agent first.');
+  }
+
   private log(message: string, ...args: unknown[]): void {
     if (this.config.debug) {
       console.log(`[AIM] ${message}`, ...args);
@@ -445,7 +463,7 @@ export class AIMClient {
     const deadlineAt = Date.now() + this.config.enforcementTimeout;
 
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     const payload = {
@@ -729,7 +747,7 @@ export class AIMClient {
    */
   async updateAgent(updates: Partial<RegisterAgentOptions>): Promise<Agent> {
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     this.agent = await this.request<Agent>(
@@ -746,7 +764,7 @@ export class AIMClient {
    */
   async reportCapabilities(capabilities: string[]): Promise<void> {
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     await this.request('POST', `/api/v1/agents/${this.credentials.agentId}/capabilities/report`, {
@@ -816,7 +834,7 @@ export class AIMClient {
     };
 
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     const response = await this.request<IsolationAttestationResult>(
