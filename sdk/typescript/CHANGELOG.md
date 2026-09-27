@@ -210,6 +210,10 @@ they stay in scope if one ever grows an observational side-channel.
   the previously undocumented exported clients (`A2AClient`, `SecretsClient`,
   `OAuthTokenManager`, `CrlCache`) to the API reference.
 
+### Fixed — entry points share one class identity
+
+- The entry points (`.`, `/arp`, `/express`, `/fastify`) share one copy of `AIMClient` and the error classes (#334). Each bundled its own copy, so an `ActionDeniedError` raised through `@opena2a/aim-sdk/express` was not `instanceof` the class imported from `@opena2a/aim-sdk`. The build now emits shared chunks in both formats. The ESM and CommonJS builds remain two copies; match on `error.code` where one process loads both.
+
 ## [1.3.1] - 2026-09-02
 
 ### Added
