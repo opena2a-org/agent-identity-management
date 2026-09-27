@@ -227,3 +227,7 @@ func TestIssueForAgent_ScoreErrorPropagates(t *testing.T) {
 func (f *fakeAgentReader) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
 	return nil, nil
 }
+
+func (f *fakeAgentReader) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
