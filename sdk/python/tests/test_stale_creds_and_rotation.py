@@ -15,7 +15,7 @@ with recovery instructions instead.
 
 import io
 import json
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -94,7 +94,9 @@ class TestInstallSdkCredentialsWarning:
         with patch("aim_sdk.credentials.SDK_CREDENTIALS_FILE", tmp_path / "sdk_credentials.json"):
             with patch("aim_sdk.credentials.save_sdk_credentials", return_value=True) as mock_save:
                 buf = io.StringIO()
-                with redirect_stdout(buf):
+                # The adoption notice goes to stderr so `aim-sdk status --json`
+                # keeps stdout to one JSON object (#409).
+                with redirect_stderr(buf):
                     _install_sdk_credentials(creds, source_path=src)
 
                 out = buf.getvalue()
@@ -117,7 +119,7 @@ class TestInstallSdkCredentialsWarning:
         with patch("aim_sdk.credentials.SDK_CREDENTIALS_FILE", tmp_path / "sdk_credentials.json"):
             with patch("aim_sdk.credentials.save_sdk_credentials", return_value=True):
                 buf = io.StringIO()
-                with redirect_stdout(buf):
+                with redirect_stderr(buf):
                     _install_sdk_credentials(creds)
                 out = buf.getvalue()
                 assert "bundled package" not in out

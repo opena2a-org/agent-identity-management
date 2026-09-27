@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk status` always states a verdict, and its exit code follows it. On an upgraded install holding only a
+  legacy `~/.aim/credentials.json` (snake_case keys, a refresh token, no access token) it printed Server, `User:
+  Unknown` and Credentials, then nothing, with exit 0. It now reads the legacy keys, prints `Authenticated ...` or
+  `Not authenticated ...` for every token state, and says the check was local. It cites only a credentials file that
+  exists: when adopting the legacy file fails, it names the file it actually read instead of a
+  `sdk_credentials.json` that was never written. A missing server URL is shown with login's default. The adoption and
+  migration notices no longer claim `[OK]` when the write failed, and they go to stderr, so `status --json` stays one
+  JSON object on stdout (#409).
 - `aim-sdk logout` revokes the stored session on the server: it posts `POST /api/v1/auth/logout`
   with the access token as the bearer and the refresh token in the body, and prints a confirmed
   sign-out only when the server reports the refresh token revoked; otherwise it names the reason
