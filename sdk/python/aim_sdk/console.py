@@ -39,6 +39,38 @@ def _strip_control_bytes(text: str) -> str:
         ch for ch in text if not ((ch < " " and ch not in "\n\t") or "\x7f" <= ch <= "\x9f")
     )
 
+# Plain-text panels: "│" + two spaces + a 46-column field + " │" = 51 columns,
+# the width of the ╭─...─╮ border lines. Every row goes through _panel_row, so
+# no value can push one row's right border out of line with the others.
+_PANEL_BORDER_TOP = "╭" + "─" * 49 + "╮"
+_PANEL_BORDER_MID = "├" + "─" * 49 + "┤"
+_PANEL_BORDER_BOTTOM = "╰" + "─" * 49 + "╯"
+_PANEL_FIELD = 46
+
+
+def _panel_row(text: str) -> str:
+    """One plain-text panel row, padded to the panel width (truncated with ... if longer)."""
+    text = str(text)
+    if len(text) > _PANEL_FIELD:
+        text = text[:_PANEL_FIELD - 3] + "..."
+    return f"│  {text:<{_PANEL_FIELD}} │"
+
+
+def _short_id(agent_id: str) -> str:
+    """First 8 and last 4 characters of a long id. An id of 15 characters or
+    fewer is shown whole: shortening it would repeat characters rather than
+    elide any (`agt_123` rendered as `agt_123..._123`)."""
+    agent_id = str(agent_id)
+    if len(agent_id) <= 15:
+        return agent_id
+    return f"{agent_id[:8]}...{agent_id[-4:]}"
+
+
+def _score_in_range(score: Optional[float]) -> bool:
+    """A normalized trust score is graded only inside [0, 1]."""
+    return score is not None and score == score and 0.0 <= score <= 1.0
+
+
 # AIM Brand Colors
 BRAND_BLUE = "#3B82F6"
 BRAND_TEAL = "#14B8A6"
@@ -134,7 +166,7 @@ class AIMConsole:
         self.console.print(rf"[bold green]\[OK][/] [bold]Agent registered:[/] [cyan]{name}[/]")
 
         # Details in a compact grid format
-        id_short = f"{agent_id[:8]}...{agent_id[-4:]}"
+        id_short = _short_id(agent_id)
         trust_str = self._format_trust_score_inline(trust_score)
 
         self.console.print(f"  [dim]ID:[/] {id_short}  [dim]Type:[/] [magenta]{agent_type}[/]  [dim]Version:[/] {version}")
@@ -159,28 +191,33 @@ class AIMConsole:
     ):
         """Simple formatted agent registration output."""
         print()
-        print("╭─────────────────────────────────────────────────╮")
-        print("│  [OK] Agent Registered                          │")
-        print("├─────────────────────────────────────────────────┤")
-        print(f"│  Agent:       {name:<32} │")
-        print(f"│  ID:          {agent_id[:8]}...{agent_id[-4:]:<20} │")
-        print(f"│  Type:        {agent_type:<32} │")
-        print(f"│  Version:     {version:<32} │")
-        print(f"│  Status:      {status:<32} │")
+        print(_PANEL_BORDER_TOP)
+        print(_panel_row("[OK] Agent Registered"))
+        print(_PANEL_BORDER_MID)
+        print(_panel_row(f"Agent:       {name}"))
+        print(_panel_row(f"ID:          {_short_id(agent_id)}"))
+        print(_panel_row(f"Type:        {agent_type}"))
+        print(_panel_row(f"Version:     {version}"))
+        print(_panel_row(f"Status:      {status}"))
         # None means the server sent no score; print that rather than a number.
-        trust_display = "N/A" if trust_score is None else f"{trust_score:.0%}"
-        print(f"│  Trust Score: {trust_display}{'':>28} │")
+        if trust_score is None:
+            trust_display = "N/A"
+        elif not _score_in_range(trust_score):
+            trust_display = "invalid"
+        else:
+            trust_display = f"{trust_score:.0%}"
+        print(_panel_row(f"Trust Score: {trust_display}"))
         if capabilities:
             cap_str = ", ".join(capabilities[:3])
             if len(capabilities) > 3:
                 cap_str += f" (+{len(capabilities) - 3})"
-            print(f"│  Capabilities: {cap_str:<30} │")
+            print(_panel_row(f"Capabilities: {cap_str}"))
         if mcp_servers:
             mcp_str = ", ".join(mcp_servers[:3])
             if len(mcp_servers) > 3:
                 mcp_str += f" (+{len(mcp_servers) - 3})"
-            print(f"│  MCP Servers: {mcp_str:<31} │")
-        print("╰─────────────────────────────────────────────────╯")
+            print(_panel_row(f"MCP Servers: {mcp_str}"))
+        print(_PANEL_BORDER_BOTTOM)
         print()
 
     def _format_trust_score(self, score: float) -> str:
@@ -188,6 +225,10 @@ class AIMConsole:
         if score is None:
             return "[dim]N/A[/]"
         score = self._normalize_trust_score(score)
+        if not _score_in_range(score):
+            # 150 or -5 is not a score to grade: it rendered "150% Excellent"
+            # and "-500% Low".
+            return "[dim]invalid[/]"
         if score >= 0.8:
             return f"[bold green]{score:.0%}[/] [dim]Excellent[/]"
         elif score >= 0.6:
@@ -202,6 +243,8 @@ class AIMConsole:
         if score is None:
             return "[dim]N/A[/]"
         score = self._normalize_trust_score(score)
+        if not _score_in_range(score):
+            return "[dim]invalid[/]"
         if score >= 0.8:
             return f"[green]{score:.0%}[/]"
         elif score >= 0.6:
@@ -233,7 +276,7 @@ class AIMConsole:
         if self.quiet:
             return
 
-        id_short = f"{agent_id[:8]}...{agent_id[-4:]}"
+        id_short = _short_id(agent_id)
 
         if RICH_AVAILABLE:
             self.console.print()
@@ -243,12 +286,12 @@ class AIMConsole:
             self.console.print()
         else:
             print()
-            print("╭─────────────────────────────────────────────────╮")
-            print("│  ↻ Using Existing Credentials                   │")
-            print("├─────────────────────────────────────────────────┤")
-            print(f"│  Agent: {name:<40} │")
-            print(f"│  ID:    {id_short:<40} │")
-            print("╰─────────────────────────────────────────────────╯")
+            print(_PANEL_BORDER_TOP)
+            print(_panel_row("↻ Using Existing Credentials"))
+            print(_PANEL_BORDER_MID)
+            print(_panel_row(f"Agent: {name}"))
+            print(_panel_row(f"ID:    {id_short}"))
+            print(_PANEL_BORDER_BOTTOM)
             print("  Use force_new=True to register a new agent")
             print()
 
@@ -328,13 +371,13 @@ class AIMConsole:
             self.console.print(panel)
         else:
             print()
-            print("╭─────────────────────────────────────────────────╮")
-            print("│  ○ Awaiting Admin Approval                      │")
-            print("├─────────────────────────────────────────────────┤")
-            print(f"│  Capability:  {capability:<32} │")
-            print(f"│  Risk Level:  {risk_level.upper():<32} │")
-            print(f"│  Timeout:     {timeout}s{'':>30} │")
-            print("╰─────────────────────────────────────────────────╯")
+            print(_PANEL_BORDER_TOP)
+            print(_panel_row("○ Awaiting Admin Approval"))
+            print(_PANEL_BORDER_MID)
+            print(_panel_row(f"Capability:  {capability}"))
+            print(_panel_row(f"Risk Level:  {risk_level.upper()}"))
+            print(_panel_row(f"Timeout:     {timeout}s"))
+            print(_PANEL_BORDER_BOTTOM)
             print("  Approve in dashboard:")
             print(f"  {url}")
             print()
