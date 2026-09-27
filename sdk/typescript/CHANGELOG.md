@@ -7,6 +7,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `aimErrorHandler` answers every SDK error as JSON. It handled only denials and
+  authentication failures and passed every other SDK error to `next(error)`, so an
+  AIM server answering 500 reached Express's default handler, which outside
+  `NODE_ENV=production` rendered an HTML page with the stack trace and local file
+  paths and printed the stack to stderr. Those errors now get the body the Fastify
+  plugin gives them, `{ statusCode, code, error, message }`, keeping a 4xx or 5xx
+  status from the SDK error and using 500 otherwise. Errors that did not come from the
+  SDK still go to `next(error)`, and so does any error once the response has started.
+  A new test drives the README middleware stack against a fake AIM server on loopback
+  (#450).
+
 ### Changed
 
 - `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
