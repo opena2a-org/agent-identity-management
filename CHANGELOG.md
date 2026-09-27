@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — capability verifications are recorded as capability checks
+
+- `POST /api/v1/sdk-api/verifications` recorded every verification event as `verification_type: identity`, because the
+  type was guessed from the capability name (a substring match on `capability` or `permission`) and no real capability
+  (`http:post`, `fs:read`) contains either word. A denied out-of-grant action therefore appeared on the activity timeline
+  as "Verification: identity, Status: failed", which reads as a failed identity check. A request that names a
+  capability is now recorded as `capability`; filters on `verification_type = 'capability'` see these events (#380).
+
 ### Security — a reused refresh token is recorded as the same client or a different one
 
 - A refresh token presented again after it was rotated or logged out is still refused, and its
