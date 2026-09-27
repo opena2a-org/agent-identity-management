@@ -394,18 +394,12 @@ def test_403_carries_the_servers_stated_denial_reason():
     assert "insufficient permissions" not in str(excinfo.value)
 
 
-# Measured 2026-08-13: only these two entry points report an execution at all on
-# the blocked path. `perform_action`, `track_action`, `require_approval` and the
-# LangChain wrapper each `raise verdict.error` without reporting -- see
-# `client.py` (three sites) -- so threading the id through the 403 fixes the
-# report for two of six. Widening that is a backend-contract change with its own
-# cost (four new POSTs on a blocked path, and a dashboard whose execution record
-# changes meaning), so it is NOT smuggled into this commit. Tracked in #382,
-# which carries the measurement and the acceptance criteria.
-REPORTING_ENTRY_POINTS = ["aim_verify", "aim_verify_database"]
-NON_REPORTING_ENTRY_POINTS = [
-    ep for ep in ENTRY_POINTS if ep not in REPORTING_ENTRY_POINTS
-]
+# Every entry point reports the blocked execution before raising (#382). On
+# 2026-08-13 only `aim_verify` and its wrappers did; `perform_action`,
+# `track_action`, `require_approval` and the LangChain wrapper raised without a
+# record. All four were widened in one change through the shared
+# `AIMClient._report_blocked_execution`, so the evidence set has one meaning.
+REPORTING_ENTRY_POINTS = list(ENTRY_POINTS)
 
 
 @pytest.mark.parametrize("entry_point", REPORTING_ENTRY_POINTS)
@@ -443,28 +437,24 @@ def test_a_blocked_403_reports_the_execution_against_the_real_id(entry_point):
     )
 
 
-@pytest.mark.parametrize("entry_point", NON_REPORTING_ENTRY_POINTS)
-def test_blocked_execution_reporting_gap_is_measured_not_assumed(entry_point):
+@pytest.mark.parametrize("entry_point", ENTRY_POINTS)
+def test_a_failed_blocked_report_never_unblocks(entry_point, monkeypatch):
     """
-    CHARACTERIZATION, not an endorsement. These four entry points block correctly
-    -- that is asserted above and is the release gate -- but send AIM no
-    execution report when they do, so the dashboard shows their denials with no
-    proof the action stopped. `perform_action` is the decorator the README Quick
-    start teaches, so this is the common case, not an edge.
+    Re-pointed from the #382 characterization test, which pinned the 2-of-6
+    reporting gap until it closed. Widening the report to every entry point
+    adds a network call on the blocked path, so the property that matters now
+    is the other direction: a report that fails -- here, one that raises
+    before it can even swallow its own error -- must never let the denied body
+    run or change what the caller sees.
+    """
+    def exploding_report(self, *args, **kwargs):
+        raise RuntimeError("execution-status channel down")
 
-    This test exists so the gap is a measured fact in the suite rather than
-    something rediscovered by the next person reading defect (B) and assuming it
-    was fixed everywhere. When the gap is closed, move the entry point into
-    REPORTING_ENTRY_POINTS -- this test going red IS the intended signal.
-    """
-    tally = {"exec_reports": 0, "result_reports": 0}
-    ran, raised = run_case(entry_point, HTTP_403, warm="strict", tally=tally)
+    monkeypatch.setattr(client_module.AIMClient, "report_execution_status", exploding_report)
+    ran, raised = run_case(entry_point, HTTP_403, warm="strict")
     assert ran is False and raised == "ActionDeniedError", (
-        f"{entry_point} must still BLOCK -- only the reporting is missing"
-    )
-    assert tally.get("exec_urls", []) == [], (
-        f"{entry_point} now reports blocked executions. Good -- move it into "
-        f"REPORTING_ENTRY_POINTS and delete it from this test."
+        f"{entry_point}: a failed blocked-execution report changed the outcome "
+        f"(ran={ran}, raised={raised})"
     )
 
 

@@ -292,6 +292,14 @@ func (m *TrustCalcMockAgentRepository) ListRevokedIDs(limit, offset int) ([]uuid
 	return args.Get(0).([]uuid.UUID), args.Error(1)
 }
 
+func (m *TrustCalcMockAgentRepository) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	args := m.Called(now)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
+}
+
 func (m *TrustCalcMockAgentRepository) Update(agent *domain.Agent) error {
 	args := m.Called(agent)
 	return args.Error(0)

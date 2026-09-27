@@ -1741,3 +1741,7 @@ func (m *MockAgentServiceImpl) ListAgentsPaged(ctx context.Context, orgID uuid.U
 func (m *MockAgentRepositoryerImpl) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
 	return nil, nil
 }
+
+func (m *MockAgentRepositoryerImpl) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
