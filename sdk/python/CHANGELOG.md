@@ -293,6 +293,14 @@ not repeated here: it is the same defect as AIM-14.AC1 and ships above.
   and `aim_sdk.decision.VerificationDecision`, the two names its deprecation
   warnings point callers to, instead of only `perform_action`.
 
+### Fixed — console and transport polish (#410)
+
+- Agent ids of 15 characters or fewer are shown whole in panels; `agt_123` rendered as `agt_123..._123`.
+- Every row of the plain-text registration, existing-credentials and approval panels is as wide as its border; values that overflowed a row are cut with `...`.
+- A trust score outside 0-100% renders as `invalid` instead of being graded: `150` printed `150% Excellent` and `-5` printed `-500% Low`.
+- The A2A client and the telemetry relay send the package version in `User-Agent` (`AIM-Python-SDK/<version> (A2A)`, `OpenA2A-AIM-SDK-Relay/<version>`), where they sent a hardcoded `A2A-1.0.0` and no version.
+- `aim-sdk logout` also removes the SDK tokens from the legacy `~/.aim/credentials.json`. The next command migrated that file again, so `aim-sdk status` read as signed in after a logout. Agent credentials in the same file are kept.
+
 ## [2.0.3] - 2026-09-09
 
 ### Fixed

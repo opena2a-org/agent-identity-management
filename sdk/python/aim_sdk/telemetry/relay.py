@@ -255,12 +255,14 @@ Transport = Callable[[str, dict, float], int]
 
 
 def _default_transport(url: str, body: dict, timeout: float) -> int:
+    # Imported here: aim_sdk/__init__ is still initialising when this module loads.
+    from .. import __version__ as sdk_version
     resp = requests.post(
         url,
         data=json.dumps(body),
         headers={
             "Content-Type": "application/json",
-            "User-Agent": "OpenA2A-AIM-SDK-Relay",
+            "User-Agent": f"OpenA2A-AIM-SDK-Relay/{sdk_version}",
         },
         timeout=timeout,
     )
