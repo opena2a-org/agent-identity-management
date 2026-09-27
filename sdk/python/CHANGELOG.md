@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk login` checks `--url` before touching the network. An empty value or a string that is not an http(s)
+  URL with a host now fails at once with `Error: --url ... is not an http(s) URL` (or `is empty`, `has no host`)
+  and an example; it used to reach the reachability probe and report `could not reach the AIM server ... no HTTP
+  response within 5s`, a network failure that never happened. An unreachable but well-formed URL still fails
+  within the probe bound with the reachability message (#408).
 - `aim-sdk logout` revokes the stored session on the server: it posts `POST /api/v1/auth/logout`
   with the access token as the bearer and the refresh token in the body, and prints a confirmed
   sign-out only when the server reports the refresh token revoked; otherwise it names the reason
