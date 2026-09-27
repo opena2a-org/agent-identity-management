@@ -7,8 +7,9 @@ AC1  Rows built through `auto_detect_mcps()`, `MCPDetector()` and
 AC2  None of the three `sdk_version` parameters carries a version-bearing
      default bound at module import: each default is `None` and each resolves
      the package version inside its own body at call time.
-AC3  Neither `aim_sdk/detection.py` nor `aim_sdk/protocol_detection.py` binds
-     a module-level `__version__` to a string constant.
+AC3  No module under `aim_sdk/` binds a module-level `__version__` to a string
+     constant, and every importable submodule that exposes `__version__` reports
+     the package version (#475: `capability_detection` read 1.1.0 on 2.0.x).
 AC4  No live site under `aim_sdk/` reports a hard-coded SDK version: no
      `aim-sdk-python@<d>.<d>.<d>` string constant outside a docstring, and no
      detection entry point called with a string-constant `sdk_version`.
@@ -131,7 +132,7 @@ def test_AIM_13_AC2_each_entry_point_resolves_the_package_version_at_call_time(
 
 
 # ---------------------------------------------------------------------------
-# AC3 -- no module-scope __version__ string literal in the two modules
+# AC3 -- no module-scope __version__ string literal in any module
 # ---------------------------------------------------------------------------
 
 def _module_scope_version_string_assignments(path: Path):
@@ -157,17 +158,44 @@ def _module_scope_version_string_assignments(path: Path):
     return hits
 
 
-@pytest.mark.parametrize("module_file", ["detection.py", "protocol_detection.py"])
+# Every module in the package, not a named pair: the pair was the two files
+# #464 fixed, and `capability_detection.py` kept "1.1.0" beside them (#475).
+_ALL_MODULE_FILES = sorted(p.relative_to(SDK_ROOT).as_posix() for p in SDK_ROOT.rglob("*.py"))
+
+
+@pytest.mark.parametrize("module_file", _ALL_MODULE_FILES)
 def test_AIM_13_AC3_no_module_level_version_string_literal(module_file):
     hits = _module_scope_version_string_assignments(SDK_ROOT / module_file)
     assert hits == [], f"module-scope __version__ string literal at {hits}"
 
 
-@pytest.mark.parametrize("module_name", ["detection", "protocol_detection"])
+def _importable_submodules():
+    import importlib
+    import pkgutil
+
+    names = []
+    for info in pkgutil.walk_packages(aim_sdk.__path__, prefix="aim_sdk."):
+        try:
+            importlib.import_module(info.name)
+        except Exception:  # optional integration dependency not installed
+            continue
+        names.append(info.name)
+    return names
+
+
+def test_AIM_13_AC3_the_walk_covers_the_modules_that_carried_a_literal():
+    names = _importable_submodules()
+    for name in ("aim_sdk.detection", "aim_sdk.protocol_detection", "aim_sdk.capability_detection"):
+        assert name in names
+
+
+@pytest.mark.parametrize("module_name", _importable_submodules())
 def test_AIM_13_AC3_any_surviving_version_attribute_equals_the_package_version(module_name):
-    module = getattr(__import__(f"aim_sdk.{module_name}"), module_name)
+    import importlib
+
+    module = importlib.import_module(module_name)
     if hasattr(module, "__version__"):
-        assert module.__version__ == aim_sdk.__version__
+        assert module.__version__ == aim_sdk.__version__, module_name
 
 
 # ---------------------------------------------------------------------------

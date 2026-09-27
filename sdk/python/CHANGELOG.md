@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stack. `X-AIM-API-Key` is retired; every API-key site sends `X-API-Key`. Requires a backend
   built on or after 2026-08-26 (the published `edge` image qualifies). A 401 in api-key mode
   now names the credential and where a valid one comes from.
+- `aim_sdk.capability_detection` no longer carries a module-level `__version__ = "1.1.0"`,
+  which disagreed with `aim_sdk.__version__` on every 2.0.x release
+  ([#475](https://github.com/opena2a-org/agent-identity-management/issues/475)). It was the last
+  such literal: the test that pinned `detection.py` and `protocol_detection.py` (#464) now walks
+  every module under `aim_sdk/` for a string-constant `__version__`, and every importable
+  submodule that exposes `__version__` must equal the package version.
 
 ### Changed
 
