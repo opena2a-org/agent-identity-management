@@ -6,6 +6,7 @@
  * are written 0600 and NEVER transmitted.
  */
 
+import { accessSync, constants as fsConstants } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
@@ -30,6 +31,22 @@ export const DISCLOSURE_MARKER_FILE = 'telemetry-disclosure-shown';
 export const OPTOUT_MARKER_FILE = 'telemetry-optout';
 /** Local record of the sensor's enrollment state (JSON: sensorId, state, updatedAt). */
 export const SENSOR_ENROLLMENT_FILE = 'telemetry-enrollment';
+
+/**
+ * Why the OpenA2A home cannot be read (the errno code), or null when it can or
+ * does not exist yet. A consent display that cannot read this directory must
+ * say so: reporting defaults would hide an opt-out marker behind a permissions
+ * problem.
+ */
+export function homeReadError(): string | null {
+  try {
+    accessSync(opena2aHome(), fsConstants.R_OK | fsConstants.X_OK);
+    return null;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' ? null : code ?? String(err);
+  }
+}
 
 export function homePath(file: string): string {
   return join(opena2aHome(), file);

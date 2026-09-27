@@ -60,9 +60,10 @@ export {
   appendAuditRecord,
   queuedRecord,
   readAuditRecords,
+  readAuditLog,
   auditLogPath,
 } from './audit-log';
-export type { AuditRecord, AuditPhase } from './audit-log';
+export type { AuditRecord, AuditPhase, AuditLogRead } from './audit-log';
 
 export {
   isOptedOut,

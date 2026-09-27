@@ -106,6 +106,55 @@ export async function readAuditRecords(limit = 100): Promise<AuditRecord[]> {
   return out;
 }
 
+/** What `aim-arp telemetry log` read: the renderable records and what it could not use. */
+export interface AuditLogRead {
+  records: AuditRecord[];
+  /**
+   * Lines in the read window that are not a complete record: a torn final
+   * write (unparseable JSON) or a record missing a field the log view prints.
+   */
+  skipped: number;
+  /** Set (to the errno code) when the log exists but could not be read. */
+  error?: string;
+}
+
+const RENDERED_FIELDS = ['ts', 'phase', 'techniqueId', 'severity', 'outcome'] as const;
+
+function isRenderableRecord(v: unknown): v is AuditRecord {
+  if (v === null || typeof v !== 'object') return false;
+  const r = v as Record<string, unknown>;
+  return RENDERED_FIELDS.every((k) => typeof r[k] === 'string');
+}
+
+/**
+ * The CLI's read of the audit log. Unlike `readAuditRecords` it keeps only
+ * records carrying every field the log view prints, counts the lines it had to
+ * skip, and reports an unreadable log instead of presenting it as empty.
+ */
+export async function readAuditLog(limit = 100): Promise<AuditLogRead> {
+  let content: string;
+  try {
+    content = await readFile(homePath(AUDIT_LOG_FILE), 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { records: [], skipped: 0 };
+    return { records: [], skipped: 0, error: code ?? String(err) };
+  }
+  const lines = content.split('\n').filter((l) => l.trim().length > 0);
+  const records: AuditRecord[] = [];
+  let skipped = 0;
+  for (const line of lines.slice(-limit)) {
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (isRenderableRecord(parsed)) records.push(parsed);
+      else skipped++;
+    } catch {
+      skipped++;
+    }
+  }
+  return { records, skipped };
+}
+
 /** Absolute path of the audit log (shown to the user by the CLI). */
 export function auditLogPath(): string {
   return homePath(AUDIT_LOG_FILE);
