@@ -7,6 +7,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Tests
+
+- The signed-field enforcement harness now proves that the verifier compares each signed instant to the clock, not
+  only that the signature covers it. Its violations change a field after signing, so the signature check alone
+  rejected every one of them: a verifier that ignored `createdAt` or `expiresAt` (the 1.0.2 `expiresAt` incident, and
+  #417) still passed. Each signed instant (derived from the signed payload) must now also have a clock violation, a
+  validly signed delegation that `verifyDelegation`, `checkDelegationTemporalValidity` and `verifyDelegationChain`
+  must reject at the evaluation time: before `createdAt`, after `expiresAt`, and exactly at `expiresAt`. The
+  `createdAt` lower bound itself was enforced in #467 (#417).
+
 ### Changed
 
 - `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
