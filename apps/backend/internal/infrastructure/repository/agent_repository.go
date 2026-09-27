@@ -633,6 +633,52 @@ func (r *AgentRepository) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error)
 	return ids, nil
 }
 
+// SuspendAgentsWithExpiredKeys suspends, in one statement, every agent whose key expired
+// before now and whose rotation grace window, if it has one, has also closed, and returns
+// the ids it suspended. Agents already suspended or revoked are left alone.
+//
+// It is a narrow UPDATE rather than a read followed by Update, for two reasons (#359).
+// Update writes 29 columns from the struct, so any read that populates fewer destroys the
+// rest on the round trip: a List-then-Update loop would have cleared the agent's encrypted
+// private key, PQC key, capability grant and rotation count while suspending it. And the
+// predicate runs at write time, so an agent whose key is rotated between a read and the
+// write is not suspended on stale data.
+//
+// The boundaries match the original loop: a key expiring exactly at now is not yet
+// expired, and a grace window ending exactly at now has closed.
+func (r *AgentRepository) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	const query = `
+		UPDATE agents
+		SET status = $1, updated_at = $2
+		WHERE key_expires_at IS NOT NULL
+		  AND key_expires_at < $2
+		  AND (key_rotation_grace_until IS NULL OR key_rotation_grace_until <= $2)
+		  AND status NOT IN ($1, $3)
+		RETURNING id
+	`
+
+	rows, err := r.db.Query(query,
+		string(domain.AgentStatusSuspended), now, string(domain.AgentStatusRevoked))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return ids, nil
+}
+
 // ErrNonPositiveLimit is returned by List when it is asked for a page of zero or
 // fewer rows. See List for why this is an error rather than an interpretation.
 var ErrNonPositiveLimit = errors.New("agent repository: limit must be positive; pass an explicit page size")

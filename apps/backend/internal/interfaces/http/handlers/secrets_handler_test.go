@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -171,5 +172,9 @@ func TestSecretsHandler_NamespaceScoped_CrossOrgReturns404(t *testing.T) {
 }
 
 func (r *secretsTestAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (r *secretsTestAgentRepo) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
 	return nil, nil
 }

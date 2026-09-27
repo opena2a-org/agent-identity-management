@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -231,5 +232,9 @@ func TestCapabilityRequestHandlers_RejectCapabilityRequest_CrossOrgReturns404(t 
 }
 
 func (r *capRequestTestAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (r *capRequestTestAgentRepo) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
 	return nil, nil
 }
