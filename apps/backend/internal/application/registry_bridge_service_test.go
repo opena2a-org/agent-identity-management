@@ -81,6 +81,10 @@ func (m *mockAgentRepoForBridge) List(limit, offset int) ([]*domain.Agent, error
 func (m *mockAgentRepoForBridge) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
 	return nil, nil
 }
+
+func (m *mockAgentRepoForBridge) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
 func (m *mockAgentRepoForBridge) UpdateTrustScore(id uuid.UUID, s float64) error { return nil }
 func (m *mockAgentRepoForBridge) IncrementViolationCount(id uuid.UUID) error     { return nil }
 func (m *mockAgentRepoForBridge) MarkAsCompromised(id uuid.UUID) error           { return nil }
