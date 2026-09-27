@@ -172,12 +172,8 @@ def aim_verify(
             strict = verdict.effective_mode is EnforcementMode.STRICT
 
             if verdict.blocked:
-                client.report_execution_status(
-                    verification_id=verification_id,
-                    executed=False,
-                    strict_mode=True,
-                    execution_error=f"Blocked by AIM: {verdict.error}",
-                )
+                # Same report every entry point sends before raising (#382).
+                client._report_blocked_execution(verification_id, verdict.error)
                 raise verdict.error
 
             try:

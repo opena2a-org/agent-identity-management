@@ -116,6 +116,7 @@ def aim_verify(
                 what=f"'{_action_name}'",
             )
             if verdict.blocked:
+                _agent._report_blocked_execution(decision.verification_id, verdict.error)
                 raise verdict.error
 
             verification_id = decision.verification_id
