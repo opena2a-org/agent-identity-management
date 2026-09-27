@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -139,5 +140,9 @@ func TestAuthorizeHandler_SameOrgPassesThroughToFGA(t *testing.T) {
 }
 
 func (r *authorizeForeignOrgAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (r *authorizeForeignOrgAgentRepo) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
 	return nil, nil
 }

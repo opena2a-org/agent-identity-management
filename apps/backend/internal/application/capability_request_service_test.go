@@ -242,6 +242,10 @@ func (m *MockAgentRepositoryForCapReq) List(limit, offset int) ([]*domain.Agent,
 func (m *MockAgentRepositoryForCapReq) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
 	return nil, nil
 }
+
+func (m *MockAgentRepositoryForCapReq) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
 func (m *MockAgentRepositoryForCapReq) GetByName(orgID uuid.UUID, name string) (*domain.Agent, error) {
 	return nil, nil
 }
