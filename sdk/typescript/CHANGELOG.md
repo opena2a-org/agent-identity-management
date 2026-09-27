@@ -7,6 +7,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `aim-arp telemetry log` and `telemetry status` no longer read a corrupt or unreadable audit log as an empty one.
+  A log holding only unparseable lines printed "No telemetry has been sent yet" and "Sent: 0"; `log` now reports
+  how many lines could not be read and how many records it shows, and `status` adds an `Unreadable:` line beside
+  the counts. A log that exists but cannot be read (for example `EACCES`) is reported as unreadable, with `Sent:
+  unknown`, and `log` exits 1. A JSON line without the audit record's fields is counted as unreadable instead of
+  throwing a raw `TypeError` from the renderer. `readAuditRecords` keeps its return shape; the new `readAuditLog`
+  in the signature module returns the records with the unreadable count and read error (#416).
+
 ### Changed
 
 - `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
