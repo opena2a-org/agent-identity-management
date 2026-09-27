@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Every entry point now reports a blocked action before raising.** In 2.0.0 only `@aim_verify` and its four
+  convenience wrappers sent the execution report on the blocked path; `perform_action` (the decorator the README
+  Quick start teaches), `track_action`, `require_approval` and the LangChain `aim_verify` raised the denial without
+  it, so a denial from them left no record that the action stopped. All six now send the same report
+  (`executed: false`, `strictMode: true`, `executionError: "Blocked by AIM: ..."`) through one shared path, widened
+  in a single change so the execution record means the same thing for every entry point. The report is
+  fire-and-forget with its short timeout, and a failure to send it, including one that raises, never lets the
+  denied action run; before this, an exception out of the report on the `@aim_verify` path replaced the denial
+  the caller saw (#382).
 - `aim-sdk logout` revokes the stored session on the server: it posts `POST /api/v1/auth/logout`
   with the access token as the bearer and the refresh token in the body, and prints a confirmed
   sign-out only when the server reports the refresh token revoked; otherwise it names the reason
