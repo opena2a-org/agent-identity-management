@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+# tests/entry-point-class-identity.test.ts builds here and removes it; an interrupted run leaves one behind
+.identity-build-*/
 
 # IDE
 .idea/

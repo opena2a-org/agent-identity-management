@@ -69,6 +69,14 @@ func (m *MockAgentRepository) ListRevokedIDs(limit, offset int) ([]uuid.UUID, er
 	return args.Get(0).([]uuid.UUID), args.Error(1)
 }
 
+func (m *MockAgentRepository) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	args := m.Called(now)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uuid.UUID), args.Error(1)
+}
+
 func (m *MockAgentRepository) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	args := m.Called(id, newScore)
 	return args.Error(0)

@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — MCP server and tag routes answer only for the caller's organization
+
+- `POST /api/v1/mcp-servers/:id/verify-capability` and `GET /api/v1/mcp-servers/:id/connections`
+  loaded the MCP server by id without checking the caller's organization. Both now answer
+  `404 {"error":"not found"}` for a server outside it, the same as for a server that does not
+  exist, and the capability check no longer records a verification event against another
+  organization's server.
+- `PUT /api/v1/tags/:id` answered a tag in another organization with a 500 naming the mismatch and
+  a missing tag with a 404. Both now get the same 404.
+- Two handlers that no route mounts, `MCPHandler.GetConnectedAgents` and
+  `PublicMCPHandler.VerifyMCPAction`, check ownership the same way, so mounting either later does
+  not expose another organization's servers.
+- The four detection routes under `/api/v1/detection/agents/:id/` were reviewed and are unchanged:
+  each service method checks `agents.id = $1 AND organization_id = $2` before reading or writing.
+- The tenant-scoping lint no longer allowlists any handler as awaiting review, and a test fails if
+  one is added back (#358).
+
 ### Security — a reused refresh token is recorded as the same client or a different one
 
 - A refresh token presented again after it was rotated or logged out is still refused, and its

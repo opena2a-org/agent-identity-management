@@ -82,6 +82,13 @@ func (h *MCPHandler) getMCPService() MCPServicerExtended {
 	return h.mcpService
 }
 
+// mcpServerLoader adapts the service's GetMCPServer to the loader LoadOwned takes.
+func (h *MCPHandler) mcpServerLoader(c fiber.Ctx, svc MCPServicerExtended) func(uuid.UUID) (*domain.MCPServer, error) {
+	return func(id uuid.UUID) (*domain.MCPServer, error) {
+		return svc.GetMCPServer(c.Context(), id)
+	}
+}
+
 func (h *MCPHandler) getMCPCapabilityService() MCPCapabilityServicer {
 	if h.mcpCapabilityServicer != nil {
 		return h.mcpCapabilityServicer
@@ -1090,8 +1097,22 @@ func (h *MCPHandler) VerifyMCPCapability(c fiber.Ctx) error {
 		})
 	}
 
+	// The server must belong to the caller's organization (#358). Without
+	// this, any authenticated user could probe another organization's server
+	// and write a verification event into that organization's audit trail.
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
+	mcpSvc := h.getMCPService()
+	if LoadOwned(c, h.mcpServerLoader(c, mcpSvc), mcpID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
+
 	// Verify MCP capability
-	decision, reason, auditID, err := h.mcpService.VerifyMCPCapability(
+	decision, reason, auditID, err := mcpSvc.VerifyMCPCapability(
 		c.Context(),
 		mcpID,
 		req.Capability,
@@ -1140,7 +1161,18 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 	}
 
 	// Get connected agents
+	// Scoped to the caller's organization (#358); not mounted today, but a
+	// handler that answers for any server ID must not become reachable as is.
+	orgID, ok := c.Locals("organization_id").(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Unauthorized",
+		})
+	}
 	mcpSvc := h.getMCPService()
+	if LoadOwned(c, h.mcpServerLoader(c, mcpSvc), mcpServerID, orgID, mcpServerOrgID) == nil {
+		return nil
+	}
 	agents, err := mcpSvc.GetConnectedAgents(c.Context(), mcpServerID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
