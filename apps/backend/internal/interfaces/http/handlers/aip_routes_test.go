@@ -164,7 +164,7 @@ func readBackendFile(t *testing.T, rel string) string {
 // /api/v1/did/* is served unauthenticated to the whole internet, and it is the only
 // route on the v1 group that is BOTH unauthenticated and backed by a database read
 // (agentRepo.GetByID). Public mounting was permitted on conditions, and the first of
-// them is that the route is rate-limited (COUNCIL_LEDGER 2026-09-02, CHIEF-CISO).
+// them is that the route is rate-limited (#490).
 //
 // setupRoutes() cannot be exercised in isolation — it needs a live DB and the full
 // service wiring — and this package's own tests mount the handler on fiber apps they

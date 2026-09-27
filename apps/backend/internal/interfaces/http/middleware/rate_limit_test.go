@@ -116,7 +116,7 @@ func clientIPFor(t *testing.T, forwardedFor string) string {
 // APPENDS to X-Forwarded-For, so ips[0] is a value the client writes itself: a caller
 // that varied it got a fresh rate-limit bucket per request, which is no rate limit at
 // all on the unauthenticated DID resolver. The rule is now the rightmost entry that is
-// not a trusted proxy. COUNCIL_LEDGER 2026-09-02, CHIEF-CISO.
+// not a trusted proxy (#490).
 func TestGetClientIP_XForwardedFor(t *testing.T) {
 	t.Run("AIMC-06.AC1 with no trusted proxy in the chain the rightmost entry is the key", func(t *testing.T) {
 		setTrustedProxies(t, "0.0.0.0")

@@ -56,7 +56,7 @@ func (h *AIPHandler) WellKnownAIP(c fiber.Ctx) error {
 //
 // SYNC: this file is NOT in .sync-protect, so it is owned by
 // agent-identity-management and overwritten wholesale by the next sync. The
-// conditions below (COUNCIL_LEDGER 2026-09-02, CHIEF-CISO and CHIEF-DPO) are ruled
+// conditions below (#490) are decided
 // for BOTH repositories; if they land only here they are silently reverted the next
 // time the public repo touches apps/backend. The twin change in
 // agent-identity-management must land first or together with this one.
@@ -114,7 +114,7 @@ func (h *AIPHandler) ResolveDID(c fiber.Ctx) error {
 	// difference between "registered but unverified" and "no such agent" observable to
 	// an unauthenticated caller — an oracle over registrations. Both are closed by
 	// answering exactly as an unknown identifier does.
-	// COUNCIL_LEDGER 2026-09-02, CHIEF-CISO.
+	// Decided in #490.
 	if agent.Status == domain.AgentStatusPending {
 		return didNotFound(c, rawDID)
 	}
@@ -184,7 +184,7 @@ func (h *AIPHandler) ResolveDID(c fiber.Ctx) error {
 	// line (404 above), so what remains is {suspended, revoked} plus any value outside
 	// the four domain constants. agents.status is a plain VARCHAR(50) with no CHECK
 	// constraint, so such a value is storable, and an allow-list publishes it as
-	// deactivated rather than as live keys. COUNCIL_LEDGER 2026-09-02, CHIEF-CISO.
+	// deactivated rather than as live keys (#490).
 	deactivated := !domain.AgentStatusPermitsAuth(agent.Status)
 
 	didDocument := fiber.Map{
@@ -231,8 +231,7 @@ func didNotFound(c fiber.Ctx, rawDID string) error {
 // row — a display-name edit, a tag, a trust-score recomputation, an operator's
 // administrative change — so publishing it on an unauthenticated endpoint turns the
 // resolver into an activity feed about the agent's operator, readable by anyone who
-// knows a UUID. COUNCIL_LEDGER 2026-09-02, CHIEF-DPO decision 1 disallows it as a
-// source outright.
+// knows a UUID. #490 disallows it as a source outright.
 //
 // A DID document's `updated` means "when this DOCUMENT last changed", and the only
 // part of this document that ever changes is the key material. So it is the later of
