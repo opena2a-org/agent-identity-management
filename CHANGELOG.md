@@ -199,6 +199,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   when the token's id was written to the denylist; a server without revocation configured reports
   `false` instead of a silent no-op. The route, the cookie channel and the message are unchanged.
 
+### Fixed — an API-call analytics row keeps its own request's endpoint and user agent
+
+`AnalyticsTracking` read the method, path, user agent and client address from the request context and wrote the `api_calls` row from a goroutine after the handler returned. Those strings are views onto buffers Fiber reuses for the next request, so a row could store another request's endpoint and user agent: under sequential load in a test, every row read as the last request's path. The middleware now copies each string it keeps. The rows are the record used to answer whether an unauthenticated route was ever called, so a wrong endpoint is a wrong answer (opena2a-org/aim-cloud#24).
+
 ### Changed — the A2A composite no longer scores an agent it has no data for, and its PUT refuses
 
 The A2A trust score started every agent at 0.5 and credited 0.1 for a missing response
