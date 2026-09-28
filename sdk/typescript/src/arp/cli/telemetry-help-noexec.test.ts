@@ -52,7 +52,8 @@ describe('--help on a subcommand prints help and executes nothing', () => {
     expect(logLines.join('\n')).not.toContain('DISABLED');
     // Help must actually be PRINTED, not just nothing executed: a guard that
     // silently returned 0 would pass every negative assertion in this file.
-    expect(logLines.join('\n')).toContain('aim-arp telemetry <subcommand>');
+    // It is opt-out's own usage (#412), not the whole group's.
+    expect(logLines.join('\n')).toContain('aim-arp telemetry opt-out [--no-purge]');
   });
 
   it('opt-out -h writes no marker and exits 0', async () => {
