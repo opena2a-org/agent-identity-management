@@ -69,120 +69,286 @@ Agent Management (Generic SDK Pattern):
     client.delete_agent(agent_id)
 """
 
-from .client import AIMClient, register_agent, AgentType
-from .decorators import aim_verify, aim_verify_database, aim_verify_api_call
+# Public names are imported on first use (PEP 562), not when the package loads.
+# The console script imports aim_sdk.cli, and importing a submodule runs this
+# file first, so eager imports here made `aim-sdk --help` load requests, PyJWT,
+# cryptography, PyNaCl and every SDK module before argparse ran.
+# `from aim_sdk import AIMClient`, `aim_sdk.secure`, `from aim_sdk import *` and
+# `import aim_sdk; aim_sdk.oauth` behave as before. The imports under
+# TYPE_CHECKING are the same names for type checkers and IDEs;
+# tests/test_cli_import_cost.py keeps the two lists equal.
+import importlib as _importlib
+from typing import TYPE_CHECKING as _TYPE_CHECKING
 
-# Alias for enterprise security
-secure = register_agent
+if _TYPE_CHECKING:
+    from .client import AIMClient, register_agent, AgentType
+    from .decorators import aim_verify, aim_verify_database, aim_verify_api_call
 
-from .exceptions import (
-    AIMError,
-    AuthenticationError,
-    VerificationError,
-    ActionDeniedError,
-    VerificationUnavailableError,
-    ConfigurationError,
-    StaleCredentialsError,
-)
-# The typed three-state decision. Exported as a NAME in 2.0.0 so that 3.0.0,
-# where verify_capability returns one instead of a dict, introduces no new symbol.
-from .decision import (
-    VerificationDecision,
-    Outcome,
-    EnforcementMode,
-    ModeSource,
-    UnknownSource,
-)
-from .enforcement import PendingEnforcementChange
-from .strict_mode import strict_mode_override
-from .secrets import SecretsClient, SecretsError
-# AAP grant client — PROVISIONAL (experimental). The Agent Authorization Protocol
-# is at spec 0.4.0-draft; this surface (and the broker wire format it talks to) may change
-# in a future minor release without a major bump. Opt-in only: existing behavior is
-# unchanged unless you pass `grant=` to @perform_action.
-from .grant_client import (
-    BrokerClient,
-    GrantSession,
-    BrokerGrantError,
-    GrantDeniedError,
-    current_grant,
-)
-from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
-from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
-from .protocol_detection import ProtocolDetector, auto_detect_protocol
-from .attestation_cache import AttestationCache
-from .isolation import (
-    SandboxType,
-    NetworkIsolation,
-    FilesystemIsolation,
-    ProcessIsolation,
-    score_isolation,
-    auto_detect_isolation,
-)
-# PolicyCache is deliberately NOT re-exported here: no released AIM server
-# serves the route it fetches, so it cannot answer a check against any released
-# backend (see its docstring in aim_sdk/auto_hooks.py). It remains importable
-# from aim_sdk.auto_hooks for the day a server registers the route.
-from .auto_hooks import activate_hooks
+    # Alias for enterprise security
+    secure = register_agent
 
-# Console quieting: silences the SDK's informational stdout output
-# (registration banners, auto-detection results, info/warning lines).
-from .console import set_quiet
+    from .exceptions import (
+        AIMError,
+        AuthenticationError,
+        VerificationError,
+        ActionDeniedError,
+        VerificationUnavailableError,
+        ConfigurationError,
+        StaleCredentialsError,
+    )
+    # The typed three-state decision. Exported as a NAME in 2.0.0 so that 3.0.0,
+    # where verify_capability returns one instead of a dict, introduces no new symbol.
+    from .decision import (
+        VerificationDecision,
+        Outcome,
+        EnforcementMode,
+        ModeSource,
+        UnknownSource,
+    )
+    from .enforcement import PendingEnforcementChange
+    from .strict_mode import strict_mode_override
+    from .secrets import SecretsClient, SecretsError
+    # AAP grant client — PROVISIONAL (experimental). The Agent Authorization Protocol
+    # is at spec 0.4.0-draft; this surface (and the broker wire format it talks to) may change
+    # in a future minor release without a major bump. Opt-in only: existing behavior is
+    # unchanged unless you pass `grant=` to @perform_action.
+    from .grant_client import (
+        BrokerClient,
+        GrantSession,
+        BrokerGrantError,
+        GrantDeniedError,
+        current_grant,
+    )
+    from .detection import MCPDetector, auto_detect_mcps, track_mcp_call
+    from .capability_detection import CapabilityDetector, auto_detect_capabilities, auto_detect_agent_type
+    from .protocol_detection import ProtocolDetector, auto_detect_protocol
+    from .attestation_cache import AttestationCache
+    from .isolation import (
+        SandboxType,
+        NetworkIsolation,
+        FilesystemIsolation,
+        ProcessIsolation,
+        score_isolation,
+        auto_detect_isolation,
+    )
+    # PolicyCache is deliberately NOT re-exported here: no released AIM server
+    # serves the route it fetches, so it cannot answer a check against any released
+    # backend (see its docstring in aim_sdk/auto_hooks.py). It remains importable
+    # from aim_sdk.auto_hooks for the day a server registers the route.
+    from .auto_hooks import activate_hooks
 
-# Credential management utilities
-from .credentials import (
-    load_sdk_credentials,
-    save_sdk_credentials,
-    load_agent_credentials,
-    save_agent_credentials,
-    list_agent_credentials,
-    delete_agent_credentials,
-    CredentialType,
-)
+    # Console quieting: silences the SDK's informational stdout output
+    # (registration banners, auto-detection results, info/warning lines).
+    from .console import set_quiet
 
-# Security logging for SOC/SIEM integration
-from .security_logging import (
-    SecurityLogger,
-    SecurityEvent,
-    security_logger,
-    configure_security_logging,
-    # Event types for custom logging
-    EventCategory,
-    EventSeverity,
-    AuthnEventType,
-    AuthzEventType,
-    AgentEventType,
-    CredEventType,
-    MCPEventType,
-    SecurityEventType,
-)
+    # Credential management utilities
+    from .credentials import (
+        load_sdk_credentials,
+        save_sdk_credentials,
+        load_agent_credentials,
+        save_agent_credentials,
+        list_agent_credentials,
+        delete_agent_credentials,
+        CredentialType,
+    )
 
-# A2A (Agent-to-Agent) protocol support
-from .a2a import (
-    A2AClient,
-    A2AAgentCard,
-    A2ARequestSignature,
-    A2ATrustScore,
-    A2APeerTrust,
-    A2AConsent,
-    A2AError,
-    create_a2a_client_from_env,
-)
+    # Security logging for SOC/SIEM integration
+    from .security_logging import (
+        SecurityLogger,
+        SecurityEvent,
+        security_logger,
+        configure_security_logging,
+        # Event types for custom logging
+        EventCategory,
+        EventSeverity,
+        AuthnEventType,
+        AuthzEventType,
+        AgentEventType,
+        CredEventType,
+        MCPEventType,
+        SecurityEventType,
+    )
 
-# Causal-denial telemetry (opt-in, best-effort, off the enforcement path).
-from .telemetry import (
-    CorrelationJoiner,
-    CorrelatedRelay,
-    EnforcementInput,
-    IntentInput,
-    DetectionInput,
-    CorrelatedRecord,
-    SharedIndicator,
-    build_correlated_record,
-    to_shared_indicator,
-    interim_technique_fields,
-    mint_correlation_id,
-)
+    # A2A (Agent-to-Agent) protocol support
+    from .a2a import (
+        A2AClient,
+        A2AAgentCard,
+        A2ARequestSignature,
+        A2ATrustScore,
+        A2APeerTrust,
+        A2AConsent,
+        A2AError,
+        create_a2a_client_from_env,
+    )
+
+    # Causal-denial telemetry (opt-in, best-effort, off the enforcement path).
+    from .telemetry import (
+        CorrelationJoiner,
+        CorrelatedRelay,
+        EnforcementInput,
+        IntentInput,
+        DetectionInput,
+        CorrelatedRecord,
+        SharedIndicator,
+        build_correlated_record,
+        to_shared_indicator,
+        interim_technique_fields,
+        mint_correlation_id,
+    )
+
+_EXPORTS = {
+    "client": (
+        "AIMClient",
+        "register_agent",
+        "AgentType",
+    ),
+    "decorators": (
+        "aim_verify",
+        "aim_verify_database",
+        "aim_verify_api_call",
+    ),
+    "exceptions": (
+        "AIMError",
+        "AuthenticationError",
+        "VerificationError",
+        "ActionDeniedError",
+        "VerificationUnavailableError",
+        "ConfigurationError",
+        "StaleCredentialsError",
+    ),
+    "decision": (
+        "VerificationDecision",
+        "Outcome",
+        "EnforcementMode",
+        "ModeSource",
+        "UnknownSource",
+    ),
+    "enforcement": (
+        "PendingEnforcementChange",
+    ),
+    "strict_mode": (
+        "strict_mode_override",
+    ),
+    "secrets": (
+        "SecretsClient",
+        "SecretsError",
+    ),
+    "grant_client": (
+        "BrokerClient",
+        "GrantSession",
+        "BrokerGrantError",
+        "GrantDeniedError",
+        "current_grant",
+    ),
+    "detection": (
+        "MCPDetector",
+        "auto_detect_mcps",
+        "track_mcp_call",
+    ),
+    "capability_detection": (
+        "CapabilityDetector",
+        "auto_detect_capabilities",
+        "auto_detect_agent_type",
+    ),
+    "protocol_detection": (
+        "ProtocolDetector",
+        "auto_detect_protocol",
+    ),
+    "attestation_cache": (
+        "AttestationCache",
+    ),
+    "isolation": (
+        "SandboxType",
+        "NetworkIsolation",
+        "FilesystemIsolation",
+        "ProcessIsolation",
+        "score_isolation",
+        "auto_detect_isolation",
+    ),
+    "auto_hooks": (
+        "activate_hooks",
+    ),
+    "console": (
+        "set_quiet",
+    ),
+    "credentials": (
+        "load_sdk_credentials",
+        "save_sdk_credentials",
+        "load_agent_credentials",
+        "save_agent_credentials",
+        "list_agent_credentials",
+        "delete_agent_credentials",
+        "CredentialType",
+    ),
+    "security_logging": (
+        "SecurityLogger",
+        "SecurityEvent",
+        "security_logger",
+        "configure_security_logging",
+        "EventCategory",
+        "EventSeverity",
+        "AuthnEventType",
+        "AuthzEventType",
+        "AgentEventType",
+        "CredEventType",
+        "MCPEventType",
+        "SecurityEventType",
+    ),
+    "a2a": (
+        "A2AClient",
+        "A2AAgentCard",
+        "A2ARequestSignature",
+        "A2ATrustScore",
+        "A2APeerTrust",
+        "A2AConsent",
+        "A2AError",
+        "create_a2a_client_from_env",
+    ),
+    "telemetry": (
+        "CorrelationJoiner",
+        "CorrelatedRelay",
+        "EnforcementInput",
+        "IntentInput",
+        "DetectionInput",
+        "CorrelatedRecord",
+        "SharedIndicator",
+        "build_correlated_record",
+        "to_shared_indicator",
+        "interim_technique_fields",
+        "mint_correlation_id",
+    ),
+}
+
+# Names that are another export under a second name.
+_ALIASES = {"secure": ("client", "register_agent")}
+
+_LAZY = {name: module for module, names in _EXPORTS.items() for name in names}
+
+
+def __getattr__(name):
+    if name in _ALIASES:
+        module, attr = _ALIASES[name]
+    elif name in _LAZY:
+        module, attr = _LAZY[name], name
+    elif name.startswith("__"):
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    else:
+        # `import aim_sdk; aim_sdk.oauth` worked while every submodule was
+        # imported eagerly; keep it working.
+        try:
+            return _importlib.import_module(f"{__name__}.{name}")
+        except ModuleNotFoundError as exc:
+            if exc.name != f"{__name__}.{name}":
+                raise
+            raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    value = getattr(_importlib.import_module(f"{__name__}.{module}"), attr)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_LAZY) | set(_ALIASES))
+
 
 # Read version from VERSION file (single source of truth)
 # Supports both development (file in parent dir) and installed package scenarios

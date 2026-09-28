@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk` commands no longer import the whole SDK before parsing their arguments. The console script
+  imports `aim_sdk.cli`, which runs `aim_sdk/__init__.py`, and that file imported every submodule and with
+  them requests, PyJWT, cryptography and PyNaCl: `import aim_sdk.cli` loaded 477 modules where the
+  interpreter starts with 76. The package now resolves its public names on first use (PEP 562), and the CLI imports requests only in the commands that
+  call the network. `aim-sdk --help` and `aim-sdk version` load `aim_sdk` and `aim_sdk.cli` only (115
+  modules, 0.13 s to 0.05 s on the machine measured here), and signed-out `status` loads no network or
+  crypto package. `from aim_sdk import AIMClient`, `aim_sdk.secure`, `from aim_sdk import *` and
+  `import aim_sdk; aim_sdk.oauth` behave as before, and type checkers read the same names from a
+  `TYPE_CHECKING` block that a test keeps equal to the lazy table. Code that relied on `import aim_sdk`
+  loading every submodule as a side effect (for example, registering the `atexit` handler in
+  `aim_sdk.client`) now gets it when it first uses a name from that module.
 - **Every entry point now reports a blocked action before raising.** In 2.0.0 only `@aim_verify` and its four
   convenience wrappers sent the execution report on the blocked path; `perform_action` (the decorator the README
   Quick start teaches), `track_action`, `require_approval` and the LangChain `aim_verify` raised the denial without
