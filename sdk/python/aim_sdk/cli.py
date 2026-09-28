@@ -483,6 +483,38 @@ def _token_state(access_token) -> str:
         return "unknown"
 
 
+def _status_verdict(creds, token_state):
+    """
+    (authenticated, sentence) for `aim-sdk status`, from the stored
+    credentials alone. Every branch returns a sentence, so the command always
+    states a verdict (#409): a legacy credentials file holding only a refresh
+    token used to print Server/User/Credentials and then nothing, with exit 0.
+    """
+    has_refresh = bool(creds.get('refreshToken') or creds.get('refresh_token'))
+    if token_state == "valid":
+        return True, "Authenticated. The access token is valid."
+    if not has_refresh:
+        return False, ("Not authenticated: the stored credentials hold no usable token. "
+                       "Run 'aim-sdk login' to authenticate.")
+    if token_state == "expired":
+        return True, "Authenticated. The access token has expired; the SDK refreshes it on next use."
+    if token_state == "absent":
+        return True, ("Authenticated with a stored refresh token; the SDK requests an "
+                      "access token on first use.")
+    return True, ("Authenticated. The access token's expiry could not be read; the SDK "
+                  "refreshes it if the server rejects it.")
+
+
+def _credentials_source():
+    """The credentials file status should cite: one that exists, or None."""
+    from . import credentials as creds_module
+
+    for path in (creds_module.SDK_CREDENTIALS_FILE, creds_module.LEGACY_CREDENTIALS_FILE):
+        if Path(path).exists():
+            return Path(path)
+    return None
+
+
 def status(args):
     """Check authentication status."""
     from .credentials import load_sdk_credentials, AIM_DIR
@@ -510,35 +542,36 @@ def status(args):
         print("Run 'aim-sdk login' to authenticate")
         return 1
 
-    aim_url = creds.get('aimUrl') or creds.get('aim_url', 'Unknown')
-    user_email = creds.get('userEmail', 'Unknown')
-    token_state = _token_state(creds.get('accessToken'))
+    # Legacy files use snake_case keys; read both so an upgraded install does
+    # not show "User: Unknown" for a user the file names.
+    aim_url = creds.get('aimUrl') or creds.get('aim_url')
+    user_email = creds.get('userEmail') or creds.get('user_email') or 'Unknown'
+    token_state = _token_state(creds.get('accessToken') or creds.get('access_token'))
+    authenticated, verdict = _status_verdict(creds, token_state)
+    # Cite a file only if it exists: when adopting a legacy file fails, the
+    # new location was never written and naming it sent users to nothing.
+    source = _credentials_source()
 
     if getattr(args, 'json', False):
         print(json.dumps({
-            "authenticated": True,
+            "authenticated": authenticated,
             "server": aim_url,
             "user": user_email,
-            "credentialsPath": str(creds_file),
+            "credentialsPath": str(source) if source else None,
             "tokenState": token_state,
         }))
-        return 0
+        return 0 if authenticated else 1
 
     print("Checking authentication status...")
     print()
-    print(f"   Server: {aim_url}")
+    print(f"   Server: {aim_url or f'not recorded (login uses {DEFAULT_AIM_URL} by default)'}")
     print(f"   User: {user_email}")
-    print(f"   Credentials: {creds_file}")
+    print(f"   Credentials: {source if source else f'none saved under {AIM_DIR}'}")
     print()
+    print(verdict)
+    print("(Checked from the stored credentials; the server was not contacted.)")
 
-    if token_state == "valid":
-        print("Token is valid.")
-    elif token_state == "expired":
-        print("Token may be expired; it will refresh on next SDK use.")
-    elif token_state == "unknown":
-        print("Could not verify token status.")
-
-    return 0
+    return 0 if authenticated else 1
 
 
 def version_cmd(args):
