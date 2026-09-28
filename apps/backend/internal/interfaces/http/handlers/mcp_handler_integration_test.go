@@ -640,8 +640,13 @@ func TestMCPHandler_GetMCPServerAgents_InvalidID_Integration(t *testing.T) {
 
 func TestMCPHandler_GetConnectedAgents_Success(t *testing.T) {
 	serverID := uuid.New()
+	orgID := uuid.New()
 
 	mockMCPService := &MockMCPServiceExtendedImpl{
+		// The server is the caller's (#358: the handler checks ownership first).
+		GetMCPServerFunc: func(ctx context.Context, id uuid.UUID) (*domain.MCPServer, error) {
+			return &domain.MCPServer{ID: id, OrganizationID: orgID}, nil
+		},
 		GetConnectedAgentsFunc: func(ctx context.Context, mcpServerID uuid.UUID) ([]application.ConnectedAgent, error) {
 			return []application.ConnectedAgent{
 				{ID: uuid.New(), Name: "Agent1"},
@@ -654,6 +659,7 @@ func TestMCPHandler_GetConnectedAgents_Success(t *testing.T) {
 
 	app := fiber.New()
 	app.Get("/mcp-servers/:id/connected-agents", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
 		return handler.GetConnectedAgents(c)
 	})
 

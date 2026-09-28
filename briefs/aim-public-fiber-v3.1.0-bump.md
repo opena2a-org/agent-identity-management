@@ -1,9 +1,7 @@
 # Bump fiber v3.1.0 + apps/web CVEs — public `agent-identity-management`
 
 **Date:** 2026-04-14
-**Chief:** CA (architecture, deps/build chain) with CSR sign-off (CVEs)
 **Driver:** Port aim-cloud PR #8 (merged 2026-04-14) to the public repo. Flagged as follow-up in that PR body because `go.mod` + `package.json` are not in `.sync-protect` and the next sync would regress aim-cloud.
-**Playbook:** `~/.claude/projects/-Users-ecolibria-workspace-opena2a-org/memory/project_fiber_v3_1_0_migration_playbook.md` (applied once, validated in CI + prod deploy of aim-cloud).
 
 ## CVEs closed
 

@@ -523,3 +523,7 @@ func TestVerificationEventHandler_CrossOrgReturns404(t *testing.T) {
 func (r *verificationEventTestAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
 	return nil, nil
 }
+
+func (r *verificationEventTestAgentRepo) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
