@@ -147,9 +147,13 @@ class A2AClient:
         self.aim_client = aim_client
         self.timeout = timeout
         self._session = requests.Session()
+        # The package version, as client.py sends, marked as the A2A client. The
+        # "AIM-Python-SDK/" prefix is what the backend's SDK tracking matches.
+        # Imported here: aim_sdk/__init__ imports this module.
+        from . import __version__ as sdk_version
         self._session.headers.update({
             "Content-Type": "application/json",
-            "User-Agent": f"AIM-Python-SDK/A2A-1.0.0",
+            "User-Agent": f"AIM-Python-SDK/{sdk_version} (A2A)",
         })
 
     @property

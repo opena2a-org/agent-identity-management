@@ -377,6 +377,38 @@ def login(args):
         return 1
 
 
+_SDK_TOKEN_KEYS = ("refreshToken", "refresh_token", "accessToken", "access_token")
+
+
+def _clear_legacy_sdk_credentials() -> None:
+    """Remove SDK OAuth tokens from the legacy ~/.aim/credentials.json.
+
+    load_sdk_credentials() copies that file to sdk_credentials.json and leaves
+    it in place, so a logout that deleted only the copy was undone by the next
+    command: `aim-sdk status` migrated the legacy file again and read as signed
+    in. The file is deleted when the tokens are all it holds; agent credentials
+    sharing it are kept and only the token fields are dropped.
+    """
+    from .credentials import LEGACY_CREDENTIALS_FILE, CredentialType, detect_credential_type
+
+    legacy = Path(LEGACY_CREDENTIALS_FILE)
+    try:
+        data = json.loads(legacy.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(data, dict) or detect_credential_type(data) != CredentialType.SDK_OAUTH:
+        return
+    remaining = {k: v for k, v in data.items() if k not in _SDK_TOKEN_KEYS}
+    try:
+        if detect_credential_type(remaining) == CredentialType.AGENT:
+            legacy.write_text(json.dumps(remaining, indent=2), encoding="utf-8")
+            os.chmod(legacy, 0o600)
+        else:
+            legacy.unlink()
+    except OSError:
+        pass
+
+
 def logout(args):
     """Revoke the stored pair on the server and clear the local credentials."""
     from .credentials import load_sdk_credentials, AIM_DIR
@@ -403,6 +435,7 @@ def logout(args):
     # Belt and braces: the file must be gone whatever the token manager did.
     if creds_file.exists():
         creds_file.unlink()
+    _clear_legacy_sdk_credentials()
 
     if confirmed:
         print("Signed out: the server revoked the session and the local credentials were cleared.")

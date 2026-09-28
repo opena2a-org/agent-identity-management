@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -248,5 +249,9 @@ func TestAuthorize_EngineErrorWithNilResult_Returns500WithErrorResponse(t *testi
 }
 
 func (r *permissiveAuthorizeAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
+	return nil, nil
+}
+
+func (r *permissiveAuthorizeAgentRepo) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
 	return nil, nil
 }

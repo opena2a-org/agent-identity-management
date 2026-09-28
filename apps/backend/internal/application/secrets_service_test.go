@@ -679,3 +679,7 @@ func (m *mockCapabilityRepo) GetCapabilitiesByAgentIDs(agentIDs []uuid.UUID, act
 func (m *mockAgentRepo) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
 	return nil, nil
 }
+
+func (m *mockAgentRepo) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error) {
+	return nil, nil
+}
