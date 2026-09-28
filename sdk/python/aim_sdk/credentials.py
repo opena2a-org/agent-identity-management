@@ -55,6 +55,31 @@ class CredentialType:
     UNKNOWN = "unknown"          # Unrecognized format
 
 
+class CredentialOrigin:
+    """Where an SDK OAuth credential came from. It decides the recovery command."""
+    LOGIN = "login"                # written by `aim-sdk login` (device grant)
+    SDK_DOWNLOAD = "sdk_download"  # bundled with an SDK downloaded from the dashboard
+
+
+# Keys only `aim-sdk login` writes into sdk_credentials.json. The dashboard's
+# download bundle carries neither, and no refresh or recovery adds them.
+# sdkTokenId, schemaVersion and type do NOT tell the two apart: every save
+# stamps schemaVersion and type, and every token rotation writes sdkTokenId.
+_LOGIN_ONLY_KEYS = ("accessToken", "organizationId")
+
+
+def detect_credential_origin(data: Optional[Dict[str, Any]]) -> str:
+    """Tell a credential written by ``aim-sdk login`` from an SDK-download one.
+
+    Anything not recognisably a login credential, including no data at all, is
+    treated as an SDK download, which keeps the long-standing recovery advice
+    for every older file.
+    """
+    if isinstance(data, dict) and any(key in data for key in _LOGIN_ONLY_KEYS):
+        return CredentialOrigin.LOGIN
+    return CredentialOrigin.SDK_DOWNLOAD
+
+
 def detect_credential_type(data: Dict[str, Any]) -> str:
     """
     Detect the type of credentials from their structure.
@@ -529,7 +554,7 @@ def print_sdk_credentials_not_found_error(aim_url: str = "http://localhost:8080"
     print()
     print("TO FIX:")
     print(f"  1. Visit your AIM dashboard: {aim_url}")
-    print("  2. Go to Settings → SDK Downloads")
+    print("  2. Go to Developers, then SDK & docs")
     print("  3. Download the Python SDK")
     print("  4. Extract and install: pip install -e aim-sdk-python/")
     print()
@@ -560,7 +585,7 @@ def print_wrong_credential_type_error(found_type: str, agent_name: str = None, a
     print()
     print("TO FIX:")
     print(f"  1. Download a fresh SDK from: {aim_url}")
-    print("  2. Go to Settings → SDK Downloads")
+    print("  2. Go to Developers, then SDK & docs")
     print("  3. Extract and install: pip install -e aim-sdk-python/")
     print()
     print("Your existing agent credentials are safe and unchanged.")
@@ -568,7 +593,29 @@ def print_wrong_credential_type_error(found_type: str, agent_name: str = None, a
     print()
 
 
-def print_token_expired_error(aim_url: str = "http://localhost:8080") -> None:
+def login_recovery_command(aim_url: str) -> str:
+    """The command that replaces a rejected credential by signing in again.
+
+    --force skips the "Re-authenticate? [y/N]" prompt the stale file would
+    otherwise trigger, and save_sdk_credentials overwrites the file.
+    """
+    return f"aim-sdk login --url {aim_url} --force"
+
+
+def refresh_rejected_fix(credentials: Optional[Dict[str, Any]], aim_url: str) -> str:
+    """One-line recovery instruction for a rejected SDK refresh token."""
+    if detect_credential_origin(credentials) == CredentialOrigin.LOGIN:
+        return f"Sign in again: {login_recovery_command(aim_url)}"
+    return (
+        "Download a fresh SDK from your AIM dashboard (Developers, then SDK & docs), "
+        f"or sign in from this machine: {login_recovery_command(aim_url)}"
+    )
+
+
+def print_token_expired_error(
+    aim_url: str = "http://localhost:8080",
+    credentials: Optional[Dict[str, Any]] = None,
+) -> None:
     """Print a clear error message when the SDK refresh token is rejected.
 
     Audit #12: the prior wording told the user to "download a fresh SDK"
@@ -576,33 +623,59 @@ def print_token_expired_error(aim_url: str = "http://localhost:8080") -> None:
     common cause is that another SDK installation rotated the refresh
     token (server-side rotation invalidates prior copies). This version
     names the cause and surfaces the local path so recovery is obvious.
+
+    The fix depends on where the credential came from. One written by
+    ``aim-sdk login`` is renewed by signing in again, which overwrites the
+    file. One bundled with a dashboard SDK download is replaced by a fresh
+    download, after removing the stale home copy the SDK would otherwise
+    read first. Without ``credentials`` the download text is printed.
     """
+    origin = detect_credential_origin(credentials)
     print()
     print("=" * 72)
     print("Warning: SDK REFRESH TOKEN REJECTED")
     print("=" * 72)
     print()
     print(f"The AIM server rejected the refresh token at {SDK_CREDENTIALS_FILE}.")
-    print()
-    print("WHAT HAPPENED:")
-    print("  The SDK rotates its refresh token on every successful refresh")
-    print("  and the server only honors the latest one. The token in your")
-    print("  local file is no longer the latest, which means one of these")
-    print("  happened:")
-    print()
-    print("  • Another SDK installation (different machine, different venv)")
-    print("    refreshed the token and now holds the current one.")
-    print("  • A previously bundled SDK download was used elsewhere.")
-    print("  • The token was revoked manually from the dashboard.")
-    print("  • The refresh token reached its 90-day expiry.")
-    print()
-    print("TO RECOVER:")
-    print(f"  1. Remove the stale file:  rm {SDK_CREDENTIALS_FILE}")
-    print(f"  2. Download a fresh SDK from {aim_url} (Settings → SDK Downloads).")
-    print("  3. Extract and install: pip install -e aim-sdk-python/")
+    if origin == CredentialOrigin.LOGIN:
+        print("This credential was created by `aim-sdk login`.")
+        print()
+        print("WHAT HAPPENED:")
+        print("  The sign-in behind this token is no longer valid. One of these")
+        print("  happened:")
+        print()
+        print("  • The sign-in expired or reached the server's maximum session age.")
+        print("  • The session was signed out or revoked from the dashboard.")
+        print("  • Another installation holding a copy of this file refreshed the")
+        print("    token, and the server only honors the latest one.")
+        print()
+        print("TO RECOVER:")
+        print("  Sign in again. This replaces the stored credential:")
+        print(f"    {login_recovery_command(aim_url)}")
+    else:
+        print()
+        print("WHAT HAPPENED:")
+        print("  The SDK rotates its refresh token on every successful refresh")
+        print("  and the server only honors the latest one. The token in your")
+        print("  local file is no longer the latest, which means one of these")
+        print("  happened:")
+        print()
+        print("  • Another SDK installation (different machine, different venv)")
+        print("    refreshed the token and now holds the current one.")
+        print("  • A previously bundled SDK download was used elsewhere.")
+        print("  • The token was revoked manually from the dashboard.")
+        print("  • The refresh token reached its 90-day expiry.")
+        print()
+        print("TO RECOVER:")
+        print(f"  1. Remove the stale file:  rm {SDK_CREDENTIALS_FILE}")
+        print(f"  2. Download a fresh SDK from {aim_url} (Developers, then SDK & docs).")
+        print("  3. Extract and install: pip install -e aim-sdk-python/")
+        print()
+        print("  Or sign in from this machine instead, which replaces the file:")
+        print(f"    {login_recovery_command(aim_url)}")
     print()
     print("Your registered agents are not affected; only the SDK auth")
-    print("credential is rotated. Agent Ed25519 keys are separate and remain")
-    print("valid.")
+    print("credential needs replacing. Agent Ed25519 keys are separate and")
+    print("remain valid.")
     print("=" * 72)
     print()

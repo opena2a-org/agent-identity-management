@@ -403,7 +403,7 @@ class OAuthTokenManager:
                         details={"token_id": token_id}
                     )
                     if not suppress_errors:
-                        print_token_expired_error(aim_url)
+                        print_token_expired_error(aim_url, self.credentials)
                 else:
                     security_logger.log_authentication(
                         AuthnEventType.TOKEN_REFRESH_FAILED,
