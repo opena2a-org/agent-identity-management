@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -162,6 +165,44 @@ func TestGenerateRandomPassword_LengthAndCharset(t *testing.T) {
 	for name, re := range classes {
 		if !re.MatchString(pw) {
 			t.Errorf("password %q missing %s class", pw, name)
+		}
+	}
+}
+
+// TestSignInURL_NamesARealDashboardPage pins the sign-in URL bootstrap prints
+// to a page the dashboard serves: the path is /auth/login and a Next.js page
+// exists for it under apps/web/app. A path with no page (such as /login) only
+// reaches the sign-in form through a redirect.
+func TestSignInURL_NamesARealDashboardPage(t *testing.T) {
+	t.Parallel()
+
+	u, err := url.Parse(signInURL)
+	if err != nil {
+		t.Fatalf("signInURL %q does not parse: %v", signInURL, err)
+	}
+	if u.Path != "/auth/login" {
+		t.Errorf("signInURL path = %q, want %q", u.Path, "/auth/login")
+	}
+
+	page := filepath.Join("..", "..", "..", "web", "app", filepath.FromSlash(strings.TrimPrefix(u.Path, "/")), "page.tsx")
+	if _, err := os.Stat(page); err != nil {
+		t.Errorf("no dashboard page for %s (looked for %s): %v", u.Path, page, err)
+	}
+}
+
+// TestSignInMessage_IsPlainText confirms the printed sign-in line carries the
+// URL and no emoji or other non-ASCII characters.
+func TestSignInMessage_IsPlainText(t *testing.T) {
+	t.Parallel()
+
+	msg := signInMessage()
+	if !strings.HasSuffix(msg, signInURL) {
+		t.Errorf("signInMessage() = %q, want it to end with %q", msg, signInURL)
+	}
+	for _, r := range msg {
+		if r < 0x20 || r > 0x7e {
+			t.Errorf("signInMessage() contains non-ASCII rune %U: %q", r, msg)
+			break
 		}
 	}
 }
