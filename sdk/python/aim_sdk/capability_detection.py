@@ -17,7 +17,7 @@ import sys
 import json
 import pathlib
 import inspect
-from typing import List, Set, Optional, Dict, Any, Tuple
+from typing import List, Set, Optional, Tuple
 from datetime import datetime, timezone
 
 __all__ = [
@@ -26,8 +26,6 @@ __all__ = [
     "auto_detect_capabilities",
     "save_capabilities_config",
 ]
-
-__version__ = "1.1.0"
 
 
 # =============================================================================

@@ -540,13 +540,14 @@ try {
 }
 ```
 
-> **Class identity is per entry point.** Each entry point (`.`, `/arp`,
-> `/express`, `/fastify`) bundles its own copy of the error classes, so
-> `instanceof` only matches errors raised by the same entry point you imported
-> from. When you use an integration, import the error classes from that same
-> integration (`@opena2a/aim-sdk/express` and `/fastify` re-export the full
-> error family); for checks that must work across entry points, match on
-> `error.code` (e.g. `'ACTION_DENIED'`) instead.
+> **Class identity is per module format.** The entry points (`.`, `/arp`,
+> `/express`, `/fastify`) share one copy of `AIMClient` and the error classes,
+> so an `ActionDeniedError` raised through `@opena2a/aim-sdk/express` is
+> `instanceof` the class imported from `@opena2a/aim-sdk`. The ESM and CommonJS
+> builds are still two copies: if one process loads the package both through
+> `import` and through `require`, `instanceof` does not match across that
+> boundary. For checks that must hold there, match on `error.code`
+> (e.g. `'ACTION_DENIED'`) instead.
 
 ## Credential Management
 

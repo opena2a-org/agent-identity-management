@@ -14,7 +14,14 @@ export default defineConfig({
   // build (and are inert for source that never references them).
   shims: true,
   dts: true,
-  splitting: false,
+  // Shared chunks, in both formats: `.`, `/arp`, `/express` and `/fastify`
+  // each bundled their own copy of AIMClient and the error classes, so an
+  // `ActionDeniedError` thrown through `/express` was not `instanceof` the
+  // root export's class. With splitting, every entry of one format imports
+  // the same chunk. The ESM/CJS boundary still yields two copies (the dual
+  // package hazard); README documents `error.code` for that case.
+  // tests/entry-point-class-identity.test.ts pins it.
+  splitting: true,
   sourcemap: true,
   // Maps ship for readable stack traces, but WITHOUT embedded sources:
   // README.md promises "source is not shipped in the npm package", and

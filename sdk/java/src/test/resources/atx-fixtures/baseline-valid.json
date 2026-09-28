@@ -77,8 +77,8 @@
     "buildAttestation": "https://slsa.dev/provenance/v1#opena2a-conformance",
     "transparencyLogIndex": 42,
     "capabilities": [
-      "read:public",
-      "write:owned"
+      "db:read",
+      "db:write"
     ],
     "scanSummary": {
       "hma": "passed",
