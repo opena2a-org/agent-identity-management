@@ -35,6 +35,7 @@ import webbrowser
 import base64
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # requests is imported inside the functions that call it, not here: it is the
 # heaviest import on the CLI's path, and `aim-sdk --help`, `version` and `status`
@@ -73,6 +74,29 @@ LOGIN_PROBE_TIMEOUT_SECONDS = 5
 LOGIN_MAX_WAIT_SECONDS = 900
 DEVICE_CLIENT_ID = "aim-sdk"
 DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
+
+
+def invalid_server_url_reason(aim_url):
+    """
+    Why `aim_url` cannot be an AIM server address, or None when it can.
+
+    Checked before the reachability probe (#408): an empty `--url` or a string
+    that is not an http(s) URL used to reach the probe, which reported "could
+    not reach the AIM server ... no HTTP response within 5s" -- the wrong
+    problem, since no request was ever sent.
+    """
+    url = (aim_url or "").strip()
+    if not url:
+        return "--url is empty"
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return f"--url {url!r} is not a URL"
+    if parts.scheme not in ("http", "https"):
+        return f"--url {url!r} is not an http(s) URL"
+    if not parts.hostname:
+        return f"--url {url!r} has no host"
+    return None
 
 
 def check_server_reachable(aim_url, timeout):
@@ -210,7 +234,15 @@ def login(args):
     """Login to an AIM server with the OAuth 2.0 device grant (RFC 8628)."""
     from .credentials import save_sdk_credentials, load_sdk_credentials, AIM_DIR
 
-    aim_url = args.url.rstrip('/')
+    url_problem = invalid_server_url_reason(args.url)
+    if url_problem:
+        print(f"Error: {url_problem}.")
+        print("Pass the server's http(s) address, for example:")
+        print("  aim-sdk login --url https://aim.example.com")
+        print(f"or omit --url to use {DEFAULT_AIM_URL}.")
+        return 1
+
+    aim_url = args.url.strip().rstrip('/')
 
     print_banner()
     print(f"Server: {aim_url}")

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk login` checks `--url` before touching the network. An empty value or a string that is not an http(s)
+  URL with a host now fails at once with `Error: --url ... is not an http(s) URL` (or `is empty`, `has no host`)
+  and an example; it used to reach the reachability probe and report `could not reach the AIM server ... no HTTP
+  response within 5s`, a network failure that never happened. An unreachable but well-formed URL still fails
+  within the probe bound with the reachability message (#408).
+
 - The "SDK REFRESH TOKEN REJECTED" banner gives the fix that matches the stored credential. A credential
   written by `aim-sdk login` (it carries `accessToken` and `organizationId`, which a dashboard SDK download
   never does) is told to sign in again with `aim-sdk login --url <server> --force`, which replaces the file;
