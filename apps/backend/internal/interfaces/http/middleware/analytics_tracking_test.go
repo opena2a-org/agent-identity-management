@@ -1,8 +1,11 @@
 package middleware
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 )
 
 // ===========================
@@ -280,4 +284,55 @@ func TestAnalyticsTracking_TracksUserID(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 	assert.True(t, handlerCalled)
+}
+
+// TestAnalyticsTracking_RecordKeepsItsOwnRequestStrings is the analytics half
+// of aim-cloud#24: the record is written from a goroutine after the handler
+// returns, when Fiber may already have reused the context for another request.
+// Each record must still carry its own request's endpoint and user agent.
+func TestAnalyticsTracking_RecordKeepsItsOwnRequestStrings(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var got []APICallLog
+	var wg sync.WaitGroup
+
+	saved := recordAPICall
+	recordAPICall = func(_ *sql.DB, log APICallLog) {
+		defer wg.Done()
+		<-release // read the strings only after every request has finished
+		mu.Lock()
+		got = append(got, log)
+		mu.Unlock()
+	}
+	defer func() { recordAPICall = saved }()
+
+	app := fiber.New()
+	app.Use(AnalyticsTracking(nil))
+	app.Get("/*", func(c fiber.Ctx) error { return c.SendString("ok") })
+
+	// Drive the handler directly on one goroutine: Fiber recycles its context
+	// (and the path buffer behind c.Path()) from a pool between requests, which
+	// is the reuse a busy server sees. app.Test serves each call on a fresh
+	// goroutine and rarely gets the same context back.
+	handler := app.Handler()
+	const n = 40
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		var fctx fasthttp.RequestCtx
+		fctx.Request.Header.SetMethod("GET")
+		fctx.Request.SetRequestURI(fmt.Sprintf("/api/v1/agents/request-%03d", i))
+		fctx.Request.Header.Set("User-Agent", fmt.Sprintf("client-%03d", i))
+		handler(&fctx)
+		require.Equal(t, 200, fctx.Response.StatusCode())
+	}
+	close(release)
+	wg.Wait()
+
+	require.Len(t, got, n)
+	for _, log := range got {
+		suffix := strings.TrimPrefix(log.Endpoint, "/api/v1/agents/request-")
+		assert.Equal(t, "client-"+suffix, log.UserAgent,
+			"endpoint %q and user agent %q come from different requests", log.Endpoint, log.UserAgent)
+		assert.Regexp(t, `^/api/v1/agents/request-\d{3}$`, log.Endpoint)
+	}
 }

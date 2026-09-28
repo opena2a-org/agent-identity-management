@@ -2317,6 +2317,35 @@ class AIMClient:
             # Don't fail the action if reporting fails
             pass
 
+    def _report_blocked_execution(
+        self,
+        verification_id: Optional[str],
+        error: BaseException,
+    ) -> None:
+        """
+        Record that an entry point refused to run a denied action (#382).
+
+        Every entry point calls this on its blocked path, immediately before
+        raising, so a denial is followed by the record that proves the action
+        stopped. Before this, only `aim_verify` and its wrappers reported; a
+        denial from `perform_action`, `track_action`, `require_approval` or the
+        LangChain wrapper left no execution record, which is indistinguishable
+        from an SDK that received the denial and ran the action anyway.
+
+        Fire-and-forget with the bounded report timeout. Nothing here can turn
+        a blocked action into an allowed one: every failure is swallowed and
+        the caller raises regardless.
+        """
+        try:
+            self.report_execution_status(
+                verification_id=verification_id,
+                executed=False,
+                strict_mode=True,
+                execution_error=f"Blocked by AIM: {error}",
+            )
+        except Exception:
+            pass
+
     # Backwards compatibility alias
     def log_action_result(
         self,
@@ -3723,6 +3752,7 @@ class AIMClient:
                     what=f"'{cap}'",
                 )
                 if verdict.blocked:
+                    self._report_blocked_execution(decision.verification_id, verdict.error)
                     raise verdict.error
                 if decision.outcome is not Outcome.ALLOW:
                     # Running without a completed verification: record it.
@@ -3839,6 +3869,7 @@ class AIMClient:
                     what=f"'{action}'",
                 )
                 if verdict.blocked:
+                    self._report_blocked_execution(decision.verification_id, verdict.error)
                     raise verdict.error
                 if decision.outcome is not Outcome.ALLOW:
                     # Running without a completed verification: record it.
@@ -3969,6 +4000,7 @@ class AIMClient:
                 )
                 if verdict.blocked:
                     console.jit_denied(action, decision.reason or str(verdict.error))
+                    self._report_blocked_execution(decision.verification_id, verdict.error)
                     raise verdict.error
 
                 # SECURITY: fixing the AttributeError crash above (the whole

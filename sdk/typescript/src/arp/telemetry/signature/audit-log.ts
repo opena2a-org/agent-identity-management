@@ -80,30 +80,87 @@ export function queuedRecord(
   };
 }
 
+const AUDIT_PHASES: ReadonlySet<string> = new Set<AuditPhase>([
+  'queued',
+  'sent',
+  'buffered',
+  'failed',
+  'dropped',
+]);
+
 /**
- * Read the last `limit` audit records (default 100) for `aim-arp telemetry log`.
- * Returns [] if the log does not exist yet.
+ * True when a parsed line has the fields the CLI renders. A line that parses as
+ * JSON but lacks them (a partial write, another writer's schema) is corrupt for
+ * this reader: rendering it threw a raw TypeError on `padEnd`/`toUpperCase`.
  */
-export async function readAuditRecords(limit = 100): Promise<AuditRecord[]> {
+function isAuditRecord(v: unknown): v is AuditRecord {
+  if (typeof v !== 'object' || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.ts === 'string' &&
+    typeof r.phase === 'string' &&
+    AUDIT_PHASES.has(r.phase) &&
+    typeof r.techniqueId === 'string' &&
+    typeof r.severity === 'string' &&
+    typeof r.outcome === 'string'
+  );
+}
+
+/** What a read of the audit log found, including what it could not use. */
+export interface AuditLogRead {
+  /** Audit records from the examined tail, oldest first. */
+  records: AuditRecord[];
+  /** Non-empty lines in the examined tail that are not audit records. */
+  unparseable: number;
+  /**
+   * Set when the log exists but could not be read (the error code, e.g.
+   * `EACCES`). `records` is then empty, which does NOT mean nothing was sent.
+   */
+  readError?: string;
+}
+
+/**
+ * Read the last `limit` lines of the audit log (default 100) and say what they
+ * held. The audit log is the surface the disclosure tells users to trust, so a
+ * corrupt or unreadable log must be reported as such: collapsing it to "no
+ * records" made `telemetry log` say nothing had been sent and `status` say
+ * "Sent: 0" over a log that held lines it could not parse (#416).
+ */
+export async function readAuditLog(limit = 100): Promise<AuditLogRead> {
   const p = homePath(AUDIT_LOG_FILE);
-  if (!existsSync(p)) return [];
+  if (!existsSync(p)) return { records: [], unparseable: 0 };
   let content: string;
   try {
     content = await readFile(p, 'utf8');
-  } catch {
-    return [];
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    return { records: [], unparseable: 0, readError: code || 'unreadable' };
   }
   const lines = content.split('\n').filter((l) => l.trim().length > 0);
   const tail = lines.slice(-limit);
-  const out: AuditRecord[] = [];
+  const records: AuditRecord[] = [];
+  let unparseable = 0;
   for (const line of tail) {
+    let parsed: unknown;
     try {
-      out.push(JSON.parse(line) as AuditRecord);
+      parsed = JSON.parse(line);
     } catch {
-      // skip a corrupt line rather than fail the whole read
+      unparseable++;
+      continue;
     }
+    if (isAuditRecord(parsed)) records.push(parsed);
+    else unparseable++;
   }
-  return out;
+  return { records, unparseable };
+}
+
+/**
+ * Read the last `limit` audit records (default 100). Returns [] if the log does
+ * not exist yet. Corrupt lines are skipped; use `readAuditLog` to learn how
+ * many there were and whether the file could be read at all.
+ */
+export async function readAuditRecords(limit = 100): Promise<AuditRecord[]> {
+  return (await readAuditLog(limit)).records;
 }
 
 /** Absolute path of the audit log (shown to the user by the CLI). */

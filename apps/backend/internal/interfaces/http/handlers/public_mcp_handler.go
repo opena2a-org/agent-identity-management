@@ -372,11 +372,15 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 
 	// ✅ SIMPLE CAPABILITY CHECK (MVP)
 	// Get MCP server to check if agent is allowed to talk to it
-	mcpServer, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
+	// The server must belong to the signing agent's organization (#358).
+	// Loaded by ID alone, any agent could test another organization's server
+	// against its own talks_to list and read that server's name back. Not
+	// mounted today; scoped so it cannot become reachable as is.
+	mcpServer := LoadOwned(c, func(id uuid.UUID) (*domain.MCPServer, error) {
+		return h.mcpService.GetMCPServer(c.Context(), id)
+	}, serverID, agent.OrganizationID, mcpServerOrgID)
+	if mcpServer == nil {
+		return nil
 	}
 
 	// Check if MCP server name/ID is in agent's talks_to list
