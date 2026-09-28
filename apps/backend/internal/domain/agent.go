@@ -135,6 +135,12 @@ type AgentRepository interface {
 	// route: filtering in Go means every request reads every agent row, including the
 	// JSONB columns, to emit the revoked subset. The predicate belongs in SQL.
 	ListRevokedIDs(limit, offset int) ([]uuid.UUID, error)
+	// SuspendAgentsWithExpiredKeys suspends every agent whose key expired before now
+	// and whose rotation grace window, if any, has closed, and returns their ids.
+	//
+	// A dedicated write, not a read followed by Update: Update writes every column from
+	// the struct, so a partial read destroys the columns it did not populate (#359).
+	SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UUID, error)
 	UpdateTrustScore(id uuid.UUID, newScore float64) error
 	MarkAsCompromised(id uuid.UUID) error
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error

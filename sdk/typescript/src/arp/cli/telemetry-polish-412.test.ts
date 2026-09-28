@@ -62,15 +62,16 @@ describe('log survives a corrupt audit log (P2)', () => {
     expect(code).toBe(0);
     expect(out()).toContain('T1');
     expect(out()).toContain('Last 1 record(s)');
-    expect(out()).toContain('Skipped 2 line(s) that are not a complete record');
+    expect(out()).toContain('2 line(s) could not be read as audit records; showing 1 record(s)');
     expect(err()).toBe('');
   });
 
-  it('a log with only corrupt lines reports nothing sent and the skip', async () => {
+  it('a log with only corrupt lines is not reported as nothing sent', async () => {
     writeAuditLog(['not json']);
     expect(await runTelemetrySubcommand('log', [])).toBe(0);
-    expect(out()).toContain('No telemetry has been sent yet');
-    expect(out()).toContain('Skipped 1 line(s)');
+    expect(out()).not.toContain('No telemetry has been sent yet');
+    expect(out()).toContain('1 line(s) could not be read as audit records; showing 0 record(s)');
+    expect(out()).toContain('this does not mean nothing was sent');
   });
 });
 

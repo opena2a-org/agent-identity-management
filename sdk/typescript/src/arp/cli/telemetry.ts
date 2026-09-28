@@ -104,26 +104,31 @@ export function telemetrySubcommandHelp(sub: TelemetrySubcommand): string {
   return out.join('\n');
 }
 
-export async function telemetryLog(countArg?: string): Promise<number> {
+export async function telemetryLog(countArg?: string): Promise<void> {
   const n = parseInt(countArg ?? '', 10) || 20;
-  const { records, skipped, error } = await readAuditLog(n);
+  const { records, unparseable, readError } = await readAuditLog(n);
   console.log(`\n  Telemetry audit log: ${auditLogPath()}`);
-  if (error !== undefined) {
-    // An unreadable log is not an empty one: saying "nothing sent" here would
-    // be a claim about what left the machine that this command did not check.
-    console.error(`  Cannot read the audit log (${error}); nothing can be said about what was sent.`);
-    console.error(`  Check its permissions: ls -l ${auditLogPath()}\n`);
-    return 1;
+  // A log that could not be read, or whose lines could not be parsed, is not
+  // an empty log: "nothing has been sent" would be a claim the log cannot
+  // support (#416).
+  if (readError) {
+    console.log(`  Could not read the audit log (${readError}), so what was sent cannot be shown.`);
+    console.log(`  Check the file's permissions: ls -l ${auditLogPath()}\n`);
+    process.exitCode = 1;
+    return;
   }
-  const skippedNote =
-    skipped > 0
-      ? `  Skipped ${skipped} line(s) that are not a complete record (a partial write or a missing field).`
-      : null;
+  if (unparseable > 0) {
+    console.log(
+      `  ${unparseable} line(s) could not be read as audit records; showing ${records.length} record(s).`,
+    );
+  }
   if (records.length === 0) {
-    console.log('  No telemetry has been sent yet (or the log is empty).');
-    if (skippedNote) console.log(skippedNote);
-    console.log('');
-    return 0;
+    console.log(
+      unparseable > 0
+        ? '  No readable records in the examined lines; this does not mean nothing was sent.\n'
+        : '  No telemetry has been sent yet (or the log is empty).\n',
+    );
+    return;
   }
   console.log(
     `  Last ${records.length} record(s), audited before any send (phase shows whether each was sent):\n`,
@@ -137,20 +142,15 @@ export async function telemetryLog(countArg?: string): Promise<number> {
   console.log("\n  A sent record's payload is byte-for-byte what left this machine. No");
   console.log('  prompts, tool args, paths, file contents, or secrets are present by');
   console.log('  design; the only identifiers are the sensor id and the rotating org');
-  console.log('  pseudonym in the payload.');
-  if (skippedNote) console.log(skippedNote);
-  console.log('');
-  return 0;
+  console.log('  pseudonym in the payload.\n');
 }
 
 export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<void> {
   const enabled = signatureTelemetryEnabled(tcfg);
   const optedOut = isOptedOut(tcfg);
-  const { records, error: auditError } = await readAuditLog(100000);
+  const audit = await readAuditLog(100000);
   const counts: Record<string, number> = {};
-  for (const r of records) counts[r.phase] = (counts[r.phase] ?? 0) + 1;
-  const count = (phase: string): string =>
-    auditError !== undefined ? 'unknown (audit log unreadable)' : String(counts[phase] ?? 0);
+  for (const r of audit.records) counts[r.phase] = (counts[r.phase] ?? 0) + 1;
 
   console.log('\n  OpenA2A structural signature telemetry');
   console.log('  ─────────────────────────────────────');
@@ -184,13 +184,25 @@ export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<
   } else {
     console.log('  Enrollment:   not enrolled');
   }
-  console.log(
-    `  Audit log:    ${auditLogPath()}${auditError !== undefined ? ` (cannot read: ${auditError})` : ''}`,
-  );
-  console.log('  Sent:         ' + count('sent'));
-  console.log('  Buffered:     ' + count('buffered'));
-  console.log('  Failed:       ' + count('failed'));
-  console.log('  Dropped:      ' + count('dropped'));
+  console.log(`  Audit log:    ${auditLogPath()}`);
+  if (audit.readError) {
+    // Counts from a log that could not be read are unknown, not zero (#416).
+    const unknown = `unknown (audit log could not be read: ${audit.readError})`;
+    console.log(`  Sent:         ${unknown}`);
+    console.log(`  Buffered:     ${unknown}`);
+    console.log(`  Failed:       ${unknown}`);
+    console.log(`  Dropped:      ${unknown}`);
+  } else {
+    console.log('  Sent:         ' + (counts['sent'] ?? 0));
+    console.log('  Buffered:     ' + (counts['buffered'] ?? 0));
+    console.log('  Failed:       ' + (counts['failed'] ?? 0));
+    console.log('  Dropped:      ' + (counts['dropped'] ?? 0));
+    if (audit.unparseable > 0) {
+      console.log(
+        `  Unreadable:   ${audit.unparseable} audit log line(s) could not be read; the counts above exclude them`,
+      );
+    }
+  }
   console.log(`\n  Review payloads: ${SHIPPED_INVOCATION} log`);
   console.log(`  Disclosure:      ${SHIPPED_INVOCATION} disclosure`);
   console.log(
@@ -444,7 +456,8 @@ async function dispatchTelemetrySubcommand(
 ): Promise<number> {
   switch (sub) {
     case 'log':
-      return telemetryLog(positionals[0]);
+      await telemetryLog(positionals[0]);
+      return 0;
     case 'status':
       await telemetryStatus(tcfg);
       return 0;

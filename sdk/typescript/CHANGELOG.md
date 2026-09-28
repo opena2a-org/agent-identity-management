@@ -7,6 +7,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `aim-arp telemetry log` and `telemetry status` no longer read a corrupt or unreadable audit log as an empty one.
+  A log holding only unparseable lines printed "No telemetry has been sent yet" and "Sent: 0"; `log` now reports
+  how many lines could not be read and how many records it shows, and `status` adds an `Unreadable:` line beside
+  the counts. A log that exists but cannot be read (for example `EACCES`) is reported as unreadable, with `Sent:
+  unknown`, and `log` exits 1. A JSON line without the audit record's fields is counted as unreadable instead of
+  throwing a raw `TypeError` from the renderer. `readAuditRecords` keeps its return shape; the new `readAuditLog`
+  in the signature module returns the records with the unreadable count and read error (#416).
+
 ### Changed
 
 - `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
@@ -118,7 +128,6 @@ they stay in scope if one ever grows an observational side-channel.
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.
-- `telemetry log` skips a torn final line or a record missing a printed field, renders the rest, and says how many lines it skipped. A record missing `techniqueId` used to end the command with a raw `TypeError`.
 - A filesystem failure (EACCES, EROFS, ENOSPC, ...) names the path and the permissions check instead of printing Node's one-line error. When `opt-out` cannot write its marker it says the opt-out did not take effect and names `OPENA2A_TELEMETRY=off`.
 - `<subcommand> --help` prints that subcommand's usage and arguments; `telemetry --no-purge opt-out` names the order that works; `telemetry disclosure` uses the same indent and rule as the other commands; the help says "telemetry disclosure" rather than "install-time disclosure" (nothing prints at install); `telemetry status` names `npx @opena2a/aim-sdk telemetry <subcommand>` for an install whose bin is not on PATH.
 - The internal CLI's `register` guard (help and stray arguments never run it) moves into a module with its own test.
@@ -217,6 +226,10 @@ they stay in scope if one ever grows an observational side-channel.
   returns `0` when no credentials are loaded (no request is made), and added
   the previously undocumented exported clients (`A2AClient`, `SecretsClient`,
   `OAuthTokenManager`, `CrlCache`) to the API reference.
+
+### Fixed — entry points share one class identity
+
+- The entry points (`.`, `/arp`, `/express`, `/fastify`) share one copy of `AIMClient` and the error classes (#334). Each bundled its own copy, so an `ActionDeniedError` raised through `@opena2a/aim-sdk/express` was not `instanceof` the class imported from `@opena2a/aim-sdk`. The build now emits shared chunks in both formats. The ESM and CommonJS builds remain two copies; match on `error.code` where one process loads both.
 
 ## [1.3.1] - 2026-09-02
 

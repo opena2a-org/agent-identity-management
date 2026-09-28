@@ -2470,50 +2470,24 @@ func (s *AgentService) CreateCapabilityViolation(
 	return nil
 }
 
-// ErrKeyExpiryEnforcementUnavailable is returned by EnforceKeyExpiry. See its doc
-// comment: the function cannot do what its name says, and returning (0, nil) would
-// report success for work that did not happen.
-var ErrKeyExpiryEnforcementUnavailable = errors.New(
-	"key-expiry enforcement is not implemented: AgentRepository.List does not select key_expires_at, " +
-		"and AgentRepository.Update would clear the agent's key material")
-
-// EnforceKeyExpiry is NOT implemented and returns an error. Do not wire it.
+// EnforceKeyExpiry suspends every agent whose key has expired and whose rotation grace
+// window, if any, has closed, and returns how many it suspended. Agents already suspended
+// or revoked are not counted.
 //
-// It reads as a working control and is not one. Three independent defects, none of which
-// is fixed by the others:
+// The work is one narrow UPDATE in the repository (SuspendAgentsWithExpiredKeys). The
+// earlier loop read agents with List, which does not select the key-expiry columns, and
+// suspended through Update, which writes every column from a partially read struct; fixing
+// only the read would have made the loop reachable and cleared the key material of every
+// agent it suspended (#359).
 //
-//  1. It walked `List(0, 0)`, which reached Postgres as `LIMIT 0` and returned no rows,
-//     so it suspended nothing. That one is fixed — List now rejects a non-positive limit.
-//
-//  2. `AgentRepository.List` does not SELECT `key_expires_at` or
-//     `key_rotation_grace_until`. Both are therefore always nil on every agent this
-//     function can see, so `agent.KeyExpiresAt != nil` is never true and the body is
-//     unreachable regardless of pagination.
-//
-//  3. The obvious repair for (2) — add the columns to List's SELECT — is a trap. This
-//     function suspends by calling `AgentRepository.Update`, which writes 29 columns from
-//     a struct that List only partially populates. Every column Update writes and List
-//     does not select is destroyed on the round trip: key material (encrypted_private_key,
-//     the key_* timestamps, previous_public_key), the whole PQC set, capabilities, and
-//     rotation_count. Enforcing key expiry would destroy the key material it exists to
-//     protect.
-//
-//     The exact column set is deliberately not enumerated here. An earlier version of this
-//     comment listed ten and was four short — a hand-maintained list in a comment is not
-//     checkable and drifts against the code it describes. Derive it instead:
-//
-//     comm -13 <(sed -n '/func (r \*AgentRepository) List(/,/FROM agents/p' \
-//     ../infrastructure/repository/agent_repository.go | grep -oE '\b[a-z_]+\b' | sort -u) \
-//     <(sed -n '/func (r \*AgentRepository) Update(/,/WHERE id/p' \
-//     ../infrastructure/repository/agent_repository.go | grep -oE '\b[a-z_]+\b' | sort -u)
-//
-// It also has no caller anywhere, including tests, so nothing regresses by refusing.
-//
-// Implementing it properly needs a narrow `UPDATE agents SET status, updated_at WHERE id`
-// rather than Update, and a repository read that carries the key-expiry columns. Tracked
-// in issue #359.
+// It has no caller yet. Where it runs (a scheduled sweep, or a check at authentication) is
+// a separate decision. The agent auth middlewares already deny the `suspended` status.
 func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
-	return 0, ErrKeyExpiryEnforcementUnavailable
+	ids, err := s.agentRepo.SuspendAgentsWithExpiredKeys(time.Now())
+	if err != nil {
+		return 0, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
+	}
+	return len(ids), nil
 }
 
 // RecordHeartbeat updates the heartbeat timestamp for an agent

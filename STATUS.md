@@ -8,7 +8,7 @@
 
 AIM 1.0. Every gate criterion in [HARDENING.md](HARDENING.md)'s "Roadmap to 1.0" is met as of 2026-05-28 (last criterion — the CI-integrated Playwright empty-state suite — closed in PR #247 + PR #248 + PR #250). Semver is honored from this release forward; breaking changes go through a deprecation cycle and ship in a major bump. Security reports are handled per the policy in [SECURITY.md](SECURITY.md).
 
-A paid third-party security review was previously listed as a 1.0 criterion but has been [rescoped to a post-1.0 investment](HARDENING.md#third-party-security-review) (CHIEF-CSR decision 2026-05-28): AIM is open source under Apache-2.0, so the codebase itself is the audit surface, and a community-review path through SECURITY.md is welcome before and after 1.0. A paid engagement is appropriate when a regulated customer requires formal attestation.
+A paid third-party security review was previously listed as a 1.0 criterion but has been [rescoped to a post-1.0 investment](HARDENING.md#third-party-security-review) (2026-05-28, #256): AIM is open source under Apache-2.0, so the codebase itself is the audit surface, and a community-review path through SECURITY.md is welcome before and after 1.0. A paid engagement is appropriate when a regulated customer requires formal attestation.
 
 ## Stage definitions
 

@@ -217,3 +217,18 @@ func TestAllowlistResolutionCheckDetectsAMissingMethod(t *testing.T) {
 		t.Errorf("expected exactly the nonexistent key to be reported, got %v", unresolved)
 	}
 }
+
+// TestNoAllowlistEntryAwaitsReview pins the end state of #358: every
+// allowlist justification names the mechanism that scopes the handler (or
+// why it is cross-tenant by design). A placeholder that defers the review
+// read as a reviewed exemption while covering nothing.
+func TestNoAllowlistEntryAwaitsReview(t *testing.T) {
+	for _, m := range []map[string]string{allowlist, collectionScopeAllowlist, serviceParamAllowlist} {
+		for key, why := range m {
+			lower := strings.ToLower(why)
+			if strings.Contains(lower, "needs review") || strings.TrimSpace(why) == "" {
+				t.Errorf("allowlist entry %s has no reviewed justification: %q", key, why)
+			}
+		}
+	}
+}
