@@ -21,6 +21,8 @@ import {
   createDelegation,
   verifyDelegation,
   verifyDelegationChain,
+  verifyDelegationSignature,
+  checkDelegationTemporalValidity,
   delegationSignablePayload,
   publicKeyToDidKey,
   toBase64url,
@@ -79,6 +81,47 @@ const VIOLATIONS: Record<string, Violation> = {
   },
 };
 
+/**
+ * The violations above change a field AFTER signing, so the signature check
+ * alone rejects every one of them: they prove a field is covered by the
+ * signature, not that the verifier compares it to the clock. The 1.0.2 bug (a
+ * signed `expiresAt` never compared to the clock) and #417 (a signed
+ * `createdAt` never used as the start of the validity window) both pass a
+ * tamper-only harness. Every signed field that holds a point in time therefore
+ * also needs a SIGNED violation: a delegation created with that value, whose
+ * signature verifies, which the temporal check must reject at NOW.
+ */
+type ClockViolation = {
+  reason: string;
+  window: { createdAt: string; expiresAt: string };
+};
+
+const CLOCK_VIOLATIONS: Record<string, ClockViolation[]> = {
+  created_at: [
+    {
+      reason: 'evaluated before the signed createdAt (not yet valid)',
+      window: { createdAt: '2026-06-01T00:00:00.000Z', expiresAt: '2026-12-31T00:00:00.000Z' },
+    },
+  ],
+  expires_at: [
+    {
+      reason: 'evaluated after the signed expiresAt',
+      window: { createdAt: '2026-01-01T00:00:00.000Z', expiresAt: '2026-02-01T00:00:00.000Z' },
+    },
+    {
+      reason: 'evaluated exactly at the signed expiresAt (expiry is exclusive)',
+      window: { createdAt: '2026-01-01T00:00:00.000Z', expiresAt: NOW },
+    },
+  ],
+};
+
+/** Signed fields whose value is an ISO-8601 instant, read from the payload itself. */
+function clockFieldsOf(payload: Record<string, unknown>): string[] {
+  return Object.keys(payload).filter(
+    (f) => typeof payload[f] === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(payload[f] as string),
+  );
+}
+
 describe('Signed-field enforcement coverage', () => {
   it('every field in the signed payload has a registered violation', async () => {
     const root = await generateKeyPair();
@@ -102,6 +145,18 @@ describe('Signed-field enforcement coverage', () => {
     // (and the verifier check it exercises) before shipping.
     expect(uncovered, `signed fields with no enforcement violation: ${uncovered.join(', ')}`).toEqual([]);
   });
+
+  it('every signed instant has a signed (clock) violation, not only a tamper one', async () => {
+    const root = await generateKeyPair();
+    const agent = await generateKeyPair();
+    const good = await baseDelegation(root, agent.publicKey);
+    const payload = JSON.parse(new TextDecoder().decode(delegationSignablePayload(good)));
+    const clockFields = clockFieldsOf(payload);
+    // Guard the derivation itself: both window bounds must be recognised.
+    expect(clockFields).toEqual(expect.arrayContaining(['created_at', 'expires_at']));
+    const uncovered = clockFields.filter((f) => !(CLOCK_VIOLATIONS[f]?.length));
+    expect(uncovered, `signed instants with no clock violation: ${uncovered.join(', ')}`).toEqual([]);
+  });
 });
 
 describe('Signed-field enforcement — single delegation', () => {
@@ -121,6 +176,51 @@ describe('Signed-field enforcement — single delegation', () => {
       const bad = violation.mutate(structuredClone(good));
       expect(await verifyDelegation(bad, { verifyAt: NOW })).toBe(false);
     });
+  }
+});
+
+describe('Signed-field enforcement — clock violations on a validly signed delegation', () => {
+  for (const [field, violations] of Object.entries(CLOCK_VIOLATIONS)) {
+    for (const violation of violations) {
+      it(`rejects when ${field} is ${violation.reason}`, async () => {
+        const root = await generateKeyPair();
+        const agent = await generateKeyPair();
+        const d = await createDelegation({
+          delegatorKeyPair: root,
+          delegatePublicKey: agent.publicKey,
+          scopes: ['search'],
+          ...violation.window,
+        });
+        // The signature is intact, so only the clock comparison can reject it.
+        expect(await verifyDelegationSignature(d)).toBe(true);
+        expect(checkDelegationTemporalValidity(d, NOW).valid).toBe(false);
+        expect(await verifyDelegation(d, { verifyAt: NOW })).toBe(false);
+      });
+
+      it(`rejects the chain when the child's ${field} is ${violation.reason}`, async () => {
+        const root = await generateKeyPair();
+        const agent = await generateKeyPair();
+        const leaf = await generateKeyPair();
+        const parent = await createDelegation({
+          delegatorKeyPair: root,
+          delegatePublicKey: agent.publicKey,
+          scopes: ['search'],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          expiresAt: '2026-12-31T00:00:00.000Z',
+        });
+        const child = await createDelegation({
+          delegatorKeyPair: agent,
+          delegatePublicKey: leaf.publicKey,
+          scopes: ['search'],
+          parentDelegation: 'del-root',
+          ...violation.window,
+        });
+        expect(await verifyDelegationSignature(child)).toBe(true);
+        const result = await verifyDelegationChain([parent, child], { verifyAt: NOW });
+        expect(result.valid).toBe(false);
+        expect(result.results[1].temporalValid).toBe(false);
+      });
+    }
   }
 });
 
