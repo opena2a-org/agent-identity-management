@@ -189,8 +189,6 @@ cd "$(dirname "$0")"
 
 Then add a row to the **Component smoke matrix** above.
 
-## Cross-link
+## Background
 
-Global testing philosophy: `~/.claude/instructions/testing-philosophy.md`
-Pre-push review skill: `~/workspace/claude-skills/skills/pre-push-review/SKILL.md`
 This doc was written in response to bugs surfaced when the user asked "did you actually run these services?" after the original verification claimed PASS based on syntax checks alone.

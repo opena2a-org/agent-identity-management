@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sdk_credentials.json` that was never written. A missing server URL is shown with login's default. The adoption and
   migration notices no longer claim `[OK]` when the write failed, and they go to stderr, so `status --json` stays one
   JSON object on stdout (#409).
+
+- **Every entry point now reports a blocked action before raising.** In 2.0.0 only `@aim_verify` and its four
+  convenience wrappers sent the execution report on the blocked path; `perform_action` (the decorator the README
+  Quick start teaches), `track_action`, `require_approval` and the LangChain `aim_verify` raised the denial without
+  it, so a denial from them left no record that the action stopped. All six now send the same report
+  (`executed: false`, `strictMode: true`, `executionError: "Blocked by AIM: ..."`) through one shared path, widened
+  in a single change so the execution record means the same thing for every entry point. The report is
+  fire-and-forget with its short timeout, and a failure to send it, including one that raises, never lets the
+  denied action run; before this, an exception out of the report on the `@aim_verify` path replaced the denial
+  the caller saw (#382).
 - `aim-sdk logout` revokes the stored session on the server: it posts `POST /api/v1/auth/logout`
   with the access token as the bearer and the refresh token in the body, and prints a confirmed
   sign-out only when the server reports the refresh token revoked; otherwise it names the reason
@@ -32,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stack. `X-AIM-API-Key` is retired; every API-key site sends `X-API-Key`. Requires a backend
   built on or after 2026-08-26 (the published `edge` image qualifies). A 401 in api-key mode
   now names the credential and where a valid one comes from.
+- `aim_sdk.capability_detection` no longer carries a module-level `__version__ = "1.1.0"`,
+  which disagreed with `aim_sdk.__version__` on every 2.0.x release
+  ([#475](https://github.com/opena2a-org/agent-identity-management/issues/475)). It was the last
+  such literal: the test that pinned `detection.py` and `protocol_detection.py` (#464) now walks
+  every module under `aim_sdk/` for a string-constant `__version__`, and every importable
+  submodule that exposes `__version__` must equal the package version.
 
 ### Changed
 
@@ -291,6 +307,14 @@ not repeated here: it is the same defect as AIM-14.AC1 and ships above.
   is sent unchanged. `AIMClient`'s class docstring names `verify_capability`
   and `aim_sdk.decision.VerificationDecision`, the two names its deprecation
   warnings point callers to, instead of only `perform_action`.
+
+### Fixed — console and transport polish (#410)
+
+- Agent ids of 15 characters or fewer are shown whole in panels; `agt_123` rendered as `agt_123..._123`.
+- Every row of the plain-text registration, existing-credentials and approval panels is as wide as its border; values that overflowed a row are cut with `...`.
+- A trust score outside 0-100% renders as `invalid` instead of being graded: `150` printed `150% Excellent` and `-5` printed `-500% Low`.
+- The A2A client and the telemetry relay send the package version in `User-Agent` (`AIM-Python-SDK/<version> (A2A)`, `OpenA2A-AIM-SDK-Relay/<version>`), where they sent a hardcoded `A2A-1.0.0` and no version.
+- `aim-sdk logout` also removes the SDK tokens from the legacy `~/.aim/credentials.json`. The next command migrated that file again, so `aim-sdk status` read as signed in after a logout. Agent credentials in the same file are kept.
 
 ## [2.0.3] - 2026-09-09
 

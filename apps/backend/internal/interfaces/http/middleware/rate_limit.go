@@ -53,7 +53,7 @@ func getClientIP(c fiber.Ctx) string {
 		// are trustworthy, so walk from the right and stop at the first address that
 		// is not one of ours: that entry is the furthest-left one we have any reason
 		// to believe, and it is the address that actually spoke to our infrastructure.
-		// COUNCIL_LEDGER 2026-09-02, CHIEF-CISO.
+		// Decided in #490.
 		if forwardedFor := c.Get("X-Forwarded-For"); forwardedFor != "" {
 			ips := strings.Split(forwardedFor, ",")
 			for i := len(ips) - 1; i >= 0; i-- {

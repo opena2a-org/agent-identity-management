@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -29,6 +30,24 @@ type TagHandler struct {
 	tagService    *application.TagService
 	agentRepo     agentByIDLookup
 	mcpServerRepo mcpServerByIDLookup
+	// tagByID replaces tagService for the tag read in tests; nil in production.
+	tagByID tagByIDLookup
+}
+
+// tagByIDLookup is the one tag read UpdateTag's scoping gate needs.
+type tagByIDLookup interface {
+	GetTagByID(ctx context.Context, tagID uuid.UUID) (*domain.Tag, error)
+}
+
+// tagLoader adapts the tag read to the loader LoadOwned takes.
+func (h *TagHandler) tagLoader(c fiber.Ctx) func(uuid.UUID) (*domain.Tag, error) {
+	var lookup tagByIDLookup = h.tagService
+	if h.tagByID != nil {
+		lookup = h.tagByID
+	}
+	return func(id uuid.UUID) (*domain.Tag, error) {
+		return lookup.GetTagByID(c.Context(), id)
+	}
 }
 
 // NewTagHandler creates a new tag handler instance.
@@ -200,6 +219,13 @@ func (h *TagHandler) UpdateTag(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
 			Error: "Invalid request body",
 		})
+	}
+
+	// The tag must belong to the caller's organization (#358). The service
+	// also checks, but answered a foreign tag with 500 "tag does not belong
+	// to organization" and a missing one with 404: an existence oracle.
+	if LoadOwned(c, h.tagLoader(c), tagID, orgID, tagOrgID) == nil {
+		return nil
 	}
 
 	// Update tag
