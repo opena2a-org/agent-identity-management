@@ -18,7 +18,7 @@ import {
   AIMContext,
   AIMRequest,
 } from './express';
-import { ActionDeniedError, AuthenticationError } from '../exceptions';
+import { ActionDeniedError, AuthenticationError, NetworkError, RateLimitError } from '../exceptions';
 
 // Mock AIMClient
 vi.mock('../client/AIMClient', () => ({
@@ -407,6 +407,44 @@ describe('aimErrorHandler', () => {
     const error = new Error('Generic error');
 
     aimErrorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+
+    expect(mockNext).toHaveBeenCalledWith(error);
+    expect(mockRes.status).not.toHaveBeenCalled();
+  });
+
+  // #450: any other SDK error used to reach Express's default handler, which
+  // renders the stack trace. It now gets the body the Fastify plugin gives it.
+  it('should answer any other SDK error in the Fastify plugin shape', () => {
+    const error = new NetworkError('Request timed out');
+
+    aimErrorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+
+    expect(mockRes.status).toHaveBeenCalledWith(500);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      statusCode: 500,
+      code: 'NETWORK_ERROR',
+      error: 'Internal Server Error',
+      message: 'Request timed out',
+    });
+    expect(mockNext).not.toHaveBeenCalled();
+  });
+
+  it('should keep an SDK error status in the 4xx range', () => {
+    const error = new RateLimitError(30, 100, 0);
+
+    aimErrorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+
+    expect(mockRes.status).toHaveBeenCalledWith(429);
+    expect(mockRes.json).toHaveBeenCalledWith(
+      expect.objectContaining({ statusCode: 429, code: 'RATE_LIMIT', error: 'Too Many Requests' })
+    );
+  });
+
+  it('should hand the error to Express once the response has started', () => {
+    const error = new NetworkError('Request timed out');
+    const startedRes = { ...mockRes, headersSent: true };
+
+    aimErrorHandler(error, mockReq as Request, startedRes as unknown as Response, mockNext);
 
     expect(mockNext).toHaveBeenCalledWith(error);
     expect(mockRes.status).not.toHaveBeenCalled();
