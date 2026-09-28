@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -14,9 +15,13 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 		// Record start time
 		start := time.Now()
 
-		// Get request details before processing
-		method := c.Method()
-		endpoint := c.Path()
+		// Get request details before processing. Fiber's request strings are views
+		// onto pooled buffers that are valid only until this handler returns
+		// (Immutable is off), and the record below is written from a goroutine
+		// after that: copy every string it keeps, or a later request that reuses
+		// the context rewrites the endpoint and user agent this row stores.
+		method := strings.Clone(c.Method())
+		endpoint := strings.Clone(c.Path())
 		requestSize := len(c.Body())
 
 		// Process the request
@@ -52,8 +57,8 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 		}
 
 		// Get user agent and IP
-		userAgent := c.Get("User-Agent")
-		ipAddress := c.IP()
+		userAgent := strings.Clone(c.Get("User-Agent"))
+		ipAddress := strings.Clone(c.IP())
 
 		// Get error message if request failed
 		var errorMessage *string
@@ -65,7 +70,7 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 		}
 
 		// Log API call asynchronously to avoid blocking
-		go logAPICall(db, APICallLog{
+		go recordAPICall(db, APICallLog{
 			OrganizationID:    orgID,
 			AgentID:           agentID,
 			UserID:            userID,
@@ -99,6 +104,10 @@ type APICallLog struct {
 	IPAddress         string
 	ErrorMessage      *string
 }
+
+// recordAPICall is what the middleware's goroutine calls; tests replace it to
+// observe the record the goroutine receives.
+var recordAPICall = logAPICall
 
 // logAPICall inserts API call record into database
 func logAPICall(db *sql.DB, log APICallLog) {

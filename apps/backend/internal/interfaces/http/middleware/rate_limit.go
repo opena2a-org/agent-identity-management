@@ -53,7 +53,7 @@ func getClientIP(c fiber.Ctx) string {
 		// are trustworthy, so walk from the right and stop at the first address that
 		// is not one of ours: that entry is the furthest-left one we have any reason
 		// to believe, and it is the address that actually spoke to our infrastructure.
-		// COUNCIL_LEDGER 2026-09-02, CHIEF-CISO.
+		// Decided in #490.
 		if forwardedFor := c.Get("X-Forwarded-For"); forwardedFor != "" {
 			ips := strings.Split(forwardedFor, ",")
 			for i := len(ips) - 1; i >= 0; i-- {
@@ -72,6 +72,13 @@ func getClientIP(c fiber.Ctx) string {
 
 	// Fallback to direct IP
 	return directIP
+}
+
+// ClientIP is the client address a route records and compares: the direct
+// peer, or, only when TRUSTED_PROXIES names the peer, the address the trusted
+// proxy reports (getClientIP). Without TRUSTED_PROXIES it equals c.IP().
+func ClientIP(c fiber.Ctx) string {
+	return getClientIP(c)
 }
 
 // rateLimitMax returns the max requests per minute based on environment.

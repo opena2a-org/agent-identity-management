@@ -215,7 +215,7 @@ Capability authorization (deny-before-execute, FGA, intent classification) requi
 
 ## Install AIM (self-hosted)
 
-> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing. To deploy by digest instead, use advisory [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr): it shows how to read which digest a tag names today, and gives the `cosign verify` command to run before deploying the fixed `aim-dashboard` build it names by digest.
+> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing.
 
 ### Docker
 
@@ -232,7 +232,7 @@ Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastr
 
 New accounts wait for an administrator's approval. To bootstrap the first administrator, set `AIM_PLATFORM_ADMINS` (comma-separated emails) before starting the backend: accounts on that list are approved automatically and approve everyone else from the dashboard's admin area. Until a listed address has registered, or some administrator exists, other sign-ups are refused with an error that says so; nothing is queued. The backend logs how the variable was read at startup, so a mistyped entry is visible there.
 
-The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0` are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The dashboard images behind them bundle a Next.js version affected by a critical vulnerability; [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) names the dashboard image to run instead.
+The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0`, and the `aim-server` tags `1.22` and `1.22.0`, are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The images behind them bundle components with critical-rated vulnerabilities, described in [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) for the dashboard and [GHSA-fxfm-hhhw-3mgf](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-fxfm-hhhw-3mgf) for the server. The dashboard images are also affected by [GHSA-638x-gwq7-xfh7](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-638x-gwq7-xfh7), rated high. Each of these advisories lists the images it affects and shows how to check a deployment.
 
 ### From source
 
@@ -262,11 +262,17 @@ The full `docker-compose.yml` also brings up Elasticsearch, MinIO, NATS, Prometh
 
 ### Verifying the `@opena2a/aim-core` package
 
-The command below checks one npm package, `@opena2a/aim-core`. Version 0.2.0 was published from GitHub Actions through npm Trusted Publishing, with SLSA v1 provenance; versions 0.1.0 to 0.1.2 carry no provenance.
+Version 0.2.0 was built by the `release.yml` workflow in `opena2a-org/opena2a` at tag `aim-core-v0.2.0` and published through npm Trusted Publishing with SLSA v1 provenance; versions 0.1.0 to 0.1.2 carry no provenance. To check the registry's 0.2.0 tarball against that provenance, run these in an empty directory (needs cosign, jq and openssl):
 
 ```bash
-npm view @opena2a/aim-core dist.attestations --json
-# Expects non-empty result with predicateType "https://slsa.dev/provenance/v1"
+npm pack @opena2a/aim-core@0.2.0
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@opena2a%2faim-core@0.2.0 \
+  | jq '.attestations[] | select(.predicateType=="https://slsa.dev/provenance/v1") | .bundle' > aim-core.sigstore.json
+cosign verify-blob-attestation --bundle aim-core.sigstore.json --new-bundle-format --type slsaprovenance1 \
+  --certificate-identity https://github.com/opena2a-org/opena2a/.github/workflows/release.yml@refs/tags/aim-core-v0.2.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --digestAlg sha512 --digest "$(openssl dgst -sha512 -r opena2a-aim-core-0.2.0.tgz | cut -d' ' -f1)"
+# Prints "Verified OK" (cosign v3.0.4, 2026-09-24); a changed tarball byte or a different signer exits non-zero.
 ```
 
 Identity files (`~/.opena2a/aim-core/identity.json`) are written `mode 0600`. OAuth tokens live in the OS keychain by default. `~/.opena2a/auth.json` stores metadata only.

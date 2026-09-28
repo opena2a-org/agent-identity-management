@@ -267,7 +267,7 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 		revoked["accessToken"] = ok
 	}
 	if refreshToken != "" && h.jwtService != nil {
-		ok, _ := h.jwtService.RevokeSessionChecked(c.Context(), refreshToken)
+		ok, _ := h.jwtService.RevokeSessionCheckedFrom(c.Context(), refreshToken, presenter(c))
 		revoked["refreshToken"] = ok
 	}
 

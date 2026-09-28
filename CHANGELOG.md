@@ -11,6 +11,42 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — MCP server and tag routes answer only for the caller's organization
+
+- `POST /api/v1/mcp-servers/:id/verify-capability` and `GET /api/v1/mcp-servers/:id/connections`
+  loaded the MCP server by id without checking the caller's organization. Both now answer
+  `404 {"error":"not found"}` for a server outside it, the same as for a server that does not
+  exist, and the capability check no longer records a verification event against another
+  organization's server.
+- `PUT /api/v1/tags/:id` answered a tag in another organization with a 500 naming the mismatch and
+  a missing tag with a 404. Both now get the same 404.
+- Two handlers that no route mounts, `MCPHandler.GetConnectedAgents` and
+  `PublicMCPHandler.VerifyMCPAction`, check ownership the same way, so mounting either later does
+  not expose another organization's servers.
+- The four detection routes under `/api/v1/detection/agents/:id/` were reviewed and are unchanged:
+  each service method checks `agents.id = $1 AND organization_id = $2` before reading or writing.
+- The tenant-scoping lint no longer allowlists any handler as awaiting review, and a test fails if
+  one is added back (#358).
+
+### Security — a reused refresh token is recorded as the same client or a different one
+
+- A refresh token presented again after it was rotated or logged out is still refused, and its
+  sign-in still ends. Its `refresh_token_reuse` audit row and `SECURITY` log line now also say
+  whether the presenter looks like the client that retired it: `clientMatch` is `sameClient` (for
+  example two browser tabs or two SDK processes racing with one token), `differentClient`, or
+  `unknown`.
+- To compare, rotation and sign-out store a keyed, truncated hash of the token's id, the client's
+  address (IPv4 exactly, IPv6 by its /64) and its user agent as the value of the token's denylist
+  entry, for the token's remaining lifetime. The key is derived from `JWT_SECRET`; neither the
+  address nor the user agent is stored in clear there. Signing out with a token that was already
+  rotated keeps the mark of the client that rotated it, so a sign-out cannot make a later replay
+  look like the same client.
+- `unknown` means the comparison could not be made: an entry written before this version, a
+  revocation store that cannot read values back, or a client address that does not parse.
+- Both refusal records use the client address the rate limiter uses: the address a proxy named in
+  `TRUSTED_PROXIES` reports, and otherwise the connecting address as before. A reported address
+  that does not parse is not recorded; the connecting address is recorded instead.
+
 ### Security — the API no longer uses cookies for sign-in
 
 - Sign-in no longer sets `access_token` or `refresh_token` cookies, and the API no longer accepts
@@ -162,6 +198,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   can revoke it, and answers a `revoked` report (`accessToken`, `refreshToken`) that is `true` only
   when the token's id was written to the denylist; a server without revocation configured reports
   `false` instead of a silent no-op. The route, the cookie channel and the message are unchanged.
+
+### Fixed — an API-call analytics row keeps its own request's endpoint and user agent
+
+`AnalyticsTracking` read the method, path, user agent and client address from the request context and wrote the `api_calls` row from a goroutine after the handler returned. Those strings are views onto buffers Fiber reuses for the next request, so a row could store another request's endpoint and user agent: under sequential load in a test, every row read as the last request's path. The middleware now copies each string it keeps. The rows are the record used to answer whether an unauthenticated route was ever called, so a wrong endpoint is a wrong answer (opena2a-org/aim-cloud#24).
 
 ### Changed — the A2A composite no longer scores an agent it has no data for, and its PUT refuses
 
