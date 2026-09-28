@@ -55,40 +55,34 @@ var allowlist = map[string]string{
 	"A2AHandler.GetPublicAgentCard": "intentionally public: serves /.well-known/agent.json, whose whole purpose is to be readable without credentials",
 	"APIKeyHandler.ListAPIKeys":     "org-scoped at the service layer: orgID comes from Locals and is passed to ListAPIKeys(ctx, orgID); the agent_id query parameter only filters that already-scoped result set in Go, so a foreign id yields an empty filter rather than a foreign key",
 
+	// Reviewed under #358. Each passes the caller's organization_id from Locals to a
+	// DetectionService method whose first statement is an agents query requiring
+	// id = $1 AND organization_id = $2, before any read or write; not-found and
+	// cross-tenant return the same error, so the response is no existence oracle.
+	"DetectionHandler.ReportDetection":           "org-scoped in SQL: DetectionService.ReportDetections checks agents.id = $1 AND organization_id = $2 before writing, and returns one error for not-found and cross-tenant",
+	"DetectionHandler.GetDetectionStatus":        "org-scoped in SQL: DetectionService.GetDetectionStatus checks agents.id = $1 AND organization_id = $2 before reading, and returns one error for not-found and cross-tenant",
+	"DetectionHandler.ReportCapabilities":        "org-scoped in SQL: DetectionService.ReportCapabilities checks agents.id = $1 AND organization_id = $2 before writing, and returns one error for not-found and cross-tenant",
+	"DetectionHandler.GetLatestCapabilityReport": "org-scoped in SQL: DetectionService.GetLatestCapabilityReport counts agents with id = $1 AND organization_id = $2 before reading reports, and answers 404 \"agent not found\" for both not-found and cross-tenant",
+
 	// ---------------------------------------------------------------
 	// AUDIT-BASELINE: pre-existing handlers that read c.Params("id"|
 	// "agent_id") without any visible OrganizationID reference. These
-	// PREDATE the LoadOwned helper. They are not known-safe — they require
-	// manual review. The lint allowlists them here so the structural fix for
-	// the 8 cited defects (#18-25) could ship without blocking on the audit.
-	// Each entry must be removed from this section as it is reviewed; the
-	// reviewer either confirms the handler is intentionally cross-tenant and
-	// moves it to the section above with a per-entry justification, or wires
-	// LoadOwned into the handler. "needs review" is not an end state.
+	// PREDATE the LoadOwned helper and were allowlisted unreviewed so the
+	// structural fix for the 8 cited defects (#18-25) could ship. #358
+	// reviewed the last of them: five now call LoadOwned and left the map,
+	// four moved to the section above with their SQL scoping cited. What
+	// remains here carries a per-entry justification.
 	//
-	// An earlier version of this comment claimed 71 handlers. This map has
-	// never held that many — verify the real number rather than restating
-	// one, since a count in a comment cannot be checked by anything:
-	//
-	//	grep -c "audit-baseline: needs review" cmd/tenantscope-lint/main.go
-	//
-	// Tracking: opena2a-org/agent-identity-management#358.
+	// An entry is never parked here awaiting review again:
+	// TestNoAllowlistEntryAwaitsReview fails on any justification that
+	// defers the review instead of stating the mechanism.
 	// ---------------------------------------------------------------
 	"A2AHandler.DeleteSkill":                       "stub-handler: returns 204 No Content with no service dispatch. Path :id is a skill UUID; once a DeleteSkill service method exists, scope at handler layer (A3d-vii.c follow-up). Not exploitable today.",
 	"AdminHandler.AcknowledgeAlert":                "service-layer scoping: AlertService.AcknowledgeAlert performs Load → caller-org check → ErrAlertNotFound (collapses cross-tenant + not-found + uuid.Nil mismatch) and the handler maps the sentinel to a fixed 404 body (A3d-v R7 closed in PR #190).",
 	"AdminHandler.ResolveAlert":                    "service-layer scoping: AlertService.ResolveAlert mirrors AcknowledgeAlert — Load → caller-org check → ErrAlertNotFound → fixed 404 handler mapping (A3d-v R7 closed in PR #190).",
-	"DetectionHandler.GetDetectionStatus":          "audit-baseline: needs review",
-	"DetectionHandler.GetLatestCapabilityReport":   "audit-baseline: needs review",
-	"DetectionHandler.ReportCapabilities":          "audit-baseline: needs review",
-	"DetectionHandler.ReportDetection":             "audit-baseline: needs review",
-	"MCPGraphHandler.GetMCPServerConnections":      "audit-baseline: needs review",
-	"MCPHandler.GetConnectedAgents":                "audit-baseline: needs review",
-	"MCPHandler.VerifyMCPCapability":               "audit-baseline: needs review",
-	"PublicMCPHandler.VerifyMCPAction":             "audit-baseline: needs review",
 	"SDKTokenHandler.RevokeToken":                  "service-layer scoping: SDKTokenService.RevokeToken collapses both not-found and cross-user mismatch into ErrSDKTokenNotFound; the handler maps the sentinel to a fixed 404. SDK tokens are user-scoped (not org-scoped), so the gate lives at the service layer.",
-	"TagHandler.UpdateTag":                         "audit-baseline: needs review (service-layer scoping exists but has existence side channel via error string; A3d-ii follow-up — see todo/2026-05-21-a3d-ii-tag-mcp-scoping.md)",
 	// VerificationHandler.SubmitVerificationResult and .UpdateExecutionStatus were
-	// carried here as "audit-baseline: needs review" from 2025 until 2026-08-10,
+	// carried here unreviewed from 2025 until 2026-08-10,
 	// when the review they were waiting for found both routes reachable with no
 	// authentication at all and one of them writing the authorization decision.
 	// The lint detected them; the finding was deferred and not returned to. Both

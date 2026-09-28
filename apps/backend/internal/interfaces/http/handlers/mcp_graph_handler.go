@@ -13,6 +13,9 @@ type MCPGraphHandler struct {
 	mcpService              *application.MCPService
 	agentRepository         *repository.AgentRepository
 	mcpAttestationRepository domain.MCPAttestationRepository
+
+	// mcpServerByID replaces the mcpService read in tests; nil in production.
+	mcpServerByID mcpServerByIDLookup
 }
 
 // NewMCPGraphHandler creates a new MCP graph handler
@@ -210,21 +213,23 @@ func (h *MCPGraphHandler) GetMCPServerConnections(c fiber.Ctx) error {
 		})
 	}
 
-	// Get the MCP server
-	mcpServer, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-
-	// Get all agents for the organization
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
 	if !ok {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Organization ID not found in context",
 		})
 	}
+
+	// The server must belong to the caller's organization (#358). Loading it
+	// by ID alone returned another organization's server name, status and
+	// trust score to anyone holding its UUID.
+	loader := h.mcpServerByIDOrService(c)
+	mcpServer := LoadOwned(c, loader, serverID, orgID, mcpServerOrgID)
+	if mcpServer == nil {
+		return nil
+	}
+
+	// Get all agents for the organization
 
 	agents, err := h.agentRepository.GetByOrganization(orgID)
 	if err != nil {
@@ -370,4 +375,15 @@ func matchesMCPServer(mcp *domain.MCPServer, talksTo string) bool {
 		}
 	}
 	return false
+}
+
+// mcpServerByIDOrService returns the MCP server loader LoadOwned calls: the
+// test seam when set, otherwise the service read.
+func (h *MCPGraphHandler) mcpServerByIDOrService(c fiber.Ctx) func(uuid.UUID) (*domain.MCPServer, error) {
+	if h.mcpServerByID != nil {
+		return h.mcpServerByID.GetByID
+	}
+	return func(id uuid.UUID) (*domain.MCPServer, error) {
+		return h.mcpService.GetMCPServer(c.Context(), id)
+	}
 }

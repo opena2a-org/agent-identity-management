@@ -26,10 +26,11 @@ import (
 // Denial states are the ones assigned on purpose: `revoked` (AgentService.RevokeAgent)
 // and `suspended` (AgentService.SuspendAgent).
 //
-// `EnforceKeyExpiry` was named here as a second writer of `suspended`. It is not one —
-// it returns ErrKeyExpiryEnforcementUnavailable and has no caller (see #359). Nothing
-// suspends an agent for an expired key today. The allow-list below is unaffected either
-// way, because it gates on the value in the column rather than on who wrote it.
+// `EnforceKeyExpiry` (AgentRepository.SuspendAgentsWithExpiredKeys) also writes
+// `suspended`, for an agent whose key expired and whose grace window closed (#359). It has
+// no caller yet, so nothing suspends an agent for an expired key until it is scheduled.
+// The allow-list below is unaffected either way, because it gates on the value in the
+// column rather than on who wrote it.
 // Before this check existed, both wrote a status that no signature or API-key path read,
 // so revoking an agent did not stop it authenticating with key material it already held.
 func agentStatusPermitsAuth(status domain.AgentStatus) bool {
