@@ -189,130 +189,36 @@ func (h *VerificationEventHandler) GetVerificationEvent(c fiber.Ctx) error {
 	return c.JSON(event)
 }
 
-// CreateVerificationEventRequest represents the request body for creating a verification event
-type CreateVerificationEventRequest struct {
-	AgentID          string                           `json:"agentId" validate:"required"`
-	Protocol         domain.VerificationProtocol      `json:"protocol" validate:"required"`
-	VerificationType domain.VerificationType          `json:"verificationType" validate:"required"`
-	Status           domain.VerificationEventStatus   `json:"status" validate:"required"`
-	Result           *domain.VerificationResult       `json:"result,omitempty"`
-	Signature        *string                          `json:"signature,omitempty"`
-	MessageHash      *string                          `json:"messageHash,omitempty"`
-	Nonce            *string                          `json:"nonce,omitempty"`
-	PublicKey        *string                          `json:"publicKey,omitempty"`
-	Confidence       float64                          `json:"confidence"`
-	DurationMs       int                              `json:"durationMs"`
-	ErrorCode        *string                          `json:"errorCode,omitempty"`
-	ErrorReason      *string                          `json:"errorReason,omitempty"`
-	InitiatorType    domain.InitiatorType             `json:"initiatorType" validate:"required"`
-	InitiatorID      *string                          `json:"initiatorId,omitempty"`
-	InitiatorName    *string                          `json:"initiatorName,omitempty"`
-	InitiatorIP      *string                          `json:"initiatorIp,omitempty"`
-	Action           *string                          `json:"action,omitempty"`
-	ResourceType     *string                          `json:"resourceType,omitempty"`
-	ResourceID       *string                          `json:"resourceId,omitempty"`
-	Location         *string                          `json:"location,omitempty"`
-	StartedAt        time.Time                        `json:"startedAt"`
-	CompletedAt      *time.Time                       `json:"completedAt,omitempty"`
-	Details          *string                          `json:"details,omitempty"`
-	Metadata         map[string]interface{}           `json:"metadata,omitempty"`
-
-	// Configuration Drift Detection (WHO and WHAT)
-	CurrentMCPServers   []string `json:"currentMcpServers,omitempty"`   // Runtime: MCP servers being communicated with
-	CurrentCapabilities []string `json:"currentCapabilities,omitempty"` // Runtime: Capabilities being used
-}
-
-// CreateVerificationEvent creates a new verification event
-// @Summary Create verification event
-// @Description Create a new verification event (manual logging)
+// CreateVerificationEvent refuses every caller.
+//
+// A verification event records the outcome of a verification (status, result,
+// signature, public key, confidence), and trust scoring reads those rows. Until
+// that outcome is derived by the server from a verification it performed, and
+// the agent is resolved within the caller's organization, this endpoint accepts
+// nothing from anyone.
+//
+// The call to the service is removed from this handler rather than guarded, so
+// the refusal holds for every mount and every role without reasoning about the
+// middleware in front of it. Nothing is read from the request and no agent is
+// looked up, so the response is the same whether or not the agent exists.
+// Verification events are still recorded by the server's own verification
+// paths (VerificationHandler.CreateVerification and the agent service), which
+// call VerificationEventService directly.
+//
+// 403 with a distinct machine-readable code, as SubmitVerificationResult does:
+// a caller can tell the refusal apart from a missing route or a failed write.
+//
+// @Summary Create verification event (disabled)
+// @Description Disabled. Returns 403 for every caller until event outcomes are derived by the server.
 // @Tags verification-events
-// @Accept json
 // @Produce json
-// @Param event body CreateVerificationEventRequest true "Verification Event"
-// @Success 201 {object} domain.VerificationEvent
-// @Failure 400 {object} map[string]interface{}
-// @Failure 401 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "Endpoint disabled"
 // @Router /api/v1/verification-events [post]
 func (h *VerificationEventHandler) CreateVerificationEvent(c fiber.Ctx) error {
-	// Get organization ID from auth context
-	orgID, err := getOrganizationID(c)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Unauthorized",
-		})
-	}
-
-	// Parse request body
-	var req CreateVerificationEventRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	// Parse agent ID
-	agentID, err := uuid.Parse(req.AgentID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID format",
-		})
-	}
-
-	// Parse optional initiator ID
-	var initiatorID *uuid.UUID
-	if req.InitiatorID != nil {
-		id, err := uuid.Parse(*req.InitiatorID)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid initiator ID format",
-			})
-		}
-		initiatorID = &id
-	}
-
-	// Create service request
-	serviceReq := &application.CreateVerificationEventRequest{
-		OrganizationID:   orgID,
-		AgentID:          agentID,
-		Protocol:         req.Protocol,
-		VerificationType: req.VerificationType,
-		Status:           req.Status,
-		Result:           req.Result,
-		Signature:        req.Signature,
-		MessageHash:      req.MessageHash,
-		Nonce:            req.Nonce,
-		PublicKey:        req.PublicKey,
-		DurationMs:       req.DurationMs,
-		ErrorCode:        req.ErrorCode,
-		ErrorReason:      req.ErrorReason,
-		InitiatorType:    req.InitiatorType,
-		InitiatorID:      initiatorID,
-		InitiatorName:    req.InitiatorName,
-		InitiatorIP:      req.InitiatorIP,
-		Action:           req.Action,
-		ResourceType:     req.ResourceType,
-		ResourceID:       req.ResourceID,
-		Location:         req.Location,
-		StartedAt:        req.StartedAt,
-		CompletedAt:      req.CompletedAt,
-		Details:          req.Details,
-		Metadata:         req.Metadata,
-
-		// Configuration Drift Detection
-		CurrentMCPServers:   req.CurrentMCPServers,
-		CurrentCapabilities: req.CurrentCapabilities,
-	}
-
-	// Create event
-	event, err := h.service.CreateVerificationEvent(c.Context(), serviceReq)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create verification event",
-		})
-	}
-
-	return c.Status(fiber.StatusCreated).JSON(event)
+	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+		"error": "verification events are recorded by the server; this endpoint does not accept them",
+		"code":  "verificationEventWriteNotAccepted",
+	})
 }
 
 // GetRecentEvents retrieves recent verification events for real-time monitoring

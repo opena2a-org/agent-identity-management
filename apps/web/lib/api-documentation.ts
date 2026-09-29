@@ -1607,16 +1607,16 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "POST",
         path: "/api/v1/verification-events",
-        description: "Create verification event manually.",
-        summary: "Create verification event",
+        description:
+          "Disabled. Returns 403 with code verificationEventWriteNotAccepted for every caller and role. Verification events are recorded by the server when it performs a verification.",
+        summary: "Create verification event (disabled)",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["verification", "admin"],
-        example: `{
-  "agentId": "uuid-agent-1",
-  "status": "success",
-  "method": "cryptographic"
+        tags: ["verification"],
+        example: `// 403 Forbidden, for every caller
+{
+  "error": "verification events are recorded by the server; this endpoint does not accept them",
+  "code": "verificationEventWriteNotAccepted"
 }`,
       },
       {
