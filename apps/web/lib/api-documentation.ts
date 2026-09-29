@@ -1622,12 +1622,13 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "DELETE",
         path: "/api/v1/verification-events/:id",
-        description: "Delete verification event. Admin-only.",
+        description:
+          "Delete a verification event of the caller's organization. Requires the manager or admin role. An event of another organization returns 404.",
         summary: "Delete verification event",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
-        roleRequired: "admin",
-        tags: ["verification", "admin"],
+        roleRequired: "manager",
+        tags: ["verification"],
         example: "No request body required",
       },
       {
