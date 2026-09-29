@@ -514,12 +514,10 @@ func TestUpdateExecutionStatusRequest_HasNoStrictModeField(t *testing.T) {
 // it parses verification_handler.go only, and matches the selector name
 // UpdateVerificationResult. It does NOT see a direct call to the repository's
 // UpdateResult, a writer added in a different handler file, the raw-SQL expiry
-// job in cmd/server/main.go, or any INSERT path. In particular
-// VerificationEventHandler.CreateVerificationEvent inserts a row with a
-// caller-chosen status and result for a caller-supplied agentId — a fifth
-// writer of these columns that this guard cannot reach. It is pre-existing and
-// recorded in the roadmap rather than fixed here; do not read a green run of
-// this test as "result/status have exactly three writers".
+// job in cmd/server/main.go, or any INSERT path. The one INSERT path that took
+// status and result from the request, VerificationEventHandler.CreateVerificationEvent,
+// now refuses every caller (verification_event_create_refused_test.go); do not
+// read a green run of this test as "result/status have exactly three writers".
 func TestUpdateVerificationResultHasOnlyPermittedCallSites(t *testing.T) {
 	permitted := map[string]bool{
 		"writeVerificationResponse": true, // lazy expiry of an elapsed event
