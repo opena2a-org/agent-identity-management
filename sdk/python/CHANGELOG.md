@@ -32,15 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the token's expiry, still clears `~/.aim/sdk_credentials.json`, and exits 1. It used to post
   `/api/v1/auth/revoke`, a route no backend registers, and print `[OK] Token revoked` whatever the
   server answered, so the refresh token stayed usable for up to seven days after a logout.
-  Requires a backend that reports `revoked` on logout (this repository from this change; the
-  published `edge` image once it carries it).
+  Requires a backend that reports `revoked` on logout (this repository from this change; a
+  published image from the first platform release that carries it).
 - `secure(name, aim_url=..., api_key=...)` registers through `POST /api/v1/agents` with the
   key in `X-API-Key` and a locally generated keypair, the route and header the backend admits
   and the TypeScript SDK already uses. It used to post to `/api/v1/public/agents/register`
   with `X-AIM-API-Key`, a header no backend reads, and failed with 400 on every self-hosted
   stack. `X-AIM-API-Key` is retired; every API-key site sends `X-API-Key`. Requires a backend
-  built on or after 2026-08-26 (the published `edge` image qualifies). A 401 in api-key mode
-  now names the credential and where a valid one comes from.
+  built on or after 2026-08-26 (the image `latest` names and every platform release from
+  1.1.0 on qualify). A 401 in api-key mode now names the credential and where a valid one
+  comes from.
 - `aim_sdk.capability_detection` no longer carries a module-level `__version__ = "1.1.0"`,
   which disagreed with `aim_sdk.__version__` on every 2.0.x release
   ([#475](https://github.com/opena2a-org/agent-identity-management/issues/475)). It was the last

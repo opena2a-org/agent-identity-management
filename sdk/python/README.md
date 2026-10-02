@@ -309,8 +309,8 @@ the `apiKey.key` value the server returns once when an agent is created from the
 `POST /api/v1/api-keys` (dashboard: API keys). `secure()` registers a new agent in that
 organization through `POST /api/v1/agents` with the key in `X-API-Key`; the agent's keypair
 is generated locally and saved in the local credential store, so no private key travels.
-Requires a self-hosted backend built on or after 2026-08-26 (the published `edge` image
-qualifies).
+Requires a self-hosted backend built on or after 2026-08-26: the image `latest` names
+qualifies, and so does every platform release from 1.1.0 on; 1.0.0 (built 2026-06-01) does not.
 
 Or supply full credentials:
 
