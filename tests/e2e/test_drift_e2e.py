@@ -1,15 +1,25 @@
 #!/usr/bin/env python3
 """
-E2E test for drift approval workflow
-Creates test agent and verification event with drift
+E2E check for the verification-events write route.
+
+POST /verification-events no longer accepts caller-reported events: the server
+records a verification event when it performs the verification. This script
+creates a test agent, then checks that a caller-reported event carrying an
+unregistered MCP server is refused, so it cannot seed a drift alert.
+
+Set AIM_E2E_TOKEN to an admin JWT for the local backend before running.
 """
 
+import os
+import sys
+
 import requests
-import json
 
 # Configuration
 BASE_URL = "http://localhost:8080/api/v1"
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQGFpbS50ZXN0IiwiZXhwIjoxNzYwMDIyNzA5LCJpYXQiOjE3NTk5MzYzMDksIm9yZ19pZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsInJvbGUiOiJhZG1pbiIsInN1YiI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiJ9.Cz6yxgcGjJP-GriMKW50y2h8_Njpp35tPMoOlt_mJb4"
+TOKEN = os.environ.get("AIM_E2E_TOKEN")
+if not TOKEN:
+    sys.exit("Set AIM_E2E_TOKEN to an admin JWT for the local backend.")
 
 headers = {
     "Authorization": f"Bearer {TOKEN}",
@@ -44,14 +54,10 @@ if response.status_code == 201:
 else:
     print(f"❌ Failed to create agent: {response.status_code}")
     print(f"   Response: {response.text}")
-    exit(1)
+    sys.exit(1)
 
-# Step 2: Create verification event with drift (includes unauthorized MCP server)
-print(f"\n2. Creating verification event with drift")
-print(f"   Current runtime servers: ['filesystem-mcp', 'github-mcp', 'external-api-mcp']")
-print(f"   Registered servers: ['filesystem-mcp', 'github-mcp']")
-print(f"   Drift detected: 'external-api-mcp' is not registered!")
-
+# Step 2: a caller-reported verification event is refused
+print("\n2. Posting a caller-reported verification event with an unregistered MCP server")
 verification_data = {
     "agent_id": agent_id,
     "organization_id": "11111111-1111-1111-1111-111111111111",
@@ -64,39 +70,14 @@ verification_data = {
 }
 
 response = requests.post(f"{BASE_URL}/verification-events", headers=headers, json=verification_data)
-if response.status_code == 201:
-    event = response.json()
-    print(f"✅ Verification event created: {event['id']}")
+body = response.json() if response.headers.get("Content-Type", "").startswith("application/json") else {}
+if response.status_code == 403 and body.get("code") == "verificationEventWriteNotAccepted":
+    print("   Refused with 403 verificationEventWriteNotAccepted, as expected.")
 else:
-    print(f"❌ Failed to create verification event: {response.status_code}")
+    print(f"   Expected 403 verificationEventWriteNotAccepted, got {response.status_code}")
     print(f"   Response: {response.text}")
-    exit(1)
+    sys.exit(1)
 
-# Step 3: Check if drift alert was created
-print(f"\n3. Checking for drift alert...")
-response = requests.get(f"{BASE_URL}/admin/alerts?limit=10", headers=headers)
-if response.status_code == 200:
-    alerts = response.json()
-    drift_alerts = [a for a in alerts if a.get("alert_type") == "configuration_drift" and a.get("resource_id") == agent_id]
-
-    if drift_alerts:
-        alert = drift_alerts[0]
-        print(f"✅ Drift alert created!")
-        print(f"   Alert ID: {alert['id']}")
-        print(f"   Severity: {alert['severity']}")
-        print(f"   Title: {alert['title']}")
-        print(f"   Description preview: {alert['description'][:200]}...")
-        print(f"\n" + "=" * 80)
-        print("SUCCESS: Test data created successfully!")
-        print("=" * 80)
-        print(f"\nNext steps:")
-        print(f"1. Navigate to http://localhost:3000/dashboard/admin/alerts")
-        print(f"2. Find the drift alert for agent '{agent['name']}'")
-        print(f"3. Click 'Approve Drift' button")
-        print(f"4. Verify agent registration updated with 'external-api-mcp'")
-    else:
-        print(f"⚠️  No drift alert found yet (might still be processing)")
-        print(f"   Total alerts: {len(alerts)}")
-else:
-    print(f"❌ Failed to fetch alerts: {response.status_code}")
-    print(f"   Response: {response.text}")
+print("\n" + "=" * 80)
+print("PASS: the write route refuses caller-reported events; no drift alert can be seeded through it.")
+print("=" * 80)
