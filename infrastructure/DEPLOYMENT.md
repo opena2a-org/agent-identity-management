@@ -27,13 +27,16 @@ AIM provides one-command deployment scripts for all major cloud providers:
 
 ## Docker Image Tags
 
+Each `aim-server` and `aim-dashboard` image carries four tags, written by a push of the matching `platform-vX.Y.Z` tag and by nothing else (not a merge to `main`, not a manual run). With 1.0.0 as the example:
+
 | Tag | Description |
 |-----|-------------|
-| `latest` | Latest stable release |
-| `edge` | Built from `main` on every push |
-| `0.5.2` | Specific release version |
-| `0.5` | Latest patch in the 0.5 series |
-| `0` | Latest minor in the 0.x series |
+| `1.0.0` | One platform release. Never changes once published |
+| `1.0` | The newest release in the 1.0 line; fixes ship forward only, as a new patch release |
+| `1` | The newest release in the 1 line; fixes ship forward only |
+| `latest` | The newest platform release |
+
+The `edge` tag is retired: it is frozen at the last build of `main` published before merges stopped publishing and will be removed. Use `latest`, a digest, or a build from source instead.
 
 All images are signed with [cosign](https://github.com/sigstore/cosign) (keyless, OIDC-based). To verify:
 

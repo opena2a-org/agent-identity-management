@@ -1,5 +1,23 @@
 name: Docker Publish
 
+# Two kinds of run share this file, split at the job boundary:
+#
+#   verify-*  every main-branch push under the path filter and every manual
+#             dispatch. Read-only: `contents: read`, no secret, `push: false`,
+#             no outputs. It proves the two Dockerfiles still build with the
+#             publish build's inputs; it moves no tag on any registry.
+#   build-*   a push of a `platform-v*` tag only (job-level `if`). These keep
+#             the write permissions, the registry logins, cosign and the
+#             provenance attestation, build the same inputs the verify jobs
+#             build, read no Actions cache, and compute only the release's own
+#             tags: X.Y.Z, X.Y and X (`latest` follows from metadata-action's
+#             default `latest=auto`). A release guard, before any login,
+#             refuses a tag that is not the newest unpublished platform-vX.Y.Z.
+#
+# A merge is therefore no longer a publish; `edge` is not computed anywhere.
+# The cell sdk/typescript/tests/docker-publish-release-only.test.ts holds this
+# shape (QGF-273).
+
 on:
   push:
     tags:
@@ -22,15 +40,16 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-backend:
+  # ---------------------------------------------------------------------------
+  # Verify builds: every run. No write permission, no secret, no push.
+  # ---------------------------------------------------------------------------
+
+  verify-backend:
     runs-on: ubuntu-latest
 
     steps:
@@ -42,6 +61,156 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # The same inputs as build-backend's build step, minus `push`, `tags` and
+      # `labels`; the Actions cache is read and written here only.
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.backend
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          provenance: true
+          sbom: true
+          build-args: |
+            VERSION=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+
+  verify-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The same inputs as build-frontend's build step, minus `push`, `tags` and
+      # `labels`; the Actions cache is read and written here only.
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.frontend
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          provenance: true
+          sbom: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:8080
+
+  # ---------------------------------------------------------------------------
+  # Publish builds: a push of a platform-v* tag only.
+  # ---------------------------------------------------------------------------
+
+  build-backend:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/platform-v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    # One backend publish at a time; a queued newer tag waits, it does not
+    # cancel a push that is signing.
+    concurrency:
+      group: docker-publish-backend
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The release guard. Runs before any registry login, holds no secret and
+      # no inline expression: every workflow value enters through `env`. It
+      # reads the tag list from the forge (never the checkout) and reads a
+      # version as unpublished only when the registry answers exactly
+      # `ERROR: <ref>:<V>: not found`; any other answer is "neither presence
+      # nor absence" and the job stops so a re-run can repeat the check.
+      - name: Refuse a tag that is not the newest unpublished platform release
+        env:
+          TAG: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          GHCR_IMAGE: ghcr.io/opena2a-org/aim-server
+          HUB_IMAGE: docker.io/opena2a/aim-server
+        run: |
+          set -euo pipefail
+          echo "release guard: ${TAG}"
+          if [ "${REF}" != "refs/tags/${TAG}" ]; then
+            echo "refused: ${TAG}: ref ${REF} is not refs/tags/${TAG}; images are published only from a platform-vX.Y.Z tag push"
+            exit 1
+          fi
+          if [[ ! "${TAG}" =~ ^platform-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "refused: ${TAG}: a release tag is exactly platform-vX.Y.Z, three numbers and no suffix; no image is published for it"
+            exit 1
+          fi
+          major=$((10#${BASH_REMATCH[1]})); minor=$((10#${BASH_REMATCH[2]})); patch=$((10#${BASH_REMATCH[3]}))
+          version="${major}.${minor}.${patch}"
+          if ! listing=$(git ls-remote --tags "https://github.com/${REPOSITORY}"); then
+            echo "refused: ${TAG}: could not list the tags of https://github.com/${REPOSITORY} (git ls-remote --tags failed); re-run once the forge answers"
+            exit 1
+          fi
+          newest=""; nmaj=-1; nmin=-1; npat=-1; listed=no
+          while read -r _sha ref; do
+            [[ "${ref}" =~ ^refs/tags/platform-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || continue
+            a=$((10#${BASH_REMATCH[1]})); b=$((10#${BASH_REMATCH[2]})); c=$((10#${BASH_REMATCH[3]}))
+            if [ "${a}.${b}.${c}" = "${version}" ]; then listed=yes; fi
+            if (( a > nmaj || (a == nmaj && (b > nmin || (b == nmin && c > npat))) )); then
+              nmaj=${a}; nmin=${b}; npat=${c}; newest="${a}.${b}.${c}"
+            fi
+          done <<< "${listing}"
+          if [ -z "${newest}" ]; then
+            echo "refused: ${TAG}: https://github.com/${REPOSITORY} lists no platform-vX.Y.Z tag, so there is no release history to check against"
+            exit 1
+          fi
+          if [ "${listed}" != "yes" ]; then
+            echo "refused: ${TAG}: https://github.com/${REPOSITORY} does not list this tag (newest listed: platform-v${newest}); it was moved or deleted after the push"
+            exit 1
+          fi
+          next="${nmaj}.${nmin}.$((npat + 1))"
+          if [ "${version}" != "${newest}" ]; then
+            echo "refused: ${TAG}: not the newest platform release (newest listed: platform-v${newest}); a published version never moves. To ship a fix, push platform-v${next} from the fixed commit"
+            exit 1
+          fi
+          check_unpublished() {
+            local ref="$1:${version}" out rc
+            if out=$(docker buildx imagetools inspect "${ref}" 2>&1); then rc=0; else rc=$?; fi
+            if [ "${rc}" -eq 0 ]; then
+              echo "refused: ${TAG}: ${ref} is already published; a published version never moves. To ship a fix, push platform-v${next} from the fixed commit"
+              exit 1
+            fi
+            if [ "${out}" = "ERROR: ${ref}: not found" ]; then
+              echo "${ref}: not published"
+              return 0
+            fi
+            if [ "${rc}" -eq 127 ]; then
+              echo "refused: ${TAG}: docker could not be run to read ${ref} (exit ${rc}):"
+              echo "${out}"
+              exit 1
+            fi
+            echo "refused: ${TAG}: the registry answered neither presence nor absence for ${ref} (exit ${rc}):"
+            echo "${out}"
+            echo "re-run once the registry answers; the check repeats"
+            exit 1
+          }
+          check_unpublished "${GHCR_IMAGE}"
+          check_unpublished "${HUB_IMAGE}"
+          echo "ok: ${TAG} is the newest platform release and ${version} is unpublished on both registries"
 
       # Registry logins are wrapped in a retry loop: transient registry 500s
       # (e.g. registry-1.docker.io HTTP 500, observed on run 27146602888) have
@@ -79,21 +248,19 @@ jobs:
           echo "GHCR login failed after 5 attempts"
           exit 1
 
+      # Only the release's own tags, each anchored to the whole ref name: a
+      # pre-release or malformed platform-v ref matches no line, yields no tag,
+      # and fails the build before any push. `latest` follows from the default
+      # flavor (latest=auto) when the X.Y.Z line matches.
       - name: Extract metadata (GHCR)
         id: meta-ghcr
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/opena2a-org/aim-server
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/platform-v') }}
-            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+),group=1
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=edge,branch=main
+            type=match,pattern=^platform-v(\d+\.\d+\.\d+)$,group=1
+            type=match,pattern=^platform-v(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=^platform-v(\d+)\.\d+\.\d+$,group=1
 
       - name: Extract metadata (Docker Hub)
         id: meta-hub
@@ -101,16 +268,12 @@ jobs:
         with:
           images: opena2a/aim-server
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/platform-v') }}
-            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+),group=1
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=edge,branch=main
+            type=match,pattern=^platform-v(\d+\.\d+\.\d+)$,group=1
+            type=match,pattern=^platform-v(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=^platform-v(\d+)\.\d+\.\d+$,group=1
 
+      # No cache-from / cache-to: a publish build reads nothing a merge-path
+      # run can write. The build inputs are verify-backend's.
       - name: Build and push image
         id: push
         uses: docker/build-push-action@v6
@@ -123,8 +286,6 @@ jobs:
             ${{ steps.meta-ghcr.outputs.tags }}
             ${{ steps.meta-hub.outputs.tags }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
           provenance: true
           sbom: true
           build-args: |
@@ -153,7 +314,16 @@ jobs:
           push-to-registry: true
 
   build-frontend:
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/platform-v') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    concurrency:
+      group: docker-publish-frontend
+      cancel-in-progress: false
 
     steps:
       - name: Checkout repository
@@ -164,6 +334,80 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # See build-backend for the guard's rationale. The pair it asks about is
+      # this job's own, so a half-published release completes by re-running
+      # only the failed job.
+      - name: Refuse a tag that is not the newest unpublished platform release
+        env:
+          TAG: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          GHCR_IMAGE: ghcr.io/opena2a-org/aim-dashboard
+          HUB_IMAGE: docker.io/opena2a/aim-dashboard
+        run: |
+          set -euo pipefail
+          echo "release guard: ${TAG}"
+          if [ "${REF}" != "refs/tags/${TAG}" ]; then
+            echo "refused: ${TAG}: ref ${REF} is not refs/tags/${TAG}; images are published only from a platform-vX.Y.Z tag push"
+            exit 1
+          fi
+          if [[ ! "${TAG}" =~ ^platform-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "refused: ${TAG}: a release tag is exactly platform-vX.Y.Z, three numbers and no suffix; no image is published for it"
+            exit 1
+          fi
+          major=$((10#${BASH_REMATCH[1]})); minor=$((10#${BASH_REMATCH[2]})); patch=$((10#${BASH_REMATCH[3]}))
+          version="${major}.${minor}.${patch}"
+          if ! listing=$(git ls-remote --tags "https://github.com/${REPOSITORY}"); then
+            echo "refused: ${TAG}: could not list the tags of https://github.com/${REPOSITORY} (git ls-remote --tags failed); re-run once the forge answers"
+            exit 1
+          fi
+          newest=""; nmaj=-1; nmin=-1; npat=-1; listed=no
+          while read -r _sha ref; do
+            [[ "${ref}" =~ ^refs/tags/platform-v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || continue
+            a=$((10#${BASH_REMATCH[1]})); b=$((10#${BASH_REMATCH[2]})); c=$((10#${BASH_REMATCH[3]}))
+            if [ "${a}.${b}.${c}" = "${version}" ]; then listed=yes; fi
+            if (( a > nmaj || (a == nmaj && (b > nmin || (b == nmin && c > npat))) )); then
+              nmaj=${a}; nmin=${b}; npat=${c}; newest="${a}.${b}.${c}"
+            fi
+          done <<< "${listing}"
+          if [ -z "${newest}" ]; then
+            echo "refused: ${TAG}: https://github.com/${REPOSITORY} lists no platform-vX.Y.Z tag, so there is no release history to check against"
+            exit 1
+          fi
+          if [ "${listed}" != "yes" ]; then
+            echo "refused: ${TAG}: https://github.com/${REPOSITORY} does not list this tag (newest listed: platform-v${newest}); it was moved or deleted after the push"
+            exit 1
+          fi
+          next="${nmaj}.${nmin}.$((npat + 1))"
+          if [ "${version}" != "${newest}" ]; then
+            echo "refused: ${TAG}: not the newest platform release (newest listed: platform-v${newest}); a published version never moves. To ship a fix, push platform-v${next} from the fixed commit"
+            exit 1
+          fi
+          check_unpublished() {
+            local ref="$1:${version}" out rc
+            if out=$(docker buildx imagetools inspect "${ref}" 2>&1); then rc=0; else rc=$?; fi
+            if [ "${rc}" -eq 0 ]; then
+              echo "refused: ${TAG}: ${ref} is already published; a published version never moves. To ship a fix, push platform-v${next} from the fixed commit"
+              exit 1
+            fi
+            if [ "${out}" = "ERROR: ${ref}: not found" ]; then
+              echo "${ref}: not published"
+              return 0
+            fi
+            if [ "${rc}" -eq 127 ]; then
+              echo "refused: ${TAG}: docker could not be run to read ${ref} (exit ${rc}):"
+              echo "${out}"
+              exit 1
+            fi
+            echo "refused: ${TAG}: the registry answered neither presence nor absence for ${ref} (exit ${rc}):"
+            echo "${out}"
+            echo "re-run once the registry answers; the check repeats"
+            exit 1
+          }
+          check_unpublished "${GHCR_IMAGE}"
+          check_unpublished "${HUB_IMAGE}"
+          echo "ok: ${TAG} is the newest platform release and ${version} is unpublished on both registries"
 
       # See build-backend for rationale: retry transient registry 500s that
       # docker/login-action does not retry on its own.
@@ -205,15 +449,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/opena2a-org/aim-dashboard
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/platform-v') }}
-            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+),group=1
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=edge,branch=main
+            type=match,pattern=^platform-v(\d+\.\d+\.\d+)$,group=1
+            type=match,pattern=^platform-v(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=^platform-v(\d+)\.\d+\.\d+$,group=1
 
       - name: Extract metadata (Docker Hub)
         id: meta-hub
@@ -221,15 +459,9 @@ jobs:
         with:
           images: opena2a/aim-dashboard
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/platform-v') }}
-            type=match,pattern=platform-v(\d+\.\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+\.\d+),group=1
-            type=match,pattern=platform-v(\d+),group=1
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=edge,branch=main
+            type=match,pattern=^platform-v(\d+\.\d+\.\d+)$,group=1
+            type=match,pattern=^platform-v(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=^platform-v(\d+)\.\d+\.\d+$,group=1
 
       - name: Build and push image
         id: push
@@ -243,8 +475,6 @@ jobs:
             ${{ steps.meta-ghcr.outputs.tags }}
             ${{ steps.meta-hub.outputs.tags }}
           labels: ${{ steps.meta-ghcr.outputs.labels }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
           provenance: true
           sbom: true
           build-args: |
