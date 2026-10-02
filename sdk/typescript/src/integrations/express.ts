@@ -4,8 +4,9 @@
 
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { AIMClient } from '../client/AIMClient';
-import type { AIMClientConfig, VerifyActionOptions } from '../types';
+import type { VerifyActionOptions } from '../types';
 import { classifyVerificationFailure } from './verification-outcome';
+import { clientFromOptions, type IntegrationClientOptions } from './client-options';
 
 /**
  * AIM context added to requests
@@ -27,7 +28,7 @@ export interface AIMRequest extends Request {
 /**
  * Middleware options
  */
-export interface AIMMiddlewareOptions extends AIMClientConfig {
+export interface AIMMiddlewareOptions extends IntegrationClientOptions {
   /** Skip verification for certain paths */
   skipPaths?: string[];
   /** Custom error handler */
@@ -43,16 +44,18 @@ export interface AIMMiddlewareOptions extends AIMClientConfig {
  * ```typescript
  * import express from 'express';
  * import { createAIMMiddleware } from '@opena2a/aim-sdk/express';
+ * import { loadCredentialsFromFile } from '@opena2a/aim-sdk';
  *
  * const app = express();
  * app.use(createAIMMiddleware({
  *   baseUrl: 'https://aim.example.com',
- *   apiKey: 'your-api-key',
+ *   // A registered agent's identity; omit to read the four AIM_* env vars.
+ *   credentials: await loadCredentialsFromFile('./agent-credentials.json'),
  * }));
  * ```
  */
 export function createAIMMiddleware(options: AIMMiddlewareOptions = {}): RequestHandler {
-  const client = new AIMClient(options);
+  const client = clientFromOptions(options);
   const skipPaths = new Set(options.skipPaths ?? ['/health', '/ready', '/metrics']);
 
   return async (req: AIMRequest, res: Response, next: NextFunction): Promise<void> => {
