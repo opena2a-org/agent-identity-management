@@ -191,13 +191,28 @@ export class OAuthTokenManager {
  * missing variable(s), so a one-variable typo does not present as the same
  * "No credentials available" a clean environment does.
  */
-export function loadCredentialsFromEnv(): AgentCredentials | null {
-  const vars = {
+function agentCredentialEnv() {
+  return {
     AIM_AGENT_ID: process.env.AIM_AGENT_ID,
     AIM_PRIVATE_KEY: process.env.AIM_PRIVATE_KEY,
     AIM_PUBLIC_KEY: process.env.AIM_PUBLIC_KEY,
     AIM_ORGANIZATION_ID: process.env.AIM_ORGANIZATION_ID,
   };
+}
+
+/**
+ * The agent-credential variables missing from a PARTIALLY set environment, by
+ * name. Empty when none are set (a clean environment) or all four are, so a
+ * caller can tell "no credentials configured" from "one variable short".
+ */
+export function missingAgentCredentialEnvVars(): string[] {
+  const vars = agentCredentialEnv();
+  const missing = Object.keys(vars).filter((name) => !vars[name as keyof typeof vars]);
+  return missing.length === Object.keys(vars).length ? [] : missing;
+}
+
+export function loadCredentialsFromEnv(): AgentCredentials | null {
+  const vars = agentCredentialEnv();
   const missing = Object.keys(vars).filter((name) => !vars[name as keyof typeof vars]);
 
   if (missing.length === Object.keys(vars).length) {

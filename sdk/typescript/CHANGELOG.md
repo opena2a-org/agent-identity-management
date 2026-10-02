@@ -19,6 +19,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The Express middleware and the Fastify plugin accept the agent identity in their options. `createAIMMiddleware`
+  and `aimPlugin` take `credentials` (an `AgentCredentials` object) or a ready `client`; the README examples, which
+  passed only `{ baseUrl, apiKey }`, answered 401 on every verified route without contacting AIM. Passing both
+  options is refused. When the environment holds three of the four `AIM_*` agent variables, the "No credentials
+  available" error now names the missing one (for example `AIM_ORGANIZATION_ID`), which reaches the 401 body. A test
+  drives both README examples with a real client against a fake AIM server and asserts the action is verified
+  there (#449).
+
 - `aim-arp telemetry log` and `telemetry status` no longer read a corrupt or unreadable audit log as an empty one.
   A log holding only unparseable lines printed "No telemetry has been sent yet" and "Sent: 0"; `log` now reports
   how many lines could not be read and how many records it shows, and `status` adds an `Unreadable:` line beside
