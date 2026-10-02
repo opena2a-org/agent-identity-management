@@ -36,7 +36,16 @@ import base64
 import json
 from pathlib import Path
 
-import requests
+# requests is imported inside the functions that call it, not here: it is the
+# heaviest import on the CLI's path, and `aim-sdk --help`, `version` and `status`
+# never touch the network.
+def __getattr__(name):
+    """Keep ``aim_sdk.cli.requests`` resolvable for callers that patch it."""
+    if name == "requests":
+        import requests
+        return requests
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Version - avoid circular import
 def _get_version():
@@ -74,6 +83,7 @@ def check_server_reachable(aim_url, timeout):
     reachable; only a transport failure (refused, unroutable, timed out)
     counts as unreachable.
     """
+    import requests
     try:
         requests.get(aim_url, timeout=timeout, allow_redirects=False)
         return True
@@ -112,6 +122,7 @@ def request_device_code(aim_url: str, client_id: str = DEVICE_CLIENT_ID):
         verificationUriComplete, expiresIn, interval), or {'error': reason}
         with a bare reason the caller prefixes.
     """
+    import requests
     url = f"{aim_url}/api/v1/oauth/device/code"
     try:
         response = requests.post(
@@ -156,6 +167,7 @@ def poll_device_token(aim_url: str, device_code: str, interval: int, deadline: f
         dict: the token pair on success, or {'error': <one of 'expired_token',
         'access_denied', 'timeout', or a bare reason>}.
     """
+    import requests
     url = f"{aim_url}/api/v1/oauth/device/token"
     wait = max(int(interval or 5), 1)
     while True:
