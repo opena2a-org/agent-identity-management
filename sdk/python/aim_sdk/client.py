@@ -4360,6 +4360,7 @@ from .credentials import (
     load_agent_credentials as _load_agent_creds_from_module,
     save_agent_credentials as _save_agent_creds_to_module,
     list_agent_credentials,
+    refresh_rejected_fix,
     AGENTS_DIR,
     LEGACY_CREDENTIALS_FILE,
 )
@@ -5308,7 +5309,7 @@ def _register_via_oauth(
             # Agent has credentials but OAuth token expired - inform user
             raise ConfigurationError(
                 f"OAuth token expired but agent '{name}' has cached credentials.\n"
-                f"The SDK OAuth token needs to be refreshed. Download a new SDK from your AIM dashboard.\n"
+                f"The SDK OAuth token needs to be replaced. {refresh_rejected_fix(token_manager.credentials, aim_url)}\n"
                 f"Your agent credentials at {agent_creds_path} are still valid."
             )
         else:
@@ -5316,7 +5317,7 @@ def _register_via_oauth(
             raise ConfigurationError(
                 f"Cannot register new agent '{name}': OAuth access token failed.\n"
                 f"This happens when your SDK OAuth token has expired or been revoked.\n"
-                f"To fix: Download a fresh SDK from your AIM dashboard (Settings → SDK Downloads)."
+                f"To fix: {refresh_rejected_fix(token_manager.credentials, aim_url)}"
             )
 
     # Set up headers for API calls
