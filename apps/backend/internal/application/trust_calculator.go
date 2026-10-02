@@ -258,11 +258,11 @@ func (c *TrustCalculator) calculateFactorsDetailed(agent *domain.Agent) (*domain
 	excluded := make(map[string]string)
 
 	// Factor 1: Verification Status (25% weight)
-	// Ed25519 signature verification for all actions
+	// verification-event success rate over 30 days times an agent-status modifier
 	factors.VerificationStatus = c.calculateVerificationStatus(agent)
 
 	// Factor 2: Uptime & Availability (15% weight)
-	// Health check responsiveness over time
+	// the same success rate adjusted for recency, used as an availability proxy
 	factors.Uptime = c.calculateUptime(agent)
 
 	// Factor 3: Action Success Rate (15% weight)
@@ -274,7 +274,7 @@ func (c *TrustCalculator) calculateFactorsDetailed(agent *domain.Agent) (*domain
 	factors.SecurityAlerts = c.calculateSecurityAlerts(agent)
 
 	// Factor 5: Compliance Score (10% weight)
-	// SOC 2, HIPAA, GDPR adherence
+	// the organization's latest AIM compliance snapshot score
 	var reason string
 	factors.Compliance, reason = c.calculateCompliance(agent)
 	if reason != "" {
@@ -286,7 +286,7 @@ func (c *TrustCalculator) calculateFactorsDetailed(agent *domain.Agent) (*domain
 	factors.Age = c.calculateAge(agent)
 
 	// Factor 7: Drift Detection (3% weight)
-	// Behavioral pattern changes
+	// configuration-drift and MCP-drift alerts on the agent and its connected servers
 	factors.DriftDetection, reason = c.calculateDriftDetection(agent)
 	if reason != "" {
 		excluded["drift_detection"] = reason
@@ -323,7 +323,8 @@ func (c *TrustCalculator) calculateFactorsDetailed(agent *domain.Agent) (*domain
 }
 
 // Factor 1: Verification Status (25% weight)
-// Measures percentage of actions successfully verified with Ed25519 signatures
+// Scores the verification-event success rate over 30 days times an agent-status modifier
+// (falls back to a status-only baseline when no verification events are recorded).
 func (c *TrustCalculator) calculateVerificationStatus(agent *domain.Agent) float64 {
 	// Try to query real verification statistics from verification_events table
 	if c.verificationEventRepo != nil {
@@ -369,7 +370,8 @@ func (c *TrustCalculator) calculateVerificationStatus(agent *domain.Agent) float
 }
 
 // Factor 2: Uptime & Availability (15% weight)
-// Measures how often agent responds to health checks
+// Scores the same success rate adjusted for recency, used as an availability proxy
+// (falls back to a status-only baseline when no verification events are recorded).
 func (c *TrustCalculator) calculateUptime(agent *domain.Agent) float64 {
 	// Try to calculate uptime from verification event response times
 	if c.verificationEventRepo != nil {
@@ -491,8 +493,8 @@ func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
 }
 
 // Factor 5: Compliance Score (10% weight)
-// Measures adherence to compliance policies (SOC 2, HIPAA, GDPR)
-// Queries the latest compliance snapshot for the agent's organization.
+// Scores the organization's latest AIM compliance snapshot score
+// (framework AIM, queried for the agent's organization).
 // Snapshot score is 0-100, normalized to 0.0-1.0.
 // With no snapshot data the factor is EXCLUDED from the composite (AIP §6.1);
 // the returned 0.5 is a display placeholder only, never a contribution.
@@ -536,9 +538,9 @@ func (c *TrustCalculator) calculateAge(agent *domain.Agent) float64 {
 }
 
 // Factor 7: Drift Detection (3% weight)
-// Measures changes in agent behavior patterns by checking for
-// configuration drift alerts. No alerts = 1.0 (perfect): a wired alert
-// repository returning zero alerts is a measurement, not missing data.
+// Scores configuration-drift and MCP-drift alerts on the agent and its connected servers.
+// No alerts = 1.0 (perfect): a wired alert repository returning zero
+// alerts is a measurement, not missing data.
 // Each drift alert reduces the score proportionally by severity.
 // With no alert repository (or a failed agent-alert query) the factor is
 // EXCLUDED from the composite (AIP §6.1); the returned 0.5 is a display
