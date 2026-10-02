@@ -127,6 +127,21 @@ type VerificationRequest struct {
 	PublicKey  string                 `json:"publicKey" validate:"required"`
 }
 
+// verificationTypeForRequest records what this endpoint checked. A request
+// that names a capability is a capability check: the signature proves who is
+// asking, and the grant decides whether it is allowed. The type used to be
+// guessed from the capability NAME (a substring match on "capability" or
+// "permission"), so every real capability (`http:post`, `fs:read`) fell back
+// to "identity", and a denied out-of-grant action rendered on the timeline as
+// "Verification: identity, Status: failed", which reads as a failed identity
+// check rather than a blocked action.
+func verificationTypeForRequest(req VerificationRequest) domain.VerificationType {
+	if strings.TrimSpace(req.Capability) == "" {
+		return domain.VerificationTypeIdentity
+	}
+	return domain.VerificationTypeCapability
+}
+
 // VerificationResponse represents the verification result
 type VerificationResponse struct {
 	ID               string    `json:"id"`
@@ -445,13 +460,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		protocol = domain.VerificationProtocolMCP
 	}
 
-	// Determine verification type
-	verificationType := domain.VerificationTypeIdentity // Default to identity verification
-	if strings.Contains(req.Capability, "capability") {
-		verificationType = domain.VerificationTypeCapability
-	} else if strings.Contains(req.Capability, "permission") {
-		verificationType = domain.VerificationTypePermission
-	}
+	verificationType := verificationTypeForRequest(req)
 
 	// Map status to verification event status
 	var eventStatus domain.VerificationEventStatus

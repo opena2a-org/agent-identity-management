@@ -1740,18 +1740,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// that entry is removed with it. The live approval path is the admin group.
 
 	// Verification Event routes (authentication required) - Real-time monitoring
-	verificationEvents := v1.Group("/verification-events")
-	verificationEvents.Use(middleware.AuthMiddleware(jwtService))
-	verificationEvents.Use(middleware.RateLimitMiddleware())
-	verificationEvents.Get("/", h.VerificationEvent.ListVerificationEvents)
-	verificationEvents.Get("/recent", h.VerificationEvent.GetRecentEvents)
-	verificationEvents.Get("/statistics", h.VerificationEvent.GetStatistics)
-	verificationEvents.Get("/stats", h.VerificationEvent.GetVerificationStats)           // ✅ Get aggregated verification stats
-	verificationEvents.Get("/agent/:id", h.VerificationEvent.GetAgentVerificationEvents) // ✅ Get events for specific agent
-	verificationEvents.Get("/mcp/:id", h.VerificationEvent.GetMCPVerificationEvents)     // ✅ Get events for specific MCP server
-	verificationEvents.Get("/:id", h.VerificationEvent.GetVerificationEvent)
-	verificationEvents.Post("/", middleware.MemberMiddleware(), h.VerificationEvent.CreateVerificationEvent)
-	verificationEvents.Delete("/:id", middleware.ManagerMiddleware(), h.VerificationEvent.DeleteVerificationEvent)
+	mountVerificationEventRoutes(v1, h.VerificationEvent, jwtService)
 
 	// Tag routes (authentication required)
 	tags := v1.Group("/tags")
@@ -1887,6 +1876,28 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2aAdmin.Use(middleware.AdminMiddleware())
 	a2aAdmin.Post("/cleanup-nonces", h.A2A.CleanupExpiredNonces)
 	a2aAdmin.Post("/refresh-cards", h.A2A.RefreshExpiredCards)
+}
+
+// mountVerificationEventRoutes mounts /verification-events on v1. It is a
+// function of its own so the mounted router can be exercised in a test without
+// the database and service wiring the rest of setupRoutes needs.
+func mountVerificationEventRoutes(v1 fiber.Router, h *handlers.VerificationEventHandler, jwtService *auth.JWTService) {
+	verificationEvents := v1.Group("/verification-events")
+	verificationEvents.Use(middleware.AuthMiddleware(jwtService))
+	verificationEvents.Use(middleware.RateLimitMiddleware())
+	verificationEvents.Get("/", h.ListVerificationEvents)
+	verificationEvents.Get("/recent", h.GetRecentEvents)
+	verificationEvents.Get("/statistics", h.GetStatistics)
+	verificationEvents.Get("/stats", h.GetVerificationStats)           // ✅ Get aggregated verification stats
+	verificationEvents.Get("/agent/:id", h.GetAgentVerificationEvents) // ✅ Get events for specific agent
+	verificationEvents.Get("/mcp/:id", h.GetMCPVerificationEvents)     // ✅ Get events for specific MCP server
+	verificationEvents.Get("/:id", h.GetVerificationEvent)
+	// POST stays mounted so a caller gets a stated refusal rather than a 405:
+	// CreateVerificationEvent refuses every caller with 403
+	// verificationEventWriteNotAccepted until event outcomes are derived by the
+	// server. Same approach as SubmitVerificationResult (sdk_api_routes.go).
+	verificationEvents.Post("/", middleware.MemberMiddleware(), h.CreateVerificationEvent)
+	verificationEvents.Delete("/:id", middleware.ManagerMiddleware(), h.DeleteVerificationEvent)
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {
