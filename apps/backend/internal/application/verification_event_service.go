@@ -2,12 +2,18 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// ErrVerificationEventAgentNotFound is returned by CreateVerificationEvent when
+// the agent does not exist or belongs to a different organization than the
+// event. Both cases return this one value so they cannot be told apart.
+var ErrVerificationEventAgentNotFound = errors.New("agent not found")
 
 // VerificationEventService handles verification event business logic
 type VerificationEventService struct {
@@ -105,10 +111,14 @@ func (s *VerificationEventService) CreateVerificationEvent(
 	ctx context.Context,
 	req *CreateVerificationEventRequest,
 ) (*domain.VerificationEvent, error) {
-	// Validate agent exists
+	// The agent must belong to the organization the event is recorded under.
+	// This comparison runs before any attribute of the agent is read and
+	// before drift detection or the event repository is called, so an agent
+	// of another organization is neither changed nor described. An unknown
+	// agent and an agent of another organization return the same error.
 	agent, err := s.agentRepo.GetByID(req.AgentID)
-	if err != nil {
-		return nil, fmt.Errorf("agent not found: %w", err)
+	if err != nil || agent == nil || agent.OrganizationID != req.OrganizationID {
+		return nil, ErrVerificationEventAgentNotFound
 	}
 
 	agentIDPtr := &req.AgentID

@@ -151,7 +151,9 @@ func TestVerificationEventHandler_CreateVerificationEvent_NoOrgContext(t *testin
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	// The handler refuses every caller before reading anything, including the
+	// caller's organization. The mounted route answers 401 first (AuthMiddleware).
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 func TestVerificationEventHandler_CreateVerificationEvent_InvalidJSON(t *testing.T) {
@@ -166,7 +168,8 @@ func TestVerificationEventHandler_CreateVerificationEvent_InvalidJSON(t *testing
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	// Refused before the body is parsed.
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 func TestVerificationEventHandler_CreateVerificationEvent_InvalidAgentID(t *testing.T) {
@@ -182,7 +185,8 @@ func TestVerificationEventHandler_CreateVerificationEvent_InvalidAgentID(t *test
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	// Refused before the body is parsed.
+	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
 // ===========================

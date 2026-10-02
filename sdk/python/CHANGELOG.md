@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The "SDK REFRESH TOKEN REJECTED" banner gives the fix that matches the stored credential. A credential
+  written by `aim-sdk login` (it carries `accessToken` and `organizationId`, which a dashboard SDK download
+  never does) is told to sign in again with `aim-sdk login --url <server> --force`, which replaces the file;
+  its causes now include the sign-in reaching the server's maximum session age. It used to be told to
+  `rm` the file and download a fresh SDK. A downloaded credential keeps the download steps, with signing
+  in as the alternative. Every SDK error that named the dashboard page "Settings → SDK Downloads" now names
+  the page that exists, Developers, then SDK & docs, and the two agent-registration errors raised after a
+  refused token give the same per-credential fix.
 - **Every entry point now reports a blocked action before raising.** In 2.0.0 only `@aim_verify` and its four
   convenience wrappers sent the execution report on the blocked path; `perform_action` (the decorator the README
   Quick start teaches), `track_action`, `require_approval` and the LangChain `aim_verify` raised the denial without
