@@ -39,8 +39,30 @@ func (r *recordingEventRepo) Create(e *domain.VerificationEvent) error {
 // recordingAgentRepo serves a fixed set of agents and counts lookups.
 type recordingAgentRepo struct {
 	domain.AgentRepository
-	agents  map[uuid.UUID]*domain.Agent
-	lookups int
+	agents       map[uuid.UUID]*domain.Agent
+	lookups      int
+	scoreUpdates []float64
+}
+
+func (r *recordingAgentRepo) UpdateTrustScore(id uuid.UUID, newScore float64) error {
+	r.scoreUpdates = append(r.scoreUpdates, newScore)
+	return nil
+}
+
+// recordingAlertRepo records every alert drift detection writes.
+type recordingAlertRepo struct {
+	domain.AlertRepository
+	created []*domain.Alert
+}
+
+func (r *recordingAlertRepo) Create(a *domain.Alert) error {
+	r.created = append(r.created, a)
+	return nil
+}
+
+// recordingMCPServerRepo is the handler's MCP server repository; this route calls none of its methods.
+type recordingMCPServerRepo struct {
+	domain.MCPServerRepository
 }
 
 func (r *recordingAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
@@ -54,6 +76,7 @@ func (r *recordingAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
 type createEventFixture struct {
 	events *recordingEventRepo
 	agents *recordingAgentRepo
+	alerts *recordingAlertRepo
 	h      *VerificationEventHandler
 }
 
@@ -64,8 +87,13 @@ func newCreateEventFixture(agents ...*domain.Agent) *createEventFixture {
 	}
 	events := &recordingEventRepo{}
 	agentRepo := &recordingAgentRepo{agents: byID}
-	svc := application.NewVerificationEventService(events, agentRepo, nil)
-	return &createEventFixture{events: events, agents: agentRepo, h: NewVerificationEventHandler(svc, agentRepo, nil)}
+	// Every collaborator the production constructors receive (cmd/server/main.go).
+	// None is nil, so the drift path (score update and alert) is measured.
+	alerts := &recordingAlertRepo{}
+	drift := application.NewDriftDetectionService(agentRepo, alerts)
+	svc := application.NewVerificationEventService(events, agentRepo, drift)
+	h := NewVerificationEventHandler(svc, agentRepo, &recordingMCPServerRepo{})
+	return &createEventFixture{events: events, agents: agentRepo, alerts: alerts, h: h}
 }
 
 // callerContext stands in for AuthMiddleware: organization, user and role are
@@ -114,6 +142,8 @@ func assertCreateRefused(t *testing.T, f *createEventFixture, res createEventRes
 	assert.Equal(t, "verificationEventWriteNotAccepted", res.body["code"], "response: %s", res.raw)
 	assert.Empty(t, f.events.created, "no verification-event row may be written")
 	assert.Zero(t, f.agents.lookups, "the refusal must not depend on, or reveal, whether the agent exists")
+	assert.Empty(t, f.agents.scoreUpdates, "no trust score may be updated")
+	assert.Empty(t, f.alerts.created, "no alert may be written")
 	for _, key := range []string{"id", "agentId", "agentName", "trustScore", "organizationId", "status", "result", "signature", "publicKey", "confidence"} {
 		assert.NotContains(t, res.body, key, "response must not carry %q: %s", key, res.raw)
 	}
