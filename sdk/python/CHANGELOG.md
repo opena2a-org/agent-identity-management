@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk login` checks `--url` before touching the network. An empty value or a string that is not an http(s)
+  URL with a host now fails at once with `Error: --url ... is not an http(s) URL` (or `is empty`, `has no host`)
+  and an example; it used to reach the reachability probe and report `could not reach the AIM server ... no HTTP
+  response within 5s`, a network failure that never happened. An unreachable but well-formed URL still fails
+  within the probe bound with the reachability message (#408).
+
 - **Every entry point now reports a blocked action before raising.** In 2.0.0 only `@aim_verify` and its four
   convenience wrappers sent the execution report on the blocked path; `perform_action` (the decorator the README
   Quick start teaches), `track_action`, `require_approval` and the LangChain `aim_verify` raised the denial without
