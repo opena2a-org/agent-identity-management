@@ -83,13 +83,13 @@ app.get('/api/profile', (req, res) => {
   res.json({ agentId, trustScore });
 });
 
-// Optional: map SDK errors thrown in later handlers to HTTP responses
-// (ActionDeniedError -> 403, AuthenticationError -> 401). aimErrorHandler IS
-// the four-argument handler — pass it to app.use, do not call it.
+// Optional: answer SDK errors as JSON (ActionDeniedError -> 403,
+// AuthenticationError -> 401, any other SDK error -> its status or 500).
+// aimErrorHandler IS the four-argument handler — pass it to app.use, do not call it.
 app.use(aimErrorHandler);
 ```
 
-The middleware authenticates to AIM as a registered agent. `apiKey` alone does not give it an identity: set `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` in the environment (all four; `loadCredentialsFromEnv()` returns `null` when any is missing, and when only some are set it warns naming the missing variable(s)). Without them every verified route answers 401 and AIM is never contacted ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)). `aimErrorHandler` answers denial and authentication errors as JSON; other SDK errors, including an upstream 5xx, are passed to Express's default handler, which renders a stack trace outside `NODE_ENV=production` ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)).
+The middleware authenticates to AIM as a registered agent. `apiKey` alone does not give it an identity: set `AIM_AGENT_ID`, `AIM_PRIVATE_KEY`, `AIM_PUBLIC_KEY` and `AIM_ORGANIZATION_ID` in the environment (all four; `loadCredentialsFromEnv()` returns `null` when any is missing, and when only some are set it warns naming the missing variable(s)). Without them every verified route answers 401 and AIM is never contacted ([#449](https://github.com/opena2a-org/agent-identity-management/issues/449)). `aimErrorHandler` answers every SDK error as JSON. Denials and authentication failures get the bodies `verifyAction` sends. Any other SDK error, including an upstream 5xx or a network failure, gets the shape the Fastify plugin gives it, for example `{"statusCode":500,"code":"API_ERROR","error":"Internal Server Error","message":"..."}`, with no stack trace ([#450](https://github.com/opena2a-org/agent-identity-management/issues/450)). Errors that did not come from the SDK are passed on to `next(error)` unchanged.
 
 ## Fastify Integration
 
