@@ -945,3 +945,20 @@ func TestVerificationHandler_getOrgRepo_NilInterfaceReturnsNil(t *testing.T) {
 	result := handler.getOrgRepo()
 	assert.Nil(t, result)
 }
+
+// Issue #380: every capability verification was recorded as "identity"
+// because the type was guessed from the capability name, so a denied
+// out-of-grant action read as a failed identity check on the timeline.
+func TestVerificationTypeForRequest_CapabilityRequestsAreCapabilityChecks(t *testing.T) {
+	for _, capability := range []string{"http:post", "web:read", "fs:read", "shell:exec", "db:read", "permission:grant", "capability:list"} {
+		t.Run(capability, func(t *testing.T) {
+			got := verificationTypeForRequest(VerificationRequest{Capability: capability})
+			assert.Equal(t, domain.VerificationTypeCapability, got)
+		})
+	}
+}
+
+func TestVerificationTypeForRequest_NoCapabilityIsIdentity(t *testing.T) {
+	assert.Equal(t, domain.VerificationTypeIdentity, verificationTypeForRequest(VerificationRequest{}))
+	assert.Equal(t, domain.VerificationTypeIdentity, verificationTypeForRequest(VerificationRequest{Capability: "  "}))
+}
