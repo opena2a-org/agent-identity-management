@@ -9,6 +9,10 @@ name: aim-otel-demo
 # stack is running on the host, point the backend at the same port via
 # OTEL_EXPORTER_OTLP_ENDPOINT (default localhost:4317).
 #
+# Container names take AIM_OTEL_CONTAINER_PREFIX (default "aim"), so the smoke
+# scripts can boot their own copy under their own project without colliding
+# with this one.
+#
 # All host ports are env-overridable. On a busy dev machine, copy
 # env.example to .env and pick free ports first:
 #   for p in 4317 4318 3200 9090 3100 3001; do lsof -i :$p && echo "BUSY $p"; done
@@ -16,7 +20,7 @@ name: aim-otel-demo
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.150.1
-    container_name: aim-otel-collector
+    container_name: ${AIM_OTEL_CONTAINER_PREFIX:-aim}-otel-collector
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
@@ -32,7 +36,7 @@ services:
 
   tempo:
     image: grafana/tempo:2.7.0
-    container_name: aim-tempo
+    container_name: ${AIM_OTEL_CONTAINER_PREFIX:-aim}-tempo
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
@@ -44,7 +48,7 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.11.3
-    container_name: aim-prometheus
+    container_name: ${AIM_OTEL_CONTAINER_PREFIX:-aim}-prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--web.enable-otlp-receiver"
@@ -58,7 +62,7 @@ services:
 
   loki:
     image: grafana/loki:3.3.0
-    container_name: aim-loki
+    container_name: ${AIM_OTEL_CONTAINER_PREFIX:-aim}-loki
     command: ["-config.file=/etc/loki/loki-config.yaml"]
     volumes:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
@@ -69,7 +73,7 @@ services:
 
   grafana:
     image: grafana/grafana:11.4.0
-    container_name: aim-grafana
+    container_name: ${AIM_OTEL_CONTAINER_PREFIX:-aim}-grafana
     volumes:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro

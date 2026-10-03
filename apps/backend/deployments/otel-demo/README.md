@@ -44,14 +44,20 @@ orphan method labels.
 ./smoke-test.sh
 ```
 
-This boots the stack, sends one trace/metric/log, verifies each landed in its
-backend, and prints `PASS` / `FAIL`. To change ports, copy `env.example` to
+This boots its own copy of the stack under a per-run compose project, sends
+one trace/metric/log, verifies each landed in its backend, prints `PASS` /
+`FAIL`, and removes that project with its volumes on exit. A stack you started
+with `docker compose up -d` is never stopped or removed; if it holds the ports,
+the smoke test says so and exits 1. To change ports, copy `env.example` to
 `.env` first. `gen-signal.sh` is the standalone signal generator the smoke test
 uses; run it directly against a collector with
 `./gen-signal.sh <otlp-grpc-port>`.
 
-Open Grafana (default `http://localhost:3000`) and inspect the `fga.authorize`
-trace in Tempo to see the eight attributes on the span.
+To look at the signals afterwards, run `KEEP_STACKS=1 ./smoke-test.sh` (it
+prints the command that removes the stack), or `docker compose up -d` and send
+one with `./gen-signal.sh`. Open Grafana (default `http://localhost:3001`) and
+inspect the `fga.authorize` trace in Tempo to see the eight attributes on the
+span.
 
 ## Notes
 

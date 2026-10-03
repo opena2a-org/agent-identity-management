@@ -15,10 +15,11 @@
 #
 # What this script does, in order:
 #   1. Pre-flight: docker, curl, jq, go on PATH.
-#   2. Boot a throwaway Postgres container (aim-smoke-postgres) on
+#   2. Boot a throwaway Postgres container (<project>-postgres) on
 #      $SMOKE_POSTGRES_PORT (default 55432). Wait on pg_isready.
 #   3. Boot the OTel demo stack (collector + Tempo + Prometheus + Loki +
-#      Grafana) by reusing the existing docker-compose.yml. Wait on /ready.
+#      Grafana) from the existing docker-compose.yml under this run's own
+#      compose project. Wait on /ready.
 #   4. Build the backend binary and run it in the background on
 #      $SMOKE_BACKEND_PORT (default 18080), pointing at the throwaway
 #      Postgres + OTLP collector. Wait on /health.
@@ -29,8 +30,14 @@
 #      shape (outcome present, not "ERROR").
 #   7. Verify the trace lands in Tempo with span name fga.authorize plus at
 #      least one fga.* child.
-#   8. Tear down: kill backend, stop+rm throwaway Postgres, docker compose
-#      down the OTel stack.
+#   8. Tear down: kill backend, remove the throwaway Postgres, take down
+#      this run's compose project with its volumes.
+#
+# Each run owns one compose project (aim-otel-smoke-<time>-<pid>, with
+# container names to match) and one Postgres container named after it, and
+# removes only those. A stack or container this run did not start is never
+# stopped or removed; KEEP_STACKS=1 leaves this run's own up and prints the
+# commands that remove it.
 #
 # Run from this directory:   ./smoke-backend.sh
 #
@@ -64,7 +71,12 @@ GRAFANA_PORT="${GRAFANA_PORT:-3001}"
 # with a user's long-running aim-backend / aim-postgres.
 SMOKE_BACKEND_PORT="${SMOKE_BACKEND_PORT:-18080}"
 SMOKE_POSTGRES_PORT="${SMOKE_POSTGRES_PORT:-55432}"
-SMOKE_PG_CONTAINER="${SMOKE_PG_CONTAINER:-aim-smoke-postgres}"
+# One compose project per run, with container names to match, so this script
+# only ever stops or removes what it started itself.
+SMOKE_PROJECT="aim-otel-smoke-$(date +%s)-$$"
+export AIM_OTEL_CONTAINER_PREFIX="$SMOKE_PROJECT"
+compose() { docker compose -p "$SMOKE_PROJECT" "$@"; }
+SMOKE_PG_CONTAINER="${SMOKE_PG_CONTAINER:-${SMOKE_PROJECT}-postgres}"
 SMOKE_PG_PASSWORD="${SMOKE_PG_PASSWORD:-smoke_postgres_password}"
 SMOKE_PG_DB="${SMOKE_PG_DB:-identity}"
 
@@ -111,6 +123,7 @@ done
 # Cleanup function — installed BEFORE we start spinning up resources so that
 # a fail-fast in a later step still tears things down cleanly.
 BACKEND_PID=""
+PG_STARTED=0
 BACKEND_BIN="$DEMO_DIR/.smoke-backend.bin"
 BACKEND_LOG="$DEMO_DIR/.smoke-backend.log"
 cleanup() {
@@ -119,22 +132,31 @@ cleanup() {
         wait "$BACKEND_PID" 2>/dev/null || true
     fi
     rm -f "$BACKEND_BIN" "${BACKEND_BIN}.bootstrap"
-    if [ "${KEEP_STACKS:-0}" != "1" ]; then
-        docker compose down --remove-orphans >/dev/null 2>&1 || true
-        docker rm -f "$SMOKE_PG_CONTAINER" >/dev/null 2>&1 || true
+    if [ "${KEEP_STACKS:-0}" = "1" ]; then
+        echo "    KEEP_STACKS=1: stacks left up. Remove them with:"
+        echo "      docker compose -p ${SMOKE_PROJECT} down -v"
+        [ "$PG_STARTED" = "1" ] && echo "      docker rm -f -v ${SMOKE_PG_CONTAINER}"
+        return 0
+    fi
+    compose down -v --remove-orphans >/dev/null 2>&1 || true
+    # Only a container this run started; a name that was already taken made
+    # docker run fail, and that container belongs to someone else.
+    if [ "$PG_STARTED" = "1" ]; then
+        docker rm -f -v "$SMOKE_PG_CONTAINER" >/dev/null 2>&1 || true
     fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM
 
 # 2. Throwaway Postgres.
 echo
 echo "==> [2/8] Throwaway Postgres"
-docker rm -f "$SMOKE_PG_CONTAINER" >/dev/null 2>&1 || true
 docker run -d --name "$SMOKE_PG_CONTAINER" \
     -e POSTGRES_PASSWORD="$SMOKE_PG_PASSWORD" \
     -e POSTGRES_DB="$SMOKE_PG_DB" \
     -p "127.0.0.1:${SMOKE_POSTGRES_PORT}:5432" \
-    timescale/timescaledb:latest-pg16 >/dev/null || { echo "FAIL: docker run postgres"; exit 2; }
+    timescale/timescaledb:latest-pg16 >/dev/null || { echo "FAIL: docker run postgres (is the name ${SMOKE_PG_CONTAINER} or port ${SMOKE_POSTGRES_PORT} taken?)"; exit 2; }
+PG_STARTED=1
 attempt=0
 while [ $attempt -lt 30 ]; do
     if pg_isready -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" >/dev/null 2>&1; then
@@ -151,11 +173,13 @@ fi
 # 3. OTel demo stack.
 echo
 echo "==> [3/8] OTel demo stack"
-docker compose down --remove-orphans >/dev/null 2>&1 || true
-for c in aim-otel-collector aim-tempo aim-loki aim-prometheus aim-grafana; do
-    docker rm -f "$c" >/dev/null 2>&1 || true
-done
-docker compose up -d 2>&1 | tail -5 || { echo "FAIL: otel stack compose up"; exit 2; }
+echo "    project ${SMOKE_PROJECT}"
+compose up -d 2>&1 | tail -5 || {
+    echo "FAIL: otel stack compose up. If the aim-otel-demo stack is running, stop it"
+    echo "      with 'docker compose stop' in this directory (keeps its data), or copy"
+    echo "      env.example to .env and pick free ports."
+    exit 2
+}
 
 wait_http() {
     local name="$1" url="$2" max=60 a=0
