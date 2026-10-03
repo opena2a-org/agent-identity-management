@@ -38,6 +38,8 @@ def get_customer(customer_id):
 
 `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
 
+A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
+
 Now call something the agent was not granted. `my-first-agent` holds `db:read` only:
 
 ```python
@@ -56,7 +58,7 @@ Capability 'db:write' pending admin approval (strict mode)
 aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
 ```
 
-Output copied from aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10): the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. Two things a new agent meets first, also measured on that stack: an agent starts `pending` and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard, and an `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+Output copied from aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. Two things a new agent meets first, also measured on that stack: an agent starts `pending` and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard, and an `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
 
 New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
 
@@ -64,7 +66,7 @@ Auditing an existing codebase instead of integrating? The [opena2a CLI](#operati
 
 ## See it work
 
-The two calls above are the whole model: every decorated call is checked against the agent's grant and logged; a capability the agent was not granted is refused before the function body executes, with the reason. Nothing in your code changes between the two, only the grant.
+The two calls above are the whole model: every decorated call is checked against the agent's grant and logged; in strict mode a capability the agent was not granted is refused before the function body executes, with the reason. Nothing in your code changes between the two, only the grant.
 
 The agent's audit log in the dashboard records each decision: the denied `db:write` above appears with `denialReason` set to the same text, the capability, the risk level and the time (that row was read back through the API on the measured run). Open `http://localhost:3000` (self-hosted) or the AIM Cloud dashboard, then Agents, then your agent, then its activity. To permit `db:write`, grant it to the agent there.
 
