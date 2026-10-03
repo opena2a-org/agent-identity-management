@@ -115,6 +115,13 @@ sdk-page
 *-tab
 *-state
 *-final
+
+# Hand-made backup siblings of source files (page.tsx.bak and the like): stale
+# copies read as live code. Guarded by apps/web/tracked-backup-siblings.test.ts.
+*.bak
+*.bkp
+*.final
+*.fmt
 apps/backend/internal/interfaces/http/middleware/request_logger.go
 test_mcp_server.py
 apps/backend/aim-server
