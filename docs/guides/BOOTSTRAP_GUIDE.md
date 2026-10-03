@@ -115,7 +115,7 @@ Agent Identity Management - Initial Setup
    Email:    admin@company.com
    Password: SecurePassword123!
 
-🌐 You can now log in at: http://localhost:3000/login
+You can now log in at: http://localhost:3000/auth/login
 
 ⚠️  IMPORTANT: Please change the admin password after first login!
 ```
@@ -129,7 +129,7 @@ go run cmd/server/main.go
 
 ### Step 4: Login
 
-1. Navigate to `http://localhost:3000/login`
+1. Navigate to `http://localhost:3000/auth/login`
 2. Enter admin credentials
 3. Change password immediately
 
