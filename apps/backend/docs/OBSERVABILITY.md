@@ -13,9 +13,11 @@ cd apps/backend/deployments/otel-demo
 ./smoke-test.sh
 ```
 
-Expected output ends with `==> PASS: all three signals landed end-to-end` plus three clickable Grafana/Prometheus URLs pointing at the verified signals. Runtime: 60-90s warm, 3-5 min on first run (image pulls).
+Expected output ends with `==> PASS: all three signals landed end-to-end`. Runtime: 60-90s warm, 3-5 min on first run (image pulls).
 
-The smoke test also handles port conflicts: if any of `4317 4318 3200 9090 3100 3001` are taken on your machine, it fails fast with a clear message and tells you to copy `env.example` to `.env` and pick free ports. See `docs/testing/release-smoke.md` for the full smoke-test contract.
+Each run boots its own compose project (`aim-otel-smoke-<time>-<pid>`, container names to match) and removes only that project, with its volumes, on exit. A demo stack you started yourself with `docker compose up -d` is never stopped or removed. To keep the run's stack up and get three clickable Grafana/Prometheus URLs pointing at the verified signals, run `KEEP_STACKS=1 ./smoke-test.sh`; the output then prints the `docker compose -p <project> down -v` that removes it.
+
+If any of `4317 4318 3200 9090 3100 3001` are taken on your machine (for example by a running demo stack), the smoke test fails fast with a clear message: stop the demo stack with `docker compose stop` (keeps its data), or copy `env.example` to `.env` and pick free ports. See `docs/testing/release-smoke.md` for the full smoke-test contract.
 
 ## Manual run
 

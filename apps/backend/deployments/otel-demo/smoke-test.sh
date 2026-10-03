@@ -12,8 +12,14 @@
 #        Loki: GET /loki/api/v1/query_range?query=... returns the log line
 #   5. Print a one-line PASS / FAIL.
 #
+# Each run boots its own compose project (aim-otel-smoke-<time>-<pid>, with
+# container names to match) and takes down only that project on exit. A
+# stack you started yourself with `docker compose up -d` is never stopped or
+# removed; if it holds the ports, the run says so and exits 1.
+#
 # Run: ./smoke-test.sh
 # To use custom ports: copy env.example to .env first, then run.
+# To keep the stack up afterwards (for the Grafana links): KEEP_STACKS=1.
 #
 # Exit codes:
 #   0 = all signals verified end-to-end
@@ -45,37 +51,50 @@ echo "    Prometheus  : localhost:${PROMETHEUS_PORT}"
 echo "    Loki        : localhost:${LOKI_PORT}"
 echo "    Grafana     : localhost:${GRAFANA_PORT}"
 
-# 1. Pre-flight (port check happens AFTER cleanup so our own prior containers
-#    do not register as conflicts).
+# One compose project per run, with container names to match, so this script
+# only ever stops or removes what it started itself.
+SMOKE_PROJECT="aim-otel-smoke-$(date +%s)-$$"
+export AIM_OTEL_CONTAINER_PREFIX="$SMOKE_PROJECT"
+compose() { docker compose -p "$SMOKE_PROJECT" "$@"; }
+
+# 1. Pre-flight.
 echo
-echo "==> [1/5] Pre-flight checks + cleanup of prior runs"
+echo "==> [1/5] Pre-flight checks"
 command -v docker >/dev/null || { echo "FAIL: docker not on PATH"; exit 1; }
 command -v curl >/dev/null   || { echo "FAIL: curl not on PATH"; exit 1; }
-
-# Reap any prior aim-otel-demo containers (idempotent — even if compose can't
-# find them because the network was deleted, the named container survives).
-docker compose down --remove-orphans >/dev/null 2>&1 || true
-for c in aim-otel-collector aim-tempo aim-loki aim-prometheus aim-grafana; do
-    docker rm -f "$c" >/dev/null 2>&1 || true
-done
 
 conflicts=0
 for p in "$OTEL_GRPC_PORT" "$OTEL_HTTP_PORT" "$TEMPO_HTTP_PORT" "$PROMETHEUS_PORT" "$LOKI_PORT" "$GRAFANA_PORT"; do
     if lsof -i ":$p" -sTCP:LISTEN >/dev/null 2>&1; then
-        echo "    BUSY: port $p is already in use (by something other than this stack)"
+        echo "    BUSY: port $p is already in use"
         conflicts=$((conflicts+1))
     fi
 done
 if [ "$conflicts" -gt 0 ]; then
-    echo "FAIL: $conflicts port conflict(s). Copy env.example to .env and pick free ports."
+    echo "FAIL: $conflicts port conflict(s). If the aim-otel-demo stack is running, stop it"
+    echo "      with 'docker compose stop' in this directory (keeps its data), or copy"
+    echo "      env.example to .env and pick free ports."
     exit 1
 fi
-echo "    ports clear, prior runs cleaned up"
+echo "    ports clear"
+
+# Installed before anything is created, so a failure in any later step still
+# takes down this run's project, and only it.
+cleanup() {
+    if [ "${KEEP_STACKS:-0}" = "1" ]; then
+        echo "    KEEP_STACKS=1: stack left up. Remove it with:"
+        echo "      docker compose -p ${SMOKE_PROJECT} down -v"
+        return
+    fi
+    compose down -v --remove-orphans >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT; trap 'exit 143' TERM
 
 # 2. Boot stack
 echo
-echo "==> [2/5] docker compose up -d"
-docker compose up -d 2>&1 | tail -10 || { echo "FAIL: docker compose up failed"; exit 2; }
+echo "==> [2/5] docker compose up -d (project ${SMOKE_PROJECT})"
+compose up -d 2>&1 | tail -10 || { echo "FAIL: docker compose up failed"; exit 2; }
 
 # 3. Wait for services to be healthy.
 wait_http() {
@@ -168,6 +187,11 @@ fi
 
 echo
 echo "==> PASS: all three signals landed end-to-end"
+if [ "${KEEP_STACKS:-0}" != "1" ]; then
+    echo "    The stack is removed on exit. To open these signals in Grafana, rerun"
+    echo "    with KEEP_STACKS=1."
+    exit 0
+fi
 echo "    Trace : http://localhost:${GRAFANA_PORT}/explore?left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22queryType%22:%22traceql%22,%22query%22:%22${TRACE_ID}%22%7D%5D%7D"
 echo "    Metric: http://localhost:${PROMETHEUS_PORT}/graph?g0.expr=fga_decisions_total"
 echo "    Logs  : http://localhost:${GRAFANA_PORT}/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bservice_name%3D%5C%22aim-smoke-test%5C%22%7D%22%7D%5D%7D"

@@ -7,15 +7,20 @@
 set -euo pipefail
 
 OTEL_PORT="${1:-4317}"
+BACKEND_GOMOD="$(cd "$(dirname "$0")/../.." && pwd)/go.mod"
+[ -f "$BACKEND_GOMOD" ] || { echo "gen-signal: $BACKEND_GOMOD not found" >&2; exit 1; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# Stage a tiny module so the helper does not pollute the main go.mod.
-cat > "$TMP/go.mod" <<EOF
-module otelgen
-
-go 1.21
-EOF
+# Stage a tiny module so the helper does not pollute the main go.mod. Its
+# OpenTelemetry modules are pinned to the versions the backend builds with:
+# left to go mod tidy they resolve to the newest release, and a new release
+# of the log API stops this helper compiling between two runs.
+{
+    printf 'module otelgen\n\ngo 1.21\n\nrequire (\n'
+    awk '$1 ~ /^go\.opentelemetry\.io\// && $2 ~ /^v[0-9]/ { print "\t" $1 " " $2 }' "$BACKEND_GOMOD"
+    printf ')\n'
+} > "$TMP/go.mod"
 
 cat > "$TMP/main.go" <<'GOEOF'
 package main
