@@ -108,7 +108,7 @@ func TestSignIn_IssuesNoSessionCookie(t *testing.T) {
 			public := NewPublicRegistrationHandler(application.NewRegistrationService(refusalRegistrationRepo{}, users, nil, nil, nil), authService, jwtService)
 			app.Post("/api/v1/public/login", public.Login)
 			app.Post("/api/v1/public/change-password", public.ChangePassword)
-			local := NewAuthHandler(authService, jwtService, nil, application.NewAuditService(&familyAuditRepo{}))
+			local := NewAuthHandler(authService, jwtService, nil, application.NewAuditService(&familyAuditRepo{}), nil)
 			app.Post("/api/v1/auth/login/local", local.LocalLogin)
 
 			req := httptest.NewRequest("POST", row.route, strings.NewReader(row.body()))

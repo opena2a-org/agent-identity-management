@@ -36,7 +36,7 @@ func newAuthTestApp() *fiber.App {
 // ===========================
 
 func TestNewAuthHandler_NilDeps(t *testing.T) {
-	handler := NewAuthHandler(nil, nil, nil, nil)
+	handler := NewAuthHandler(nil, nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

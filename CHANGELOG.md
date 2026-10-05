@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a logged-out SDK-download token no longer shows as active in the SDK token list
+
+- `POST /api/v1/auth/logout` with an SDK-download refresh token in the body put the token on the denylist, so the
+  refresh route refused it, but left its `sdk_tokens` row active: `GET /api/v1/users/me/sdk-tokens` and the dashboard
+  kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
+  already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
+  only when the row is revoked too.
+
 ### Fixed — a trust-score policy is evaluated at the threshold it is seeded with
 
 - The default `trust_score_low` policies were seeded with their threshold where the evaluator does not read it.

@@ -1139,7 +1139,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Auth,
 			jwtService,
 			repos.Organization,
-			services.Audit, // ✅ For audit logging login/logout events
+			services.Audit,    // ✅ For audit logging login/logout events
+			services.SDKToken, // retires an SDK-download token's sdk_tokens row at logout
 		),
 		Agent: handlers.NewAgentHandler(
 			services.Agent,
