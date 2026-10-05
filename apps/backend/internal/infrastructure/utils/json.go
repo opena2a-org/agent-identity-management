@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 )
 
@@ -47,6 +48,35 @@ func normalizeKeys(data interface{}) interface{} {
 	default:
 		return data
 	}
+}
+
+// CamelCaseKeys returns a copy of m with every top-level key converted from
+// snake_case to camelCase. When a key is stored in both forms, the camelCase
+// one wins; other collisions resolve in sorted key order. A nil map stays nil.
+func CamelCaseKeys(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	out := make(map[string]interface{}, len(m))
+	for _, key := range keys {
+		camelKey := snakeToCamel(key)
+		if camelKey != key {
+			if _, stored := m[camelKey]; stored {
+				continue
+			}
+			if _, taken := out[camelKey]; taken {
+				continue
+			}
+		}
+		out[camelKey] = m[key]
+	}
+	return out
 }
 
 // snakeToCamel converts snake_case to camelCase
