@@ -11,6 +11,56 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — the dashboard lists an organization's audit records
+
+- `/dashboard/admin/audit-logs` lists the records `GET /api/v1/admin/audit-logs` returns, newest first, 50 per page.
+  Each row shows the time in UTC, the actor, the action and the target (resource type and ID). The page is reached
+  from the Organization tabs and is open to admins only, as the route is. No row shows a network address, a user
+  agent or metadata.
+- A user act names the user and an agent act names the agent. A record with neither says "No user or agent
+  recorded" instead of attributing the act to the system.
+- `GET /api/v1/admin/audit-logs` without a `user_id` filter, and its JSON export, now send `userName` and
+  `agentName` with each record that has a user or an agent, as the per-agent and per-resource audit routes already
+  do. The CSV export is unchanged.
+
+### Fixed — secrets resolve encrypts the credential to the agent's registered key and answers a signed request once
+
+- `POST /api/v1/secrets/resolve` encrypts the credential to the agent's registered Ed25519 key, however the agent
+  authenticated (ATC or signed request). A request whose `agentPublicKey` is not that key is refused with 403 before
+  the credential is read and before its nonce is spent.
+- `nonce` must be `<RFC 3339 time>:<random part>`, the form both SDKs send, with a time no more than 30 seconds from
+  the server clock in either direction. Any other nonce is refused with 403.
+- Each signed request (namespace, operation and nonce) is answered once. It is admitted through the same single
+  statement and table, `agent_request_nonces`, as signed action-request statements, and the same purge deletes it. A
+  repeat is refused with 403. When the check cannot run, including before the first purge after start, the answer is
+  503 and nothing is resolved.
+
+### Added — action verification accepts a signed statement with a nonce and a 30-second window
+
+- `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications` accept a second body form: exactly
+  `signedBytes`, `signature` and `publicKey`, each unpadded base64url. `signedBytes` is the DSSE v1
+  pre-authentication encoding of the payload type `application/vnd.opena2a.action-request.v1+json` and a JSON
+  payload with `action_type`, `agent_id`, `resource` (a string or `null`), `timestamp` (RFC 3339 in UTC with `Z`)
+  and `nonce` (16 random bytes), and optionally `context`, `delegation_digests` and `risk_level`. The Ed25519
+  signature is checked over the bytes as received, and the action is decided and recorded from the signed payload.
+  Numbers in `context` are recorded with the digits they were signed with.
+- A statement is accepted only when its `timestamp` is within 30 seconds of the database clock, and an agent's nonce
+  is accepted once. The time check and the nonce insert are one database statement, shared by both routes and every
+  replica: a statement accepted on one route is refused on the other. The window is a code constant.
+- Refusals carry a `reasonCode`. The shape checks answer 400 `invalidRequest` or `nonceRequired`, or 422
+  `limitExceeded` for `signedBytes` over 65,536 bytes or a payload nested deeper than 32 levels. An unknown agent and
+  a key that is not the agent's registered key get the same 401 `agentKeyNotRecognized` body. The others are 401
+  `signatureInvalid`, `hybridSignatureRequired`, `timestampOutsideWindow`, `nonceReused` and `agentStatusDenied`,
+  and 503 `freshnessCheckUnavailable` when the database cannot run the check. A refused statement writes no
+  verification event, audit entry or alert.
+- A statement from a suspended or revoked agent whose key and signature check out still spends its nonce. To stop a
+  key someone else holds from writing nonces, rotate or remove the key, or delete the agent.
+- Accepted nonces are kept in a new table, `agent_request_nonces` (migration 116), until 31 seconds after their
+  window ends. A purge deletes them once at start and then every 60 seconds; until a purge has completed, and
+  whenever none has for two intervals, every statement is refused with 503 and nothing is stored.
+- A request in the original form is handled as before. One that also carries a top-level `nonce` or
+  `delegationDigests` is refused with 400: those members are checked only inside a signed statement.
+
 ### Fixed — sample output in the docs shows a placeholder account
 
 - The Azure CLI sample in `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` showed the signed-in account as a real
