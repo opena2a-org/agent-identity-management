@@ -545,10 +545,18 @@ export default function AgentDetailsPage({
                 <Edit className="h-4 w-4 mr-1" /> Edit
               </Button>
             )}
-            {canManage && (
+            {/* A verified agent has nothing left to verify: show the state as a
+                status badge, not as a disabled action. */}
+            {canManage && isVerified && (
+              <Badge variant="success" className="self-center">
+                <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                Verified
+              </Badge>
+            )}
+            {canManage && !isVerified && (
               <Button
                 onClick={handleVerify}
-                disabled={verifying || isVerified}
+                disabled={verifying}
                 className="rounded-pill"
               >
                 {verifying ? (
@@ -558,8 +566,7 @@ export default function AgentDetailsPage({
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="h-4 w-4 mr-1" />{" "}
-                    {isVerified ? "Verified" : "Verify agent"}
+                    <CheckCircle className="h-4 w-4 mr-1" /> Verify agent
                   </>
                 )}
               </Button>
