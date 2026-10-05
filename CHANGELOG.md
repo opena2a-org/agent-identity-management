@@ -30,6 +30,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   so every credential issued this way failed schema validation in a conformance verifier. AIM now sends the bare
   hex digest. A credential issued before this change keeps its prefixed value until it is reissued or expires.
 
+### Fixed — the backend image stamps the version and commit that `/health/ready` reports
+
+- `GET /health/ready` reports `commit` and `version` from two values stamped into the server at build time. The image
+  Dockerfile, `infrastructure/docker/Dockerfile.backend`, stamped a name the server does not declare and no commit, and
+  the Go linker drops such a stamp without an error, so every image built from it reported `"commit": null` and
+  `"version": null`. The build now stamps `version` from the `VERSION` build argument and `commit` from the
+  `COMMIT` build argument: `docker build --build-arg COMMIT=$(git rev-parse HEAD) ...`. A build that passes no
+  40-character commit SHA still reports `"commit": null`.
+- `sdk/typescript/tests/dockerfile-backend-build-stamp.test.ts` fails when the Dockerfile the image workflow builds
+  stamps a name the server does not declare, or does not stamp both values from those two build arguments.
+
 ### Added — refused signed agent requests are counted and logged by reason
 
 - A signed agent request (Ed25519, ML-DSA or hybrid) that the request-signature middleware refused got a 401, or a 400
