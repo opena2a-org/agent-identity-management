@@ -38,6 +38,16 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w" \
     -o /bin/aim-bootstrap ./cmd/bootstrap
 
+# Third-party license notices. Every library linked into the three binaries is
+# redistributed in this image, so the image carries each one's license text, a
+# pointer to its source and, for the MPL-2.0 libraries, the source itself. The
+# script installs go-licenses at this pin, writes /third_party and verifies it;
+# any failure fails the build. The pin must equal the one
+# .github/workflows/security.yml gives the license gate.
+ARG GO_LICENSES_VERSION=v2.0.1
+ARG GO_LICENSES_SUM=h1:ti+9bi5o7DKbeeg5eBb/uZTgsaPNoJaLCh93cRcXsW8=
+RUN CGO_ENABLED=0 sh scripts/third-party-notices.sh /third_party
+
 # Runtime stage
 FROM alpine:3.21@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
 
@@ -56,6 +66,9 @@ COPY apps/backend/migrations ./migrations
 
 # Copy SDK directory
 COPY sdk ./sdk
+
+# Third-party license notices: /app/third_party/README says what is there
+COPY --from=builder /third_party ./third_party
 
 # Ensure correct ownership
 RUN chown -R appuser:appgroup /app
