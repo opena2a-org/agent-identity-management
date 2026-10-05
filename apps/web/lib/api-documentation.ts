@@ -325,21 +325,27 @@ export const apiDocumentation: EndpointCategory[] = [
         requestSchema: {
           type: "object",
           properties: {
-            token: {
+            resetToken: {
               type: "string",
               description: "Reset token from email",
               required: true,
             },
             newPassword: {
               type: "string",
-              description: "New password",
+              description: "New password (min 8 chars)",
+              required: true,
+            },
+            confirmPassword: {
+              type: "string",
+              description: "New password again; must equal newPassword",
               required: true,
             },
           },
         },
         example: `{
-  "token": "abc123-reset-token-def456",
-  "newPassword": "NewPassword789!"
+  "resetToken": "abc123-reset-token-def456",
+  "newPassword": "NewPassword789!",
+  "confirmPassword": "NewPassword789!"
 }`,
       },
     ],
