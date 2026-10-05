@@ -89,6 +89,70 @@ func TestNewKeyVaultFromEnv_DevelopmentGeneratesKey(t *testing.T) {
 	assert.Len(t, kv.masterKey, 32)
 }
 
+// TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment covers every
+// ENVIRONMENT value a deployment can carry when KEYVAULT_MASTER_KEY is missing.
+// A generated key changes at every start, so the server signing key changes
+// and stored agent private keys can no longer be decrypted after a restart.
+// Only an explicit development or test setting may accept that; an unset,
+// misspelled or unrecognised value refuses to start.
+func TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment(t *testing.T) {
+	cases := []struct {
+		name        string
+		environment string
+		unset       bool
+		wantVault   bool
+	}{
+		{name: "unset", unset: true},
+		{name: "empty", environment: ""},
+		{name: "prod", environment: "prod"},
+		{name: "production", environment: "production"},
+		{name: "staging", environment: "staging"},
+		{name: "capitalised development", environment: "Development"},
+		{name: "development", environment: "development", wantVault: true},
+		{name: "test", environment: "test", wantVault: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("KEYVAULT_MASTER_KEY", "")
+			t.Setenv("ENVIRONMENT", tc.environment)
+			if tc.unset {
+				require.NoError(t, os.Unsetenv("ENVIRONMENT"))
+			}
+
+			first, err := NewKeyVaultFromEnv()
+			if !tc.wantVault {
+				require.Error(t, err)
+				assert.Nil(t, first)
+				assert.Contains(t, err.Error(), "KEYVAULT_MASTER_KEY")
+				assert.Contains(t, err.Error(), "ENVIRONMENT=development")
+				return
+			}
+			require.NoError(t, err)
+			second, err := NewKeyVaultFromEnv()
+			require.NoError(t, err)
+			assert.NotEqual(t, first.GetServerSigningPublicKey(), second.GetServerSigningPublicKey(),
+				"a generated master key is ephemeral by design")
+		})
+	}
+}
+
+// TestNewKeyVaultFromEnv_ErrorNeverContainsKey keeps a rejected master key
+// value out of the startup error, which reaches the server log.
+func TestNewKeyVaultFromEnv_ErrorNeverContainsKey(t *testing.T) {
+	for _, value := range []string{
+		base64.StdEncoding.EncodeToString([]byte("sixteen-byte-key")),
+		"not-base64-but-secret-shaped-value",
+	} {
+		t.Setenv("KEYVAULT_MASTER_KEY", value)
+		t.Setenv("ENVIRONMENT", "production")
+
+		kv, err := NewKeyVaultFromEnv()
+		require.Error(t, err)
+		assert.Nil(t, kv)
+		assert.NotContains(t, err.Error(), value)
+	}
+}
+
 func TestEncryptPrivateKey_Success(t *testing.T) {
 	masterKey := generateTestMasterKey()
 	kv, err := NewKeyVault(masterKey)
