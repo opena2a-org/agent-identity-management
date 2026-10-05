@@ -53,6 +53,13 @@ public class AIMClient implements AutoCloseable {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final String VERIFICATIONS_PATH = "/api/v1/sdk-api/verifications/";
 
+    /**
+     * The outcomes the capability registration route answers with. "already_exists"
+     * is a capability the agent already holds; "pending" awaits admin approval.
+     */
+    private static final List<String> CAPABILITY_REGISTRATION_OUTCOMES =
+            Collections.unmodifiableList(Arrays.asList("granted", "already_exists", "pending"));
+
     // Retry configuration for enterprise reliability
     private static final int MAX_RETRIES = 3;
     private static final int INITIAL_BACKOFF_MS = 1000;
@@ -1523,28 +1530,26 @@ public class AIMClient implements AutoCloseable {
     /**
      * Register a new capability for this agent.
      * In MONITORING mode, capabilities are auto-granted.
-     * In STRICT mode, requires admin approval.
+     * In STRICT mode, a pending request awaits admin approval.
      *
      * @param capability  Capability to register (e.g., "db:write")
      * @param description Description of the capability
-     * @return Map containing registration result
+     * @return the registration outcome AIM answered with: "status" is "granted",
+     *         "pending" (with "requestId" when the request is new) or "already_exists"
+     * @throws AIMException if AIM refuses or fails the registration
      */
     public Map<String, Object> registerCapability(String capability, String description) {
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("capability", capability);
+            payload.put("capabilityType", capability);
             payload.put("description", description);
-
-            // Use SDK API endpoint for capability registration
-            String id = getAgentId();
-            String response = post("/api/v1/sdk-api/agents/" + id + "/capabilities/register", payload.toString());
-            return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+            return postCapabilityRegistration(capability, payload);
+        } catch (AIMException e) {
+            throw e;
         } catch (Exception e) {
             throw new AIMException("Failed to register capability: " + e.getMessage(), e);
         }
     }
-
-    // ==================== MCP SERVER METHODS ====================
 
     /**
      * Register an MCP server to this agent's mcp_servers list.
@@ -2042,7 +2047,10 @@ public class AIMClient implements AutoCloseable {
      * @param capabilityType The capability to register (e.g., "weather:check", "db:read")
      * @param description Optional description of what this capability does
      * @param riskLevel Risk level ("low", "medium", "high", "critical")
-     * @return Map containing registration result
+     * @return Map containing registration result; "status" is the outcome AIM answered
+     *         with: "granted", "pending" (with "requestId" when the request is new) or
+     *         "already_exists"
+     * @throws AIMException if AIM refuses or fails the registration, including a 404
      */
     public Map<String, Object> registerCapability(String capabilityType, String description, String riskLevel) {
         if (capabilityType == null || capabilityType.isEmpty()) {
@@ -2058,40 +2066,19 @@ public class AIMClient implements AutoCloseable {
             payload.put("description", description != null ? description : "Registered capability: " + capabilityType);
             payload.put("riskLevel", riskLevel);
 
-            String agentId = getAgentId();
-            String url = "/api/v1/sdk-api/agents/" + agentId + "/capabilities/register";
-            String response = post(url, payload.toString());
-            Map<String, Object> result = objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
+            Map<String, Object> result = postCapabilityRegistration(capabilityType, payload);
 
             // Build response
             Map<String, Object> returnResult = new HashMap<>();
             returnResult.put("success", true);
             returnResult.put("capabilityType", capabilityType);
-            returnResult.put("status", result.getOrDefault("status", "registered"));
+            returnResult.put("status", result.get("status"));
             returnResult.put("message", result.getOrDefault("message", "Capability '" + capabilityType + "' registered"));
             if (result.containsKey("requestId")) {
                 returnResult.put("requestId", result.get("requestId"));
             }
             return returnResult;
         } catch (AIMException e) {
-            // Handle 409 or already exists
-            if (e.getMessage().contains("409") || e.getMessage().toLowerCase().contains("already")) {
-                Map<String, Object> result = new HashMap<>();
-                result.put("success", true);
-                result.put("capabilityType", capabilityType);
-                result.put("status", "already_exists");
-                result.put("message", "Capability '" + capabilityType + "' already exists");
-                return result;
-            }
-            // Handle 404 - endpoint not available
-            if (e.getMessage().contains("404")) {
-                Map<String, Object> result = new HashMap<>();
-                result.put("success", true);
-                result.put("capabilityType", capabilityType);
-                result.put("status", "not_tracked");
-                result.put("message", "Capability registration not supported by server");
-                return result;
-            }
             throw e;
         } catch (Exception e) {
             logger.warn("Failed to register capability '{}': {}", capabilityType, e.getMessage());
@@ -2101,6 +2088,44 @@ public class AIMClient implements AutoCloseable {
             result.put("status", "error");
             result.put("message", e.getMessage());
             return result;
+        }
+    }
+
+    /**
+     * Posts one capability registration and returns the outcome AIM answered with.
+     *
+     * The registration route follows the organization's enforcement mode. It
+     * answers a new capability with 201 "granted" (monitoring mode) or 202
+     * "pending" with a requestId (strict mode), and a repeat with 409 carrying
+     * "already_exists" or "pending". Those 409 bodies are outcomes and are
+     * returned. Any other status, or a body without one of those outcomes, raises.
+     */
+    private Map<String, Object> postCapabilityRegistration(String capabilityType, ObjectNode payload) throws IOException {
+        Request request = new Request.Builder()
+                .url(aimUrl + "/api/v1/sdk-api/agents/" + getAgentId() + "/capabilities/register")
+                .post(RequestBody.create(payload.toString(), JSON))
+                .build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            int code = response.code();
+            String body = response.body() != null ? response.body().string() : "";
+            if (!response.isSuccessful() && code != 409) {
+                throw new AIMException("Failed to register capability '" + capabilityType
+                        + "': Request failed: " + code + " - " + body, "HTTP_ERROR", code);
+            }
+            Map<String, Object> answer;
+            try {
+                answer = objectMapper.readValue(body, new TypeReference<Map<String, Object>>() {});
+            } catch (IOException e) {
+                answer = null;
+            }
+            Object status = answer != null ? answer.get("status") : null;
+            if (!CAPABILITY_REGISTRATION_OUTCOMES.contains(status)) {
+                throw new AIMException("Failed to register capability '" + capabilityType
+                        + "': AIM answered " + code + " without a known outcome (status " + status + ")",
+                        "HTTP_ERROR", code);
+            }
+            return answer;
         }
     }
 
@@ -2413,55 +2438,89 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Report capabilities to AIM in bulk.
-     * Useful for declaring multiple capabilities at once.
+     * Report capabilities to AIM.
+     * Each distinct capability is registered once, one at a time and in the order it
+     * first appears, through the registration route that follows the organization's
+     * enforcement mode: in monitoring mode a capability is granted, in strict mode it
+     * stays pending until an administrator approves it.
      *
      * @param capabilities List of capability types to report
-     * @param scope        Optional scope information (source, detectedAt, etc.)
-     * @return Map with granted count and total count
+     * @return Map with "granted" (granted now or already held), "pending" (awaiting
+     *         approval), "total" (distinct capabilities) and "results" (one map per
+     *         distinct capability, in order, with "capabilityType", "status" ("granted",
+     *         "already_exists" or "pending"), "message" and, for a newly created pending
+     *         request, "requestId")
+     * @throws ConfigurationException if an entry is null or empty; nothing is sent
+     * @throws AIMException if AIM refuses or fails a registration, or answers without a
+     *         known outcome; the capabilities after it are not sent
      */
-    public Map<String, Object> reportCapabilities(List<String> capabilities, Map<String, Object> scope) {
-        if (capabilities == null || capabilities.isEmpty()) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("granted", 0);
-            result.put("total", 0);
-            return result;
+    public Map<String, Object> reportCapabilities(List<String> capabilities) {
+        Set<String> distinct = new LinkedHashSet<>();
+        if (capabilities != null) {
+            for (String capabilityType : capabilities) {
+                if (capabilityType == null || capabilityType.isEmpty()) {
+                    throw new ConfigurationException("reportCapabilities takes capability types as non-empty strings");
+                }
+                distinct.add(capabilityType);
+            }
         }
 
+        List<Map<String, Object>> results = new ArrayList<>();
         int grantedCount = 0;
-        int totalCount = capabilities.size();
+        int pendingCount = 0;
+        for (String capabilityType : distinct) {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("capabilityType", capabilityType);
 
-        for (String capabilityType : capabilities) {
+            Map<String, Object> answer;
             try {
-                ObjectNode payload = objectMapper.createObjectNode();
-                payload.put("capabilityType", capabilityType);
-                if (scope != null) {
-                    payload.set("scope", objectMapper.valueToTree(scope));
-                } else {
-                    ObjectNode defaultScope = objectMapper.createObjectNode();
-                    defaultScope.put("source", "java_sdk_auto_detection");
-                    defaultScope.put("detectedAt", Instant.now().toString());
-                    payload.set("scope", defaultScope);
-                }
+                answer = postCapabilityRegistration(capabilityType, payload);
+            } catch (IOException e) {
+                throw new AIMException("Failed to register capability '" + capabilityType + "': "
+                        + e.getMessage(), "NETWORK_ERROR", 0, e);
+            }
 
-                String agentId = getAgentId();
-                post("/api/v1/sdk-api/agents/" + agentId + "/capabilities", payload.toString());
+            String status = (String) answer.get("status");
+            Map<String, Object> outcome = new LinkedHashMap<>();
+            outcome.put("capabilityType", capabilityType);
+            outcome.put("status", status);
+            outcome.put("message", answer.getOrDefault("message", ""));
+            if ("pending".equals(status) && answer.get("requestId") != null) {
+                outcome.put("requestId", answer.get("requestId"));
+            }
+            results.add(outcome);
+
+            if ("pending".equals(status)) {
+                pendingCount++;
+            } else {
                 grantedCount++;
-            } catch (Exception e) {
-                // Capability might already exist - count as granted if duplicate
-                String errorStr = e.getMessage().toLowerCase();
-                if (errorStr.contains("duplicate") || errorStr.contains("already exists") ||
-                    errorStr.contains("unique constraint") || errorStr.contains("500")) {
-                    grantedCount++;
-                }
-                // Continue even if one capability fails
             }
         }
 
         Map<String, Object> result = new HashMap<>();
         result.put("granted", grantedCount);
-        result.put("total", totalCount);
+        result.put("pending", pendingCount);
+        result.put("total", distinct.size());
+        result.put("results", results);
         return result;
+    }
+
+    /**
+     * Report capabilities to AIM.
+     *
+     * @param capabilities List of capability types to report
+     * @param scope        Ignored; capability registration does not take a scope
+     * @return see {@link #reportCapabilities(List)}
+     * @deprecated {@code scope} is ignored and passing one logs a warning. Use
+     *             {@link #reportCapabilities(List)}.
+     */
+    @Deprecated
+    public Map<String, Object> reportCapabilities(List<String> capabilities, Map<String, Object> scope) {
+        if (scope != null) {
+            logger.warn("The scope argument of reportCapabilities is deprecated and is ignored: "
+                    + "capability registration does not take a scope.");
+        }
+        return reportCapabilities(capabilities);
     }
 
     /**

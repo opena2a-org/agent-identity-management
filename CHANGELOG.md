@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the Java SDK's `reportCapabilities` follows the enforcement mode and raises when a registration fails
+
+- What to check before upgrading: in strict mode a reported capability stays pending until an
+  administrator approves it, and the result counts it under `pending`, not `granted`. A
+  registration that AIM refuses or fails now throws `AIMException` with the HTTP status, and the
+  capabilities after it are not sent. Failures used to be swallowed, and one whose message
+  contained "500" was counted as granted.
+- `reportCapabilities` sends one `POST /api/v1/sdk-api/agents/{id}/capabilities/register` per
+  distinct capability, one at a time in the order each first appears, with the body
+  `{"capabilityType": ...}`, and reads the outcome AIM answers with. It used to post to
+  `/api/v1/sdk-api/agents/{id}/capabilities`.
+- The result keeps `granted` and `total` and adds `pending` and `results`. `granted` counts
+  capabilities granted now or already held, `pending` counts those awaiting approval, `total`
+  counts distinct capabilities, and `results` has one entry per capability with its `status`
+  (`granted`, `already_exists` or `pending`) and, for a new pending request, its `requestId`.
+- `reportCapabilities(List)` is new. `reportCapabilities(List, Map)` is deprecated: its `scope` is
+  ignored, and passing one logs a warning. A null or empty entry throws `ConfigurationException`
+  before anything is sent.
+- `registerCapability(String, String)` sends `capabilityType`. It sent `capability`, which the
+  route does not read, so every call was refused with 400.
+- `registerCapability(String, String, String)` reads `status` from a 409 answer, which can be
+  `pending` as well as `already_exists`; it used to report every 409 as `already_exists`. A 404
+  now throws; it used to be reported as `success: true` with status `not_tracked`.
+
 ### Fixed: the fleet governance guide's deployment step starts the server
 
 - Step 1 of `docs/use-cases/fleet-governance.md` gave the server `DATABASE_URL`, which it does not read, so the

@@ -12,54 +12,36 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Checks AIMClient.useMcpTool against the routes the backend registers.
  *
  * The stand-in server answers the way the backend's router does: a request is
  * served only when its method and path are in the SDK-API route table, read
- * here from the backend source, and gets a 404 otherwise. A test that chose its
- * own path would agree with the client while the real server refused the call.
+ * from the backend source by {@link SdkApiRouteTable}, and gets a 404
+ * otherwise.
  */
 class AIMClientMcpUsageRouteTest {
 
-    /** Repo-relative location of the backend's SDK-API route table. */
-    private static final String ROUTE_TABLE = "apps/backend/cmd/server/sdk_api_routes.go";
-
     private static final String REFRESH_PATH = "/api/v1/auth/refresh";
-
-    private static final Pattern STRING_CONSTANT = Pattern.compile("(\\w+)\\s*=\\s*\"([^\"]*)\"");
-    private static final Pattern ROUTE_ENTRY =
-            Pattern.compile("Method:\\s*http\\.Method(\\w+),\\s*Path:\\s*(?:\"([^\"]+)\"|(\\w+))");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private MockWebServer server;
-    private List<Route> registeredRoutes;
+    private SdkApiRouteTable registeredRoutes;
 
     @BeforeEach
     void setUp() throws IOException {
-        registeredRoutes = readRegisteredRoutes();
+        registeredRoutes = SdkApiRouteTable.read();
         server = new MockWebServer();
         server.setDispatcher(new Dispatcher() {
             @Override
@@ -108,7 +90,7 @@ class AIMClientMcpUsageRouteTest {
         assertEquals("POST", usage.getMethod());
         assertTrue(isRegistered("POST", path),
                 "useMcpTool posted to " + path + ", which the backend does not register. Registered routes:\n"
-                        + formatRoutes());
+                        + registeredRoutes.format());
         assertEquals("/api/v1/sdk-api/agents/" + agentId + "/mcp-usage-report", path);
         assertEquals(Boolean.TRUE, result.get("success"),
                 "the server answered the usage report with an error: " + result.get("error"));
@@ -136,8 +118,8 @@ class AIMClientMcpUsageRouteTest {
         // Guards the reader itself: a pattern that stopped matching the table
         // would turn every request into a 404 for the wrong reason.
         assertTrue(isRegistered("POST", "/api/v1/sdk-api/agents/" + UUID.randomUUID() + "/mcp-usage-report"),
-                "POST /api/v1/sdk-api/agents/:id/mcp-usage-report was not found in " + ROUTE_TABLE
-                        + ". Registered routes:\n" + formatRoutes());
+                "POST /api/v1/sdk-api/agents/:id/mcp-usage-report was not found in " + SdkApiRouteTable.ROUTE_TABLE
+                        + ". Registered routes:\n" + registeredRoutes.format());
         assertFalse(isRegistered("POST", "/api/v1/sdk-api/agents/" + UUID.randomUUID() + "/not-a-route"));
     }
 
@@ -170,79 +152,6 @@ class AIMClientMcpUsageRouteTest {
     }
 
     private boolean isRegistered(String method, String path) {
-        for (Route route : registeredRoutes) {
-            if (route.method.equals(method) && route.matcher.matcher(path).matches()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String formatRoutes() {
-        StringBuilder out = new StringBuilder();
-        for (Route route : registeredRoutes) {
-            out.append("  ").append(route.method).append(' ').append(route.pattern).append('\n');
-        }
-        return out.toString();
-    }
-
-    /**
-     * Reads every route of the backend's SDK-API route table: the method, and
-     * the full path with its base prefix. A path written as a named constant is
-     * resolved from the same file.
-     */
-    private static List<Route> readRegisteredRoutes() throws IOException {
-        String source = new String(Files.readAllBytes(locateRouteTable()), StandardCharsets.UTF_8);
-
-        Map<String, String> constants = new HashMap<>();
-        Matcher constant = STRING_CONSTANT.matcher(source);
-        while (constant.find()) {
-            constants.put(constant.group(1), constant.group(2));
-        }
-        String basePath = constants.get("sdkAPIBasePath");
-        assertNotNull(basePath, "sdkAPIBasePath is not declared in " + ROUTE_TABLE);
-
-        List<Route> routes = new ArrayList<>();
-        Matcher entry = ROUTE_ENTRY.matcher(source);
-        while (entry.find()) {
-            String relative = entry.group(2) != null ? entry.group(2) : constants.get(entry.group(3));
-            assertNotNull(relative, "route path " + entry.group(3) + " is not a string constant in " + ROUTE_TABLE);
-            routes.add(new Route(entry.group(1).toUpperCase(Locale.ROOT), basePath + relative));
-        }
-        assertFalse(routes.isEmpty(), "no route entries found in " + ROUTE_TABLE);
-        return routes;
-    }
-
-    private static Path locateRouteTable() {
-        Path start = Paths.get("").toAbsolutePath();
-        for (Path dir = start; dir != null; dir = dir.getParent()) {
-            Path candidate = dir.resolve(ROUTE_TABLE);
-            if (Files.isRegularFile(candidate)) {
-                return candidate;
-            }
-        }
-        return fail(ROUTE_TABLE + " was not found above " + start
-                + ". This test reads the backend's route table and has to run inside the repository.");
-    }
-
-    /** One registered route; a ":name" path segment matches any single segment. */
-    private static final class Route {
-        final String method;
-        final String pattern;
-        final Pattern matcher;
-
-        Route(String method, String pattern) {
-            this.method = method;
-            this.pattern = pattern;
-
-            StringBuilder regex = new StringBuilder();
-            for (String segment : pattern.split("/")) {
-                if (segment.isEmpty()) {
-                    continue;
-                }
-                regex.append('/').append(segment.startsWith(":") ? "[^/]+" : Pattern.quote(segment));
-            }
-            this.matcher = Pattern.compile(regex.toString());
-        }
+        return registeredRoutes.isRegistered(method, path);
     }
 }

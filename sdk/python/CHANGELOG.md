@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `report_capabilities` follows the enforcement mode and raises when a registration fails
+
+What to check before upgrading:
+
+- In strict mode a reported capability stays pending until an administrator approves it. The
+  result counts it under `pending`, not `granted`. Code that reads `granted` to decide whether
+  a capability can be used should read `pending` as well.
+- A registration that AIM refuses or fails now raises `VerificationError`, and the capabilities
+  after it are not sent. Failures used to be swallowed, and one whose message contained "500"
+  was counted as granted.
+
+What changed:
+
+- `report_capabilities` sends one `POST /api/v1/sdk-api/agents/{id}/capabilities/register` per
+  distinct capability, one at a time in the order each first appears, with the body
+  `{"capabilityType": ...}`, and reads the outcome AIM answers with. It used to post to
+  `/api/v1/sdk-api/agents/{id}/capabilities`.
+- The result keeps `granted` and `total` and adds `pending` and `results`. `granted` counts
+  capabilities granted now or already held, `pending` counts those awaiting approval, `total`
+  counts distinct capabilities, and `results` has one entry per capability with its `status`
+  (`granted`, `already_exists` or `pending`) and, for a new pending request, its `request_id`.
+- The `scope` argument is still accepted. It is ignored and emits a `DeprecationWarning`.
+- An entry that is not a non-empty string raises `ConfigurationError` before anything is sent.
+
 ### Fixed
 
 - `aim-sdk login` reports an unavailable AIM server as unavailable and exits 75. When the server answers

@@ -845,7 +845,8 @@ class AIMClient:
         endpoint: str,
         data: Optional[Dict] = None,
         retry_count: int = 0,
-        custom_headers: Optional[Dict] = None
+        custom_headers: Optional[Dict] = None,
+        accept_status: tuple = ()
     ) -> Dict:
         """
         Make authenticated HTTP request to AIM server.
@@ -855,6 +856,9 @@ class AIMClient:
             endpoint: API endpoint path
             data: Request payload (for POST/PUT)
             retry_count: Current retry attempt number
+            accept_status: Error status codes whose JSON body is returned
+                instead of raised, for routes that answer an outcome with one
+                (capability registration answers a repeat with 409 and a body)
 
         Returns:
             Response JSON data
@@ -971,11 +975,14 @@ class AIMClient:
             # Retry on server errors if enabled
             if response.status_code >= 500 and self.auto_retry and retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)  # Exponential backoff
-                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
+                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers, accept_status)
 
             # Debug 400 errors (disabled in production)
             # if response.status_code == 400:
             #     print(f"[DEBUG] 400 Bad Request - Response body: {response.text}")
+
+            if response.status_code in accept_status:
+                return response.json()
 
             response.raise_for_status()
             return response.json()
@@ -983,7 +990,7 @@ class AIMClient:
         except requests.exceptions.Timeout as e:
             if self.auto_retry and retry_count < self.max_retries:
                 time.sleep(2 ** retry_count)
-                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers)
+                return self._make_request(method, endpoint, data, retry_count + 1, custom_headers, accept_status)
             raise VerificationError(_transport_failure_message(e, self.aim_url))
 
         except requests.exceptions.ConnectionError as e:
@@ -3076,6 +3083,11 @@ class AIMClient:
         cache = AttestationCache(agent_id=self.agent_id)
         return cache.get_supply_chain_report()
 
+    # The outcomes POST /sdk-api/agents/:id/capabilities/register answers with.
+    # "already_exists" (409) is a capability the agent already holds; "pending"
+    # (202, or 409 on a repeat) is a strict-mode request awaiting approval.
+    _CAPABILITY_REGISTRATION_OUTCOMES = ("granted", "already_exists", "pending")
+
     def report_capabilities(
         self,
         capabilities: List[str],
@@ -3084,82 +3096,93 @@ class AIMClient:
         """
         Report agent capabilities to AIM (API key mode).
 
-        This method is used when the SDK is running in API key mode to report
-        detected capabilities to the backend. Capabilities are granted individually.
+        Each distinct capability is registered once, one at a time and in the
+        order it first appears, through the registration route that follows the
+        organization's enforcement mode: in monitoring mode a capability is
+        granted, in strict mode it stays pending until an administrator
+        approves it.
 
         Args:
             capabilities: List of capability types to report
-            scope: Optional scope information for the capabilities
+            scope: Deprecated and ignored. The registration route takes no
+                scope; passing one emits a DeprecationWarning.
 
         Returns:
             Dict with keys:
-                - granted: int - Number of capabilities granted
-                - total: int - Total capabilities attempted
+                - granted: int - Capabilities the agent holds: granted now or
+                  already held ("already_exists")
+                - pending: int - Capabilities awaiting approval (strict mode)
+                - total: int - Distinct capabilities reported
+                - results: list - One dict per distinct capability, in order,
+                  with ``capability_type``, ``status`` ("granted",
+                  "already_exists" or "pending"), ``message`` and, for a newly
+                  created pending request, ``request_id``
 
         Example:
-            # Report detected capabilities
             result = client.report_capabilities([
-                "network_access",
-                "make_api_calls",
-                "read_files"
+                "network:access",
+                "api:call",
+                "file:read"
             ])
-            print(f"Granted {result['granted']}/{result['total']} capabilities")
+            print(f"Granted {result['granted']}/{result['total']}, "
+                  f"{result['pending']} awaiting approval")
 
         Raises:
+            ConfigurationError: If the client is not in API key mode, or an
+                entry is not a non-empty string (nothing is sent)
             AuthenticationError: If authentication fails
-            VerificationError: If request fails
+            VerificationError: If AIM refuses or fails a registration, or
+                answers without a known outcome. Capabilities after the one
+                that failed are not sent.
         """
         if not self.api_key:
             raise ConfigurationError("report_capabilities requires API key authentication mode")
 
-        granted_count = 0
-        total_count = len(capabilities)
+        if scope is not None:
+            warnings.warn(
+                "The 'scope' parameter of report_capabilities() is deprecated and is "
+                "ignored: capability registration does not take a scope.",
+                DeprecationWarning,
+                stacklevel=2
+            )
 
-        # Temporarily disable auto-retry for capability reporting to handle duplicates faster
-        original_auto_retry = self.auto_retry
-        self.auto_retry = False
+        distinct: List[str] = []
+        for capability_type in capabilities:
+            if not isinstance(capability_type, str) or not capability_type:
+                raise ConfigurationError(
+                    f"report_capabilities takes capability types as non-empty strings, got {capability_type!r}"
+                )
+            if capability_type not in distinct:
+                distinct.append(capability_type)
 
-        try:
-            for capability_type in capabilities:
-                try:
-                    # Use SDK API endpoint for capability grant
-                    result = self._make_request(
-                        method="POST",
-                        endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capabilities",
-                        data={
-                            "capabilityType": capability_type,
-                            "scope": scope or {
-                                "source": "python_sdk_auto_detection",
-                                "detectedAt": datetime.now(timezone.utc).isoformat()
-                            }
-                        }
-                    )
-
-                    if result:
-                        granted_count += 1
-
-                except Exception as e:
-                    # Capability might already exist (duplicate key error) - count as granted
-                    # Check both the exception message and type
-                    error_str = str(e).lower()
-                    is_duplicate = (
-                        "duplicate" in error_str or
-                        "already exists" in error_str or
-                        "unique constraint" in error_str or
-                        "500" in error_str  # Backend returns 500 for duplicate key violations
-                    )
-                    if is_duplicate:
-                        granted_count += 1
-                    # Continue even if one capability fails for other reasons
-                    continue
-
-        finally:
-            # Restore original auto-retry setting
-            self.auto_retry = original_auto_retry
+        results = []
+        for capability_type in distinct:
+            answer = self._make_request(
+                method="POST",
+                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/capabilities/register",
+                data={"capabilityType": capability_type},
+                accept_status=(409,),
+            )
+            status = answer.get("status") if isinstance(answer, dict) else None
+            if status not in self._CAPABILITY_REGISTRATION_OUTCOMES:
+                raise VerificationError(
+                    f"AIM answered the registration of capability '{capability_type}' "
+                    f"without a known outcome (status {status!r})"
+                )
+            outcome = {
+                "capability_type": capability_type,
+                "status": status,
+                "message": answer.get("message", ""),
+            }
+            if status == "pending" and answer.get("requestId"):
+                outcome["request_id"] = answer["requestId"]
+            results.append(outcome)
 
         return {
-            "granted": granted_count,
-            "total": total_count
+            "granted": sum(1 for r in results if r["status"] in ("granted", "already_exists")),
+            "pending": sum(1 for r in results if r["status"] == "pending"),
+            "total": len(distinct),
+            "results": results,
         }
 
     def report_sdk_integration(
