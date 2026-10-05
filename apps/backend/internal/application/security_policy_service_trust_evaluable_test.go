@@ -31,9 +31,8 @@ func criticalTrustScoreBlockPolicy() *domain.SecurityPolicy {
 		EnforcementAction: domain.EnforcementBlockAndAlert,
 		AppliesTo:         "trust_score_below:0.3",
 		IsEnabled:         true,
-		// The seeded rules carry "threshold": 50; the evaluator reads
-		// "trust_threshold" and falls back to 0.3 (filed separately).
-		Rules: map[string]interface{}{"threshold": 50.0, "auto_disable": true},
+		// The rules migration 015 seeds for this policy.
+		Rules: map[string]interface{}{"trust_threshold": 0.5, "auto_disable": true},
 	}
 }
 
