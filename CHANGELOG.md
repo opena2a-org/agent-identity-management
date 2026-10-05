@@ -82,6 +82,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — `ADMIN_PASSWORD` seeds the first administrator and no longer resets a changed password
+
+- The backend wrote `ADMIN_PASSWORD` over the password of the administrator named by `ADMIN_EMAIL` on every start, so
+  a password changed in the dashboard reverted at the next restart while `ADMIN_PASSWORD` stayed set (the quick
+  start's `.env` sets it). `ADMIN_PASSWORD` is now a first-run seed. When the database has no administrator and no
+  account with `ADMIN_EMAIL`, the backend creates that administrator in the `admin.opena2a.org` organization; the
+  password must meet the platform's password rule and must be changed at first sign-in, as with
+  `aim-bootstrap --default`. Once any administrator exists, the backend changes no account's password and logs that
+  `ADMIN_PASSWORD` was not applied. Before this change the backend created no administrator from `ADMIN_PASSWORD`; it
+  only overwrote an existing one's password. Setting `ADMIN_PASSWORD` no longer recovers a lost administrator
+  password; use the password-reset flow (`POST /api/v1/public/forgot-password`) instead.
+- `scripts/lint-no-secret-fallbacks.sh` checks `ADMIN_PASSWORD`: a compose file may leave it empty
+  (`${ADMIN_PASSWORD:-}`) but may not fall back to a fixed password.
 
 ### Fixed — a trust-score policy is evaluated at the threshold it is seeded with
 
