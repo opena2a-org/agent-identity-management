@@ -230,6 +230,11 @@ The demo agent registers in your own organization under agent type `demo`:
 visibly a demo in every list, excluded from adoption and trust analytics,
 and re-runs reconnect to the same agent instead of creating new ones.
 
+`aim-sdk login` exits 0 when you are signed in, 1 when the login did not complete (the code was
+denied or expired, or the server refused the request), and 75 when the AIM server was unavailable:
+it answered HTTP 502, 503 or 504, or gave no HTTP answer. On 75 nothing is retried or stored, so a
+script can run the same command again later. `aim-sdk login --help` lists the codes.
+
 For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime), see the separate [opena2a CLI](https://github.com/opena2a-org/opena2a).
 
 ## Causal-denial telemetry (opt-in)
