@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -32,6 +33,12 @@ func NewKeyVault(masterKeyBase64 string) (*KeyVault, error) {
 
 	if len(masterKey) != 32 {
 		return nil, fmt.Errorf("master key must be 32 bytes (AES-256), got %d bytes", len(masterKey))
+	}
+
+	// A key of 32 zero bytes passes the length check but is a placeholder,
+	// not a secret: anyone can decrypt what it encrypts.
+	if subtle.ConstantTimeCompare(masterKey, make([]byte, len(masterKey))) == 1 {
+		return nil, fmt.Errorf("master key must not be all zero bytes; generate one with `openssl rand -base64 32`")
 	}
 
 	return &KeyVault{

@@ -166,6 +166,7 @@ func TestKeyVault_MasterKeyNeverReachesOutput(t *testing.T) {
 
 func TestKeyVault_RejectedMasterKeyNeverReachesErrorOrOutput(t *testing.T) {
 	wrongLength := fixedTestKey("wrong-length master key", 31)
+	allZero := make([]byte, 32)
 	undecodable := []byte(base64.StdEncoding.EncodeToString(fixedTestKey("undecodable master key", 32)))
 	undecodable[20] = '*'
 
@@ -187,6 +188,14 @@ func TestKeyVault_RejectedMasterKeyNeverReachesErrorOrOutput(t *testing.T) {
 			value:      base64.StdEncoding.EncodeToString(wrongLength),
 			renderings: keyRenderings(wrongLength),
 			wantErr:    "master key must be 32 bytes",
+		},
+		{
+			// Decodes and has the right length, so only the content check
+			// refuses it.
+			name:       "all zero bytes",
+			value:      base64.StdEncoding.EncodeToString(allZero),
+			renderings: keyRenderings(allZero),
+			wantErr:    "master key must not be all zero bytes",
 		},
 	}
 
