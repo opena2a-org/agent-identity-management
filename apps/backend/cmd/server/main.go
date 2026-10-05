@@ -377,6 +377,11 @@ func main() {
 	stopExpirationJob := startExpirationCleanupJob(db)
 	defer close(stopExpirationJob)
 
+	// Replace the MCP trust scores migration 104 only rescaled with calculated
+	// ones, once per database. Runs in the background so startup does not wait
+	// on it.
+	startMCPTrustRescore(repository.NewSystemConfigRepository(db), repos.MCPServer, services.MCPTrust)
+
 	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
 	if services.RegistryBridge != nil {
 		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
@@ -598,6 +603,7 @@ type Services struct {
 	Alert             *application.AlertService
 	Compliance        *application.ComplianceService
 	MCP               *application.MCPService
+	MCPTrust          *application.MCPTrustCalculator    // For the one-time MCP rescoring pass at startup
 	MCPCapability     *application.MCPCapabilityService  // ✅ For MCP server capability management
 	MCPAttestation    *application.MCPAttestationService // ✅ For agent attestation of MCPs
 	Security          *application.SecurityService
@@ -1059,6 +1065,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		Alert:             alertService,
 		Compliance:        complianceService,
 		MCP:               mcpService,
+		MCPTrust:          mcpTrustCalculator,
 		MCPCapability:     mcpCapabilityService,  // ✅ For MCP server capability management
 		MCPAttestation:    mcpAttestationService, // ✅ For agent attestation of MCPs
 		Security:          securityService,
@@ -2096,6 +2103,23 @@ func startExpirationCleanupJob(db *sql.DB) chan struct{} {
 	}()
 
 	return stopChan
+}
+
+// startMCPTrustRescore runs application.RescoreMCPServersOnce in a background
+// goroutine. A run that cannot finish leaves the marker unset, so the next
+// start tries again.
+func startMCPTrustRescore(markers application.SystemMarkerStore, servers application.MCPServerIDLister, calculator *application.MCPTrustCalculator) {
+	go func() {
+		result, err := application.RescoreMCPServersOnce(context.Background(), markers, servers, calculator)
+		if err != nil {
+			log.Printf("MCP trust rescoring did not complete, will retry at next start: %v", err)
+			return
+		}
+		if result.AlreadyDone {
+			return
+		}
+		log.Printf("MCP trust rescoring complete: %d server(s) scored, %d left unchanged after a scoring failure", result.Scored, len(result.Failed))
+	}()
 }
 
 // expireOldVerifications marks old pending and approved verifications as expired
