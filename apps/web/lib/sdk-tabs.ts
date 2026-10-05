@@ -79,6 +79,8 @@ const result = await client.verifyAction({
       "git clone https://github.com/opena2a-org/agent-identity-management.git && mvn -f agent-identity-management/sdk/java -DskipTests install",
     docsHref: "https://github.com/opena2a-org/agent-identity-management/tree/main/sdk/java",
     docsLabel: "Java SDK reference",
+    note:
+      "The Java SDK is not published to Maven Central. The commands above build it from source and install org.opena2a:aim-sdk:1.0.0 in your local Maven repository, where your pom.xml can depend on it.",
     code: () => `import org.opena2a.aim.client.AIMClient;
 
 AIMClient agent = AIMClient.secure("my-first-agent");
