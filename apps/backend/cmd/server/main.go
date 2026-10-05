@@ -2164,6 +2164,7 @@ func getMigrationVersion(filename string) string {
 // Expiration rules:
 // - Pending verifications: expire after 1 hour (if not approved/denied)
 // - Approved verifications: expire after 24 hours (access window closes)
+// - Password reset tokens: cleared once they can no longer be redeemed
 //
 // Returns a channel that should be closed to stop the cleanup job.
 func startExpirationCleanupJob(db *sql.DB) chan struct{} {
@@ -2176,9 +2177,7 @@ func startExpirationCleanupJob(db *sql.DB) chan struct{} {
 		for {
 			select {
 			case <-ticker.C:
-				if err := expireOldVerifications(db); err != nil {
-					log.Printf("⚠️  Expiration cleanup error: %v", err)
-				}
+				runExpirationCleanup(db)
 			case <-stopChan:
 				ticker.Stop()
 				log.Println("🛑 Stopping JIT access expiration cleanup job")
@@ -2205,6 +2204,43 @@ func startMCPTrustRescore(markers application.SystemMarkerStore, servers applica
 		}
 		log.Printf("MCP trust rescoring complete: %d server(s) scored, %d left unchanged after a scoring failure", result.Scored, len(result.Failed))
 	}()
+}
+
+// runExpirationCleanup is one tick of the expiration cleanup job. Each sweep
+// runs even when the one before it fails.
+func runExpirationCleanup(db *sql.DB) {
+	if err := expireOldVerifications(db); err != nil {
+		log.Printf("⚠️  Expiration cleanup error: %v", err)
+	}
+
+	cleared, err := clearExpiredPasswordResetTokens(db)
+	if err != nil {
+		log.Printf("⚠️  Password reset token cleanup error: %v", err)
+	} else if cleared > 0 {
+		log.Printf("🕐 Cleared %d expired password reset token(s)", cleared)
+	}
+}
+
+// clearExpiredPasswordResetTokens removes reset tokens that can no longer be
+// redeemed: those past their expiry, and any token stored without an expiry,
+// which the reset lookup never accepts. Without this sweep an unused token
+// stays on the users row until the user requests another reset.
+//
+// The statement does not set updated_at, but the BEFORE UPDATE trigger on
+// users still stamps it on each cleared row. Nothing is read back, so only
+// the count reaches the log.
+func clearExpiredPasswordResetTokens(db *sql.DB) (int64, error) {
+	result, err := db.Exec(`
+		UPDATE users
+		SET password_reset_token = NULL,
+		    password_reset_expires_at = NULL
+		WHERE password_reset_expires_at <= NOW()
+		   OR (password_reset_token IS NOT NULL AND password_reset_expires_at IS NULL)
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("password reset token cleanup failed: %w", err)
+	}
+	return result.RowsAffected()
 }
 
 // expireOldVerifications marks old pending and approved verifications as expired
