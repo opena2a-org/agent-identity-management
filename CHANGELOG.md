@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an SDK refresh no longer hands out a refresh token that has no row
+
+- `POST /api/v1/auth/refresh` with an SDK refresh token revoked the presented token's `sdk_tokens` row, then inserted
+  a row for the new refresh token and ignored the insert's error. When the insert failed, the response still carried
+  the new token with `rotated: true`, but the next refresh refused it (an SDK token without a row), and the presented
+  token's row was already revoked, so the SDK had to be set up again. The revocation and the insert now run in one
+  database transaction, and the new token is returned only when it commits. When it does not, neither write takes
+  effect: the presented token comes back unchanged with a fresh access token and `rotated: false`, the failure is
+  logged, and a later refresh rotates normally.
+- A failure to record the presented token's usage (`last_used_at`, `usage_count`) is now logged; the refresh still
+  proceeds.
+- A recovered SDK token (login-issued, with a row) whose denylist write fails comes back unchanged with its row left
+  live. Its row was revoked before, so the next refresh refused the token the response had just returned.
+- `apps/backend/internal/interfaces/http/handlers/auth_refresh_rotation_test.go` fails when an SDK refresh whose row
+  insert fails returns a new token or revokes the old row, when a failed usage record is not logged, and when a
+  recovered token's row is revoked while the token is returned unchanged.
+  `apps/backend/internal/infrastructure/repository/sdk_token_repository_rotate_test.go` fails when the revocation and
+  the insert do not commit or roll back together.
+
 ### Fixed — an SDK refresh no longer leaves two live refresh tokens when the old one cannot be revoked
 
 - `POST /api/v1/auth/refresh` with an SDK refresh token revokes the presented token's `sdk_tokens` row, then records a

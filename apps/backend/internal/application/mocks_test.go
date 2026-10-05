@@ -787,6 +787,11 @@ func (m *SharedMockSDKTokenRepository) RevokeByTokenHash(tokenHash string, reaso
 	return args.Error(0)
 }
 
+func (m *SharedMockSDKTokenRepository) Rotate(oldTokenHash string, reason string, next *domain.SDKToken) error {
+	args := m.Called(oldTokenHash, reason, next)
+	return args.Error(0)
+}
+
 func (m *SharedMockSDKTokenRepository) RevokeAllForUser(userID uuid.UUID, reason string) error {
 	args := m.Called(userID, reason)
 	return args.Error(0)
