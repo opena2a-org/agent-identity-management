@@ -82,6 +82,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — the alert detail panel presents a user-account alert as an account, not as an unknown agent
+
+- Alerts raised on a dashboard user account (`account_locked`, `auth_failure_pattern`) opened a detail panel built
+  only for agents: "Agent name Unknown", the nil UUID as the agent ID, an empty verification history, and a
+  "View agent" button to a page that does not exist. The panel also asked the agent endpoints about the user. An
+  alert whose resource type is `user` now shows an **Account** section with the email and, when the alert names
+  one, the user ID; it hides the agent and verification history sections, makes no agent requests, and links to
+  the users page instead. Agent alerts are unchanged.
+- The panel's context block states a refresh-token reuse's `clientMatch` in words: "The same client that last used
+  this token", "A different client from the one that last used this token", or "Could not be determined", under the
+  label "Presented by". An unrecognised value is shown as recorded.
+
 ### Changed — the SDK token list returns token metadata with camelCase keys
 
 - `GET /api/v1/users/me/sdk-tokens` returned each token's `metadata` exactly as stored. A token created by
