@@ -41,12 +41,13 @@ mvn install
 
 ### Dependencies
 
-The SDK includes:
-- **OkHttp 4.12** - HTTP client
-- **Jackson 2.16** - JSON processing
-- **BouncyCastle 1.77** - Ed25519 cryptography
-- **AspectJ 1.9.21** - AOP for annotations
-- **SLF4J 2.0** - Logging
+The SDK includes the libraries below. The version of each is pinned in [`sdk/java/pom.xml`](../../sdk/java/pom.xml).
+
+- **OkHttp** - HTTP client
+- **Jackson** - JSON processing
+- **BouncyCastle** - Ed25519 cryptography
+- **AspectJ** - AOP for annotations
+- **SLF4J** - Logging
 
 ---
 
