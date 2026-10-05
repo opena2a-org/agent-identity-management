@@ -21,7 +21,7 @@ type ATCClaims struct {
 	IssuerPublicKey []byte            `json:"issuerPublicKey,omitempty"`
 	PQCAlgorithm    string            `json:"pqcAlgorithm,omitempty"`
 	DelegationChain []DelegationEntry `json:"delegationChain,omitempty"`
-	AuthMethod      string            `json:"authMethod,omitempty"` // "atc", "jwt" (for shim compat)
+	AuthMethod      string            `json:"authMethod,omitempty"` // "atc"
 }
 
 // DelegationEntry represents one link in an ATC issuer delegation chain.
@@ -97,7 +97,7 @@ func (c *ATCClaims) HasCapability(required string) bool {
 }
 
 // ATCVerifier verifies Agent Trust Certificates and extracts claims.
-// Implementations: JWTShimVerifier (Phase 0 compat), ATCRealVerifier (Phase 6).
+// Implementation: RealATCVerifier (CBOR-encoded ATCs, spec v1).
 type ATCVerifier interface {
 	// Verify validates a raw ATC token and returns the extracted claims.
 	// Returns an error if the token is invalid, expired, or revoked.
