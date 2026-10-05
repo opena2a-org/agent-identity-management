@@ -51,6 +51,7 @@ public class AIMClient implements AutoCloseable {
 
     private static final Logger logger = LoggerFactory.getLogger(AIMClient.class);
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private static final String VERIFICATIONS_PATH = "/api/v1/sdk-api/verifications/";
 
     // Retry configuration for enterprise reliability
     private static final int MAX_RETRIES = 3;
@@ -784,17 +785,32 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
+     * The message signed for the X-Signature request headers: method, path
+     * with query and Unix timestamp joined by newlines, then the body as a
+     * fourth line only when the request has one. The platform rebuilds exactly
+     * this before it verifies, so a GET or an empty-body POST ends at the
+     * timestamp with no trailing newline.
+     */
+    static String signedRequestMessage(String method, String endpoint, String timestamp, String body) {
+        String message = method + "\n" + endpoint + "\n" + timestamp;
+        if (body != null && !body.isEmpty()) {
+            message += "\n" + body;
+        }
+        return message;
+    }
+
+    /**
      * POST request with Ed25519 signature.
      */
-    private String postWithSignature(String endpoint, String body) {
+    String postWithSignature(String endpoint, String body) {
         try {
+            String requestBody = body != null ? body : "";
             String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
-            String message = "POST\n" + endpoint + "\n" + timestamp + "\n" + body;
-            String signature = sign(message);
+            String signature = sign(signedRequestMessage("POST", endpoint, timestamp, requestBody));
 
             Request.Builder builder = new Request.Builder()
                 .url(aimUrl + endpoint)
-                .post(RequestBody.create(body, JSON));
+                .post(RequestBody.create(requestBody, JSON));
 
             builder.addHeader("X-Agent-ID", agentId);
             builder.addHeader("X-Signature", signature);
@@ -818,11 +834,10 @@ public class AIMClient implements AutoCloseable {
     /**
      * GET request with Ed25519 signature.
      */
-    private String getWithSignature(String endpoint) {
+    String getWithSignature(String endpoint) {
         try {
             String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
-            String message = "GET\n" + endpoint + "\n" + timestamp + "\n";
-            String signature = sign(message);
+            String signature = sign(signedRequestMessage("GET", endpoint, timestamp, null));
 
             Request.Builder builder = new Request.Builder()
                 .url(aimUrl + endpoint)
@@ -2093,13 +2108,15 @@ public class AIMClient implements AutoCloseable {
 
     /**
      * Wait for JIT (Just-in-Time) approval.
-     * Polls the AIM server for verification approval.
+     * Polls the AIM server for verification approval. Each poll is signed with
+     * the agent's Ed25519 key, so the agent must be registered.
      *
      * @param verificationId ID of the verification request
      * @param timeoutSeconds Maximum time to wait for approval
      * @return VerificationResult when approved
      * @throws ActionDeniedException if action is denied
-     * @throws VerificationException if timeout or polling fails
+     * @throws VerificationException if timeout or polling fails, or if the
+     *         agent has no signing key or the IDs are not UUIDs
      */
     public VerificationResult waitForApproval(String verificationId, int timeoutSeconds) {
         return waitForApproval(verificationId, timeoutSeconds, null, null);
@@ -2119,14 +2136,20 @@ public class AIMClient implements AutoCloseable {
      */
     private VerificationResult waitForApproval(String verificationId, int timeoutSeconds,
                                                String capability, String resource) {
+        if (privateKey == null || agentId == null) {
+            throw new VerificationException(
+                    "Cannot poll verification: the agent has no signing key or agent ID; register the agent first");
+        }
+        String vid = canonicalUuid(verificationId, "verification ID");
+        String agent = canonicalUuid(agentId, "agent ID");
+
         long startTime = System.currentTimeMillis();
         long pollInterval = 2000; // Start with 2 second polls
         long maxPollInterval = 10000; // Max 10 seconds between polls
 
         while (System.currentTimeMillis() - startTime < timeoutSeconds * 1000L) {
             try {
-                String url = "/api/v1/sdk-api/verifications/" + verificationId;
-                String response = get(url);
+                String response = getVerificationSigned(vid, agent);
                 Map<String, Object> result = objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
 
                 String status = (String) result.get("status");
@@ -2175,6 +2198,62 @@ public class AIMClient implements AutoCloseable {
         }
 
         throw new VerificationException("Timeout waiting for JIT approval after " + timeoutSeconds + " seconds");
+    }
+
+    /**
+     * The message signed to read one of the agent's own verifications: GET,
+     * the verification path, the agent ID and the Unix timestamp joined by
+     * newlines with no trailing newline. Both IDs must already be in canonical
+     * lowercase form, which is how the platform rebuilds them.
+     */
+    static String verificationReadMessage(String verificationId, String agentId, String timestamp) {
+        return "GET\n" + VERIFICATIONS_PATH + verificationId + "\n" + agentId + "\n" + timestamp;
+    }
+
+    /**
+     * Read one of this agent's verifications. The endpoint authenticates the
+     * caller by the X-AIM-Agent-ID, X-AIM-Timestamp and X-AIM-Signature
+     * headers, not by a bearer token, so this goes out on the client without
+     * the auth interceptor.
+     */
+    private String getVerificationSigned(String verificationId, String agent) throws IOException {
+        String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
+        String signature = sign(verificationReadMessage(verificationId, agent, timestamp));
+
+        Request request = new Request.Builder()
+                .url(aimUrl + VERIFICATIONS_PATH + verificationId)
+                .get()
+                .header("X-AIM-Agent-ID", agent)
+                .header("X-AIM-Timestamp", timestamp)
+                .header("X-AIM-Signature", signature)
+                .build();
+
+        try (Response response = authClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                String errorBody = response.body() != null ? response.body().string() : "";
+                throw new AIMException("Request failed: " + response.code() + " - " + errorBody,
+                        "HTTP_ERROR", response.code());
+            }
+            return response.body().string();
+        }
+    }
+
+    /**
+     * Canonical lowercase form of a UUID, as the platform formats it when it
+     * rebuilds a signed message. UUID.fromString also accepts shortened
+     * groups and expands them, which would name a different ID, so only the
+     * full 8-4-4-4-12 form in either case is accepted.
+     */
+    private static String canonicalUuid(String value, String what) {
+        try {
+            String canonical = UUID.fromString(value).toString();
+            if (canonical.equals(value.toLowerCase(Locale.ROOT))) {
+                return canonical;
+            }
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // fall through to the refusal below
+        }
+        throw new VerificationException("Cannot poll verification: the " + what + " is not a UUID: " + value);
     }
 
     // ========================================================================
