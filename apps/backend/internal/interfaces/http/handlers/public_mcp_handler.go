@@ -383,18 +383,15 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Check if MCP server name/ID is in agent's talks_to list
+	// Check if MCP server name/ID is in agent's talks_to list.
+	// talks_to is an allowlist: an empty list names no servers, so it
+	// authorizes none (the same reading as AgentService.GetAgentMCPServers).
 	isAuthorized := false
-	if len(agent.TalksTo) == 0 {
-		// If no TalksTo configured, allow all MCP servers (backwards compatibility)
-		isAuthorized = true
-	} else {
-		for _, allowedServer := range agent.TalksTo {
-			// Match by name (case-insensitive) or ID
-			if strings.EqualFold(allowedServer, mcpServer.Name) || allowedServer == serverID.String() {
-				isAuthorized = true
-				break
-			}
+	for _, allowedServer := range agent.TalksTo {
+		// Match by name (case-insensitive) or ID
+		if strings.EqualFold(allowedServer, mcpServer.Name) || allowedServer == serverID.String() {
+			isAuthorized = true
+			break
 		}
 	}
 
