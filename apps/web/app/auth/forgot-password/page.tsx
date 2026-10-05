@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
 
           <div className="glass-chrome p-6 sm:p-8">
             <p className="text-sm font-bold text-ink">Next steps</p>
-            <ul className="mt-2 space-y-1.5 text-xs text-ink-body">
+            <ul className="mt-2 space-y-1.5 text-sm text-ink-body">
               <li>Open the message from Agent Identity Management and follow the reset link.</li>
               <li>The link expires after 24 hours and works once; request another if it has expired.</li>
               <li>Check your spam folder if nothing arrives.</li>
@@ -115,7 +115,7 @@ export default function ForgotPasswordPage() {
         <div className="glass-chrome p-6 sm:p-8">
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div>
-              <label htmlFor="email" className="mb-1 block text-xs font-semibold text-ink-body">
+              <label htmlFor="email" className="mb-1 block text-sm font-semibold text-ink-body">
                 Email address
               </label>
               <div className="relative">
@@ -135,12 +135,12 @@ export default function ForgotPasswordPage() {
                 />
               </div>
               {error ? (
-                <p id="email-error" className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+                <p id="email-error" className="mt-1 flex items-center gap-1 text-sm font-semibold text-danger-text">
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   {error}
                 </p>
               ) : (
-                <p id="email-hint" className="mt-1 text-xs text-ink-tertiary">The address you sign in with.</p>
+                <p id="email-hint" className="mt-1 text-sm text-ink-tertiary">The address you sign in with.</p>
               )}
             </div>
             <Button type="submit" disabled={isLoading} className="w-full" size="lg">
@@ -150,7 +150,7 @@ export default function ForgotPasswordPage() {
 
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-ink-body">
+            <p className="text-sm leading-relaxed text-ink-body">
               The response does not say whether an account exists. A message is sent only to registered accounts.
             </p>
           </div>
