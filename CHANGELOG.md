@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — sample output in the docs shows a placeholder account
+
+- The Azure CLI sample in `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` showed the signed-in account as a real
+  person's address. It now shows `admin@example.com`.
+- `scripts/lint-docs-sample-addresses.sh` fails if a Markdown page under `docs/` carries an email address outside
+  the reserved example domains, the project's own domain and the generic placeholders the guides already use, and
+  names each one with its file and line. `scripts/test-lint-docs-sample-addresses.sh` tests it.
+
+### Fixed — expired A2A request nonces are deleted on a schedule
+
+- An A2A request nonce, and the SHA-256 request hash stored with it, stayed in `a2a_request_nonces` after it expired
+  until an admin called `POST /api/v1/a2a/maintenance/cleanup-nonces`. The server now deletes them every 60 seconds,
+  logs the interval when the job starts, and logs only the count of rows each run deletes.
+- A nonce is kept while a request carrying it could still pass the timestamp check: for the five-minute signature
+  timestamp tolerance past its expiry, and for twice that past its first use.
+- The admin route stays and runs the same cleanup on demand, with the same bound.
+
 ### Removed — a prebuilt server binary is no longer part of the source tree
 
 - `apps/backend/cmd/server/server`, a 20.7 MB macOS x86_64 executable built on a developer machine, was tracked in
