@@ -14,6 +14,7 @@ Security Note:
 - Local parsing is only for reading claims (expiry, token ID) for housekeeping
 """
 
+import hashlib
 import json
 import os
 import time
@@ -30,6 +31,8 @@ from .credentials import (
     get_sdk_credentials_path,
     print_sdk_credentials_not_found_error,
     print_token_expired_error,
+    read_sdk_credentials_file,
+    sdk_credentials_lock,
 )
 from .security_logging import security_logger, AuthnEventType, CredEventType
 
@@ -49,6 +52,22 @@ except ImportError as e:
 
 # Expected JWT issuers from AIM server
 VALID_JWT_ISSUERS = {"agent-identity-management", "agent-identity-management-sdk"}
+
+# Key in the SDK credentials file that holds the access token issued with the
+# stored refresh token, so another process sharing the file uses that pair
+# instead of refreshing again. Not `accessToken`: that key marks a credential
+# written by `aim-sdk login` (credentials.detect_credential_origin).
+SHARED_ACCESS_TOKEN_KEY = "sharedAccessToken"
+
+
+def _stored_refresh_token(credentials: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not credentials:
+        return None
+    return credentials.get('refreshToken') or credentials.get('refresh_token')
+
+
+def _token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def decode_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
@@ -137,6 +156,9 @@ class OAuthTokenManager:
         self.credentials: Optional[Dict[str, Any]] = None
         self.access_token: Optional[str] = None
         self.access_token_expiry: Optional[float] = None
+        # The refresh token the server last refused in this process. A refused
+        # token stays refused, so it is not presented again.
+        self._refused_refresh_token: Optional[str] = None
 
         # Audit #12: the encrypted shadow file (~/.aim/sdk_credentials.encrypted)
         # used to be written alongside the JSON file by SecureCredentialStorage.
@@ -297,6 +319,12 @@ class OAuthTokenManager:
         - Old refresh token is invalidated
         - New refresh token is saved to credentials
 
+        Several processes can share the credentials file, and each refresh
+        token is accepted once. The refresh runs under a cross-process lock on
+        the file and starts by re-reading it: a pair another process already
+        obtained is used as is, and a refresh token another process rotated is
+        never presented.
+
         Args:
             suppress_errors: If True, suppress error messages when refresh fails.
                            Use this when you have a fallback authentication mechanism.
@@ -304,6 +332,77 @@ class OAuthTokenManager:
         Returns:
             New access token or None if refresh failed
         """
+        try:
+            with sdk_credentials_lock():
+                self._adopt_stored_credentials()
+                shared = self._use_shared_access_token()
+                if shared:
+                    return shared
+                refresh_token = _stored_refresh_token(self.credentials)
+                if refresh_token and refresh_token == getattr(self, '_refused_refresh_token', None):
+                    # The server refused this token already and would refuse it again.
+                    return None
+                return self._refresh_token_locked(suppress_errors=suppress_errors)
+        except OSError as e:
+            # Includes SDKCredentialsLockTimeout. Refreshing without the lock
+            # could present a token another process is rotating, which ends
+            # the sign-in for every process, so this refresh is skipped.
+            security_logger.log_authentication(
+                AuthnEventType.TOKEN_REFRESH_FAILED,
+                success=False,
+                error=f"Credentials lock not acquired: {e}"
+            )
+            if not suppress_errors:
+                print(f"Warning: Token refresh skipped, the credentials lock was not acquired: {e}")
+            return None
+
+    def _adopt_stored_credentials(self) -> None:
+        """Replace the in-memory credentials with the file as it is now.
+
+        Called under the credentials lock, so no other process using the lock
+        changes the file until this refresh is saved.
+        """
+        stored = read_sdk_credentials_file()
+        if stored is None:
+            return
+        if _stored_refresh_token(stored) != _stored_refresh_token(self.credentials):
+            self.access_token = None
+            self.access_token_expiry = None
+        self.credentials = stored
+
+    def _use_shared_access_token(self) -> Optional[str]:
+        """Use the access token stored with the current refresh token, if still valid."""
+        shared = (self.credentials or {}).get(SHARED_ACCESS_TOKEN_KEY)
+        refresh_token = _stored_refresh_token(self.credentials)
+        if not isinstance(shared, dict) or not refresh_token:
+            return None
+        token = shared.get('token')
+        if not token or shared.get('refreshTokenSha256') != _token_fingerprint(refresh_token):
+            return None
+        payload = decode_jwt_claims(token)
+        expiry = payload.get('exp') if payload else None
+        if not isinstance(expiry, (int, float)) or time.time() >= expiry - 60:
+            return None
+        self.access_token = token
+        self.access_token_expiry = expiry
+        return token
+
+    def _share_access_token(self) -> None:
+        """Store the current access token with the refresh token it was issued with."""
+        credentials = self.credentials
+        if credentials is None:
+            return
+        refresh_token = _stored_refresh_token(credentials)
+        if self.access_token and refresh_token:
+            credentials[SHARED_ACCESS_TOKEN_KEY] = {
+                "token": self.access_token,
+                "refreshTokenSha256": _token_fingerprint(refresh_token),
+            }
+        else:
+            credentials.pop(SHARED_ACCESS_TOKEN_KEY, None)
+
+    def _refresh_token_locked(self, suppress_errors: bool = False) -> Optional[str]:
+        """Present the stored refresh token. The caller holds the credentials lock."""
         # Support both camelCase and snake_case for backward compatibility
         has_refresh_token = 'refreshToken' in self.credentials or 'refresh_token' in self.credentials
         if not self.credentials or not has_refresh_token:
@@ -367,6 +466,7 @@ class OAuthTokenManager:
                                     if new_token_id:
                                         self.credentials['sdkTokenId'] = new_token_id
 
+                                self._share_access_token()
                                 self.save_credentials(self.credentials)
                                 print("[OK] Token recovered automatically! SDK credentials updated.")
                                 print("No need to re-download the SDK - everything just works!")
@@ -414,6 +514,8 @@ class OAuthTokenManager:
                     if not suppress_errors:
                         print(f"Warning: Token refresh failed with status {response.status_code}: {error_msg}")
 
+                if response.status_code == 401:
+                    self._refused_refresh_token = refresh_token
                 return None
 
             data = response.json()
@@ -421,19 +523,25 @@ class OAuthTokenManager:
 
             # Check if server returned new refresh token (token rotation)
             new_refresh_token = data.get('refreshToken')
-            if new_refresh_token and new_refresh_token != refresh_token:
+            rotated = bool(new_refresh_token and new_refresh_token != refresh_token)
+            new_token_id_full = None
+            if rotated:
                 # Token rotation: save new refresh token
                 self.credentials['refreshToken'] = new_refresh_token
 
                 # Also update sdkTokenId if present in the new token (using PyJWT)
-                new_token_id_full = None
                 token_payload = decode_jwt_claims(new_refresh_token)
                 if token_payload:
                     new_token_id_full = token_payload.get('jti')
                     if new_token_id_full:
                         self.credentials['sdkTokenId'] = new_token_id_full
 
-                self.save_credentials(self.credentials)
+            # Saved on every refresh, rotated or not, so another process
+            # sharing the file uses this pair instead of refreshing again.
+            self._share_access_token()
+            self.save_credentials(self.credentials)
+
+            if rotated:
                 security_logger.log_credential_event(
                     CredEventType.CREDENTIAL_ROTATED,
                     credential_type="sdk_oauth",

@@ -203,7 +203,9 @@ class _Response:
         (DOWNLOAD_CREDS, "Download a fresh SDK", "created by `aim-sdk login`"),
     ],
 )
-def test_refused_refresh_prints_the_banner_for_the_stored_credential(capsys, monkeypatch, creds, expect, reject):
+def test_refused_refresh_prints_the_banner_for_the_stored_credential(capsys, monkeypatch, tmp_path, creds, expect, reject):
+    # A refresh re-reads and locks the credentials file; keep both out of the real profile.
+    monkeypatch.setattr("aim_sdk.credentials.SDK_CREDENTIALS_FILE", tmp_path / "sdk_credentials.json")
     manager = OAuthTokenManager.__new__(OAuthTokenManager)
     manager.credentials = dict(creds)
     manager.access_token = None
