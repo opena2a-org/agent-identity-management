@@ -5,7 +5,7 @@
 
 ## Problem
 
-You have a team running multiple AI agents across different machines. Each agent needs its own identity, but you need centralized audit logging, policy management, and OIDC integration -- not isolated local files on each developer's laptop.
+You have a team running multiple AI agents across different machines. Each agent needs its own identity, but you need centralized audit logging, policy management, and service tokens for agents -- not isolated local files on each developer's laptop.
 
 ## Step 1: Deploy AIM Server
 
@@ -161,39 +161,58 @@ Filter by agent:
 curl http://localhost:8080/api/v1/audit?agentId=aim_9c4b2e1f&limit=50
 ```
 
-## Step 4: OIDC Integration
+## Step 4: Service Tokens for Agents
 
-AIM Server includes an OAuth 2.0 / OIDC token endpoint for machine-to-machine authentication. Agents can request tokens that other services verify.
+AIM Server has an OAuth 2.0 token endpoint for machine-to-machine authentication. An agent exchanges an assertion signed with its own Ed25519 key for an access token, using the JWT-bearer grant (RFC 7523). The endpoint needs no identity provider.
 
-Configure your identity provider in the server environment:
+Set the URL that agents use to reach the server in the `aim-server` environment. The token endpoint compares the audience of each assertion with it:
 
 ```yaml
 environment:
-  - OIDC_ISSUER=https://auth.example.com
-  - OIDC_CLIENT_ID=aim-server
-  - OIDC_CLIENT_SECRET=your-client-secret
+  - AIM_BASE_URL=http://localhost:8080
 ```
 
-Request a token for an agent:
+The assertion is a JWT (`alg` `EdDSA`) that the agent signs with its Ed25519 private key. The server checks the signature against the public key registered for the agent and requires three claims:
+
+| Claim | Value |
+|-------|-------|
+| `sub` | The agent's ID on the server, a UUID. The same value as `client_id` |
+| `aud` | The value of `AIM_BASE_URL` |
+| `exp` | A time at most five minutes ahead |
+
+`OAuthTokenManager` in [`sdk/typescript/src/auth/oauth.ts`](../../sdk/typescript/src/auth/oauth.ts) builds this assertion.
+
+Request a token with the agent's ID in `$AGENT_ID` and the signed assertion in `$ASSERTION`:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/token \
-  -H "Content-Type: application/json" \
-  -d '{"agentId": "aim_9c4b2e1f", "scope": "db:read api:call"}'
+curl -X POST http://localhost:8080/api/v1/oauth/token \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
+  -d "client_id=$AGENT_ID" \
+  -d "client_assertion=$ASSERTION"
 ```
 
 Expected output:
 
 ```json
 {
-  "accessToken": "eyJhbGciOiJFZERTQSIs...",
-  "tokenType": "Bearer",
-  "expiresIn": 3600,
-  "scope": "db:read api:call"
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 7200
 }
 ```
 
-Other services verify the token against the AIM Server's JWKS endpoint at `http://localhost:8080/.well-known/jwks.json`.
+`expires_in` is the lifetime of the token in seconds: two hours unless `JWT_ACCESS_TTL` is set.
+
+### Verifying the token
+
+The access token is a JWT signed with HS256 under the server's `JWT_SECRET`. HS256 is symmetric: the key that verifies a token is the key that signs one. The server therefore publishes no JWK Set, and no public key verifies the token.
+
+AIM Server is the verifier. The agent sends the token as `Authorization: Bearer <access_token>` on the server's `/api/v1/agents` routes, and on each request the server checks the signature, the expiry, whether the token has been revoked, and whether the agent is still allowed to authenticate. A token issued to an agent that is later suspended or revoked stops working at that point.
+
+Two things follow:
+
+- Keep `JWT_SECRET` on the server. A service that holds it to verify tokens can also issue them, for any user or agent.
+- Do not hand the access token to another service as proof of the agent's identity. It is a bearer credential for AIM Server, and a service that receives it can use it there as the agent.
 
 ## Step 5: Fleet Overview via Dashboard
 
@@ -393,13 +412,13 @@ Developer A                    Developer B
 | Policy management | YAML files | REST API + dashboard |
 | Trust scoring | Local calculation | Server-side + history |
 | Multi-agent | Per-machine only | Cross-machine fleet |
-| OIDC tokens | Not available | Built-in token endpoint |
+| Service tokens | Not available | OAuth 2.0 token endpoint |
 
 ## What You Now Have
 
 - Centralized identity management for all agents in your organization
 - PostgreSQL-backed audit log queryable via REST API
-- OIDC token endpoint for machine-to-machine authentication
+- OAuth 2.0 token endpoint for machine-to-machine authentication
 - A dashboard for monitoring trust scores and audit events across the fleet
 
 ## Next Steps

@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the fleet governance guide describes the access token the server issues, and no longer points at a JWK Set
+
+- `docs/use-cases/fleet-governance.md` told readers to request a token at `/api/v1/token` with `agentId` and `scope`
+  in a JSON body, showed a response with `accessToken`, `tokenType`, `expiresIn` and `scope` whose token header read
+  EdDSA, and told other services to verify the token against `/.well-known/jwks.json`. The server mounts the endpoint
+  at `POST /api/v1/oauth/token`, accepts only the RFC 7523 JWT-bearer grant, returns `access_token`, `token_type` and
+  `expires_in`, signs the token with HS256 under `JWT_SECRET`, and publishes no JWK Set. The documented request named
+  a path the server does not mount, and no published key verified the token.
+- The step now documents the grant: the assertion the agent signs with its Ed25519 key, the `sub`, `aud` and `exp`
+  claims the server requires, the `AIM_BASE_URL` setting that `aud` must equal, and the response as the server
+  returns it. A new section says how the token is verified: by AIM Server, on its `/api/v1/agents` routes, which
+  check the signature, the expiry, revocation and the agent's status on each request. It says to keep `JWT_SECRET`
+  on the server and not to hand the access token to another service as proof of the agent's identity.
+- The step's three `OIDC_*` environment variables are removed: the server reads none of them. The guide and the use
+  case index name the endpoint an OAuth 2.0 token endpoint.
+- A test compares the step with a token the handler issues, so a change to the signing method, the path or the
+  response fields fails until the guide is rewritten to match.
+
 ### Removed — the second backend Dockerfile; the quickstart test builds the published one
 
 - `apps/backend/infrastructure/docker/Dockerfile.backend` was a second backend Dockerfile, built only by
