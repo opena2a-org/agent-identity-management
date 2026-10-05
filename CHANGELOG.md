@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The EchoLeak demo script shows a placeholder for the admin password
+
+- The login step in `docs/DEMO_SCRIPT_ECHOLEAK.md` also printed the fixed admin password that stacks seeded before
+  `aim-bootstrap` were given, so a presenter copying the script carried that value into a new install or a recording.
+  The step now shows `<admin-password>` and says the password is set per install: the `DEFAULT_ADMIN_PASSWORD` value
+  in `.env` (`./scripts/gen-dev-secrets.sh` generates one), or, if that is unset, a random password that
+  `aim-bootstrap --default` prints once on first deploy.
+- `sdk/typescript/tests/demo-script-admin-password.test.ts` fails if the demo script contains the fixed value
+  anywhere, or if its login step lacks the placeholder or either password source.
+
 ### Fixed — MCP server routes answer 404 for another organization's server, the same as for an unknown ID
 
 - Eleven routes under `/api/v1/mcp-servers/:id` answered `404 {"error":"MCP server not found"}` for an ID that does
