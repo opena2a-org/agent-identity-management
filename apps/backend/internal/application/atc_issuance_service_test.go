@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -56,7 +57,7 @@ func TestATCContentHash_PublicKeyVsFallback(t *testing.T) {
 	// No public key -> hash of the agent ID bytes.
 	noKey := &domain.Agent{ID: id}
 	idSum := sha256.Sum256(id[:])
-	wantFallback := "sha256:" + hex.EncodeToString(idSum[:])
+	wantFallback := hex.EncodeToString(idSum[:])
 	if got := atcContentHash(noKey); got != wantFallback {
 		t.Errorf("fallback contentHash = %q, want %q", got, wantFallback)
 	}
@@ -66,6 +67,37 @@ func TestATCContentHash_PublicKeyVsFallback(t *testing.T) {
 	withKey := &domain.Agent{ID: id, PublicKey: &pk}
 	if got := atcContentHash(withKey); got == wantFallback {
 		t.Error("contentHash with public key should differ from ID fallback")
+	}
+}
+
+// TestBuildATCIssuanceRequest_HashFieldsMatchATXSchema pins the wire form of the
+// two hash fields AIM supplies to the published ATX v1.1 credential schema
+// (schemas/atx-credential-v1.1.schema.json in atx-spec). The Registry signs
+// contentHash verbatim, so a prefixed value here yields a credential that fails
+// schema validation in every conformance verifier. behavioralProfile.checksum
+// is the opposite case: the schema requires the "sha256:" prefix there.
+func TestBuildATCIssuanceRequest_HashFieldsMatchATXSchema(t *testing.T) {
+	contentHashPattern := regexp.MustCompile(`^[0-9a-f]{64}$`)
+	checksumPattern := regexp.MustCompile(`^sha256:.+`)
+
+	id := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	now := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
+	pk := "dGhpcyBpcyBhIGZha2Uga2V5" // base64
+	score := &domain.TrustScore{Score: 0.6, Factors: domain.TrustScoreFactors{Uptime: 0.9}}
+
+	for name, agent := range map[string]*domain.Agent{
+		"public key":  {ID: id, PublicKey: &pk},
+		"id fallback": {ID: id},
+	} {
+		req := buildATCIssuanceRequest(agent, score, "Acme Org", now)
+		if !contentHashPattern.MatchString(req.ContentHash) {
+			t.Errorf("%s: contentHash %q does not match the ATX schema pattern %s",
+				name, req.ContentHash, contentHashPattern)
+		}
+		if !checksumPattern.MatchString(req.BehavioralProfile.Checksum) {
+			t.Errorf("%s: behavioralProfile.checksum %q does not match the ATX schema pattern %s",
+				name, req.BehavioralProfile.Checksum, checksumPattern)
+		}
 	}
 }
 

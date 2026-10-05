@@ -183,6 +183,8 @@ func atcTrustLevel(score float64) int {
 // atcContentHash binds the credential to the agent's public key. The key is the
 // stable identity material for an AIM agent (there is no package artifact). When
 // no public key is set yet, we hash the agent ID so the field is never empty.
+// The value is lowercase hex with no algorithm prefix: the Registry signs it
+// verbatim, and the ATX v1.1 credential schema requires ^[0-9a-f]{64}$.
 func atcContentHash(agent *domain.Agent) string {
 	var data []byte
 	switch {
@@ -197,7 +199,7 @@ func atcContentHash(agent *domain.Agent) string {
 		data = idBytes[:]
 	}
 	sum := sha256.Sum256(data)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:])
 }
 
 // atcBehavioralChecksum is the SHA-256 of the canonical 9-factor breakdown. It
