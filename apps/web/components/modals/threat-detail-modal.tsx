@@ -66,7 +66,7 @@ const THREAT_RECOMMENDATIONS: Record<string, RecommendationItem[]> = {
       priority: "critical",
       action: "Revoke SDK token immediately",
       description: "Prevent further unauthorized access by revoking the token used to create this agent",
-      link: "/dashboard/sdk-tokens",
+      link: "/dashboard/credentials#sdk-tokens",
       icon: Ban,
     },
     {
@@ -158,14 +158,14 @@ const THREAT_RECOMMENDATIONS: Record<string, RecommendationItem[]> = {
       priority: "critical",
       action: "Rotate all credentials",
       description: "Immediately rotate API keys and tokens associated with this agent",
-      link: "/dashboard/sdk-tokens",
+      link: "/dashboard/credentials",
       icon: RefreshCw,
     },
     {
       priority: "high",
       action: "Revoke compromised tokens",
       description: "Revoke any tokens that may have been exposed",
-      link: "/dashboard/sdk-tokens",
+      link: "/dashboard/credentials#sdk-tokens",
       icon: Ban,
     },
     {
@@ -432,7 +432,7 @@ export default function ThreatDetailModal({
               ) : agent?.createdBySdkTokenId ? (
                 <>
                   <Link
-                    href={`/dashboard/sdk-tokens?highlight=${agent.createdBySdkTokenId}`}
+                    href={`/dashboard/credentials?highlight=${agent.createdBySdkTokenId}#sdk-tokens`}
                     className="inline-flex items-center gap-1 rounded-pill border border-stroke bg-glass px-3 py-1.5 text-xs font-medium text-brand-text transition-colors hover:bg-brand-soft"
                   >
                     <KeyRound className="h-3 w-3" />

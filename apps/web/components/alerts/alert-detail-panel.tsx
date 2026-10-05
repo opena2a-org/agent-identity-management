@@ -319,7 +319,7 @@ export function AlertDetailPanel({
                   <span className="text-sm text-ink-secondary">SDK token</span>
                   <div className="flex items-center gap-2">
                     <Link
-                      href={`/dashboard/sdk-tokens?highlight=${agentDetails.createdBySdkTokenId}`}
+                      href={`/dashboard/credentials?highlight=${agentDetails.createdBySdkTokenId}#sdk-tokens`}
                       className="text-xs text-brand-text hover:underline flex items-center gap-1"
                     >
                       <KeyRound className="h-3 w-3" />

@@ -820,7 +820,7 @@ export default function AgentDetailsPage({
                               variant="link"
                               size="sm"
                               className="p-0 h-auto text-xs text-primary justify-start"
-                              onClick={() => router.push(`/dashboard/sdk-tokens?highlight=${agent.createdBySdkTokenId}`)}
+                              onClick={() => router.push(`/dashboard/credentials?highlight=${agent.createdBySdkTokenId}#sdk-tokens`)}
                             >
                               <KeyRound className="h-3 w-3 mr-1" />
                               View SDK Token
@@ -831,7 +831,7 @@ export default function AgentDetailsPage({
                               variant="link"
                               size="sm"
                               className="p-0 h-auto text-xs text-warning-text justify-start"
-                              onClick={() => router.push(`/dashboard/api-keys?highlight=${agent.createdByApiKeyId}`)}
+                              onClick={() => router.push(`/dashboard/credentials?highlight=${agent.createdByApiKeyId}#api-keys`)}
                             >
                               <KeyRound className="h-3 w-3 mr-1" />
                               View API Key
