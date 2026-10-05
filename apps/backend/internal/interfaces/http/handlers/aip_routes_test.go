@@ -50,6 +50,7 @@ func reached(hit *bool) fiber.Handler {
 }
 
 func TestWellKnownAIPIsMountedAndPublic(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "https://aim.opena2a.org")
 	app := fiber.New()
 	mountAIPRoutes(app, NewAIPHandler(nil), func(c fiber.Ctx) error { return nil })
 
@@ -65,13 +66,59 @@ func TestWellKnownAIPIsMountedAndPublic(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &doc))
 
 	// The discovery document is what an implementer reads first, so pin its contract.
-	assert.Equal(t, "did:aip:provider_opena2a", doc["providerDid"])
+	// AIP-SPEC 3.2: the provider identifies itself as did:web:<provider-host>.
+	assert.Equal(t, "did:web:aim.opena2a.org", doc["providerDid"])
 	assert.Equal(t, "1.0", doc["version"])
 
 	endpoints, ok := doc["endpoints"].(map[string]any)
 	require.True(t, ok, "discovery document must carry an endpoints directory")
 	assert.Equal(t, "/api/v1/did/{did}", endpoints["didResolve"],
 		"the advertised didResolve path must match the route actually mounted below")
+}
+
+// fetchDiscovery requests /.well-known/aip with the given Host header and decodes it.
+func fetchDiscovery(t *testing.T, host string) map[string]any {
+	t.Helper()
+	app := fiber.New()
+	mountAIPRoutes(app, NewAIPHandler(nil), func(c fiber.Ctx) error { return nil })
+
+	req := httptest.NewRequest("GET", "/.well-known/aip", nil)
+	req.Host = host
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(body, &doc))
+	return doc
+}
+
+// The provider DID is the deployment's public identity, so it comes from configuration
+// (FRONTEND_URL, the dashboard origin that also proxies /.well-known/aip) and never from
+// the request. The hosted service answers discovery on both its dashboard and API hosts,
+// and both must name the same provider; a Host header must not be able to rename it.
+func TestWellKnownAIPProviderDIDIsTheConfiguredHostNotTheRequestHost(t *testing.T) {
+	t.Run("same provider DID whichever host the request arrived on", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "https://aim.opena2a.org")
+		for _, host := range []string{"aim.opena2a.org", "api.aim.opena2a.org", "attacker.example"} {
+			assert.Equal(t, "did:web:aim.opena2a.org", fetchDiscovery(t, host)["providerDid"], "Host: %s", host)
+		}
+	})
+
+	t.Run("unset FRONTEND_URL uses the same local default as the rest of the server", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "")
+		assert.Equal(t, "did:web:localhost%3A3000", fetchDiscovery(t, "localhost:8080")["providerDid"])
+	})
+
+	t.Run("an origin with no DNS host omits providerDid rather than inventing one", func(t *testing.T) {
+		t.Setenv("FRONTEND_URL", "https://:3000")
+		doc := fetchDiscovery(t, "aim.example.com")
+		_, present := doc["providerDid"]
+		assert.False(t, present, "a misconfigured origin must not produce a provider DID")
+		assert.Equal(t, "1.0", doc["version"], "the rest of the discovery document is still served")
+	})
 }
 
 // The discovery document advertises a resolver path. If that path is not mounted, the
