@@ -16,11 +16,15 @@ RUN go mod download
 # Copy source code
 COPY apps/backend/ ./
 
-# Build the application for the target platform
+# Build the application for the target platform.
+# GET /health/ready reports main.buildCommit as `commit` and main.buildVersion
+# as `version`. Pass --build-arg GIT_COMMIT=<40-hex sha> (and VERSION) to stamp
+# them; an empty or non-40-hex GIT_COMMIT reports `commit: null`.
 ARG TARGETARCH
 ARG VERSION=dev
+ARG GIT_COMMIT
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags="-s -w -X main.version=${VERSION}" \
+    -ldflags="-s -w -X main.buildCommit=${GIT_COMMIT} -X main.buildVersion=${VERSION}" \
     -o /bin/aim-server ./cmd/server
 
 # Build the migrate and bootstrap binaries so operators can run them inside the
