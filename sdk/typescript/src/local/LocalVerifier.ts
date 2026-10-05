@@ -24,7 +24,7 @@ import type {
   AtxPublicKey,
   AtxTrustAnchors,
   AtxVerificationResult,
-  AtxVerifier,
+  LocalAtxVerifier,
   RejectCategory,
   ResolutionContext,
 } from '@opena2a/atx-verify';
@@ -147,7 +147,7 @@ export interface LocalAuthorizationResult {
 export class LocalVerifier {
   private readonly anchors: AtxTrustAnchors;
   private readonly crlCache?: CrlCache;
-  private verifier: AtxVerifier | null = null;
+  private verifier: LocalAtxVerifier | null = null;
 
   constructor(config: LocalVerificationConfig) {
     // Trust anchors of the wrong shape must fail loudly here, not later as a
@@ -187,7 +187,7 @@ export class LocalVerifier {
     await this.getVerifier();
   }
 
-  private async getVerifier(): Promise<AtxVerifier> {
+  private async getVerifier(): Promise<LocalAtxVerifier> {
     if (this.crlCache) {
       // The cached CRL changes over time, so build the verifier with the current
       // list at each call. Construction is allocation-only (it just stores the
@@ -208,8 +208,17 @@ export class LocalVerifier {
     return this.verifier;
   }
 
-  /** Cryptographically verify an ATX credential offline. No network access. */
-  async verifyCredential(atx: Atx): Promise<AtxVerificationResult> {
+  /**
+   * Cryptographically verify an ATX credential offline. No network access.
+   *
+   * Pass the credential as it arrived on the wire — its raw JSON text or bytes —
+   * whenever you have it. Raw input is strict-parsed before any field is read: a
+   * credential carrying a duplicate member at any depth, including two names that
+   * differ only in case, rejects as `MALFORMED` (the conformance suite's
+   * `PARSE_ERROR`). A parsed object cannot get that check, because `JSON.parse`
+   * has already kept one of the duplicates and dropped the other.
+   */
+  async verifyCredential(credential: Atx | string | Uint8Array): Promise<AtxVerificationResult> {
     // Fail-closed stale policy: when a revocation cache is configured with
     // onStale='reject' and its list is beyond TTL, we cannot confirm the
     // credential is unrevoked, so deny rather than soft-open. Treated as REVOKED
@@ -224,23 +233,35 @@ export class LocalVerifier {
       } as AtxVerificationResult;
     }
     const verifier = await this.getVerifier();
-    return verifier.verify(atx);
+    if (isRawCredential(credential)) {
+      return verifier.verifyCredential(credential);
+    }
+    return verifier.verify(credential);
   }
 
   /**
    * Verify the credential, then evaluate the local broker policy for `action`.
    * Fails closed: a credential that does not verify denies the action.
+   *
+   * Accepts the credential as a parsed object or as its raw JSON text or bytes;
+   * see {@link verifyCredential}. When raw input fails verification, the identity
+   * fields of the result are empty: a credential that did not verify is not
+   * parsed to fill them.
    */
-  async authorize(atx: Atx, options: LocalAuthorizationOptions): Promise<LocalAuthorizationResult> {
-    const result = await this.verifyCredential(atx);
+  async authorize(
+    credential: Atx | string | Uint8Array,
+    options: LocalAuthorizationOptions,
+  ): Promise<LocalAuthorizationResult> {
+    const result = await this.verifyCredential(credential);
 
     if (!result.valid || !result.context) {
+      const claimed = isRawCredential(credential) ? undefined : credential;
       return {
         verified: false,
         actionAllowed: false,
-        agentId: atx.agentId ?? '',
-        agentDid: atx.agentDid ?? '',
-        issuerDid: atx.issuerDid ?? '',
+        agentId: claimed?.agentId ?? '',
+        agentDid: claimed?.agentDid ?? '',
+        issuerDid: claimed?.issuerDid ?? '',
         trustLevel: 0,
         trustScore: 0,
         capabilities: [],
@@ -271,6 +292,15 @@ export class LocalVerifier {
       source: 'local',
     };
   }
+}
+
+/**
+ * True for a credential given as raw JSON text or bytes. `ArrayBuffer.isView`
+ * reads an internal slot rather than the prototype chain, so it cannot throw;
+ * a view other than a Uint8Array is passed on and rejected as MALFORMED.
+ */
+function isRawCredential(credential: Atx | string | Uint8Array): credential is string | Uint8Array {
+  return typeof credential === 'string' || ArrayBuffer.isView(credential);
 }
 
 /**
