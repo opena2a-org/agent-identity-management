@@ -24,19 +24,18 @@ Features:
 - ✅ Automatic capability detection by AIM
 
 Usage:
-    python3 test-mcp-server.py
+    python3 mcp-server.py
 
-The server will display its public key. Use this to register
-the MCP server in the AIM dashboard.
+The server listens on port 5151 and displays its public key. Use this
+to register the MCP server in the AIM dashboard.
 
-Registration in AIM Dashboard:
+Registration in AIM Dashboard (see README.md):
     1. Go to: http://localhost:3000/dashboard/mcp
-    2. Click "Register MCP Server"
-    3. Name: test-mcp-local
-    4. URL: http://localhost:5555
-    5. Public Key: (copy from server output)
-    6. Click "Save" then "Verify"
-    7. Capabilities will auto-detect!
+    2. Click "Register MCP server"
+    3. Server name: test-mcp-local
+    4. Server URL: http://localhost:5151/mcp
+    5. Public key: (copy from server output)
+    6. Click "Register server", then "Verify" on the server's page
 
 Security:
     This server generates a NEW Ed25519 key pair on each restart.
@@ -66,7 +65,7 @@ print("")
 print("📋 Server Details:")
 print(f"   URL: http://localhost:5151/mcp")
 print(f"   Verification Endpoint: http://localhost:5151/mcp/.well-known/mcp/verify")
-print(f"   Capabilities Endpoint: http://localhost:5151/mcp/capabilities")
+print(f"   Capabilities Endpoint: http://localhost:5151/.well-known/mcp/capabilities")
 print("")
 print("🔑 Cryptographic Keys (Ed25519):")
 print(f"   Public Key:  {PUBLIC_KEY}")
@@ -114,14 +113,14 @@ def verify():
     """
     Cryptographic verification endpoint
     
-    AIM sends:
-        POST /.well-known/mcp/verify
+    AIM sends (to the registered URL + /.well-known/mcp/verify):
+        POST /mcp/.well-known/mcp/verify
         { "challenge": "random-base64-string", "server_id": "uuid" }
     
     MCP responds:
-        { "signed_challenge": "base64-signature" }
+        { "signedChallenge": "base64-signature" }
     
-    AIM verifies signature using public key
+    AIM reads signedChallenge and verifies it using the registered public key
     """
     try:
         data = request.get_json()
@@ -164,8 +163,8 @@ def verify():
         sys.stdout.flush()
         
         return jsonify({
-            'signed_challenge': signature,
-            'public_key': PUBLIC_KEY,
+            'signedChallenge': signature,
+            'publicKey': PUBLIC_KEY,
             'algorithm': 'ed25519'
         })
         
