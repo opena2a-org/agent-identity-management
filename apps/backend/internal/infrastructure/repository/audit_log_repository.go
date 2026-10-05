@@ -91,12 +91,22 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 	return log, nil
 }
 
+// GetByOrganization returns the organization's audit rows, newest first, with
+// the acting user's and agent's names joined in as GetByAgent and
+// GetByResource do, so the admin audit list can name each record's actor.
 func (r *AuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
 	query := `
-		SELECT id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp
-		FROM audit_logs
-		WHERE organization_id = $1
-		ORDER BY timestamp DESC
+		SELECT
+			al.id, al.organization_id, al.user_id, al.agent_id, al.action,
+			al.resource_type, al.resource_id, al.ip_address, al.user_agent,
+			al.metadata, al.timestamp,
+			COALESCE(a.name, '') as agent_name,
+			COALESCE(u.name, '') as user_name
+		FROM audit_logs al
+		LEFT JOIN agents a ON al.agent_id = a.id
+		LEFT JOIN users u ON al.user_id = u.id
+		WHERE al.organization_id = $1
+		ORDER BY al.timestamp DESC
 		LIMIT $2 OFFSET $3
 	`
 
@@ -106,7 +116,7 @@ func (r *AuditLogRepository) GetByOrganization(orgID uuid.UUID, limit, offset in
 	}
 	defer rows.Close()
 
-	return r.scanLogs(rows)
+	return r.scanLogsWithNames(rows)
 }
 
 // GetByUser returns audit rows in the caller's organization performed
