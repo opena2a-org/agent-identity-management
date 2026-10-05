@@ -93,6 +93,9 @@ func (h *MCPHandler) getMCPCapabilityService() MCPCapabilityServicer {
 	if h.mcpCapabilityServicer != nil {
 		return h.mcpCapabilityServicer
 	}
+	if h.mcpCapabilityService == nil {
+		return nil
+	}
 	return h.mcpCapabilityService
 }
 
@@ -127,6 +130,9 @@ func (h *MCPHandler) getTagService() TagServicer {
 func (h *MCPHandler) getAttestationService() MCPAttestationServicerExtended {
 	if h.attestationServicer != nil {
 		return h.attestationServicer
+	}
+	if h.attestationService == nil {
+		return nil
 	}
 	return h.attestationService
 }
@@ -400,19 +406,9 @@ func (h *MCPHandler) GetMCPServer(c fiber.Ctx) error {
 		})
 	}
 
-	mcpSvc := h.getMCPService()
-	server, err := mcpSvc.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-
-	// Verify server belongs to organization
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	// ✅ Enrich response with tags
@@ -489,16 +485,8 @@ func (h *MCPHandler) UpdateMCPServer(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	existingServer, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if existingServer.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	if LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	server, err := h.mcpService.UpdateMCPServer(c.Context(), serverID, &req)
@@ -546,16 +534,8 @@ func (h *MCPHandler) DeleteMCPServer(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	existingServer, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if existingServer.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	if LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID) == nil {
+		return nil
 	}
 
 	if err := h.mcpService.DeleteMCPServer(c.Context(), serverID); err != nil {
@@ -601,16 +581,9 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	// Generate verification challenge
@@ -708,16 +681,9 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	if err := h.mcpService.AddPublicKey(c.Context(), serverID, &req); err != nil {
@@ -769,16 +735,9 @@ func (h *MCPHandler) GetVerificationStatus(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	status, err := h.mcpService.GetVerificationStatus(c.Context(), serverID)
@@ -812,16 +771,9 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 
 	// Verify server belongs to organization first
 	mcpSvc := h.getMCPService()
-	server, err := mcpSvc.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, mcpSvc), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	// Fetch detailed capabilities from mcp_server_capabilities table
@@ -860,16 +812,9 @@ func (h *MCPHandler) DetectCapabilities(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	// Trigger capability detection
@@ -920,21 +865,11 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 
 	// Verify server belongs to organization first
 	mcpSvc := h.getMCPService()
-	server, err := mcpSvc.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		log.Printf("❌ GetMCPServerAgents: MCP server not found: %v", err)
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, mcpSvc), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 	log.Printf("✅ GetMCPServerAgents: Found MCP server '%s' (orgID=%s)", server.Name, server.OrganizationID)
-
-	if server.OrganizationID != orgID {
-		log.Printf("❌ GetMCPServerAgents: Org mismatch - server.OrgID=%s != request.OrgID=%s", server.OrganizationID, orgID)
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
-	}
 
 	// Fetch agents that have this MCP server in their talks_to array
 	// Try both by ID and by NAME (agents often use names, not IDs)
@@ -1012,16 +947,9 @@ func (h *MCPHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
 	}
 
 	// Verify server belongs to organization first
-	server, err := h.mcpService.GetMCPServer(c.Context(), serverID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if server.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	if server == nil {
+		return nil
 	}
 
 	// Parse pagination parameters
@@ -1196,8 +1124,7 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 // @Param offset query int false "Offset for pagination (default: 0)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string "Invalid MCP server ID"
-// @Failure 404 {object} map[string]string "MCP server not found"
-// @Failure 403 {object} map[string]string "Access denied"
+// @Failure 404 {object} map[string]string "MCP server not found in the caller's organization"
 // @Router /api/v1/mcp-servers/{id}/audit-logs [get]
 func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
@@ -1232,17 +1159,12 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		fmt.Sscanf(offsetStr, "%d", &offset)
 	}
 
-	// Verify MCP server belongs to organization
-	mcpServer, err := h.mcpService.GetMCPServer(c.Context(), mcpServerID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "MCP server not found",
-		})
-	}
-	if mcpServer.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+	// Verify MCP server belongs to organization. An unknown ID and another
+	// organization's ID get the same 404, so the response does not reveal
+	// which server IDs exist.
+	mcpServer := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), mcpServerID, orgID, mcpServerOrgID)
+	if mcpServer == nil {
+		return nil
 	}
 
 	// Build unified timeline from multiple sources
@@ -1262,7 +1184,7 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 	timeline := make([]TimelineEvent, 0)
 
 	// 1. Get audit logs
-	logs, _, err := h.auditService.GetAuditLogs(
+	logs, _, err := h.getAuditService().GetAuditLogs(
 		c.Context(),
 		orgID,
 		"",           // action filter (empty = all)
@@ -1319,8 +1241,8 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 	}
 
 	// 2. Get attestation events (if attestation service is available)
-	if h.attestationService != nil {
-		attestations, _, _, err := h.attestationService.GetMCPAttestations(c.Context(), mcpServerID)
+	if attSvc := h.getAttestationService(); attSvc != nil {
+		attestations, _, _, err := attSvc.GetMCPAttestations(c.Context(), mcpServerID)
 		if err == nil && attestations != nil {
 			for _, att := range attestations {
 				actorType := "agent"
@@ -1366,8 +1288,8 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 	}
 
 	// 3. Get capability detection events (from capability service)
-	if h.mcpCapabilityService != nil {
-		capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), mcpServerID)
+	if capSvc := h.getMCPCapabilityService(); capSvc != nil {
+		capabilities, err := capSvc.GetCapabilities(c.Context(), mcpServerID)
 		if err == nil && capabilities != nil {
 			for _, cap := range capabilities {
 				description := fmt.Sprintf("Capability '%s' (%s) detected", cap.Name, cap.CapabilityType)
