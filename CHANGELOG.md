@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the server refuses to start with the `JWT_SECRET` placeholder from `.env.example`
+
+- The root `.env.example` sets `JWT_SECRET` to a placeholder long enough to pass the 32-character minimum, so a copy
+  of the file used without editing started the server signing tokens with a value published in this repository. That
+  placeholder is now on the list of known defaults: startup stops with an error naming `JWT_SECRET` and the command
+  that generates a value (`openssl rand -hex 32`).
+- **Upgrading:** a deployment whose `.env` still carries that placeholder no longer starts. Set `JWT_SECRET` to the
+  output of `openssl rand -hex 32`; users signed in under the old value sign in again.
+- `apps/backend/.env.example` no longer puts a comment on the same line as an empty value. godotenv, which the backend
+  uses to load `.env` files, reads `JWT_SECRET=   # REQUIRED: ...` as the value `# REQUIRED: ...`, which also passed
+  the length check. `POSTGRES_PASSWORD`, `SMTP_USERNAME` and `SMTP_PASSWORD` had the same layout and now carry their
+  comment on the line above.
+- A test loads each environment template (`.env.example`, `.env.quickstart`, `apps/backend/.env.example`) as written
+  and expects startup to refuse its `JWT_SECRET`.
+
+### Changed — each server signing purpose has its own key, and the public keys are published
+
 ### Fixed — on tablet-width screens the end of a dashboard page is no longer hidden beneath the bottom tab bar
 
 - From 640 to 1023 pixels wide the dashboard shows the bottom tab bar, but the page's bottom padding fell back to 24

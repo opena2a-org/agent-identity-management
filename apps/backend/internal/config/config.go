@@ -10,7 +10,8 @@ import (
 	"time"
 )
 
-// SECURITY: SHA-256 digests of known development-only secrets that must never be
+// SECURITY: SHA-256 digests of known development-only secrets, and of template
+// placeholders long enough to pass the length check, that must never be
 // used in any environment. Hash-only storage keeps the plaintexts out of the
 // compiled binary and the source-of-record (CWE-798). To verify whether a
 // suspect string is on the blocklist during a security review:
@@ -27,6 +28,7 @@ var insecureDevSecretDigests = []string{
 	"e8cdbad8a2a71625ade7cd908b26f6522040a56af09ba9b82387185627c2b596",
 	"8413be1bcea1ec20652c60b3c01c6ba7f8a09d3e1c4c11f1d872e737d9a9a4ad",
 	"b508342c88497e5bc592721e44ef7b27642741df360a10fde1d48be4b44aefa7",
+	"bc43a14beca8866dbece708e622e3733d7580d1ea130403ff658a13eafc38f26",
 }
 
 // isKnownDevSecret reports whether s matches any of the hashed dev-secret
