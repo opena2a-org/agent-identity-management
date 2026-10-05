@@ -11,6 +11,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the developer compose stack passes `DEFAULT_ADMIN_PASSWORD` only to a one-shot bootstrap run
+
+- `docker-compose.yml` set `DEFAULT_ADMIN_PASSWORD` in the backend's environment. The backend never reads it; only
+  `aim-bootstrap --default` does. The long-running container still kept the value for its whole life, where
+  `docker inspect` and any process in the container could read it.
+- A new `bootstrap` service runs `/app/aim-bootstrap --default` with `DEFAULT_ADMIN_PASSWORD` and the database
+  connection, and exits: `docker compose run --rm bootstrap`. Its profile keeps it out of `docker compose up`. The
+  backend no longer has the variable.
+- The documented step this replaces, `docker compose run --rm aim-backend /app/aim-bootstrap --default`, named a
+  service the file does not define, and the backend's environment has no `DATABASE_URL` for the bootstrap to connect
+  with. `docs/quick-start.md` now writes `.env` with `./scripts/gen-dev-secrets.sh` before `docker compose up -d`,
+  which does not start without it, and adds the bootstrap step.
+- A test reads each root `docker-compose*.yml` and fails if any service other than a one-shot bootstrap run sets
+  `DEFAULT_ADMIN_PASSWORD`.
+
+### Fixed — an expired password reset token is cleared from the account
+
+- A password reset token that was never used stayed on the user's row after it expired, until the user requested
+  another reset. A token stored without an expiry, which the reset lookup never accepts, stayed the same way.
+- The server's five-minute cleanup job now clears both and logs only how many rows it cleared. A reset link that has
+  not expired keeps working.
+- The `users` update trigger still sets `updated_at` on each row the job clears.
+
 ### Fixed — an approved device code is exchanged for one token pair
 
 - `POST /api/v1/oauth/device/token` minted a new token pair, each its own session, on every poll of an approved

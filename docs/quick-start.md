@@ -26,10 +26,14 @@ By the end of this guide, you'll have:
 git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
+# Generate local secrets into .env (compose does not start without them)
+./scripts/gen-dev-secrets.sh > .env
+
 # Start with Docker Compose
 docker compose up -d
 
-# Wait ~60 seconds for services to start
+# Wait ~60 seconds for services to start, then create the admin account
+docker compose run --rm bootstrap
 ```
 
 **Access Points**:
@@ -39,7 +43,7 @@ docker compose up -d
 
 **Default Admin Login**:
 - Email: `admin@opena2a.org`
-- Password: captured from `aim-bootstrap --default` stdout on first deploy. (⚠️ Pre-B2 stacks used `AIM2025!Secure` — rotate immediately if you inherited it; first login forces a change either way.)
+- Password: the `DEFAULT_ADMIN_PASSWORD` value in `.env`. The bootstrap step does not print it. If `.env` sets no `DEFAULT_ADMIN_PASSWORD`, the bootstrap step generates a password and prints it once. (⚠️ Pre-B2 stacks used `AIM2025!Secure` — rotate immediately if you inherited it; first login forces a change either way.)
 
 ### Option B: Azure Production (One Command) ☁️
 

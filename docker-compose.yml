@@ -218,11 +218,8 @@ services:
       # Comma-separated emails approved automatically at sign-up; they become the first administrators.
       - AIM_PLATFORM_ADMINS=${AIM_PLATFORM_ADMINS:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
-      # DEFAULT_ADMIN_PASSWORD is read by `aim-bootstrap --default` inside the
-      # container so operators can pre-set the canonical admin password via
-      # .env (./scripts/gen-dev-secrets.sh emits one). If unset, bootstrap
-      # generates a random password and prints it once to stdout. Optional.
-      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-}
+      # DEFAULT_ADMIN_PASSWORD is not set here: only the one-shot bootstrap
+      # service below reads it, so it is not kept in this container's environment.
       # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
       - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
@@ -238,6 +235,27 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - aim-network
+
+  # One-shot admin bootstrap: `docker compose run --rm bootstrap` once the
+  # backend is healthy (it applies the migrations at startup). Creates
+  # admin@opena2a.org and exits; later runs change nothing. The password is
+  # DEFAULT_ADMIN_PASSWORD from .env (./scripts/gen-dev-secrets.sh emits one) and
+  # is not printed. If it is unset, bootstrap generates a password and prints it
+  # once. The profile keeps this service out of `docker compose up`.
+  bootstrap:
+    image: ghcr.io/opena2a-org/aim-server:latest
+    profiles: ["bootstrap"]
+    entrypoint: ["/app/aim-bootstrap"]
+    command: ["--default"]
+    environment:
+      - DATABASE_URL=host=postgres port=5432 user=${POSTGRES_USER:-postgres} password='${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}' dbname=${POSTGRES_DB:-identity} sslmode=${POSTGRES_SSL_MODE:-disable}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: "no"
     networks:
       - aim-network
 
