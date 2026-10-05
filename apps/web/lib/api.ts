@@ -8,6 +8,11 @@ export type ApiRequestError = Error & { status?: number; code?: string };
 
 const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
+// The Web Lock every tab of this origin takes before it refreshes the session.
+const TOKEN_REFRESH_LOCK = "aim:token-refresh";
+
+type TokenPair = { accessToken: string; refreshToken: string };
+
 // Runtime API URL configuration
 // CRITICAL: This function MUST be called ONLY in browser context (client-side)
 // to ensure proper URL detection for environment-agnostic deployments
@@ -599,15 +604,98 @@ class APIClient {
     }
   }
 
-  // Refresh access token using refresh token
-  async refreshAccessToken(): Promise<{
-    accessToken: string;
-    refreshToken: string;
-  } | null> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) {
+  // Refreshes waiting their turn in this tab, used where the browser has no Web
+  // Locks (an origin served over plain HTTP that is not localhost).
+  private refreshQueue: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Runs one refresh at a time. With Web Locks the turn is taken across every
+   * tab of the origin; without them it is taken within this tab only.
+   */
+  private async withRefreshLock(
+    work: () => Promise<TokenPair | null>
+  ): Promise<TokenPair | null> {
+    const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    if (locks && typeof locks.request === "function") {
+      let started = false;
+      try {
+        return await locks.request(TOKEN_REFRESH_LOCK, () => {
+          started = true;
+          return work();
+        });
+      } catch (error) {
+        if (started) throw error;
+        // The lock manager refused the request itself: take the turn in this tab.
+      }
+    }
+    const run = this.refreshQueue.then(work, work);
+    this.refreshQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Refresh access token using refresh token.
+   *
+   * A refresh token is single-use: the API rotates it on every refresh, and
+   * presenting one that was already rotated ends the whole sign-in. Every tab
+   * shares one stored pair, so the refresh is single-flight: a caller waits its
+   * turn, then reads the store again, and posts only if the store still holds
+   * the pair it was refused with. If another caller rotated the pair meanwhile,
+   * this one adopts what is stored and posts nothing.
+   *
+   * `rejectedAccessToken` is the access token the API just refused, when the
+   * caller knows it; without it the stored one at the time of the call is used.
+   */
+  async refreshAccessToken(
+    rejectedAccessToken?: string | null
+  ): Promise<TokenPair | null> {
+    const seenRefreshToken = this.getRefreshToken();
+    if (!seenRefreshToken) {
       return null;
     }
+    const seenAccessToken =
+      rejectedAccessToken !== undefined ? rejectedAccessToken : this.getToken();
+
+    return this.withRefreshLock(() =>
+      this.refreshUnlessRotated(seenAccessToken, seenRefreshToken)
+    );
+  }
+
+  // The stored pair, when it is complete.
+  private storedPair(): TokenPair | null {
+    const accessToken = this.getToken();
+    const refreshToken = this.getRefreshToken();
+    return accessToken && refreshToken ? { accessToken, refreshToken } : null;
+  }
+
+  private async refreshUnlessRotated(
+    seenAccessToken: string | null,
+    seenRefreshToken: string
+  ): Promise<TokenPair | null> {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) {
+      // Signed out, or refused, while this caller waited.
+      return null;
+    }
+    const stored = this.storedPair();
+    if (
+      stored &&
+      (stored.refreshToken !== seenRefreshToken ||
+        stored.accessToken !== seenAccessToken)
+    ) {
+      // Another caller already replaced the pair: use it.
+      return stored;
+    }
+
+    // A refusal speaks only for the token that was presented. If the store
+    // holds another pair by the time it arrives, that pair is left in place.
+    const clearUnlessReplaced = (): TokenPair | null => {
+      if (this.getRefreshToken() === refreshToken) {
+        this.clearToken();
+        return null;
+      }
+      return this.storedPair();
+    };
 
     try {
       const response = await fetch(`${this.baseURL}/api/v1/auth/refresh`, {
@@ -621,8 +709,7 @@ class APIClient {
 
       if (!response.ok) {
         // Refresh token is invalid or expired
-        this.clearToken();
-        return null;
+        return clearUnlessReplaced();
       }
 
       const data = await response.json();
@@ -633,8 +720,7 @@ class APIClient {
       return data;
     } catch (error) {
       // Network error or other issue
-      this.clearToken();
-      return null;
+      return clearUnlessReplaced();
     }
   }
 
@@ -662,7 +748,7 @@ class APIClient {
     if (response.status === 401) {
       // Try to refresh the token if we haven't already
       if (!isRetry) {
-        const refreshResult = await this.refreshAccessToken();
+        const refreshResult = await this.refreshAccessToken(token);
         if (refreshResult) {
           // Retry the request with new token
           return this.request<T>(endpoint, options, true);
@@ -2411,11 +2497,12 @@ class APIClient {
     };
 
     // First attempt with current token
-    let response = await attemptDownload(this.getToken());
+    const token = this.getToken();
+    let response = await attemptDownload(token);
 
     // If 401 Unauthorized, try to refresh token and retry
     if (response.status === 401) {
-      const refreshed = await this.refreshAccessToken();
+      const refreshed = await this.refreshAccessToken(token);
 
       if (!refreshed) {
         // Refresh failed - token is expired and can't be refreshed
