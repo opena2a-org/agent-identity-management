@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The API reference names the password reset fields the endpoint reads
+
+- The developer page documented `POST /api/v1/public/reset-password` with a `token` field and no confirmation
+  field. The endpoint reads `resetToken`, `newPassword` and `confirmPassword`, all required, so a request written from
+  the documentation was refused with `Reset token is required`. The schema and example body now use those three
+  fields, and `newPassword` notes the 8-character minimum the endpoint enforces.
+- `public_password_reset_docs_test.go` compares the documented schema fields, their `required` flags and the example
+  body of the forgot-password and reset-password endpoints against the json tags of the request structs their
+  handlers bind, and fails on any difference.
+
 ### Fixed — The EchoLeak demo script shows a placeholder for the admin password
 
 - The login step in `docs/DEMO_SCRIPT_ECHOLEAK.md` also printed the fixed admin password that stacks seeded before
