@@ -872,6 +872,14 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — an expired password reset token is cleared from the account
+
+- A password reset token that was never used stayed on the user's row after it expired, until the user requested
+  another reset. A token stored without an expiry, which the reset lookup never accepts, stayed the same way.
+- The server's five-minute cleanup job now clears both and logs only how many rows it cleared. A reset link that has
+  not expired keeps working.
+- The `users` update trigger still sets `updated_at` on each row the job clears.
+
 ### Changed — a third party can verify an agent card attestation from the served card and the JWK Set
 
 - A served card's attestation could not be checked by anyone but the server. The signed `issuedAt` was a different
