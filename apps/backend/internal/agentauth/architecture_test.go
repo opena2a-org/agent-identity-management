@@ -275,6 +275,8 @@ var admittedStatusReads = map[string]struct {
 		1, "after the signature verifies, through LoadVerifiedAgent; the unknown-agent 404 is a named residual"},
 	"interfaces/http/handlers/verification_handler.go#*VerificationHandler.GetVerificationSDK": {
 		1, "after the signature verifies, through LoadVerifiedAgent"},
+	"interfaces/http/handlers/action_request_statement.go#*VerificationHandler.createVerificationFromStatement": {
+		1, "after the statement's signature verifies and its nonce is admitted, through LoadVerifiedAgent"},
 	"interfaces/http/middleware/service_principal.go#ServicePrincipalMiddleware": {
 		1, "verify-first: the service token's JWT signature is verified before the agent row is read"},
 	"interfaces/http/middleware/api_key.go#APIKeyMiddleware": {

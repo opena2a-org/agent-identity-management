@@ -398,6 +398,12 @@ func main() {
 	stopNonceCleanup := startNonceCleanupJob(services.A2A, application.NonceCleanupInterval)
 	defer close(stopNonceCleanup)
 
+	// Start the job that deletes the nonces of signed action-request
+	// statements. Its first run completes before the server listens: until a
+	// purge has completed, every statement is refused with no write.
+	stopActionRequestNoncePurge := startActionRequestNoncePurgeJob(services.ActionRequestNonces, domain.ActionRequestNoncePurgeInterval)
+	defer close(stopActionRequestNoncePurge)
+
 	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
 	if services.RegistryBridge != nil {
 		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
@@ -650,6 +656,8 @@ type Services struct {
 	FGA               *application.FGAEngine                // Fine-Grained Authorization engine (5-step decision flow)
 	ATCIssuance       *application.ATCIssuanceService       // Issues Registry-signed ATCs carrying AIM's behavioral score
 	SigningKeys       *crypto.SigningKeyRing                // One server signing key per purpose; public keys served at /.well-known/jwks.json
+	// Admits and purges the nonces of signed action-request statements
+	ActionRequestNonces *application.ActionRequestNonceService
 }
 
 func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -1130,6 +1138,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		FGA:               fgaEngine,                                            // Fine-Grained Authorization engine
 		ATCIssuance:       atcIssuanceService,                                   // Registry-delegated ATC issuance
 		SigningKeys:       signingKeys,                                          // Per-purpose server signing keys
+
+		// Admission store for signed action-request statements
+		ActionRequestNonces: application.NewActionRequestNonceService(repository.NewAgentRequestNonceRepository(db)),
 	}, keyVault
 }
 
@@ -1270,7 +1281,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.VerificationEvent,
 			repos.Organization,
 			services.FGA,
-		),
+		).WithActionRequestNonces(services.ActionRequestNonces),
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,
 			repos.Agent,     // A3d-iv: agent-keyed verification-event reads verify agent.OrganizationID via LoadOwned
@@ -2369,6 +2380,57 @@ func runNonceCleanup(cleaner nonceCleaner) {
 	if deleted > 0 {
 		log.Printf("A2A nonce cleanup deleted %d expired nonce(s)", deleted)
 	}
+}
+
+// actionRequestNoncePurger deletes action-request nonces past expires_at + K.
+type actionRequestNoncePurger interface {
+	Purge(ctx context.Context) (application.ActionRequestNoncePurgeResult, error)
+}
+
+// startActionRequestNoncePurgeJob logs the signed action-request constants,
+// runs one purge, then purges every interval. Returns a channel that should
+// be closed to stop the job.
+func startActionRequestNoncePurgeJob(purger actionRequestNoncePurger, interval time.Duration) chan struct{} {
+	log.Printf("Signed action-request statements: window %ds, nonces kept %ds past expiry, purge every %s, "+
+		"admission timeout %s, signedBytes at most %d bytes (%d base64url characters), body at most %d bytes "+
+		"(allowance %d), payload depth at most %d",
+		domain.ActionRequestWindowSeconds, domain.ActionRequestNonceRetentionSeconds, interval,
+		domain.ActionRequestAdmissionTimeout, domain.ActionRequestMaxSignedBytes,
+		domain.ActionRequestMaxSignedBytesChars, domain.ActionRequestMaxRawBody,
+		domain.ActionRequestRawBodyAllowance, domain.ActionRequestMaxDepth)
+	runActionRequestNoncePurge(purger)
+
+	stopChan := make(chan struct{})
+	ticker := time.NewTicker(interval)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				runActionRequestNoncePurge(purger)
+			case <-stopChan:
+				ticker.Stop()
+				log.Println("Action-request nonce purge job stopped")
+				return
+			}
+		}
+	}()
+	return stopChan
+}
+
+// runActionRequestNoncePurge is one purge run, bounded by the purge interval
+// so a run blocked on a lock cannot hold up the server's start. Its line
+// carries counts and the duration only, never an organization or a nonce.
+func runActionRequestNoncePurge(purger actionRequestNoncePurger) {
+	ctx, cancel := context.WithTimeout(context.Background(), domain.ActionRequestNoncePurgeInterval)
+	defer cancel()
+	result, err := purger.Purge(ctx)
+	if err != nil {
+		log.Printf("s6_nonce_purge success=false deleted=%d organizations=%d duration_ms=%d",
+			result.Deleted, result.Organizations, result.Duration.Milliseconds())
+		return
+	}
+	log.Printf("s6_nonce_purge success=true deleted=%d organizations=%d duration_ms=%d",
+		result.Deleted, result.Organizations, result.Duration.Milliseconds())
 }
 
 // startRegistryBridgeJob starts a background goroutine that periodically

@@ -298,6 +298,13 @@ type VerificationEventServicerForVerification interface {
 	UpdateExecutionStatus(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
 }
 
+// ActionRequestNonceAdmitter admits the nonce of a signed action-request
+// statement: the window check on the database clock and the insert of
+// (agentID, nonce), in one statement.
+type ActionRequestNonceAdmitter interface {
+	Admit(ctx context.Context, agentID, organizationID uuid.UUID, nonce []byte, signedAt time.Time) (domain.ActionRequestAdmission, error)
+}
+
 // OrganizationRepositoryer defines the methods from OrganizationRepository that handlers use
 type OrganizationRepositoryer interface {
 	GetByID(id uuid.UUID) (*domain.Organization, error)
