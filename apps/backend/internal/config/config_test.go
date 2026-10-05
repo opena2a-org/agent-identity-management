@@ -354,3 +354,31 @@ func TestConfigSource_DoesNotReadTokenLifetimes(t *testing.T) {
 		return true
 	})
 }
+
+// TestLoad_RedisConfigured pins what makes Redis configured for readiness:
+// REDIS_HOST set. The localhost default is still the address tried when it is
+// unset, but a failure there reads notConfigured, not unavailable.
+func TestLoad_RedisConfigured(t *testing.T) {
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_USER", "aim")
+	t.Setenv("POSTGRES_DB", "aim")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 64))
+
+	t.Setenv("REDIS_HOST", "redis")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() with REDIS_HOST set: %v", err)
+	}
+	if !cfg.Redis.Configured || cfg.Redis.Host != "redis" {
+		t.Fatalf("REDIS_HOST=redis: got Configured=%v Host=%q, want true and %q", cfg.Redis.Configured, cfg.Redis.Host, "redis")
+	}
+
+	os.Unsetenv("REDIS_HOST")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() with REDIS_HOST unset: %v", err)
+	}
+	if cfg.Redis.Configured || cfg.Redis.Host != "localhost" {
+		t.Fatalf("REDIS_HOST unset: got Configured=%v Host=%q, want false and %q", cfg.Redis.Configured, cfg.Redis.Host, "localhost")
+	}
+}

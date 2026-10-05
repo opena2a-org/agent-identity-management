@@ -92,6 +92,9 @@ type RedisConfig struct {
 	Password string
 	DB       int
 	UseTLS   bool
+	// Configured is true when REDIS_HOST names a Redis. The localhost default
+	// is still tried when it is unset, but does not make Redis configured.
+	Configured bool
 }
 
 // JWTConfig holds JWT configuration. Token lifetimes (JWT_ACCESS_TTL,
@@ -148,6 +151,8 @@ func Load() (*Config, error) {
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvAsInt("REDIS_DB", 0),
 			UseTLS:   getEnv("REDIS_USE_TLS", "false") == "true",
+
+			Configured: os.Getenv("REDIS_HOST") != "",
 		},
 		JWT: JWTConfig{
 			Secret: getEnvRequired("JWT_SECRET"),

@@ -230,13 +230,7 @@ func main() {
 
 	// Readiness probe (no auth required). Body contract:
 	// apps/backend/contracts/health-ready.schema.json.
-	var redisReadyCheck func(context.Context) error
-	if redisClient != nil {
-		redisReadyCheck = func(ctx context.Context) error {
-			return redisClient.Ping(ctx).Err()
-		}
-	}
-	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck))
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(cfg.Redis.Configured, redisClient)))
 
 	// System status endpoint (no auth required)
 	app.Get("/api/v1/status", func(c fiber.Ctx) error {
