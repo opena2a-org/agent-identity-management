@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -545,13 +546,15 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	// if it diverges from the trusted baseline. Divergence is only treated as server drift once the
 	// server has reached multi-agent consensus, so a single rogue or misconfigured agent cannot poison
 	// the baseline. consensusMet is read after the confidence-score update above so it reflects this
-	// attestation. Best-effort: a drift-tracking failure must not fail the attestation.
+	// attestation. It is the agent, owner and confidence thresholds without the agreement criterion,
+	// because a diverging report is what makes the attestations disagree. Best-effort: a
+	// drift-tracking failure must not fail the attestation.
 	if s.manifestService != nil && len(req.Attestation.CapabilitiesFound) > 0 {
 		consensusMet := false
 		if status, err := s.GetConsensusStatus(ctx, mcpServerID); err != nil {
 			fmt.Printf("⚠️  Failed to read consensus status for manifest drift on %s: %v\n", mcpServerID, err)
 		} else {
-			consensusMet = status.ConsensusReached
+			consensusMet = status.thresholdsMet()
 		}
 		if drift, err := s.manifestService.RecomputeFromAttestation(ctx, mcpServerID, req.Attestation.CapabilitiesFound, consensusMet); err != nil {
 			fmt.Printf("⚠️  Failed to recompute MCP manifest from attestation for %s: %v\n", mcpServerID, err)
@@ -683,6 +686,7 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 	// 1. Minimum number of unique agents
 	// 2. Minimum number of unique agent owners (independence)
 	// 3. Confidence score above threshold
+	// 4. Every attesting agent connected and reported the same tool set
 	if err := s.checkAndApplyConsensusVerification(ctx, mcpServerID, confidenceScore); err != nil {
 		// Log but don't fail - attestation was still recorded successfully
 		fmt.Printf("⚠️  Warning: failed to check consensus verification: %v\n", err)
@@ -744,11 +748,26 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 		return nil
 	}
 
+	// Check 4: The attestations agree. Checks 1-3 count attestations; this one compares what they
+	// report. Every attesting agent's latest attestation must report a successful connection and the
+	// same tool set, so the agent and owner counts above are counts of agents that agree.
+	attestations, err := s.attestationRepo.GetValidAttestationsByMCP(mcpServerID)
+	if err != nil {
+		return fmt.Errorf("failed to get attestations: %w", err)
+	}
+	agreement := evaluateAttestationAgreement(attestations)
+	if !agreement.agree() {
+		fmt.Printf("🔐 MCP %s: Consensus not reached - attestations disagree (%d of %d agents agree, %d failed connections, %d tool sets)\n",
+			mcpServerID, agreement.AgreeingAgents, agreement.Agents, agreement.ConnectionFailures, agreement.DistinctToolSets)
+		return nil
+	}
+
 	// 🎉 All consensus criteria met! Auto-verify the MCP server
 	fmt.Printf("🎉 MULTI-AGENT CONSENSUS REACHED for MCP %s:\n", mcpServerID)
 	fmt.Printf("   ✓ Unique agents: %d (required: %d)\n", uniqueAgentCount, minAgents)
 	fmt.Printf("   ✓ Unique owners: %d (required: %d)\n", uniqueOwnerCount, minOwners)
 	fmt.Printf("   ✓ Confidence: %.1f%% (required: %.1f%%)\n", confidenceScore, MinConfidenceScoreForVerification)
+	fmt.Printf("   ✓ Agreement: %d agents connected and reported the same tool set\n", agreement.AgreeingAgents)
 	fmt.Printf("   → Auto-verifying MCP server\n")
 
 	// Update MCP status to verified
@@ -765,6 +784,78 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 	return nil
 }
 
+// attestationAgreement compares what the agents attesting an MCP server report. Only each agent's
+// most recent valid SDK attestation counts, so an agent that re-attests after the server changes
+// replaces its earlier report instead of disagreeing with itself. Manual attestations are not agent
+// reports and are left out, as they are from the agent and owner counts.
+type attestationAgreement struct {
+	Agents             int // agents with a valid SDK attestation
+	AgreeingAgents     int // largest group of agents that connected and reported the same tool set
+	ConnectionFailures int // agents whose latest attestation reports a failed connection
+	DistinctToolSets   int // distinct tool sets reported by agents that connected
+}
+
+// agree reports whether every attesting agent connected and all of them reported the same tool set.
+func (a attestationAgreement) agree() bool {
+	return a.Agents > 0 && a.AgreeingAgents == a.Agents
+}
+
+// evaluateAttestationAgreement groups the latest attestation of each agent by the tool set it
+// reports. A tool set is the set of reported tool names: order, duplicates and the generic
+// capability-category tokens do not change it. An empty tool set is a tool set like any other.
+func evaluateAttestationAgreement(attestations []*domain.MCPAttestation) attestationAgreement {
+	latest := make(map[uuid.UUID]*domain.MCPAttestation)
+	for _, att := range attestations {
+		if att == nil || !att.IsValid || att.AgentID == nil || att.Signature == "manual-attestation" {
+			continue
+		}
+		if prev, ok := latest[*att.AgentID]; !ok || attestationTime(att).After(attestationTime(prev)) {
+			latest[*att.AgentID] = att
+		}
+	}
+
+	result := attestationAgreement{Agents: len(latest)}
+	agentsPerToolSet := make(map[string]int)
+	for _, att := range latest {
+		if !att.AttestationData.ConnectionSuccessful {
+			result.ConnectionFailures++
+			continue
+		}
+		key := toolSetKey(att.AttestationData.CapabilitiesFound)
+		agentsPerToolSet[key]++
+		if agentsPerToolSet[key] > result.AgreeingAgents {
+			result.AgreeingAgents = agentsPerToolSet[key]
+		}
+	}
+	result.DistinctToolSets = len(agentsPerToolSet)
+	return result
+}
+
+// attestationTime is when an attestation was verified, or when it was stored if that is unknown.
+func attestationTime(att *domain.MCPAttestation) time.Time {
+	if att.VerifiedAt != nil {
+		return *att.VerifiedAt
+	}
+	return att.CreatedAt
+}
+
+// toolSetKey returns a comparable key for the set of tool names in an attestation.
+func toolSetKey(names []string) string {
+	seen := make(map[string]struct{})
+	tools := make([]string, 0, len(names))
+	for _, name := range filterAttestedToolNames(names) {
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		tools = append(tools, name)
+	}
+	sort.Strings(tools)
+	// JSON keeps the key unambiguous whatever characters a tool name holds.
+	key, _ := json.Marshal(tools)
+	return string(key)
+}
+
 // ConsensusStatus represents the current multi-agent consensus status for an MCP server
 type ConsensusStatus struct {
 	MCPServerID         string  `json:"mcpServerId"`
@@ -776,9 +867,22 @@ type ConsensusStatus struct {
 	RequiredOwners      int     `json:"requiredOwners"`    // Threshold
 	ConfidenceScore     float64 `json:"confidenceScore"`   // Current score
 	RequiredConfidence  float64 `json:"requiredConfidence"`// Threshold
+	AttestationsAgree   bool    `json:"attestationsAgree"` // Every attesting agent connected and reported the same tool set
+	AgreeingAgents      int     `json:"agreeingAgents"`    // Largest group of agents that connected and reported the same tool set
+	ConnectionFailures  int     `json:"connectionFailures"`// Agents whose latest attestation reports a failed connection
+	DistinctToolSets    int     `json:"distinctToolSets"`  // Distinct tool sets reported by agents that connected
 	ConsensusReached    bool    `json:"consensusReached"`  // All criteria met
 	ProgressPercent     float64 `json:"progressPercent"`   // Overall progress 0-100
 	MissingCriteria     []string `json:"missingCriteria"`  // What's still needed
+}
+
+// thresholdsMet reports whether the agent, owner and confidence thresholds are met, without the
+// agreement criterion. Manifest drift detection keys on this: an attestation that disagrees with the
+// others is the input it exists to record, so disagreement must not switch it off.
+func (c *ConsensusStatus) thresholdsMet() bool {
+	return c.UniqueAgents >= c.RequiredAgents &&
+		c.UniqueOwners >= c.RequiredOwners &&
+		c.ConfidenceScore >= c.RequiredConfidence
 }
 
 // GetConsensusStatus returns the current multi-agent consensus status for an MCP server
@@ -837,6 +941,27 @@ func (s *MCPAttestationService) GetConsensusStatus(
 			fmt.Sprintf("Need %.1f%% more confidence score", MinConfidenceScoreForVerification-mcpServer.ConfidenceScore))
 	}
 
+	// Agreement: share of attesting agents that connected and reported the same tool set.
+	attestations, err := s.attestationRepo.GetValidAttestationsByMCP(mcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestations: %w", err)
+	}
+	agreement := evaluateAttestationAgreement(attestations)
+	var agreementProgress float64
+	if agreement.Agents > 0 {
+		agreementProgress = float64(agreement.AgreeingAgents) / float64(agreement.Agents) * 100
+	}
+	if agreement.ConnectionFailures == 1 {
+		missingCriteria = append(missingCriteria, "1 attesting agent reports a failed connection")
+	} else if agreement.ConnectionFailures > 1 {
+		missingCriteria = append(missingCriteria,
+			fmt.Sprintf("%d attesting agents report a failed connection", agreement.ConnectionFailures))
+	}
+	if agreement.DistinctToolSets > 1 {
+		missingCriteria = append(missingCriteria,
+			fmt.Sprintf("Attesting agents report %d different tool sets", agreement.DistinctToolSets))
+	}
+
 	// Overall progress is the minimum of all criteria (all must be met)
 	overallProgress := agentsProgress
 	if ownersProgress < overallProgress {
@@ -845,8 +970,11 @@ func (s *MCPAttestationService) GetConsensusStatus(
 	if confidenceProgress < overallProgress {
 		overallProgress = confidenceProgress
 	}
+	if agreementProgress < overallProgress {
+		overallProgress = agreementProgress
+	}
 
-	consensusReached := len(missingCriteria) == 0
+	consensusReached := len(missingCriteria) == 0 && agreement.agree()
 
 	return &ConsensusStatus{
 		MCPServerID:        mcpServerID.String(),
@@ -858,6 +986,10 @@ func (s *MCPAttestationService) GetConsensusStatus(
 		RequiredOwners:     minOwners,
 		ConfidenceScore:    mcpServer.ConfidenceScore,
 		RequiredConfidence: MinConfidenceScoreForVerification,
+		AttestationsAgree:  agreement.agree(),
+		AgreeingAgents:     agreement.AgreeingAgents,
+		ConnectionFailures: agreement.ConnectionFailures,
+		DistinctToolSets:   agreement.DistinctToolSets,
 		ConsensusReached:   consensusReached,
 		ProgressPercent:    overallProgress,
 		MissingCriteria:    missingCriteria,
