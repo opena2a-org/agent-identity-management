@@ -16,4 +16,4 @@ Practical guides organized by what you are trying to accomplish. Each guide incl
 
 **Adding identity to your own framework** -- Go to [Embed in my app](use-cases/embed-in-my-app.md) for programmatic access via `@opena2a/aim-core` or the Python SDK.
 
-**Team with multiple agents** -- Jump to [Fleet governance](use-cases/fleet-governance.md) for centralized audit, OIDC, and dashboard-based management.
+**Team with multiple agents** -- Jump to [Fleet governance](use-cases/fleet-governance.md) for centralized audit, service tokens for agents, and dashboard-based management.
