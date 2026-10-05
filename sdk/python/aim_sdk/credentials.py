@@ -23,10 +23,20 @@ This design ensures:
 import os
 import sys
 import json
+import errno
 import shutil
+import tempfile
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 # Security logging for SOC monitoring
 from .security_logging import security_logger, CredEventType
@@ -43,6 +53,11 @@ LEGACY_CREDENTIALS_FILE = AIM_DIR / "credentials.json"
 
 # Schema version for future evolution
 SCHEMA_VERSION = "1.0"
+
+# How long a process waits for another process's refresh of the SDK credentials
+# before giving up on its own. The holder makes at most two HTTP calls (refresh,
+# then recovery), each with a 10-second timeout.
+SDK_CREDENTIALS_LOCK_TIMEOUT = 60.0
 
 
 # =============================================================================
@@ -117,6 +132,144 @@ def detect_credential_type(data: Dict[str, Any]) -> str:
 def get_sdk_credentials_path() -> Path:
     """Get the path to SDK credentials file."""
     return SDK_CREDENTIALS_FILE
+
+
+class SDKCredentialsLockTimeout(TimeoutError):
+    """Another process held the SDK credentials lock for longer than the timeout."""
+
+
+_lock_depth = threading.local()
+
+
+def get_sdk_credentials_lock_path() -> Path:
+    """The lock file that serializes refreshes of the SDK credentials file.
+
+    It sits next to the credentials file and is never replaced or removed: the
+    credentials file itself is replaced on every save, so a lock taken on it
+    would not be seen by a process that opened the new file.
+    """
+    return SDK_CREDENTIALS_FILE.with_name(SDK_CREDENTIALS_FILE.name + ".lock")
+
+
+def _try_lock(fd: int) -> bool:
+    try:
+        if sys.platform == "win32":
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError as e:
+        if sys.platform != "win32" and e.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+            raise
+        return False
+
+
+def _unlock(fd: int) -> None:
+    if sys.platform == "win32":
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextmanager
+def sdk_credentials_lock(timeout: Optional[float] = None):
+    """Hold the cross-process lock on the SDK credentials file.
+
+    Refresh tokens are single-use, so two processes sharing the credentials file
+    must not both present the stored token: the one that loses the race presents
+    a token the other already rotated, which the server refuses, and for a sign-in
+    from ``aim-sdk login`` the server then ends the sign-in for both.
+    Holding this lock across read, refresh and save makes the refresh happen
+    once. The lock is reentrant within a thread, so a save made while it is held
+    does not wait on itself.
+
+    Raises:
+        SDKCredentialsLockTimeout: another holder kept the lock past ``timeout``
+            seconds (default ``SDK_CREDENTIALS_LOCK_TIMEOUT``).
+    """
+    path = get_sdk_credentials_lock_path()
+    key = str(path)
+    held = getattr(_lock_depth, "held", None)
+    if held is None:
+        held = _lock_depth.held = {}
+
+    if held.get(key):
+        held[key] += 1
+        try:
+            yield
+        finally:
+            held[key] -= 1
+        return
+
+    wait = SDK_CREDENTIALS_LOCK_TIMEOUT if timeout is None else timeout
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(key, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        deadline = time.monotonic() + wait
+        while not _try_lock(fd):
+            if time.monotonic() >= deadline:
+                raise SDKCredentialsLockTimeout(
+                    f"Another process held {path} for more than {wait:g} seconds"
+                )
+            time.sleep(0.05)
+        held[key] = 1
+        try:
+            yield
+        finally:
+            held[key] = 0
+            _unlock(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_private_json(path: Path, data: Dict[str, Any]) -> None:
+    """Replace ``path`` with ``data`` in one step, readable by the owner only.
+
+    A reader in another process sees the old file or the new one, never a
+    truncated one.
+    """
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            os.replace(tmp, str(path))
+        except PermissionError:
+            if sys.platform != "win32":
+                raise
+            # Windows refuses to replace a file another process has open.
+            with open(path, "w") as f:
+                json.dump(data, f, indent=2)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    os.chmod(path, 0o600)
+
+
+def read_sdk_credentials_file() -> Optional[Dict[str, Any]]:
+    """Read the SDK credentials file alone, with no migration or discovery.
+
+    Returns None when the file is missing, unreadable or not SDK credentials.
+    """
+    try:
+        with open(SDK_CREDENTIALS_FILE, "r") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if isinstance(data, dict) and detect_credential_type(data) == CredentialType.SDK_OAUTH:
+        return data
+    return None
 
 
 def load_sdk_credentials() -> Optional[Dict[str, Any]]:
@@ -232,9 +385,9 @@ def save_sdk_credentials(credentials: Dict[str, Any]) -> bool:
         credentials["schemaVersion"] = SCHEMA_VERSION
         credentials["type"] = CredentialType.SDK_OAUTH
 
-        with open(SDK_CREDENTIALS_FILE, 'w') as f:
-            json.dump(credentials, f, indent=2)
-        os.chmod(SDK_CREDENTIALS_FILE, 0o600)
+        with sdk_credentials_lock():
+            SDK_CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _write_private_json(SDK_CREDENTIALS_FILE, credentials)
 
         security_logger.log_credential_event(
             CredEventType.CREDENTIAL_SAVED,
