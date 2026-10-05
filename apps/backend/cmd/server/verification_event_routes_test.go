@@ -58,8 +58,13 @@ func (r *routeTestAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	return nil, errors.New("sql: no rows in result set")
 }
 
+// UpdateTrustScore records the write and applies it to the stored agent, so an
+// assertion on the agent's TrustScore fails when a score was written.
 func (r *routeTestAgentRepo) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	r.scoreUpdates = append(r.scoreUpdates, newScore)
+	if a, ok := r.agents[id]; ok {
+		a.TrustScore = newScore
+	}
 	return nil
 }
 
