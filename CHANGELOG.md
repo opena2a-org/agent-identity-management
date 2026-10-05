@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — `aim-bootstrap` prints the admin password only when it generated it
+
+- `aim-bootstrap` ended every run by printing the admin email and password, including a password the operator
+  supplied with `--admin-password` or `DEFAULT_ADMIN_PASSWORD`. That copied the password into any log capturing the
+  command's output, which `DEFAULT_ADMIN_PASSWORD` exists to avoid. The credential block is now printed only when
+  `--default` generated the password; with a supplied password the run names the admin account and says the
+  password is not printed.
+- Tests cover both cases: a supplied password, by flag or environment variable, is absent from the output, and a
+  generated one is printed once with the capture notice.
+
 ### Security — the server refuses to start with the `JWT_SECRET` placeholder from `.env.example`
 
 - The root `.env.example` sets `JWT_SECRET` to a placeholder long enough to pass the 32-character minimum, so a copy
