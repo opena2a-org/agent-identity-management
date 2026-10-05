@@ -94,11 +94,10 @@ type RedisConfig struct {
 	UseTLS   bool
 }
 
-// JWTConfig holds JWT configuration
+// JWTConfig holds JWT configuration. Token lifetimes (JWT_ACCESS_TTL,
+// JWT_REFRESH_TTL, JWT_SESSION_MAX_AGE) are read by auth.NewJWTService.
 type JWTConfig struct {
-	Secret          string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
+	Secret string
 }
 
 // OAuthConfig holds OAuth provider configurations
@@ -151,9 +150,7 @@ func Load() (*Config, error) {
 			UseTLS:   getEnv("REDIS_USE_TLS", "false") == "true",
 		},
 		JWT: JWTConfig{
-			Secret:          getEnvRequired("JWT_SECRET"),
-			AccessTokenTTL:  getEnvAsDuration("JWT_ACCESS_TTL", 24*time.Hour),
-			RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
+			Secret: getEnvRequired("JWT_SECRET"),
 		},
 		OAuth: OAuthConfig{
 			Google: OAuthProvider{
