@@ -1626,7 +1626,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/verification-events",
         description:
-          "Disabled. A request without a token returns 401. A caller below the member role returns 403 from the role check, without a code. Member, manager and admin callers receive 403 with code verificationEventWriteNotAccepted. Verification events are recorded by the server when it performs a verification.",
+          "Disabled. A request without a token returns 401. A caller below the member role returns 403 from the role check, without a code. Member, manager and admin callers receive 403 with reasonCode verificationEventWriteNotAccepted, also sent as code. Verification events are recorded by the server when it performs a verification.",
         summary: "Create verification event (disabled)",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
@@ -1634,7 +1634,8 @@ export const apiDocumentation: EndpointCategory[] = [
         example: `// 403 Forbidden, for member, manager and admin callers
 {
   "error": "verification events are recorded by the server; this endpoint does not accept them",
-  "code": "verificationEventWriteNotAccepted"
+  "code": "verificationEventWriteNotAccepted",
+  "reasonCode": "verificationEventWriteNotAccepted"
 }`,
       },
       {
