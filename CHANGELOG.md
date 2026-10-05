@@ -11,6 +11,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a reused SDK-download token ends the chain that grew from it
+
+- Presenting an SDK-download refresh token (the 90-day token embedded in a downloaded SDK) that
+  was already rotated out now ends the chain that grew from it, as a reused login refresh token
+  ends its sign-in (RFC 9700 section 4.14.2). Every token issued from that download by rotation is
+  refused from then on: the family is revoked in the revocation store, and every `sdk_tokens` row
+  of the download is revoked with reason `token_family_revoked`, so the chain also ends where no
+  revocation store is configured. The event is recorded as a login reuse is
+  (`refresh_token_reuse`, then `refresh_session_revoked` for each later member refused), with
+  identifiers only. A rotated-out SDK token used to be refused on its own while the token that
+  replaced it stayed valid.
+- Two presentations of one SDK-download token in the same instant no longer both rotate. The
+  `sdk_tokens` retirement matches only an active row. When a presentation's rotation does not
+  take effect, its row is read again, and a row that another presentation retired by rotation in
+  the meantime makes it a reuse: it is refused, receives no tokens, and any row it created is
+  revoked with the family. It used to receive a second live token.
+- `POST /api/v1/auth/sdk/recover` refuses a token whose chain a reuse ended, with the refresh
+  route's 401 answer; the SDK is downloaded again instead. A token its owner revoked is still
+  recovered.
+- SDK-download tokens carry the registered `sid` claim naming their download (the downloaded
+  token's own id, copied on every rotation), and the access tokens minted from them carry it too,
+  so the SDK download, device approval and SDK recovery routes refuse an access token from an
+  ended chain. A download's family never shares an id with the sign-in it was downloaded from.
+  `POST /api/v1/auth/logout` with an SDK-download token revokes that download's family as it does
+  a sign-in's. A family's `sdk_tokens` rows are found from the download's row (its `token_id` is
+  the family's id) through the `parent_token` entry each rotation records; no row gains a field,
+  and there is no migration. A token downloaded before this change is the root of its own family
+  and carries it on its first rotation. Tokens are opaque to clients; no SDK change is needed.
+
 ### Changed (breaking) — `/metrics` moves off the API port to its own listener, loopback by default
 
 - What to check before upgrading: a Prometheus job that scrapes `/metrics` on port 8080 or through the

@@ -807,6 +807,11 @@ func (m *SharedMockSDKTokenRepository) RevokeAllForUser(userID uuid.UUID, reason
 	return args.Error(0)
 }
 
+func (m *SharedMockSDKTokenRepository) RevokeFamily(userID uuid.UUID, familyID string, reason string) error {
+	args := m.Called(userID, familyID, reason)
+	return args.Error(0)
+}
+
 func (m *SharedMockSDKTokenRepository) RecordUsage(tokenID string, ipAddress string) error {
 	args := m.Called(tokenID, ipAddress)
 	return args.Error(0)

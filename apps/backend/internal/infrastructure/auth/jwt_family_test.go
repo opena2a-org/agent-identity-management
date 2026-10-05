@@ -17,9 +17,11 @@ import (
 
 // Token families (RFC 9700 section 4.14.2): a login refresh token carries the
 // registered "sid" claim naming the sign-in it belongs to (its own jti at
-// login, copied on every rotation), so the refresh route can end the whole
-// sign-in when a rotated-out member is presented again. Access, SDK-download
-// and service tokens carry no family.
+// login, copied on every rotation), and an SDK-download token the download it
+// belongs to (its own jti at download, copied on every rotation), so the
+// refresh route can end the whole chain when a rotated-out member is presented
+// again. Access tokens carry their refresh token's family for reading only;
+// service tokens carry none.
 
 const familyTestSecret = "test-only-jwt-secret-not-a-real-value-0123456789"
 
@@ -105,7 +107,8 @@ func preChangeRefreshToken(t *testing.T, userID, orgID string, lifetime time.Dur
 	})
 }
 
-// J1: a login refresh token names its own family; no other token kind does.
+// J1: a login refresh token names its own family, and an SDK-download token
+// its own; a service token none.
 func TestFamily_LoginRefreshTokenCarriesSid(t *testing.T) {
 	svc := familyTestService(t, "168h")
 	userID, orgID := uuid.New().String(), uuid.New().String()
@@ -125,14 +128,17 @@ func TestFamily_LoginRefreshTokenCarriesSid(t *testing.T) {
 	sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "j1@example.com", "admin")
 	require.NoError(t, err)
 	_, hasSid = payloadOf(t, sdk)["sid"]
-	assert.False(t, hasSid, "SDK-download tokens carry no sid")
+	assert.True(t, hasSid, "an SDK-download token's payload carries the sid key")
+	sc := validated(t, svc, sdk)
+	assert.Equal(t, sc.ID, sc.SessionID, "at download the family is the token's own jti")
 	service, err := svc.GenerateServiceToken(uuid.New().String(), orgID)
 	require.NoError(t, err)
 	_, hasSid = payloadOf(t, service)["sid"]
 	assert.False(t, hasSid, "service tokens carry no sid")
 }
 
-// J2: rotation copies the family and draws a fresh jti; SDK rotation carries none.
+// J2: rotation copies the family and draws a fresh jti, for login and
+// SDK-download tokens alike.
 func TestFamily_RotationCopiesTheSid(t *testing.T) {
 	svc := familyTestService(t, "168h")
 	userID, orgID := uuid.New().String(), uuid.New().String()
@@ -153,16 +159,24 @@ func TestFamily_RotationCopiesTheSid(t *testing.T) {
 	require.NoError(t, err)
 	_, s2, err := svc.RefreshTokenPair(s1, "j2@example.com", "admin")
 	require.NoError(t, err)
-	_, hasSid := payloadOf(t, s2)["sid"]
-	assert.False(t, hasSid, "an SDK token rotated through RefreshTokenPair carries no sid")
+	_, s3, err := svc.RefreshTokenPair(s2, "j2@example.com", "admin")
+	require.NoError(t, err)
+	sc1, sc2, sc3 := validated(t, svc, s1), validated(t, svc, s2), validated(t, svc, s3)
+	assert.Equal(t, TokenTypeSDK, sc2.TokenType, "an SDK token rotates into an SDK token")
+	assert.Equal(t, IssuerSDK, sc2.Issuer)
+	assert.Equal(t, sc1.ID, sc2.SessionID, "SDK rotation copies the family")
+	assert.Equal(t, sc1.ID, sc3.SessionID)
+	assert.NotEqual(t, sc1.ID, sc2.ID)
+	assert.NotEqual(t, sc2.ID, sc3.ID)
 
-	// the rotated login access token carries the presented family; the SDK path's access token none
+	// the rotated access token carries the presented family, on both paths
 	a2, _, err := svc.RefreshTokenPair(p2, "j2@example.com", "admin")
 	require.NoError(t, err)
 	assert.Equal(t, c1.ID, validated(t, svc, a2).SessionID, "a rotated login access token carries the family")
 	sa, _, err := svc.RefreshTokenPair(s2, "j2@example.com", "admin")
 	require.NoError(t, err)
-	assert.Empty(t, validated(t, svc, sa).SessionID, "an SDK-path access token carries no family")
+	assert.Equal(t, sc1.ID, validated(t, svc, sa).AccessFamilyID(), "an SDK-path access token carries the SDK family")
+	assert.Equal(t, "", validated(t, svc, sa).FamilyID(), "and never drives a family write")
 }
 
 // A1: AccessFamilyID reads a login access token's family and nothing else's.
@@ -217,19 +231,61 @@ func TestFamily_PreChangeTokenIsItsOwnFamilyRoot(t *testing.T) {
 	assert.Equal(t, cl.ID, validated(t, svc, n1).SessionID, "the rotation carries the pre-change token's jti as the family")
 }
 
-// J4 (pin): no family for access, SDK-download and service tokens.
-func TestFamily_OnlyLoginRefreshTokensHaveAFamily(t *testing.T) {
+// J4 (pin): no family for access and service tokens.
+func TestFamily_OnlyRefreshTokensHaveAFamily(t *testing.T) {
 	svc := familyTestService(t, "168h")
 	userID, orgID := uuid.New().String(), uuid.New().String()
 	access, err := svc.GenerateAccessToken(userID, orgID, "j4@example.com", "admin")
 	require.NoError(t, err)
-	sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "j4@example.com", "admin")
-	require.NoError(t, err)
 	service, err := svc.GenerateServiceToken(uuid.New().String(), orgID)
 	require.NoError(t, err)
-	for name, token := range map[string]string{"access": access, "sdk": sdk, "service": service} {
+	for name, token := range map[string]string{"access": access, "service": service} {
 		assert.Equal(t, "", validated(t, svc, token).FamilyID(), name)
 	}
+	// a token that pairs the SDK type with the login issuer, or the reverse,
+	// names no family
+	now := time.Now()
+	for name, kind := range map[string][2]string{"sdk-typ-login-iss": {TokenTypeSDK, IssuerUser}, "refresh-typ-sdk-iss": {TokenTypeRefresh, IssuerSDK}} {
+		mixed := signClaims(t, JWTClaims{UserID: userID, OrganizationID: orgID, TokenType: kind[0], SessionID: uuid.New().String(), RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)), IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now), Issuer: kind[1], Subject: userID, ID: uuid.New().String()}})
+		assert.Equal(t, "", validated(t, svc, mixed).FamilyID(), name)
+	}
+}
+
+// J8: an SDK-download token starts its own family, and a login family and an
+// SDK family never share an id, even when the SDK is downloaded during the
+// sign-in.
+func TestFamily_SDKDownloadTokenStartsItsOwnFamily(t *testing.T) {
+	svc := familyTestService(t, "168h")
+	userID, orgID := uuid.New().String(), uuid.New().String()
+	_, login, err := svc.GenerateTokenPair(userID, orgID, "j6@example.com", "admin")
+	require.NoError(t, err)
+	seen := map[string]bool{validated(t, svc, login).FamilyID(): true}
+	for i := 0; i < 3; i++ {
+		sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "j6@example.com", "admin")
+		require.NoError(t, err)
+		c := validated(t, svc, sdk)
+		require.Equal(t, c.ID, c.FamilyID())
+		assert.False(t, seen[c.FamilyID()], "every download starts a family of its own")
+		seen[c.FamilyID()] = true
+	}
+}
+
+// J9: an SDK-download token minted before this change is the root of its own
+// family, and its first rotation starts the family under that jti.
+func TestFamily_PreChangeSDKTokenIsItsOwnFamilyRoot(t *testing.T) {
+	svc := familyTestService(t, "168h")
+	userID, orgID := uuid.New().String(), uuid.New().String()
+	now := time.Now()
+	pre := signClaims(t, JWTClaims{UserID: userID, OrganizationID: orgID, TokenType: TokenTypeSDK, RegisteredClaims: jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(now.Add(90 * 24 * time.Hour)), IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now), Issuer: IssuerSDK, Subject: userID, ID: uuid.New().String()}})
+	cp := validated(t, svc, pre)
+	assert.Empty(t, cp.SessionID)
+	assert.Equal(t, cp.ID, cp.FamilyID())
+
+	_, n1, err := svc.RefreshTokenPair(pre, "j7@example.com", "admin")
+	require.NoError(t, err)
+	assert.Equal(t, cp.ID, validated(t, svc, n1).SessionID, "the rotation carries the pre-change token's jti as the family")
 }
 
 // J5 (pin): a verifier built before this change accepts a token that carries
@@ -303,13 +359,24 @@ func TestFamily_RevokeFamilyWritesTheKeyForTheLongerLifetime(t *testing.T) {
 		assert.False(t, revoked)
 		assert.Empty(t, failing.keys)
 	})
+	t.Run("an SDK-download family: written for the token's own 90-day lifetime", func(t *testing.T) {
+		sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "j6@example.com", "admin")
+		require.NoError(t, err)
+		sc := validated(t, svc, sdk)
+		revoked, err := svc.RevokeFamily(ctx, sc)
+		require.NoError(t, err)
+		assert.True(t, revoked)
+		ttl, ok := store.keys["revoked:fam:"+sc.ID]
+		require.True(t, ok, "the family key is written under the download token's own jti")
+		assert.InDelta(t, (90*24*time.Hour + time.Minute).Seconds(), ttl.Seconds(), 1)
+	})
 	t.Run("tokens without a family: false, nil, no write", func(t *testing.T) {
 		before := len(store.keys)
 		access, err := svc.GenerateAccessToken(userID, orgID, "j6@example.com", "admin")
 		require.NoError(t, err)
-		sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "j6@example.com", "admin")
+		service, err := svc.GenerateServiceToken(uuid.New().String(), orgID)
 		require.NoError(t, err)
-		for _, token := range []string{access, sdk} {
+		for _, token := range []string{access, service} {
 			revoked, err := svc.RevokeFamily(ctx, validated(t, svc, token))
 			assert.NoError(t, err)
 			assert.False(t, revoked)

@@ -52,9 +52,10 @@ type JWTClaims struct {
 	// TokenType is "access" | "refresh" | "sdk". Empty on legacy tokens.
 	TokenType string `json:"typ,omitempty"`
 	// SessionID (the IANA-registered "sid" claim) names the token family a
-	// login refresh token belongs to: one sign-in on one user agent or device,
-	// carried unchanged through every rotation. Absent on access, SDK-download
-	// and service tokens.
+	// refresh token belongs to, carried unchanged through every rotation: for
+	// a login refresh token one sign-in on one user agent or device, for an
+	// SDK-download token one download. An access token minted with or from a
+	// refresh token carries the same value. Absent on service tokens.
 	SessionID string `json:"sid,omitempty"`
 	// AuthTime (the IANA-registered auth_time claim, seconds since the epoch)
 	// is the time of the sign-in a login refresh token belongs to: set at
@@ -83,12 +84,19 @@ func (c *JWTClaims) SignedInAt() time.Time {
 // defaultSessionMaxAge bounds a sign-in when JWT_SESSION_MAX_AGE is unset or unreadable.
 const defaultSessionMaxAge = 8 * time.Hour
 
-// FamilyID returns the token family a login refresh token belongs to: its
-// sid claim, or its own jti for a token minted before sid existed (such a
-// token is the root of its own family, and its first rotation carries the
-// family on). "" for every other kind of token.
+// FamilyID returns the token family a login refresh token or an SDK-download
+// token belongs to: its sid claim, or its own jti for a token minted before
+// sid existed (such a token is the root of its own family, and its first
+// rotation carries the family on). Both kinds draw a family's id from a fresh
+// jti, so a login family and an SDK family never share one. "" for every
+// other kind of token.
 func (c *JWTClaims) FamilyID() string {
-	if c == nil || c.TokenType != TokenTypeRefresh || c.Issuer != IssuerUser {
+	if c == nil {
+		return ""
+	}
+	login := c.TokenType == TokenTypeRefresh && c.Issuer == IssuerUser
+	sdk := c.TokenType == TokenTypeSDK && c.Issuer == IssuerSDK
+	if !login && !sdk {
 		return ""
 	}
 	if c.SessionID != "" {
@@ -171,9 +179,9 @@ func (s *JWTService) CheckFamilyRevoked(ctx context.Context, family string) (rev
 	return s.revoker.CheckFamily(ctx, family)
 }
 
-// RevokeFamily ends the token family the given login refresh token belongs
-// to, for the longer of the configured refresh lifetime and the token's own
-// lifetime, plus a minute: every member minted before the write expires
+// RevokeFamily ends the token family the given refresh token (login or
+// SDK-download) belongs to, for the longer of the configured refresh lifetime
+// and the token's own lifetime, plus a minute: every member minted before the write expires
 // within that, and one minted by a refresh in flight is covered by the
 // slack. Reports true only when the key was written; a missing revoker or a
 // token with no family is a no-op reported as false with no error.
@@ -197,9 +205,9 @@ func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool,
 	return true, nil
 }
 
-// RevokeSessionChecked revokes the presented refresh token and, for a login
-// refresh token, the whole session it belongs to (every refresh token of that
-// sign-in). Reports true only when every applicable write succeeded, so a
+// RevokeSessionChecked revokes the presented refresh token and, for a token
+// with a family (a login refresh token or an SDK-download token), the whole
+// family it belongs to (every refresh token of that sign-in or download). Reports true only when every applicable write succeeded, so a
 // logout answer never claims an ended session that is not ended.
 func (s *JWTService) RevokeSessionChecked(ctx context.Context, tokenString string) (bool, error) {
 	return s.RevokeSessionCheckedFrom(ctx, tokenString, Client{})
@@ -361,9 +369,20 @@ func getEnv(key, fallback string) string {
 // GenerateSDKRefreshToken generates a refresh token for SDK usage (90 days)
 // This token is embedded in downloaded SDKs for auto-authentication
 // Security: Reduced from 1 year to 90 days to minimize exposure window
+// A download starts a new token family: the token's sid is its own jti.
 func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) (string, error) {
+	return s.generateSDKRefreshToken(userID, orgID, email, role, "")
+}
+
+// generateSDKRefreshToken mints an SDK-download token in the given family; an
+// empty family starts a new one named by the new token's jti.
+func (s *JWTService) generateSDKRefreshToken(userID, orgID, email, role, family string) (string, error) {
 	now := time.Now()
 	sdkExpiry := 90 * 24 * time.Hour // 90 days (reduced from 365 for security)
+	id := uuid.New().String()
+	if family == "" {
+		family = id
+	}
 
 	claims := JWTClaims{
 		UserID:         userID,
@@ -371,13 +390,14 @@ func (s *JWTService) GenerateSDKRefreshToken(userID, orgID, email, role string) 
 		Email:          email,
 		Role:           role,
 		TokenType:      TokenTypeSDK,
+		SessionID:      family,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(sdkExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),
 			Issuer:    IssuerSDK,
 			Subject:   userID,
-			ID:        uuid.New().String(),
+			ID:        id,
 		},
 	}
 
@@ -534,10 +554,11 @@ func (s *JWTService) ValidateToken(tokenString string) (*JWTClaims, error) {
 
 // RefreshTokenPair mints a new access token and a new refresh token of the
 // presented token's kind (a login refresh token carries JWT_REFRESH_TTL, 168h
-// by default; an SDK token 90 days). A new login refresh token carries the
-// presented token's family (sid) and sign-in time (auth_time), so the sign-in
-// stays one family, with one start, across rotations. It retires nothing
-// itself: the refresh handler denylists a login
+// by default; an SDK token 90 days). The new refresh token and the new access
+// token carry the presented token's family (sid); a new login refresh token
+// also carries the sign-in time (auth_time), so the sign-in stays one family,
+// with one start, across rotations, and an SDK download stays one family
+// across its rotations. It retires nothing itself: the refresh handler denylists a login
 // token's jti (and returns the presented token unchanged when it cannot) and
 // revokes an SDK token's sdk_tokens row by hash.
 // Returns: newAccessToken, newRefreshToken, error
@@ -570,7 +591,7 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 	var newAccessToken, newRefreshToken string
 
 	// Generate new access token from the supplied principal, in the presented
-	// token's family (none for an SDK-download token)
+	// token's family
 	newAccessToken, err = s.generateAccessToken(claims.UserID, claims.OrganizationID, email, role, claims.FamilyID())
 	if err != nil {
 		return "", "", err
@@ -578,7 +599,7 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 
 	// Generate new refresh token (with same type as original)
 	if isSDKToken {
-		newRefreshToken, err = s.GenerateSDKRefreshToken(claims.UserID, claims.OrganizationID, email, role)
+		newRefreshToken, err = s.generateSDKRefreshToken(claims.UserID, claims.OrganizationID, email, role, claims.FamilyID())
 	} else {
 		newRefreshToken, err = s.generateRefreshToken(claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt())
 	}
