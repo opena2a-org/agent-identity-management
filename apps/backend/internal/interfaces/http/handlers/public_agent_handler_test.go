@@ -1,15 +1,76 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// signedInPublicRegisterApp mounts Register behind the identity that
+// OptionalAuthMiddleware sets for a valid user access token.
+func signedInPublicRegisterApp(handler *PublicAgentHandler) *fiber.App {
+	app := fiber.New()
+	app.Use(func(c fiber.Ctx) error {
+		c.Locals("user_id", uuid.New())
+		c.Locals("organization_id", uuid.New())
+		return c.Next()
+	})
+	app.Post("/public/agents/register", handler.Register)
+	return app
+}
+
+// insertCountingAgentRepo stands in for the agents table. It counts insert
+// attempts and refuses each one the way PostgreSQL refuses a row whose
+// organization does not exist. No other repository method is set, so a request
+// that reaches one fails its test.
+type insertCountingAgentRepo struct {
+	domain.AgentRepository
+	inserts atomic.Int32
+}
+
+func (r *insertCountingAgentRepo) Create(*domain.Agent) error {
+	r.inserts.Add(1)
+	return errors.New(`pq: insert or update on table "agents" violates foreign key constraint "agents_organization_id_fkey"`)
+}
+
+// publicRegisterRoute wires Register as the server does: the real agent
+// service over insertCountingAgentRepo, behind the real OptionalAuthMiddleware.
+func publicRegisterRoute(t *testing.T) (*fiber.App, *auth.JWTService, *insertCountingAgentRepo) {
+	t.Helper()
+	t.Setenv("JWT_SECRET", "test-only-jwt-secret-not-a-real-value-0123456789")
+	jwtService := auth.NewJWTService()
+
+	masterKey := make([]byte, 32)
+	_, err := rand.Read(masterKey)
+	require.NoError(t, err)
+	vault, err := crypto.NewKeyVault(base64.StdEncoding.EncodeToString(masterKey))
+	require.NoError(t, err)
+
+	repo := &insertCountingAgentRepo{}
+	agentService := application.NewAgentService(repo, nil, nil, vault, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	app := fiber.New()
+	app.Use(middleware.OptionalAuthMiddleware(jwtService))
+	app.Post("/api/v1/public/agents/register", NewPublicAgentHandler(agentService, nil, vault).Register)
+	return app, jwtService, repo
+}
+
+const publicRegisterValidBody = `{"name":"test","displayName":"Test Agent","description":"A test agent","agentType":"claude"}`
 
 // ===========================
 // NewPublicAgentHandler Tests
@@ -25,9 +86,7 @@ func TestNewPublicAgentHandler_NilDeps(t *testing.T) {
 // ===========================
 
 func TestPublicAgentHandler_Register_InvalidJSON(t *testing.T) {
-	handler := &PublicAgentHandler{}
-	app := fiber.New()
-	app.Post("/public/agents/register", handler.Register)
+	app := signedInPublicRegisterApp(&PublicAgentHandler{})
 
 	req := httptest.NewRequest("POST", "/public/agents/register", strings.NewReader("not json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -40,9 +99,7 @@ func TestPublicAgentHandler_Register_InvalidJSON(t *testing.T) {
 }
 
 func TestPublicAgentHandler_Register_MissingRequiredFields(t *testing.T) {
-	handler := &PublicAgentHandler{}
-	app := fiber.New()
-	app.Post("/public/agents/register", handler.Register)
+	app := signedInPublicRegisterApp(&PublicAgentHandler{})
 
 	// Missing name, displayName, description
 	body := `{"agentType":"claude"}`
@@ -57,9 +114,7 @@ func TestPublicAgentHandler_Register_MissingRequiredFields(t *testing.T) {
 }
 
 func TestPublicAgentHandler_Register_InvalidAgentType(t *testing.T) {
-	handler := &PublicAgentHandler{}
-	app := fiber.New()
-	app.Post("/public/agents/register", handler.Register)
+	app := signedInPublicRegisterApp(&PublicAgentHandler{})
 
 	body := `{"name":"test","displayName":"Test Agent","description":"A test agent","agentType":"invalid_type"}`
 	req := httptest.NewRequest("POST", "/public/agents/register", strings.NewReader(body))
@@ -72,41 +127,93 @@ func TestPublicAgentHandler_Register_InvalidAgentType(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
-func TestPublicAgentHandler_Register_NoAuthRequired(t *testing.T) {
-	handler := &PublicAgentHandler{}
-	app := fiber.New()
-	// Add recover middleware so nil agentService panic returns 500 instead of crashing
-	app.Use(func(c fiber.Ctx) error {
-		defer func() {
-			if r := recover(); r != nil {
-				_ = c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "internal server error",
-				})
-			}
-		}()
-		return c.Next()
-	})
-	app.Post("/public/agents/register", handler.Register)
+// TestPublicAgentHandler_Register_WithoutUserTokenAnswers401 pins what a caller
+// with no user access token gets. An agent row needs a user and an
+// organization, and on this route only a user access token supplies them, so
+// the handler used to run every such request through key generation and an
+// insert the database refused, and answered 400 "invalid organization or user
+// for this registration". It now answers 401, names the two paths that do
+// register an agent, and never reaches the agents table.
+func TestPublicAgentHandler_Register_WithoutUserTokenAnswers401(t *testing.T) {
+	app, jwtService, repo := publicRegisterRoute(t)
 
-	body := `{"name":"test","displayName":"Test Agent","description":"A test agent","agentType":"claude"}`
-	req := httptest.NewRequest("POST", "/public/agents/register", strings.NewReader(body))
+	refreshToken, err := jwtService.GenerateRefreshToken(uuid.NewString(), uuid.NewString())
+	require.NoError(t, err)
+
+	tests := []struct {
+		name   string
+		header string
+		value  string
+		body   string
+	}{
+		{name: "no credential", body: publicRegisterValidBody},
+		{name: "API key in X-AIM-API-Key", header: "X-AIM-API-Key", value: "not-a-real-key", body: publicRegisterValidBody},
+		{name: "API key in X-API-Key", header: "X-API-Key", value: "not-a-real-key", body: publicRegisterValidBody},
+		{name: "API key as bearer", header: "Authorization", value: "Bearer not-a-real-key", body: publicRegisterValidBody},
+		{name: "refresh token as bearer", header: "Authorization", value: "Bearer " + refreshToken, body: publicRegisterValidBody},
+		{name: "no credential and a body that is not JSON", body: "not json"},
+		{name: "no credential and an unknown agent type", body: `{"name":"test","displayName":"Test Agent","description":"A test agent","agentType":"invalid_type"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/api/v1/public/agents/register", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			if tt.header != "" {
+				req.Header.Set(tt.header, tt.value)
+			}
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+
+			var payload map[string]string
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+			assert.Equal(t, publicRegisterAuthRequiredMessage, payload["error"])
+		})
+	}
+
+	assert.Equal(t, int32(0), repo.inserts.Load(), "a caller with no user access token must not reach the agents table")
+}
+
+// TestPublicRegisterAuthRequiredMessage_NamesBothWorkingPaths keeps the 401
+// actionable: it has to say what to send here and where an API key is accepted.
+func TestPublicRegisterAuthRequiredMessage_NamesBothWorkingPaths(t *testing.T) {
+	assert.Contains(t, publicRegisterAuthRequiredMessage, "Authorization: Bearer <token>")
+	assert.Contains(t, publicRegisterAuthRequiredMessage, "X-API-Key")
+	assert.Contains(t, publicRegisterAuthRequiredMessage, "POST /api/v1/agents")
+}
+
+// TestPublicAgentHandler_Register_WithUserAccessTokenReachesTheService is the
+// other half: a signed-in user is not turned away. The stand-in table refuses
+// the insert, so the request ends in the service's 400 for an organization
+// that does not exist, after exactly one insert attempt.
+func TestPublicAgentHandler_Register_WithUserAccessTokenReachesTheService(t *testing.T) {
+	app, jwtService, repo := publicRegisterRoute(t)
+
+	accessToken, err := jwtService.GenerateAccessToken(uuid.NewString(), uuid.NewString(), "member@example.com", "member")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/v1/public/agents/register", strings.NewReader(publicRegisterValidBody))
 	req.Header.Set("Content-Type", "application/json")
-	// No X-AIM-API-Key header -- endpoint is public, should NOT return 401
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// Without a real agentService wired up, we expect 500 (nil pointer on service call),
-	// but critically NOT 401 -- the endpoint no longer requires authentication
-	assert.NotEqual(t, fiber.StatusUnauthorized, resp.StatusCode)
-	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+
+	var payload map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
+	assert.Equal(t, application.ErrInvalidOrgOrUser.Error(), payload["error"])
+	assert.Equal(t, int32(1), repo.inserts.Load())
 }
 
 func TestPublicAgentHandler_Register_MissingAgentType(t *testing.T) {
-	handler := &PublicAgentHandler{}
-	app := fiber.New()
-	app.Post("/public/agents/register", handler.Register)
+	app := signedInPublicRegisterApp(&PublicAgentHandler{})
 
 	// Has name, displayName, description but missing agentType
 	body := `{"name":"test","displayName":"Test Agent","description":"A test agent"}`

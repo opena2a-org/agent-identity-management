@@ -501,11 +501,11 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/public/agents/register",
         description:
-          "ONE-LINE agent registration. Creates agent with Ed25519 keypair automatically.",
+          "One-request agent registration for a signed-in user. Creates the agent in your organization and generates its Ed25519 keypair on the server; the private key is returned once, in this response. A request without a valid user access token is answered 401. To register with an API key, send it in the X-API-Key header to POST /api/v1/agents.",
         summary: "Register new agent (one-line)",
-        auth: "None (Public) or Bearer Token",
-        requiresAuth: false,
-        tags: ["agents", "public"],
+        auth: "Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["agents"],
         requestSchema: {
           type: "object",
           properties: {
@@ -515,12 +515,22 @@ export const apiDocumentation: EndpointCategory[] = [
               required: true,
               example: "my-assistant",
             },
-            type: {
+            displayName: {
               type: "string",
-              description: "Agent type (ai_agent, mcp_server, automation_bot)",
+              description: "Name shown in the dashboard",
               required: true,
             },
-            description: { type: "string", description: "Agent description" },
+            description: {
+              type: "string",
+              description: "Agent description",
+              required: true,
+            },
+            agentType: {
+              type: "string",
+              description:
+                "Agent type, for example claude, gpt, langchain, crewai, assistant or custom",
+              required: true,
+            },
           },
         },
         responseSchema: {
@@ -537,14 +547,16 @@ export const apiDocumentation: EndpointCategory[] = [
             },
             trustScore: {
               type: "number",
-              description: "Initial trust score (~90% for auto-verified agents)",
+              description:
+                "Initial trust score, 50 to 80 depending on the metadata supplied",
             },
           },
         },
         example: `{
   "name": "customer-support-agent",
-  "type": "ai_agent",
-  "description": "AI agent for customer support"
+  "displayName": "Customer Support Agent",
+  "description": "AI agent for customer support",
+  "agentType": "custom"
 }`,
       },
       {
