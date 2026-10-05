@@ -179,6 +179,17 @@ const verifier = client.getLocalVerifier();
 const { valid, context, rejectCategory } = await verifier!.verifyCredential(atx);
 ```
 
+When you hold the credential as it arrived on the wire, pass its JSON text (or
+bytes) instead of a parsed object. `verifyCredential` and `authorize` both accept
+it, and strict-parse it before reading any field: a credential with a duplicate
+member at any depth, including two names that differ only in case, is rejected
+as `MALFORMED`. A parsed object cannot get that check, because `JSON.parse` has
+already kept one of the duplicates and dropped the other.
+
+```typescript
+const result = await verifier!.verifyCredential(credentialJson); // string or Uint8Array
+```
+
 > Network is reserved for credential *resolution* (the AAP broker hands the agent
 > its ATX) and the periodic CRL refresh — never for a per-action decision.
 
