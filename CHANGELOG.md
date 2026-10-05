@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `POST /api/v1/public/agents/register` answers 401 without a user access token, and the API reference says it needs one
+
+- The route registers an agent only for a signed-in user: it takes the user and organization from a user access
+  token and reads no other credential. A request with no credential, or with an API key in `X-AIM-API-Key`,
+  `X-API-Key` or `Authorization: Bearer`, used to run through key generation and an insert the database refused, and
+  came back as 400 `invalid organization or user for this registration`. It is now answered 401 before the body is
+  read, with a message that names the two paths that register an agent: a user access token as
+  `Authorization: Bearer <token>` on this route, or an API key in `X-API-Key` at `POST /api/v1/agents`. A signed-in
+  caller is served as before.
+- The dashboard's API reference listed the route as public with no auth required, so the request it built carried
+  no token. Its example body also used `type` where the route reads `agentType`, and left out `displayName`. The
+  entry now requires a bearer token and documents the four required fields, and the route's API description says the
+  same.
+- A client that sent an API key to this route and matched on the 400 now sees 401; the key is accepted at
+  `POST /api/v1/agents`.
+
 ### Fixed — the Java SDK signs requests in the form the platform verifies, and its approval poll is signed
 
 - `AIMClient` signed an `X-Signature` GET over `METHOD\npath\ntimestamp\n`, and a POST with an empty body the same
