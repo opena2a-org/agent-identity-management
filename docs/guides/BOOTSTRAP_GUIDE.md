@@ -67,14 +67,18 @@ command exits successfully without changing the existing admin. This makes it
 safe to wire into deployment scripts that may run on every container start.
 
 Inside the docker-compose image (post-B2), the binary is shipped as
-`/app/aim-bootstrap`, so the equivalent invocation is:
+`/app/aim-bootstrap`. The repository's `docker-compose.yml` runs it with
+`--default` as the one-shot `bootstrap` service. Run it once the backend is
+healthy, since the backend applies the migrations at startup:
 
 ```bash
-docker compose run --rm aim-backend /app/aim-bootstrap --default
+docker compose run --rm bootstrap
 ```
 
-Capture the printed password from the command output before the container is
-removed. The admin user is forced to change the password at first login.
+The service passes `DEFAULT_ADMIN_PASSWORD` from `.env` to this run only; no
+long-running service has it in its environment. If `DEFAULT_ADMIN_PASSWORD` is
+unset, capture the generated password from the command output, which is printed
+once. The admin user is forced to change the password at first login.
 
 Expected output:
 ```
