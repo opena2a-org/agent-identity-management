@@ -213,7 +213,8 @@ services:
       # Frontend URL for CORS and links
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
-      # Admin user configuration (optional - override default admin password)
+      # Admin user configuration (optional). ADMIN_PASSWORD seeds the first administrator
+      # (ADMIN_EMAIL) only while no administrator exists; it never changes an existing password.
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
       # Comma-separated emails approved automatically at sign-up; they become the first administrators.
       - AIM_PLATFORM_ADMINS=${AIM_PLATFORM_ADMINS:-}

@@ -104,9 +104,9 @@ func main() {
 	// Report how AIM_PLATFORM_ADMINS was read; a mistyped entry is visible, not silent.
 	application.ReportPlatformAdminAllowlist()
 
-	// Override default admin password if ADMIN_PASSWORD env var is set
-	if err := applyAdminPasswordOverride(db); err != nil {
-		log.Printf("⚠️  Failed to apply admin password override: %v", err)
+	// Seed the first administrator from ADMIN_PASSWORD; an existing account is never changed.
+	if err := seedAdminFromEnv(db); err != nil {
+		log.Printf("⚠️  Failed to seed administrator from ADMIN_PASSWORD: %v", err)
 	}
 
 	// Initialize Redis (optional - used for caching only)
