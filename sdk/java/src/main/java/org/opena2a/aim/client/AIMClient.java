@@ -1567,29 +1567,31 @@ public class AIMClient implements AutoCloseable {
 
     /**
      * Record usage of an MCP tool.
-     * This builds the supply chain graph and triggers smart attestation when needed.
+     * Sends a usage report for one use of the tool to the backend's MCP supply chain
+     * analytics, which also records that this agent is connected to the server.
      *
-     * @param serverId   MCP server ID
+     * @param serverId   MCP server ID (the UUID returned when the server was registered)
      * @param toolName   Name of the tool being used
-     * @param mcpUrl     URL of the MCP server (optional, for attestation)
-     * @param mcpName    Name of the MCP server (optional, for attestation)
+     * @param mcpUrl     URL of the MCP server (not part of a usage report; not sent)
+     * @param mcpName    Name of the MCP server (not part of a usage report; not sent)
      * @return Map containing usage recording result
      */
     public Map<String, Object> useMcpTool(String serverId, String toolName, String mcpUrl, String mcpName) {
         try {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("serverId", serverId);
-            payload.put("toolName", toolName);
-            if (mcpUrl != null) {
-                payload.put("mcpUrl", mcpUrl);
-            }
-            if (mcpName != null) {
-                payload.put("mcpName", mcpName);
-            }
-            payload.put("timestamp", java.time.Instant.now().toString());
-
             String agentId = getAgentId();
-            String response = post("/api/v1/sdk-api/agents/" + agentId + "/mcp-usage", payload.toString());
+            String usedAt = java.time.Instant.now().toString();
+
+            // A usage report is keyed by MCP server ID, then by tool name.
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("agentId", agentId);
+            ObjectNode toolUsage = payload.putObject("mcpServers").putObject(serverId).putObject("toolUsage");
+            ObjectNode usage = toolUsage.putObject(toolName);
+            usage.put("count", 1);
+            usage.put("firstUsed", usedAt);
+            usage.put("lastUsed", usedAt);
+            payload.put("reportedAt", usedAt);
+
+            String response = post("/api/v1/sdk-api/agents/" + agentId + "/mcp-usage-report", payload.toString());
             logger.debug("Recorded MCP tool usage: server={}, tool={}", serverId, toolName);
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
