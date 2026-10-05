@@ -13,6 +13,10 @@ const TOKEN_REFRESH_LOCK = "aim:token-refresh";
 
 type TokenPair = { accessToken: string; refreshToken: string };
 
+// Routes under this prefix do not check the session, so a 401 from one of them is that
+// route's own refusal (a wrong password at sign-in), never an expired session.
+const PUBLIC_ROUTE_PREFIX = "/api/v1/public/";
+
 // Runtime API URL configuration
 // CRITICAL: This function MUST be called ONLY in browser context (client-side)
 // to ensure proper URL detection for environment-agnostic deployments
@@ -771,7 +775,7 @@ class APIClient {
       credentials: "omit", // the session travels only in the Authorization header
     });
 
-    if (response.status === 401) {
+    if (response.status === 401 && !endpoint.startsWith(PUBLIC_ROUTE_PREFIX)) {
       // Try to refresh the token if we haven't already
       if (!isRetry) {
         const refreshResult = await this.refreshAccessToken(token);
