@@ -51,6 +51,7 @@ import { APIKeysTab } from "@/components/agent/api-keys-tab";
 import { TrustScoreBreakdown } from "@/components/agent/trust-score-breakdown";
 import { DriftScoreCard } from "@/components/agent/drift-score-card";
 import { AgentTagsTab } from "@/components/agent/tags-tab";
+import { FirstRunPanel } from "@/components/agent/first-run-panel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -624,6 +625,9 @@ export default function AgentDetailsPage({
       </div>
 
       <Separator />
+
+      {/* Next steps for an agent that has not connected yet; renders nothing afterwards */}
+      <FirstRunPanel agent={agent} />
 
       {/* Agent Info Cards */}
       <div className="grid gap-4 md:grid-cols-3">

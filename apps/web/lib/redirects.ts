@@ -25,6 +25,7 @@ export const ROUTE_MOVES: readonly RouteMove[] = [
   { source: "/dashboard/admin/compliance", destination: "/dashboard/compliance" },
   { source: "/dashboard/api-keys", destination: "/dashboard/credentials" },
   { source: "/dashboard/sdk-tokens", destination: "/dashboard/credentials" },
+  { source: "/dashboard/agents/:id/success", destination: "/dashboard/agents/:id" },
 ];
 
 /** The table in the shape next.config.ts returns from redirects(). */
