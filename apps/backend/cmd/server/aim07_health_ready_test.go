@@ -306,7 +306,8 @@ func TestAIM07CommitStamping(t *testing.T) {
 	})
 
 	t.Run("AIM-07.AC2 Dockerfile.backend declares ARG GIT_COMMIT and stamps main.buildCommit", func(t *testing.T) {
-		b, err := os.ReadFile(aim07Path(t, filepath.Join("..", "..", "infrastructure", "docker", "Dockerfile.backend")))
+		// The repository-root Dockerfile.backend, the one docker-publish.yml builds.
+		b, err := os.ReadFile(aim07Path(t, filepath.Join("..", "..", "..", "..", "infrastructure", "docker", "Dockerfile.backend")))
 		require.NoError(t, err)
 		src := string(b)
 
