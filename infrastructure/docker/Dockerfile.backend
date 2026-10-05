@@ -17,13 +17,14 @@ RUN go mod download
 COPY apps/backend/ ./
 
 # Build the application for the target platform.
-# COMMIT is the full 40-character sha of the commit the image is built from;
-# GET /health/ready reports it. A build that passes none reports "commit": null.
+# GET /health/ready reports main.buildCommit as `commit` and main.buildVersion
+# as `version`. COMMIT is the full 40-character sha of the commit the image is
+# built from; a build that passes none reports "commit": null.
 ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags="-s -w -X main.version=${VERSION} -X main.buildCommit=${COMMIT}" \
+    -ldflags="-s -w -X main.buildVersion=${VERSION} -X main.buildCommit=${COMMIT}" \
     -o /bin/aim-server ./cmd/server
 
 # Build the migrate and bootstrap binaries so operators can run them inside the
