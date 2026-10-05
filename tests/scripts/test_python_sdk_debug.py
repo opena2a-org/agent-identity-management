@@ -10,10 +10,14 @@ sys.path.insert(0, sdk_path)
 
 from aim_sdk import AIMClient
 
+API_KEY = os.environ.get("AIM_API_KEY")
+if not API_KEY:
+    sys.exit("Set AIM_API_KEY to an API key issued by the local backend before running.")
+
 print("Creating client...")
 client = AIMClient(
     agent_id="e237d89d-d366-43e5-808e-32c2ab64de6b",
-    api_key="aim_live_dw4shT8Ng6fyM7OTO9XLVA71NP09KVeBqmJhlQe_cJw=",
+    api_key=API_KEY,
     aim_url="http://localhost:8080",
     sdk_token_id=None,
     timeout=5  # Short timeout for debugging
