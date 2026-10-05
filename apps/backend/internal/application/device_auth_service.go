@@ -23,6 +23,9 @@ var (
 	ErrAccessDenied         = errors.New("access_denied")
 	ErrInvalidDeviceCode    = errors.New("invalid_device_code")
 	ErrInvalidUserCode      = errors.New("invalid_user_code")
+	// ErrDeviceCodeUsed is returned for a code that has already been exchanged
+	// for its token pair. An approved code mints one pair.
+	ErrDeviceCodeUsed = errors.New("device_code_used")
 )
 
 // deviceCodeExpiry is the lifetime of a device authorization code.
@@ -158,6 +161,9 @@ func (s *DeviceAuthService) PollToken(ctx context.Context, deviceCode string) (*
 	case domain.DeviceCodeStatusDenied:
 		return nil, ErrAccessDenied
 
+	case domain.DeviceCodeStatusConsumed:
+		return nil, ErrDeviceCodeUsed
+
 	case domain.DeviceCodeStatusApproved:
 		if dc.UserID == nil || dc.OrganizationID == nil {
 			return nil, fmt.Errorf("device code approved but missing user or organization association")
@@ -178,22 +184,36 @@ func (s *DeviceAuthService) PollToken(ctx context.Context, deviceCode string) (*
 			return nil, ErrAccessDenied
 		}
 
-		accessToken, refreshToken, err := s.jwtService.GenerateTokenPair(
-			dc.UserID.String(),
-			dc.OrganizationID.String(),
-			user.Email,
-			string(user.Role),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate token pair: %w", err)
+		// One approval mints one pair. The code moves to consumed in the same
+		// transaction that mints, so of two polls racing on one approved code
+		// only one receives a pair, and a pair that fails to mint leaves the
+		// code approved for the next poll.
+		var resp *DeviceTokenResponse
+		err = s.deviceCodeRepo.Consume(ctx, deviceCode, func() error {
+			accessToken, refreshToken, err := s.jwtService.GenerateTokenPair(
+				dc.UserID.String(),
+				dc.OrganizationID.String(),
+				user.Email,
+				string(user.Role),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to generate token pair: %w", err)
+			}
+			resp = &DeviceTokenResponse{
+				AccessToken:  accessToken,
+				RefreshToken: refreshToken,
+				TokenType:    "Bearer",
+				ExpiresIn:    7200, // 2 hours, matching JWTService default
+			}
+			return nil
+		})
+		if errors.Is(err, domain.ErrDeviceCodeNotApproved) {
+			return nil, ErrDeviceCodeUsed
 		}
-
-		return &DeviceTokenResponse{
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
-			TokenType:    "Bearer",
-			ExpiresIn:    7200, // 2 hours, matching JWTService default
-		}, nil
+		if err != nil {
+			return nil, err
+		}
+		return resp, nil
 
 	default:
 		return nil, fmt.Errorf("unexpected device code status: %s", dc.Status)

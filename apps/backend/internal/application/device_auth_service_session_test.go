@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,21 +22,32 @@ import (
 // poll must apply the same rule, or a deactivated account receives a fresh
 // two-hour access token.
 
-type deviceCodeMapRepo struct{ codes map[string]*domain.DeviceCode }
+// deviceCodeMapRepo holds codes in memory. Reads return copies and every
+// method holds the lock, so polls may run concurrently; Consume tests and
+// changes the status under one lock, as the SQL does in one UPDATE.
+type deviceCodeMapRepo struct {
+	mu    sync.Mutex
+	codes map[string]*domain.DeviceCode
+}
 
 func (r *deviceCodeMapRepo) Create(_ context.Context, dc *domain.DeviceCode) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.codes[dc.DeviceCode] = dc
 	return nil
 }
 
 func (r *deviceCodeMapRepo) GetByDeviceCode(_ context.Context, d string) (*domain.DeviceCode, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if dc, ok := r.codes[d]; ok {
-		return dc, nil
+		cp := *dc
+		return &cp, nil
 	}
 	return nil, errors.New("not found")
 }
 
-func (r *deviceCodeMapRepo) GetByUserCode(_ context.Context, u string) (*domain.DeviceCode, error) {
+func (r *deviceCodeMapRepo) byUserCode(u string) (*domain.DeviceCode, error) {
 	for _, dc := range r.codes {
 		if strings.ReplaceAll(dc.UserCode, "-", "") == strings.ReplaceAll(u, "-", "") {
 			return dc, nil
@@ -44,8 +56,21 @@ func (r *deviceCodeMapRepo) GetByUserCode(_ context.Context, u string) (*domain.
 	return nil, errors.New("not found")
 }
 
-func (r *deviceCodeMapRepo) Approve(ctx context.Context, u string, userID, orgID uuid.UUID) error {
-	dc, err := r.GetByUserCode(ctx, u)
+func (r *deviceCodeMapRepo) GetByUserCode(_ context.Context, u string) (*domain.DeviceCode, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dc, err := r.byUserCode(u)
+	if err != nil {
+		return nil, err
+	}
+	cp := *dc
+	return &cp, nil
+}
+
+func (r *deviceCodeMapRepo) Approve(_ context.Context, u string, userID, orgID uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dc, err := r.byUserCode(u)
 	if err != nil {
 		return err
 	}
@@ -55,12 +80,28 @@ func (r *deviceCodeMapRepo) Approve(ctx context.Context, u string, userID, orgID
 	return nil
 }
 
-func (r *deviceCodeMapRepo) Deny(ctx context.Context, u string) error {
-	dc, err := r.GetByUserCode(ctx, u)
+func (r *deviceCodeMapRepo) Deny(_ context.Context, u string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dc, err := r.byUserCode(u)
 	if err != nil {
 		return err
 	}
 	dc.Status = domain.DeviceCodeStatusDenied
+	return nil
+}
+
+func (r *deviceCodeMapRepo) Consume(_ context.Context, d string, issue func() error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	dc, ok := r.codes[d]
+	if !ok || dc.Status != domain.DeviceCodeStatusApproved || dc.IsExpired() {
+		return domain.ErrDeviceCodeNotApproved
+	}
+	if err := issue(); err != nil {
+		return err
+	}
+	dc.Status = domain.DeviceCodeStatusConsumed
 	return nil
 }
 
