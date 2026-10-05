@@ -98,6 +98,11 @@ func (m *MockAgentRepoForAPIKey) UpdateLastActive(ctx context.Context, agentID u
 	return args.Error(0)
 }
 
+func (m *MockAgentRepoForAPIKey) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	args := m.Called(ctx, agentID)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func (m *MockAgentRepoForAPIKey) List(limit, offset int) ([]*domain.Agent, error) {
 	args := m.Called(limit, offset)
 	if args.Get(0) == nil {

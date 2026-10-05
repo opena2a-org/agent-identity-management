@@ -144,6 +144,9 @@ type AgentRepository interface {
 	UpdateTrustScore(id uuid.UUID, newScore float64) error
 	MarkAsCompromised(id uuid.UUID) error
 	UpdateLastActive(ctx context.Context, agentID uuid.UUID) error
+	// UpdateHeartbeat sets last_heartbeat to the database's current time and returns
+	// it. It writes no other agent column besides updated_at.
+	UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error)
 	GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*Agent, error)
 	// GetByIDs returns the agents among ids that belong to callerOrgID. The
 	// organization predicate is REQUIRED and runs in SQL — see the implementation.

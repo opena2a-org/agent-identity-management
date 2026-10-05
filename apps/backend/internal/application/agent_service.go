@@ -2507,19 +2507,25 @@ func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
 	return len(ids), nil
 }
 
-// RecordHeartbeat updates the heartbeat timestamp for an agent
+// RecordHeartbeat stores a heartbeat time for an agent and returns the agent as it
+// stands after that write.
+//
+// The write is UpdateHeartbeat, which sets last_heartbeat and nothing else. It is not a
+// read followed by Update: Update's statement has no last_heartbeat column, so no
+// heartbeat time was stored, and it rewrote status and key material from the earlier
+// read, so a suspension or key rotation committed in between was undone.
 func (s *AgentService) RecordHeartbeat(ctx context.Context, agentID uuid.UUID) (*domain.Agent, error) {
+	heartbeatAt, err := s.agentRepo.UpdateHeartbeat(ctx, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to record heartbeat: %w", err)
+	}
+
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("agent not found: %w", err)
 	}
-
-	now := time.Now()
-	agent.LastHeartbeat = &now
-	agent.UpdatedAt = now
-	if err := s.agentRepo.Update(agent); err != nil {
-		return nil, fmt.Errorf("failed to update heartbeat: %w", err)
-	}
+	// GetByID does not select last_heartbeat; report the time this call stored.
+	agent.LastHeartbeat = &heartbeatAt
 
 	return agent, nil
 }
