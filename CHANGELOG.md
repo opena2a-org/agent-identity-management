@@ -82,6 +82,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — shutdown on SIGTERM is bounded and a failed shutdown no longer skips cleanup
+
+- On SIGTERM or an interrupt, the server waited for every in-flight request with no time limit, so one stalled request
+  held shutdown open until the orchestrator killed the process. When stopping the listener returned an error, the
+  server exited at once with `Server forced to shutdown`, which skipped the drain of the fine-grained authorization
+  engine's asynchronous intent checks and the deferred cleanup (background jobs, Redis, the database pool, the
+  telemetry flush). Stopping the listener is now bounded at 10 seconds. A timeout or error is logged as
+  `API server did not shut down cleanly within 10s: <error>`, and shutdown continues with the intent-check drain
+  (bounded at 10 seconds) and the cleanup.
+
 ### Fixed — an authenticated request without an organization or user answers 401, not 500
 
 - Agent, A2A, capability, capability request, lifecycle, MCP attestation, secrets, security policy, tag, admin and
