@@ -21,7 +21,6 @@ import { CreateAPIKeyModal } from "@/components/modals/create-api-key-modal";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { getAgentPermissions, UserRole } from "@/lib/permissions";
 import { getErrorMessage } from "@/lib/error-messages";
-import { AuthGuard } from "@/components/auth-guard";
 
 interface APIKeyWithAgent extends APIKey {
 }
@@ -68,7 +67,6 @@ function APIKeysPageSkeleton() {
       <div className="flex items-center justify-between">
         <div>
           <div className="h-8 w-32 bg-track rounded"></div>
-          <div className="h-4 w-64 bg-track rounded mt-2"></div>
         </div>
         <div className="h-10 w-36 bg-track rounded-pill"></div>
       </div>
@@ -130,7 +128,11 @@ function APIKeysPageSkeleton() {
   );
 }
 
-export default function APIKeysPage() {
+/**
+ * The API keys section of the Credentials page (app/dashboard/credentials): the list, its
+ * filters and the create, disable and delete actions.
+ */
+export function APIKeysSection({ headingId }: { headingId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<APIKeyWithAgent[]>([]);
@@ -381,250 +383,241 @@ export default function APIKeysPage() {
   };
 
   if (loading) {
-    return (
-      <AuthGuard>
-        <APIKeysPageSkeleton />
-      </AuthGuard>
-    );
+    return <APIKeysPageSkeleton />;
   }
 
   return (
-    <AuthGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-headline">
-              API keys
-            </h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 id={headingId} className="text-lg font-semibold text-ink">
+            API keys
+          </h2>
+        </div>
+        {permissions.canCreateAPIKey && (
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Create API key
+          </button>
+        )}
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {statCards.map((stat) => (
+          <StatCard key={stat.name} stat={stat} />
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="glass p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
+            <input
+              type="text"
+              placeholder="Search by name, prefix, or agent..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-inset border border-stroke bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="relative">
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="pl-10 pr-8 py-2 rounded-inset border border-stroke bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+              <option value="expired">Expired</option>
+              <option value="never-used">Never used</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* API Keys Table */}
+      <div className="glass overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-divider">
+            <thead className="bg-glass-inset-gray">
+              <tr>
+                <th className="px-6 py-3 text-left text-overline">
+                  Name
+                </th>
+                <th className="px-6 py-3 text-left text-overline">
+                  Key prefix
+                </th>
+                <th className="px-6 py-3 text-left text-overline">
+                  Agent
+                </th>
+                <th className="px-6 py-3 text-left text-overline">
+                  Last used
+                </th>
+                <th className="px-6 py-3 text-left text-overline">
+                  Expires
+                </th>
+                <th className="px-6 py-3 text-left text-overline">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-overline">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-divider">
+              {filteredKeys?.map((key) => (
+                <tr
+                  key={key?.id}
+                  className="hover:bg-glass-inset-gray transition-colors"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-ink">
+                      {key?.name}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm text-ink-code font-mono">
+                        {key?.prefix}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(key?.prefix, key?.id)}
+                        className="p-1 text-ink-tertiary hover:text-brand-text transition-colors"
+                        title="Copy prefix"
+                      >
+                        {copiedId === key?.id ? (
+                          <Check className="h-4 w-4 text-success-text" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-ink">
+                      {key?.agentName || "Unknown"}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-ink-secondary">
+                      {key?.lastUsedAt && formatDate(key.lastUsedAt)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div
+                      className={`text-sm ${key?.expiresAt && isExpired(key.expiresAt) ? "text-danger-text" : "text-ink-secondary"}`}
+                    >
+                      {key?.expiresAt && formatDate(key.expiresAt)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-semibold ${
+                        !key?.isActive
+                          ? "border border-glass-inset-border bg-glass-inset-gray text-ink-secondary"
+                          : key?.expiresAt && isExpired(key.expiresAt)
+                            ? "border border-danger-border bg-danger-fill text-danger-text"
+                            : "border border-success-border bg-success-fill text-success-text"
+                      }`}
+                    >
+                      {!key?.isActive
+                        ? "Disabled"
+                        : key?.expiresAt && isExpired(key.expiresAt)
+                          ? "Expired"
+                          : "Active"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {key?.isActive &&
+                      (!key?.expiresAt || !isExpired(key.expiresAt)) ? (
+                        <button
+                          onClick={() => handleDisableKey(key)}
+                          className="p-1 text-ink-tertiary hover:text-warning-text transition-colors"
+                          title="Disable key"
+                        >
+                          <Ban className="h-4 w-4" />
+                        </button>
+                      ) : !key?.isActive && permissions.canDeleteAPIKey ? (
+                        <button
+                          onClick={() => handleDeleteKey(key)}
+                          className="p-1 text-ink-tertiary hover:text-danger-text transition-colors"
+                          title="Delete key permanently"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filteredKeys.length === 0 && (
+          <div className="text-center py-12">
+            <Key className="mx-auto h-12 w-12 text-ink-tertiary" />
+            <h3 className="mt-2 text-sm font-medium text-ink">
+              No API keys found
+            </h3>
             <p className="mt-1 text-sm text-ink-secondary">
-              Manage API keys for agent authentication and authorization.
+              {searchTerm || statusFilter !== "all"
+                ? "Try adjusting your search or filters."
+                : "Get started by creating your first API key."}
             </p>
           </div>
-          {permissions.canCreateAPIKey && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex h-10 items-center gap-2 rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Create API key
-            </button>
-          )}
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((stat) => (
-            <StatCard key={stat.name} stat={stat} />
-          ))}
-        </div>
-
-        {/* Filters */}
-        <div className="glass p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
-              <input
-                type="text"
-                placeholder="Search by name, prefix, or agent..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-inset border border-stroke bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-ink-tertiary" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="pl-10 pr-8 py-2 rounded-inset border border-stroke bg-glass-inset text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">All statuses</option>
-                <option value="active">Active</option>
-                <option value="disabled">Disabled</option>
-                <option value="expired">Expired</option>
-                <option value="never-used">Never used</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* API Keys Table */}
-        <div className="glass overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-divider">
-              <thead className="bg-glass-inset-gray">
-                <tr>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Key prefix
-                  </th>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Agent
-                  </th>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Last used
-                  </th>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Expires
-                  </th>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-overline">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-divider">
-                {filteredKeys?.map((key) => (
-                  <tr
-                    key={key?.id}
-                    className="hover:bg-glass-inset-gray transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-ink">
-                        {key?.name}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <code className="text-sm text-ink-code font-mono">
-                          {key?.prefix}
-                        </code>
-                        <button
-                          onClick={() => copyToClipboard(key?.prefix, key?.id)}
-                          className="p-1 text-ink-tertiary hover:text-brand-text transition-colors"
-                          title="Copy prefix"
-                        >
-                          {copiedId === key?.id ? (
-                            <Check className="h-4 w-4 text-success-text" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-ink">
-                        {key?.agentName || "Unknown"}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-ink-secondary">
-                        {key?.lastUsedAt && formatDate(key.lastUsedAt)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div
-                        className={`text-sm ${key?.expiresAt && isExpired(key.expiresAt) ? "text-danger-text" : "text-ink-secondary"}`}
-                      >
-                        {key?.expiresAt && formatDate(key.expiresAt)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center rounded-pill px-2.5 py-0.5 text-xs font-semibold ${
-                          !key?.isActive
-                            ? "border border-glass-inset-border bg-glass-inset-gray text-ink-secondary"
-                            : key?.expiresAt && isExpired(key.expiresAt)
-                              ? "border border-danger-border bg-danger-fill text-danger-text"
-                              : "border border-success-border bg-success-fill text-success-text"
-                        }`}
-                      >
-                        {!key?.isActive
-                          ? "Disabled"
-                          : key?.expiresAt && isExpired(key.expiresAt)
-                            ? "Expired"
-                            : "Active"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {key?.isActive &&
-                        (!key?.expiresAt || !isExpired(key.expiresAt)) ? (
-                          <button
-                            onClick={() => handleDisableKey(key)}
-                            className="p-1 text-ink-tertiary hover:text-warning-text transition-colors"
-                            title="Disable key"
-                          >
-                            <Ban className="h-4 w-4" />
-                          </button>
-                        ) : !key?.isActive && permissions.canDeleteAPIKey ? (
-                          <button
-                            onClick={() => handleDeleteKey(key)}
-                            className="p-1 text-ink-tertiary hover:text-danger-text transition-colors"
-                            title="Delete key permanently"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {filteredKeys.length === 0 && (
-            <div className="text-center py-12">
-              <Key className="mx-auto h-12 w-12 text-ink-tertiary" />
-              <h3 className="mt-2 text-sm font-medium text-ink">
-                No API keys found
-              </h3>
-              <p className="mt-1 text-sm text-ink-secondary">
-                {searchTerm || statusFilter !== "all"
-                  ? "Try adjusting your search or filters."
-                  : "Get started by creating your first API key."}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Modals */}
-        <CreateAPIKeyModal
-          isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={handleKeyCreated}
-          agents={agents}
-        />
-
-        <ConfirmDialog
-          isOpen={showDisableConfirm}
-          title="Disable API key"
-          message={`Are you sure you want to disable "${selectedKey?.name}"? The key will be marked as inactive and cannot be used for authentication. You can delete it permanently later.`}
-          confirmText="Disable"
-          cancelText="Cancel"
-          variant="warning"
-          loading={disableLoading}
-          onConfirm={confirmDisable}
-          onCancel={() => {
-            if (!disableLoading) {
-              setShowDisableConfirm(false);
-              setSelectedKey(null);
-            }
-          }}
-        />
-
-        <ConfirmDialog
-          isOpen={showDeleteConfirm}
-          title="Delete API key"
-          message={`Are you sure you want to permanently delete "${selectedKey?.name}"? This action cannot be undone.`}
-          confirmText="Delete"
-          cancelText="Cancel"
-          variant="danger"
-          loading={deleteLoading}
-          onConfirm={confirmDelete}
-          onCancel={() => {
-            if (!deleteLoading) {
-              setShowDeleteConfirm(false);
-              setSelectedKey(null);
-            }
-          }}
-        />
+        )}
       </div>
-    </AuthGuard>
+
+      {/* Modals */}
+      <CreateAPIKeyModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handleKeyCreated}
+        agents={agents}
+      />
+
+      <ConfirmDialog
+        isOpen={showDisableConfirm}
+        title="Disable API key"
+        message={`Are you sure you want to disable "${selectedKey?.name}"? The key will be marked as inactive and cannot be used for authentication. You can delete it permanently later.`}
+        confirmText="Disable"
+        cancelText="Cancel"
+        variant="warning"
+        loading={disableLoading}
+        onConfirm={confirmDisable}
+        onCancel={() => {
+          if (!disableLoading) {
+            setShowDisableConfirm(false);
+            setSelectedKey(null);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete API key"
+        message={`Are you sure you want to permanently delete "${selectedKey?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleteLoading}
+        onConfirm={confirmDelete}
+        onCancel={() => {
+          if (!deleteLoading) {
+            setShowDeleteConfirm(false);
+            setSelectedKey(null);
+          }
+        }}
+      />
+    </div>
   );
 }

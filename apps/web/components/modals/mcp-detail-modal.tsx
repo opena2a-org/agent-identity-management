@@ -729,7 +729,7 @@ export function MCPDetailModal({
                         className="p-0 h-auto text-xs justify-start"
                         onClick={() => {
                           onClose();
-                          router.push(`/dashboard/sdk-tokens?highlight=${mcp.createdBySdkTokenId}`);
+                          router.push(`/dashboard/credentials?highlight=${mcp.createdBySdkTokenId}#sdk-tokens`);
                         }}
                       >
                         <KeyRound className="h-3 w-3 mr-1" />
@@ -743,7 +743,7 @@ export function MCPDetailModal({
                         className="p-0 h-auto text-xs justify-start text-warning-text"
                         onClick={() => {
                           onClose();
-                          router.push(`/dashboard/api-keys?highlight=${mcp.createdByApiKeyId}`);
+                          router.push(`/dashboard/credentials?highlight=${mcp.createdByApiKeyId}#api-keys`);
                         }}
                       >
                         <KeyRound className="h-3 w-3 mr-1" />
