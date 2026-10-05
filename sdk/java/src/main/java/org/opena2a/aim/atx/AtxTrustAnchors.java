@@ -14,7 +14,7 @@ import java.util.List;
  * anchor set, always set a DID-URL keyId on every key.
  *
  * @param trustedIssuers issuer DIDs the verifier trusts
- * @param publicKeys     issuer public keys (Ed25519 verified; ML-DSA-65 recorded)
+ * @param publicKeys     issuer public keys (Ed25519 and ML-DSA-65, both used to verify signatures)
  * @param crl            cached revocation list (may be null)
  * @param clock          clock source (injectable for tests); when null, the system UTC clock is used
  */

@@ -162,7 +162,9 @@ public final class LocalAtxVerifier {
                     RejectCategory.UNTRUSTED_ISSUER, "issuer DID " + atx.issuerDid + " is not trusted");
         }
 
-        // Step 5: signature verification (Ed25519 fully; ML-DSA-65 presence recorded).
+        // Step 5: signature verification. Every declared Ed25519 and ML-DSA-65
+        // signature must verify against an eligible key of its algorithm, and at
+        // least one Ed25519 signature is required.
         byte[] payload;
         try {
             payload = isV11 ? AtxCanonicalizer.canonicalPayloadV11(atx) : AtxCanonicalizer.canonicalPayload(atx);
