@@ -72,6 +72,16 @@ What changed:
   response within 5s`, a network failure that never happened. An unreachable but well-formed URL still fails
   within the probe bound with the reachability message (#408).
 
+- `register_pqc_key`, `rotate_pqc_key` and `set_hybrid_mode` now send the request members the server reads
+  (`publicKey`, `algorithm` and `enableHybrid`; `newPublicKey` and `algorithm`; `enable`). They sent
+  `pqcPublicKey`, `enableHybridMode`, `newPqcPublicKey` and `enabled`, which the server does not read, so
+  before this release `register_pqc_key` and `rotate_pqc_key` always failed, because the key arrived empty,
+  and `set_hybrid_mode(True)` turned hybrid mode off. `enable_hybrid_mode` now defaults to `False`, and
+  `register_pqc_key(..., enable_hybrid_mode=True)` and `set_hybrid_mode(True)` raise `ConfigurationError`
+  before sending anything: hybrid mode marks the agent as requiring both an Ed25519 and an ML-DSA
+  signature, and no AIM SDK signs requests in that form yet. The three routes admit an AIM user's access
+  token with role member, manager or admin, not the agent's own signature or an API key; the docstrings
+  now say so.
 - Processes that share `~/.aim/sdk_credentials.json` now refresh it once. Each refresh token is accepted
   once, and every process used to present the token it had read at startup, so when two refreshed together
   the second presented a token the first had already rotated. The server refused it, and for a sign-in from
