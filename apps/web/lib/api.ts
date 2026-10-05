@@ -784,8 +784,14 @@ class APIClient {
         `HTTP ${response.status}`;
       const requestError = new Error(errorMessage) as ApiRequestError;
       requestError.status = response.status;
-      if (typeof error?.code === "string") {
-        requestError.code = error.code;
+      // The refusal's machine-readable reason: reasonCode is the API's member
+      // for it; code is the older member the same refusals still carry.
+      const reasonCode =
+        (typeof error?.reasonCode === "string" && error.reasonCode) ||
+        (typeof error?.code === "string" && error.code) ||
+        undefined;
+      if (reasonCode) {
+        requestError.code = reasonCode;
       }
       throw requestError;
     }

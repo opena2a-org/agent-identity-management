@@ -823,11 +823,11 @@ func registrationSuccessMessage(status domain.RegistrationRequestStatus) string 
 }
 
 // registrationErrorBody is the JSON body for a refused registration or access request; the
-// operator-actionable refusal carries a machine-readable code as well as its message.
+// operator-actionable refusal carries a machine-readable reason as well as its message.
 func registrationErrorBody(err error, message string) fiber.Map {
 	body := fiber.Map{"success": false, "error": message}
 	if err == application.ErrNoAdministrators {
-		body["code"] = NoAdministratorsCode
+		withReasonCode(body, NoAdministratorsCode)
 	}
 	return body
 }
