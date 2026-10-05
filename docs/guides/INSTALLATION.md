@@ -62,6 +62,9 @@ OKTA_DOMAIN=your-domain.okta.com
 # JWT Secret (generate with: openssl rand -hex 32)
 JWT_SECRET=your-super-secret-jwt-key-min-32-chars
 
+# Key Vault master key, encrypts agent private keys (generate with: openssl rand -base64 32)
+KEYVAULT_MASTER_KEY=your-base64-encoded-32-byte-key
+
 # Database (defaults work for Docker Compose)
 POSTGRES_PASSWORD=postgres  # Change for production!
 ```
@@ -273,6 +276,7 @@ ENABLE_CORS=true
 **Staging** (`.env.staging`):
 ```bash
 ENVIRONMENT=staging
+KEYVAULT_MASTER_KEY=your-base64-encoded-32-byte-key  # openssl rand -base64 32
 LOG_LEVEL=info
 ENABLE_CORS=true
 DATABASE_SSL_MODE=require
@@ -281,11 +285,14 @@ DATABASE_SSL_MODE=require
 **Production** (`.env.production`):
 ```bash
 ENVIRONMENT=production
+KEYVAULT_MASTER_KEY=your-base64-encoded-32-byte-key  # openssl rand -base64 32
 LOG_LEVEL=warn
 ENABLE_CORS=false
 DATABASE_SSL_MODE=require
 REDIS_TLS_ENABLED=true
 ```
+
+`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, so generate a separate key for each environment once and keep the same value across restarts and upgrades. With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
 
 ## SSL/TLS Setup
 

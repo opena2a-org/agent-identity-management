@@ -324,6 +324,10 @@ npm run build
 cd apps/backend
 go build -o server cmd/server/main.go
 
+# KEYVAULT_MASTER_KEY is required outside development. Generate it once with
+# `openssl rand -base64 32`, store it, and set the same value on every start.
+export KEYVAULT_MASTER_KEY="your-stored-base64-encoded-32-byte-key"
+
 # Run with production env
 ENVIRONMENT=production ./server
 ```

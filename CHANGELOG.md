@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — deployment and installation guides name `KEYVAULT_MASTER_KEY` as required outside development
+
+- `docs/DEPLOYMENT.md`, `docs/guides/INSTALLATION.md`, `docs/guides/DEPLOYMENT_CHECKLIST.md`,
+  `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` and `docs/guides/SETUP_GUIDE.md` showed production and staging
+  configurations without `KEYVAULT_MASTER_KEY`. Each now names it as required in every environment except
+  `ENVIRONMENT=development`, with `openssl rand -base64 32` to generate it once and the instruction to keep the same
+  value across restarts. Agent private keys are encrypted under it; with `ENVIRONMENT=production` the server refuses to
+  start without it, and in development a missing key is replaced by one generated at each start, whose data cannot be
+  decrypted after a restart. The remedy given is the key, never `ENVIRONMENT=development`.
+- `HARDENING.md` no longer says the configuration validator fails on a missing `KEYVAULT_MASTER_KEY`. The validator
+  rejects known development values of the key; the refusal to start without it comes from the key vault.
+- `scripts/lint-docs-keyvault-master-key.sh` rejects a section of a page under `docs/` that sets `ENVIRONMENT` to
+  anything other than `development` without naming `KEYVAULT_MASTER_KEY`, with its file, line and value.
+
 ### Added — the dashboard lists an organization's audit records
 
 - `/dashboard/admin/audit-logs` lists the records `GET /api/v1/admin/audit-logs` returns, newest first, 50 per page.

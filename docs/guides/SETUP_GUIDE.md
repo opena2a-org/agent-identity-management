@@ -307,15 +307,16 @@ Once the backend is running, API endpoints are available at:
 For production deployment:
 
 1. Generate strong JWT secret (32+ characters)
-2. Use production OAuth credentials with HTTPS redirect URLs
-3. Enable PostgreSQL SSL mode
-4. Set strong database passwords
-5. Configure Redis password
-6. Set `ENVIRONMENT=production`
-7. Use proper secrets management (AWS Secrets Manager, Vault, etc.)
-8. Enable rate limiting
-9. Configure monitoring and logging
-10. Set up backups for PostgreSQL
+2. Set `KEYVAULT_MASTER_KEY` to a key from `openssl rand -base64 32` and keep the same value across restarts. Agent private keys are encrypted under it, and the server refuses to start in production without it. Setting `ENVIRONMENT=development` does not fix a missing key.
+3. Use production OAuth credentials with HTTPS redirect URLs
+4. Enable PostgreSQL SSL mode
+5. Set strong database passwords
+6. Configure Redis password
+7. Set `ENVIRONMENT=production`
+8. Use proper secrets management (AWS Secrets Manager, Vault, etc.)
+9. Enable rate limiting
+10. Configure monitoring and logging
+11. Set up backups for PostgreSQL
 
 ## Support
 

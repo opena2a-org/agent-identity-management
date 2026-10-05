@@ -230,6 +230,7 @@ cp apps/backend/.env.example apps/backend/.env.production
 # Update with production values:
 # - Strong database password
 # - Production JWT secret (64+ chars)
+# - KEYVAULT_MASTER_KEY from: openssl rand -base64 32
 # - Real OAuth credentials
 # - ENVIRONMENT=production
 # - Enable TLS
@@ -239,6 +240,7 @@ cp apps/backend/.env.example apps/backend/.env.production
 - [ ] Production .env configured
 - [ ] Strong passwords (20+ characters)
 - [ ] JWT secret is 64+ characters
+- [ ] `KEYVAULT_MASTER_KEY` is set, stored with your other secrets, and kept the same across restarts (agent private keys are encrypted under it; the server refuses to start in production without it)
 - [ ] OAuth credentials are configured
 - [ ] Database connection string uses production host
 
