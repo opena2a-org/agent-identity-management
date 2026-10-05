@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the Java SDK's `useMcpTool` reaches the usage report route
+
+- `AIMClient.useMcpTool` posted to `/api/v1/sdk-api/agents/{id}/mcp-usage`, a path the API does not
+  register, with a body no handler reads. Every call was answered 404. The method reports a failure
+  as `success: false` in its result and a warning in the log rather than throwing, so tool usage
+  recorded this way never arrived and nothing stopped.
+- It now posts to `POST /api/v1/sdk-api/agents/{id}/mcp-usage-report` with the report that route
+  reads: one use of the named tool on the named MCP server. `serverId` has to be the server's id as
+  returned at registration; a report for any other value is answered 404.
+- The `mcpUrl` and `mcpName` arguments are not part of a usage report and are not sent. The method
+  signature is unchanged.
+
 ### Removed — the unread token lifetime defaults in the backend configuration
 
 - `apps/backend/internal/config/config.go` read `JWT_ACCESS_TTL` and `JWT_REFRESH_TTL` with defaults of 24 hours and
