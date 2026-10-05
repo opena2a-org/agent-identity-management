@@ -82,6 +82,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — refusals that carry a machine-readable reason also send it as `reasonCode`
+
+- `reasonCode` is the API's member for a refusal's machine-readable reason. The four refusals that already sent one
+  in `code` now send the same value in `reasonCode` as well: `noAdministrators` (registration and access requests
+  when no administrator can approve them), `verificationEventWriteNotAccepted` (`POST /api/v1/verification-events`),
+  `executionOutcomeNotAccepted` (`POST /api/v1/sdk-api/verifications/:id/result`) and `enforcementModeUnavailable`
+  (`POST /api/v1/sdk-api/verifications/:id/execution-status`). `code` is still sent with the same value, so existing
+  clients are unaffected.
+- The dashboard reads `reasonCode` first and falls back to `code`.
+
 ### Fixed — a verification event refused because its agent could not be read logs the cause
 
 - When a verification event was refused because the agent read failed (for example, a database error), the server
