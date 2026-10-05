@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is `development` or `test`
+
+- With no `KEYVAULT_MASTER_KEY`, the API generated a new master key at every start unless
+  `ENVIRONMENT` was exactly `production`. An unset `ENVIRONMENT`, or a value such as `prod` or
+  `staging`, ran on that generated key. The key changes at each restart, so the server signing key
+  changed with it and agent private keys stored under the previous key could no longer be
+  decrypted.
+- A generated key is now used only when `ENVIRONMENT` is exactly `development` or `test`. Any other
+  value, including an unset one, stops startup with an error that names `KEYVAULT_MASTER_KEY` and
+  the `ENVIRONMENT` value it read. The error never contains a key.
+- To upgrade, set `KEYVAULT_MASTER_KEY` (`openssl rand -base64 32`) on every deployment that is not
+  local development. The docker-compose files already require it.
+
+### Fixed — the Java SDK's `useMcpTool` reaches the usage report route
+
 ### Fixed: webhook, MCP server and agent card requests follow no redirect and connect only to the addresses registration admits
 
 - A webhook URL, an MCP server's capability and verification URLs and an agent card URL are checked when they are
