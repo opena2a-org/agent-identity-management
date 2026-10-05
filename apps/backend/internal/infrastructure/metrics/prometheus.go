@@ -205,6 +205,12 @@ func normalizeMethod(method string) string {
 	return "UNKNOWN"
 }
 
+// unmatchedPathLabel is the path label for requests that reached no route
+// handler: unknown paths, and requests a group middleware refused before
+// routing reached a handler. One fixed value keeps callers from adding a
+// series per path they choose.
+const unmatchedPathLabel = "unmatched"
+
 // PrometheusMiddleware collects HTTP metrics for all requests
 func PrometheusMiddleware() fiber.Handler {
 	return func(c fiber.Ctx) error {
@@ -218,16 +224,29 @@ func PrometheusMiddleware() fiber.Handler {
 		// Process request
 		err := c.Next()
 
+		// An error returned by the chain only becomes a response status when
+		// the app's error handler runs, which would be after this middleware
+		// returns. Run it here, as Fiber's logger middleware does, so the
+		// recorded status is the one the client receives.
+		if err != nil {
+			if handlerErr := c.App().ErrorHandler(c, err); handlerErr != nil {
+				_ = c.SendStatus(fiber.StatusInternalServerError)
+			}
+		}
+
 		// Record metrics
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Response().StatusCode())
 		method := normalizeMethod(c.Method())
-		path := normalizePath(c.Path())
+		path := unmatchedPathLabel
+		if c.Matched() {
+			path = normalizePath(c.Path())
+		}
 
 		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
 		httpRequestDuration.WithLabelValues(method, path, status).Observe(duration)
 
-		return err
+		return nil
 	}
 }
 
