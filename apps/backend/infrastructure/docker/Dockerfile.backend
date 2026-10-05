@@ -1,5 +1,5 @@
 # Multi-stage build for Go backend
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git gcc musl-dev
@@ -20,7 +20,7 @@ ARG GIT_COMMIT
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags "-X main.buildCommit=$GIT_COMMIT" -o aim-server ./cmd/server
 
 # Final stage
-FROM alpine:latest
+FROM alpine:latest@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates tzdata wget
