@@ -306,12 +306,12 @@ ML-DSA signatures are optional in v1 but RECOMMENDED. Services MUST verify ML-DS
 
 ## 9. Implementation Notes
 
-### 9.1 JWT Shim Compatibility
+### 9.1 Token Format
 
-The AIM backend currently uses a JWT-based ATC shim (`jwt_shim.go`). During migration:
-- Services accept both `Authorization: Bearer <jwt>` and `Authorization: ATC <base64url-atc>`
-- JWT path continues to work for agents that haven't upgraded
-- ATC path takes precedence when both are possible
+The AIM backend accepts the CBOR-encoded ATC defined in this spec and no other token format as an ATC. A JWT
+presented as an ATC, in an `Authorization: ATC` header or in the secrets resolve request body, is refused; the header
+path answers `401` with `atc_malformed`. A request without an `Authorization: ATC` header passes to the route's other
+authentication middleware.
 
 ### 9.2 Performance
 

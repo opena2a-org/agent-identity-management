@@ -124,7 +124,7 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 
 	// Step 2: Verify ATC
 	// If ATCClaims were set by ATCAuthMiddleware, use them directly (already verified).
-	// Otherwise, verify the ATCID from the request body (legacy JWT shim path).
+	// Otherwise, verify the ATC token sent in the request body.
 	var atcClaims *atcdomain.ATCClaims
 	if req.ATCClaims != nil {
 		// ATC was verified by middleware — use directly
