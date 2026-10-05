@@ -48,7 +48,7 @@ type RecordOnboardingEventRequest struct {
 func (h *OnboardingTelemetryHandler) RecordEvent(c fiber.Ctx) error {
 	orgID, _, err := RequireOrgAndUserID(c)
 	if err != nil {
-		return nil // the 401 response has been written
+		return err
 	}
 	var req RecordOnboardingEventRequest
 	if err := c.Bind().JSON(&req); err != nil {

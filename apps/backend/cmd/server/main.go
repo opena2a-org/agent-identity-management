@@ -1696,7 +1696,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
 	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge) // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
 	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                 // ✅ Submit agent attestation (Ed25519 signed, with challenge)
-	mcpServersAgentAuth.Get("/:id/attestations", h.MCPAttestation.GetMCPAttestations)   // ✅ Get all attestations for this MCP
+	// A dashboard request carries a bearer token, which the agent middleware above does not
+	// authenticate; it continues to the same path in the JWT group below.
+	mcpServersAgentAuth.Get("/:id/attestations", middleware.DeferBearerRequests(h.MCPAttestation.GetMCPAttestations)) // ✅ Get all attestations for this MCP
 	// NOTE: /:id/agents moved to JWT-authenticated mcpServers group to fix route conflict
 	// The Ed25519 middleware's c.Next() was forwarding JWT requests to wrong handler
 
@@ -1721,6 +1723,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServers.Get("/:id/consensus-status", h.MCPAttestation.GetConsensusStatus)                           // 🔐 Multi-agent consensus status for verification
 	mcpServers.Post("/:id/manual-attest", middleware.MemberMiddleware(), h.MCPAttestation.ManualAttestMCP) // ✅ Manual attestation (non-SDK users)
 	mcpServers.Get("/:id/agents", h.MCP.GetMCPServerAgents)                                                // ✅ Dashboard: Get agents with this MCP in talks_to field
+	mcpServers.Get("/:id/attestations", h.MCPAttestation.GetMCPAttestations)                               // Dashboard: attestations for this MCP server (agents use the route above)
 	// Runtime verification endpoint - CORE functionality
 	mcpServers.Post("/:id/verify-capability", h.MCP.VerifyMCPCapability)
 	mcpServers.Get("/:id/connections", h.MCPGraph.GetMCPServerConnections) // ✅ Get connection graph for specific MCP server

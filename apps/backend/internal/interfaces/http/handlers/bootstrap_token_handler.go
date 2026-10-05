@@ -105,7 +105,7 @@ func noStore(c fiber.Ctx) {
 func (h *BootstrapTokenHandler) Mint(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
-		return nil // the 401 response has been written
+		return err
 	}
 	minted, err := h.service.Mint(c.Context(), orgID, userID, bootstrapRequestMeta(c))
 	if err != nil {
@@ -132,7 +132,7 @@ func (h *BootstrapTokenHandler) Mint(c fiber.Ctx) error {
 func (h *BootstrapTokenHandler) Revoke(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
-		return nil // the 401 response has been written
+		return err
 	}
 	n, err := h.service.Revoke(c.Context(), orgID, userID, bootstrapRequestMeta(c))
 	if err != nil {

@@ -943,6 +943,21 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   `API server did not shut down cleanly within 10s: <error>`, and shutdown continues with the intent-check drain
   (bounded at 10 seconds) and the cleanup.
 
+### Fixed — an authenticated request without an organization or user answers 401, not 500
+
+- Agent, A2A, capability, capability request, lifecycle, MCP attestation, secrets, security policy, tag, admin and
+  authorize routes read the caller's organization and user from the request context through shared helpers. When a
+  caller passed authentication without one of them, the helper wrote a 401 and returned a plain error, and the
+  server's error handler replaced that response with `500 Internal Server Error`. The helpers now return a 401 error
+  that the error handler answers as `401` with `"message": "Organization ID not found in context"` (or
+  `"User ID not found in context"`), in the same `{"error": true, "message": ..., "timestamp": ...}` shape as other
+  API errors. A test now checks that every call site returns the helper's error unchanged.
+- `GET /api/v1/mcp-servers/:id/attestations` is mounted on the agent-signed group, whose middleware passes a request
+  that carries a bearer token through without authenticating it. The dashboard's request therefore reached the
+  handler with no organization, which answered `500` and would now answer `401`. A request with a bearer token now
+  continues to the same path on the JWT-authenticated group, which answers it with the MCP server's attestations; an
+  agent-signed request is served as before.
+
 ### Changed — `/.well-known/aip` identifies the provider as `did:web:<provider-host>`
 
 - The discovery document served `"providerDid": "did:aip:provider_opena2a"` on every deployment, a fixed value that
