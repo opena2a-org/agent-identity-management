@@ -91,6 +91,8 @@ export interface Agent {
   agentType: AgentType;
   status: "pending" | "verified" | "suspended" | "revoked";
   version: string;
+  publicKey?: string | null;    // Ed25519 public key
+  lastActive?: string | null;   // Stamped on the agent's first authenticated call; empty until then
   trustScore: number;
   talksTo?: string[];
   capabilities?: any[];
