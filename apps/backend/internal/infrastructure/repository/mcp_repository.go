@@ -488,6 +488,32 @@ func (r *MCPServerRepository) Delete(id uuid.UUID) error {
 	return nil
 }
 
+// ListAllIDs returns the ID of every MCP server in every organization, in one
+// query. It is for system tasks such as the one-time rescoring pass, never for
+// a tenant request. One query rather than LIMIT/OFFSET pages, because a page
+// boundary between servers with the same created_at can skip a server.
+func (r *MCPServerRepository) ListAllIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id FROM mcp_servers ORDER BY created_at, id`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list mcp server ids: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan mcp server id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list mcp server ids: %w", err)
+	}
+
+	return ids, nil
+}
+
 func (r *MCPServerRepository) List(limit, offset int) ([]*domain.MCPServer, error) {
 	query := `
 		SELECT
