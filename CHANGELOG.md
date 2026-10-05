@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an approved device code is exchanged for one token pair
+
+- `POST /api/v1/oauth/device/token` minted a new token pair, each its own session, on every poll of an approved
+  device code until the code expired 15 minutes after it was issued. The code never left `approved`.
+- The code now moves to `consumed` in the same database transaction that mints its pair, so it is exchanged once.
+  Of several polls racing on one approved code, one receives the pair. A later poll mints nothing and is answered
+  `400` with `invalid_grant` (RFC 6749 Section 5.2, which RFC 8628 Section 3.5 inherits). If the pair fails to
+  mint, the transaction rolls back and the code stays `approved`, so the client's next poll can still receive it.
+- `aim-sdk login` stops polling when it receives its pair and is unaffected. The dashboard's device page already
+  shows a code that is no longer pending as "no longer waiting for approval".
+
 ### Fixed — a wrong password at sign-in is reported once, and not as an expired session
 
 - The dashboard treated every 401 as an expired session, including the sign-in route's answer to a wrong password.

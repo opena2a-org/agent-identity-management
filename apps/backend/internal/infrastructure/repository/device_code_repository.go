@@ -183,6 +183,50 @@ func (r *DeviceCodeRepository) Deny(ctx context.Context, userCode string) error 
 	return nil
 }
 
+// Consume moves an approved, unexpired device code to consumed and calls issue
+// inside the same transaction, committing only when issue succeeds.
+//
+// The status test and the change are one conditional UPDATE. A concurrent poll
+// on the same code blocks on the row lock this UPDATE takes; once this
+// transaction commits, Postgres re-checks the WHERE clause against the
+// consumed row, matches nothing, and that poll gets ErrDeviceCodeNotApproved.
+// A read of the status followed by a separate UPDATE would let both polls see
+// approved and both mint.
+func (r *DeviceCodeRepository) Consume(ctx context.Context, deviceCode string, issue func() error) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(ctx, `
+		UPDATE device_codes
+		SET status = $1
+		WHERE device_code = $2 AND status = $3 AND expires_at > $4
+	`,
+		domain.DeviceCodeStatusConsumed,
+		deviceCode,
+		domain.DeviceCodeStatusApproved,
+		time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.ErrDeviceCodeNotApproved
+	}
+
+	if err := issue(); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // CleanupExpired removes device codes that have passed their expiration time.
 func (r *DeviceCodeRepository) CleanupExpired(ctx context.Context) (int64, error) {
 	query := `DELETE FROM device_codes WHERE expires_at < $1`

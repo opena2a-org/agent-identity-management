@@ -201,6 +201,9 @@ func (r *mintDeviceRepo) Approve(_ context.Context, u string, _ uuid.UUID, _ uui
 }
 func (r *mintDeviceRepo) Deny(context.Context, string) error            { return nil }
 func (r *mintDeviceRepo) CleanupExpired(context.Context) (int64, error) { return 0, nil }
+func (r *mintDeviceRepo) Consume(context.Context, string, func() error) error {
+	return domain.ErrDeviceCodeNotApproved
+}
 
 func deviceApproveApp(f *mintFixture, family string) (*fiber.App, *mintDeviceRepo) {
 	repo := &mintDeviceRepo{code: &domain.DeviceCode{ID: uuid.New(), DeviceCode: "dev", UserCode: "ABCDEFGH", ClientID: "aim-sdk", ExpiresAt: time.Now().Add(10 * time.Minute), Status: domain.DeviceCodeStatusPending, CreatedAt: time.Now()}}
