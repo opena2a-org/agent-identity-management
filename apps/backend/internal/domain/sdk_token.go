@@ -6,6 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// Revoke reasons the server writes on its own. A row retired by rotation and
+// presented again is a reuse; a row revoked with its family was ended by one.
+const (
+	SDKTokenRevokeReasonRotation      = "token_rotation"
+	SDKTokenRevokeReasonFamilyRevoked = "token_family_revoked"
+)
+
 // SDKToken represents a tracked SDK refresh token for security and revocation
 type SDKToken struct {
 	ID               uuid.UUID              `json:"id"`
@@ -36,6 +43,11 @@ func (t *SDKToken) IsActive() bool {
 		return false
 	}
 	return true
+}
+
+// RevokedFor reports whether the row was revoked with the given reason.
+func (t *SDKToken) RevokedFor(reason string) bool {
+	return t.RevokedAt != nil && t.RevokeReason != nil && *t.RevokeReason == reason
 }
 
 // Revoke marks the token as revoked with a reason
@@ -88,6 +100,12 @@ type SDKTokenRepository interface {
 
 	// RevokeAllForUser revokes all tokens for a user
 	RevokeAllForUser(userID uuid.UUID, reason string) error
+
+	// RevokeFamily revokes every active row of a user's SDK-download token
+	// family: the download's row (its token ID is the family's id) and every
+	// row that descends from it by rotation (each names the row it replaced
+	// in its parent_token metadata)
+	RevokeFamily(userID uuid.UUID, familyID string, reason string) error
 
 	// RecordUsage updates token usage statistics
 	RecordUsage(tokenID string, ipAddress string) error

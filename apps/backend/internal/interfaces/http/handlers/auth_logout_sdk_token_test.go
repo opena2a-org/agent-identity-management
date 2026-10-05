@@ -51,6 +51,17 @@ func (r *sdkRowRepo) RevokeByTokenHash(hash string, reason string) error {
 	return nil
 }
 
+// RevokeFamily revokes the family's download row; these fixtures track one
+// download and no row rotated from it.
+func (r *sdkRowRepo) RevokeFamily(userID uuid.UUID, familyID string, reason string) error {
+	for _, row := range r.rows {
+		if row.UserID == userID && row.TokenID == familyID && row.RevokedAt == nil {
+			row.Revoke(reason)
+		}
+	}
+	return nil
+}
+
 func (r *sdkRowRepo) GetByUserID(userID uuid.UUID, includeRevoked bool) ([]*domain.SDKToken, error) {
 	var out []*domain.SDKToken
 	for _, row := range r.rows {

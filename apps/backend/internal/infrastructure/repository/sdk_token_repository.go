@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -482,6 +483,73 @@ func (r *sdkTokenRepository) RevokeAllForUser(userID uuid.UUID, reason string) e
 	_, err := r.db.Exec(query, time.Now(), reason, userID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke all SDK tokens for user: %w", err)
+	}
+
+	return nil
+}
+
+// RevokeFamily reads the user's rows to find the family: the download's row,
+// whose token_id is the family's id, and every row that descends from it, each
+// naming the row it replaced in metadata parent_token. The family's active
+// rows are then revoked in one statement.
+func (r *sdkTokenRepository) RevokeFamily(userID uuid.UUID, familyID string, reason string) error {
+	rows, err := r.db.Query(`
+		SELECT id, token_id, COALESCE(metadata->>'parent_token', ''), revoked_at IS NULL
+		FROM sdk_tokens
+		WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to read SDK token family: %w", err)
+	}
+	defer rows.Close()
+
+	pending := make([]string, 0)
+	children := map[string][]string{}
+	active := map[string]bool{}
+	for rows.Next() {
+		var id uuid.UUID
+		var tokenID, parent string
+		var isActive bool
+		if err := rows.Scan(&id, &tokenID, &parent, &isActive); err != nil {
+			return fmt.Errorf("failed to scan SDK token family: %w", err)
+		}
+		if tokenID == familyID {
+			pending = append(pending, id.String())
+		}
+		if parent != "" {
+			children[parent] = append(children[parent], id.String())
+		}
+		active[id.String()] = isActive
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed to read SDK token family: %w", err)
+	}
+
+	revoke := make([]string, 0)
+	seen := map[string]bool{}
+	for len(pending) > 0 {
+		id := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if active[id] {
+			revoke = append(revoke, id)
+		}
+		pending = append(pending, children[id]...)
+	}
+	if len(revoke) == 0 {
+		return nil
+	}
+
+	query := `
+		UPDATE sdk_tokens
+		SET revoked_at = $1, revoke_reason = $2
+		WHERE user_id = $3 AND revoked_at IS NULL AND id = ANY($4::uuid[])
+	`
+	if _, err := r.db.Exec(query, time.Now(), reason, userID, pq.Array(revoke)); err != nil {
+		return fmt.Errorf("failed to revoke SDK token family: %w", err)
 	}
 
 	return nil

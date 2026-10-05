@@ -89,6 +89,11 @@ func (m *MockSDKTokenRepository) RevokeAllForUser(userID uuid.UUID, reason strin
 	return args.Error(0)
 }
 
+func (m *MockSDKTokenRepository) RevokeFamily(userID uuid.UUID, familyID string, reason string) error {
+	args := m.Called(userID, familyID, reason)
+	return args.Error(0)
+}
+
 func (m *MockSDKTokenRepository) RecordUsage(tokenID string, ipAddress string) error {
 	args := m.Called(tokenID, ipAddress)
 	return args.Error(0)

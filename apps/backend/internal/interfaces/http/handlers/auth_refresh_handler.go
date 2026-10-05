@@ -123,13 +123,36 @@ func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, 
 	}
 }
 
-// reuseDetected handles a login refresh token that is denylisted and was
-// presented again (RFC 9700 section 4.14.2): whoever holds the chain that
-// grew from it cannot be told apart from the legitimate client, so the whole
-// family is revoked and the event recorded. The record says whether the
-// presenter is the client that retired the token (a race with itself) or not
-// (auth.ClassifyReuse); enforcement is the same either way. Tokens without a
-// family (SDK download tokens, which are retired by row) record nothing here.
+// sdkRowRefused records why an SDK-download token whose sdk_tokens row is no
+// longer active was refused. A row the server retired by rotation, presented
+// again, is a reuse and ends the family. A row revoked with its family is a
+// member of an ended family and is recorded as one, as a login family member
+// is. A row its owner revoked records nothing, and neither does any token of
+// another issuer tracked in the table.
+func (h *AuthRefreshHandler) sdkRowRefused(c fiber.Ctx, token string, row *domain.SDKToken) {
+	claims, err := h.jwtService.ValidateToken(token)
+	if err != nil || claims.Issuer != auth.IssuerSDK || claims.FamilyID() == "" {
+		return
+	}
+	switch {
+	case row.RevokedFor(domain.SDKTokenRevokeReasonRotation):
+		h.reuseDetected(c, token)
+	case row.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked):
+		h.recordRefusal(c, claims, domain.AuditActionRefreshSessionRevoked, nil, "")
+	}
+}
+
+// reuseDetected handles a refresh token that was retired and was presented
+// again (RFC 9700 section 4.14.2): a login token denylisted by rotation or
+// logout, or an SDK-download token whose sdk_tokens row was retired by
+// rotation. Whoever holds the chain that grew from it cannot be told apart
+// from the legitimate client, so the whole family is revoked and the event
+// recorded. The record says whether the presenter is the client that retired
+// the token (a race with itself) or not (auth.ClassifyReuse); enforcement is
+// the same either way. An SDK-download family's sdk_tokens rows are revoked
+// too, so the family ends even where no revocation store is configured; the
+// record's familyRevoked is true when either write succeeded. A token without
+// a family (an access or service token) records nothing here.
 func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil || claims.FamilyID() == "" {
@@ -139,6 +162,15 @@ func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
 	familyRevoked, revokeErr := h.jwtService.RevokeFamily(c.Context(), claims)
 	if revokeErr != nil {
 		log.Printf("⚠️  Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
+	}
+	if claims.Issuer == auth.IssuerSDK && h.sdkTokenService != nil {
+		if userID, err := uuid.Parse(claims.UserID); err == nil {
+			if rowsErr := h.sdkTokenService.RevokeFamily(c.Context(), userID, claims.FamilyID(), domain.SDKTokenRevokeReasonFamilyRevoked); rowsErr == nil {
+				familyRevoked = true
+			} else {
+				log.Printf("⚠️  Refresh: sdk_tokens rows of family %s could not be revoked after a reuse: %v", claims.FamilyID(), rowsErr)
+			}
+		}
 	}
 	h.recordRefusal(c, claims, domain.AuditActionRefreshTokenReuse, &familyRevoked, clientMatch)
 }
@@ -263,6 +295,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		if err == nil && sdkToken != nil {
 			// Token is tracked in SDK table - verify it's still active
 			if !sdkToken.IsActive() {
+				h.sdkRowRefused(c, req.RefreshToken, sdkToken)
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 					"error": "Token has been revoked or is invalid",
 				})
@@ -341,9 +374,11 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	// when that cannot happen (no revocation store, or the store refused the
 	// write, under either fail-open setting) the presented token goes back
 	// unchanged with a fresh access token, and the answer says so (rotated).
-	// SDK-download tokens are retired by row in sdk_tokens below. Minting
-	// before retiring means a signing failure leaves the client with the token
-	// it still holds; only a response lost after the write costs a re-login.
+	// SDK-download tokens are retired by row in sdk_tokens below, and the
+	// same holds for them: a presentation whose row another presentation
+	// retired first is a reuse. Minting before retiring means a signing
+	// failure leaves the client with the token it still holds; only a response
+	// lost after the write costs a re-login.
 	// The retirement is atomic on a store with set-if-absent: two presentations
 	// of one token within a request's duration cannot both retire it. The one
 	// that loses the write is a reuse (the same token presented twice), so the
@@ -410,6 +445,24 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 				newRefreshToken = req.RefreshToken
 				log.Printf("⚠️  Refresh: sdk_tokens rotation failed for token id %s; the presented refresh token was returned unchanged: %v", tokenID, rotateErr)
 			}
+		}
+	}
+
+	// An SDK-download token that did not rotate is checked once more. Its row
+	// was active when it was read above; when it no longer is, another
+	// presentation of the same token retired it in between, so this one lost
+	// the retirement. It is answered as that check would answer it now (a row
+	// retired by rotation is a reuse and ends the family, with any row this
+	// presentation created), and what it minted is not handed out.
+	if claims.Issuer == auth.IssuerSDK && !rotated && tokenID != "" {
+		hasher := sha256.New()
+		hasher.Write([]byte(req.RefreshToken))
+		row, err := h.sdkTokenService.GetByTokenHash(c.Context(), hex.EncodeToString(hasher.Sum(nil)))
+		if err == nil && row != nil && !row.IsActive() {
+			h.sdkRowRefused(c, req.RefreshToken, row)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Token has been revoked or is invalid",
+			})
 		}
 	}
 

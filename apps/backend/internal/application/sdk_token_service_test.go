@@ -157,6 +157,36 @@ func (m *MockSDKTokenRepository) RevokeAllForUser(userID uuid.UUID, reason strin
 	return nil
 }
 
+// RevokeFamily mirrors the repository: the family is the user's row whose
+// token ID is the family's id and every row that descends from it by
+// parent_token.
+func (m *MockSDKTokenRepository) RevokeFamily(userID uuid.UUID, familyID string, reason string) error {
+	if m.revokeErr != nil {
+		return m.revokeErr
+	}
+	inFamily := map[string]bool{}
+	for grew := true; grew; {
+		grew = false
+		for _, token := range m.tokens {
+			id := token.ID.String()
+			if token.UserID != userID || inFamily[id] {
+				continue
+			}
+			parent, _ := token.Metadata["parent_token"].(string)
+			if token.TokenID == familyID || inFamily[parent] {
+				inFamily[id] = true
+				grew = true
+			}
+		}
+	}
+	for _, token := range m.tokens {
+		if inFamily[token.ID.String()] && token.RevokedAt == nil {
+			token.Revoke(reason)
+		}
+	}
+	return nil
+}
+
 func (m *MockSDKTokenRepository) RecordUsage(tokenID string, ipAddress string) error {
 	token, ok := m.tokensByTokenID[tokenID]
 	if !ok {
@@ -354,6 +384,42 @@ func TestSDKTokenService_RevokeByTokenHash(t *testing.T) {
 
 	// Verify token is revoked
 	assert.NotNil(t, token.RevokedAt)
+}
+
+func TestSDKTokenService_RevokeFamily(t *testing.T) {
+	repo := NewMockSDKTokenRepository()
+	service := NewSDKTokenService(repo)
+	ctx := context.Background()
+
+	userID := uuid.New()
+	orgID := uuid.New()
+
+	// A family: the download's row, a row rotated from it and a row rotated
+	// from that one; another download of the same user; another user's row
+	// that names the download's row as its parent.
+	child := func(userID uuid.UUID, parent *domain.SDKToken) *domain.SDKToken {
+		token := createTestSDKToken(userID, orgID)
+		token.Metadata = map[string]interface{}{"parent_token": parent.ID.String()}
+		require.NoError(t, repo.Create(token))
+		return token
+	}
+	root := createTestSDKToken(userID, orgID)
+	require.NoError(t, repo.Create(root))
+	member := child(userID, root)
+	tip := child(userID, member)
+	other := createTestSDKToken(userID, orgID)
+	require.NoError(t, repo.Create(other))
+	otherMember := child(userID, other)
+	foreign := child(uuid.New(), root)
+
+	require.NoError(t, service.RevokeFamily(ctx, userID, root.TokenID, domain.SDKTokenRevokeReasonFamilyRevoked))
+
+	assert.True(t, root.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked), "the download's row")
+	assert.True(t, member.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked), "a rotated row")
+	assert.True(t, tip.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked), "the row the chain's live token has")
+	assert.Nil(t, other.RevokedAt, "another download is untouched")
+	assert.Nil(t, otherMember.RevokedAt, "another download's chain is untouched")
+	assert.Nil(t, foreign.RevokedAt, "another user's row is untouched")
 }
 
 func TestSDKTokenService_RevokeAllUserTokens(t *testing.T) {

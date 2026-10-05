@@ -286,10 +286,10 @@ func TestRefreshToken_CrossInstanceReplayIsRefused(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, status, "the family is over on every instance")
 }
 
-// F7: the SDK-download path is unchanged: no sid, no family key, no row; a
-// revoked SDK row is refused with no row. Control: a login-pair reuse on the
-// same store writes one family key.
-func TestRefreshToken_SDKPathHasNoFamily(t *testing.T) {
+// F7: an SDK rotation carries the family and writes no family key and no
+// row; a row its owner revoked is refused with no row (it is not a reuse).
+// Control: a login-pair reuse on the same store writes one family key.
+func TestRefreshToken_SDKOwnerRevokedRowIsNotAReuse(t *testing.T) {
 	store := &rotationStore{}
 	userID, orgID := uuid.New(), uuid.New()
 	users := &refreshTestUserRepo{getByID: func(uuid.UUID) (*domain.User, error) {
@@ -308,16 +308,17 @@ func TestRefreshToken_SDKPathHasNoFamily(t *testing.T) {
 	require.Equal(t, fiber.StatusOK, status)
 	claims, err := jwtSvc.ValidateToken(out.RefreshToken)
 	require.NoError(t, err)
-	assert.Empty(t, claims.SessionID)
+	assert.Equal(t, jtiOfToken(t, jwtSvc, old), claims.SessionID, "the rotation carries the download's family")
 	assert.Equal(t, 0, familyKeyWrites(store))
 	assert.Empty(t, audit.rows)
 
-	revokedAt := time.Now()
-	sdkRepo.token.RevokedAt = &revokedAt
+	revokedAt, reason := time.Now(), "user_revoked"
+	sdkRepo.token.RevokedAt, sdkRepo.token.RevokeReason = &revokedAt, &reason
 	body, status := postRefreshRaw(t, app, out.RefreshToken)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assert.Contains(t, body, familyRefusal)
-	assert.Empty(t, audit.rows, "a revoked SDK row records no reuse")
+	assert.Empty(t, audit.rows, "a row its owner revoked records no reuse")
+	assert.Equal(t, 0, familyKeyWrites(store))
 
 	sdkRepo.token = nil // login tokens are not tracked in sdk_tokens
 	_, p1, err := jwtSvc.GenerateTokenPair(userID.String(), orgID.String(), "sdk@example.com", "admin")

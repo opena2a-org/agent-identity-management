@@ -81,6 +81,12 @@ func (s *SDKTokenService) RevokeAllUserTokens(ctx context.Context, userID uuid.U
 	return s.sdkTokenRepo.RevokeAllForUser(userID, reason)
 }
 
+// RevokeFamily revokes every active SDK token row of a user's token family
+// (after a reuse ends the family).
+func (s *SDKTokenService) RevokeFamily(ctx context.Context, userID uuid.UUID, familyID string, reason string) error {
+	return s.sdkTokenRepo.RevokeFamily(userID, familyID, reason)
+}
+
 // GetActiveTokenCount returns count of active tokens for a user
 func (s *SDKTokenService) GetActiveTokenCount(ctx context.Context, userID uuid.UUID) (int, error) {
 	return s.sdkTokenRepo.GetActiveCount(userID)

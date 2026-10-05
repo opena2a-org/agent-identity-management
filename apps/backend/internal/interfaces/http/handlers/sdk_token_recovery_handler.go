@@ -108,6 +108,17 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
+	// A token family a reuse ended is not recovered: the chain that grew from
+	// the reused token cannot be told apart from the owner's, so the holder
+	// downloads a new SDK instead. The family is ended when the row was
+	// revoked with it, or when the revocation store says so (an unanswered
+	// store follows the fail-open setting). The answer is the refresh route's.
+	if h.familyEnded(c, req.OldRefreshToken, oldToken) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Token has been revoked or is invalid",
+		})
+	}
+
 	// The recovered pair carries the account's CURRENT role and email, read
 	// from the database; an account that may no longer hold a session cannot
 	// recover one.
@@ -187,4 +198,17 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		ExpiresIn:    86400, // 24 hours
 		Message:      "Token recovered successfully - SDK credentials updated automatically",
 	})
+}
+
+// familyEnded reports whether the presented token's family was ended.
+func (h *SDKTokenRecoveryHandler) familyEnded(c fiber.Ctx, token string, row *domain.SDKToken) bool {
+	if row.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked) {
+		return true
+	}
+	claims, err := h.jwtService.ValidateToken(token)
+	if err != nil {
+		return false
+	}
+	revoked, _ := h.jwtService.CheckFamilyRevoked(c.Context(), claims.FamilyID())
+	return revoked
 }
