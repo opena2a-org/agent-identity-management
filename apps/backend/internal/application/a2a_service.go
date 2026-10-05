@@ -395,7 +395,7 @@ func (s *A2AService) SignA2ARequest(
 		}
 		encodedKeys := crypto.EncodeKeyPair(keyPair)
 
-		encPrivKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+		encPrivKey, err := s.keyVault.EncryptPrivateKey(agent.ID, encodedKeys.PrivateKeyBase64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
 		}
@@ -407,7 +407,7 @@ func (s *A2AService) SignA2ARequest(
 	}
 
 	// Decrypt private key
-	privateKeyB64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
+	privateKeyB64, err := s.keyVault.DecryptPrivateKey(agent.ID, *agent.EncryptedPrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt private key: %w", err)
 	}
@@ -1124,7 +1124,7 @@ func (s *A2AService) signAttestation(ctx context.Context, agentID uuid.UUID, att
 	}
 
 	// Decrypt private key
-	privateKeyB64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
+	privateKeyB64, err := s.keyVault.DecryptPrivateKey(agent.ID, *agent.EncryptedPrivateKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt private key: %w", err)
 	}

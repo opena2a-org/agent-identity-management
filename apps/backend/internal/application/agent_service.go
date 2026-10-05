@@ -219,6 +219,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	// Reject malformed entries (e.g., comma-separated values in a single string)
 	req.TalksTo = sanitizeTalksTo(req.TalksTo)
 
+	// The agent ID is assigned here, not by the repository, because a
+	// server-generated private key is encrypted bound to the row's ID.
+	agentID := uuid.New()
+
 	// ✅ KEY MANAGEMENT - Support both SDK-provided and auto-generated keys
 	var publicKeyBase64 string
 	var encryptedPrivateKey string
@@ -244,8 +248,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		publicKeyBase64 = encodedKeys.PublicKeyBase64
 		keyAlgorithm = encodedKeys.Algorithm
 
-		// Encrypt private key before storing (NEVER stored in plaintext)
-		encPrivKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+		// Encrypt private key before storing (NEVER stored in plaintext),
+		// bound to the ID of the row it will be stored in
+		encPrivKey, err := s.keyVault.EncryptPrivateKey(agentID, encodedKeys.PrivateKeyBase64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
 		}
@@ -274,6 +279,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	agent := &domain.Agent{
+		ID:                  agentID,
 		OrganizationID:      orgID,
 		Name:                req.Name,
 		DisplayName:         req.DisplayName,
@@ -1675,8 +1681,8 @@ func (s *AgentService) GetAgentCredentials(ctx context.Context, agentID uuid.UUI
 		return "", "", fmt.Errorf("agent keys not generated")
 	}
 
-	// Decrypt private key
-	privateKeyBase64, err := s.keyVault.DecryptPrivateKey(*agent.EncryptedPrivateKey)
+	// Decrypt private key, bound to the row just loaded
+	privateKeyBase64, err := s.keyVault.DecryptPrivateKey(agent.ID, *agent.EncryptedPrivateKey)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to decrypt private key: %w", err)
 	}
@@ -2196,7 +2202,7 @@ func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (pub
 	encodedKeys := crypto.EncodeKeyPair(keyPair)
 
 	// 4. Encrypt new private key before storing
-	encryptedPrivateKey, err := s.keyVault.EncryptPrivateKey(encodedKeys.PrivateKeyBase64)
+	encryptedPrivateKey, err := s.keyVault.EncryptPrivateKey(agent.ID, encodedKeys.PrivateKeyBase64)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to encrypt private key: %w", err)
 	}

@@ -329,9 +329,9 @@ func TestNoProductionCodeUsesTheSharedServerKey(t *testing.T) {
 	require.Greater(t, checked, 100, "the walk did not reach the backend source tree")
 
 	kv, _ := newTestVault(t)
-	sealed, err := kv.EncryptPrivateKey("agent-private-key")
+	sealed, err := kv.EncryptPrivateKey(testAgentID, "agent-private-key")
 	require.NoError(t, err)
-	opened, err := kv.DecryptPrivateKey(sealed)
+	opened, err := kv.DecryptPrivateKey(testAgentID, sealed)
 	require.NoError(t, err)
 	assert.Equal(t, "agent-private-key", opened)
 }
