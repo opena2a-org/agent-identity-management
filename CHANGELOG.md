@@ -19,6 +19,43 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed — the Java SDK signs requests in the form the platform verifies, and its approval poll is signed
+
+- `AIMClient` signed an `X-Signature` GET over `METHOD\npath\ntimestamp\n`, and a POST with an empty body the same
+  way. The platform verifies over those three lines with no trailing newline and adds the body as a fourth line only
+  when the request has one, so it refused both with 401. The signed read of an agent's MCP servers, made when an MCP
+  server registration returns 409, was one of them. Both now sign the form the platform verifies.
+- `waitForApproval` polled `GET /api/v1/sdk-api/verifications/{id}` with a bearer token. That endpoint authenticates
+  only the `X-AIM-Agent-ID`, `X-AIM-Timestamp` and `X-AIM-Signature` headers, so every poll was refused and a pending
+  action timed out even after an administrator approved it. Each poll now sends those headers, signed over
+  `GET\n/api/v1/sdk-api/verifications/<id>\n<agent id>\n<timestamp>` with both IDs in canonical lowercase. A client
+  with no signing key, or with an agent or verification ID that is not a UUID, now fails at once with a
+  `VerificationException` instead of polling until the timeout.
+- Tests verify each signature the client sends against the message the platform rebuilds, written out in the test:
+  a GET, a POST with a body, a POST with an empty body, and an approval poll made with upper-case IDs.
+
+### Security — a stored agent private key decrypts only in the agent row it was written for
+
+- Server-generated agent private keys were sealed with AES-256-GCM and no additional data, so a ciphertext copied
+  into another row of `agents.encrypted_private_key` decrypted as that agent's key on the credential and A2A signing
+  paths. Keys are now stored in format v2: a cleartext header (a version byte and a storage-key id), the nonce, and
+  the ciphertext sealed with the additional data `"aim/agent-private-key" 0x00 <header> 0x00 <agent id>`, where the
+  agent ID is the row's primary key in canonical lowercase. Each decrypt takes the ID from the row it loaded. A
+  ciphertext copied to another row, sealed for another purpose, or carrying an altered header is refused, and the
+  credential rotation helper keeps the binding.
+- The request path refuses the earlier v1 format. At startup, before the server accepts requests, a one-time
+  migration re-encrypts each v1 key to v2 bound to its own row with a compare-and-swap update and logs counts only
+  (`v1Read`, `v2Written`, `alreadyV2`, `failures`), never a key or an agent ID. It is recorded in `schema_migrations`
+  as `keyvault/agent-private-key-v2` once a run finishes with no failures; until then it runs again at the next
+  startup. A row that cannot be read stays refused until that agent's credentials are rotated. An earlier release
+  cannot read v2 keys, so rolling back after the migration leaves server-generated keys unreadable until rotated.
+- Registration assigns the agent ID before it encrypts the generated key, and the agent repository keeps an ID the
+  caller assigned instead of replacing it.
+- Tests pin the additional data byte for byte and fail when a ciphertext copied from one row decrypts under another,
+  when a ciphertext sealed for another purpose or a v1 ciphertext is accepted on the request path, when the migration
+  re-binds a v2 ciphertext copied from another row, when a completed migration reads agent keys again, or when a
+  planted key, its ciphertext or an agent ID appears in the migration log or a refusal error.
+
 ### Fixed — No tracked file carries a home directory path from the machine that built or wrote it
 
 - Six backend executables were tracked in the repository: macOS builds from a developer machine, 13 to 25 MB each,
