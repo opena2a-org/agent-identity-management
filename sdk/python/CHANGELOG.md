@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk login` reports an unavailable AIM server as unavailable and exits 75. When the server answers
+  HTTP 502, 503 or 504, or gives no HTTP answer (refused, reset, unresolvable, unanswered), to the pre-flight
+  probe, the device-code request or a token poll, the login ends at that request: nothing is retried, slept
+  on or stored, no browser is opened unless a code was already issued, and the last two lines name the
+  server URL, the status or the failure, and when to run the same command again (the server's `Retry-After`
+  in whole seconds, otherwise "later"). These outcomes used to exit 1 as "Login failed: ..." or "Could not
+  start the device login: ... verify the server URL", and a 503 whose body named `authorization_pending`
+  kept the CLI polling until the code's lifetime ran out and then reported an expired code. The HTTP status
+  now decides before the body is read: `authorization_pending`, `slow_down`, `expired_token` and
+  `access_denied` count only on a 400 or 403, and a 429 is always a slow-down. A rejected TLS certificate
+  and a URL that cannot be requested keep exit 1. `aim-sdk login --help` lists the exit codes (0, 1, 2, 75).
 - `client.secrets.resolve()` refuses a namespace or operation that contains a line feed, a carriage
   return or `|`, raising `SecretsError` before anything is signed or sent. The request signature covers
   the text `namespace|operation|nonce`, so a field cannot carry the separator or a line break; such a

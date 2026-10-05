@@ -25,9 +25,13 @@ Login design (RFC 8628, OAuth 2.0 Device Authorization Grant):
   stores the same access/refresh token pair the dashboard login issues
 - No local HTTP server, no redirect URI, no browser callback: the device code
   never leaves this process and the user code alone authorizes nothing
+- An unavailable server (HTTP 502, 503 or 504, or no HTTP answer) ends the
+  login at that request with exit status 75: nothing is retried, slept on or
+  stored, so the same command can be run again later
 """
 
 import argparse
+import re
 import sys
 import os
 import time
@@ -75,6 +79,12 @@ LOGIN_MAX_WAIT_SECONDS = 900
 DEVICE_CLIENT_ID = "aim-sdk"
 DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 
+# Exit status of `aim-sdk login` when the AIM server was unavailable: it
+# answered 502, 503 or 504, or gave no HTTP answer. This is EX_TEMPFAIL from
+# sysexits.h. It is kept apart from 1 so a script can tell "run the same
+# command again later" from a login that was denied, expired or refused.
+EXIT_SERVER_UNAVAILABLE = 75
+SERVER_UNAVAILABLE_STATUSES = (502, 503, 504)
 
 def invalid_server_url_reason(aim_url):
     """
@@ -99,9 +109,25 @@ def invalid_server_url_reason(aim_url):
     return None
 
 
-def check_server_reachable(aim_url, timeout):
+# The outcomes poll_device_token reports by name. A grant state counts only on
+# a 400 or 403 answer (RFC 8628 section 3.5; AIM sends 403), and 'timeout' only
+# comes from the local deadline: on any other answer these are just body text.
+_POLL_OUTCOMES = ('authorization_pending', 'slow_down', 'expired_token', 'access_denied', 'timeout')
+
+LOGIN_EXIT_CODES_HELP = """\
+exit codes:
+  0   signed in, or an existing sign-in was kept
+  1   the login did not complete: the code was denied or expired, the login
+      was cancelled, or the server refused the request
+  2   the command line was not valid
+  75  the AIM server was unavailable: it answered HTTP 502, 503 or 504, or
+      gave no HTTP answer. Nothing was stored; run the same command again later
+"""
+
+
+def _probe_failure(aim_url, timeout):
     """
-    Pre-flight probe: is anything answering HTTP at aim_url?
+    Pre-flight probe: the `requests` failure of one GET to aim_url, or None.
 
     Any HTTP response -- including an error status -- proves the server is
     reachable; only a transport failure (refused, unroutable, timed out)
@@ -110,9 +136,14 @@ def check_server_reachable(aim_url, timeout):
     import requests
     try:
         requests.get(aim_url, timeout=timeout, allow_redirects=False)
-        return True
-    except requests.RequestException:
-        return False
+        return None
+    except requests.RequestException as e:
+        return e
+
+
+def check_server_reachable(aim_url, timeout):
+    """Pre-flight probe: is anything answering HTTP at aim_url?"""
+    return _probe_failure(aim_url, timeout) is None
 
 
 def print_banner():
@@ -137,6 +168,125 @@ def _server_reason(response, fallback):
     return data.get('errorDescription') or data.get('error_description') or data.get('error') or fallback
 
 
+class _Outage:
+    """
+    Why the AIM server could not be used for a device-flow request: the 502,
+    503 or 504 it answered with, or the class of failure that left the request
+    with no HTTP answer.
+
+    A class rather than a dict key so that no server body can produce one.
+    """
+
+    __slots__ = ('status', 'retry_after', 'reason_code', 'failure')
+
+    def __init__(self, status=None, retry_after=None, reason_code=None, failure=None):
+        self.status = status
+        self.retry_after = retry_after
+        self.reason_code = reason_code
+        self.failure = failure
+
+
+def _retry_after_seconds(response):
+    """`Retry-After` as a non-negative whole number of seconds, or None. A
+    date, a fraction or a missing header is None: no default is made up."""
+    raw = response.headers.get('Retry-After')
+    if not isinstance(raw, str) or not re.fullmatch(r'[0-9]{1,9}', raw.strip()):
+        return None
+    return int(raw.strip())
+
+
+def _machine_code(response):
+    """The server's machine code for an answer: the body's `reasonCode` when
+    it is a string, otherwise `code` when it is a string, otherwise None. Read
+    only after the status has set the class of the answer."""
+    try:
+        data = response.json() if response.content else None
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        return None
+    for member in ('reasonCode', 'code'):
+        if isinstance(data.get(member), str):
+            return data[member]
+    return None
+
+
+def _unavailable_answer(response, url):
+    """The result of a device-flow request the server answered 502, 503 or 504."""
+    return {
+        'error': f"HTTP {response.status_code} from {url}",
+        'outage': _Outage(
+            status=response.status_code,
+            retry_after=_retry_after_seconds(response),
+            reason_code=_machine_code(response),
+        ),
+    }
+
+
+def _outage_from_failure(exc):
+    """
+    The outage a `requests` failure stands for, or None when it is not one.
+
+    No HTTP answer is an outage: refused, reset, unresolvable, unanswered. A
+    rejected TLS certificate is not (running the command again later would not
+    help), and neither is a URL `requests` would not send to.
+    """
+    import requests
+    from .client import _is_transport_failure, _transport_failure_class
+
+    if not _is_transport_failure(exc):
+        return None
+    if isinstance(exc, getattr(requests.exceptions, 'SSLError', ())):
+        return None
+    return _Outage(failure=_transport_failure_class(exc))
+
+
+def _no_answer(exc, aim_url):
+    """The result of a device-flow request that raised instead of answering."""
+    # The same rendering the SDK uses everywhere else: the host from the
+    # server URL, the failure class, the URL to check; never the urllib3
+    # pool chain.
+    from .client import _request_failure_message
+
+    result = {'error': _request_failure_message(exc, aim_url)}
+    outage = _outage_from_failure(exc)
+    if outage is not None:
+        result['outage'] = outage
+    return result
+
+
+def _print_server_unavailable(aim_url, outage, blank_line=True):
+    """
+    The last output of a login the server could not serve: what happened and
+    where, that nothing was stored, and when to run the command again.
+
+    The wait is printed, never slept, and comes from `Retry-After` alone.
+    `blank_line` is False where the output so far already ends with one.
+    """
+    if outage.status is not None:
+        what = f"it answered HTTP {outage.status}"
+        # A machine code is a short token; anything else in that member is
+        # server-chosen text and is left out of the terminal.
+        if outage.reason_code and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}', outage.reason_code):
+            what += f", reason code {outage.reason_code}"
+    elif outage.failure == 'timed out':
+        what = "it gave no HTTP answer in time"
+    else:
+        what = f"it gave no HTTP answer ({outage.failure})"
+
+    if outage.retry_after is None:
+        when = "later"
+    elif outage.retry_after == 0:
+        when = "now"
+    else:
+        when = f"in {outage.retry_after} second{'' if outage.retry_after == 1 else 's'}"
+
+    if blank_line:
+        print()
+    print(f"The AIM server at {aim_url} is unavailable: {what}.")
+    print(f"No sign-in was completed and nothing was stored. Run the same command again {when}.")
+
+
 def request_device_code(aim_url: str, client_id: str = DEVICE_CLIENT_ID):
     """
     Start the device grant: POST /api/v1/oauth/device/code.
@@ -144,7 +294,9 @@ def request_device_code(aim_url: str, client_id: str = DEVICE_CLIENT_ID):
     Returns:
         dict: the server's answer (deviceCode, userCode, verificationUri,
         verificationUriComplete, expiresIn, interval), or {'error': reason}
-        with a bare reason the caller prefixes.
+        with a bare reason the caller prefixes. When the server was
+        unavailable (502, 503, 504 or no HTTP answer) the result also carries
+        'outage'.
     """
     import requests
     url = f"{aim_url}/api/v1/oauth/device/code"
@@ -156,13 +308,10 @@ def request_device_code(aim_url: str, client_id: str = DEVICE_CLIENT_ID):
             timeout=30,
         )
     except requests.RequestException as e:
-        # The same rendering the SDK uses everywhere else: the host from the
-        # server URL, the failure class, the URL to check; never the urllib3
-        # pool chain.
-        from .client import _request_failure_message
+        return _no_answer(e, aim_url)
 
-        return {'error': _request_failure_message(e, aim_url)}
-
+    if response.status_code in SERVER_UNAVAILABLE_STATUSES:
+        return _unavailable_answer(response, url)
     if response.status_code != 200:
         return {'error': _server_reason(
             response,
@@ -187,9 +336,15 @@ def poll_device_token(aim_url: str, device_code: str, interval: int, deadline: f
     Never polls faster than `interval`; a `slow_down` answer or an HTTP 429
     adds five seconds to the wait (RFC 8628 section 3.5).
 
+    The status sets the class of an answer before any body field is read: a
+    502, 503 or 504 (or no HTTP answer) ends the poll at once, with no retry
+    and no sleep, whatever the body says; the grant states count only on a 400
+    or 403.
+
     Returns:
         dict: the token pair on success, or {'error': <one of 'expired_token',
-        'access_denied', 'timeout', or a bare reason>}.
+        'access_denied', 'timeout', or a bare reason>}. When the server was
+        unavailable the result also carries 'outage'.
     """
     import requests
     url = f"{aim_url}/api/v1/oauth/device/token"
@@ -206,11 +361,10 @@ def poll_device_token(aim_url: str, device_code: str, interval: int, deadline: f
                 timeout=30,
             )
         except requests.RequestException as e:
-            from .client import _request_failure_message
+            return _no_answer(e, aim_url)
 
-            return {'error': _request_failure_message(e, aim_url)}
-
-        if response.status_code == 200:
+        status = response.status_code
+        if status == 200:
             try:
                 data = response.json()
             except ValueError:
@@ -219,15 +373,24 @@ def poll_device_token(aim_url: str, device_code: str, interval: int, deadline: f
                 return {'error': f"the token answer from {url} carried no access token"}
             return data
 
-        code = _server_reason(response, '')
-        if response.status_code == 429 or code == 'slow_down':
+        if status in SERVER_UNAVAILABLE_STATUSES:
+            return _unavailable_answer(response, url)
+        if status == 429:
             wait += 5
             continue
-        if code == 'authorization_pending':
-            continue
-        if code in ('expired_token', 'access_denied'):
-            return {'error': code}
-        return {'error': code or f"HTTP {response.status_code} from {url}"}
+
+        code = _server_reason(response, '')
+        if status in (400, 403):
+            if code == 'slow_down':
+                wait += 5
+                continue
+            if code == 'authorization_pending':
+                continue
+            if code in ('expired_token', 'access_denied'):
+                return {'error': code}
+        if code in _POLL_OUTCOMES:
+            code = ''
+        return {'error': code or f"HTTP {status} from {url}"}
 
 
 def login(args):
@@ -274,7 +437,12 @@ def login(args):
     # Fail fast on an unreachable server: probing before the browser opens is
     # what keeps a mistyped or dead --url from parking the user on a login
     # page that will never call back.
-    if not check_server_reachable(aim_url, LOGIN_PROBE_TIMEOUT_SECONDS):
+    probe_failure = _probe_failure(aim_url, LOGIN_PROBE_TIMEOUT_SECONDS)
+    if probe_failure is not None:
+        outage = _outage_from_failure(probe_failure)
+        if outage is not None:
+            _print_server_unavailable(aim_url, outage, blank_line=False)
+            return EXIT_SERVER_UNAVAILABLE
         print(f"Error: could not reach the AIM server at {aim_url}")
         print(f"(no HTTP response within {LOGIN_PROBE_TIMEOUT_SECONDS}s).")
         print("Check the URL and your network, then retry. For a self-hosted")
@@ -284,6 +452,9 @@ def login(args):
     # Start the device grant. The device code stays in this process; only the
     # short user code is shown, and it authorizes nothing by itself.
     device = request_device_code(aim_url)
+    if isinstance(device.get('outage'), _Outage):
+        _print_server_unavailable(aim_url, device['outage'], blank_line=False)
+        return EXIT_SERVER_UNAVAILABLE
     if 'error' in device:
         print(f"\nCould not start the device login: {device['error']}")
         return 1
@@ -330,6 +501,9 @@ def login(args):
         print("\n\nLogin cancelled.")
         return 1
 
+    if isinstance(token_response.get('outage'), _Outage):
+        _print_server_unavailable(aim_url, token_response['outage'])
+        return EXIT_SERVER_UNAVAILABLE
     if 'error' in token_response:
         reason = token_response['error']
         if reason in ('expired_token', 'timeout'):
@@ -612,7 +786,12 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='Commands')
 
     # Login command
-    login_parser = subparsers.add_parser('login', help='Login to AIM server')
+    login_parser = subparsers.add_parser(
+        'login',
+        help='Login to AIM server',
+        epilog=LOGIN_EXIT_CODES_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     login_parser.add_argument(
         '--url',
         default=DEFAULT_AIM_URL,

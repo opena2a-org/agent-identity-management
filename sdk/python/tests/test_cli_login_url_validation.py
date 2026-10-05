@@ -58,8 +58,10 @@ def test_a_valid_url_passes_validation(url):
 
 
 def test_an_unreachable_valid_url_still_reports_unreachable(monkeypatch):
-    monkeypatch.setattr(cli, "check_server_reachable", lambda url, timeout: False)
+    # A well-formed URL passes validation and reaches the probe. No HTTP answer
+    # there is an outage: exit 75 (EX_TEMPFAIL), not the exit 1 of a refused login.
+    monkeypatch.setattr(cli, "_probe_failure", lambda url, timeout: cli.requests.ConnectionError("refused"))
     monkeypatch.setattr("aim_sdk.credentials.load_sdk_credentials", lambda *a, **k: None)
     rc, out = _login("http://127.0.0.1:1")
-    assert rc == 1
-    assert "could not reach the AIM server at http://127.0.0.1:1" in out
+    assert rc == cli.EXIT_SERVER_UNAVAILABLE == 75
+    assert "The AIM server at http://127.0.0.1:1 is unavailable: it gave no HTTP answer" in out
