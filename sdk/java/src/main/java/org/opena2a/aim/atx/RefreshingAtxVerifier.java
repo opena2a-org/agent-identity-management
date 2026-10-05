@@ -28,7 +28,7 @@ public final class RefreshingAtxVerifier {
 
     /**
      * @param trustedIssuers issuer DIDs the verifier trusts
-     * @param publicKeys     issuer public keys (Ed25519 verified; ML-DSA-65 recorded)
+     * @param publicKeys     issuer public keys (Ed25519 and ML-DSA-65, both used to verify signatures)
      * @param clock          clock source (nullable; system UTC when null)
      * @param crlCache       async-refreshed revocation cache (required; call {@link CrlCache#start()} to begin refreshing)
      */
