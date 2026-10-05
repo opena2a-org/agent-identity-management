@@ -219,7 +219,7 @@ func (s *SecurityPolicyService) CreateDefaultPolicies(ctx context.Context, orgID
 		EnforcementAction: domain.EnforcementAlertOnly,
 		SeverityThreshold: domain.AlertSeverityWarning,
 		Rules: map[string]interface{}{
-			"trust_threshold": 0.3,
+			TrustThresholdRuleKey: 0.3,
 		},
 		AppliesTo: "trust_score_below:0.3",
 		IsEnabled: true,
@@ -304,6 +304,25 @@ func (s *SecurityPolicyService) DisablePolicy(ctx context.Context, id uuid.UUID)
 	return s.policyRepo.Update(policy)
 }
 
+// TrustThresholdRuleKey is the rules key a trust_score_low policy carries its
+// threshold under. The value is on the trust score's own 0-1 scale (0.5, not
+// 50): EvaluateTrustScoreLow compares it to Agent.TrustScore unconverted.
+const TrustThresholdRuleKey = "trust_threshold"
+
+// DefaultTrustScorePolicyThreshold applies to a trust_score_low policy whose
+// rules carry no numeric TrustThresholdRuleKey.
+const DefaultTrustScorePolicyThreshold = 0.3
+
+// trustScorePolicyThreshold returns the threshold EvaluateTrustScoreLow
+// applies for a trust_score_low policy's rules. Any other key, "threshold"
+// included, is not read.
+func trustScorePolicyThreshold(rules map[string]interface{}) float64 {
+	if threshold, ok := rules[TrustThresholdRuleKey].(float64); ok {
+		return threshold
+	}
+	return DefaultTrustScorePolicyThreshold
+}
+
 // EvaluateTrustScoreLow evaluates security policies for low trust score agents
 // Returns enforcement decision and whether to create an alert
 func (s *SecurityPolicyService) EvaluateTrustScoreLow(
@@ -335,11 +354,7 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 			continue
 		}
 
-		// Check trust score threshold from rules
-		threshold, ok := policy.Rules["trust_threshold"].(float64)
-		if !ok {
-			threshold = 0.3 // Default threshold
-		}
+		threshold := trustScorePolicyThreshold(policy.Rules)
 
 		// Trigger if agent trust score is below threshold
 		if agent.TrustScore < threshold {
@@ -364,7 +379,15 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 	return false, false, "", nil
 }
 
-// TrustScoreEnforcementThresholds defines thresholds for trust score enforcement
+// Update-time trust score thresholds. These are platform rules, not policy
+// rows: EvaluateTrustScoreOnUpdate applies them when an evaluable agent's
+// score drops, whether or not its organization has a trust_score_low policy,
+// and an edit to a policy row does not move them. Request-time enforcement
+// is the policy rows' job: EvaluateTrustScoreLow reads each row's
+// TrustThresholdRuleKey. The seeded 'Critical Trust Score Block' policy
+// carries TrustScoreThresholdCritical as its trust_threshold, so out of the
+// box an action is blocked below the same score that suspends the agent on
+// recalculation; a test keeps the two equal.
 const (
 	TrustScoreThresholdWarning  = 0.70 // 70% - Generate warning alert
 	TrustScoreThresholdCritical = 0.50 // 50% - Suspend agent and create critical alert
