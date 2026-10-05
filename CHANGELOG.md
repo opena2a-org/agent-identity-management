@@ -11,6 +11,52 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes
+
+- A master key that decodes to 32 zero bytes passed the length check and was used to encrypt agent private keys.
+  The key vault now refuses it, so startup stops with `master key must not be all zero bytes` and the command that
+  generates a key (`openssl rand -base64 32`). The error does not repeat the supplied value. Key rotation refuses the
+  same value as its new key.
+- **Upgrading:** a deployment whose `KEYVAULT_MASTER_KEY` is 32 zero bytes no longer starts. Set it to the output of
+  `openssl rand -base64 32`; agent private keys stored under the old value cannot be decrypted under the new one.
+
+### Fixed — a 4xx response states its reason instead of carrying an error's text
+
+- 51 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and three 200 fallbacks) put the text of a Go
+  error in the body. Most passed a library or service message through: a UUID or JSON decoding error, a wrapped repository
+  error behind a 400 (`failed to update password: ...` on a password change, the repository error on an API key
+  delete or a device-code approval), or every reason a secrets resolve was refused, agent and namespace names
+  included. Each now answers a line written for the caller.
+- A refusal the caller can fix names the request member and the rule it breaks: `newPassword must be at least 8
+  characters long`, `id must be a UUID`, `signupProfile.role must be one of the listed values`,
+  `sandbox is not a recognized sandbox type`, `encryptedBlob must decode to at most 1048576 bytes`. The services
+  return these refusals as declared errors (for example `ErrCurrentPasswordIncorrect`, `ErrAPIKeyNotDisabled`,
+  `ErrDeviceCodeNotPending`, `ErrCapabilityAlreadyGranted`), and the handlers match them with `errors.Is` or
+  `errors.As` instead of comparing text.
+- A failure behind one of these endpoints that is not the caller's to fix (a repository or hashing error during a
+  password change, password reset, API key delete, device-code approval or capability registration) now answers 500
+  with the fixed server line and goes to the server log.
+- `POST /api/v1/secrets/resolve` still refuses with 403. A malformed, stale or reused nonce and an `agentPublicKey`
+  that is not the registered key are named; every other refusal answers `Secret resolution refused`, and its reason
+  stays in the secrets audit entry and the server log.
+- The census test in the handlers package now covers every status: it fails on any response (`c.JSON`,
+  `c.Status(s).JSON`, `Send`, `SendString`, `fiber.NewError`) and any `fiber.Map` or `ErrorResponse` literal whose
+  body is built from an error value. A second test plants an error text in a server failure and checks that it is
+  in the log line and not in the response.
+
+### Fixed — a 5xx response carries a fixed line, never the server's error text
+
+- 131 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`.
+  A failed `DELETE /api/v1/agents/:id`, for example, answered with the foreign-key violation, naming the table and
+  constraint. Each now answers `{"error":"An internal error occurred. Please try again later."}`, a line declared once
+  in the handlers package, and writes the error to the server log with the status, method and path. Agent
+  registration and the MCP attestation endpoints still answer 400, 403, 404 and 409 with the reason they did before.
+- The dashboard shows the same line for every 5xx, whatever the body holds: an older server's error text or a proxy's
+  HTML page. A 503 refusal that names its reason (`reasonCode`, such as `noAdministrators`) keeps its own line.
+- A test in the handlers package reads every handler file and fails on a response at a 5xx status whose body is built
+  from an error value. A status counts as 5xx when it is a 5xx constant, a local variable set to one, or a call to a
+  package function that returns one.
+
 ### Removed — the source tree no longer carries prebuilt server binaries
 
 - Five macOS x86_64 executables built on developer machines were tracked under `apps/backend`: `aim-server`,
