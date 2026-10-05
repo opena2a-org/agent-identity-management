@@ -315,3 +315,42 @@ func loadRefusal() (refusal string) {
 	}
 	return ""
 }
+
+// TestConfigSource_DoesNotReadTokenLifetimes keeps one source of truth for the
+// token lifetimes. NewJWTService reads JWT_ACCESS_TTL (2h), JWT_REFRESH_TTL
+// (168h) and JWT_SESSION_MAX_AGE (8h). config.go used to read the first two as
+// well, with defaults of 24h and 7d that nothing used, so a reader of config.go
+// saw a 24h access-token default the server never applied.
+func TestConfigSource_DoesNotReadTokenLifetimes(t *testing.T) {
+	t.Parallel()
+
+	src, err := os.ReadFile("config.go")
+	if err != nil {
+		t.Fatalf("read config.go: %v", err)
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "config.go", src, 0)
+	if err != nil {
+		t.Fatalf("parse config.go: %v", err)
+	}
+
+	owned := map[string]struct{}{
+		"JWT_ACCESS_TTL":      {},
+		"JWT_REFRESH_TTL":     {},
+		"JWT_SESSION_MAX_AGE": {},
+	}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING || len(lit.Value) < 2 {
+			return true
+		}
+		name := lit.Value[1 : len(lit.Value)-1]
+		if _, isOwned := owned[name]; isOwned {
+			pos := fset.Position(lit.Pos())
+			t.Errorf("config.go:%d reads %s; token lifetimes are read only by auth.NewJWTService", pos.Line, name)
+		}
+		return true
+	})
+}
