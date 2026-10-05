@@ -116,7 +116,8 @@ func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 	expectedSize, err := pqc.GetExpectedPublicKeySize(pureAlg)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
+			"error":           "Invalid PQC algorithm",
+			"supportedValues": []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"},
 		})
 	}
 	if len(publicKeyBytes) != expectedSize {
@@ -243,7 +244,8 @@ func (h *AgentHandler) RotatePQCKey(c fiber.Ctx) error {
 	expectedSize, err := pqc.GetExpectedPublicKeySize(alg)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
+			"error":           "Invalid PQC algorithm",
+			"supportedValues": []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"},
 		})
 	}
 	if len(publicKeyBytes) != expectedSize {

@@ -236,7 +236,7 @@ func (h *TagHandler) UpdateTag(c fiber.Ctx) error {
 	if err != nil {
 		if contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(ErrorResponse{
-				Error: err.Error(),
+				Error: "tag not found",
 			})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
@@ -358,7 +358,7 @@ func (h *TagHandler) AddTagsToAgent(c fiber.Ctx) error {
 		// Check if it's a Community Edition limit error
 		if contains(err.Error(), "Community Edition limited to 3 tags") {
 			return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
-				Error: err.Error(),
+				Error: "Community Edition limited to 3 tags",
 			})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
@@ -566,7 +566,7 @@ func (h *TagHandler) AddTagsToMCPServer(c fiber.Ctx) error {
 		// Check if it's a Community Edition limit error
 		if contains(err.Error(), "Community Edition limited to 3 tags") {
 			return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
-				Error: err.Error(),
+				Error: "Community Edition limited to 3 tags",
 			})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
@@ -781,8 +781,8 @@ func (h *TagHandler) SearchTags(c fiber.Ctx) error {
 		{"q", query},
 		{"category", categoryFilter},
 	} {
-		if err := queryTextError(param.name, param.value); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{Error: err.Error()})
+		if queryTextError(param.name, param.value) != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{Error: queryTextMessage(param.name)})
 		}
 	}
 

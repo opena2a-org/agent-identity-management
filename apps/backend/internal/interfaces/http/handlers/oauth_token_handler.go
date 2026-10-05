@@ -189,8 +189,8 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 	// without them the assertion never expired: anyone who obtained one once could replay
 	// it forever, against this or any other service the agent talks to. The TypeScript
 	// SDK (sdk/typescript/src/auth/oauth.ts) signs `iss`, `sub`, `aud`, `iat` and `exp`.
-	if errResp := validateAssertionClaims(c, claims); errResp != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(errResp)
+	if rejection := validateAssertionClaims(c, claims); rejection != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(rejection)
 	}
 
 	// SECURITY: a revoked or suspended agent must not obtain a token.

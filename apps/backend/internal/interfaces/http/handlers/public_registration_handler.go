@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -106,9 +108,14 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 			strings.TrimSpace(req.SignupProfile.ReferralSource),
 		)
 		if profileErr != nil {
+			member := "answers"
+			var invalid *domain.SignupProfileError
+			if errors.As(profileErr, &invalid) {
+				member = invalid.Member
+			}
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"success": false,
-				"error":   profileErr.Error(),
+				"error":   "signupProfile." + member + " must be one of the listed values",
 			})
 		}
 	}
@@ -128,7 +135,8 @@ func (h *PublicRegistrationHandler) RegisterUser(c fiber.Ctx) error {
 			// SECURITY: Log unexpected errors server-side, return generic message to client
 			log.Printf("Registration request failed for email %s: %v", email, err)
 		}
-		return c.Status(status).JSON(registrationErrorBody(err, message))
+		body := registrationErrorBody(err, message)
+		return c.Status(status).JSON(body)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(&RegisterUserResponse{
@@ -550,7 +558,8 @@ func (h *PublicRegistrationHandler) RequestAccess(c fiber.Ctx) error {
 			if status == fiber.StatusInternalServerError {
 				log.Printf("Access request failed for email %s: %v", email, err)
 			}
-			return c.Status(status).JSON(registrationErrorBody(err, message))
+			body := registrationErrorBody(err, message)
+			return c.Status(status).JSON(body)
 		}
 	}
 
@@ -629,10 +638,13 @@ func (h *PublicRegistrationHandler) ChangePassword(c fiber.Ctx) error {
 
 	// Use AuthService.ChangePassword (handles validation, hashing, and force_password_change flag)
 	if err := h.authService.ChangePassword(c.Context(), user.ID, req.OldPassword, req.NewPassword); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
+		if rule, ok := changePasswordRule(err, "oldPassword"); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"success": false,
+				"error":   rule,
+			})
+		}
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Fetch updated user (password was changed)
@@ -772,10 +784,13 @@ func (h *PublicRegistrationHandler) ResetPassword(c fiber.Ctx) error {
 		req.NewPassword,
 		req.ConfirmPassword,
 	); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error":   err.Error(),
-		})
+		if rule, ok := resetPasswordRule(err); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"success": false,
+				"error":   rule,
+			})
+		}
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(&ResetPasswordResponse{
@@ -815,11 +830,55 @@ func registrationErrorResponse(err error) (int, string) {
 		// The deployment, not the request, is the problem: unavailable until an operator configures it.
 		return fiber.StatusServiceUnavailable, NoAdministratorsMessage
 	}
-	// Return validation errors (e.g. password too short) to the client
+	// A password the policy rejects is the caller's to fix
 	if strings.Contains(err.Error(), "password validation failed") {
-		return fiber.StatusBadRequest, err.Error()
+		if rule, ok := passwordRule(err, "password"); ok {
+			return fiber.StatusBadRequest, rule
+		}
+		return fiber.StatusBadRequest, "password does not meet the password policy"
 	}
 	return fiber.StatusInternalServerError, ServerErrorMessage
+}
+
+// passwordRule states the policy rule a rejected password breaks, naming the
+// request member that carried it. ok is false for any other error.
+func passwordRule(err error, member string) (rule string, ok bool) {
+	switch {
+	case errors.Is(err, auth.ErrPasswordTooShort):
+		return fmt.Sprintf("%s must be at least %d characters long", member, auth.MinPasswordLength), true
+	case errors.Is(err, auth.ErrPasswordTooWeak):
+		return member + " must contain an uppercase letter, a lowercase letter, a number and a special character", true
+	}
+	return "", false
+}
+
+// changePasswordRule states why AuthService.ChangePassword refused the
+// change; currentMember names the request member holding the current
+// password. ok is false for a server failure.
+func changePasswordRule(err error, currentMember string) (rule string, ok bool) {
+	switch {
+	case errors.Is(err, application.ErrCurrentPasswordIncorrect):
+		return currentMember + " is incorrect", true
+	case errors.Is(err, application.ErrPasswordNotConfigured):
+		return "Password not configured for this account, please contact administrator", true
+	}
+	return passwordRule(err, "newPassword")
+}
+
+// resetPasswordRule states why RegistrationService.ResetPassword refused the
+// reset. ok is false for a server failure.
+func resetPasswordRule(err error) (rule string, ok bool) {
+	switch {
+	case errors.Is(err, application.ErrResetTokenRequired):
+		return "resetToken is required", true
+	case errors.Is(err, application.ErrNewPasswordRequired):
+		return "newPassword is required", true
+	case errors.Is(err, auth.ErrPasswordMismatch):
+		return "newPassword and confirmPassword must match", true
+	case errors.Is(err, application.ErrResetTokenInvalid):
+		return "Invalid or expired reset token", true
+	}
+	return passwordRule(err, "newPassword")
 }
 
 // registrationSuccessMessage states the outcome of a successful sign-up: an allowlisted

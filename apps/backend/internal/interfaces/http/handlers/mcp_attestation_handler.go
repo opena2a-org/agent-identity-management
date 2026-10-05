@@ -69,7 +69,7 @@ func (h *MCPAttestationHandler) GetAttestationChallenge(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -85,7 +85,7 @@ func (h *MCPAttestationHandler) GetAttestationChallenge(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",
-			"message": err.Error(),
+			"message": "agent_id must be a UUID",
 		})
 	}
 
@@ -110,18 +110,21 @@ func (h *MCPAttestationHandler) GetAttestationChallenge(c fiber.Ctx) error {
 	// Generate challenge
 	response, err := h.attestationService.GenerateChallenge(c.Context(), agentID, mcpServerID)
 	if err != nil {
-		statusCode := fiber.StatusNotFound
+		statusCode, message := fiber.StatusNotFound, ""
 		switch err.Error() {
-		case "agent not found", "mcp server not found":
+		case "agent not found":
+			message = "agent not found"
+		case "mcp server not found":
+			message = "mcp server not found"
 		case "only verified agents can request attestation challenges":
-			statusCode = fiber.StatusForbidden
+			statusCode, message = fiber.StatusForbidden, "only verified agents can request attestation challenges"
 		default:
 			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 
 		return c.Status(statusCode).JSON(fiber.Map{
 			"error":   "Failed to generate challenge",
-			"message": err.Error(),
+			"message": message,
 		})
 	}
 
@@ -147,7 +150,7 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -156,7 +159,7 @@ func (h *MCPAttestationHandler) AttestMCP(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
-			"message": err.Error(),
+			"message": "The request body must be a JSON object with the members this endpoint documents",
 		})
 	}
 
@@ -287,7 +290,7 @@ func (h *MCPAttestationHandler) GetMCPAttestations(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -312,7 +315,7 @@ func (h *MCPAttestationHandler) GetMCPAttestations(c fiber.Ctx) error {
 
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "Failed to get attestations",
-			"message": err.Error(),
+			"message": "mcp server not found",
 		})
 	}
 
@@ -341,7 +344,7 @@ func (h *MCPAttestationHandler) GetConnectedAgents(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -388,7 +391,7 @@ func (h *MCPAttestationHandler) GetAgentMCPServers(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -452,7 +455,7 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -468,7 +471,7 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
-			"message": err.Error(),
+			"message": "The request body must be a JSON object with the members this endpoint documents",
 		})
 	}
 
@@ -503,7 +506,7 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "Manual attestation failed",
-			"message": err.Error(),
+			"message": "mcp server not found",
 		})
 	}
 
@@ -566,7 +569,7 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid attestation ID",
-			"message": err.Error(),
+			"message": "attestation_id must be a UUID",
 		})
 	}
 
@@ -579,7 +582,7 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
-			"message": err.Error(),
+			"message": "The request body must be a JSON object with the members this endpoint documents",
 		})
 	}
 
@@ -678,7 +681,7 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -691,7 +694,7 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
-			"message": err.Error(),
+			"message": "The request body must be a JSON object with the members this endpoint documents",
 		})
 	}
 
@@ -778,7 +781,7 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -795,7 +798,7 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
-			"message": err.Error(),
+			"message": "The request body must be a JSON object with the members this endpoint documents",
 		})
 	}
 
@@ -911,7 +914,7 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid agent ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -952,7 +955,7 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
-			"message": err.Error(),
+			"message": "The request body must be a JSON object with the members this endpoint documents",
 		})
 	}
 
@@ -1072,7 +1075,7 @@ func (h *MCPAttestationHandler) GetConsensusStatus(c fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid MCP server ID",
-			"message": err.Error(),
+			"message": "id must be a UUID",
 		})
 	}
 
@@ -1097,7 +1100,7 @@ func (h *MCPAttestationHandler) GetConsensusStatus(c fiber.Ctx) error {
 
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "Failed to get consensus status",
-			"message": err.Error(),
+			"message": "mcp server not found",
 		})
 	}
 

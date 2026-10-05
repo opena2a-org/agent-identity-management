@@ -3,9 +3,9 @@ package handlers
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -140,7 +140,9 @@ func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 			log.Printf("secrets resolve refused: nonce check unavailable (error_class=%s)", freshnessErrorClass(err))
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Nonce check unavailable; retry the request with a new nonce"})
 		}
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("secrets resolve refused for agent %s: %v", agentID, err)
+		refusal := resolveRefusalLine(err)
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": refusal})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(resolveResponse{
@@ -342,8 +344,8 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 	}
 
 	if err := h.secretsService.StoreCredential(nsID, blob, alg); err != nil {
-		if strings.Contains(err.Error(), "exceeds maximum size") {
-			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
+		if errors.Is(err, application.ErrCredentialBlobTooLarge) {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": credentialTooLargeLine})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
@@ -394,8 +396,8 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 	}
 
 	if err := h.secretsService.RotateCredential(nsID, blob, alg); err != nil {
-		if strings.Contains(err.Error(), "exceeds maximum size") {
-			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
+		if errors.Is(err, application.ErrCredentialBlobTooLarge) {
+			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": credentialTooLargeLine})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
@@ -460,4 +462,24 @@ func getUserID(c fiber.Ctx) (uuid.UUID, error) {
 	default:
 		return uuid.Nil, fiber.ErrUnauthorized
 	}
+}
+
+// credentialTooLargeLine states the size rule an encryptedBlob breaks.
+var credentialTooLargeLine = fmt.Sprintf("encryptedBlob must decode to at most %d bytes", application.MaxCredentialBlobSize)
+
+// resolveRefusalLine is the answer to a refused resolve request. A refusal
+// the caller can correct names the member and the rule; any other refusal is
+// one line, and its reason is in the secrets audit entry and the server log.
+func resolveRefusalLine(err error) string {
+	switch {
+	case errors.Is(err, application.ErrResolveKeyNotRegistered):
+		return "agentPublicKey is not the registered key of this agent; omit it or send the registered key"
+	case errors.Is(err, application.ErrResolveNonceMalformed):
+		return "nonce must be <RFC 3339 time>:<random part>"
+	case errors.Is(err, application.ErrResolveNonceOutsideWindow):
+		return "nonce time is outside the accepted window; sign the request again with a fresh nonce"
+	case errors.Is(err, application.ErrResolveNonceAlreadyUsed):
+		return "nonce has already been used; sign the request again with a fresh nonce"
+	}
+	return "Secret resolution refused"
 }

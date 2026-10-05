@@ -447,14 +447,9 @@ func (h *TrustScoreHandler) SubmitIsolationAttestation(c fiber.Ctx) error {
 	)
 	if err != nil {
 		// Unrecognized posture values are a client error; everything else is a 500.
-		if domain.ValidateIsolationPosture(
-			domain.SandboxType(body.Sandbox),
-			domain.NetworkIsolation(body.Network),
-			domain.FilesystemIsolation(body.Filesystem),
-			domain.ProcessIsolation(body.Process),
-		) != nil {
+		if rule := isolationPostureRule(body.Sandbox, body.Network, body.Filesystem, body.Process); rule != "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
+				"error": rule,
 			})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -543,4 +538,20 @@ func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
 		"history":   history,
 		"total":     len(history),
 	})
+}
+
+// isolationPostureRule names the first isolation posture member whose value
+// is not one AIM recognizes, or returns "" when every value is recognized.
+func isolationPostureRule(sandbox, network, filesystem, process string) string {
+	switch {
+	case !domain.SandboxType(sandbox).IsValid():
+		return "sandbox is not a recognized sandbox type"
+	case !domain.NetworkIsolation(network).IsValid():
+		return "network is not a recognized network isolation"
+	case !domain.FilesystemIsolation(filesystem).IsValid():
+		return "filesystem is not a recognized filesystem isolation"
+	case !domain.ProcessIsolation(process).IsValid():
+		return "process is not a recognized process isolation"
+	}
+	return ""
 }

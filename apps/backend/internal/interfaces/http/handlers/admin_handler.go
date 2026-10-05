@@ -924,8 +924,8 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		{"severity", severity},
 		{"status", status},
 	} {
-		if err := queryTextError(param.name, param.value); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		if queryTextError(param.name, param.value) != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": queryTextMessage(param.name)})
 		}
 	}
 

@@ -24,6 +24,11 @@ var (
 	ErrRegistrationRequestExists = errors.New("registration request with this email already exists")
 	// ErrNoAdministrators: the request would wait for an approval nobody in this deployment can give.
 	ErrNoAdministrators = errors.New("no administrator can approve a registration request in this deployment")
+	// ResetPassword refusals the caller can act on. A mismatched confirmation
+	// is auth.ErrPasswordMismatch and a weak password is the validator's error.
+	ErrResetTokenRequired  = errors.New("reset token is required")
+	ErrNewPasswordRequired = errors.New("new password is required")
+	ErrResetTokenInvalid   = errors.New("invalid or expired reset token")
 )
 
 // RegistrationRepository defines the interface for registration data persistence
@@ -583,19 +588,19 @@ func (s *RegistrationService) ResetPassword(
 ) error {
 	// Validate inputs
 	if strings.TrimSpace(resetToken) == "" {
-		return fmt.Errorf("reset token is required")
+		return ErrResetTokenRequired
 	}
 	if strings.TrimSpace(newPassword) == "" {
-		return fmt.Errorf("new password is required")
+		return ErrNewPasswordRequired
 	}
 	if newPassword != confirmPassword {
-		return fmt.Errorf("passwords do not match")
+		return auth.ErrPasswordMismatch
 	}
 
 	// Find user by reset token digest (automatically validates expiration)
 	user, err := s.userRepo.GetByPasswordResetToken(hashPasswordResetToken(resetToken))
 	if err != nil {
-		return fmt.Errorf("invalid or expired reset token")
+		return ErrResetTokenInvalid
 	}
 
 	// Validate password strength

@@ -238,7 +238,12 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 	}
 	filter, err := agentListFilter(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		// agentListFilter refuses only a value that is not text, naming its parameter.
+		var notText notTextError
+		if errors.As(err, &notText) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": queryTextMessage(notText.param)})
+		}
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	limit := 0
@@ -300,8 +305,7 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 // client-correctable conditions become 4xx so callers (SDKs, CI) can tell a bad
 // request apart from a server fault; everything else is an unexpected server
 // error (500). Shared by the authenticated and public registration handlers so
-// both surfaces map identically. The error message is safe to surface directly
-// (the service already sanitizes DB internals into these sentinels).
+// both surfaces map identically.
 func registrationErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, application.ErrAgentNameExists):
@@ -316,12 +320,14 @@ func registrationErrorStatus(err error) int {
 }
 
 // respondRegistrationError answers a CreateAgent failure at the status
-// registrationErrorStatus maps it to. A 4xx carries the sentinel's message;
-// a server error carries ServerErrorMessage.
+// registrationErrorStatus maps it to. A 4xx carries the stated line for its
+// sentinel; a server error carries ServerErrorMessage.
 func respondRegistrationError(c fiber.Ctx, err error) error {
 	switch status := registrationErrorStatus(err); status {
-	case fiber.StatusConflict, fiber.StatusBadRequest:
-		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
+	case fiber.StatusConflict:
+		return c.Status(status).JSON(fiber.Map{"error": "an agent with this name already exists"})
+	case fiber.StatusBadRequest:
+		return c.Status(status).JSON(fiber.Map{"error": "invalid organization or user for this registration"})
 	default:
 		return respondServerError(c, status, err)
 	}

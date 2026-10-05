@@ -22,6 +22,13 @@ import (
 // handlers should map it to HTTP 400, not 500 (issue #293).
 var ErrHoneytokenNotAllowed = errors.New("capability cannot be marked as a honeytoken")
 
+// The two reasons a capability cannot be a honeytoken; each wraps
+// ErrHoneytokenNotAllowed.
+var (
+	ErrHoneytokenWildcard       = fmt.Errorf("%w: it is a wildcard", ErrHoneytokenNotAllowed)
+	ErrHoneytokenGrantCollision = fmt.Errorf("%w: the agent holds it through another active grant", ErrHoneytokenNotAllowed)
+)
+
 // VerificationResult represents the result of an action verification
 type VerificationResult struct {
 	IsValid       bool    `json:"isValid"`
@@ -482,7 +489,7 @@ func (s *CapabilityService) MarkHoneytoken(
 	// this guard covers the state observable at mark time.)
 	if honeytoken {
 		if strings.Contains(capability.CapabilityType, "*") {
-			return nil, fmt.Errorf("%w: '%s' is a wildcard that would match legitimate traffic; use a specific decoy capability", ErrHoneytokenNotAllowed, capability.CapabilityType)
+			return nil, fmt.Errorf("%w: '%s' would match legitimate traffic; use a specific decoy capability", ErrHoneytokenWildcard, capability.CapabilityType)
 		}
 		siblings, sErr := s.capabilityRepo.GetActiveCapabilitiesByAgentID(capability.AgentID)
 		if sErr != nil {
@@ -493,7 +500,7 @@ func (s *CapabilityService) MarkHoneytoken(
 				continue
 			}
 			if sib.CapabilityType == capability.CapabilityType {
-				return nil, fmt.Errorf("%w: agent has another active grant of type '%s', so legitimate use would raise false alerts", ErrHoneytokenNotAllowed, capability.CapabilityType)
+				return nil, fmt.Errorf("%w: type '%s', so legitimate use would raise false alerts", ErrHoneytokenGrantCollision, capability.CapabilityType)
 			}
 		}
 	}

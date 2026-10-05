@@ -678,7 +678,7 @@ func TestCapabilityHandler_GrantCapability_ValidationError(t *testing.T) {
 
 	mockCapabilityService := &MockCapabilityServiceImpl{
 		ValidateAndRegisterCapabilityFunc: func(ctx context.Context, capability string, oID uuid.UUID) error {
-			return assert.AnError
+			return &domain.CapabilityError{Capability: capability, Message: "invalid capability format"}
 		},
 	}
 

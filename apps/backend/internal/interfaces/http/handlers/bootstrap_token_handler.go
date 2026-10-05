@@ -282,13 +282,9 @@ func bootstrapExchangeError(c fiber.Ctx, err error) error {
 		errors.Is(err, domain.ErrBootstrapTokenRevoked):
 		return bootstrapTokenRefusal(c, err)
 	case errors.Is(err, application.ErrBootstrapTokenScope):
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error(), "code": "bootstrap_token_scope"})
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "The bootstrap token's scope does not permit agent registration.", "code": "bootstrap_token_scope"})
 	case errors.Is(err, application.ErrBootstrapInvalidPublicKey):
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "publicKey must be a base64-encoded 32-byte Ed25519 public key"})
 	}
-	status := registrationErrorStatus(err)
-	if status == fiber.StatusInternalServerError {
-		return c.Status(status).JSON(fiber.Map{"error": "Failed to register agent"})
-	}
-	return c.Status(status).JSON(fiber.Map{"error": err.Error()})
+	return respondRegistrationError(c, err)
 }

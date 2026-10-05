@@ -1,10 +1,10 @@
 package handlers
 
-// A 5xx means the server failed, so the error behind it describes the
-// server: a repository error names tables, constraints and query fragments,
-// and a wrapped error carries every layer's prefix. None of that is for the
-// client. Each 5xx answer is the fixed body respondServerError writes, and
-// the error goes to the server log:
+// A response body carries stated lines, never an error's text. A 5xx means
+// the server failed, so the error behind it describes the server: a
+// repository error names tables, constraints and query fragments, and a
+// wrapped error carries every layer's prefix. Each 5xx answer is the fixed
+// body respondServerError writes, and the error goes to the server log:
 //
 //	if err := h.tagService.DeleteTag(ctx, id); err != nil {
 //		return respondServerError(c, fiber.StatusInternalServerError, err)
@@ -14,21 +14,27 @@ package handlers
 // answers a fixed sentence of its own instead; the census holds it to the same
 // rule.
 //
+// A refusal the caller can act on is matched (errors.Is, errors.As) and
+// answered with a line written for the caller that names the member and the
+// rule it breaks; the error's own text is not the answer.
+//
 // The census reads every non-test file in the package and fails on a
-// response that can be sent at a 5xx status (c.Status(s).JSON(...),
-// .SendString, fiber.NewError(s, ...)) whose body mentions an error value: a
-// call to .Error(), or an identifier named err, fooErr or errFoo. A status
-// can be 5xx when it is a 5xx constant, a local variable the enclosing
-// function sets to one, or a call to a function of this package that returns
-// one.
+// response at any status (c.JSON, c.Status(s).JSON, .Send, .SendString,
+// fiber.NewError) or a fiber.Map or ErrorResponse literal whose body mentions
+// an error value: a call to .Error(), or an identifier named err, fooErr or
+// errFoo.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
+	"log"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -41,20 +47,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-var serverErrorStatusNames = map[string]bool{
-	"StatusInternalServerError":           true,
-	"StatusNotImplemented":                true,
-	"StatusBadGateway":                    true,
-	"StatusServiceUnavailable":            true,
-	"StatusGatewayTimeout":                true,
-	"StatusHTTPVersionNotSupported":       true,
-	"StatusVariantAlsoNegotiates":         true,
-	"StatusInsufficientStorage":           true,
-	"StatusLoopDetected":                  true,
-	"StatusNotExtended":                   true,
-	"StatusNetworkAuthenticationRequired": true,
-}
 
 // repositoryFailure is the text of a real foreign-key violation, the kind of
 // error a 5xx used to hand to the browser.
@@ -79,6 +71,27 @@ func TestRespondServerErrorWritesTheFixedLine(t *testing.T) {
 	status, body := decodeErrorBody(t, app, "GET", "/probe")
 	assert.Equal(t, fiber.StatusServiceUnavailable, status)
 	assert.Equal(t, map[string]any{"error": ServerErrorMessage}, body)
+}
+
+func TestRespondServerErrorLogsWhatTheBodyLeavesOut(t *testing.T) {
+	var logged bytes.Buffer
+	defer log.SetOutput(log.Writer())
+	log.SetOutput(&logged)
+
+	planted := "planted-" + uuid.NewString()
+	app := fiber.New()
+	app.Get("/probe", func(c fiber.Ctx) error {
+		return respondServerError(c, fiber.StatusInternalServerError, fmt.Errorf("pq: relation %q does not exist", planted))
+	})
+	resp, err := app.Test(httptest.NewRequest("GET", "/probe", nil))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+	assert.NotContains(t, string(body), planted)
+	assert.Contains(t, logged.String(), planted)
 }
 
 func TestDeleteAgentRepositoryFailureAnswersItsStatedLine(t *testing.T) {
@@ -111,168 +124,91 @@ func TestDeleteAgentRepositoryFailureAnswersItsStatedLine(t *testing.T) {
 	assert.Equal(t, map[string]any{"error": agentDeleteFailedMessage}, body)
 }
 
-func TestServerErrorResponsesCarryNoErrorText(t *testing.T) {
+func TestResponsesCarryNoErrorText(t *testing.T) {
 	paths, err := filepath.Glob("*.go")
 	require.NoError(t, err)
 
 	fset := token.NewFileSet()
-	var files []*ast.File
+	total, leaking := 0, 0
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
 		file, err := parser.ParseFile(fset, path, nil, 0)
 		require.NoError(t, err)
-		files = append(files, file)
-	}
-	returns5xx := functionsReturningServerErrorStatus(files)
-
-	total, leaking := 0, 0
-	for _, file := range files {
-		var stack []ast.Node
 		ast.Inspect(file, func(n ast.Node) bool {
-			if n == nil {
-				stack = stack[:len(stack)-1]
-				return true
-			}
-			stack = append(stack, n)
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			status, body, ok := responseStatusAndBody(call)
-			if !ok || !canBeServerErrorStatus(status, enclosingFuncBody(stack), returns5xx) {
+			var body []ast.Expr
+			switch e := n.(type) {
+			case *ast.CallExpr:
+				args, ok := responseBody(e)
+				if !ok {
+					return true
+				}
+				body = args
+			case *ast.CompositeLit:
+				if !isResponseLiteral(e) {
+					return true
+				}
+				body = []ast.Expr{e}
+			default:
 				return true
 			}
 			total++
-			for _, arg := range body {
-				if mentionsErrorValue(arg) {
+			for _, expr := range body {
+				if mentionsErrorValue(expr) {
 					leaking++
-					t.Errorf("%s: a 5xx response body is built from an error value; return respondServerError(c, status, err) instead",
-						fset.Position(call.Pos()))
-					break
+					t.Errorf("%s: a response body is built from an error value; answer a stated line (respondServerError for a 5xx)",
+						fset.Position(n.Pos()))
+					return false
 				}
 			}
 			return true
 		})
 	}
 
-	require.NotZero(t, total, "no 5xx responses found; the census is not reading the handler files")
+	require.NotZero(t, total, "no responses found; the census is not reading the handler files")
 	if leaking > 0 {
-		t.Logf("%d of %d 5xx responses carry error text", leaking, total)
+		t.Logf("%d of %d response bodies carry error text", leaking, total)
 	} else {
-		t.Logf("%d 5xx responses, none built from an error value", total)
+		t.Logf("%d response bodies, none built from an error value", total)
 	}
 }
 
-// responseStatusAndBody matches X.Status(s).Method(...) and
-// fiber.NewError(s, ...) and returns the status and the expressions that
-// form the body.
-func responseStatusAndBody(call *ast.CallExpr) (ast.Expr, []ast.Expr, bool) {
+// responseBody returns the expressions that form the body of a response
+// call: X.JSON, X.Send, X.SendString (with or without .Status(s) before it)
+// and fiber.NewError(s, ...). Decoding a request (c.Bind().JSON) is not a
+// response.
+func responseBody(call *ast.CallExpr) ([]ast.Expr, bool) {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
-		return nil, nil, false
+		return nil, false
 	}
-	if sel.Sel.Name == "NewError" && isIdent(sel.X, "fiber") {
-		if len(call.Args) > 1 {
-			return call.Args[0], call.Args[1:], true
+	switch sel.Sel.Name {
+	case "NewError":
+		if isIdent(sel.X, "fiber") && len(call.Args) > 1 {
+			return call.Args[1:], true
 		}
-		return nil, nil, false
+	case "JSON", "Send", "SendString":
+		if inner, ok := sel.X.(*ast.CallExpr); ok {
+			if innerSel, ok := inner.Fun.(*ast.SelectorExpr); ok && innerSel.Sel.Name == "Bind" {
+				return nil, false
+			}
+		}
+		return call.Args, true
 	}
-	inner, ok := sel.X.(*ast.CallExpr)
-	if !ok || len(inner.Args) != 1 {
-		return nil, nil, false
-	}
-	innerSel, ok := inner.Fun.(*ast.SelectorExpr)
-	if !ok || innerSel.Sel.Name != "Status" {
-		return nil, nil, false
-	}
-	return inner.Args[0], call.Args, true
+	return nil, false
 }
 
-func canBeServerErrorStatus(status ast.Expr, fnBody *ast.BlockStmt, returns5xx map[string]bool) bool {
-	switch s := status.(type) {
-	case *ast.Ident:
-		return fnBody != nil && assignsServerErrorStatus(fnBody, s.Name)
-	case *ast.CallExpr:
-		fn, ok := s.Fun.(*ast.Ident)
-		return ok && returns5xx[fn.Name]
-	}
-	return isServerErrorStatus(status)
-}
-
-func isServerErrorStatus(expr ast.Expr) bool {
-	switch e := expr.(type) {
+// isResponseLiteral reports whether lit is a fiber.Map or an ErrorResponse,
+// the two shapes a handler builds a body from.
+func isResponseLiteral(lit *ast.CompositeLit) bool {
+	switch typ := lit.Type.(type) {
 	case *ast.SelectorExpr:
-		return serverErrorStatusNames[e.Sel.Name]
-	case *ast.BasicLit:
-		return e.Kind == token.INT && len(e.Value) == 3 && e.Value[0] == '5'
+		return typ.Sel.Name == "Map" && isIdent(typ.X, "fiber")
+	case *ast.Ident:
+		return typ.Name == "ErrorResponse"
 	}
 	return false
-}
-
-// assignsServerErrorStatus reports whether body sets the variable name to a
-// 5xx constant (name := 500, name = fiber.StatusInternalServerError, var name = ...).
-func assignsServerErrorStatus(body *ast.BlockStmt, name string) bool {
-	found := false
-	ast.Inspect(body, func(n ast.Node) bool {
-		switch s := n.(type) {
-		case *ast.AssignStmt:
-			if len(s.Lhs) == len(s.Rhs) {
-				for i, lhs := range s.Lhs {
-					if isIdent(lhs, name) && isServerErrorStatus(s.Rhs[i]) {
-						found = true
-					}
-				}
-			}
-		case *ast.ValueSpec:
-			if len(s.Names) == len(s.Values) {
-				for i, ident := range s.Names {
-					if ident.Name == name && isServerErrorStatus(s.Values[i]) {
-						found = true
-					}
-				}
-			}
-		}
-		return !found
-	})
-	return found
-}
-
-// functionsReturningServerErrorStatus names the package-level functions with
-// a return statement whose first result is a 5xx constant.
-func functionsReturningServerErrorStatus(files []*ast.File) map[string]bool {
-	names := map[string]bool{}
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil || fn.Body == nil {
-				continue
-			}
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				if _, nested := n.(*ast.FuncLit); nested {
-					return false
-				}
-				if ret, ok := n.(*ast.ReturnStmt); ok && len(ret.Results) > 0 && isServerErrorStatus(ret.Results[0]) {
-					names[fn.Name.Name] = true
-				}
-				return true
-			})
-		}
-	}
-	return names
-}
-
-func enclosingFuncBody(stack []ast.Node) *ast.BlockStmt {
-	for i := len(stack) - 1; i >= 0; i-- {
-		switch fn := stack[i].(type) {
-		case *ast.FuncLit:
-			return fn.Body
-		case *ast.FuncDecl:
-			return fn.Body
-		}
-	}
-	return nil
 }
 
 // mentionsErrorValue reports whether expr calls .Error() or names a variable

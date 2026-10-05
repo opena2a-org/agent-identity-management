@@ -1,7 +1,5 @@
 package domain
 
-import "fmt"
-
 // SignupProfileMetadataKey is the key under user_registration_requests.metadata
 // that holds the optional signup questionnaire answers.
 const SignupProfileMetadataKey = "signupProfile"
@@ -34,6 +32,16 @@ var (
 	}
 )
 
+// SignupProfileError names the questionnaire answer that is outside its
+// vocabulary: Member is "role", "primaryUseCase" or "referralSource".
+type SignupProfileError struct {
+	Member string
+}
+
+func (e *SignupProfileError) Error() string {
+	return "invalid signup profile " + e.Member
+}
+
 // BuildSignupProfile validates the optional questionnaire answers and returns
 // the map to store under SignupProfileMetadataKey. Empty answers are skipped
 // (the questions are optional at the API level); a non-empty answer outside
@@ -46,19 +54,19 @@ func BuildSignupProfile(role, primaryUseCase, referralSource string) (map[string
 	// arbitrarily long attacker-controlled strings.
 	if role != "" {
 		if !containsString(SignupProfileRoles, role) {
-			return nil, fmt.Errorf("invalid signup profile role")
+			return nil, &SignupProfileError{Member: "role"}
 		}
 		profile["role"] = role
 	}
 	if primaryUseCase != "" {
 		if !containsString(SignupProfileUseCases, primaryUseCase) {
-			return nil, fmt.Errorf("invalid signup profile primaryUseCase")
+			return nil, &SignupProfileError{Member: "primaryUseCase"}
 		}
 		profile["primaryUseCase"] = primaryUseCase
 	}
 	if referralSource != "" {
 		if !containsString(SignupProfileReferralSources, referralSource) {
-			return nil, fmt.Errorf("invalid signup profile referralSource")
+			return nil, &SignupProfileError{Member: "referralSource"}
 		}
 		profile["referralSource"] = referralSource
 	}

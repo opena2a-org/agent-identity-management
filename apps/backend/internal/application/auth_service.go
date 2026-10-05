@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -11,6 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+)
+
+// ChangePassword refusals the caller can act on.
+var (
+	ErrPasswordNotConfigured    = errors.New("password not configured for this account, please contact administrator")
+	ErrCurrentPasswordIncorrect = errors.New("current password is incorrect")
 )
 
 // AuthService handles authentication business logic
@@ -272,12 +279,12 @@ func (s *AuthService) ChangePassword(
 	}
 
 	if user.PasswordHash == nil || *user.PasswordHash == "" {
-		return fmt.Errorf("password not configured for this account, please contact administrator")
+		return ErrPasswordNotConfigured
 	}
 
 	passwordHasher := auth.NewPasswordHasher()
 	if err := passwordHasher.VerifyPassword(currentPassword, *user.PasswordHash); err != nil {
-		return fmt.Errorf("current password is incorrect")
+		return ErrCurrentPasswordIncorrect
 	}
 
 	if err := passwordHasher.ValidatePassword(newPassword); err != nil {

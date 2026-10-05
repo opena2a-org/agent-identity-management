@@ -135,9 +135,7 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 
 	// Validate capability format and auto-register custom capabilities
 	if err := capSvc.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, orgID); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondCapabilityValidationError(c, err)
 	}
 
 	// For SDK/API key authentication, userID will be uuid.Nil
@@ -278,9 +276,7 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 	if org.EnforcementMode == domain.EnforcementModeMonitoring {
 		// Validate and auto-register the capability type if custom
 		if err := capSvc.ValidateAndRegisterCapability(context.Background(), req.CapabilityType, agent.OrganizationID); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-				Error: err.Error(),
-			})
+			return respondCapabilityValidationError(c, err)
 		}
 
 		// Auto-grant the capability. The agent asked for it, and the
@@ -323,9 +319,8 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 	request, err := h.capabilityRequestService.CreateRequest(
 		transition.WithActor(c.Context(), transition.Agent(agentID)), input)
 	if err != nil {
-		errMsg := err.Error()
 		// Check if pending request already exists
-		if len(errMsg) > 7 && errMsg[:7] == "pending" {
+		if errors.Is(err, application.ErrCapabilityRequestPending) {
 			return c.Status(fiber.StatusConflict).JSON(RegisterCapabilityResponse{
 				Success:        true,
 				CapabilityType: req.CapabilityType,
@@ -533,9 +528,14 @@ func (h *CapabilityHandler) MarkHoneytoken(c fiber.Ctx) error {
 	updated, err := capSvc.MarkHoneytoken(c.Context(), capabilityID, req.Honeytoken, &userID)
 	if err != nil {
 		// Wildcard/collision rejections are client validation errors -> 400, not 500.
-		if errors.Is(err, application.ErrHoneytokenNotAllowed) {
+		switch {
+		case errors.Is(err, application.ErrHoneytokenWildcard):
 			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-				Error: err.Error(),
+				Error: "honeytoken cannot be set on a wildcard capability; use a specific decoy capability",
+			})
+		case errors.Is(err, application.ErrHoneytokenGrantCollision):
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+				Error: "honeytoken cannot be set on a capability the agent holds through another active grant",
 			})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
@@ -769,4 +769,17 @@ type ErrorResponse struct {
 
 type SuccessResponse struct {
 	Message string `json:"message"`
+}
+
+// respondCapabilityValidationError answers a ValidateAndRegisterCapability
+// failure: a capability that breaks the format or naming rules is a 400 with
+// the rule it breaks, and anything else is a repository failure.
+func respondCapabilityValidationError(c fiber.Ctx, err error) error {
+	var invalid *domain.CapabilityError
+	if errors.As(err, &invalid) {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error: invalid.Message,
+		})
+	}
+	return respondServerError(c, fiber.StatusInternalServerError, err)
 }
