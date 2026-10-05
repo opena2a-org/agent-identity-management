@@ -664,6 +664,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — `/.well-known/aip` identifies the provider as `did:web:<provider-host>`
+
+- The discovery document served `"providerDid": "did:aip:provider_opena2a"` on every deployment, a fixed value that
+  was not the `did:web:<provider-host>` form the AIP specification (section 3.2) requires and that named the same
+  provider for every self-hosted instance. `providerDid` is now `did:web:` followed by the host of `FRONTEND_URL`, the
+  dashboard origin that also proxies `/.well-known/aip`: the hosted service serves `did:web:aim.opena2a.org`, and a
+  default local install serves `did:web:localhost%3A3000` (a non-default port is percent-encoded, as `did:web`
+  requires). The value comes from configuration, not from the request, so the dashboard and API hosts name the same
+  provider and a `Host` header cannot change it. When `FRONTEND_URL` names no DNS host, the document omits
+  `providerDid` and the backend logs why. Clients that compared `providerDid` to `did:aip:provider_opena2a` need to
+  read the new value. Agent identifiers (`did:aip:aim_<uuid>`) and the DID resolver are unchanged; the provider's
+  `/.well-known/did.json` document is not served yet.
+
 ### Fixed — `/health/ready` reports a configured Redis that failed at startup as unavailable
 
 - When `REDIS_HOST` was set and the backend could not connect to Redis at startup, it continued without Redis and
