@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -100,19 +101,21 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 	request, err := h.service.CreateRequest(withTransitionActor(c), input)
 	if err != nil {
 		// Check for specific error types
-		errMsg := err.Error()
-		if errMsg == "agent not found" {
+		if err.Error() == "agent not found" {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "agent not found",
 			})
 		}
 		// Check if capability already granted or pending request exists
-		if len(errMsg) > 10 {
-			if errMsg[:10] == "capability" || errMsg[:7] == "pending" {
-				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-					"error": errMsg,
-				})
-			}
+		switch {
+		case errors.Is(err, application.ErrCapabilityAlreadyGranted):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "capability already granted to this agent",
+			})
+		case errors.Is(err, application.ErrCapabilityRequestPending):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "pending request already exists for this capability",
+			})
 		}
 
 		return respondServerError(c, fiber.StatusInternalServerError, err)

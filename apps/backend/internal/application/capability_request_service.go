@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,13 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
+)
+
+// CreateRequest refusals: the capability is already the agent's, or a
+// request for it is already waiting for review.
+var (
+	ErrCapabilityAlreadyGranted = errors.New("capability already granted")
+	ErrCapabilityRequestPending = errors.New("pending request already exists")
 )
 
 type CapabilityRequestService struct {
@@ -50,7 +58,7 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 
 	for _, cap := range capabilities {
 		if cap.CapabilityType == input.CapabilityType {
-			return nil, fmt.Errorf("capability '%s' already granted to agent '%s'", input.CapabilityType, agent.Name)
+			return nil, fmt.Errorf("%w: '%s' to agent '%s'", ErrCapabilityAlreadyGranted, input.CapabilityType, agent.Name)
 		}
 	}
 
@@ -64,7 +72,7 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 
 	for _, req := range existingRequests {
 		if req.CapabilityType == input.CapabilityType && req.Status == domain.CapabilityRequestStatusPending {
-			return nil, fmt.Errorf("pending request already exists for capability '%s'", input.CapabilityType)
+			return nil, fmt.Errorf("%w for capability '%s'", ErrCapabilityRequestPending, input.CapabilityType)
 		}
 	}
 

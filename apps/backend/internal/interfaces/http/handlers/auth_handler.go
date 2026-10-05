@@ -188,9 +188,12 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 	// Change password
 	err := h.authService.ChangePassword(c.Context(), userID, req.CurrentPassword, req.NewPassword)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		if rule, ok := changePasswordRule(err, "currentPassword"); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": rule,
+			})
+		}
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{

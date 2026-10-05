@@ -2649,6 +2649,30 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   pending agent now receives the 409. Verify a pending agent, reactivate a suspended one, and register a new agent to
   replace a revoked one.
 
+### Fixed — a 4xx response states its reason instead of carrying an error's text
+
+- 51 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and three 200 fallbacks) put the text of a Go
+  error in the body. Most passed a library or service message through: a UUID or JSON decoding error, a wrapped repository
+  error behind a 400 (`failed to update password: ...` on a password change, the repository error on an API key
+  delete or a device-code approval), or every reason a secrets resolve was refused, agent and namespace names
+  included. Each now answers a line written for the caller.
+- A refusal the caller can fix names the request member and the rule it breaks: `newPassword must be at least 8
+  characters long`, `id must be a UUID`, `signupProfile.role must be one of the listed values`,
+  `sandbox is not a recognized sandbox type`, `encryptedBlob must decode to at most 1048576 bytes`. The services
+  return these refusals as declared errors (for example `ErrCurrentPasswordIncorrect`, `ErrAPIKeyNotDisabled`,
+  `ErrDeviceCodeNotPending`, `ErrCapabilityAlreadyGranted`), and the handlers match them with `errors.Is` or
+  `errors.As` instead of comparing text.
+- A failure behind one of these endpoints that is not the caller's to fix (a repository or hashing error during a
+  password change, password reset, API key delete, device-code approval or capability registration) now answers 500
+  with the fixed server line and goes to the server log.
+- `POST /api/v1/secrets/resolve` still refuses with 403. A malformed, stale or reused nonce and an `agentPublicKey`
+  that is not the registered key are named; every other refusal answers `Secret resolution refused`, and its reason
+  stays in the secrets audit entry and the server log.
+- The census test in the handlers package now covers every status: it fails on any response (`c.JSON`,
+  `c.Status(s).JSON`, `Send`, `SendString`, `fiber.NewError`) and any `fiber.Map` or `ErrorResponse` literal whose
+  body is built from an error value. A second test plants an error text in a server failure and checks that it is
+  in the log line and not in the response.
+
 ### Fixed — a 5xx response carries a fixed line, never the server's error text
 
 - 130 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`,

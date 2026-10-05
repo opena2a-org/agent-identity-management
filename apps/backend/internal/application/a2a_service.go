@@ -37,11 +37,15 @@ var ErrConsentGrantorNotOwned = errors.New("grantor agent not found in this orga
 // may carry: the width of a2a_request_nonces.nonce, VARCHAR(64).
 const MaxA2ANonceLength = 64
 
+// InvalidA2ANonceMessage is the line a handler answers, with 400, for a request
+// VerifyA2ARequest refused with ErrInvalidA2ANonce.
+var InvalidA2ANonceMessage = fmt.Sprintf("nonce must be 1 to %d characters of UTF-8 text without a NUL character", MaxA2ANonceLength)
+
 // ErrInvalidA2ANonce is returned by VerifyA2ARequest for a request whose nonce
 // cannot be recorded: an empty one, one longer than MaxA2ANonceLength
 // characters, or one that is not UTF-8 text without a NUL character. It is a
 // malformed request, not a verdict on one.
-var ErrInvalidA2ANonce = fmt.Errorf("nonce must be 1 to %d characters of UTF-8 text without a NUL character", MaxA2ANonceLength)
+var ErrInvalidA2ANonce = errors.New(InvalidA2ANonceMessage)
 
 // A2A Configuration Constants
 const (

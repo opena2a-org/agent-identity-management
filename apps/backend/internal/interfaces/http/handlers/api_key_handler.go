@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -305,12 +307,14 @@ func (h *APIKeyHandler) DeleteAPIKey(c fiber.Ctx) error {
 	if err := h.apiKeyService.DeleteAPIKey(c.Context(), keyID, orgID); err != nil {
 		// The "key must be disabled before deletion" rule is the only
 		// remaining service-level rejection here (the cross-tenant and
-		// not-found cases were collapsed by LoadOwned above). Echo
-		// err.Error() to surface that specific guard message — it
-		// carries no cross-tenant information.
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		// not-found cases were collapsed by LoadOwned above). Any other
+		// error is a repository failure.
+		if errors.Is(err, application.ErrAPIKeyNotDisabled) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "API key must be disabled before deletion",
+			})
+		}
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit

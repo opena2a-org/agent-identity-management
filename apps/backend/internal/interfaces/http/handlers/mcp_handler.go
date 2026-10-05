@@ -292,7 +292,7 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 		// Return 409 Conflict for duplicate URL errors - include existing server ID for SDK
 		if err.Error() == "mcp server with this URL already exists" {
 			response := fiber.Map{
-				"error": err.Error(),
+				"error": "mcp server with this URL already exists",
 			}
 			// ✅ Include existing server ID so SDK can still use it for attestation
 			if server != nil {
@@ -444,8 +444,8 @@ func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
 		})
 	}
 	// name reaches the lookup as a text parameter.
-	if err := queryTextError("name", name); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	if queryTextError("name", name) != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": queryTextMessage("name")})
 	}
 
 	mcpSvc := h.getMCPService()

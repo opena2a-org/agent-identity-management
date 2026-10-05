@@ -60,10 +60,12 @@ func (h *OnboardingTelemetryHandler) RecordEvent(c fiber.Ctx) error {
 		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"recorded": true})
 	case errors.Is(err, application.ErrOnboardingEventCapped):
 		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"recorded": false})
-	case errors.Is(err, application.ErrOnboardingEventUnknown),
-		errors.Is(err, application.ErrOnboardingEventServerOnly),
-		errors.Is(err, application.ErrOnboardingTabInvalid):
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	case errors.Is(err, application.ErrOnboardingEventUnknown):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "event is not a known onboarding event"})
+	case errors.Is(err, application.ErrOnboardingEventServerOnly):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "event is recorded by the server and cannot be sent by a client"})
+	case errors.Is(err, application.ErrOnboardingTabInvalid):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "tab must name a known tab for tab_selected and be absent for every other event"})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to record onboarding event"})
 	}

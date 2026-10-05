@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
@@ -221,14 +222,15 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// whichever agent it names.
 	message, err := verificationSigningMessage(req)
 	if err != nil {
+		log.Printf("verification signature check failed for agent %s: %v", agentID, err)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": fmt.Sprintf("Signature verification failed: %v", err),
+			"error": "Signature verification failed",
 		})
 	}
 	signatureBytes, err := base64.StdEncoding.DecodeString(req.Signature)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": fmt.Sprintf("Signature verification failed: invalid signature encoding: %v", err),
+			"error": "Signature verification failed: invalid signature encoding",
 		})
 	}
 
@@ -1521,8 +1523,8 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 		{"search", search},
 		{"search_field", searchField},
 	} {
-		if err := queryTextError(param.name, param.value); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		if queryTextError(param.name, param.value) != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": queryTextMessage(param.name)})
 		}
 	}
 	status = strings.ToLower(status)

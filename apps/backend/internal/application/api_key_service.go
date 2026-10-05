@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"time"
 
@@ -129,6 +130,9 @@ func (s *APIKeyService) RevokeAPIKey(ctx context.Context, keyID, orgID uuid.UUID
 	return nil
 }
 
+// ErrAPIKeyNotDisabled refuses the deletion of an API key that is still active.
+var ErrAPIKeyNotDisabled = errors.New("API key must be disabled before deletion")
+
 // DeleteAPIKey permanently deletes an API key (only if disabled)
 func (s *APIKeyService) DeleteAPIKey(ctx context.Context, keyID, orgID uuid.UUID) error {
 	// Verify key belongs to organization
@@ -143,7 +147,7 @@ func (s *APIKeyService) DeleteAPIKey(ctx context.Context, keyID, orgID uuid.UUID
 
 	// Check if key is disabled (is_active=false)
 	if key.IsActive {
-		return fmt.Errorf("API key must be disabled before deletion")
+		return ErrAPIKeyNotDisabled
 	}
 
 	return s.apiKeyRepo.Delete(keyID)

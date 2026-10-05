@@ -290,9 +290,14 @@ func (h *DetectionHandler) GetLatestCapabilityReport(c fiber.Ctx) error {
 	// Get latest capability report
 	report, err := h.detectionService.GetLatestCapabilityReport(c.Context(), agentID, orgID)
 	if err != nil {
-		if err.Error() == "agent not found" || err.Error() == "no capability reports found for this agent" {
+		switch err.Error() {
+		case "agent not found":
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": err.Error(),
+				"error": "agent not found",
+			})
+		case "no capability reports found for this agent":
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "no capability reports found for this agent",
 			})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)

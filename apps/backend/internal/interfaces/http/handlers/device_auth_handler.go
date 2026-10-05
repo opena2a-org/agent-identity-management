@@ -210,10 +210,12 @@ func (h *DeviceAuthHandler) ApproveDevice(c fiber.Ctx) error {
 			return c.Status(fiber.StatusGone).JSON(fiber.Map{
 				"error": "Device code has expired",
 			})
-		default:
+		case errors.Is(err, application.ErrDeviceCodeNotPending):
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": err.Error(),
+				"error": "Device code is no longer pending",
 			})
+		default:
+			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 	}
 

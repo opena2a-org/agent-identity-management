@@ -26,9 +26,9 @@ const (
 	// maxNonceAge is the maximum age of a nonce before it's considered replayed (CR-003).
 	maxNonceAge = 30 * time.Second
 
-	// maxCredentialBlobSize is the maximum size of a credential blob (1 MiB).
+	// MaxCredentialBlobSize is the maximum size of a credential blob (1 MiB).
 	// Prevents DoS via oversized blobs in encryption/decryption.
-	maxCredentialBlobSize = 1 << 20
+	MaxCredentialBlobSize = 1 << 20
 
 	// resolveNonceKeyLabel separates the admission keys of resolve requests
 	// from other keys in the same admission store.
@@ -38,6 +38,18 @@ const (
 // ErrSecretsNonceAdmissionUnavailable means the single-use check for a resolve
 // request could not run. Nothing was resolved.
 var ErrSecretsNonceAdmissionUnavailable = errors.New("secrets resolve: nonce check unavailable")
+
+// Resolve refusals the caller can correct. Every other refusal is answered
+// with one line; its reason is in the audit entry.
+var (
+	ErrResolveKeyNotRegistered   = errors.New("agentPublicKey is not the registered key")
+	ErrResolveNonceMalformed     = errors.New("nonce must be <RFC 3339 time>:<random part>")
+	ErrResolveNonceOutsideWindow = errors.New("nonce time is outside the accepted window")
+	ErrResolveNonceAlreadyUsed   = errors.New("nonce already used")
+)
+
+// ErrCredentialBlobTooLarge refuses a credential blob over MaxCredentialBlobSize.
+var ErrCredentialBlobTooLarge = errors.New("credential blob exceeds maximum size")
 
 // SecretsNonceAdmitter records a signed resolve request once: it checks the
 // signed time against the database clock and inserts the key in one
@@ -146,7 +158,7 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 	// refused here, before anything is admitted or read.
 	if len(req.AgentPublicKey) != 0 && subtle.ConstantTimeCompare(req.AgentPublicKey, pubKeyBytes) != 1 {
 		denyReason = "agentPublicKey is not the agent's registered key"
-		return nil, fmt.Errorf("agentPublicKey is not the registered key of agent %s", agentID)
+		return nil, fmt.Errorf("%w of agent %s", ErrResolveKeyNotRegistered, agentID)
 	}
 
 	// Nonce freshness (replay protection): the nonce must carry an
@@ -158,10 +170,10 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 	}
 	if age := time.Since(signedAt); age > maxNonceAge {
 		denyReason = "nonce expired (replay protection)"
-		return nil, fmt.Errorf("nonce expired: submitted %s, max age %s", age, maxNonceAge)
+		return nil, fmt.Errorf("%w: nonce expired: submitted %s, max age %s", ErrResolveNonceOutsideWindow, age, maxNonceAge)
 	} else if -age > maxNonceAge {
 		denyReason = "nonce time is ahead of the server clock"
-		return nil, fmt.Errorf("nonce time is %s ahead of the server clock, max %s", -age, maxNonceAge)
+		return nil, fmt.Errorf("%w: nonce time is %s ahead of the server clock, max %s", ErrResolveNonceOutsideWindow, -age, maxNonceAge)
 	}
 
 	// Single use: the signed request is admitted once, by one statement that
@@ -303,11 +315,11 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 func parseResolveNonceTime(nonce string) (time.Time, error) {
 	i := strings.LastIndex(nonce, ":")
 	if i <= 0 || i == len(nonce)-1 {
-		return time.Time{}, fmt.Errorf("nonce must be <RFC 3339 time>:<random part>")
+		return time.Time{}, ErrResolveNonceMalformed
 	}
 	ts, err := time.Parse(time.RFC3339Nano, nonce[:i])
 	if err != nil {
-		return time.Time{}, fmt.Errorf("nonce time is not RFC 3339")
+		return time.Time{}, fmt.Errorf("%w: nonce time is not RFC 3339", ErrResolveNonceMalformed)
 	}
 	return ts, nil
 }
@@ -340,11 +352,11 @@ func (s *SecretsService) admitResolveRequest(agentID, organizationID uuid.UUID, 
 	case domain.ActionRequestAdmitted:
 		return "", nil
 	case domain.ActionRequestNonceReused:
-		return "nonce already used (replay protection)", fmt.Errorf("nonce already used by agent %s", agentID)
+		return "nonce already used (replay protection)", fmt.Errorf("%w by agent %s", ErrResolveNonceAlreadyUsed, agentID)
 	case domain.ActionRequestBehindClock:
-		return "nonce expired (replay protection)", fmt.Errorf("nonce expired on the database clock")
+		return "nonce expired (replay protection)", fmt.Errorf("%w: nonce expired on the database clock", ErrResolveNonceOutsideWindow)
 	case domain.ActionRequestAheadOfClock:
-		return "nonce time is ahead of the server clock", fmt.Errorf("nonce time is ahead of the database clock")
+		return "nonce time is ahead of the server clock", fmt.Errorf("%w: nonce time is ahead of the database clock", ErrResolveNonceOutsideWindow)
 	default:
 		return unavailable, ErrSecretsNonceAdmissionUnavailable
 	}
@@ -396,8 +408,8 @@ func (s *SecretsService) DeleteNamespace(id uuid.UUID) error {
 
 // StoreCredential stores an encrypted credential blob in a namespace.
 func (s *SecretsService) StoreCredential(namespaceID uuid.UUID, blob []byte, encryptionAlg string) error {
-	if len(blob) > maxCredentialBlobSize {
-		return fmt.Errorf("credential blob exceeds maximum size of %d bytes", maxCredentialBlobSize)
+	if len(blob) > MaxCredentialBlobSize {
+		return fmt.Errorf("%w of %d bytes", ErrCredentialBlobTooLarge, MaxCredentialBlobSize)
 	}
 
 	ns, err := s.nsRepo.GetByID(namespaceID)
@@ -415,8 +427,8 @@ func (s *SecretsService) StoreCredential(namespaceID uuid.UUID, blob []byte, enc
 
 // RotateCredential stores a new version of the credential.
 func (s *SecretsService) RotateCredential(namespaceID uuid.UUID, blob []byte, encryptionAlg string) error {
-	if len(blob) > maxCredentialBlobSize {
-		return fmt.Errorf("credential blob exceeds maximum size of %d bytes", maxCredentialBlobSize)
+	if len(blob) > MaxCredentialBlobSize {
+		return fmt.Errorf("%w of %d bytes", ErrCredentialBlobTooLarge, MaxCredentialBlobSize)
 	}
 
 	ns, err := s.nsRepo.GetByID(namespaceID)
@@ -464,8 +476,8 @@ func (s *SecretsService) encryptForAgent(rawBlob []byte, agentEd25519PubKey []by
 	}
 
 	// Bound blob size to prevent DoS
-	if len(rawBlob) > maxCredentialBlobSize {
-		return nil, nil, fmt.Errorf("credential blob exceeds maximum size of %d bytes", maxCredentialBlobSize)
+	if len(rawBlob) > MaxCredentialBlobSize {
+		return nil, nil, fmt.Errorf("%w of %d bytes", ErrCredentialBlobTooLarge, MaxCredentialBlobSize)
 	}
 
 	// Derive 256-bit encryption key from shared secret via SHA-256

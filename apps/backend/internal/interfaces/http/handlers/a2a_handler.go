@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -308,7 +309,7 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	if errors.Is(err, application.ErrInvalidA2ANonce) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"valid": false,
-			"error": err.Error(),
+			"error": application.InvalidA2ANonceMessage,
 		})
 	}
 	if err != nil {
@@ -365,10 +366,11 @@ func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
 		if computeErr != nil {
 			// If computation fails, return zero score with message
+			log.Printf("a2a trust score computation failed for agent %s: %v", agentID, computeErr)
 			return c.JSON(fiber.Map{
 				"agentId": agentID,
 				"score":   0.0,
-				"message": "Could not compute trust score: " + computeErr.Error(),
+				"message": "Could not compute trust score",
 			})
 		}
 		return c.JSON(computedScore)
@@ -772,8 +774,8 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 		})
 	}
 	// q reaches the skill search as a text parameter.
-	if err := queryTextError("q", query); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	if queryTextError("q", query) != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": queryTextMessage("q")})
 	}
 
 	limit := 20
@@ -1660,10 +1662,11 @@ func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
 		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
 		if computeErr != nil {
 			// If computation fails, return zero score with message
+			log.Printf("a2a trust score computation failed for agent %s: %v", agentID, computeErr)
 			return c.JSON(fiber.Map{
 				"agentId": agentID,
 				"score":   0.0,
-				"message": "Could not compute trust score: " + computeErr.Error(),
+				"message": "Could not compute trust score",
 			})
 		}
 		return c.JSON(computedScore)

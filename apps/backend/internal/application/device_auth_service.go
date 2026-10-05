@@ -26,6 +26,9 @@ var (
 	// ErrDeviceCodeUsed is returned for a code that has already been exchanged
 	// for its token pair. An approved code mints one pair.
 	ErrDeviceCodeUsed = errors.New("device_code_used")
+	// ErrDeviceCodeNotPending is returned when approving or denying a code
+	// that was already approved or denied.
+	ErrDeviceCodeNotPending = errors.New("device code is no longer pending")
 )
 
 // deviceCodeExpiry is the lifetime of a device authorization code.
@@ -241,7 +244,7 @@ func (s *DeviceAuthService) ApproveDeviceCode(ctx context.Context, userCode stri
 	}
 
 	if dc.Status != domain.DeviceCodeStatusPending {
-		return fmt.Errorf("device code is no longer pending (status: %s)", dc.Status)
+		return fmt.Errorf("%w (status: %s)", ErrDeviceCodeNotPending, dc.Status)
 	}
 
 	return s.deviceCodeRepo.Approve(ctx, normalizedCode, userID, orgID)
@@ -261,7 +264,7 @@ func (s *DeviceAuthService) DenyDeviceCode(ctx context.Context, userCode string)
 	}
 
 	if dc.Status != domain.DeviceCodeStatusPending {
-		return fmt.Errorf("device code is no longer pending (status: %s)", dc.Status)
+		return fmt.Errorf("%w (status: %s)", ErrDeviceCodeNotPending, dc.Status)
 	}
 
 	return s.deviceCodeRepo.Deny(ctx, normalizedCode)
