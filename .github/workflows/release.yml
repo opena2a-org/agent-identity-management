@@ -36,13 +36,13 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: apps/backend/go.mod
-          cache-dependency-path: apps/backend/go.sum
+          # No cache restore in a tag-triggered job
+          # (scripts/lint-release-path-cache.py); setup-go caches by default.
+          cache: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: package-lock.json
 
       # Exact module version: the Go checksum database verifies its bytes.
       - name: Generate Go SBOM (CycloneDX)
@@ -261,8 +261,6 @@ jobs:
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-          cache: "npm"
-          cache-dependency-path: sdk/typescript/package-lock.json
 
       - name: Verify tag matches package.json version
         run: |
@@ -403,7 +401,6 @@ jobs:
           server-password: MAVEN_CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
-          cache: maven
 
       - name: Verify tag matches pom.xml version
         run: |
