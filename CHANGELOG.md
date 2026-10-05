@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — backend scripts that approved registrations and signed admin tokens outside the service
+
+- `apps/backend/scripts/approval/approve_registration.go`, `approve_registration.sql`, `quick_approve.sql` and
+  `simple_approve.sql` approved a pending registration by writing `users` and `user_registration_requests` directly,
+  and `apps/backend/scripts/jwt/generate_jwt.go` signed a 24-hour admin token with `JWT_SECRET`. None wrote an
+  `audit_logs` row or refused a production database, and none was built into or copied into the backend image. They
+  are removed. Approve a registration with `POST /api/v1/admin/registration-requests/:id/approve`, which records an
+  audit entry, and create the first admin with `aim-bootstrap`.
+- `sdk/typescript/tests/backend-scripts-no-out-of-band-approval.test.ts` fails when a file under
+  `apps/backend/scripts` writes `user_registration_requests`, signs a JWT, or inserts into `users` without first
+  refusing a database that holds a production-shaped organization, as the seed files do.
+
 ### Fixed — an empty `talks_to` list no longer allows every MCP server in the agent-signed action check
 
 - `PublicMCPHandler.VerifyMCPAction` approved any MCP server in the agent's organization when the agent's `talks_to`
