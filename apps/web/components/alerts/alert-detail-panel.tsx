@@ -7,6 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, Agent } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
+import {
+  USERS_PAGE_HREF,
+  contextLabel,
+  contextValue,
+  hasResourceId,
+  isUserResource,
+} from "@/lib/alert-resource";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -125,6 +132,16 @@ export function AlertDetailPanel({
         setAuditLog(null);
       }
 
+      // Verification history, trust score and SDK token belong to agents. A
+      // user alert's resource ID is a user (or the nil UUID), not an agent.
+      if (isUserResource(alert.resourceType)) {
+        setVerificationHistory([]);
+        setCurrentTrustScore(null);
+        setAgentDetails(null);
+        setLoadingData(false);
+        return;
+      }
+
       // Try to fetch verification history for the agent (non-fatal if not found)
       try {
         const history = await api.getAgentVerificationHistory(alert.resourceId, 5);
@@ -161,7 +178,7 @@ export function AlertDetailPanel({
       console.error("Error in fetchData:", e);
       setLoadingData(false);
     });
-  }, [alert?.auditId, alert?.resourceId]);
+  }, [alert?.auditId, alert?.resourceId, alert?.resourceType]);
 
   // Handle SDK token revocation
   const handleRevokeSDKToken = async () => {
@@ -206,6 +223,7 @@ export function AlertDetailPanel({
 
   const metadata = alert.metadata || {};
   const metadataEntries = Object.entries(metadata);
+  const isUserAlert = isUserResource(alert.resourceType);
 
   return (
     <>
@@ -240,112 +258,159 @@ export function AlertDetailPanel({
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Agent Info */}
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
-              <User className="h-4 w-4" />
-              Agent information
-            </h3>
-            <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-ink-secondary">Agent name</span>
-                <span className="font-medium text-ink">{alert.agentName || "Unknown"}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-ink-secondary">Agent ID</span>
-                <div className="flex items-center gap-2">
-                  <code className="text-xs bg-glass-inset-gray text-ink px-2 py-1 rounded font-mono">
-                    {alert.resourceId}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => copyToClipboard(alert.resourceId, "agentId")}
-                  >
-                    {copiedField === "agentId" ? (
-                      <Check className="h-3 w-3 text-success-text" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              {/* Show current trust score (freshly fetched) */}
-              {currentTrustScore !== null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary">Current trust score</span>
-                  <span className="font-medium text-ink">
-                    {Math.round(currentTrustScore * 100)}%
-                  </span>
-                </div>
-              )}
-              {/* Show historical trust score at alert time if different from current */}
-              {metadata.trustScore !== undefined && currentTrustScore !== null &&
-               Math.abs((metadata.trustScore * 100) - (currentTrustScore * 100)) > 1 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary">Trust score at alert time</span>
-                  <span className="font-medium text-ink-tertiary">
-                    {(metadata.trustScore * 100).toFixed(0)}%
-                  </span>
-                </div>
-              )}
-              {/* Fallback: show historical score if current couldn't be fetched */}
-              {metadata.trustScore !== undefined && currentTrustScore === null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary">Trust score at alert time</span>
-                  <span className="font-medium text-ink">
-                    {(metadata.trustScore * 100).toFixed(0)}%
-                  </span>
-                </div>
-              )}
-
-              {/* Creator Info */}
-              {agentDetails?.createdByName && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary">Created by</span>
-                  <span className="font-medium text-ink">
-                    {agentDetails.createdByName}
-                    {agentDetails.createdByEmail && (
-                      <span className="text-ink-tertiary text-xs ml-1">({agentDetails.createdByEmail})</span>
-                    )}
-                  </span>
-                </div>
-              )}
-
-              {/* SDK Token Info */}
-              {agentDetails?.createdBySdkTokenId && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-ink-secondary">SDK token</span>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/dashboard/credentials?highlight=${agentDetails.createdBySdkTokenId}#sdk-tokens`}
-                      className="text-xs text-brand-text hover:underline flex items-center gap-1"
-                    >
-                      <KeyRound className="h-3 w-3" />
-                      View token
-                    </Link>
-                    {!revokeSuccess ? (
+          {/* Account Info (user alerts) */}
+          {isUserAlert && (
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Account
+              </h3>
+              <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
+                {metadata.email && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">Email</span>
+                    <span className="font-medium text-ink">{String(metadata.email)}</span>
+                  </div>
+                )}
+                {hasResourceId(alert.resourceId) && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">User ID</span>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-glass-inset-gray text-ink px-2 py-1 rounded font-mono">
+                        {alert.resourceId}
+                      </code>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-6 text-xs text-danger-text hover:bg-danger-fill px-2"
-                        onClick={() => setShowRevokeConfirm(true)}
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => copyToClipboard(alert.resourceId, "userId")}
                       >
-                        <Ban className="h-3 w-3 mr-1" />
-                        Revoke
+                        {copiedField === "userId" ? (
+                          <Check className="h-3 w-3 text-success-text" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
                       </Button>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-success-text border-success-border">
-                        <Check className="h-3 w-3 mr-1" />
-                        Revoked
-                      </Badge>
-                    )}
+                    </div>
+                  </div>
+                )}
+                {!metadata.email && !hasResourceId(alert.resourceId) && (
+                  <p className="text-sm text-ink-secondary">
+                    This alert does not name an account.
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Agent Info */}
+          {!isUserAlert && (
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Agent information
+              </h3>
+              <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-ink-secondary">Agent name</span>
+                  <span className="font-medium text-ink">{alert.agentName || "Unknown"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-ink-secondary">Agent ID</span>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs bg-glass-inset-gray text-ink px-2 py-1 rounded font-mono">
+                      {alert.resourceId}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => copyToClipboard(alert.resourceId, "agentId")}
+                    >
+                      {copiedField === "agentId" ? (
+                        <Check className="h-3 w-3 text-success-text" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                    </Button>
                   </div>
                 </div>
-              )}
-            </div>
-          </section>
+                {/* Show current trust score (freshly fetched) */}
+                {currentTrustScore !== null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">Current trust score</span>
+                    <span className="font-medium text-ink">
+                      {Math.round(currentTrustScore * 100)}%
+                    </span>
+                  </div>
+                )}
+                {/* Show historical trust score at alert time if different from current */}
+                {metadata.trustScore !== undefined && currentTrustScore !== null &&
+                 Math.abs((metadata.trustScore * 100) - (currentTrustScore * 100)) > 1 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">Trust score at alert time</span>
+                    <span className="font-medium text-ink-tertiary">
+                      {(metadata.trustScore * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+                {/* Fallback: show historical score if current couldn't be fetched */}
+                {metadata.trustScore !== undefined && currentTrustScore === null && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">Trust score at alert time</span>
+                    <span className="font-medium text-ink">
+                      {(metadata.trustScore * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+
+                {/* Creator Info */}
+                {agentDetails?.createdByName && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">Created by</span>
+                    <span className="font-medium text-ink">
+                      {agentDetails.createdByName}
+                      {agentDetails.createdByEmail && (
+                        <span className="text-ink-tertiary text-xs ml-1">({agentDetails.createdByEmail})</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {/* SDK Token Info */}
+                {agentDetails?.createdBySdkTokenId && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-ink-secondary">SDK token</span>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/dashboard/credentials?highlight=${agentDetails.createdBySdkTokenId}#sdk-tokens`}
+                        className="text-xs text-brand-text hover:underline flex items-center gap-1"
+                      >
+                        <KeyRound className="h-3 w-3" />
+                        View token
+                      </Link>
+                      {!revokeSuccess ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-danger-text hover:bg-danger-fill px-2"
+                          onClick={() => setShowRevokeConfirm(true)}
+                        >
+                          <Ban className="h-3 w-3 mr-1" />
+                          Revoke
+                        </Button>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-success-text border-success-border">
+                          <Check className="h-3 w-3 mr-1" />
+                          Revoked
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* SDK Token Revoke Confirmation */}
           {showRevokeConfirm && agentDetails?.createdBySdkTokenId && (
@@ -439,161 +504,163 @@ export function AlertDetailPanel({
           </section>
 
           {/* Verification History */}
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Verification history
-            </h3>
+          {!isUserAlert && (
+            <section className="space-y-3">
+              <h3 className="text-sm font-semibold text-ink-tertiary uppercase tracking-wide flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Verification history
+              </h3>
 
-            {loadingData ? (
-              <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-1/2" />
-              </div>
-            ) : verificationHistory.length > 0 ? (
-              <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-ink-secondary">Recent verifications</span>
-                  <Badge variant="outline" className="text-xs">
-                    {verificationHistory.length} events
-                  </Badge>
+              {loadingData ? (
+                <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
                 </div>
-                <div className="space-y-3">
-                  {verificationHistory.map((event) => {
-                    const isDenied = event.allowed === false || event.result === "denied" || event.status === "failed";
-                    const isSuccess = event.allowed === true || event.result === "verified" || event.status === "success";
+              ) : verificationHistory.length > 0 ? (
+                <div className="bg-glass-inset-gray rounded-inset p-4 space-y-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-ink-secondary">Recent verifications</span>
+                    <Badge variant="outline" className="text-xs">
+                      {verificationHistory.length} events
+                    </Badge>
+                  </div>
+                  <div className="space-y-3">
+                    {verificationHistory.map((event) => {
+                      const isDenied = event.allowed === false || event.result === "denied" || event.status === "failed";
+                      const isSuccess = event.allowed === true || event.result === "verified" || event.status === "success";
 
-                    return (
-                      <div
-                        key={event.id}
-                        className={`p-3 rounded-inset border ${
-                          isDenied
-                            ? "bg-danger-fill border-danger-border"
-                            : isSuccess
-                            ? "bg-success-fill border-success-border"
-                            : "bg-glass-inset-gray border-stroke"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant={isDenied ? "destructive" : isSuccess ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              {isDenied ? "DENIED" : isSuccess ? "ALLOWED" : event.status.toUpperCase()}
-                            </Badge>
-                            <span className="text-xs font-medium text-ink-secondary">
-                              {event.verificationType}
+                      return (
+                        <div
+                          key={event.id}
+                          className={`p-3 rounded-inset border ${
+                            isDenied
+                              ? "bg-danger-fill border-danger-border"
+                              : isSuccess
+                              ? "bg-success-fill border-success-border"
+                              : "bg-glass-inset-gray border-stroke"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant={isDenied ? "destructive" : isSuccess ? "default" : "secondary"}
+                                className="text-xs"
+                              >
+                                {isDenied ? "DENIED" : isSuccess ? "ALLOWED" : event.status.toUpperCase()}
+                              </Badge>
+                              <span className="text-xs font-medium text-ink-secondary">
+                                {event.verificationType}
+                              </span>
+                            </div>
+                            <span className="text-xs text-ink-tertiary">
+                              {formatDateTime(event.createdAt)}
                             </span>
                           </div>
-                          <span className="text-xs text-ink-tertiary">
-                            {formatDateTime(event.createdAt)}
-                          </span>
-                        </div>
 
-                        {(event.action || event.resource) && (
-                          <div className="mt-2 space-y-1">
-                            {event.action && (
-                              <p className="text-sm text-ink-body">
-                                <span className="text-ink-tertiary">Capability:</span>{" "}
-                                <code className="text-xs bg-glass text-ink px-1.5 py-0.5 rounded border border-stroke">
-                                  {event.action}
-                                </code>
-                              </p>
-                            )}
-                            {event.resource && (
-                              <p className="text-sm text-ink-body">
-                                <span className="text-ink-tertiary">Resource:</span>{" "}
-                                <code className="text-xs bg-glass text-ink px-1.5 py-0.5 rounded border border-stroke">
-                                  {event.resource}
-                                </code>
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {isDenied && event.reason && (
-                          <p className="text-sm text-danger-text mt-2">
-                            <span className="font-medium">Denied:</span> {event.reason}
-                          </p>
-                        )}
-
-                        {/*
-                          Execution status: what the AGENT SAID happened after verification.
-
-                          These fields (executed, strictMode, executedAt, executionError)
-                          have exactly one writer in the backend — the agent's own SDK, via
-                          POST /sdk-api/verifications/:id/execution-status. AIM holds no
-                          independent record of whether the action ran, so this block must
-                          be attributed to its source and must never assert that AIM
-                          enforced anything.
-
-                          It previously rendered "Action BLOCKED (strict mode enforced)",
-                          which read as a claim about our control while being derived
-                          entirely from the self-report of the party being audited. strictMode
-                          is now server-derived from the organization's enforcement mode, so
-                          the mode shown here is ours; `executed` is still the agent's word.
-                          Labelling these columns by provenance belongs to the
-                          execution-outcome follow-up.
-                        */}
-                        {event.executed !== undefined && (
-                          <div className={`mt-2 p-2 rounded-inset-sm text-xs ${
-                            event.executed
-                              ? isDenied
-                                ? "bg-warning-fill border border-warning-border text-warning-text"
-                                : "bg-success-fill border border-success-border text-success-text"
-                              : "bg-glass-inset-gray border border-stroke text-ink-body"
-                          }`}>
-                            <span className="font-medium">
-                              {event.executed ? (
-                                isDenied ? (
-                                  "Agent reported: action executed despite denial"
-                                ) : (
-                                  "Agent reported: action executed"
-                                )
-                              ) : (
-                                "Agent reported: action not executed"
+                          {(event.action || event.resource) && (
+                            <div className="mt-2 space-y-1">
+                              {event.action && (
+                                <p className="text-sm text-ink-body">
+                                  <span className="text-ink-tertiary">Capability:</span>{" "}
+                                  <code className="text-xs bg-glass text-ink px-1.5 py-0.5 rounded border border-stroke">
+                                    {event.action}
+                                  </code>
+                                </p>
                               )}
-                            </span>
-                            <p className="mt-1 text-ink-secondary">
-                              Self-reported by the agent. AIM does not independently observe
-                              execution, so this is not a record of enforcement.
-                              {event.strictMode !== undefined && (
-                                <> Organization enforcement mode at report time:{" "}
-                                  {event.strictMode ? "strict" : "monitoring"}.</>
+                              {event.resource && (
+                                <p className="text-sm text-ink-body">
+                                  <span className="text-ink-tertiary">Resource:</span>{" "}
+                                  <code className="text-xs bg-glass text-ink px-1.5 py-0.5 rounded border border-stroke">
+                                    {event.resource}
+                                  </code>
+                                </p>
                               )}
+                            </div>
+                          )}
+
+                          {isDenied && event.reason && (
+                            <p className="text-sm text-danger-text mt-2">
+                              <span className="font-medium">Denied:</span> {event.reason}
                             </p>
-                            {event.executionError && (
-                              <p className="mt-1 text-danger-text">Reported error: {event.executionError}</p>
-                            )}
-                          </div>
-                        )}
+                          )}
 
-                        <div className="flex items-center gap-4 mt-2 text-xs text-ink-tertiary">
-                          <span>Trust: {(event.trustScore * 100).toFixed(0)}%</span>
-                          {event.durationMs > 0 && <span>{event.durationMs}ms</span>}
-                          {event.initiatorIp && <span>IP: {event.initiatorIp}</span>}
+                          {/*
+                            Execution status: what the AGENT SAID happened after verification.
+
+                            These fields (executed, strictMode, executedAt, executionError)
+                            have exactly one writer in the backend — the agent's own SDK, via
+                            POST /sdk-api/verifications/:id/execution-status. AIM holds no
+                            independent record of whether the action ran, so this block must
+                            be attributed to its source and must never assert that AIM
+                            enforced anything.
+
+                            It previously rendered "Action BLOCKED (strict mode enforced)",
+                            which read as a claim about our control while being derived
+                            entirely from the self-report of the party being audited. strictMode
+                            is now server-derived from the organization's enforcement mode, so
+                            the mode shown here is ours; `executed` is still the agent's word.
+                            Labelling these columns by provenance belongs to the
+                            execution-outcome follow-up.
+                          */}
+                          {event.executed !== undefined && (
+                            <div className={`mt-2 p-2 rounded-inset-sm text-xs ${
+                              event.executed
+                                ? isDenied
+                                  ? "bg-warning-fill border border-warning-border text-warning-text"
+                                  : "bg-success-fill border border-success-border text-success-text"
+                                : "bg-glass-inset-gray border border-stroke text-ink-body"
+                            }`}>
+                              <span className="font-medium">
+                                {event.executed ? (
+                                  isDenied ? (
+                                    "Agent reported: action executed despite denial"
+                                  ) : (
+                                    "Agent reported: action executed"
+                                  )
+                                ) : (
+                                  "Agent reported: action not executed"
+                                )}
+                              </span>
+                              <p className="mt-1 text-ink-secondary">
+                                Self-reported by the agent. AIM does not independently observe
+                                execution, so this is not a record of enforcement.
+                                {event.strictMode !== undefined && (
+                                  <> Organization enforcement mode at report time:{" "}
+                                    {event.strictMode ? "strict" : "monitoring"}.</>
+                                )}
+                              </p>
+                              {event.executionError && (
+                                <p className="mt-1 text-danger-text">Reported error: {event.executionError}</p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-4 mt-2 text-xs text-ink-tertiary">
+                            <span>Trust: {(event.trustScore * 100).toFixed(0)}%</span>
+                            {event.durationMs > 0 && <span>{event.durationMs}ms</span>}
+                            {event.initiatorIp && <span>IP: {event.initiatorIp}</span>}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="bg-glass-inset-gray rounded-inset p-4">
-                <p className="text-sm text-ink-secondary">
-                  No verification events recorded for this agent.
-                </p>
-              </div>
-            )}
-          </section>
+              ) : (
+                <div className="bg-glass-inset-gray rounded-inset p-4">
+                  <p className="text-sm text-ink-secondary">
+                    No verification events recorded for this agent.
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Alert Metadata - Only show if there's context beyond what's already displayed */}
           {(() => {
-            const contextEntries = metadataEntries.filter(
-              ([key]) => !["trustScore", "policyName", "enforcement", "isBlocked", "policyType"].includes(key)
-            );
+            const shownElsewhere = ["trustScore", "policyName", "enforcement", "isBlocked", "policyType"];
+            if (isUserAlert) shownElsewhere.push("email");
+            const contextEntries = metadataEntries.filter(([key]) => !shownElsewhere.includes(key));
             if (contextEntries.length === 0) return null;
             return (
               <section className="space-y-3">
@@ -605,10 +672,10 @@ export function AlertDetailPanel({
                   {contextEntries.map(([key, value]) => (
                     <div key={key} className="flex items-center justify-between">
                       <span className="text-sm text-ink-secondary capitalize">
-                        {key.replace(/([A-Z])/g, " $1").trim()}
+                        {contextLabel(key)}
                       </span>
                       <span className="text-sm font-medium text-ink">
-                        {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                        {contextValue(key, value)}
                       </span>
                     </div>
                   ))}
@@ -636,12 +703,21 @@ export function AlertDetailPanel({
               Resolve
             </Button>
           )}
-          <Link href={`/dashboard/agents/${alert.resourceId}`} className="flex-1">
-            <Button variant="outline" className="w-full">
-              <ExternalLink className="h-4 w-4 mr-2" />
-              View agent
-            </Button>
-          </Link>
+          {isUserAlert ? (
+            <Link href={USERS_PAGE_HREF} className="flex-1">
+              <Button variant="outline" className="w-full">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View users
+              </Button>
+            </Link>
+          ) : (
+            <Link href={`/dashboard/agents/${alert.resourceId}`} className="flex-1">
+              <Button variant="outline" className="w-full">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View agent
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </>
