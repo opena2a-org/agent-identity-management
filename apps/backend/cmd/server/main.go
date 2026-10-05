@@ -179,6 +179,12 @@ func main() {
 	// Initialize application services
 	services, keyVault := initServices(cfg, db, repos, cacheService, oauthRepo, jwtService, emailService)
 
+	// Convert stored agent private keys to the storage-bound v2 format once,
+	// before the server accepts requests: the request path refuses v1.
+	if _, err := application.MigrateAgentPrivateKeysToV2(context.Background(), db, keyVault); err != nil {
+		log.Printf("⚠️  Agent private key migration did not finish: %v", err)
+	}
+
 	// Initialize handlers
 	h := initHandlers(services, repos, jwtService, keyVault, cfg, db)
 
