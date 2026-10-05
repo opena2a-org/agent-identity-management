@@ -19,9 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Unknown` and Credentials, then nothing, with exit 0. It now reads the legacy keys, prints `Authenticated ...` or
   `Not authenticated ...` for every token state, and says the check was local. It cites only a credentials file that
   exists: when adopting the legacy file fails, it names the file it actually read instead of a
-  `sdk_credentials.json` that was never written. A missing server URL is shown with login's default. The adoption and
-  migration notices no longer claim `[OK]` when the write failed, and they go to stderr, so `status --json` stays one
-  JSON object on stdout (#409).
+  `sdk_credentials.json` that was never written, and with no stored credentials at all `status --json` reports
+  `credentialsPath` as `null` instead of naming the `sdk_credentials.json` that login would write. A missing server
+  URL is shown with login's default. The adoption and migration notices no longer claim `[OK]` when the write failed,
+  and they go to stderr, so `status --json` stays one JSON object on stdout (#409).
 
 - `aim-sdk login` checks `--url` before touching the network. An empty value or a string that is not an http(s)
   URL with a host now fails at once with `Error: --url ... is not an http(s) URL` (or `is empty`, `has no host`)

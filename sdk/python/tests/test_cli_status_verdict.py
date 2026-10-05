@@ -116,3 +116,12 @@ def test_json_is_one_object_and_agrees_with_the_verdict(home):
     assert payload["user"] == "dev@example.com"
     path = payload["credentialsPath"]
     assert path is not None and (home / "sdk_credentials.json").exists() and path.endswith("sdk_credentials.json")
+
+
+def test_json_with_no_stored_credentials_cites_no_file(home):
+    rc, out, _ = _status(json_output=True)
+    payload = json.loads(out)
+    assert payload["authenticated"] is False and rc == 1
+    assert payload["tokenState"] == "absent"
+    assert not (home / "sdk_credentials.json").exists()
+    assert payload["credentialsPath"] is None
