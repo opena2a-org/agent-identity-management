@@ -9,7 +9,8 @@ Understanding how AIM secures your agents with military-grade cryptography.
 - ✅ **Fast**: 64,000+ signatures per second
 - ✅ **Small Keys**: 32-byte keys (256 bits)
 - ✅ **Collision-Resistant**: Practically impossible to forge signatures
-- ✅ **No Known Vulnerabilities**: Unlike RSA, immune to quantum attacks (with caveats)
+
+**Quantum attacks:** Ed25519, like RSA, is not resistant to quantum attacks. A large enough quantum computer running Shor's algorithm could recover a private key from its public key. For signatures designed to resist that, see [Post-Quantum Cryptography](../guides/PQC.md) (ML-DSA, alone or combined with Ed25519).
 
 **Why Ed25519?**
 - **RSA-2048**: Old, slow, large keys (2048 bits)
