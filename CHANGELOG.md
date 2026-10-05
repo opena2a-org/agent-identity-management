@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — the unread token lifetime defaults in the backend configuration
+
+- `apps/backend/internal/config/config.go` read `JWT_ACCESS_TTL` and `JWT_REFRESH_TTL` with defaults of 24 hours and
+  7 days into two fields nothing used. The server's token lifetimes come from `NewJWTService`, which reads
+  `JWT_ACCESS_TTL` (2 hours by default), `JWT_REFRESH_TTL` (168 hours) and `JWT_SESSION_MAX_AGE` (8 hours). The unread
+  fields and their defaults are removed, so each lifetime has one default. Token lifetimes are unchanged.
+- `apps/backend/internal/config/config_test.go` fails when `config.go` reads any of the three lifetime variables.
+
 ### Fixed — the agent page shows why a call was refused and where to grant it
 
 - The agent page's activity timeline listed a refused call as `Denied` with its resource, risk and trust score, but not
