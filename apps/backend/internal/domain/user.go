@@ -51,7 +51,7 @@ type User struct {
 	Status                 UserStatus `json:"status"`     // pending, active, suspended, deactivated
 	PasswordHash           *string    `json:"-"`          // Never expose in JSON
 	ForcePasswordChange    bool       `json:"forcePasswordChange"`
-	PasswordResetToken     *string    `json:"-"`                    // Never expose in JSON
+	PasswordResetToken     *string    `json:"-"`                    // SHA-256 digest of the reset token; never expose in JSON
 	PasswordResetExpiresAt *time.Time `json:"-"`                    // Never expose in JSON
 	ApprovedBy             *uuid.UUID `json:"approvedBy,omitempty"` // Admin who approved this user
 	ApprovedAt             *time.Time `json:"approvedAt,omitempty"` // When user was approved
@@ -66,7 +66,7 @@ type UserRepository interface {
 	Create(user *User) error
 	GetByID(id uuid.UUID) (*User, error)
 	GetByEmail(email string) (*User, error)
-	GetByPasswordResetToken(resetToken string) (*User, error)
+	GetByPasswordResetToken(tokenDigest string) (*User, error)
 	GetByOrganization(orgID uuid.UUID) ([]*User, error)
 	GetByOrganizationAndStatus(orgID uuid.UUID, status UserStatus) ([]*User, error)
 	Update(user *User) error

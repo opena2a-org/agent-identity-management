@@ -1291,7 +1291,7 @@ func TestRegistrationService_ResetPassword_InvalidToken(t *testing.T) {
 	ctx := context.Background()
 
 	mockUserRepo := new(MockUserRepoForRegistration)
-	mockUserRepo.On("GetByPasswordResetToken", "invalid-token").Return(nil, errors.New("not found"))
+	mockUserRepo.On("GetByPasswordResetToken", hashPasswordResetToken("invalid-token")).Return(nil, errors.New("not found"))
 
 	service := NewRegistrationService(nil, mockUserRepo, nil, nil, nil)
 
@@ -1311,7 +1311,7 @@ func TestRegistrationService_ResetPassword_WeakPassword(t *testing.T) {
 		Email:          "user@example.com",
 		OrganizationID: uuid.New(),
 	}
-	mockUserRepo.On("GetByPasswordResetToken", "valid-token").Return(user, nil)
+	mockUserRepo.On("GetByPasswordResetToken", hashPasswordResetToken("valid-token")).Return(user, nil)
 
 	service := NewRegistrationService(nil, mockUserRepo, nil, nil, nil)
 

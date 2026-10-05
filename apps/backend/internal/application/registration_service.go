@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -519,14 +521,16 @@ func (s *RegistrationService) RequestPasswordReset(
 		return nil
 	}
 
-	// Generate password reset token (UUID format)
+	// Generate password reset token (UUID format). The token goes to the user in the
+	// reset link; only its digest is stored.
 	resetToken := uuid.New().String()
+	tokenDigest := hashPasswordResetToken(resetToken)
 
 	// Set expiration to 24 hours from now
 	expiresAt := time.Now().Add(24 * time.Hour)
 
-	// Update user with reset token and expiration
-	user.PasswordResetToken = &resetToken
+	// Update user with reset token digest and expiration
+	user.PasswordResetToken = &tokenDigest
 	user.PasswordResetExpiresAt = &expiresAt
 
 	if err := s.userRepo.Update(user); err != nil {
@@ -588,8 +592,8 @@ func (s *RegistrationService) ResetPassword(
 		return fmt.Errorf("passwords do not match")
 	}
 
-	// Find user by reset token (automatically validates expiration)
-	user, err := s.userRepo.GetByPasswordResetToken(resetToken)
+	// Find user by reset token digest (automatically validates expiration)
+	user, err := s.userRepo.GetByPasswordResetToken(hashPasswordResetToken(resetToken))
 	if err != nil {
 		return fmt.Errorf("invalid or expired reset token")
 	}
@@ -633,6 +637,15 @@ func (s *RegistrationService) ResetPassword(
 	)
 
 	return nil
+}
+
+// hashPasswordResetToken returns the hex SHA-256 digest of a password reset token.
+// The users table stores this digest, so a copy of the table does not yield a usable
+// reset link. The token is random and high-entropy, so a fast unsalted digest keeps
+// the lookup deterministic and indexed without exposing the token to guessing.
+func hashPasswordResetToken(resetToken string) string {
+	sum := sha256.Sum256([]byte(resetToken))
+	return hex.EncodeToString(sum[:])
 }
 
 // extractEmailDomain extracts the domain from an email address
