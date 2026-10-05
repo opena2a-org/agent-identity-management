@@ -125,6 +125,26 @@ func (m *MockSDKTokenRepository) RevokeByTokenHash(tokenHash string, reason stri
 	return nil
 }
 
+// Rotate mirrors the repository's transaction: the old row is revoked and
+// next stored only when both writes can happen.
+func (m *MockSDKTokenRepository) Rotate(oldTokenHash string, reason string, next *domain.SDKToken) error {
+	if m.revokeErr != nil {
+		return m.revokeErr
+	}
+	old, ok := m.tokensByHash[oldTokenHash]
+	if !ok || old.RevokedAt != nil {
+		return errors.New("token not found or already revoked")
+	}
+	if m.createErr != nil {
+		return m.createErr
+	}
+	old.Revoke(reason)
+	m.tokens[next.ID] = next
+	m.tokensByHash[next.TokenHash] = next
+	m.tokensByTokenID[next.TokenID] = next
+	return nil
+}
+
 func (m *MockSDKTokenRepository) RevokeAllForUser(userID uuid.UUID, reason string) error {
 	if m.revokeErr != nil {
 		return m.revokeErr

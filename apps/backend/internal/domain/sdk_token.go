@@ -82,6 +82,10 @@ type SDKTokenRepository interface {
 	// RevokeByTokenHash marks a token as revoked using its hash
 	RevokeByTokenHash(tokenHash string, reason string) error
 
+	// Rotate revokes the active token whose hash is oldTokenHash and stores
+	// next in one transaction: both happen or neither does
+	Rotate(oldTokenHash string, reason string, next *SDKToken) error
+
 	// RevokeAllForUser revokes all tokens for a user
 	RevokeAllForUser(userID uuid.UUID, reason string) error
 

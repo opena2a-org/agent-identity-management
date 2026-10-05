@@ -55,11 +55,14 @@ func (s *rotationStore) Set(_ context.Context, key string, _ interface{}, _ time
 }
 
 // rotationSDKRepo records what the SDK-token path does to the sdk_tokens table.
-// revokeErr, when set, makes every row revocation fail.
+// revokeErr, when set, makes every row revocation fail; createErr every row
+// insert; usageErr every usage record.
 type rotationSDKRepo struct {
 	domain.SDKTokenRepository
 	token     *domain.SDKToken
 	revokeErr error
+	createErr error
+	usageErr  error
 	revoked   []struct{ hash, reason string }
 	created   []*domain.SDKToken
 }
@@ -70,7 +73,7 @@ func (r *rotationSDKRepo) GetByTokenHash(hash string) (*domain.SDKToken, error) 
 	}
 	return r.token, nil
 }
-func (r *rotationSDKRepo) RecordUsage(string, string) error { return nil }
+func (r *rotationSDKRepo) RecordUsage(string, string) error { return r.usageErr }
 func (r *rotationSDKRepo) RevokeByTokenHash(hash, reason string) error {
 	if r.revokeErr != nil {
 		return r.revokeErr
@@ -79,8 +82,42 @@ func (r *rotationSDKRepo) RevokeByTokenHash(hash, reason string) error {
 	return nil
 }
 func (r *rotationSDKRepo) Create(token *domain.SDKToken) error {
+	if r.createErr != nil {
+		return r.createErr
+	}
 	r.created = append(r.created, token)
 	return nil
+}
+
+// Rotate mirrors the repository's transaction: the revocation and the insert
+// are recorded only when neither fails.
+func (r *rotationSDKRepo) Rotate(oldHash, reason string, next *domain.SDKToken) error {
+	if r.revokeErr != nil {
+		return r.revokeErr
+	}
+	if r.createErr != nil {
+		return r.createErr
+	}
+	r.revoked = append(r.revoked, struct{ hash, reason string }{oldHash, reason})
+	r.created = append(r.created, next)
+	return nil
+}
+
+// sdkRotationApp builds the refresh handler on repo for one active SDK token
+// row and returns the app, the JWT service and an SDK refresh token.
+func sdkRotationApp(t *testing.T, repo *rotationSDKRepo) (*fiber.App, *auth.JWTService, string) {
+	t.Helper()
+	userID, orgID := uuid.New(), uuid.New()
+	users := &refreshTestUserRepo{getByID: func(uuid.UUID) (*domain.User, error) {
+		return activeUser(userID, orgID, domain.RoleAdmin, "sdk@example.com"), nil
+	}}
+	repo.token = &domain.SDKToken{
+		ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	app, jwtSvc := newRefreshTestApp(t, users, repo)
+	old, err := jwtSvc.GenerateSDKRefreshToken(userID.String(), orgID.String(), "sdk@example.com", "admin")
+	require.NoError(t, err)
+	return app, jwtSvc, old
 }
 
 func rotationApp(t *testing.T, store *rotationStore, failOpen bool) (*fiber.App, *auth.JWTService, string) {
@@ -288,4 +325,92 @@ func TestRefreshToken_LoginRotationIgnoresSDKRowRevokeFailure(t *testing.T) {
 	assert.Empty(t, sdkRepo.created)
 	_, status = postRefresh(t, app, out.RefreshToken)
 	assert.Equal(t, fiber.StatusOK, status, "the rotated login token refreshes")
+}
+
+// R8: the usage record on the presented SDK token is bookkeeping: when it
+// cannot be written the failure is logged and the token still rotates.
+func TestRefreshToken_SDKUsageRecordFailureIsLoggedAndRotates(t *testing.T) {
+	sdkRepo := &rotationSDKRepo{usageErr: errors.New("database unavailable")}
+	app, jwtSvc, old := sdkRotationApp(t, sdkRepo)
+	logs := captureLog(t)
+
+	out, status := postRefresh(t, app, old)
+	require.Equal(t, fiber.StatusOK, status)
+	assert.NotEqual(t, old, out.RefreshToken)
+	assert.True(t, out.Rotated)
+	require.Len(t, sdkRepo.revoked, 1)
+	require.Len(t, sdkRepo.created, 1)
+	assert.Equal(t, jtiOfToken(t, jwtSvc, out.RefreshToken), sdkRepo.created[0].TokenID)
+	assert.Contains(t, logs.String(), "usage of token id "+jtiOfToken(t, jwtSvc, old)+" not recorded: database unavailable")
+}
+
+// R9: when the new token's row cannot be inserted the rotation does not
+// happen: the old row stays live, the presented token comes back unchanged
+// with a fresh access token (rotated=false), the failure is logged, and the
+// next refresh with the same token rotates once the insert succeeds. The
+// client is never handed a refresh token without a row (which the next
+// refresh would refuse) while its own row is revoked.
+func TestRefreshToken_SDKRowInsertFailureDoesNotRotate(t *testing.T) {
+	sdkRepo := &rotationSDKRepo{createErr: errors.New("database unavailable")}
+	app, jwtSvc, old := sdkRotationApp(t, sdkRepo)
+	logs := captureLog(t)
+
+	out, status := postRefresh(t, app, old)
+	require.Equal(t, fiber.StatusOK, status)
+	assert.Equal(t, old, out.RefreshToken, "the presented refresh token comes back unchanged")
+	assert.False(t, out.Rotated)
+	claims, err := jwtSvc.ValidateToken(out.AccessToken)
+	require.NoError(t, err)
+	assert.Equal(t, auth.TokenTypeAccess, claims.TokenType)
+	assert.Empty(t, sdkRepo.revoked, "the old row stays live when the new row cannot be written")
+	assert.Empty(t, sdkRepo.created)
+	assert.Contains(t, logs.String(), "the presented refresh token was returned unchanged: ")
+	assert.Contains(t, logs.String(), "database unavailable")
+
+	sdkRepo.createErr = nil
+	out, status = postRefresh(t, app, old)
+	require.Equal(t, fiber.StatusOK, status)
+	assert.NotEqual(t, old, out.RefreshToken)
+	assert.True(t, out.Rotated)
+	require.Len(t, sdkRepo.revoked, 1)
+	require.Len(t, sdkRepo.created, 1)
+	assert.Equal(t, jtiOfToken(t, jwtSvc, out.RefreshToken), sdkRepo.created[0].TokenID)
+}
+
+// R10: a recovered SDK token is login-issued and has a row. It is retired by
+// the jti denylist; its row follows the rotation. When the denylist write
+// fails the token is answered unchanged and its row is left alone (a revoked
+// row would refuse the token the answer handed back). When only the row
+// rotation fails, the denylist already retired the token, so it still rotates
+// and the failure is logged.
+func TestRefreshToken_RecoveredTokenRowFollowsTheDenylist(t *testing.T) {
+	userID, orgID := uuid.New(), uuid.New()
+	users := &refreshTestUserRepo{getByID: func(uuid.UUID) (*domain.User, error) {
+		return activeUser(userID, orgID, domain.RoleAdmin, "rotate@example.com"), nil
+	}}
+	sdkRepo := &rotationSDKRepo{token: &domain.SDKToken{
+		ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+	}}
+	app, jwtSvc := newRefreshTestApp(t, users, sdkRepo)
+	store := &rotationStore{setErr: errors.New("store unavailable")}
+	jwtSvc.SetRevoker(auth.NewTokenRevoker(store, false))
+	_, p1, err := jwtSvc.GenerateTokenPair(userID.String(), orgID.String(), "rotate@example.com", "admin")
+	require.NoError(t, err)
+	logs := captureLog(t)
+
+	out, status := postRefresh(t, app, p1)
+	require.Equal(t, fiber.StatusOK, status)
+	assert.Equal(t, p1, out.RefreshToken)
+	assert.False(t, out.Rotated)
+	assert.Empty(t, sdkRepo.revoked, "the row of a token handed back unchanged stays live")
+	assert.Empty(t, sdkRepo.created)
+
+	store.setErr = nil
+	sdkRepo.createErr = errors.New("database unavailable")
+	out, status = postRefresh(t, app, p1)
+	require.Equal(t, fiber.StatusOK, status)
+	assert.NotEqual(t, p1, out.RefreshToken)
+	assert.True(t, out.Rotated, "the denylist retired the token")
+	assert.Empty(t, sdkRepo.created)
+	assert.Contains(t, logs.String(), "sdk_tokens rotation failed for token id "+jtiOfToken(t, jwtSvc, p1)+": database unavailable")
 }

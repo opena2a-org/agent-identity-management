@@ -19,23 +19,23 @@ func NewSDKTokenRepository(db *sql.DB) domain.SDKTokenRepository {
 	return &sdkTokenRepository{db: db}
 }
 
-func (r *sdkTokenRepository) Create(token *domain.SDKToken) error {
+// insertSDKTokenQuery stores one token row; insertSDKTokenArgs supplies its
+// parameters. Create and Rotate share both.
+const insertSDKTokenQuery = `
+	INSERT INTO sdk_tokens (
+		id, user_id, organization_id, token_hash, token_id,
+		device_name, device_fingerprint, ip_address, user_agent,
+		expires_at, metadata, created_at, usage_count, last_used_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+	RETURNING id, created_at
+`
+
+func insertSDKTokenArgs(token *domain.SDKToken) ([]interface{}, error) {
 	metadataJSON, err := json.Marshal(token.Metadata)
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-
-	query := `
-		INSERT INTO sdk_tokens (
-			id, user_id, organization_id, token_hash, token_id,
-			device_name, device_fingerprint, ip_address, user_agent,
-			expires_at, metadata, created_at, usage_count, last_used_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		RETURNING id, created_at
-	`
-
-	err = r.db.QueryRow(
-		query,
+	return []interface{}{
 		token.ID,
 		token.UserID,
 		token.OrganizationID,
@@ -50,8 +50,16 @@ func (r *sdkTokenRepository) Create(token *domain.SDKToken) error {
 		token.CreatedAt,
 		token.UsageCount,
 		token.LastUsedAt,
-	).Scan(&token.ID, &token.CreatedAt)
+	}, nil
+}
 
+func (r *sdkTokenRepository) Create(token *domain.SDKToken) error {
+	args, err := insertSDKTokenArgs(token)
+	if err != nil {
+		return err
+	}
+
+	err = r.db.QueryRow(insertSDKTokenQuery, args...).Scan(&token.ID, &token.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create SDK token: %w", err)
 	}
@@ -418,6 +426,49 @@ func (r *sdkTokenRepository) RevokeByTokenHash(tokenHash string, reason string) 
 		return fmt.Errorf("SDK token not found or already revoked")
 	}
 
+	return nil
+}
+
+// Rotate retires the token whose hash is oldTokenHash and stores its
+// successor in one transaction. The old row is revoked only if it is still
+// active; when it is not, or the insert fails, the transaction is rolled back
+// and neither write takes effect, so a rotation never leaves the old token
+// live beside the new one, nor the new token without a row.
+func (r *sdkTokenRepository) Rotate(oldTokenHash string, reason string, next *domain.SDKToken) error {
+	args, err := insertSDKTokenArgs(next)
+	if err != nil {
+		return err
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin SDK token rotation: %w", err)
+	}
+	defer tx.Rollback() // no-op after Commit
+
+	result, err := tx.Exec(`
+		UPDATE sdk_tokens
+		SET revoked_at = $1, revoke_reason = $2
+		WHERE token_hash = $3 AND revoked_at IS NULL
+	`, time.Now(), reason, oldTokenHash)
+	if err != nil {
+		return fmt.Errorf("failed to revoke SDK token by hash: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("SDK token not found or already revoked")
+	}
+
+	if err := tx.QueryRow(insertSDKTokenQuery, args...).Scan(&next.ID, &next.CreatedAt); err != nil {
+		return fmt.Errorf("failed to create SDK token: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit SDK token rotation: %w", err)
+	}
 	return nil
 }
 

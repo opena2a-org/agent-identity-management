@@ -69,6 +69,13 @@ func (s *SDKTokenService) RevokeByTokenHash(ctx context.Context, tokenHash strin
 	return s.sdkTokenRepo.RevokeByTokenHash(tokenHash, reason)
 }
 
+// RotateToken revokes the active token whose hash is oldTokenHash and stores
+// its successor in one transaction (for token rotation): both happen or
+// neither does.
+func (s *SDKTokenService) RotateToken(ctx context.Context, oldTokenHash string, reason string, next *domain.SDKToken) error {
+	return s.sdkTokenRepo.Rotate(oldTokenHash, reason, next)
+}
+
 // RevokeAllUserTokens revokes all SDK tokens for a user
 func (s *SDKTokenService) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID, reason string) error {
 	return s.sdkTokenRepo.RevokeAllForUser(userID, reason)
