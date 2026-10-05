@@ -41,6 +41,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `tests/chart-standard.test.ts` fails the web suite when a file outside `components/charts` imports the charting
   library, or when chart code carries a hex, rgb/hsl or palette-class colour.
 
+### Fixed — MCP servers registered before the upgrade get a calculated trust score
+
+- In 1.0.0 an MCP server's `trustScore` was never calculated: it was set to 75.0 when the SDK registered or verified
+  the server, and stayed 0.0 for a manually registered one. Migration 104 moves the field to the [0,1] scale by dividing
+  by 100, which turns those values into `0.75` and `0.0` without calculating anything, so they read like calculated
+  scores until each server is verified again.
+- The first start after the upgrade now scores every MCP server with the 8-factor trust calculator, in the background,
+  and records the `mcp_trust_rescored_after_scale_migration` key in `system_config` so later starts skip the pass. A
+  server whose scoring fails keeps its stored value and is named in the server log. If the pass cannot finish, for
+  example because the process stops part-way, the key is not written and the next start runs the pass again.
+
 ### Fixed — capability verifications are recorded as capability checks
 
 - `POST /api/v1/sdk-api/verifications` recorded every verification event as `verification_type: identity`, because the
