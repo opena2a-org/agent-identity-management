@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -204,5 +205,112 @@ func TestSignInMessage_IsPlainText(t *testing.T) {
 			t.Errorf("signInMessage() contains non-ASCII rune %U: %q", r, msg)
 			break
 		}
+	}
+}
+
+// TestPrintBootstrapResult_SuppliedPasswordIsNotPrinted covers
+// `aim-bootstrap --admin-password=Y`: the operator already knows Y, so the
+// closing summary names the admin account without echoing Y into stdout.
+func TestPrintBootstrapResult_SuppliedPasswordIsNotPrinted(t *testing.T) {
+	t.Parallel()
+
+	const supplied = "OperatorChosenP@ssword1"
+	cfg := &BootstrapConfig{
+		AdminEmail:    "custom@example.com",
+		AdminPassword: supplied,
+	}
+
+	var out bytes.Buffer
+	printBootstrapResult(&out, cfg)
+
+	if strings.Contains(out.String(), supplied) {
+		t.Errorf("output contains the supplied password:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "Admin Credentials") {
+		t.Errorf("output prints the credential block for a supplied password:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "custom@example.com") {
+		t.Errorf("output does not name the admin account:\n%s", out.String())
+	}
+}
+
+// TestPrintBootstrapResult_EnvSuppliedPasswordIsNotPrinted covers
+// `aim-bootstrap --default` with DEFAULT_ADMIN_PASSWORD set, which exists so
+// the password is kept out of the deploy log.
+func TestPrintBootstrapResult_EnvSuppliedPasswordIsNotPrinted(t *testing.T) {
+	const supplied = "EnvChosenP@ssword1"
+	t.Setenv("DEFAULT_ADMIN_PASSWORD", supplied)
+
+	cfg := &BootstrapConfig{
+		AdminName: "System Administrator",
+		OrgDomain: "localhost",
+		MaxUsers:  100,
+		MaxAgents: 1000,
+	}
+	if err := applyDefaultBootstrapValues(cfg); err != nil {
+		t.Fatalf("applyDefaultBootstrapValues: %v", err)
+	}
+
+	var out bytes.Buffer
+	printBootstrapResult(&out, cfg)
+
+	if strings.Contains(out.String(), supplied) {
+		t.Errorf("output contains the DEFAULT_ADMIN_PASSWORD value:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "Admin Credentials") {
+		t.Errorf("output prints the credential block for a supplied password:\n%s", out.String())
+	}
+}
+
+// TestPrintBootstrapResult_GeneratedPasswordIsPrinted covers
+// `aim-bootstrap --default` with no password supplied: this run's stdout is
+// the only place the generated password can be read from.
+func TestPrintBootstrapResult_GeneratedPasswordIsPrinted(t *testing.T) {
+	t.Setenv("DEFAULT_ADMIN_PASSWORD", "")
+
+	cfg := &BootstrapConfig{
+		AdminName: "System Administrator",
+		OrgDomain: "localhost",
+		MaxUsers:  100,
+		MaxAgents: 1000,
+	}
+	if err := applyDefaultBootstrapValues(cfg); err != nil {
+		t.Fatalf("applyDefaultBootstrapValues: %v", err)
+	}
+
+	var out bytes.Buffer
+	printBootstrapResult(&out, cfg)
+
+	for _, want := range []string{
+		"Admin Credentials",
+		"Email:    " + defaultAdminEmail,
+		"Password: " + cfg.AdminPassword,
+		"CAPTURE IT NOW",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output missing %q", want)
+		}
+	}
+}
+
+// TestPrintBootstrapResult_ExistingAdminPrintsNoPassword covers the
+// --default re-run whose admin INSERT was a no-op: the generated password was
+// never stored, so printing it would hand the operator a wrong password.
+func TestPrintBootstrapResult_ExistingAdminPrintsNoPassword(t *testing.T) {
+	t.Parallel()
+
+	const generated = "NeverStoredP@ssword1"
+	cfg := &BootstrapConfig{
+		AdminEmail:           defaultAdminEmail,
+		AdminPassword:        generated,
+		passwordWasGenerated: true,
+		adminAlreadyExisted:  true,
+	}
+
+	var out bytes.Buffer
+	printBootstrapResult(&out, cfg)
+
+	if strings.Contains(out.String(), generated) {
+		t.Errorf("output contains a password that was never stored:\n%s", out.String())
 	}
 }
