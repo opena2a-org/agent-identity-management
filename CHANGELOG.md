@@ -82,6 +82,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — the SDK token list returns token metadata with camelCase keys
+
+- `GET /api/v1/users/me/sdk-tokens` returned each token's `metadata` exactly as stored. A token created by
+  refresh-token rotation therefore carried `parent_token` and `rotated_from` next to `rotationCount`, while every
+  other key in the response is camelCase. The list now returns every metadata key in camelCase, so those two are
+  `parentToken` and `rotatedFrom`. Stored tokens are unchanged, and the dashboard does not read this field. A
+  client that read the snake_case keys from this response reads the camelCase names instead.
+
 ### Fixed — a CLI login on a production stack is no longer throttled while it waits for approval
 
 - `POST /api/v1/oauth/device/code` handed out a poll interval of 5 seconds, while every `/api/v1/oauth/device` route
