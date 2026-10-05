@@ -55,6 +55,14 @@ func (r *issuanceUserRepo) Update(u *domain.User) error {
 	return nil
 }
 
+func (r *issuanceUserRepo) UpdateLastLogin(id uuid.UUID, at time.Time) error {
+	if r.user != nil && r.user.ID == id {
+		r.user.LastLoginAt = &at
+		r.user.UpdatedAt = at
+	}
+	return nil
+}
+
 func issuanceUser(t *testing.T, forceChange bool) *domain.User {
 	t.Helper()
 	hash, err := auth.NewPasswordHasher().HashPassword(issuancePassword)

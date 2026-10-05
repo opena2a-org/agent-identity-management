@@ -79,6 +79,11 @@ func (m *MockUserRepository) UpdateRole(id uuid.UUID, role domain.UserRole) erro
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) UpdateLastLogin(id uuid.UUID, at time.Time) error {
+	args := m.Called(id, at)
+	return args.Error(0)
+}
+
 func (m *MockUserRepository) Delete(id uuid.UUID) error {
 	args := m.Called(id)
 	return args.Error(0)
@@ -293,7 +298,7 @@ func TestAuthService_LoginWithPassword_Success(t *testing.T) {
 	user := createTestUser("test@example.com")
 
 	mockUserRepo.On("GetByEmail", "test@example.com").Return(user, nil)
-	mockUserRepo.On("Update", mock.AnythingOfType("*domain.User")).Return(nil)
+	mockUserRepo.On("UpdateLastLogin", user.ID, mock.AnythingOfType("time.Time")).Return(nil)
 
 	// Act
 	ctx := context.Background()
@@ -306,6 +311,10 @@ func TestAuthService_LoginWithPassword_Success(t *testing.T) {
 	assert.Equal(t, user.Email, result.Email)
 	assert.NotNil(t, result.LastLoginAt)
 
+	// The row was read before the password check; writing it back whole would
+	// undo anything committed since. signin_race_integration_test.go drives that
+	// race against Postgres.
+	mockUserRepo.AssertNotCalled(t, "Update", mock.Anything)
 	mockUserRepo.AssertExpectations(t)
 }
 
@@ -448,7 +457,7 @@ func TestAuthService_LoginWithPassword_UpdateLastLoginFails(t *testing.T) {
 	user := createTestUser("test@example.com")
 
 	mockUserRepo.On("GetByEmail", "test@example.com").Return(user, nil)
-	mockUserRepo.On("Update", mock.AnythingOfType("*domain.User")).Return(errors.New("database error"))
+	mockUserRepo.On("UpdateLastLogin", user.ID, mock.AnythingOfType("time.Time")).Return(errors.New("database error"))
 
 	// Act
 	ctx := context.Background()
@@ -1368,7 +1377,7 @@ func TestAuthService_UpdateLastLogin_Success(t *testing.T) {
 	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
-	mockUserRepo.On("Update", mock.AnythingOfType("*domain.User")).Return(nil)
+	mockUserRepo.On("UpdateLastLogin", user.ID, mock.AnythingOfType("time.Time")).Return(nil)
 
 	// Act
 	ctx := context.Background()
@@ -1378,6 +1387,7 @@ func TestAuthService_UpdateLastLogin_Success(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, user.LastLoginAt)
 
+	mockUserRepo.AssertNotCalled(t, "Update", mock.Anything)
 	mockUserRepo.AssertExpectations(t)
 }
 
@@ -1391,7 +1401,7 @@ func TestAuthService_UpdateLastLogin_Failure(t *testing.T) {
 	service := NewAuthService(mockUserRepo, mockOrgRepo, mockAPIKeyRepo, nil, nil, mockEmailService)
 
 	user := createTestUser("test@example.com")
-	mockUserRepo.On("Update", mock.AnythingOfType("*domain.User")).Return(errors.New("database error"))
+	mockUserRepo.On("UpdateLastLogin", user.ID, mock.AnythingOfType("time.Time")).Return(errors.New("database error"))
 
 	// Act
 	ctx := context.Background()
