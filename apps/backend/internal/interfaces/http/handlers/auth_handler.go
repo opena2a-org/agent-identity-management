@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"strings"
 
@@ -11,24 +14,34 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
+// sdkTokenLogoutReason is the revoke_reason an SDK-download token's
+// sdk_tokens row carries when the token was logged out.
+const sdkTokenLogoutReason = "logout"
+
 type AuthHandler struct {
-	authService  *application.AuthService
-	jwtService   *auth.JWTService
-	orgRepo      domain.OrganizationRepository
-	auditService *application.AuditService
+	authService     *application.AuthService
+	jwtService      *auth.JWTService
+	orgRepo         domain.OrganizationRepository
+	auditService    *application.AuditService
+	sdkTokenService *application.SDKTokenService
 }
 
+// NewAuthHandler builds the auth handler. The SDK token service retires an
+// SDK-download token's sdk_tokens row at logout, so the dashboard's token list
+// agrees with the denylist.
 func NewAuthHandler(
 	authService *application.AuthService,
 	jwtService *auth.JWTService,
 	orgRepo domain.OrganizationRepository,
 	auditService *application.AuditService,
+	sdkTokenService *application.SDKTokenService,
 ) *AuthHandler {
 	return &AuthHandler{
-		authService:  authService,
-		jwtService:   jwtService,
-		orgRepo:      orgRepo,
-		auditService: auditService,
+		authService:     authService,
+		jwtService:      jwtService,
+		orgRepo:         orgRepo,
+		auditService:    auditService,
+		sdkTokenService: sdkTokenService,
 	}
 }
 
@@ -268,6 +281,12 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	}
 	if refreshToken != "" && h.jwtService != nil {
 		ok, _ := h.jwtService.RevokeSessionCheckedFrom(c.Context(), refreshToken, presenter(c))
+		// An SDK-download token is also tracked by row in sdk_tokens, which the
+		// dashboard lists; the answer claims the revocation only when the row
+		// is retired too.
+		if claims, err := h.jwtService.ValidateToken(refreshToken); err == nil && claims.Issuer == auth.IssuerSDK {
+			ok = h.retireSDKTokenRow(c.Context(), refreshToken, claims.ID) && ok
+		}
 		revoked["refreshToken"] = ok
 	}
 
@@ -310,6 +329,27 @@ func bearerToken(c fiber.Ctx) string {
 		}
 	}
 	return ""
+}
+
+// retireSDKTokenRow marks the sdk_tokens row of a logged-out SDK-download
+// token revoked. A row already retired (by rotation or an earlier logout) is
+// the state logout wants and is kept as it is. Reports false when no SDK token
+// service is wired, the token has no row, or the write failed.
+func (h *AuthHandler) retireSDKTokenRow(ctx context.Context, token, jti string) bool {
+	if h.sdkTokenService == nil {
+		return false
+	}
+	sum := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(sum[:])
+	revokeErr := h.sdkTokenService.RevokeByTokenHash(ctx, tokenHash, sdkTokenLogoutReason)
+	if revokeErr == nil {
+		return true
+	}
+	if row, err := h.sdkTokenService.GetByTokenHash(ctx, tokenHash); err == nil && row != nil && !row.IsActive() {
+		return true
+	}
+	log.Printf("⚠️  Logout: sdk_tokens row not revoked for token id %s: %v", jti, revokeErr)
+	return false
 }
 
 // logoutPrincipal returns the claims the logout row is written from: the
