@@ -35,6 +35,27 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from .exceptions import AIMError, AuthenticationError, SecretsError
 
 
+# resolve() signs the text "namespace|operation|nonce". A namespace or operation
+# holding "|" or a line break would sign text that reads as different fields, so
+# these characters are refused rather than escaped.
+_UNSIGNABLE_CHARACTERS = (
+    ("\n", "a line feed"),
+    ("\r", "a carriage return"),
+    ("|", "'|'"),
+)
+
+
+def _refuse_unsignable(field: str, value: Any) -> None:
+    """Raise SecretsError if a field of the signed message holds a character it cannot carry."""
+    text = str(value)  # the text the signed message interpolates
+    for character, name in _UNSIGNABLE_CHARACTERS:
+        if character in text:
+            raise SecretsError(
+                f"Cannot resolve secret: {field} contains {name}. "
+                "A namespace or operation cannot contain a line feed, a carriage return or '|'."
+            )
+
+
 class SecretsClient:
     """
     Identity-native secrets client.
@@ -72,13 +93,17 @@ class SecretsClient:
             Dict with "credential" (bytes), "encryptionAlg" (str), "namespace" (str)
 
         Raises:
-            SecretsError: If resolution fails
+            SecretsError: If resolution fails, or if namespace or operation contains
+                a line feed, a carriage return or "|" (nothing is signed or sent)
             AuthenticationError: If agent auth fails
         """
         if not self._client.signing_key:
             raise SecretsError("Ed25519 signing key required for secrets resolution")
         if not self._client.public_key:
             raise SecretsError("Public key required for secrets resolution")
+
+        _refuse_unsignable("namespace", namespace)
+        _refuse_unsignable("operation", operation)
 
         # Build nonce: timestamp:uuid (server rejects nonces older than 30s)
         nonce = f"{time.strftime('%Y-%m-%dT%H:%M:%S.000000000Z', time.gmtime())}:{uuid4()}"
