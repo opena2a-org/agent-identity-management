@@ -129,7 +129,7 @@ func main() {
 				PolicyType:        "trust_score_low",
 				EnforcementAction: "alert_only",
 				SeverityThreshold: "medium",
-				Rules:             `{"trust_threshold":70.0,"monitor_low_trust":true,"block_low_trust":false}`,
+				Rules:             `{"trust_threshold":0.7,"monitor_low_trust":true,"block_low_trust":false}`,
 				AppliesTo:         "all_agents",
 				IsEnabled:         true,
 				Priority:          90,

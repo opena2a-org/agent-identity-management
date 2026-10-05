@@ -56,7 +56,7 @@ BEGIN
                 'trust_score_low',
                 'alert_only',
                 'medium',
-                '{"trust_threshold":70.0,"monitor_low_trust":true,"block_low_trust":false}',
+                '{"trust_threshold":0.7,"monitor_low_trust":true,"block_low_trust":false}',
                 'all_agents',
                 true,
                 90,

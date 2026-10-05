@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a trust-score policy is evaluated at the threshold it is seeded with
+
+- The default `trust_score_low` policies were seeded with their threshold where the evaluator does not read it.
+  'Critical Trust Score Block' carried `{"threshold": 50}` and 'Low Trust Score Alert' `{"threshold": 70}`; the
+  evaluator reads `trust_threshold` on the trust score's 0-1 scale and, finding none, applied 0.3 to both, so editing
+  the seeded value changed nothing. The bundled seed script and the policy backfill wrote `{"trust_threshold": 70.0}`,
+  a percent compared to a 0-1 score, which every agent is below. The seeds now write `trust_threshold` as a 0-1 value,
+  and migration 112 rewrites existing `trust_score_low` rows the same way: a numeric `threshold` moves to
+  `trust_threshold`, and a value above 1 and at most 100 is divided by 100. After the migration, 'Critical Trust Score
+  Block' blocks an evaluable agent below 0.50 (it blocked below 0.30) and 'Low Trust Score Alert' alerts below 0.70.
+  The suspension applied when a recalculated score drops below 0.50 stays a platform rule, separate from policy rows.
+
 ### Fixed — an issued trust credential's content hash matches the ATX schema
 
 - `POST /api/v1/agents/:id/atc` sent the Registry a `contentHash` of the form `sha256:<hex>`, and the Registry
