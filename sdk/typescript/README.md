@@ -69,7 +69,7 @@ The Ed25519 key pair is generated locally and only the public key is sent. The c
 
 - **Full TypeScript Support**: Complete type definitions for all APIs
 - **Ed25519 Signatures**: Cryptographic signing for secure verification
-- **OAuth 2.0**: Automatic token management with client credentials flow
+- **OAuth 2.0**: Automatic token management with the JWT-bearer grant (RFC 7523): the SDK signs a short-lived assertion with the agent's Ed25519 key, and the server verifies it against the agent's registered public key
 - **Express Middleware**: Easy integration with Express.js applications
 - **Fastify Plugin**: First-class support for Fastify applications
 - **Typed HTTP Errors**: Failures surface as a typed error family (`RateLimitError` carries the server's `Retry-After`); the SDK does not retry automatically — retry policy stays with the caller

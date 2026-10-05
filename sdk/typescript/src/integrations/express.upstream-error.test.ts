@@ -121,7 +121,7 @@ beforeEach(async () => {
   aimBody = { error: 'boom' };
   aimServer = createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/oauth/token') {
+    if (req.url === '/api/v1/oauth/token') {
       res.end(JSON.stringify({ access_token: 'token', expires_in: 300 }));
     } else if (req.url === `/api/v1/agents/${AGENT_ID}`) {
       res.end(JSON.stringify({ id: AGENT_ID, trustScore: 0.9 }));

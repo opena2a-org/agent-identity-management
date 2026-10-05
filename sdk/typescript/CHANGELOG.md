@@ -59,6 +59,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `OAuthTokenManager` now obtains a token the AIM server issues. It posted to `/oauth/token`, which the server does
+  not serve (404), with `grant_type=client_credentials`, which the token endpoint answers with 400
+  `unsupported_grant_type`; its client assertion was padded standard base64 and its signature covered a
+  request-signature string rather than the JWT, so the server could not verify it either. The SDK now posts to
+  `/api/v1/oauth/token` with the RFC 7523 JWT-bearer grant
+  (`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`) and a compact JWS: unpadded base64url segments, the
+  Ed25519 signature taken over `header.payload` with the agent's key, and `sub`, `aud` and a five-minute `exp`.
+  The README's OAuth line describes this grant instead of a client credentials flow.
 - The Express middleware and the Fastify plugin accept the agent identity in their options. `createAIMMiddleware`
   and `aimPlugin` take `credentials` (an `AgentCredentials` object) or a ready `client`; the README examples, which
   passed only `{ baseUrl, apiKey }`, answered 401 on every verified route without contacting AIM. Passing both
