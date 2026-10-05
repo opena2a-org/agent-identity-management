@@ -82,6 +82,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — a CLI login on a production stack is no longer throttled while it waits for approval
+
+- `POST /api/v1/oauth/device/code` handed out a poll interval of 5 seconds, while every `/api/v1/oauth/device` route
+  shares the strict rate limit of 10 requests per minute per address in production. A login sends the code request
+  and 12 polls a minute, so a login not approved within about 45 seconds was answered
+  `429 Rate limit exceeded. Please try again later.`, and so were the dashboard's verify and approve calls when the
+  browser shared the CLI's address. The interval is now 10 seconds: the busiest minute of a login is the code
+  request, six polls, and the verify and approve calls, which is nine requests. A CLI that follows the interval it
+  is given now completes a login up to 10 seconds after approval instead of 5.
+
 ### Fixed — shutdown on SIGTERM is bounded and a failed shutdown no longer skips cleanup
 
 - On SIGTERM or an interrupt, the server waited for every in-flight request with no time limit, so one stalled request
