@@ -49,9 +49,11 @@ REQUIRED_SECRETS=(
 
 # OPTIONAL_SECRETS: ${VAR:-} (empty fallback) is allowed because the feature
 # itself is optional. Non-empty fallback is still forbidden.
+# ADMIN_PASSWORD seeds the first administrator when set; unset, no account is seeded.
 OPTIONAL_SECRETS=(
     SMTP_PASSWORD
     DEFAULT_ADMIN_PASSWORD
+    ADMIN_PASSWORD
 )
 
 compose_files=(docker-compose*.yml)
