@@ -13,11 +13,18 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 WORKDIR /app
 
-# Copy package files from web app
-COPY apps/web/package.json apps/web/package-lock.json* ./
+# Copy the manifest AND the committed lockfile from the web app. Both names
+# are literal: the former `package-lock.json*` glob matched nothing while the
+# lockfile was absent, so the install below floated to whatever the registry
+# served on build day.
+COPY apps/web/package.json apps/web/package-lock.json ./
 
-# Install dependencies
-RUN npm install --legacy-peer-deps
+# Install exactly what apps/web/package-lock.json pins, with lifecycle scripts
+# disabled: `npm ci` refuses a lockfile that disagrees with package.json, and
+# `--ignore-scripts` keeps a dependency's postinstall out of the build. The
+# only admitted npm verbs in this file are `ci` and `run build`
+# (sdk/typescript/tests/frontend-lockfile-install.test.ts holds that shape).
+RUN npm ci --ignore-scripts --legacy-peer-deps
 
 # Copy source code from web app
 COPY apps/web/ ./

@@ -10,9 +10,14 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Copy package files
-COPY apps/web/package*.json ./
-RUN npm install --production=false --legacy-peer-deps
+# Copy the manifest AND the committed lockfile, both by literal name (the former
+# `package*.json` glob tolerated an absent lockfile), then install exactly what
+# the lockfile pins with lifecycle scripts disabled. `--include=dev` keeps the
+# build-time devDependencies the next build needs; the only admitted npm verbs
+# in this file are `ci` and `run build`
+# (sdk/typescript/tests/frontend-lockfile-install.test.ts holds that shape).
+COPY apps/web/package.json apps/web/package-lock.json ./
+RUN npm ci --ignore-scripts --include=dev --legacy-peer-deps
 
 # Rebuild the source code only when needed
 FROM base AS builder
