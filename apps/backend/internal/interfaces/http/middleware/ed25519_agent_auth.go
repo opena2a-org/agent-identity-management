@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
 
 // sortedJSONMarshal marshals JSON with sorted keys to match Python's json.dumps(sort_keys=True)
@@ -101,35 +102,34 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		// Parse agent ID
 		agentID, err := uuid.Parse(agentIDStr)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid agent ID format",
-			})
+			return refuseS1(c, metrics.S1ReasonInvalidAgentID, fiber.StatusUnauthorized, "Invalid agent ID format")
 		}
 
 		// Validate timestamp (prevent replay attacks)
 		timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid timestamp format",
-			})
+			return refuseS1(c, metrics.S1ReasonInvalidTimestamp, fiber.StatusUnauthorized, "Invalid timestamp format")
 		}
 
 		now := time.Now().Unix()
 		// SECURITY: Allow only 30 seconds clock skew to minimize replay attack window
 		// This is a balance between security and usability for network latency
+		//
+		// The two directions answer the caller identically and are counted apart: a
+		// server clock running fast refuses honest requests as skew_past, one running
+		// slow refuses them as skew_future.
 		const maxClockSkewSeconds = 30
-		if timestamp < now-maxClockSkewSeconds || timestamp > now+maxClockSkewSeconds {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Request timestamp expired or invalid",
-			})
+		if timestamp < now-maxClockSkewSeconds {
+			return refuseS1(c, metrics.S1ReasonSkewPast, fiber.StatusUnauthorized, "Request timestamp expired or invalid")
+		}
+		if timestamp > now+maxClockSkewSeconds {
+			return refuseS1(c, metrics.S1ReasonSkewFuture, fiber.StatusUnauthorized, "Request timestamp expired or invalid")
 		}
 
 		// Load agent from database
 		agent, err := agentService.GetAgent(c.Context(), agentID)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Agent not found",
-			})
+			return refuseS1(c, metrics.S1ReasonAgentLookupFailed, fiber.StatusUnauthorized, "Agent not found")
 		}
 
 		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
@@ -137,9 +137,7 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		// as `agents.status`, so an agent that keeps its key material after being revoked
 		// or suspended authenticated successfully until this check existed.
 		if !agentStatusPermitsAuth(agent.Status) {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": agentStatusDeniedMessage(agent.Status),
-			})
+			return refuseS1(c, metrics.S1ReasonAgentStatusDenied, fiber.StatusUnauthorized, agentStatusDeniedMessage(agent.Status))
 		}
 
 		// SECURITY: Agent MUST have a registered public key
@@ -147,32 +145,26 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		// where an attacker supplies their own key via X-Public-Key header.
 		// Key registration must happen through authenticated channels (JWT auth).
 		if agent.PublicKey == nil || *agent.PublicKey == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Agent has no registered public key. Register a key first using JWT authentication.",
-			})
+			return refuseS1(c, metrics.S1ReasonNoRegisteredKey, fiber.StatusUnauthorized,
+				"Agent has no registered public key. Register a key first using JWT authentication.")
 		}
 
 		verifyPublicKey := *agent.PublicKey
 
 		// Verify that the provided public key matches the registered one
 		if publicKeyB64 != verifyPublicKey {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Provided public key does not match registered key",
-			})
+			return refuseS1(c, metrics.S1ReasonPublicKeyMismatch, fiber.StatusUnauthorized, "Provided public key does not match registered key")
 		}
 
 		// Decode public key
 		publicKeyBytes, err := base64.StdEncoding.DecodeString(verifyPublicKey)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid public key format",
-			})
+			return refuseS1(c, metrics.S1ReasonRegisteredKeyMalformed, fiber.StatusUnauthorized, "Invalid public key format")
 		}
 
 		if len(publicKeyBytes) != ed25519.PublicKeySize {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": fmt.Sprintf("Invalid public key size: expected %d bytes, got %d", ed25519.PublicKeySize, len(publicKeyBytes)),
-			})
+			return refuseS1(c, metrics.S1ReasonRegisteredKeyMalformed, fiber.StatusUnauthorized,
+				fmt.Sprintf("Invalid public key size: expected %d bytes, got %d", ed25519.PublicKeySize, len(publicKeyBytes)))
 		}
 
 		publicKey := ed25519.PublicKey(publicKeyBytes)
@@ -180,9 +172,7 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		// Decode signature
 		signatureBytes, err := base64.StdEncoding.DecodeString(signatureB64)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid signature format",
-			})
+			return refuseS1(c, metrics.S1ReasonSignatureMalformed, fiber.StatusUnauthorized, "Invalid signature format")
 		}
 
 		// Reconstruct the signed message
@@ -206,9 +196,7 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 
 		// Verify Ed25519 signature
 		if !ed25519.Verify(publicKey, []byte(message), signatureBytes) {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid signature",
-			})
+			return refuseS1(c, metrics.S1ReasonSignatureInvalidEd25519, fiber.StatusUnauthorized, "Invalid signature")
 		}
 
 		// Signature is valid! Set agent context for handlers
