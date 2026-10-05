@@ -590,9 +590,7 @@ func (h *ComplianceHandler) CollectEvidence(c fiber.Ctx) error {
 		userID,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to collect evidence: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit

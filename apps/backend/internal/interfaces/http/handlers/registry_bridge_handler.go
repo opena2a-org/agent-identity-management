@@ -33,10 +33,7 @@ func (h *RegistryBridgeHandler) TriggerPush(c fiber.Ctx) error {
 
 	ctx := context.Background()
 	if err := h.bridgeService.AggregateAndPush(ctx); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "registry bridge push failed",
-			"message": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{

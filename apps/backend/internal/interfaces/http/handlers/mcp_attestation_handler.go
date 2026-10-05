@@ -110,11 +110,13 @@ func (h *MCPAttestationHandler) GetAttestationChallenge(c fiber.Ctx) error {
 	// Generate challenge
 	response, err := h.attestationService.GenerateChallenge(c.Context(), agentID, mcpServerID)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "agent not found" || err.Error() == "mcp server not found" {
-			statusCode = fiber.StatusNotFound
-		} else if err.Error() == "only verified agents can request attestation challenges" {
+		statusCode := fiber.StatusNotFound
+		switch err.Error() {
+		case "agent not found", "mcp server not found":
+		case "only verified agents can request attestation challenges":
 			statusCode = fiber.StatusForbidden
+		default:
+			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 
 		return c.Status(statusCode).JSON(fiber.Map{
@@ -304,12 +306,11 @@ func (h *MCPAttestationHandler) GetMCPAttestations(c fiber.Ctx) error {
 	// Get attestations
 	attestations, confidenceScore, lastAttestedAt, err := h.attestationService.GetMCPAttestations(c.Context(), mcpServerID)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "mcp server not found" {
-			statusCode = fiber.StatusNotFound
+		if err.Error() != "mcp server not found" {
+			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 
-		return c.Status(statusCode).JSON(fiber.Map{
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "Failed to get attestations",
 			"message": err.Error(),
 		})
@@ -361,10 +362,7 @@ func (h *MCPAttestationHandler) GetConnectedAgents(c fiber.Ctx) error {
 	// Get connected agents
 	agents, err := h.attestationService.GetConnectedAgentsForMCP(c.Context(), mcpServerID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to get connected agents",
-			"message": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -410,10 +408,7 @@ func (h *MCPAttestationHandler) GetAgentMCPServers(c fiber.Ctx) error {
 	// Get MCP servers
 	mcpServers, err := h.attestationService.GetMCPServersForAgent(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to get MCP servers",
-			"message": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -501,14 +496,12 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 		req.HealthCheckPassed,
 		req.Notes,
 	)
-	// SECURITY: No error logging to prevent information leakage
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "mcp server not found" {
-			statusCode = fiber.StatusNotFound
+		if err.Error() != "mcp server not found" {
+			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 
-		return c.Status(statusCode).JSON(fiber.Map{
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "Manual attestation failed",
 			"message": err.Error(),
 		})
@@ -725,10 +718,7 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 	// Revoke all attestations by this agent
 	revokedCount, err := h.attestationService.RevokeAllAttestationsByAgent(c.Context(), agentID, userID, req.Reason)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to revoke attestations",
-			"message": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Audit log
@@ -869,10 +859,7 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 	)
 
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to record MCP connection",
-			"message": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Audit log
@@ -1104,12 +1091,11 @@ func (h *MCPAttestationHandler) GetConsensusStatus(c fiber.Ctx) error {
 	// Get consensus status
 	status, err := h.attestationService.GetConsensusStatus(c.Context(), mcpServerID)
 	if err != nil {
-		statusCode := fiber.StatusInternalServerError
-		if err.Error() == "mcp server not found" {
-			statusCode = fiber.StatusNotFound
+		if err.Error() != "mcp server not found" {
+			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 
-		return c.Status(statusCode).JSON(fiber.Map{
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   "Failed to get consensus status",
 			"message": err.Error(),
 		})

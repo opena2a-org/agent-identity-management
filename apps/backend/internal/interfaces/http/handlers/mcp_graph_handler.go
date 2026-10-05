@@ -78,17 +78,13 @@ func (h *MCPGraphHandler) GetConnectionGraph(c fiber.Ctx) error {
 	// Get all MCP servers for the organization
 	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch MCP servers: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get all agents for the organization
 	agents, err := h.agentRepository.GetByOrganization(orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch agents: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Build graph nodes and edges
@@ -233,9 +229,7 @@ func (h *MCPGraphHandler) GetMCPServerConnections(c fiber.Ctx) error {
 
 	agents, err := h.agentRepository.GetByOrganization(orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch agents: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Build mini graph centered on the MCP server

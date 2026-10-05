@@ -168,9 +168,7 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 	// Note: sdkTokenID and apiKeyID are nil for agent-authenticated requests (uses cryptographic signature auth)
 	server, err := h.mcpService.CreateMCPServer(c.Context(), createReq, agent.OrganizationID, agentID, &agentID, nil, nil)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit

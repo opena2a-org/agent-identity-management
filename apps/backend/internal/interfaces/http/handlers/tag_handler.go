@@ -120,9 +120,7 @@ func (h *TagHandler) CreateTag(c fiber.Ctx) error {
 		CreatedBy:      userID,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(tag)
@@ -158,9 +156,7 @@ func (h *TagHandler) GetTags(c fiber.Ctx) error {
 	tags, err := h.tagService.GetTagsByOrganization(c.Context(), orgID, categoryFilter)
 
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(tags)
@@ -243,9 +239,7 @@ func (h *TagHandler) UpdateTag(c fiber.Ctx) error {
 				Error: err.Error(),
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(tag)
@@ -289,9 +283,7 @@ func (h *TagHandler) DeleteTag(c fiber.Ctx) error {
 
 	// Delete tag
 	if err := h.tagService.DeleteTag(c.Context(), tagID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -369,9 +361,7 @@ func (h *TagHandler) AddTagsToAgent(c fiber.Ctx) error {
 				Error: err.Error(),
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -419,9 +409,7 @@ func (h *TagHandler) RemoveTagFromAgent(c fiber.Ctx) error {
 
 	// Remove tag from agent
 	if err := h.tagService.RemoveTagFromAgent(c.Context(), agentID, tagID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -462,9 +450,7 @@ func (h *TagHandler) GetAgentTags(c fiber.Ctx) error {
 	// Get agent tags
 	tags, err := h.tagService.GetAgentTags(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(tags)
@@ -505,9 +491,7 @@ func (h *TagHandler) SuggestTagsForAgent(c fiber.Ctx) error {
 	// Get tag suggestions
 	suggestions, err := h.tagService.SuggestTagsForAgent(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(suggestions)
@@ -585,9 +569,7 @@ func (h *TagHandler) AddTagsToMCPServer(c fiber.Ctx) error {
 				Error: err.Error(),
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -635,9 +617,7 @@ func (h *TagHandler) RemoveTagFromMCPServer(c fiber.Ctx) error {
 
 	// Remove tag from MCP server
 	if err := h.tagService.RemoveTagFromMCPServer(c.Context(), mcpServerID, tagID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
@@ -678,9 +658,7 @@ func (h *TagHandler) GetMCPServerTags(c fiber.Ctx) error {
 	// Get MCP server tags
 	tags, err := h.tagService.GetMCPServerTags(c.Context(), mcpServerID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(tags)
@@ -721,9 +699,7 @@ func (h *TagHandler) SuggestTagsForMCPServer(c fiber.Ctx) error {
 	// Get tag suggestions
 	suggestions, err := h.tagService.SuggestTagsForMCPServer(c.Context(), mcpServerID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(suggestions)
@@ -763,9 +739,7 @@ func (h *TagHandler) GetPopularTags(c fiber.Ctx) error {
 
 	tags, err := h.tagService.GetPopularTags(c.Context(), orgID, limit)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(tags)
@@ -804,9 +778,7 @@ func (h *TagHandler) SearchTags(c fiber.Ctx) error {
 
 	tags, err := h.tagService.SearchTags(c.Context(), orgID, query, categoryFilter)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(tags)

@@ -872,6 +872,20 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — a 5xx response carries a fixed line, never the server's error text
+
+- 129 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`,
+  naming tables, constraints and query fragments. Each now answers
+  `{"error":"An internal error occurred. Please try again later."}`, a line declared once in the handlers package,
+  and writes the error to the server log with the status, method and path. A failed `DELETE /api/v1/agents/:id`
+  keeps its own stated sentence. Agent registration and the MCP attestation endpoints still answer 400, 403, 404 and
+  409 with the reason they did before.
+- The dashboard shows the same line for every 5xx, whatever the body holds: an older server's error text or a proxy's
+  HTML page. A 503 refusal that names its reason (`reasonCode`, such as `noAdministrators`) keeps its own line.
+- A test in the handlers package reads every handler file and fails on a response at a 5xx status whose body is built
+  from an error value. A status counts as 5xx when it is a 5xx constant, a local variable set to one, or a call to a
+  package function that returns one.
+
 ### Fixed — expired A2A request nonces are deleted on a schedule
 
 - An A2A request nonce, and the SHA-256 request hash stored with it, stayed in `a2a_request_nonces` after it expired
