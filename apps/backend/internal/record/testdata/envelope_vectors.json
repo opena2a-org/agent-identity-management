@@ -1,0 +1,127 @@
+{
+  "comment": "Envelope vectors. Every payload is the empty object: these pin the envelope and its signed bytes, not the contents of a record or a checkpoint. The key is a test key derived from a public label. An empty wantReason means the envelope is accepted.",
+  "keyId": "test-key-1",
+  "publicKey": "boQjousEIStVioCGE806YCF5mwf+XKdgAveLj0b9KAU=",
+  "vectors": [
+    {
+      "name": "record envelope opened as a record",
+      "openAs": "record",
+      "wantReason": "",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-record.v1+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "uEd3kU6zkfeWTv5uGFyuPZgcFkXDkn/4hFfXMhizTK1uNfsPkFxinVaayGCj37teRFFMUOl9vecX0aILXU0UCA=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "checkpoint envelope opened as a checkpoint",
+      "openAs": "checkpoint",
+      "wantReason": "",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-checkpoint.v1+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "qRUD3Bovo/+ZgNLgEHuyibL0ybPXVtTl2/3bqvx/dTFE9+H4XEq3mHlsUJ80VJ9JE3UeKaJDHwYchTvGG4eNDw=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "valid checkpoint envelope offered as a record",
+      "openAs": "record",
+      "wantReason": "payload_type_mismatch",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-checkpoint.v1+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "qRUD3Bovo/+ZgNLgEHuyibL0ybPXVtTl2/3bqvx/dTFE9+H4XEq3mHlsUJ80VJ9JE3UeKaJDHwYchTvGG4eNDw=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "valid record envelope offered as a checkpoint",
+      "openAs": "checkpoint",
+      "wantReason": "payload_type_mismatch",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-record.v1+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "uEd3kU6zkfeWTv5uGFyuPZgcFkXDkn/4hFfXMhizTK1uNfsPkFxinVaayGCj37teRFFMUOl9vecX0aILXU0UCA=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "record payload type with no format version offered as a record",
+      "openAs": "record",
+      "wantReason": "payload_type_mismatch",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-record+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "XzeDQIzI277qgXWyzOnm8fLrBeP3ZXYj6anOpEqmCVgCWFkRiFfxGkyT0EzxTVNzOu6bfe6HIGPlKx9H7BS5Cg=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "record payload type with no format version offered as a checkpoint",
+      "openAs": "checkpoint",
+      "wantReason": "payload_type_mismatch",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-record+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "XzeDQIzI277qgXWyzOnm8fLrBeP3ZXYj6anOpEqmCVgCWFkRiFfxGkyT0EzxTVNzOu6bfe6HIGPlKx9H7BS5Cg=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "record signature under the checkpoint payload type",
+      "openAs": "checkpoint",
+      "wantReason": "signature_invalid",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-checkpoint.v1+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "uEd3kU6zkfeWTv5uGFyuPZgcFkXDkn/4hFfXMhizTK1uNfsPkFxinVaayGCj37teRFFMUOl9vecX0aILXU0UCA=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "checkpoint signature under the record payload type",
+      "openAs": "record",
+      "wantReason": "signature_invalid",
+      "envelope": {
+        "payload": "e30=",
+        "payloadType": "application/vnd.opena2a.audit-record.v1+json",
+        "signatures": [
+          {
+            "keyid": "test-key-1",
+            "sig": "qRUD3Bovo/+ZgNLgEHuyibL0ybPXVtTl2/3bqvx/dTFE9+H4XEq3mHlsUJ80VJ9JE3UeKaJDHwYchTvGG4eNDw=="
+          }
+        ]
+      }
+    }
+  ]
+}
