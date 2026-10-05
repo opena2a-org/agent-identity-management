@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — a JWT is no longer accepted as an agent's ATC
+
+- The server checked agent ATCs, in an `Authorization: ATC` header or in the secrets resolve request body, with a
+  verifier that fell back to a JWT format when a token was not a CBOR ATC. Nothing issued that JWT format: the server
+  had a function to mint it, but no route or service called it. The fallback is removed, and the server accepts the
+  CBOR ATC of the ATC verification spec only. A JWT presented as an ATC is refused; in the header, with `401` and
+  `atc_malformed`.
+- `apps/backend/internal/infrastructure/atc/server_verifier_test.go` and
+  `apps/backend/internal/interfaces/http/middleware/atc_auth_test.go` fail when the verifier the server builds accepts
+  a JWT-format token signed with the server key.
+
 ### Fixed — a logged-out SDK-download token no longer shows as active in the SDK token list
 
 - `POST /api/v1/auth/logout` with an SDK-download refresh token in the body put the token on the denylist, so the
