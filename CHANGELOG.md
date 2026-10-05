@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `aim_http_requests_total` records the status the client received, and unknown paths share one series
+
+- `PrometheusMiddleware` read the response status before the app's error handler had run, so a request that ended in
+  an error was recorded with status `200`: a 404 on an unknown path, a 401 from an auth group, a 403 or a 500 returned
+  by a handler. The middleware now runs the app's error handler itself, as Fiber's logger middleware does, and records
+  the status that handler sets. `aim_http_request_duration_seconds` carries the same corrected label.
+- A request that reaches no route handler is recorded with the path label `unmatched` instead of its own path. This
+  covers unknown paths and requests a group middleware refuses before routing reaches a handler, such as a request
+  without credentials under `/api/v1/agents`. Before, every distinct path a caller sent added a new series, whether
+  or not the caller could read `/metrics`. Requests a route handler serves keep their normalized path label.
+- `prometheus_middleware_test.go` drives requests through a Fiber app and fails when the recorded status differs from
+  the status the client received, or when distinct unknown or refused paths add series.
+
 ### Removed — backend scripts that approved registrations and signed admin tokens outside the service
 
 - `apps/backend/scripts/approval/approve_registration.go`, `approve_registration.sql`, `quick_approve.sql` and
