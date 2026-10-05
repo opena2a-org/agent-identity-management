@@ -41,6 +41,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `tests/chart-standard.test.ts` fails the web suite when a file outside `components/charts` imports the charting
   library, or when chart code carries a hex, rgb/hsl or palette-class colour.
 
+### Fixed — two dashboard tabs no longer sign each other out when the access token expires
+
+- A login refresh token can be used once. When the access token expired with the dashboard open in
+  two tabs, each tab posted the same stored refresh token to `POST /api/v1/auth/refresh`. The API
+  accepted the first and refused the second as a reused token, which ends the sign-in, and the
+  refused tab then cleared the session the first tab had just stored, so every tab went to the
+  login page. Several requests refused together in one tab did the same.
+- The dashboard now refreshes one at a time across all of its tabs (the Web Locks API). A tab that
+  waited its turn reads the stored session again and uses the tokens another tab already obtained
+  instead of posting its own. In a browser without Web Locks, which includes a dashboard served
+  over plain HTTP from a host other than `localhost`, the refresh is one at a time within each tab
+  only, so two tabs can still collide there.
+- A refused or failed refresh clears the stored session only while it still holds the refresh token
+  that was presented; a session another tab stored in the meantime is kept.
+
 ### Fixed — MCP servers registered before the upgrade get a calculated trust score
 
 - In 1.0.0 an MCP server's `trustScore` was never calculated: it was set to 75.0 when the SDK registered or verified
