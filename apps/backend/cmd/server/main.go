@@ -406,6 +406,10 @@ func main() {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 
+	// No request is in flight any more. Write the refused-request line for the
+	// period that was still open, which would otherwise end with the process.
+	metrics.FlushS1RefusalLine()
+
 	// Drain the FGA async intent-check worker pool. Bound the wait at 10s
 	// so we don't deadlock shutdown on a hung NanoMind daemon — the
 	// per-call HTTP timeout (800ms) caps individual workers regardless.

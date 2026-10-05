@@ -30,6 +30,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   so every credential issued this way failed schema validation in a conformance verifier. AIM now sends the bare
   hex digest. A credential issued before this change keeps its prefixed value until it is reissued or expires.
 
+### Added — refused signed agent requests are counted and logged by reason
+
+- A signed agent request (Ed25519, ML-DSA or hybrid) that the request-signature middleware refused got a 401, or a 400
+  for an unsupported algorithm, and left nothing else behind. A server with a drifting clock, or an SDK release signing
+  the wrong bytes, refused honest agents with no counter and no log line to show it. Each refusal now increments
+  `aim_s1_refusals_total{reason, sdk}` on `/metrics` and is included in one `s1_refusals` log line per 64-second period
+  in which any request was refused. The responses themselves are unchanged.
+- `reason` is one of 14 values, one per kind of refusal. A timestamp outside the 30-second window is counted as
+  `skew_past` or `skew_future`, so a fast server clock and a slow one read differently. `sdk` is `python`, `typescript`
+  or `java` from the SDK's `User-Agent` prefix, and `other` for every other caller.
+- A refusal happens before the caller is authenticated, so neither the labels nor the line carry an agent id, key,
+  signature, signed bytes or the raw `User-Agent`.
+- A test reads the two middleware source files and fails when a refusal is added that is not counted, and drives each
+  of the 50 refusal branches once to check it moves exactly its own series. The reasons and how to read them are in
+  `apps/backend/docs/OBSERVABILITY.md`.
+
 ### Changed — dashboard charts render through one chart layer
 
 - The charts on the A2A, compliance, MCP supply-chain and security pages and the agent trust-score history now render

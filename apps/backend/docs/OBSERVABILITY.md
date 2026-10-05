@@ -117,6 +117,50 @@ Attributes: `agent.id`, `agent.capability`, `fga.outcome`, `fga.denied_by`, `fga
 
 In Loki, structured metadata for `trace.id`, `span.id`, `agent.id`, `fga.outcome`, `fga.denied_by`, `fga.step` is indexed (see `loki-config.yaml`).
 
+### Refused signed agent requests
+
+An agent request signed with Ed25519, ML-DSA or both is checked by the request-signature middleware before any handler runs. A request it refuses gets a 401 (400 for an unsupported algorithm) and is recorded in two places. Both come from the backend process itself, not through the OTLP pipeline above.
+
+**Counter**, on the backend's `/metrics` endpoint: `aim_s1_refusals_total{reason, sdk}`.
+
+| `reason` | The request was refused because |
+|---|---|
+| `unsupported_algorithm` | `X-Algorithm` names an algorithm the server cannot verify |
+| `invalid_agent_id` | `X-Agent-ID` is not a UUID |
+| `invalid_timestamp` | `X-Timestamp` is not an integer |
+| `skew_past` | the timestamp is more than 30 seconds behind the server clock |
+| `skew_future` | the timestamp is more than 30 seconds ahead of the server clock |
+| `agent_lookup_failed` | the agent does not exist, or loading it failed |
+| `agent_status_denied` | the agent is revoked, suspended or in an unrecognised status |
+| `missing_signature_headers` | a signature or public-key header the algorithm requires is absent |
+| `no_registered_key` | the agent has no registered key for the algorithm |
+| `public_key_mismatch` | the key the request presents is not the registered key |
+| `registered_key_malformed` | the registered key cannot be decoded or has the wrong size |
+| `signature_malformed` | a signature header is not valid base64 |
+| `signature_invalid_ed25519` | the Ed25519 signature does not verify over the request |
+| `signature_invalid_mldsa` | the ML-DSA signature does not verify over the request |
+
+The set is closed. `unclassified` exists only as a guard: the middleware never produces it, and seeing it means a refusal was recorded without a reason from the table.
+
+`sdk` is `python`, `typescript` or `java` when the request's `User-Agent` starts with `AIM-Python-SDK/`, `AIM-SDK-TypeScript/` or `AIM-Java-SDK/`, and `other` for every other caller.
+
+**Log line**, on the backend's standard log: one `s1_refusals` line per 64-second period in which at least one request was refused, with one `reason.sdk=count` field per series. A period starts at the first refusal after the previous line, so nothing is written while nothing is refused. On shutdown the open period is written before the process exits.
+
+```
+s1_refusals period_s=64 total=3 signature_invalid_ed25519.typescript=1 skew_past.python=2
+```
+
+A refusal happens before the caller is authenticated, so neither the labels nor the line carry anything the request sent: no agent id, key, signature, signed bytes or raw `User-Agent`.
+
+Two patterns the split is there to show:
+
+- `skew_past` or `skew_future` rising on one instance for every `sdk` at once points at that instance's clock. A fast server clock shows as `skew_past`, a slow one as `skew_future`.
+- `signature_invalid_ed25519` or `signature_invalid_mldsa` rising for one `sdk` only points at how that SDK signs.
+
+```promql
+sum by (reason, sdk) (rate(aim_s1_refusals_total[5m]))
+```
+
 ## Sample queries
 
 ### Tempo (TraceQL)
