@@ -11,6 +11,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — No tracked file carries a home directory path from the machine that built or wrote it
+
+- Six backend executables were tracked in the repository: macOS builds from a developer machine, 13 to 25 MB each,
+  that embedded that machine's home directory paths (its Go module cache and its checkout). Nothing used them; the
+  backend image builds `cmd/server` from source. They are removed, and `.gitignore` names the local build outputs
+  (`apps/backend/server`, `main`, `bin/` and `cmd/server/server`) beside the existing `aim-server` entry. The two
+  instructions that ran the tracked `./server`, in `sdk/python/tests/README.md` and the LangChain CRUD example, now
+  say `go run ./cmd/server`.
+- The demo census (`docs/demo/lib/census.mjs`) assembles its local-path canary at run time, so the script holds no
+  home directory path of its own. Its positive control still reports all nine classes.
+- The logo SVG's embedded PNG carries one more IDAT chunk, split at the point where its base64 text matched a
+  tree-wide scan for internal path references by chance. The compressed image data is byte-identical and the decoded
+  pixels are unchanged. One negative assertion in an SDK doc test builds its pattern with `new RegExp` so its own
+  source no longer matches the same scan.
+- `scripts/lint-public-surface.mjs` reads every file `git ls-files` returns, binary files included, and fails on a
+  line that carries a macOS home directory path. `git grep` did not report the paths inside the executables; this
+  script did. Extra classes come from a file kept outside the repository, in the census's
+  `class<TAB>regex<TAB>canary` format (`--forbidden <file>` or `$PUBLIC_SURFACE_FORBIDDEN_FILE`). Base64 that no
+  reader reads, a data: URI payload or a lockfile integrity digest, is blanked before matching. Every class must
+  catch its own canary first, otherwise the run reads INCONCLUSIVE (exit 2); findings print path, line and class,
+  never the matched text.
+- `scripts/test-lint-public-surface.mjs` (`node --test scripts/test-lint-public-surface.mjs`) holds 13 cells. One runs
+  the lint over this repository and fails on any finding; before this change it reported 7 (the six executables and
+  the census line).
+
 ### Fixed — The agent page reports verify, suspend, reactivate and delete outcomes beside the actions
 
 - The agent page reported these four actions in browser alerts. An alert carries no link, ignores the theme, and on
