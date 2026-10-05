@@ -9,7 +9,8 @@ package org.opena2a.aim.atx;
  * @param context        present iff valid — the authorization context
  * @param rejectCategory present iff invalid
  * @param reason         human-readable reason (this verifier's own wording)
- * @param mldsaPresent   whether an ML-DSA-65 signature was present (delegated, not silently skipped)
+ * @param mldsaPresent   whether the accepted credential carried an ML-DSA-65 signature;
+ *                       when true, every such signature verified (always false on reject)
  */
 public record AtxVerificationResult(
         boolean valid,
