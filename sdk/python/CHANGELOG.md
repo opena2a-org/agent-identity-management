@@ -48,6 +48,13 @@ What changed:
   return or `|`, raising `SecretsError` before anything is signed or sent. The request signature covers
   the text `namespace|operation|nonce`, so a field cannot carry the separator or a line break; such a
   value used to be signed and sent as given.
+- Agent credential files are owner-only from the moment they are created. `~/.aim/agents/` is
+  created with mode 0700, and each `~/.aim/agents/<name>.json`, which holds the agent's private
+  key, is written to a new file opened with mode 0600 that then replaces the old one. The file
+  used to be written with the process's default mode (0644 under the usual umask 022) and set to
+  0600 only after the key was on disk, in a directory left at the default mode. A directory or
+  file left wider by an earlier version is narrowed on the next save, and a save that fails part
+  way now leaves the previous file as it was instead of a truncated one.
 
 - `aim-sdk status` always states a verdict, and its exit code follows it. On an upgraded install holding only a
   legacy `~/.aim/credentials.json` (snake_case keys, a refresh token, no access token) it printed Server, `User:
