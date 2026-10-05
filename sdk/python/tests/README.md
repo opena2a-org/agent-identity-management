@@ -58,7 +58,7 @@ pytest tests/
 1. **Backend Server Running**:
    ```bash
    cd apps/backend
-   ./server
+   go run ./cmd/server
    ```
 
 2. **Dependencies Installed**:

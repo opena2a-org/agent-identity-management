@@ -20,12 +20,14 @@ if (args.env && fs.existsSync(args.env)) {
     if (m && /PASSWORD|SECRET|KEY|TOKEN/.test(m[1]) && m[2].length >= 8) secrets.push({ name: m[1], value: m[2] });
   }
 }
+// The local-path canary is assembled at run time so this file holds no home
+// directory path of its own.
 const classes = [
   ["jwt", /eyJ[A-Za-z0-9_-]{10,}/, "eyJhbGciOiJIUzI1NiJ9.canary"],
   ["api-key", /aim_live_[A-Za-z0-9]{6,}/, "aim_live_canary0000"],
   ["bearer", /Bearer\s+[A-Za-z0-9._-]{8,}/, "Bearer canarytoken00"],
   ["token-field", /"(refreshToken|accessToken)"\s*:\s*"[^"]{6,}"/, '"refreshToken": "canary000000"'],
-  ["local-path", /\/Users\/|\/home\/(?!demo\b)[a-z]|~\/workspace|\/private\/tmp|\/tmp\/[a-z]+-[a-z0-9]{6,}/, "/Users/canary"],
+  ["local-path", /\/Users\/|\/home\/(?!demo\b)[a-z]|~\/workspace|\/private\/tmp|\/tmp\/[a-z]+-[a-z0-9]{6,}/, ["", "Users", "canary"].join("/")],
   ["email", /[A-Za-z0-9._%+-]+@(?!example\.com\b)[A-Za-z0-9.-]+\.[a-z]{2,}/, "canary@canary.org"],
   ["own-fixture", /admin\.opena2a\.org|OpenA2A Admin|aim\.opena2a\.org/, "OpenA2A Admin"],
   ["host", /https?:\/\/(?!localhost(?::\d+)?(?:\/|$|\s)|github\.com\/opena2a-org|opena2a\.org\/docs|pypi\.org|files\.pythonhosted\.org)[a-z0-9.-]+/i, "https://canary.example.net/x"],

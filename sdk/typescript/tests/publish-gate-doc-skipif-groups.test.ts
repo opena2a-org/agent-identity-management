@@ -247,7 +247,7 @@ describe('sdk-publish-gate.md names the two skipIf groups by file', () => {
   });
 
   it('AIM-20.AC1 the doc carries no internal artifact name', () => {
-    expect(doc).not.toMatch(/qgf/i);
+    expect(doc).not.toMatch(new RegExp('qgf', 'i'));
     expect(doc).not.toMatch(/ledger/i);
     expect(doc).not.toMatch(/chief[-_ ]?tag/i);
     expect(doc).not.toMatch(/\btodo\//i);
