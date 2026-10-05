@@ -44,8 +44,13 @@ type recordingAgentRepo struct {
 	scoreUpdates []float64
 }
 
+// UpdateTrustScore records the write and applies it to the stored agent, so an
+// assertion on the agent's TrustScore fails when a score was written.
 func (r *recordingAgentRepo) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	r.scoreUpdates = append(r.scoreUpdates, newScore)
+	if a, ok := r.agents[id]; ok {
+		a.TrustScore = newScore
+	}
 	return nil
 }
 
