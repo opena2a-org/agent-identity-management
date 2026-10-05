@@ -11,6 +11,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a wrong password at sign-in is reported once, and not as an expired session
+
+- The dashboard treated every 401 as an expired session, including the sign-in route's answer to a wrong password.
+  A failed sign-in showed a "Session expired" toast and a "Could not sign in: Unauthorized" toast, wrote
+  "Unauthorized" under the password field, spent any stored refresh token, and reloaded the page 1.5 seconds later,
+  which cleared the email address. The server's "Invalid email or password" was never shown.
+- A 401 from a route under `/api/v1/public/` is now that route's own refusal: the client raises it with the server's
+  message and leaves the session alone. A 401 from any other route still ends the session as before.
+- The sign-in page shows a server-side failure once, in an alert at the top of the sign-in card, and moves focus to
+  it. The alert stays until the next submit. No toast is shown and no server text is written under an input. The
+  invalid-credentials refusal marks both inputs invalid because it names both. When the server sent no message (the
+  request did not reach it, or it answered without one), the alert gives a neutral message that does not say the
+  credentials were wrong. Client-side validation still shows its errors under the fields.
+
+### Changed — a third party can verify an agent card attestation from the served card and the JWK Set
+
+- A served card's attestation could not be checked by anyone but the server. The signed `issuedAt` was a different
+  instant from the stored one, timestamps were signed with sub-microsecond precision that PostgreSQL does not keep,
+  the served `issuer` was empty, and `cardHash` was not served. A refreshed attestation also signed the hash of the
+  card as stored in JSONB rather than the registered card's hash.
+- Attestations are now signed in the `opena2a-aim/card-attestation/v2` format: the label, a newline, and the JSON
+  payload (`cardHash`, `agentId`, `issuer`, `issuedAt`, `expiresAt`), with both timestamps in UTC and whole seconds.
+  The stored and served timestamps are the signed ones, in UTC. `aim.attestation` in a served card adds `format` and
+  `cardHash`, and `issuer` reads `aim-server`.
+- `docs/specs/card-attestation-v2.md` is the verification procedure. `docs/specs/card-attestation-v2-vector.json` is
+  a conformance vector with seven cases, and `docs/specs/verify-card-attestation.mjs` is a Node.js verifier with no
+  dependencies that checks a served card or the vector. The procedure also covers key rotation with
+  `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and the effect of rotating `KEYVAULT_MASTER_KEY` on derived keys.
+- Cards record the format as `attestationFormat` (migration 115). Attestations issued before the upgrade read no
+  format, are served without `format`, cannot be verified by a third party, and are re-signed in v2 when refreshed.
+
 ### Changed — `aim-bootstrap` prints the admin password only when it generated it
 
 - `aim-bootstrap` ended every run by printing the admin email and password, including a password the operator

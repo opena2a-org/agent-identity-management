@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { AimLogo } from "@/components/sidebar";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { safeReturnUrl } from "@/lib/return-url";
+import { signInFailure, type SignInFailure } from "@/lib/sign-in-failure";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -20,7 +22,16 @@ function LoginPageContent() {
     password: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // A server-side failure, shown once in the alert at the top of the card. It stays until
+  // the next submit; field errors under the inputs are for client-side validation only.
+  const [failure, setFailure] = useState<SignInFailure | null>(null);
+  const failureRef = useRef<HTMLDivElement>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Move focus to the alert so it is announced and scrolled into view on a small screen.
+  useEffect(() => {
+    if (failure) failureRef.current?.focus();
+  }, [failure]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -41,6 +52,7 @@ function LoginPageContent() {
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFailure(null);
 
     if (!validateForm()) return;
 
@@ -76,29 +88,14 @@ function LoginPageContent() {
           router.push("/auth/registration-pending");
         }
       }
-    } catch (error: any) {
-      // Extract error message from different possible error formats
-      let errorMessage = "Invalid email or password";
-
-      if (error?.message) {
-        errorMessage = error.message;
-      } else if (typeof error === "string") {
-        errorMessage = error;
-      } else if (error?.error) {
-        errorMessage = error.error;
-      }
-
-      // Show toast notification with the exact backend error
-      toast.error("Could not sign in", {
-        description: errorMessage,
-        duration: 5000,
-      });
-
-      setErrors({ password: errorMessage });
+    } catch (error) {
+      setFailure(signInFailure(error));
     } finally {
       setIsLoadingPassword(false);
     }
   };
+
+  const credentialsRefused = !!failure?.marksCredentials;
 
   const inputClass = (invalid: boolean) =>
     `w-full rounded-inset border bg-glass-inset py-2.5 pl-10 pr-10 text-sm text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 ${
@@ -115,6 +112,18 @@ function LoginPageContent() {
         </div>
 
         <div className="glass-chrome p-6 sm:p-8">
+          {failure && (
+            <Alert
+              ref={failureRef}
+              tabIndex={-1}
+              variant={failure.marksCredentials ? "destructive" : "default"}
+              className="mb-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              <AlertTitle>Could not sign in</AlertTitle>
+              <AlertDescription id="sign-in-failure">{failure.message}</AlertDescription>
+            </Alert>
+          )}
           <form onSubmit={handlePasswordLogin} className="space-y-4" noValidate>
             <div>
               <label htmlFor="email" className="mb-1 block text-xs font-semibold text-ink-body">
@@ -128,10 +137,10 @@ function LoginPageContent() {
                   autoComplete="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={inputClass(!!errors.email)}
+                  className={inputClass(!!errors.email || credentialsRefused)}
                   placeholder="you@example.com"
-                  aria-invalid={!!errors.email}
-                  aria-describedby={errors.email ? "email-error" : undefined}
+                  aria-invalid={!!errors.email || credentialsRefused}
+                  aria-describedby={errors.email ? "email-error" : credentialsRefused ? "sign-in-failure" : undefined}
                 />
               </div>
               {errors.email && (
@@ -159,10 +168,10 @@ function LoginPageContent() {
                   autoComplete="current-password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className={inputClass(!!errors.password)}
+                  className={inputClass(!!errors.password || credentialsRefused)}
                   placeholder="Enter your password"
-                  aria-invalid={!!errors.password}
-                  aria-describedby={errors.password ? "password-error" : undefined}
+                  aria-invalid={!!errors.password || credentialsRefused}
+                  aria-describedby={errors.password ? "password-error" : credentialsRefused ? "sign-in-failure" : undefined}
                 />
                 <button
                   type="button"
