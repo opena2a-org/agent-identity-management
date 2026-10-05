@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a stored agent private key decrypts only in the agent row it was written for
+
+- Server-generated agent private keys were sealed with AES-256-GCM and no additional data, so a ciphertext copied
+  into another row of `agents.encrypted_private_key` decrypted as that agent's key on the credential and A2A signing
+  paths. Keys are now stored in format v2: a cleartext header (a version byte and a storage-key id), the nonce, and
+  the ciphertext sealed with the additional data `"aim/agent-private-key" 0x00 <header> 0x00 <agent id>`, where the
+  agent ID is the row's primary key in canonical lowercase. Each decrypt takes the ID from the row it loaded. A
+  ciphertext copied to another row, sealed for another purpose, or carrying an altered header is refused, and the
+  credential rotation helper keeps the binding.
+- The request path refuses the earlier v1 format. At startup, before the server accepts requests, a one-time
+  migration re-encrypts each v1 key to v2 bound to its own row with a compare-and-swap update and logs counts only
+  (`v1Read`, `v2Written`, `alreadyV2`, `failures`), never a key or an agent ID. It is recorded in `schema_migrations`
+  as `keyvault/agent-private-key-v2` once a run finishes with no failures; until then it runs again at the next
+  startup. A row that cannot be read stays refused until that agent's credentials are rotated. An earlier release
+  cannot read v2 keys, so rolling back after the migration leaves server-generated keys unreadable until rotated.
+- Registration assigns the agent ID before it encrypts the generated key, and the agent repository keeps an ID the
+  caller assigned instead of replacing it.
+- Tests pin the additional data byte for byte and fail when a ciphertext copied from one row decrypts under another,
+  when a ciphertext sealed for another purpose or a v1 ciphertext is accepted on the request path, when the migration
+  re-binds a v2 ciphertext copied from another row, when a completed migration reads agent keys again, or when a
+  planted key, its ciphertext or an agent ID appears in the migration log or a refusal error.
+
 ### Security — a check fails on token-shaped literals in tracked files
 
 - `node scripts/lint-token-literals.mjs` reads every file `git ls-files` returns, binary files included, and fails on

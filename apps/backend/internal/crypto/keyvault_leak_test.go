@@ -156,9 +156,9 @@ func TestKeyVault_MasterKeyNeverReachesOutput(t *testing.T) {
 		current := fixedTestKey("current master key", 32)
 		kv, err := NewKeyVault(base64.StdEncoding.EncodeToString(current))
 		require.NoError(t, err)
-		encrypted, err := kv.EncryptPrivateKey("agent-private-key")
+		encrypted, err := kv.EncryptPrivateKey(testAgentID, "agent-private-key")
 		require.NoError(t, err)
-		out := captureKeyVaultOutput(t, func() { _, err = kv.RotatePrivateKey(encrypted, suppliedBase64) })
+		out := captureKeyVaultOutput(t, func() { _, err = kv.RotatePrivateKey(testAgentID, encrypted, suppliedBase64) })
 		require.NoError(t, err)
 		assertNoKeyFragment(t, out, append(keyRenderings(current), keyRenderings(supplied)...))
 	})
@@ -224,9 +224,9 @@ func TestKeyVault_RejectedMasterKeyNeverReachesErrorOrOutput(t *testing.T) {
 			prepare: func(t *testing.T, value string) func() error {
 				kv, err := NewKeyVault(base64.StdEncoding.EncodeToString(fixedTestKey("current master key", 32)))
 				require.NoError(t, err)
-				encrypted, err := kv.EncryptPrivateKey("agent-private-key")
+				encrypted, err := kv.EncryptPrivateKey(testAgentID, "agent-private-key")
 				require.NoError(t, err)
-				return func() error { _, err := kv.RotatePrivateKey(encrypted, value); return err }
+				return func() error { _, err := kv.RotatePrivateKey(testAgentID, encrypted, value); return err }
 			},
 		},
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // ===========================
@@ -2330,8 +2331,8 @@ func TestAgentService_GetAgentCredentials_Success(t *testing.T) {
 	publicKey := "test-public-key-base64"
 	privateKey := "test-private-key-base64"
 
-	// Encrypt the private key for storage
-	encryptedPrivateKey, err := keyVault.EncryptPrivateKey(privateKey)
+	// Encrypt the private key for storage in this agent's row
+	encryptedPrivateKey, err := keyVault.EncryptPrivateKey(agentID, privateKey)
 	assert.NoError(t, err)
 
 	agent := &domain.Agent{
@@ -2349,6 +2350,81 @@ func TestAgentService_GetAgentCredentials_Success(t *testing.T) {
 	assert.Equal(t, publicKey, gotPublic)
 	assert.Equal(t, privateKey, gotPrivate)
 	mockAgentRepo.AssertExpectations(t)
+}
+
+// A database writer who copies another agent's stored private key ciphertext
+// into a row it controls must not receive that key back through the API.
+func TestAgentService_GetAgentCredentials_RefusesCiphertextCopiedFromAnotherAgent(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, err := crypto.NewKeyVault(masterKey)
+	require.NoError(t, err)
+	service := &AgentService{agentRepo: mockAgentRepo, keyVault: keyVault}
+
+	victimID := uuid.New()
+	victimPrivateKey := "victim-agent-private-key"
+	victimCiphertext, err := keyVault.EncryptPrivateKey(victimID, victimPrivateKey)
+	require.NoError(t, err)
+
+	attackerPublicKey := "attacker-public-key"
+	attacker := &domain.Agent{
+		ID:                  uuid.New(),
+		PublicKey:           &attackerPublicKey,
+		EncryptedPrivateKey: &victimCiphertext,
+	}
+	mockAgentRepo.On("GetByID", attacker.ID).Return(attacker, nil)
+
+	gotPublic, gotPrivate, err := service.GetAgentCredentials(context.Background(), attacker.ID)
+
+	require.Error(t, err)
+	assert.Empty(t, gotPublic)
+	assert.Empty(t, gotPrivate)
+	assert.NotContains(t, err.Error(), victimPrivateKey)
+	assert.NotContains(t, err.Error(), victimCiphertext)
+}
+
+// The key generated at registration is encrypted bound to the ID of the row it
+// is stored in, so the repository must persist the ID the service assigned.
+func TestAgentService_CreateAgent_BindsGeneratedKeyToAgentID(t *testing.T) {
+	mockAgentRepo := new(MockAgentRepository)
+	mockTrustCalc := new(AgentServiceMockTrustScoreCalculator)
+	mockTrustScoreRepo := new(AgentServiceMockTrustScoreRepository)
+	masterKey := base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!"))
+	keyVault, err := crypto.NewKeyVault(masterKey)
+	require.NoError(t, err)
+	service := &AgentService{
+		agentRepo:      mockAgentRepo,
+		trustCalc:      mockTrustCalc,
+		trustScoreRepo: mockTrustScoreRepo,
+		keyVault:       keyVault,
+	}
+
+	var created *domain.Agent
+	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).
+		Run(func(args mock.Arguments) { created = args.Get(0).(*domain.Agent) }).
+		Return(nil)
+	mockAgentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+	mockTrustCalc.On("Calculate", mock.AnythingOfType("*domain.Agent")).Return(&domain.TrustScore{ID: uuid.New(), Score: 0.5}, nil)
+	mockTrustScoreRepo.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
+
+	req := &CreateAgentRequest{
+		Name:        "bound-key-agent",
+		DisplayName: "Bound Key Agent",
+		AgentType:   domain.AgentTypeAI,
+		Version:     "1.0.0",
+	}
+	agent, err := service.CreateAgent(context.Background(), req, uuid.New(), uuid.New(), nil, nil, "")
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	require.NotNil(t, created.EncryptedPrivateKey)
+
+	assert.NotEqual(t, uuid.Nil, created.ID, "the service assigns the ID before Create")
+	assert.Equal(t, created.ID, agent.ID)
+
+	_, err = keyVault.DecryptPrivateKey(created.ID, *created.EncryptedPrivateKey)
+	assert.NoError(t, err)
+	_, err = keyVault.DecryptPrivateKey(uuid.New(), *created.EncryptedPrivateKey)
+	assert.Error(t, err)
 }
 
 func TestAgentService_GetAgentCredentials_AgentNotFound(t *testing.T) {

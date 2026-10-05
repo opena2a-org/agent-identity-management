@@ -69,7 +69,11 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	`
 
 	now := time.Now()
-	agent.ID = uuid.New()
+	// Keep an ID the caller assigned: a server-generated private key is
+	// encrypted bound to the row's ID before the row is inserted.
+	if agent.ID == uuid.Nil {
+		agent.ID = uuid.New()
+	}
 	agent.CreatedAt = now
 	agent.UpdatedAt = now
 	if agent.TrustScore == 0 {
