@@ -19,6 +19,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed — a password sign-in records the sign-in time and writes nothing else to the user
+
+- Both password sign-in routes (`POST /api/v1/auth/login/local` and `POST /api/v1/public/login`)
+  read the user, checked the password, and then saved their whole copy of the user row to record
+  `last_login_at`. A password change, password reset, deactivation or role change that was saved
+  between that read and that write was overwritten with the values the sign-in had read. The write
+  also cleared any pending password-reset token, because the sign-in's read never loads it, so a
+  reset link requested before a successful sign-in stopped working.
+- A sign-in now writes `last_login_at` and `updated_at` only. A pending reset token stays valid
+  until it is used or expires.
+
 ### Changed — the API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is `development` or `test`
 
 - With no `KEYVAULT_MASTER_KEY`, the API generated a new master key at every start unless

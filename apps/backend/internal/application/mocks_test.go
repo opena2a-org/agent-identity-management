@@ -663,6 +663,11 @@ func (m *SharedMockUserRepository) UpdateRole(id uuid.UUID, role domain.UserRole
 	return args.Error(0)
 }
 
+func (m *SharedMockUserRepository) UpdateLastLogin(id uuid.UUID, at time.Time) error {
+	args := m.Called(id, at)
+	return args.Error(0)
+}
+
 func (m *SharedMockUserRepository) Delete(id uuid.UUID) error {
 	args := m.Called(id)
 	return args.Error(0)

@@ -71,6 +71,9 @@ type UserRepository interface {
 	GetByOrganizationAndStatus(orgID uuid.UUID, status UserStatus) ([]*User, error)
 	Update(user *User) error
 	UpdateRole(id uuid.UUID, role UserRole) error
+	// UpdateLastLogin records a sign-in by writing last_login_at and updated_at only, so a
+	// sign-in never writes back the rest of a row it read before verifying the password.
+	UpdateLastLogin(id uuid.UUID, at time.Time) error
 	Delete(id uuid.UUID) error
 	CountActiveUsers(orgID uuid.UUID, withinMinutes int) (int, error)
 	// CountByRoleAndStatus counts users across every organization with the given role and status

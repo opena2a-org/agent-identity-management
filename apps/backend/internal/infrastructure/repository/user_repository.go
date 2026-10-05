@@ -327,6 +327,16 @@ func (r *UserRepository) UpdateRole(id uuid.UUID, role domain.UserRole) error {
 	return err
 }
 
+// UpdateLastLogin records a sign-in. It writes last_login_at and updated_at and
+// nothing else: the caller's copy of the row was read before the password check,
+// and a password change, deactivation, role change or reset-token write that
+// commits in that window must not be overwritten with the values it read.
+func (r *UserRepository) UpdateLastLogin(id uuid.UUID, at time.Time) error {
+	query := `UPDATE users SET last_login_at = $1, updated_at = $1 WHERE id = $2`
+	_, err := r.db.Exec(query, at, id)
+	return err
+}
+
 // Delete deletes a user
 func (r *UserRepository) Delete(id uuid.UUID) error {
 	query := `DELETE FROM users WHERE id = $1`

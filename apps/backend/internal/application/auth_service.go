@@ -107,11 +107,13 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 		}
 	}
 
-	// Update last login timestamp
+	// Record the sign-in. Only last_login_at and updated_at are written: user was
+	// read before the password check, and writing the whole row back would undo a
+	// password change, deactivation or role change committed since then.
 	now := time.Now()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
-	if err := s.userRepo.Update(user); err != nil {
+	if err := s.userRepo.UpdateLastLogin(user.ID, now); err != nil {
 		// Log error but don't fail the login - this is non-critical
 		log.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
 	}
@@ -364,12 +366,13 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*Valid
 	}, nil
 }
 
-// UpdateLastLogin updates a user's last_login_at timestamp
+// UpdateLastLogin updates a user's last_login_at timestamp. It writes only that
+// and updated_at, never the rest of the caller's copy of the row.
 func (s *AuthService) UpdateLastLogin(ctx context.Context, user *domain.User) error {
 	now := time.Now()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
-	if err := s.userRepo.Update(user); err != nil {
+	if err := s.userRepo.UpdateLastLogin(user.ID, now); err != nil {
 		// Log error but don't fail - this is non-critical
 		log.Printf("Warning: failed to update last_login_at for user %s: %v\n", user.ID, err)
 		return err
