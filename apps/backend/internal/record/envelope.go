@@ -1,20 +1,3 @@
-// Package record is the signed-envelope layer of AIM's audit records.
-//
-// A record and a chain checkpoint are each carried in a DSSE v1 envelope
-// (https://github.com/secure-systems-lab/dsse) signed with the deployment's
-// record key. This package fixes three things:
-//
-//   - the closed set of payload classes the record key signs, each with exactly
-//     one payload type;
-//   - the bytes that are signed, which begin with the payload type, so a
-//     signature made for one class never verifies as another;
-//   - the order in which an envelope is checked: its payload type is compared
-//     with the one class the caller expects before anything else in it is read.
-//
-// The serializer that produces a Payload, the chain, the writer and the
-// verifier of a whole chain are not part of the package yet. Until the
-// serializer exists nothing outside the package can build a non-empty
-// Payload, so nothing can be signed through it.
 package record
 
 import (
