@@ -162,7 +162,7 @@ Step 5 uses the [NanoMind security classifier](https://huggingface.co/opena2a/na
 
 ### MCP attestation
 
-Multi-agent consensus. 3+ attesters across 2+ owners equals verified.
+Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and reporting the same tool set, equals verified.
 
 ### Privileged Access Management
 

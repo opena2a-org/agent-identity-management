@@ -19,6 +19,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed — MCP server verification compares what the attesting agents report
+
+- An MCP server was marked verified once at least three agents created by at least two users had
+  attested it and its confidence score reached 60. The rule counted attestations and did not read
+  them: three agents reporting three different tool lists verified a server, and so did three
+  agents that each reported a failed connection.
+- Verification now also requires the attestations to agree: the latest attestation of every
+  attesting agent must report a successful connection, and all of them must report the same tool
+  set. Tool names are compared as a set, so order, repeats and the `tools`, `resources` and
+  `prompts` category entries do not count as differences. Manual attestations are not agent
+  reports and are left out, as they already were from the agent and owner counts.
+- `GET /api/v1/mcp-servers/:id/consensus-status` reports `attestationsAgree`, `agreeingAgents`,
+  `connectionFailures` and `distinctToolSets`, lists failed connections and differing tool sets
+  under `missingCriteria`, and returns `consensusReached: true` only when the attestations agree.
+- Manifest drift recording from attestations still starts at the agent, owner and confidence
+  thresholds, so an attestation that reports a different tool set is recorded as drift rather
+  than switching drift recording off.
+- A server verified before this change keeps its verified status; the rule applies the next time
+  a pending server is evaluated.
+
 ### Fixed — an agent heartbeat stores the heartbeat time and writes nothing else to the agent
 
 - `POST /api/v1/sdk-api/agents/:id/heartbeat` read the agent and then saved its whole copy of the
