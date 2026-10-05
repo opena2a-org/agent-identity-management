@@ -4107,52 +4107,59 @@ class AIMClient:
     # POST-QUANTUM CRYPTOGRAPHY (PQC) METHODS
     # =========================================================================
 
+    # Hybrid mode marks an agent as requiring both an Ed25519 and an ML-DSA
+    # signature. No AIM SDK signs requests in that form, so register_pqc_key()
+    # and set_hybrid_mode() refuse to turn it on before sending anything.
+    _HYBRID_MODE_UNAVAILABLE = (
+        "Hybrid mode is not available from this SDK: it marks the agent as "
+        "requiring both an Ed25519 and an ML-DSA signature, and no AIM SDK "
+        "signs requests in that form yet. Register the key without it: "
+        "register_pqc_key(pqc_public_key, enable_hybrid_mode=False)."
+    )
+
     def register_pqc_key(
         self,
         pqc_public_key: str,
         algorithm: str = "ML-DSA-65",
-        enable_hybrid_mode: bool = True,
+        enable_hybrid_mode: bool = False,
         agent_id: Optional[str] = None,
     ) -> Dict:
         """
-        Register a post-quantum cryptographic (PQC) public key for the agent.
+        Register an ML-DSA public key for an agent that has none.
 
-        This enables post-quantum authentication using ML-DSA (NIST FIPS 204)
-        digital signatures. When hybrid mode is enabled (recommended), both
-        Ed25519 AND ML-DSA signatures are required for authentication.
+        Sends POST /api/v1/agents/{id}/pqc-key. The server stores the key and
+        its algorithm, and get_pqc_key_info() then returns them. To replace a
+        key the agent already has, use rotate_pqc_key().
+
+        The route admits an AIM user's access token with role member, manager
+        or admin. It does not admit the agent's own signature or an API key.
 
         Args:
             pqc_public_key: Base64-encoded ML-DSA public key
-            algorithm: ML-DSA variant (ML-DSA-44, ML-DSA-65, ML-DSA-87)
-                       Default is ML-DSA-65 (NIST Level 3, recommended)
-            enable_hybrid_mode: If True, require BOTH Ed25519 and ML-DSA
-                               signatures for authentication (defense-in-depth)
-            agent_id: Agent ID to update (defaults to current agent)
+            algorithm: ML-DSA-44, ML-DSA-65 or ML-DSA-87; must match the key
+            enable_hybrid_mode: Must be False. True raises ConfigurationError
+                               before any request is sent, because no AIM SDK
+                               signs requests in the hybrid form.
+            agent_id: Agent to update (defaults to current agent)
 
         Returns:
-            Dict containing:
-            - success: bool
-            - pqcKeyAlgorithm: str
-            - hybridModeEnabled: bool
-            - message: str
+            The server's response: agentId, pqcKeyAlgorithm, hybridModeEnabled,
+            pqcKeyCreatedAt and message.
 
         Example:
             from aim_sdk.crypto import generate_mldsa_keypair, Algorithm
 
-            # Generate ML-DSA-65 keypair
             keypair = generate_mldsa_keypair(Algorithm.MLDSA_65)
-
-            # Register the public key with hybrid mode
             result = client.register_pqc_key(
                 pqc_public_key=keypair.public_key_base64(),
                 algorithm="ML-DSA-65",
-                enable_hybrid_mode=True
             )
 
         Raises:
-            ConfigurationError: If PQC key format is invalid
-            AuthenticationError: If authentication fails
-            VerificationError: If request fails
+            ConfigurationError: If algorithm is not an ML-DSA variant, or
+                enable_hybrid_mode is True
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If the request fails otherwise
         """
         target_agent_id = agent_id or self.agent_id
 
@@ -4163,15 +4170,19 @@ class AIMClient:
                 f"Invalid PQC algorithm: {algorithm}. "
                 f"Valid options: {', '.join(valid_algorithms)}"
             )
+        if enable_hybrid_mode:
+            raise ConfigurationError(self._HYBRID_MODE_UNAVAILABLE)
 
         try:
+            # Members of RegisterPQCKeyRequest; pinned by
+            # tests/fixtures/pqc_requests/register_pqc_key.json.
             result = self._make_request(
                 method="POST",
                 endpoint=f"/api/v1/agents/{target_agent_id}/pqc-key",
                 data={
-                    "pqcPublicKey": pqc_public_key,
+                    "publicKey": pqc_public_key,
                     "algorithm": algorithm,
-                    "enableHybridMode": enable_hybrid_mode,
+                    "enableHybrid": enable_hybrid_mode,
                 }
             )
             return result
@@ -4188,47 +4199,47 @@ class AIMClient:
         agent_id: Optional[str] = None,
     ) -> Dict:
         """
-        Rotate the post-quantum cryptographic key for the agent.
+        Replace the agent's registered ML-DSA public key.
 
-        Key rotation is a security best practice. This method replaces the
-        existing PQC public key with a new one while maintaining hybrid mode
-        settings.
+        Sends PUT /api/v1/agents/{id}/pqc-key. The server replaces the stored
+        key and its algorithm, and get_pqc_key_info() then returns the new
+        key. The agent must already have a key from register_pqc_key().
+
+        The route admits an AIM user's access token with role member, manager
+        or admin. It does not admit the agent's own signature or an API key.
 
         Args:
             new_pqc_public_key: Base64-encoded new ML-DSA public key
-            algorithm: ML-DSA variant (must match the new key type)
-            agent_id: Agent ID to update (defaults to current agent)
+            algorithm: ML-DSA variant of the new key
+            agent_id: Agent to update (defaults to current agent)
 
         Returns:
-            Dict containing:
-            - success: bool
-            - pqcKeyAlgorithm: str
-            - message: str
+            The server's response: agentId, pqcKeyAlgorithm, pqcKeyCreatedAt,
+            hasPreviousPqcKey and message.
 
         Example:
             from aim_sdk.crypto import generate_mldsa_keypair, Algorithm
 
-            # Generate new ML-DSA keypair for rotation
             new_keypair = generate_mldsa_keypair(Algorithm.MLDSA_65)
-
-            # Rotate to the new key
             result = client.rotate_pqc_key(
                 new_pqc_public_key=new_keypair.public_key_base64(),
-                algorithm="ML-DSA-65"
+                algorithm="ML-DSA-65",
             )
 
         Raises:
-            AuthenticationError: If authentication fails
-            VerificationError: If request fails
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If the request fails otherwise
         """
         target_agent_id = agent_id or self.agent_id
 
         try:
+            # Members of RotatePQCKeyRequest; pinned by
+            # tests/fixtures/pqc_requests/rotate_pqc_key.json.
             result = self._make_request(
                 method="PUT",
                 endpoint=f"/api/v1/agents/{target_agent_id}/pqc-key",
                 data={
-                    "newPqcPublicKey": new_pqc_public_key,
+                    "newPublicKey": new_pqc_public_key,
                     "algorithm": algorithm,
                 }
             )
@@ -4245,43 +4256,43 @@ class AIMClient:
         agent_id: Optional[str] = None,
     ) -> Dict:
         """
-        Enable or disable hybrid authentication mode.
+        Turn the agent's hybrid mode off.
 
-        Hybrid mode requires BOTH Ed25519 AND ML-DSA signatures for
-        authentication, providing defense-in-depth during the quantum
-        cryptographic transition period.
+        Sends POST /api/v1/agents/{id}/hybrid-mode, and the response's
+        hybridModeEnabled is false. set_hybrid_mode(True) raises
+        ConfigurationError before any request is sent: hybrid mode marks the
+        agent as requiring both an Ed25519 and an ML-DSA signature, and no
+        AIM SDK signs requests in that form.
 
-        WARNING: Disabling hybrid mode reduces security. Only disable if
-        you have a specific compatibility requirement.
+        The route admits an AIM user's access token with role member, manager
+        or admin. It does not admit the agent's own signature or an API key.
 
         Args:
-            enabled: True to enable hybrid mode, False to disable
-            agent_id: Agent ID to update (defaults to current agent)
+            enabled: Must be False; True raises ConfigurationError
+            agent_id: Agent to update (defaults to current agent)
 
         Returns:
-            Dict containing:
-            - success: bool
-            - hybridModeEnabled: bool
-            - message: str
+            The server's response: agentId, hybridModeEnabled and message.
 
         Example:
-            # Enable hybrid mode (recommended)
-            result = client.set_hybrid_mode(enabled=True)
-
-            # Disable hybrid mode (not recommended)
             result = client.set_hybrid_mode(enabled=False)
 
         Raises:
-            AuthenticationError: If authentication fails
-            VerificationError: If request fails
+            ConfigurationError: If enabled is True
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If the request fails otherwise
         """
         target_agent_id = agent_id or self.agent_id
+        if enabled:
+            raise ConfigurationError(self._HYBRID_MODE_UNAVAILABLE)
 
         try:
+            # Members of EnableHybridModeRequest; pinned by
+            # tests/fixtures/pqc_requests/set_hybrid_mode.json.
             result = self._make_request(
                 method="POST",
                 endpoint=f"/api/v1/agents/{target_agent_id}/hybrid-mode",
-                data={"enabled": enabled}
+                data={"enable": enabled}
             )
             return result
 
