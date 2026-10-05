@@ -63,6 +63,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ActionOutcome } from "@/components/ui/action-outcome";
+import {
+  actionSuccess,
+  describeActionFailure,
+  type ActionFailureContext,
+  type ActionOutcome as ActionOutcomeState,
+} from "@/lib/action-outcome";
 import { AuthGuard } from "@/components/auth-guard";
 
 interface MCPServer {
@@ -79,6 +86,17 @@ interface MCPServer {
   lastVerifiedAt?: string;
   createdAt: string;
   capabilities?: string[];
+}
+
+// The lifecycle endpoints state no `code` yet, so a failure is described from its status.
+function lifecycleFailure(action: string): ActionFailureContext {
+  return {
+    action,
+    missing: {
+      reason: "This agent no longer exists in your organization.",
+      link: { label: "Back to agents", href: "/dashboard/agents" },
+    },
+  };
 }
 
 export default function AgentDetailsPage({
@@ -110,6 +128,7 @@ export default function AgentDetailsPage({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
+  const [lifecycleOutcome, setLifecycleOutcome] = useState<ActionOutcomeState | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [agentActivity, setAgentActivity] = useState<any[]>([]);
   const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
@@ -289,11 +308,13 @@ export default function AgentDetailsPage({
   const handleVerify = async () => {
     if (!agentId) return;
     setVerifying(true);
+    setLifecycleOutcome(null);
     try {
       await api.verifyAgent(agentId);
+      setLifecycleOutcome(actionSuccess("Agent verified."));
       handleRefresh();
-    } catch (e: any) {
-      alert(e?.message || "Verification failed");
+    } catch (e) {
+      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("verify this agent")));
     } finally {
       setVerifying(false);
     }
@@ -302,11 +323,12 @@ export default function AgentDetailsPage({
   const handleDelete = async () => {
     if (!agentId) return;
     setDeleting(true);
+    setLifecycleOutcome(null);
     try {
       await api.deleteAgent(agentId);
       router.push("/dashboard/agents");
-    } catch (e: any) {
-      alert(e?.message || "Delete failed");
+    } catch (e) {
+      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("delete this agent")));
     } finally {
       setDeleting(false);
       setShowDeleteConfirm(false);
@@ -316,12 +338,15 @@ export default function AgentDetailsPage({
   const handleSuspend = async () => {
     if (!agentId) return;
     setSuspending(true);
+    setLifecycleOutcome(null);
     try {
       await api.suspendAgent(agentId);
-      alert("Agent suspended successfully");
+      setLifecycleOutcome(
+        actionSuccess("Agent suspended. It cannot authenticate or act until you reactivate it.")
+      );
       handleRefresh();
-    } catch (e: any) {
-      alert(e?.message || "Suspend failed");
+    } catch (e) {
+      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("suspend this agent")));
     } finally {
       setSuspending(false);
       setShowSuspendConfirm(false);
@@ -331,12 +356,13 @@ export default function AgentDetailsPage({
   const handleReactivate = async () => {
     if (!agentId) return;
     setReactivating(true);
+    setLifecycleOutcome(null);
     try {
       await api.reactivateAgent(agentId);
-      alert("Agent reactivated successfully");
+      setLifecycleOutcome(actionSuccess("Agent reactivated. It can authenticate and act again."));
       handleRefresh();
-    } catch (e: any) {
-      alert(e?.message || "Reactivate failed");
+    } catch (e) {
+      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("reactivate this agent")));
     } finally {
       setReactivating(false);
     }
@@ -629,6 +655,12 @@ export default function AgentDetailsPage({
             )}
           </div>
         </div>
+
+        <ActionOutcome
+          outcome={lifecycleOutcome}
+          onDismiss={() => setLifecycleOutcome(null)}
+          className="mt-4"
+        />
       </div>
 
       <Separator />
