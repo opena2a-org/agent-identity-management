@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — password reset tokens are stored as a SHA-256 digest
+
+- `users.password_reset_token` now holds the hex SHA-256 digest of the token in the reset link, as its column
+  comment already said, instead of the token itself. `POST /api/v1/public/reset-password` hashes the token it
+  receives and looks the user up by that digest, so a value read from the table does not reset a password. The
+  link, the request body and the 24-hour expiry are unchanged.
+- No schema change: the digest fits the existing column and index. A reset link sent before the upgrade stops
+  working, and the user requests a new one; the expired-token sweep clears its stored value once it expires.
+
 ### Fixed — deployment and installation guides name `KEYVAULT_MASTER_KEY` as required outside development
 
 - `docs/DEPLOYMENT.md`, `docs/guides/INSTALLATION.md`, `docs/guides/DEPLOYMENT_CHECKLIST.md`,

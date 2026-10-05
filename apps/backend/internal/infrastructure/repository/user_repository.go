@@ -166,8 +166,9 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	return user, nil
 }
 
-// GetByPasswordResetToken retrieves a user by password reset token
-func (r *UserRepository) GetByPasswordResetToken(resetToken string) (*domain.User, error) {
+// GetByPasswordResetToken retrieves a user by the digest of a password reset token
+// (the value stored in password_reset_token), never by the token itself
+func (r *UserRepository) GetByPasswordResetToken(tokenDigest string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role,
 		       password_hash, force_password_change, last_login_at,
@@ -182,7 +183,7 @@ func (r *UserRepository) GetByPasswordResetToken(resetToken string) (*domain.Use
 	user := &domain.User{}
 	var status sql.NullString
 
-	err := r.db.QueryRow(query, resetToken).Scan(
+	err := r.db.QueryRow(query, tokenDigest).Scan(
 		&user.ID,
 		&user.OrganizationID,
 		&user.Email,
