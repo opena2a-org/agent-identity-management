@@ -1,5 +1,7 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from 'next';
+import { dashboardRedirects } from './lib/redirects';
+
+const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone', // Enable standalone output for Docker
   images: {
@@ -17,6 +19,10 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Agent Identity Management',
+  },
+  // Moved dashboard pages. The table lives in lib/redirects.ts; add rows there, not here.
+  async redirects() {
+    return dashboardRedirects();
   },
   async rewrites() {
     // AIM_BACKEND_URL is the canonical backend URL for Vercel deployments.
@@ -66,4 +72,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;
