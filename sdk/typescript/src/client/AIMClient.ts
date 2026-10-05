@@ -263,6 +263,12 @@ export class AIMClient {
         if (error instanceof Error && error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
         }
+        // fetch rejects with a TypeError when AIM cannot be reached; with no
+        // cached token that is the exchange, and it is the same network
+        // failure the request below would report.
+        if (error instanceof TypeError) {
+          throw this.networkError(error, 'POST', `${this.config.baseUrl}/oauth/token`);
+        }
         throw error;
       }
       headers['Authorization'] = `Bearer ${token}`;
@@ -327,22 +333,28 @@ export class AIMClient {
         if (error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
         }
-        // Name the target and the cause: Node's fetch reports connection
-        // failures as a bare "fetch failed" with the errno buried in the cause
-        // chain, which is useless without the URL it was aimed at.
-        const errnoCode = unwrapErrnoCode(error);
-        const causeSuffix = errnoCode ? ` [${errnoCode}]` : '';
-        const hint = this.usedDefaultBaseUrl
-          ? ` (baseUrl defaulted to ${DEFAULT_BASE_URL} — no baseUrl option or AIM_BASE_URL env var was set)`
-          : '';
-        throw new NetworkError(
-          `Network error: ${error.message} (${method} ${url})${causeSuffix}${hint}`,
-          error
-        );
+        throw this.networkError(error, method, url);
       }
 
       throw new NetworkError('Unknown network error');
     }
+  }
+
+  /**
+   * Name the target and the cause: Node's fetch reports connection failures
+   * as a bare "fetch failed" with the errno buried in the cause chain, which
+   * is useless without the URL it was aimed at.
+   */
+  private networkError(error: Error, method: string, url: string): NetworkError {
+    const errnoCode = unwrapErrnoCode(error);
+    const causeSuffix = errnoCode ? ` [${errnoCode}]` : '';
+    const hint = this.usedDefaultBaseUrl
+      ? ` (baseUrl defaulted to ${DEFAULT_BASE_URL} — no baseUrl option or AIM_BASE_URL env var was set)`
+      : '';
+    return new NetworkError(
+      `Network error: ${error.message} (${method} ${url})${causeSuffix}${hint}`,
+      error
+    );
   }
 
   /**

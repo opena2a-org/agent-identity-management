@@ -208,4 +208,34 @@ describe('aimErrorHandler with an upstream error, through the README example', (
     expect(status).toBe(200);
     expect(JSON.parse(text)).toEqual({ success: true });
   });
+
+  it('answers an unreachable AIM on a cold start as a JSON network error', async () => {
+    // A fresh app has no cached token, so the first thing the SDK does is the
+    // token exchange, and that fetch is the one that rejects.
+    const port = await new Promise<number>((resolve) => {
+      const probe = createServer();
+      probe.listen(0, '127.0.0.1', () => {
+        const { port: free } = probe.address() as AddressInfo;
+        probe.close(() => resolve(free));
+      });
+    });
+    appServer = readmeApp(`http://127.0.0.1:${port}`);
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { status, contentType, text } = await postData();
+
+    expect(status).toBe(500);
+    expect(contentType).toMatch(/application\/json/);
+    const body = JSON.parse(text) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(['code', 'error', 'message', 'statusCode']);
+    expect(body).toMatchObject({
+      statusCode: 500,
+      code: 'NETWORK_ERROR',
+      error: 'Internal Server Error',
+    });
+    expect(body.message).toContain('/oauth/token');
+    expect(body.message).toContain('ECONNREFUSED');
+    expect(text).not.toMatch(/<!DOCTYPE|<pre>|\bat \S+ \(|node_modules|\.[jt]s:\d+/);
+    expect(stderr).not.toHaveBeenCalled();
+  });
 });

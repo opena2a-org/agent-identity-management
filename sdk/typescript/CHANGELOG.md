@@ -44,6 +44,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   SDK still go to `next(error)`, and so does any error once the response has started.
   A new test drives the README middleware stack against a fake AIM server on loopback
   (#450).
+- An unreachable AIM server with no cached token now rejects with `NetworkError`, naming
+  the token endpoint and the errno, as every other request does. The token exchange
+  wrapped only a timeout, so the raw `TypeError: fetch failed` from `fetch` reached the
+  caller, and `aimErrorHandler` passed it to Express's default handler, which answered
+  500 with an HTML page carrying the stack trace (#450).
 
 ### Changed
 
