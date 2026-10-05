@@ -82,6 +82,11 @@ apps/backend/backend
 apps/backend/tenantscope-lint
 # `go build` in apps/backend/cmd/server writes the executable here
 apps/backend/cmd/server/server
+# `go build -o` targets used for local runs of the server
+apps/backend/aim-server
+apps/backend/bin/
+apps/backend/main
+apps/backend/server
 .pytest_cache/
 __pycache__/
 *.pyc
@@ -134,7 +139,6 @@ sdk-page
 *.fmt
 apps/backend/internal/interfaces/http/middleware/request_logger.go
 test_mcp_server.py
-apps/backend/aim-server
 
 # Demo recordings, generated secrets and build output of docs/demo (never committed)
 docs/demo/out/

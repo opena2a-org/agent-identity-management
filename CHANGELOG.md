@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — the source tree no longer carries prebuilt server binaries
+
+- Five macOS x86_64 executables built on developer machines were tracked under `apps/backend`: `aim-server`,
+  `bin/aim-backend`, `bin/server`, `main` and `server`, 108.5 MB together. Nothing used them: the container image
+  builds the server from source. They are removed (history is left as is), and ignore rules keep a local
+  `go build -o` to those paths out of `git status`.
+- A test in `apps/backend/cmd/server` reads every tracked file and fails if one is a compiled executable, object or
+  library (Mach-O, ELF, PE, ar, WebAssembly or Java class) or has the executable bit without a `#!` line. A second
+  test plants one file of each kind in a scratch repository and checks that the census reports exactly those.
+
 ### Fixed — password reset tokens are stored as a SHA-256 digest
 
 - `users.password_reset_token` now holds the hex SHA-256 digest of the token in the reset link, as its column
