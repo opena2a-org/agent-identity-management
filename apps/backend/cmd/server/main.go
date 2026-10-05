@@ -382,6 +382,11 @@ func main() {
 	// on it.
 	startMCPTrustRescore(repository.NewSystemConfigRepository(db), repos.MCPServer, services.MCPTrust)
 
+	// Start background job that deletes A2A request nonces once they can no
+	// longer be replayed, so they do not wait for the admin maintenance route
+	stopNonceCleanup := startNonceCleanupJob(services.A2A, application.NonceCleanupInterval)
+	defer close(stopNonceCleanup)
+
 	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
 	if services.RegistryBridge != nil {
 		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
@@ -2298,6 +2303,49 @@ func expireOldVerifications(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+// nonceCleaner deletes A2A request nonces that can no longer be replayed.
+type nonceCleaner interface {
+	CleanupExpiredNonces(ctx context.Context) (int, error)
+}
+
+// startNonceCleanupJob starts a background goroutine that deletes expired A2A
+// request nonces every interval. The admin maintenance route stays a manual
+// trigger of the same cleanup. Returns a channel that should be closed to
+// stop the job.
+func startNonceCleanupJob(cleaner nonceCleaner, interval time.Duration) chan struct{} {
+	stopChan := make(chan struct{})
+	ticker := time.NewTicker(interval)
+	log.Printf("A2A nonce cleanup job started (runs every %s)", interval)
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				runNonceCleanup(cleaner)
+			case <-stopChan:
+				ticker.Stop()
+				log.Println("A2A nonce cleanup job stopped")
+				return
+			}
+		}
+	}()
+
+	return stopChan
+}
+
+// runNonceCleanup is one tick of the nonce cleanup job. Only the count of
+// deleted rows reaches the log.
+func runNonceCleanup(cleaner nonceCleaner) {
+	deleted, err := cleaner.CleanupExpiredNonces(context.Background())
+	if err != nil {
+		log.Printf("A2A nonce cleanup error: %v", err)
+		return
+	}
+	if deleted > 0 {
+		log.Printf("A2A nonce cleanup deleted %d expired nonce(s)", deleted)
+	}
 }
 
 // startRegistryBridgeJob starts a background goroutine that periodically

@@ -1762,13 +1762,25 @@ func (r *A2ARequestNonceRepository) Exists(ctx context.Context, nonce string) (b
 	return exists, nil
 }
 
-func (r *A2ARequestNonceRepository) DeleteExpired(ctx context.Context) (int, error) {
-	query := `DELETE FROM a2a_request_nonces WHERE expires_at < NOW()`
-	result, err := r.db.ExecContext(ctx, query)
+// DeleteExpired deletes nonces that can no longer be replayed. A request is
+// accepted while its timestamp is within skew of the server clock, so a nonce
+// first used at used_at stays replayable until used_at + 2*skew. A row is
+// kept until that point and expires_at + skew have both passed, which holds
+// even when the nonce expiry is configured shorter than skew.
+func (r *A2ARequestNonceRepository) DeleteExpired(ctx context.Context, skew time.Duration) (int, error) {
+	query := `
+		DELETE FROM a2a_request_nonces
+		WHERE expires_at < NOW() - make_interval(secs => $1)
+		  AND used_at < NOW() - make_interval(secs => $2)
+	`
+	result, err := r.db.ExecContext(ctx, query, skew.Seconds(), (2 * skew).Seconds())
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete expired nonces: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to count deleted nonces: %w", err)
+	}
 	return int(rows), nil
 }
 
