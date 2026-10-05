@@ -192,6 +192,11 @@ JWT_ACCESS_TTL=2h            # Access token lifetime
 JWT_REFRESH_TTL=168h         # A refresh token unused this long expires; each refresh issues a new one
 JWT_SESSION_MAX_AGE=8h       # Longest a sign-in lasts, however often it is refreshed
 
+# Key Vault master key: base64-encoded 32 bytes that encrypt agent private keys.
+# Required in every environment except development. Generate it once with
+# `openssl rand -base64 32` and keep the same value across restarts.
+KEYVAULT_MASTER_KEY=your-base64-encoded-32-byte-key
+
 # CORS Configuration
 CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
 
@@ -285,6 +290,8 @@ ENABLE_ALERTS=true
 ENABLE_COMPLIANCE_REPORTS=true
 ```
 
+`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, and every signing key that is not provisioned is derived from it (see [Server Signing Keys](#server-signing-keys)). Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
+
 ### Secrets Management
 
 **⚠️ NEVER commit `.env` to version control!**
@@ -297,6 +304,7 @@ ENABLE_COMPLIANCE_REPORTS=true
 - **Option 1**: Environment variables (recommended)
   ```bash
   export JWT_SECRET="$(openssl rand -hex 32)"
+  export KEYVAULT_MASTER_KEY="your-stored-key"  # created once with: openssl rand -base64 32
   export DATABASE_URL="postgresql://..."
   ```
 
@@ -309,6 +317,7 @@ ENABLE_COMPLIANCE_REPORTS=true
   ```bash
   kubectl create secret generic aim-secrets \
     --from-literal=jwt-secret=your-secret \
+    --from-literal=keyvault-master-key="$(openssl rand -base64 32)" \
     --from-literal=database-url=postgresql://...
   ```
 
@@ -316,6 +325,7 @@ ENABLE_COMPLIANCE_REPORTS=true
   ```bash
   vault kv put secret/aim/production \
     jwt_secret=your-secret \
+    keyvault_master_key="$(openssl rand -base64 32)" \
     database_url=postgresql://...
   ```
 
