@@ -79,6 +79,11 @@ func (m *MockSDKTokenRepository) RevokeByTokenHash(tokenHash string, reason stri
 	return args.Error(0)
 }
 
+func (m *MockSDKTokenRepository) Rotate(oldTokenHash string, reason string, next *domain.SDKToken) error {
+	args := m.Called(oldTokenHash, reason, next)
+	return args.Error(0)
+}
+
 func (m *MockSDKTokenRepository) RevokeAllForUser(userID uuid.UUID, reason string) error {
 	args := m.Called(userID, reason)
 	return args.Error(0)

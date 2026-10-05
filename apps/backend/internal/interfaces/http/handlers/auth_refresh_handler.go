@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -140,6 +141,65 @@ func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
 		log.Printf("⚠️  Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
 	}
 	h.recordRefusal(c, claims, domain.AuditActionRefreshTokenReuse, &familyRevoked, clientMatch)
+}
+
+// rotateSDKTokenRow revokes the presented token's sdk_tokens row (oldToken,
+// found by oldTokenHash) and creates the row of its successor,
+// newRefreshToken, in one transaction: both happen or neither does. The new
+// row carries the old row's owner and device forward, its usage count plus
+// this refresh, and its lineage in metadata.
+//
+// SECURITY: each SDK instance has its own token from the download flow, so
+// retiring one instance's old token doesn't affect other instances.
+func (h *AuthRefreshHandler) rotateSDKTokenRow(c fiber.Ctx, oldToken *domain.SDKToken, oldTokenHash, rotatedFrom, newRefreshToken string) error {
+	newTokenID, err := h.jwtService.GetTokenID(newRefreshToken)
+	if err != nil {
+		return fmt.Errorf("new refresh token id unreadable: %w", err)
+	}
+	if newTokenID == "" {
+		return errors.New("new refresh token carries no id")
+	}
+
+	newHasher := sha256.New()
+	newHasher.Write([]byte(newRefreshToken))
+	newTokenHash := hex.EncodeToString(newHasher.Sum(nil))
+
+	// Get client info
+	newIPAddress := c.IP()
+	userAgent := c.Get("User-Agent")
+
+	// Get rotation count from old token metadata
+	rotationCount := 1
+	if oldToken.Metadata != nil {
+		if count, ok := oldToken.Metadata["rotationCount"].(float64); ok {
+			rotationCount = int(count) + 1
+		}
+	}
+
+	// IMPORTANT: Carry forward the parent token's usage count so it's cumulative
+	now := time.Now()
+	next := &domain.SDKToken{
+		ID:                uuid.New(),
+		UserID:            oldToken.UserID,
+		OrganizationID:    oldToken.OrganizationID,
+		TokenHash:         newTokenHash,
+		TokenID:           newTokenID,
+		DeviceName:        oldToken.DeviceName,
+		DeviceFingerprint: oldToken.DeviceFingerprint,
+		IPAddress:         &newIPAddress,
+		UserAgent:         &userAgent,
+		UsageCount:        oldToken.UsageCount + 1, // Carry forward parent's usage count + 1 for this refresh
+		LastUsedAt:        &now,                    // Token is being used right now
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(90 * 24 * time.Hour), // 90 days
+		Metadata: map[string]interface{}{
+			"source":        "token_rotation",
+			"rotated_from":  rotatedFrom,
+			"rotationCount": rotationCount,
+			"parent_token":  oldToken.ID.String(), // Track token lineage
+		},
+	}
+	return h.sdkTokenService.RotateToken(c.Context(), oldTokenHash, "token_rotation", next)
 }
 
 // RefreshToken godoc
@@ -308,88 +368,47 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		}
 	}
 
-	// SDK-download tokens (a different issuer) are tracked by row: the old
-	// token's row is revoked by hash, and only when that revocation succeeded
-	// is a row created for the new token and the new token handed out. When
-	// the old row cannot be revoked, the presented SDK token goes back
-	// unchanged with a fresh access token (rotated=false), so an SDK client
-	// never holds two live refresh tokens.
+	// SDK-download tokens (a different issuer) are tracked by row in
+	// sdk_tokens: the old token's row is revoked and the new token's row
+	// created in one transaction, and the new token is handed out only when
+	// that transaction committed. When it did not (the old row is no longer
+	// active, the insert failed, or the new row could not be built), neither
+	// write took effect and the presented SDK token goes back unchanged with a
+	// fresh access token (rotated=false), so an SDK client never holds two
+	// live refresh tokens, nor a new one without a row, which the next refresh
+	// would refuse. A login-issued token with a row (a recovered SDK token)
+	// was retired by the denylist above; its row follows the same rotation,
+	// and a failure there is logged without changing the answer.
 	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
 		oldTokenHash := hex.EncodeToString(hasher.Sum(nil))
 
 		// Get old token info for creating new token entry
-		oldToken, _ := h.sdkTokenService.ValidateToken(c.Context(), oldTokenHash)
+		oldToken, lookupErr := h.sdkTokenService.ValidateToken(c.Context(), oldTokenHash)
 
-		// Record usage on the old token (updates last_used_at, usage_count)
-		ipAddress := c.IP()
-		_ = h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, ipAddress)
-
-		// SECURITY: Revoke the old refresh token after rotation
-		// Each SDK instance has its own token from the download flow, so revoking
-		// one instance's old token doesn't affect other instances.
-		revokeErr := h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation")
-		if revokeErr == nil {
-			if claims.Issuer == auth.IssuerSDK {
-				rotated = true
-			}
-		} else if claims.Issuer == auth.IssuerSDK {
-			newRefreshToken = req.RefreshToken
-			log.Printf("⚠️  Refresh: sdk_tokens revocation failed for token id %s; the presented refresh token was returned unchanged: %v", tokenID, revokeErr)
-		} else {
-			log.Printf("⚠️  Refresh: sdk_tokens revocation failed for token id %s: %v", tokenID, revokeErr)
+		// Record usage on the old token (updates last_used_at, usage_count).
+		// This is bookkeeping: a failed write is logged and the refresh proceeds.
+		if err := h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, c.IP()); err != nil {
+			log.Printf("⚠️  Refresh: usage of token id %s not recorded: %v", tokenID, err)
 		}
 
-		// Save the new rotated SDK token to database
-		if revokeErr == nil && oldToken != nil {
-			// Get new token ID from rotated refresh token
-			newTokenID, err := h.jwtService.GetTokenID(newRefreshToken)
-			if err == nil && newTokenID != "" {
-				// Hash the new token
-				newHasher := sha256.New()
-				newHasher.Write([]byte(newRefreshToken))
-				newTokenHash := hex.EncodeToString(newHasher.Sum(nil))
-
-				// Get client info
-				newIPAddress := c.IP()
-				userAgent := c.Get("User-Agent")
-
-				// Get rotation count from old token metadata
-				rotationCount := 1
-				if oldToken.Metadata != nil {
-					if count, ok := oldToken.Metadata["rotationCount"].(float64); ok {
-						rotationCount = int(count) + 1
-					}
+		if newRefreshToken != req.RefreshToken && (claims.Issuer == auth.IssuerSDK || oldToken != nil) {
+			var rotateErr error
+			if oldToken == nil {
+				rotateErr = fmt.Errorf("no active sdk_tokens row: %v", lookupErr)
+			} else {
+				rotateErr = h.rotateSDKTokenRow(c, oldToken, oldTokenHash, tokenID, newRefreshToken)
+			}
+			if claims.Issuer != auth.IssuerSDK {
+				if rotateErr != nil {
+					log.Printf("⚠️  Refresh: sdk_tokens rotation failed for token id %s: %v", tokenID, rotateErr)
 				}
-
-				// Create the new token's row (the old token's row was revoked above)
-				// IMPORTANT: Carry forward the parent token's usage count so it's cumulative
-				now := time.Now()
-				newSDKToken := &domain.SDKToken{
-					ID:                uuid.New(),
-					UserID:            oldToken.UserID,
-					OrganizationID:    oldToken.OrganizationID,
-					TokenHash:         newTokenHash,
-					TokenID:           newTokenID,
-					DeviceName:        oldToken.DeviceName,
-					DeviceFingerprint: oldToken.DeviceFingerprint,
-					IPAddress:         &newIPAddress,
-					UserAgent:         &userAgent,
-					UsageCount:        oldToken.UsageCount + 1, // Carry forward parent's usage count + 1 for this refresh
-					LastUsedAt:        &now,                    // Token is being used right now
-					CreatedAt:         now,
-					ExpiresAt:         now.Add(90 * 24 * time.Hour), // 90 days
-					Metadata: map[string]interface{}{
-						"source":        "token_rotation",
-						"rotated_from":  tokenID,
-						"rotationCount": rotationCount,
-						"parent_token":  oldToken.ID.String(), // Track token lineage
-					},
-				}
-
-				// Save to database (critical for next rotation)
-				_ = h.sdkTokenService.CreateToken(c.Context(), newSDKToken)
+			} else if rotateErr == nil {
+				rotated = true
+			} else {
+				newRefreshToken = req.RefreshToken
+				log.Printf("⚠️  Refresh: sdk_tokens rotation failed for token id %s; the presented refresh token was returned unchanged: %v", tokenID, rotateErr)
 			}
 		}
 	}

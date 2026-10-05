@@ -57,6 +57,10 @@ func (r *refreshTestSDKRepo) RecordUsage(tokenID string, ipAddress string) error
 func (r *refreshTestSDKRepo) RevokeByTokenHash(tokenHash string, reason string) error {
 	return nil
 }
+func (r *refreshTestSDKRepo) Rotate(oldTokenHash, reason string, next *domain.SDKToken) error {
+	r.created = append(r.created, next)
+	return nil
+}
 func (r *refreshTestSDKRepo) Create(token *domain.SDKToken) error {
 	r.created = append(r.created, token)
 	return nil
