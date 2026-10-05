@@ -632,7 +632,7 @@ type A2ATrustScoreRepository interface {
 type A2ARequestNonceRepository interface {
 	Create(ctx context.Context, nonce *A2ARequestNonce) error
 	Exists(ctx context.Context, nonce string) (bool, error)
-	DeleteExpired(ctx context.Context) (int, error)
+	DeleteExpired(ctx context.Context, skew time.Duration) (int, error)
 }
 
 // A2APolicyRepository defines operations for A2A policies

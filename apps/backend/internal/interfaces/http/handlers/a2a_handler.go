@@ -1243,7 +1243,8 @@ func (h *A2AHandler) GetPublicAgentCard(c fiber.Ctx) error {
 // Maintenance Endpoints
 // ============================================================================
 
-// CleanupExpiredNonces removes expired nonces (admin only)
+// CleanupExpiredNonces removes expired nonces (admin only). The server runs
+// the same cleanup every minute; this route triggers it on demand.
 // POST /api/v1/a2a/maintenance/cleanup-nonces
 func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 	count, err := h.a2aService.CleanupExpiredNonces(c.Context())
