@@ -182,7 +182,7 @@ func (h *SecretsHandler) CreateNamespace(c fiber.Ctx) error {
 	}
 
 	if err := h.secretsService.CreateNamespace(ns); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -227,7 +227,7 @@ func (h *SecretsHandler) ListNamespaces(c fiber.Ctx) error {
 
 	namespaces, err := h.secretsService.ListNamespaces(agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"namespaces": namespaces})
@@ -282,7 +282,7 @@ func (h *SecretsHandler) DeleteNamespace(c fiber.Ctx) error {
 	}
 
 	if err := h.secretsService.DeleteNamespace(id); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Namespace deleted"})
@@ -334,7 +334,7 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 		if strings.Contains(err.Error(), "exceeds maximum size") {
 			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Credential stored"})
@@ -386,7 +386,7 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 		if strings.Contains(err.Error(), "exceeds maximum size") {
 			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": err.Error()})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Credential rotated"})
@@ -429,7 +429,7 @@ func (h *SecretsHandler) GetAuditLog(c fiber.Ctx) error {
 
 	entries, err := h.secretsService.GetAuditLog(agentID, since, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"entries": entries})

@@ -157,9 +157,7 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 		expiresInDays,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit

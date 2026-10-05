@@ -86,9 +86,7 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 	stats, err := h.connectionRepo.GetSupplyChainStats(c.Context(), orgID)
 	if err != nil {
 		log.Printf("❌ GetSupplyChainStats error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get supply chain stats: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	log.Printf("✅ Stats: connections=%d, attestations=%d", stats.TotalConnections, stats.TotalAttestations)
 
@@ -96,9 +94,7 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 	trend, err := h.connectionRepo.GetAttestationTrend(c.Context(), orgID, days)
 	if err != nil {
 		log.Printf("❌ GetAttestationTrend error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get attestation trend: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	log.Printf("✅ Trend: %d entries", len(trend))
 
@@ -106,9 +102,7 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 	connections, err := h.connectionRepo.ListByOrganization(c.Context(), orgID)
 	if err != nil {
 		log.Printf("❌ ListByOrganization error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get connections: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	log.Printf("✅ Connections: %d found", len(connections))
 
@@ -203,9 +197,7 @@ func (h *SupplyChainHandler) GetCapabilityDriftAlerts(c fiber.Ctx) error {
 	alerts, stats, err := h.capabilityRepo.GetCapabilityDriftAlerts(orgID, days)
 	if err != nil {
 		log.Printf("❌ GetCapabilityDriftAlerts error: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get capability drift alerts: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	log.Printf("✅ Drift alerts: %d alerts found", len(alerts))
 

@@ -78,9 +78,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 
 	webhook, err := h.getWebhookService().CreateWebhook(c.Context(), &req, orgID, userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -197,9 +195,7 @@ func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
 	}
 
 	if err := h.getWebhookService().DeleteWebhook(c.Context(), webhookID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -262,9 +258,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	// Update webhook
 	webhook, err := h.getWebhookService().UpdateWebhook(c.Context(), webhookID, &req)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -321,10 +315,7 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 	// Send test payload
 	result, err := h.getWebhookService().TestWebhook(c.Context(), webhookID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to send test payload",
-			"details": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit

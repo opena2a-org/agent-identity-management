@@ -93,9 +93,7 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 		c.Context(), agentID, orgID, &req)
 
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -150,9 +148,7 @@ func (h *DetectionHandler) GetDetectionStatus(c fiber.Ctx) error {
 	// Get detection status
 	status, err := h.detectionService.GetDetectionStatus(c.Context(), agentID, orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(status)
@@ -227,10 +223,7 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 		c.Context(), agentID, orgID, &req)
 
 	if err != nil {
-		// SECURITY: No error logging to prevent information leakage
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit with security alert details if present
@@ -302,9 +295,7 @@ func (h *DetectionHandler) GetLatestCapabilityReport(c fiber.Ctx) error {
 				"error": err.Error(),
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(report)

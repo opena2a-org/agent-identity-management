@@ -340,9 +340,7 @@ func (h *AdminHandler) UpdateUserRole(c fiber.Ctx) error {
 	// Update user role
 	user, err := h.getAuthService().UpdateUserRole(c.Context(), targetUserID, orgID, role, adminID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -409,9 +407,7 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 	}
 
 	if err := h.getAuthService().DeactivateUser(c.Context(), targetUserID, orgID, adminID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -457,9 +453,7 @@ func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
 
 	// Activate user using admin service
 	if err := h.getAdminService().ActivateUser(c.Context(), targetUserID, adminID, orgID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -529,9 +523,7 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 
 	// Permanently delete user using admin service
 	if err := h.getAdminService().PermanentlyDeleteUser(c.Context(), targetUserID, adminID, orgID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1357,9 +1349,7 @@ func (h *AdminHandler) ApproveUser(c fiber.Ctx) error {
 	}
 
 	if err := h.getAdminService().ApproveUser(c.Context(), targetUserID, adminID, orgID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1409,9 +1399,7 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 	}
 
 	if err := h.getAdminService().RejectUser(c.Context(), targetUserID, adminID, orgID, req.Reason); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1495,9 +1483,7 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 	// Approve registration request
 	newUser, err := h.getRegistrationService().ApproveRegistrationRequest(c.Context(), requestID, adminID, orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to approve registration: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1559,9 +1545,7 @@ func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
 
 	// Reject registration request
 	if err := h.getRegistrationService().RejectRegistrationRequest(c.Context(), requestID, adminID, req.Reason); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to reject registration: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1669,9 +1653,7 @@ func (h *AdminHandler) GetUnacknowledgedAlertCount(c fiber.Ctx) error {
 	// Call alert service to count alerts
 	allCount, acknowledgedCount, unacknowledgedCount, err := h.getAlertService().CountUnacknowledged(c.Context(), orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1765,9 +1747,7 @@ func (h *AdminHandler) UpdateEnforcementSettings(c fiber.Ctx) error {
 	}
 
 	if err := h.getAdminService().UpdateEnforcementMode(c.Context(), orgID, mode); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit

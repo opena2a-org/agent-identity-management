@@ -257,6 +257,18 @@ func registrationErrorStatus(err error) int {
 	}
 }
 
+// respondRegistrationError answers a CreateAgent failure at the status
+// registrationErrorStatus maps it to. A 4xx carries the sentinel's message;
+// a server error carries ServerErrorMessage.
+func respondRegistrationError(c fiber.Ctx, err error) error {
+	switch status := registrationErrorStatus(err); status {
+	case fiber.StatusConflict, fiber.StatusBadRequest:
+		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
+	default:
+		return respondServerError(c, status, err)
+	}
+}
+
 func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
@@ -293,12 +305,9 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		})
 	}
 
-	// SECURITY: No error logging to prevent information leakage
 	agent, err := h.agentService.CreateAgent(c.Context(), &req, orgID, userID, sdkTokenID, apiKeyID, userEmail)
 	if err != nil {
-		return c.Status(registrationErrorStatus(err)).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondRegistrationError(c, err)
 	}
 
 	// ✅ AUTO-CREATE API KEY: Only for non-SDK registrations
@@ -440,9 +449,7 @@ func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
 
 	agent, err := h.agentService.UpdateAgent(c.Context(), agentID, &req, userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -543,9 +550,7 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 	}
 
 	if err := h.agentService.VerifyAgent(c.Context(), agentID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get updated agent to return in response
@@ -1147,9 +1152,7 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 		req.MCPServerIDs,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// For API key auth (no user_id), use agent's creator for audit logging
@@ -1233,9 +1236,7 @@ func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
 		mcpServerID,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1485,9 +1486,7 @@ func (h *AgentHandler) DetectAndMapMCPServers(c fiber.Ctx) error {
 		userID,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1874,9 +1873,7 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 
 	// Suspend the agent
 	if err := h.agentService.SuspendAgent(c.Context(), agentID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get updated agent to return in response
@@ -1945,9 +1942,7 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 
 	// Reactivate the agent
 	if err := h.agentService.ReactivateAgent(c.Context(), agentID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get updated agent to return in response
@@ -2017,9 +2012,7 @@ func (h *AgentHandler) RevokeAgent(c fiber.Ctx) error {
 
 	// Revoke the agent
 	if err := h.agentService.RevokeAgent(c.Context(), agentID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get updated agent to return in response
@@ -2092,9 +2085,7 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 	// Rotate credentials (generates new keypair)
 	publicKey, privateKey, err := h.agentService.RotateCredentials(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get updated agent to return in response
@@ -2192,9 +2183,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 
 	// Update public key (passes auth method for key replacement security check)
 	if err := h.agentService.UpdateAgentPublicKey(c.Context(), agentID, req.PublicKey, authMethod); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get updated agent

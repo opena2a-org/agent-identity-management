@@ -299,9 +299,7 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 			return c.Status(fiber.StatusConflict).JSON(response)
 		}
 
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -491,9 +489,7 @@ func (h *MCPHandler) UpdateMCPServer(c fiber.Ctx) error {
 
 	server, err := h.mcpService.UpdateMCPServer(c.Context(), serverID, &req)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -539,9 +535,7 @@ func (h *MCPHandler) DeleteMCPServer(c fiber.Ctx) error {
 	}
 
 	if err := h.mcpService.DeleteMCPServer(c.Context(), serverID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -687,9 +681,7 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 	}
 
 	if err := h.mcpService.AddPublicKey(c.Context(), serverID, &req); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -819,10 +811,7 @@ func (h *MCPHandler) DetectCapabilities(c fiber.Ctx) error {
 
 	// Trigger capability detection
 	if err := h.mcpCapabilityService.DetectCapabilities(c.Context(), serverID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to detect capabilities",
-			"details": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Fetch the newly detected capabilities
@@ -1103,9 +1092,7 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 	}
 	agents, err := mcpSvc.GetConnectedAgents(c.Context(), mcpServerID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
