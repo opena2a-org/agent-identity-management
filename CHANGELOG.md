@@ -23,6 +23,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/web/app/dashboard/agents/[id]/page.test.tsx` fails when the page renders a refused activity row without its
   reason or its grant path; `apps/web/lib/refused-call.test.ts` covers each kind of refusal.
 
+### Removed — the unread `users.password_reset_expires` column and its index
+
+- The `users` table carried two password reset expiry columns. The reset flow reads and writes
+  `password_reset_expires_at`; `password_reset_expires`, added later with the partial index
+  `idx_users_password_reset_expires`, was never read or written and held only `NULL`s. Migration 112 drops the column
+  and the index. It is a no-op on a database that does not have them, and leaves `password_reset_expires_at`,
+  `password_reset_token` and `idx_users_password_reset_token` unchanged.
+- `apps/backend/internal/infrastructure/repository/users_password_reset_columns_integration_test.go` fails when a
+  migrated database still has the unread column or its index, or is missing the column the reset flow reads.
+
 ### Fixed — the dashboard asks for the signed-in user once per page load
 
 - The dashboard shell, the sidebar, the header and the deactivation check each requested `/api/v1/auth/me` when a
