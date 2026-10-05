@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a check fails on token-shaped literals in tracked files
+
+- `node scripts/lint-token-literals.mjs` reads every file `git ls-files` returns, binary files included, and fails on
+  a three-segment base64url token (the JWT shape), a private key block, an AIM API key, an AWS, GitHub, Slack, Stripe,
+  Google or `sk-` prefixed key, or a credential-named field assigned a high-entropy string. It prints the path, line,
+  rule and a fingerprint of each finding, never the matched text.
+- Each run also scans a synthetic file it plants in a temporary directory, carrying one sample per rule. If any sample
+  is missed, the run reports INCONCLUSIVE and exits 2 instead of passing. A tracked path it cannot read, or an empty
+  file list, also exits 2.
+- Literals reviewed as non-credentials are listed, each with a reason, in `scripts/token-literal-allowlist.txt`. An
+  entry covers one literal at one path, and an entry that no longer matches fails the run.
+- The SDK token tracking middleware test builds its JWT at run time instead of storing one, and the Python scripts
+  under `tests/scripts/` read the API key from `AIM_API_KEY` instead of carrying a key issued by a local backend.
+- `scripts/test-lint-token-literals.mjs` (`node --test scripts/test-lint-token-literals.mjs`) fails when a tracked
+  token is not reported or is printed, when a missed planted sample or an unreadable path does not make the run
+  inconclusive, or when this repository's tracked tree has a finding.
+
 ### Fixed — The logo SVG's embedded PNG is split into one more IDAT chunk
 
 - The PNG embedded in `apps/web/public/opena2a-logo.svg` carries one more IDAT chunk, split at the point where its

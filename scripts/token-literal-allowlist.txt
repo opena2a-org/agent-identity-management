@@ -1,0 +1,50 @@
+# Reviewed literals that scripts/lint-token-literals.mjs may report and that
+# are not credentials. One entry per line:
+#
+#   <rule> <fingerprint> <path>   # why this literal is not a credential
+#
+# The fingerprint is the one the scanner prints for the finding. An entry
+# covers that literal at that path only: the same literal at another path is
+# still reported. An entry that stops matching fails the run; remove it.
+#
+# Prefer not to add entries. A test that needs a token can build one at run
+# time, and a script that needs a real key reads it from the environment.
+
+# AWS's documentation example key pair (AKIA...EXAMPLE and its ...EXAMPLEKEY
+# secret), used as provider configuration in the SES tests.
+aws-access-key-id 1a5d44a2dca19669 apps/backend/internal/infrastructure/email/aws_ses_provider_test.go  # AWS documentation example key id
+credential-assignment 8a55ec995f15ab71 apps/backend/internal/infrastructure/email/aws_ses_provider_test.go  # AWS documentation example secret
+aws-access-key-id 1a5d44a2dca19669 apps/backend/internal/infrastructure/email/provider_test.go  # AWS documentation example key id
+credential-assignment 8a55ec995f15ab71 apps/backend/internal/infrastructure/email/provider_test.go  # AWS documentation example secret
+
+# Backend test fixtures: fixed values a test signs with or submits.
+credential-assignment 9d903eff4ee514de apps/backend/internal/application/signin_race_integration_test.go  # test user password the sign-in race test starts from
+credential-assignment f07c0e7ee1ff6c75 apps/backend/internal/application/signin_race_integration_test.go  # test user password the sign-in race test changes to
+credential-assignment 5c39458f82b1810b apps/backend/internal/infrastructure/auth/jwt_family_test.go  # HMAC key for test-signed tokens only
+credential-assignment 4079f9fbdaf6a6d2 apps/backend/internal/interfaces/http/handlers/sdk_token_recovery_handler_test.go  # placeholder refresh token string sent to a mocked service
+credential-assignment bf4436dc9f9fbce4 apps/backend/internal/interfaces/http/handlers/session_cookie_issuance_test.go  # test user password for a password-change request
+
+# Documentation examples.
+credential-assignment 79276974112ae3d7 apps/web/lib/api-documentation.ts  # sample reset token in the API documentation page
+credential-assignment d1c45d0431a98bf9 docs/guides/API_REFERENCE.md  # sample key in an example response (sequential a1b2c3 pattern)
+
+# SDK test fixtures.
+credential-assignment 50edf7a4ce828f4f sdk/python/tests/test_credential_management.py  # fixture Ed25519 key for a credential-file test; agent id is the nil UUID
+credential-assignment 82547bd04c2fd42d sdk/typescript/src/auth/oauth.integration.test.ts  # base64 of the ASCII text 0123456789abcdef repeated, not key material
+credential-assignment 833e5839fa9c7f62 sdk/typescript/src/cli/init.test.ts  # synthetic bootstrap token the init tests send to a local fake server
+sk-api-key 0d5a5066de203663 sdk/typescript/src/cli/init.test.ts  # sk-FAKE value a test proves init refuses as a bootstrap token
+credential-assignment 6ef338c31e186549 tests/shared/fixtures/agents.json  # base64 of the ASCII text 0123456789abcdef repeated, not key material
+
+# Inputs to the secret-detection and redaction tests: these tests exist to
+# prove a credential-shaped string is caught, so the string has to be there.
+aws-access-key-id 1a5d44a2dca19669 sdk/typescript/src/arp/telemetry/signature/redaction.test.ts  # AWS documentation example key id, redaction input
+sk-api-key 0f0af744dca26b89 sdk/typescript/src/arp/telemetry/signature/redaction.test.ts  # synthetic sk- key, redaction input
+sk-api-key 12d4aadf1db44022 sdk/typescript/tests/arp/harness/dvaa-integration.ts  # synthetic sk- key, output-scanning input
+sk-api-key 77059f9a3e4325c7 sdk/typescript/tests/arp/harness/dvaa-integration.ts  # synthetic sk- key, output-scanning input
+sk-api-key 12d4aadf1db44022 sdk/typescript/tests/arp/harness/proxy-e2e.ts  # synthetic sk- key, output-scanning input
+sk-api-key 77059f9a3e4325c7 sdk/typescript/tests/arp/interceptors/prompt.test.ts  # synthetic sk- key, output-scanning input
+aws-access-key-id 1a5d44a2dca19669 sdk/typescript/tests/arp/patterns/ai-threats.test.ts  # AWS documentation example key id, pattern input
+github-token 46eb12352e801d0b sdk/typescript/tests/arp/patterns/ai-threats.test.ts  # repeated-x placeholder token, pattern input
+sk-api-key 77059f9a3e4325c7 sdk/typescript/tests/arp/patterns/ai-threats.test.ts  # synthetic sk- key, pattern input
+slack-token 5d65648f9c2eb213 sdk/typescript/tests/arp/patterns/ai-threats.test.ts  # sequential-digit placeholder token, pattern input
+sk-api-key 77059f9a3e4325c7 sdk/typescript/tests/arp/proxy/response-scanning.test.ts  # synthetic sk- key, response-scanning input
