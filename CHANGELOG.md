@@ -40,8 +40,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   agent's request, and at `POST /api/v1/agents/{id}/capabilities` with the capability. An unverified agent points at
   Verify agent, a compromised agent at its security review, and a named policy at Security policies. The links go to
   administrator-only pages and are shown to administrators only.
-- `apps/web/app/dashboard/agents/[id]/page.test.tsx` fails when the page renders a refused activity row without its
-  reason or its grant path; `apps/web/lib/refused-call.test.ts` covers each kind of refusal.
+- `apps/web/app/dashboard/agents/[id]/page.refused-call.test.tsx` fails when the page renders a refused activity row
+  without its reason or its grant path; `apps/web/lib/refused-call.test.ts` covers each kind of refusal.
 
 ### Removed — the unread `users.password_reset_expires` column and its index
 
