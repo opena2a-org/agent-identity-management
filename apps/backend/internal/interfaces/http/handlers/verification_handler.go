@@ -40,6 +40,17 @@ type VerificationHandler struct {
 	alertServicer             AlertServicerForVerification
 	verificationEventServicer VerificationEventServicerForVerification
 	orgRepoInterface          OrganizationRepositoryer
+
+	// actionRequestNonces admits the nonces of signed action-request
+	// statements. Without it every statement is refused with no write.
+	actionRequestNonces ActionRequestNonceAdmitter
+}
+
+// WithActionRequestNonces sets the admission store for signed action-request
+// statements and returns the handler.
+func (h *VerificationHandler) WithActionRequestNonces(admitter ActionRequestNonceAdmitter) *VerificationHandler {
+	h.actionRequestNonces = admitter
+	return h
 }
 
 // NewVerificationHandler creates a new verification handler
@@ -170,6 +181,19 @@ type VerificationResponse struct {
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/verifications [post]
 func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
+	// A body naming signedBytes is a signed action-request statement
+	// (action_request_statement.go). Any other body is the original form,
+	// handled exactly as before, except that it may not carry the members only
+	// a signed statement defines.
+	if members, err := readJSONObjectMembers(c.Body()); err == nil {
+		if members.has("signedBytes") {
+			return h.createVerificationFromStatement(c, members)
+		}
+		if members.has("nonce") || members.has("delegationDigests") {
+			return invalidStatement("%s", legacyFreshMemberLine).send(c)
+		}
+	}
+
 	var req VerificationRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -191,10 +215,6 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			"error": "Invalid agentId format",
 		})
 	}
-
-	// Auto-detect risk level from capability if not explicitly provided
-	detectedRiskLevel := domain.DetectRiskLevel(req.Capability, req.RiskLevel)
-	riskAutoDetected := req.RiskLevel == ""
 
 	// The signed message and the signature's encoding are the request's shape: built and
 	// decoded before any agent is read, so a malformed request gets the same answer
@@ -236,8 +256,6 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			"error": "Signature verification failed: signature verification failed",
 		})
 	}
-	publicKeyMatched := true
-	signatureVerified := true
 
 	// Verify agent is active. The shared predicate, after the signature verified: the
 	// status this names reaches only a caller holding the agent's key.
@@ -247,6 +265,42 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			"error": fmt.Sprintf("Agent status is %s, cannot perform actions", agent.Status),
 		})
 	}
+
+	return h.decideAndRecord(c, agent, agentID, verificationInput{
+		capability: req.Capability,
+		resource:   req.Resource,
+		context:    req.Context,
+		riskLevel:  req.RiskLevel,
+		signature:  req.Signature,
+		publicKey:  req.PublicKey,
+	})
+}
+
+// verificationInput is an authenticated verification request: what the
+// capability decision and the records are made from. Both body forms of
+// CreateVerification produce one once the key and the signature have been
+// checked.
+type verificationInput struct {
+	capability string
+	resource   string
+	context    map[string]interface{}
+	riskLevel  string
+	signature  string
+	publicKey  string
+	// metadata is added to the audit entry and the verification event.
+	metadata map[string]interface{}
+}
+
+// decideAndRecord makes the capability decision for an authenticated request
+// and writes its audit entry, alert and verification event.
+func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, agentID uuid.UUID, in verificationInput) error {
+	// Auto-detect risk level from capability if not explicitly provided
+	detectedRiskLevel := domain.DetectRiskLevel(in.capability, in.riskLevel)
+	riskAutoDetected := in.riskLevel == ""
+
+	// The caller checked both before calling.
+	publicKeyMatched := true
+	signatureVerified := true
 
 	// Use agent's base trust score for display/storage (consistency across app)
 	// The risk-adjusted calculation is used internally for security decisions
@@ -261,9 +315,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	allowed, denialReason, auditIDFromVerify, err := h.getAgentService().VerifyCapability(
 		c.Context(),
 		agentID,
-		req.Capability,
-		req.Resource,
-		req.Context,
+		in.capability,
+		in.resource,
+		in.context,
 		c.IP(), // Capture source IP for security tracking
 	)
 
@@ -277,7 +331,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			agentID,
 			agent.KeyAlgorithm,
 			trustScore,
-			req.Capability,
+			in.capability,
 			allowed,
 			denialReason,
 		)
@@ -285,7 +339,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Check if this is a JIT (Just-In-Time) access request that needs admin approval
 	isJITRequest := false
-	if jitAccess, ok := req.Context["jit_access"].(bool); ok && jitAccess {
+	if jitAccess, ok := in.context["jit_access"].(bool); ok && jitAccess {
 		isJITRequest = true
 	}
 
@@ -336,16 +390,16 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// HasCapabilityNoAlert (not HasCapability): VerifyCapability above already ran
 	// honeytoken detection for this request; using the alerting variant here would
 	// double-fire the honeytoken alert/audit for a single verification (#293).
-	hasCapability, err := h.getAgentService().HasCapabilityNoAlert(c.Context(), agentID, req.Capability, req.Resource)
+	hasCapability, err := h.getAgentService().HasCapabilityNoAlert(c.Context(), agentID, in.capability, in.resource)
 	if err == nil && !hasCapability {
 		// Determine if this action warrants an alert based on risk level and approval status
-		isLowRisk := isLowRiskCapability(req.Capability)
+		isLowRisk := isLowRiskCapability(in.capability)
 		isDenied := status == "denied"
 
 		if isDenied {
 			// Always alert on denied actions
 			shouldCreateAlert = true
-		} else if !isLowRisk && req.RiskLevel != "low" {
+		} else if !isLowRisk && in.riskLevel != "low" {
 			// Alert for medium/high risk actions without capability (even if approved)
 			shouldCreateAlert = true
 		}
@@ -358,7 +412,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		OrganizationID: agent.OrganizationID,
 		UserID:         &agent.CreatedBy, // Creator of the agent (now a pointer)
 		AgentID:        &agentID,         // Set AgentID so GetByAgent queries work
-		Action:         domain.AuditAction(req.Capability),
+		Action:         domain.AuditAction(in.capability),
 		ResourceType:   "agent_action",
 		ResourceID:     agentID,
 		IPAddress:      c.IP(),
@@ -367,9 +421,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			"verificationId":   verificationID.String(),
 			"trustScore":       trustScore,
 			"autoApproved":     status == "approved" || status == "auto-approved",
-			"actionType":       req.Capability,
-			"resource":         req.Resource,
-			"context":          req.Context,
+			"actionType":       in.capability,
+			"resource":         in.resource,
+			"context":          in.context,
 			"riskLevel":        detectedRiskLevel,
 			"riskAutoDetected": riskAutoDetected,
 		},
@@ -378,6 +432,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	if status == "denied" {
 		auditEntry.Metadata["denialReason"] = denialReason
+	}
+	for k, v := range in.metadata {
+		auditEntry.Metadata[k] = v
 	}
 
 	// Save audit log - errors don't block the request
@@ -391,7 +448,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		var alertType domain.AlertType
 		var severity domain.AlertSeverity
 
-		if isDemoHighRiskCapability(req.Capability) {
+		if isDemoHighRiskCapability(in.capability) {
 			// Demo high-risk actions get informational monitoring alerts (not scary breach alerts)
 			alertType = domain.AlertUnusualActivity // Info-level, not breach
 			severity = domain.AlertSeverityInfo
@@ -400,12 +457,12 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 				"Agent '%s' performed high-risk action '%s' on resource '%s'. "+
 					"This action was approved (trust score: %.2f) and logged for monitoring. "+
 					"Consider granting explicit capability for production use.",
-				agent.Name, req.Capability, req.Resource, trustScore,
+				agent.Name, in.capability, in.resource, trustScore,
 			)
 		} else {
 			// Real security concern - create breach alert
 			alertType = domain.AlertSecurityBreach
-			severity = h.determineAlertSeverity(req.Capability, req.Context, detectedRiskLevel)
+			severity = h.determineAlertSeverity(in.capability, in.context, detectedRiskLevel)
 			alertTitle = fmt.Sprintf("Unauthorized Action Detected: %s", agent.Name)
 
 			// Use correct message based on status and enforcement mode
@@ -413,25 +470,25 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 				alertDescription = fmt.Sprintf(
 					"Agent '%s' attempted unauthorized action '%s' on resource '%s' without proper capability. "+
 						"This action was DENIED. Grant the required capability to allow this action.",
-					agent.Name, req.Capability, req.Resource,
+					agent.Name, in.capability, in.resource,
 				)
 			} else if status == "pending" {
 				alertDescription = fmt.Sprintf(
 					"Agent '%s' requested JIT access for action '%s' on resource '%s' without pre-granted capability. "+
 						"This action is PENDING admin approval (strict mode). Approve or deny in the JIT Requests dashboard.",
-					agent.Name, req.Capability, req.Resource,
+					agent.Name, in.capability, in.resource,
 				)
 			} else if isMonitoringMode {
 				alertDescription = fmt.Sprintf(
 					"Agent '%s' performed action '%s' on resource '%s' without explicit capability grant. "+
 						"This action was ALLOWED (monitoring mode) but logged for review. Consider granting the capability explicitly.",
-					agent.Name, req.Capability, req.Resource,
+					agent.Name, in.capability, in.resource,
 				)
 			} else {
 				alertDescription = fmt.Sprintf(
 					"Agent '%s' performed action '%s' on resource '%s'. "+
 						"This action was APPROVED. Enforcement mode: strict.",
-					agent.Name, req.Capability, req.Resource,
+					agent.Name, in.capability, in.resource,
 				)
 			}
 		}
@@ -449,8 +506,8 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 			AgentName:      agent.Name,
 			SourceIP:       c.IP(), // Capture source IP for security tracking
 			Metadata: map[string]interface{}{
-				"capability":       req.Capability,
-				"resource":         req.Resource,
+				"capability":       in.capability,
+				"resource":         in.resource,
 				"trustScore":       trustScore,
 				"verificationId":   verificationID.String(),
 				"riskLevel":        detectedRiskLevel,
@@ -477,11 +534,11 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Determine verification protocol based on action type
 	protocol := domain.VerificationProtocolA2A // Default to A2A (Agent-to-Agent)
-	if strings.Contains(req.Capability, "mcp") || strings.Contains(req.Capability, "azure_openai") {
+	if strings.Contains(in.capability, "mcp") || strings.Contains(in.capability, "azure_openai") {
 		protocol = domain.VerificationProtocolMCP
 	}
 
-	verificationType := verificationTypeForRequest(req)
+	verificationType := verificationTypeForRequest(VerificationRequest{Capability: in.capability})
 
 	// Map status to verification event status
 	var eventStatus domain.VerificationEventStatus
@@ -501,9 +558,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// Create verification event metadata
 	eventMetadata := map[string]interface{}{
 		"verificationId":   verificationID.String(),
-		"actionType":       req.Capability,
-		"resource":         req.Resource,
-		"context":          req.Context,
+		"actionType":       in.capability,
+		"resource":         in.resource,
+		"context":          in.context,
 		"trustScore":       trustScore,
 		"autoApproved":     status == "approved" || status == "auto-approved",
 		"displayStatus":    status, // Store actual status for frontend (approved/auto-approved/pending/denied)
@@ -513,6 +570,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	}
 	if status == "denied" {
 		eventMetadata["denialReason"] = denialReason
+	}
+	for k, v := range in.metadata {
+		eventMetadata[k] = v
 	}
 
 	// Create verification event using service
@@ -532,16 +592,16 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		VerificationType: verificationType,
 		Status:           eventStatus,
 		Result:           result,
-		Signature:        &req.Signature,
-		PublicKey:        &req.PublicKey,
+		Signature:        &in.signature,
+		PublicKey:        &in.publicKey,
 		Confidence:       confidence,
 		DurationMs:       verificationDurationMs,
 		ErrorReason:      errorReasonPtr,
 		InitiatorType:    domain.InitiatorTypeAgent,
 		InitiatorID:      &agentID,
 		InitiatorName:    &agent.DisplayName,
-		Action:           &req.Capability,
-		ResourceType:     &req.Resource,
+		Action:           &in.capability,
+		ResourceType:     &in.resource,
 		StartedAt:        startTime.Add(-time.Duration(verificationDurationMs) * time.Millisecond),
 		CompletedAt:      &completedAt,
 		Metadata:         eventMetadata,

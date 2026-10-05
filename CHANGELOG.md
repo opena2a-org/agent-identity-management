@@ -1060,6 +1060,32 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   from an error value. A status counts as 5xx when it is a 5xx constant, a local variable set to one, or a call to a
   package function that returns one.
 
+### Added — action verification accepts a signed statement with a nonce and a 30-second window
+
+- `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications` accept a second body form: exactly
+  `signedBytes`, `signature` and `publicKey`, each unpadded base64url. `signedBytes` is the DSSE v1
+  pre-authentication encoding of the payload type `application/vnd.opena2a.action-request.v1+json` and a JSON
+  payload with `action_type`, `agent_id`, `resource` (a string or `null`), `timestamp` (RFC 3339 in UTC with `Z`)
+  and `nonce` (16 random bytes), and optionally `context`, `delegation_digests` and `risk_level`. The Ed25519
+  signature is checked over the bytes as received, and the action is decided and recorded from the signed payload.
+  Numbers in `context` are recorded with the digits they were signed with.
+- A statement is accepted only when its `timestamp` is within 30 seconds of the database clock, and an agent's nonce
+  is accepted once. The time check and the nonce insert are one database statement, shared by both routes and every
+  replica: a statement accepted on one route is refused on the other. The window is a code constant.
+- Refusals carry a `reasonCode`. The shape checks answer 400 `invalidRequest` or `nonceRequired`, or 422
+  `limitExceeded` for `signedBytes` over 65,536 bytes or a payload nested deeper than 32 levels. An unknown agent and
+  a key that is not the agent's registered key get the same 401 `agentKeyNotRecognized` body. The others are 401
+  `signatureInvalid`, `hybridSignatureRequired`, `timestampOutsideWindow`, `nonceReused` and `agentStatusDenied`,
+  and 503 `freshnessCheckUnavailable` when the database cannot run the check. A refused statement writes no
+  verification event, audit entry or alert.
+- A statement from a suspended or revoked agent whose key and signature check out still spends its nonce. To stop a
+  key someone else holds from writing nonces, rotate or remove the key, or delete the agent.
+- Accepted nonces are kept in a new table, `agent_request_nonces` (migration 123), until 31 seconds after their
+  window ends. A purge deletes them once at start and then every 60 seconds; until a purge has completed, and
+  whenever none has for two intervals, every statement is refused with 503 and nothing is stored.
+- A request in the original form is handled as before. One that also carries a top-level `nonce` or
+  `delegationDigests` is refused with 400: those members are checked only inside a signed statement.
+
 ### Fixed — expired A2A request nonces are deleted on a schedule
 
 - An A2A request nonce, and the SHA-256 request hash stored with it, stayed in `a2a_request_nonces` after it expired
