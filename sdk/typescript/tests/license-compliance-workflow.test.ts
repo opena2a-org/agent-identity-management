@@ -44,7 +44,8 @@ import { load } from 'js-yaml';
  *        frontend-lockfile-only pull request no longer runs the Go check;
  *   AC5  each of those properties refuses a planted regression;
  *   AC6  the workflow's permissions, action set and sibling filters are held,
- *        and the allowlist reads as the ruling that admitted it.
+ *        the Go release is read from apps/backend/go.mod by every job that
+ *        sets Go up, and the allowlist reads as the ruling that admitted it.
  *
  * The allowances exist because the first real run of the fixed gate read the
  * real dependency set: ten MPL-2.0 HashiCorp modules behind the Vault client
@@ -107,6 +108,8 @@ const ALLOWLIST_REL = 'apps/backend/go-licenses-allowlist.tsv';
 const ALLOWLIST_PATH = join(REPO_ROOT, 'apps', 'backend', 'go-licenses-allowlist.tsv');
 const ROOT_LICENSE_PATH = join(REPO_ROOT, 'LICENSE');
 const BACKEND_LICENSE_PATH = join(REPO_ROOT, 'apps', 'backend', 'LICENSE');
+/** The one file every setup-go step reads the Go release from. */
+const GO_VERSION_FILE = 'apps/backend/go.mod';
 
 /**
  * The ten HashiCorp modules the first real run reported as class Reciprocal,
@@ -851,10 +854,58 @@ function assertLicenseCheckActionSet(source: string): void {
   assertActionRef(source, steps[2].uses as string, 'v4');
 
   expect(steps[1].with).toEqual({
-    'go-version': '1.25',
+    'go-version-file': GO_VERSION_FILE,
     'cache-dependency-path': 'apps/backend/go.sum',
   });
   expect(steps[2].with).toEqual({ 'node-version': '20' });
+}
+
+/** Every `with:` block of every job, with the job and step it belongs to. */
+function withBlocks(
+  source: string,
+): { jobId: string; step: WorkflowStep; inputs: Record<string, unknown> }[] {
+  return Object.entries(parseWorkflow(source).jobs).flatMap(([jobId, j]) =>
+    (j.steps ?? []).map((step) => ({ jobId, step, inputs: step.with ?? {} })),
+  );
+}
+
+/**
+ * The Go release is declared once, in apps/backend/go.mod. A `go-version:`
+ * literal on any step is a second declaration that moves on its own, so every
+ * setup-go step in the workflow reads the file and no step names a release.
+ */
+function assertGoVersionComesFromGoMod(source: string): void {
+  const blocks = withBlocks(source);
+  for (const { jobId, inputs } of blocks) {
+    expect(
+      Object.keys(inputs),
+      `the ${jobId} job must not hard-code go-version: the release is declared in ${GO_VERSION_FILE}`,
+    ).not.toContain('go-version');
+  }
+
+  const setupGo = blocks.filter(
+    ({ step }) =>
+      typeof step.uses === 'string' && step.uses.split('@')[0] === 'actions/setup-go',
+  );
+  expect(
+    setupGo.map(({ jobId }) => jobId),
+    'the license-check job must set Go up, or this assertion holds nothing',
+  ).toContain('license-check');
+  for (const { jobId, inputs } of setupGo) {
+    expect(
+      inputs['go-version-file'],
+      `the setup-go step of the ${jobId} job must read go-version-file: ${GO_VERSION_FILE}`,
+    ).toBe(GO_VERSION_FILE);
+  }
+}
+
+function assertGoVersionFileIsDelivered(): void {
+  const path = join(REPO_ROOT, GO_VERSION_FILE);
+  expect(existsSync(path), `${GO_VERSION_FILE} must be delivered`).toBe(true);
+  expect(
+    readFileSync(path, 'utf-8'),
+    `${GO_VERSION_FILE} must carry a go directive for setup-go to read`,
+  ).toMatch(/^go \d+\.\d+(\.\d+)?$/m);
 }
 
 function assertSiblingFiltersHeld(source: string): void {
@@ -1172,6 +1223,42 @@ function mutateDropAllowlistFromGoDeps(source: string): string {
     'the go_deps entry for the allowlist',
   );
   lines.splice(i, 1);
+  return lines.join('\n');
+}
+
+/** The index of the `go-version-file:` line of each setup-go step, per job. */
+function goVersionFileLines(lines: string[]): { jobId: string; index: number }[] {
+  const found: { jobId: string; index: number }[] = [];
+  let jobId = '';
+  let inJobs = false;
+  lines.forEach((l, index) => {
+    if (/^\S/.test(l)) inJobs = l.startsWith('jobs:');
+    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(l);
+    if (inJobs && header) jobId = header[1];
+    if (inJobs && l.trim() === `go-version-file: ${GO_VERSION_FILE}`) {
+      found.push({ jobId, index });
+    }
+  });
+  return found;
+}
+
+/** (11) the license-check job back on a release literal of its own. */
+function mutateHardCodeGoVersionInLicenseCheck(source: string): string {
+  const lines = source.split('\n');
+  const target = goVersionFileLines(lines).find((f) => f.jobId === 'license-check');
+  expect(target, 'expected a go-version-file: line in the license-check job').toBeDefined();
+  const i = (target as { index: number }).index;
+  lines.splice(i, 1, `${indentOf(lines[i])}go-version: "1.25"`);
+  return lines.join('\n');
+}
+
+/** (12) a release literal beside the file input, in a job other than license-check. */
+function mutateAddGoVersionToAnotherJob(source: string): string {
+  const lines = source.split('\n');
+  const target = goVersionFileLines(lines).find((f) => f.jobId !== 'license-check');
+  expect(target, 'expected a go-version-file: line outside the license-check job').toBeDefined();
+  const i = (target as { index: number }).index;
+  lines.splice(i, 0, `${indentOf(lines[i])}go-version: "1.25"`);
   return lines.join('\n');
 }
 
@@ -1654,6 +1741,37 @@ describe('each bound property refuses a planted regression', () => {
     expect(() => assertGoDepsFilter(mutated)).toThrow();
   });
 
+  it('AC5 (11) a hard-coded go-version in the license-check job is refused', () => {
+    const mutated = mutateHardCodeGoVersionInLicenseCheck(workflowSource());
+    // The mutation must have landed in the license-check job, or the throws
+    // below would prove nothing about it.
+    const setupGo = (job(mutated, 'license-check').steps ?? []).find(
+      (s) => typeof s.uses === 'string' && s.uses.startsWith('actions/setup-go@'),
+    );
+    expect(setupGo?.with).toEqual({
+      'go-version': '1.25',
+      'cache-dependency-path': 'apps/backend/go.sum',
+    });
+    expect(() => assertLicenseCheckActionSet(mutated)).toThrow();
+    expect(() => assertGoVersionComesFromGoMod(mutated)).toThrow();
+  });
+
+  it('AC5 (12) a hard-coded go-version in any other job is refused', () => {
+    const source = workflowSource();
+    const mutated = mutateAddGoVersionToAnotherJob(source);
+    // Exactly one step outside the license-check job gained the literal, and
+    // the license-check job itself still passes its own assertion.
+    const carriers = (text: string) =>
+      withBlocks(text)
+        .filter(({ inputs }) => 'go-version' in inputs)
+        .map(({ jobId }) => jobId);
+    expect(carriers(source)).toEqual([]);
+    expect(carriers(mutated)).toHaveLength(1);
+    expect(carriers(mutated)).not.toContain('license-check');
+    assertLicenseCheckActionSet(mutated);
+    expect(() => assertGoVersionComesFromGoMod(mutated)).toThrow();
+  });
+
   it('QGF-251.AC5 none of those assertions throws on the delivered files', () => {
     const source = workflowSource();
     assertGoStepRunsOnlyTheScript(source);
@@ -1668,6 +1786,8 @@ describe('each bound property refuses a planted regression', () => {
     assertNpmStepUnchanged(source);
     assertTopLevelPermissions(source);
     assertLicenseCheckActionSet(source);
+    assertGoVersionComesFromGoMod(source);
+    assertGoVersionFileIsDelivered();
     assertSiblingFiltersHeld(source);
     assertBackendCarriesTheRepositoryLicense();
     assertAllowlistIsTheRuling(allowlistSource());
@@ -1692,6 +1812,11 @@ describe('the workflow permissions, action set and sibling filters are held', ()
 
   it('QGF-251.AC6 the license-check job uses exactly checkout, setup-go and setup-node, at the base tag or a sha with its version comment', () => {
     assertLicenseCheckActionSet(workflowSource());
+  });
+
+  it('AC6 every setup-go step reads go-version-file: apps/backend/go.mod and no job hard-codes a go-version', () => {
+    assertGoVersionComesFromGoMod(workflowSource());
+    assertGoVersionFileIsDelivered();
   });
 
   it('QGF-251.AC6 the docker filter keeps its five patterns and the backend, frontend and crypto filters keep theirs', () => {
