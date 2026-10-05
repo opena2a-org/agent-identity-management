@@ -35,9 +35,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { AuthGuard } from "@/components/auth-guard";
 
-export default function SDKTokensPage() {
+/**
+ * The SDK tokens section of the Credentials page (app/dashboard/credentials): the tokens
+ * issued with SDK downloads, their usage, and the revoke and revoke-all actions.
+ */
+export function SDKTokensSection({ headingId }: { headingId: string }) {
   const [tokens, setTokens] = useState<SDKToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,15 +127,13 @@ export default function SDKTokensPage() {
   }
 
   return (
-    <AuthGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink">SDK tokens</h1>
-          <p className="text-sm text-ink-secondary mt-1">
-            Manage your SDK authentication tokens and monitor their usage
-          </p>
+          <h2 id={headingId} className="text-lg font-semibold text-ink">
+            SDK tokens
+          </h2>
         </div>
         <div className="flex items-center gap-3">
           <Button
@@ -427,6 +428,5 @@ export default function SDKTokensPage() {
         </DialogContent>
       </Dialog>
     </div>
-    </AuthGuard>
   );
 }
