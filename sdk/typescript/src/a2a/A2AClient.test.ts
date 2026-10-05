@@ -11,6 +11,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { A2AClient } from './A2AClient';
 import type { AIMClient } from '../client/AIMClient';
 import type {
@@ -43,6 +45,45 @@ const createMockAIMClient = () => {
 const setMockResponse = (response: unknown) => {
   mockFetchResponse = response;
 };
+
+// The A2A routes the server registers, read from the file that registers them:
+// `a2a.<Verb>("<path>", ...)` on the /api/v1/a2a group and `v1.<Verb>("/a2a/...", ...)`.
+const SERVER_MAIN = join(__dirname, '..', '..', '..', '..', 'apps', 'backend', 'cmd', 'server', 'main.go');
+
+const registeredA2ARoutes = (): Array<{ method: string; path: string; pattern: RegExp }> => {
+  const source = readFileSync(SERVER_MAIN, 'utf8');
+  const toRoute = (verb: string, path: string) => ({
+    method: verb.toUpperCase(),
+    path,
+    pattern: new RegExp(
+      '^' +
+        path
+          .split('/')
+          .map((seg) => (seg.startsWith(':') ? '[^/]+' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+          .join('/') +
+        '$'
+    ),
+  });
+  const routes = [
+    ...[...source.matchAll(/\ba2a\.(Get|Post|Put|Patch|Delete)\("([^"]+)"/g)].map((m) =>
+      toRoute(m[1], `/api/v1/a2a${m[2]}`)
+    ),
+    ...[...source.matchAll(/\bv1\.(Get|Post|Put|Patch|Delete)\("(\/a2a\/[^"]+)"/g)].map((m) =>
+      toRoute(m[1], `/api/v1${m[2]}`)
+    ),
+  ];
+  if (routes.length === 0) {
+    throw new Error(`no A2A route registrations found in ${SERVER_MAIN}`);
+  }
+  return routes;
+};
+
+// The method and path (query dropped) of each request the client sent through fetch.
+const sentRequests = (): Array<{ method: string; path: string }> =>
+  vi.mocked(global.fetch).mock.calls.map(([url, init]) => ({
+    method: (init?.method ?? 'GET').toUpperCase(),
+    path: new URL(String(url)).pathname,
+  }));
 
 describe('A2AClient', () => {
   let client: A2AClient;
@@ -614,6 +655,110 @@ describe('A2AClient', () => {
 
       // Skill not verified: needs 3+ attesters, 2+ owners, 60+ confidence
       expect(result.isVerified).toBe(false);
+    });
+  });
+
+  // ==================== Registered Route Tests ====================
+
+  describe('Requests reach a route the server registers', () => {
+    const TARGET = '6f1c2b8e-1d2a-4c3b-9e8f-0a1b2c3d4e5f';
+    const OTHER = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
+
+    const expectEveryRequestRegistered = () => {
+      const routes = registeredA2ARoutes();
+      const sent = sentRequests();
+      expect(sent.length).toBeGreaterThan(0);
+      for (const req of sent) {
+        const match = routes.find((r) => r.method === req.method && r.pattern.test(req.path));
+        expect(match, `${req.method} ${req.path} is not a route the server registers`).toBeDefined();
+      }
+    };
+
+    it('getTaskHistory lists tasks through GET /tasks, filtered to the target agent', async () => {
+      setMockResponse({
+        tasks: [
+          {
+            id: 'row-1',
+            externalTaskId: 'ext-1',
+            contextId: 'code-review',
+            clientAgentId: 'test-agent-id',
+            remoteAgentId: TARGET,
+            skillId: 'code-review',
+            state: 'COMPLETED',
+            createdAt: '2026-10-01T12:00:00Z',
+            messageCount: 0,
+          },
+          {
+            id: 'row-2',
+            externalTaskId: 'ext-2',
+            contextId: 'summarize',
+            clientAgentId: TARGET,
+            remoteAgentId: 'test-agent-id',
+            state: 'SUBMITTED',
+            createdAt: '2026-10-01T11:00:00Z',
+            messageCount: 0,
+          },
+          {
+            id: 'row-3',
+            externalTaskId: 'ext-3',
+            contextId: 'unrelated',
+            clientAgentId: 'test-agent-id',
+            remoteAgentId: OTHER,
+            state: 'FAILED',
+            createdAt: '2026-10-01T10:00:00Z',
+            messageCount: 0,
+          },
+        ],
+        total: 3,
+        limit: 25,
+        offset: 0,
+      });
+
+      const result = await client.getTaskHistory(TARGET, 25);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://test.example.com/api/v1/a2a/tasks?agentId=${TARGET}&limit=25`,
+        expect.objectContaining({ method: 'GET' })
+      );
+      expectEveryRequestRegistered();
+      expect(result).toEqual([
+        { id: 'row-1', taskId: 'ext-1', taskType: 'code-review', status: 'COMPLETED', createdAt: '2026-10-01T12:00:00Z' },
+        { id: 'row-2', taskId: 'ext-2', taskType: 'summarize', status: 'SUBMITTED', createdAt: '2026-10-01T11:00:00Z' },
+      ]);
+    });
+
+    it('getTaskHistory returns an empty list when the server returns no tasks', async () => {
+      setMockResponse({ tasks: null, total: 0, limit: 50, offset: 0 });
+
+      await expect(client.getTaskHistory(TARGET)).resolves.toEqual([]);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://test.example.com/api/v1/a2a/tasks?agentId=${TARGET}&limit=50`,
+        expect.objectContaining({ method: 'GET' })
+      );
+    });
+
+    it("listSkills lists the current agent's skills through GET /agents/:id/skills", async () => {
+      const mockSkills = [{ id: 'skill-1', name: 'Code Analysis', description: 'Analyzes code quality' }];
+      setMockResponse({ agentId: 'test-agent-id', skills: mockSkills, count: 1 });
+
+      const result = await client.listSkills();
+
+      expect(result).toEqual(mockSkills);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://test.example.com/api/v1/a2a/agents/test-agent-id/skills',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expectEveryRequestRegistered();
+    });
+
+    it('revokeAttestation rejects without sending a request, because the server has no revocation route', async () => {
+      await expect(client.revokeAttestation('attest-123', 'No longer valid')).rejects.toThrow(
+        /no route that revokes an attestation/
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(
+        registeredA2ARoutes().some((r) => r.method === 'POST' && r.pattern.test('/api/v1/a2a/attestations/attest-123/revoke'))
+      ).toBe(false);
     });
   });
 });

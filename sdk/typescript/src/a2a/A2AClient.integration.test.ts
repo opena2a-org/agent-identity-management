@@ -510,7 +510,7 @@ describe('A2AClient Integration Tests', () => {
     );
 
     it.skipIf(!backendAvailable || !credentialsAvailable)(
-      'should revoke attestation',
+      'should refuse to revoke an attestation, since the server has no revocation route',
       async () => {
         const attestation = await a2aClient.attestSkill(
           targetAgentId,
@@ -519,13 +519,9 @@ describe('A2AClient Integration Tests', () => {
           0.8
         );
 
-        const revoked = await a2aClient.revokeAttestation(
-          attestation.id,
-          'No longer valid'
-        );
-
-        expect(revoked.isRevoked).toBe(true);
-        console.log('✅ Attestation revoked');
+        await expect(
+          a2aClient.revokeAttestation(attestation.id, 'No longer valid')
+        ).rejects.toThrow(/no route that revokes an attestation/);
       }
     );
   });
