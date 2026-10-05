@@ -21,8 +21,9 @@ export interface RouteMove {
   destination: string;
 }
 
-// Empty until the first move lands; no planned destination page exists yet.
-export const ROUTE_MOVES: readonly RouteMove[] = [];
+export const ROUTE_MOVES: readonly RouteMove[] = [
+  { source: "/dashboard/admin/compliance", destination: "/dashboard/compliance" },
+];
 
 /** The table in the shape next.config.ts returns from redirects(). */
 export function dashboardRedirects() {

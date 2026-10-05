@@ -80,7 +80,7 @@ const THREAT_RECOMMENDATIONS: Record<string, RecommendationItem[]> = {
       priority: "medium",
       action: "Review violation history",
       description: "Check the compliance logs for patterns of malicious behavior",
-      link: "/dashboard/admin/compliance",
+      link: "/dashboard/compliance",
       icon: FileWarning,
     },
   ],
@@ -172,7 +172,7 @@ const THREAT_RECOMMENDATIONS: Record<string, RecommendationItem[]> = {
       priority: "medium",
       action: "Audit access logs",
       description: "Review who accessed what with the compromised credentials",
-      link: "/dashboard/admin/compliance",
+      link: "/dashboard/compliance",
       icon: Database,
     },
   ],
@@ -207,7 +207,7 @@ const DEFAULT_RECOMMENDATIONS: RecommendationItem[] = [
     priority: "high",
     action: "Investigate the threat",
     description: "Review agent activity logs and audit trail for suspicious patterns",
-    link: "/dashboard/admin/compliance",
+    link: "/dashboard/compliance",
     icon: Eye,
   },
   {
@@ -416,7 +416,7 @@ export default function ThreatDetailModal({
                 <ExternalLink className="h-3 w-3" />
               </Link>
               <Link
-                href="/dashboard/admin/compliance"
+                href="/dashboard/compliance"
                 className="inline-flex items-center gap-1 rounded-pill border border-stroke bg-glass px-3 py-1.5 text-xs font-medium text-brand-text transition-colors hover:bg-brand-soft"
               >
                 <FileText className="h-3 w-3" />
