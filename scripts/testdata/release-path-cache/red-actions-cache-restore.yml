@@ -1,0 +1,19 @@
+# Refused: actions/cache/restore in a job a release event starts.
+name: fixture
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache/restore@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.m2
+          key: maven

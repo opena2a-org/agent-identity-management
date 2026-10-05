@@ -60,6 +60,9 @@ jobs:
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           image: docker.io/tonistiigi/binfmt:latest@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 # qemu-v10.2.3
+          # The action caches this image in the Actions cache by default, and this
+          # job runs for a platform-v* tag (scripts/lint-release-path-cache.py).
+          cache-image: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -67,7 +70,7 @@ jobs:
           driver-opts: image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea # v0.33.1
 
       # The same inputs as build-backend's build step, minus `push`, `tags` and
-      # `labels`; the Actions cache is read and written here only.
+      # `labels`. No cache-from / cache-to: this job also runs on a tag push.
       - name: Build image (no push)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -75,8 +78,6 @@ jobs:
           file: infrastructure/docker/Dockerfile.backend
           platforms: linux/amd64,linux/arm64
           push: false
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
           provenance: true
           sbom: true
           build-args: |
@@ -94,6 +95,9 @@ jobs:
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           image: docker.io/tonistiigi/binfmt:latest@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 # qemu-v10.2.3
+          # The action caches this image in the Actions cache by default, and this
+          # job runs for a platform-v* tag (scripts/lint-release-path-cache.py).
+          cache-image: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -101,7 +105,7 @@ jobs:
           driver-opts: image=moby/buildkit:buildx-stable-1@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea # v0.33.1
 
       # The same inputs as build-frontend's build step, minus `push`, `tags` and
-      # `labels`; the Actions cache is read and written here only.
+      # `labels`. No cache-from / cache-to: this job also runs on a tag push.
       - name: Build image (no push)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -109,8 +113,6 @@ jobs:
           file: infrastructure/docker/Dockerfile.frontend
           platforms: linux/amd64,linux/arm64
           push: false
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
           provenance: true
           sbom: true
           build-args: |
@@ -142,6 +144,9 @@ jobs:
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           image: docker.io/tonistiigi/binfmt:latest@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 # qemu-v10.2.3
+          # The action caches this image in the Actions cache by default, and this
+          # job runs for a platform-v* tag (scripts/lint-release-path-cache.py).
+          cache-image: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -285,8 +290,9 @@ jobs:
             type=match,pattern=^platform-v(\d+\.\d+)\.\d+$,group=1
             type=match,pattern=^platform-v(\d+)\.\d+\.\d+$,group=1
 
-      # No cache-from / cache-to: a publish build reads nothing a merge-path
-      # run can write. The build inputs are verify-backend's.
+      # No cache-from / cache-to: a publish build reads nothing another run
+      # wrote (scripts/lint-release-path-cache.py). The build inputs are
+      # verify-backend's.
       - name: Build and push image
         id: push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -347,6 +353,9 @@ jobs:
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           image: docker.io/tonistiigi/binfmt:latest@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 # qemu-v10.2.3
+          # The action caches this image in the Actions cache by default, and this
+          # job runs for a platform-v* tag (scripts/lint-release-path-cache.py).
+          cache-image: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
