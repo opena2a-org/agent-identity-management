@@ -82,6 +82,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — an authenticated request without an organization or user answers 401, not 500
+
+- Agent, A2A, capability, capability request, lifecycle, MCP attestation, secrets, security policy, tag, admin and
+  authorize routes read the caller's organization and user from the request context through shared helpers. When a
+  caller passed authentication without one of them, the helper wrote a 401 and returned a plain error, and the
+  server's error handler replaced that response with `500 Internal Server Error`. The helpers now return a 401 error
+  that the error handler answers as `401` with `"message": "Organization ID not found in context"` (or
+  `"User ID not found in context"`), in the same `{"error": true, "message": ..., "timestamp": ...}` shape as other
+  API errors. A test now checks that every call site returns the helper's error unchanged.
+
 ### Changed — `/.well-known/aip` identifies the provider as `did:web:<provider-host>`
 
 - The discovery document served `"providerDid": "did:aip:provider_opena2a"` on every deployment, a fixed value that
