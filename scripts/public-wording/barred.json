@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "about": "Wording that must not appear in this repository's public documents, read by scripts/check-public-wording.py. Each barred entry is a term or phrase with the reason it is ruled out. Each allowlist entry is one sentence that uses a barred term to say, accurately, what the code does not do; a barred term inside that sentence is not a hit. Terms match case-insensitively on word boundaries, and a space or hyphen inside a term matches any run of spaces, hyphens and line breaks, so 'tamper proof' also matches 'Tamper-proof'. Allowlist sentences match exactly, apart from line wrapping.",
+  "barred": [
+    {
+      "term": "tamper proof",
+      "reason": "Claims a record cannot be tampered with. The audit table is not append-only at the database layer and is not cryptographically signed, so the term is never used."
+    },
+    {
+      "term": "tamper evident",
+      "reason": "Claims tamper-evidence the code does not provide. Allowed only when a test shows chain verification failing at an altered row."
+    },
+    {
+      "term": "append only",
+      "reason": "Claims a store that nothing updates or deletes. Allowed only for a store no code path updates or deletes, with a test; the audit table is not append-only at the database layer."
+    },
+    {
+      "term": "immutable",
+      "reason": "Claims a table or log cannot change. Not used for a database table or log; the audit table is not append-only at the database layer."
+    },
+    {
+      "term": "cannot be edited or deleted",
+      "reason": "Claims records cannot be edited or deleted, which the audit table does not guarantee: it is not append-only at the database layer."
+    },
+    {
+      "term": "non-repudiation",
+      "reason": "Claims an agent cannot deny an action it signed. Not used while legacy registration generates and stores the agent's private key on the server, because a key the server holds does not prove the agent acted."
+    }
+  ],
+  "allowlist": [
+    {
+      "sentence": "The `audit_logs` table records actions and is access-controlled, but is not append-only at the database layer and is not cryptographically signed.",
+      "reason": "Accurate negative in SECURITY.md: says the audit table is not append-only."
+    },
+    {
+      "sentence": "AU-9's \"protection of audit information\" requirement is partially met by RBAC; it is not met by a tamper-evident signing scheme.",
+      "reason": "Accurate negative in SECURITY.md: says no tamper-evident signing scheme protects the audit records."
+    }
+  ]
+}
