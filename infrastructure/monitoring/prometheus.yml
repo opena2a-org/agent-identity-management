@@ -25,15 +25,21 @@ scrape_configs:
         labels:
           service: 'prometheus'
 
-  # Backend API metrics
+  # Backend metrics, from the backend's metrics listener rather than the API
+  # port. docker-compose.yml sets METRICS_LISTEN_ADDR=0.0.0.0:9464 inside the
+  # container, reachable on aim-network only. Off loopback the listener requires
+  # METRICS_AUTH_TOKEN; Prometheus reads it from the compose secret file.
   - job_name: 'backend'
     static_configs:
-      - targets: ['host.docker.internal:8080']
+      - targets: ['backend:9464']
         labels:
           service: 'backend'
           component: 'api'
     metrics_path: '/metrics'
     scrape_interval: 10s
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics_auth_token
 
   # PostgreSQL metrics (via postgres_exporter if added)
   - job_name: 'postgres'

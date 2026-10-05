@@ -59,15 +59,8 @@ var (
 		[]string{"severity", "type"},
 	)
 
-	// Trust score metrics
-	trustScoreGauge = factory.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "aim_trust_score",
-			Help: "Current trust score of agents",
-		},
-		[]string{"agent_id", "agent_name"},
-	)
-
+	// Trust score metrics. Only the distribution is exported: a per-agent
+	// series would put an agent identifier on the exposition.
 	trustScoreHistogram = factory.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "aim_trust_score_distribution",
@@ -98,14 +91,6 @@ var (
 			Name: "aim_mcp_servers_total",
 			Help: "Total number of registered MCP servers",
 		},
-	)
-
-	mcpAttestationsTotal = factory.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "aim_mcp_attestations_total",
-			Help: "Total number of MCP attestations",
-		},
-		[]string{"agent_id", "mcp_id", "status"},
 	)
 
 	// Verification metrics
@@ -295,9 +280,9 @@ func RecordSecurityThreat(severity, threatType string) {
 	securityThreatsTotal.WithLabelValues(severity, threatType).Inc()
 }
 
-// UpdateTrustScore updates the trust score for an agent
-func UpdateTrustScore(agentID, agentName string, score float64) {
-	trustScoreGauge.WithLabelValues(agentID, agentName).Set(score)
+// UpdateTrustScore observes an agent's trust score in the distribution. It
+// takes no agent identifier: no metric carries a per-entity label.
+func UpdateTrustScore(score float64) {
 	trustScoreHistogram.Observe(score)
 }
 
@@ -314,11 +299,6 @@ func UpdateActiveAgents(count float64) {
 // UpdateMCPServersTotal updates the total number of MCP servers
 func UpdateMCPServersTotal(count float64) {
 	mcpServersTotal.Set(count)
-}
-
-// RecordMCPAttestation records an MCP attestation
-func RecordMCPAttestation(agentID, mcpID, status string) {
-	mcpAttestationsTotal.WithLabelValues(agentID, mcpID, status).Inc()
 }
 
 // RecordVerificationEvent records a verification event

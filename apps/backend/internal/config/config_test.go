@@ -231,8 +231,8 @@ func TestConfigSource_HasNoPlaintextDevSecrets(t *testing.T) {
 
 // TestLoad_MetricsAuthToken pins the METRICS_AUTH_TOKEN contract for issue #348:
 // the env var operators set must be the one Load() reads, and it must default to
-// empty (open, backward-compatible). A typo in the var name would silently leave
-// /metrics unauthenticated despite a configured token.
+// empty. A typo in the var name would silently drop a configured token, which
+// takes /metrics off the API listener and refuses a non-loopback metrics bind.
 func TestLoad_MetricsAuthToken(t *testing.T) {
 	// Load() runs Validate(); satisfy the required env with a known-valid set.
 	t.Setenv("POSTGRES_HOST", "localhost")

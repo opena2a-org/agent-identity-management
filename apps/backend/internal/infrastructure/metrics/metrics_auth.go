@@ -1,31 +1,37 @@
 package metrics
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
 
-// MetricsAuthMiddleware optionally gates the /metrics endpoint behind a bearer
-// token.
+// MetricsAuthMiddleware gates a /metrics route behind a bearer token.
 //
 // The Prometheus scrape exposes endpoint topology and operational counters
-// (info-disclosure, CWE-200 — issue #348). When token is non-empty, a request
-// must present `Authorization: Bearer <token>` with an exact, constant-time
-// match; otherwise it is rejected with 401. Prometheus supports this natively
-// via `authorization`/`bearer_token` in scrape_configs.
+// (info-disclosure, CWE-200 — issue #348). A request must present
+// `Authorization: Bearer <token>` matching token exactly; otherwise it is
+// rejected with 401. Prometheus supports this natively via `authorization`
+// with `credentials_file` in scrape_configs.
 //
-// When token is empty the endpoint stays open, preserving the prior behaviour
-// for deployments that rely on network-layer isolation instead. main.go logs a
-// startup warning in that case so the exposure is not silent.
+// An empty token refuses every request. A surface meant to be open (the
+// dedicated metrics listener on a loopback address, see cmd/server) mounts the
+// handler without this middleware; it never passes an empty token to open it.
 //
-// Constant-time comparison (crypto/subtle) avoids leaking the token length or
-// prefix through response timing.
+// The comparison runs crypto/subtle.ConstantTimeCompare over the SHA-256
+// digests of the presented and the configured token. ConstantTimeCompare
+// returns at once when its inputs differ in length, so comparing the raw
+// values would let response timing tell a presented value of the right length
+// from one of the wrong length. Both digests are 32 bytes whatever the inputs,
+// so the compare does the same work for every presented value and response
+// timing reveals neither the configured token's length nor its content.
 func MetricsAuthMiddleware(token string) fiber.Handler {
+	want := sha256.Sum256([]byte(token))
 	return func(c fiber.Ctx) error {
 		if token == "" {
-			return c.Next()
+			return metricsUnauthorized(c)
 		}
 
 		const prefix = "Bearer "
@@ -34,8 +40,8 @@ func MetricsAuthMiddleware(token string) fiber.Handler {
 			return metricsUnauthorized(c)
 		}
 
-		presented := strings.TrimPrefix(authHeader, prefix)
-		if subtle.ConstantTimeCompare([]byte(presented), []byte(token)) != 1 {
+		got := sha256.Sum256([]byte(strings.TrimPrefix(authHeader, prefix)))
+		if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
 			return metricsUnauthorized(c)
 		}
 

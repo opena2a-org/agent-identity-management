@@ -45,6 +45,7 @@ REQUIRED_SECRETS=(
     KEYVAULT_MASTER_KEY
     MINIO_ROOT_PASSWORD
     GRAFANA_ADMIN_PASSWORD
+    METRICS_AUTH_TOKEN
 )
 
 # OPTIONAL_SECRETS: ${VAR:-} (empty fallback) is allowed because the feature

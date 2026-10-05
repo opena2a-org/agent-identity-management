@@ -49,6 +49,11 @@ grafana_admin_password="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-32)"
 # bootstrap runs, bootstrap generates its own random password and prints it.
 default_admin_password="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-28)Aa1!"
 
+# METRICS_AUTH_TOKEN — bearer token for the backend's /metrics listener, which
+# docker-compose.yml binds off loopback for Prometheus. The backend treats a
+# value under 32 characters as unset; hex32 = 64.
+metrics_auth_token="$(openssl rand -hex 32)"
+
 prefix=""
 if [[ "$mode" == "export" ]]; then
     prefix="export "
@@ -64,4 +69,5 @@ ${prefix}REDIS_PASSWORD=${redis_password}
 ${prefix}MINIO_ROOT_PASSWORD=${minio_root_password}
 ${prefix}GRAFANA_ADMIN_PASSWORD=${grafana_admin_password}
 ${prefix}DEFAULT_ADMIN_PASSWORD=${default_admin_password}
+${prefix}METRICS_AUTH_TOKEN=${metrics_auth_token}
 EOF
