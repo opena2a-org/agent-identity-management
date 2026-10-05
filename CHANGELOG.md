@@ -11,6 +11,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — a prebuilt server binary is no longer part of the source tree
+
+- `apps/backend/cmd/server/server`, a 20.7 MB macOS x86_64 executable built on a developer machine, was tracked in
+  the repository. Nothing used it: the container image builds the server from source. It is removed, and an ignore
+  rule keeps the output of `go build` in that directory out of `git status`.
+- A test in `apps/backend/cmd/server` fails if a compiled `server` is tracked there again or the ignore rule goes.
+
 ### Changed — the developer compose stack passes `DEFAULT_ADMIN_PASSWORD` only to a one-shot bootstrap run
 
 - `docker-compose.yml` set `DEFAULT_ADMIN_PASSWORD` in the backend's environment. The backend never reads it; only
