@@ -277,7 +277,7 @@ export default function RegisterPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, password: e.target.value })
                   }
-                  className={`w-full pl-10 pr-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
+                  className={`w-full pl-10 pr-12 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
                     errors.password ? "border-danger" : "border-stroke"
                   }`}
                   placeholder="Min. 8 characters, uppercase, lowercase, number, special char"
@@ -285,7 +285,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink"
+                  className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center text-ink-tertiary hover:text-ink"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
@@ -302,7 +302,7 @@ export default function RegisterPage() {
                 </p>
               )}
               {!errors.password && (
-                <p className="mt-1 text-xs text-ink-tertiary">
+                <p className="mt-1 text-sm text-ink-tertiary">
                   Must be 8+ characters with uppercase, lowercase, number &
                   special character
                 </p>
@@ -328,7 +328,7 @@ export default function RegisterPage() {
                       confirmPassword: e.target.value,
                     })
                   }
-                  className={`w-full pl-10 pr-4 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
+                  className={`w-full pl-10 pr-12 py-2 rounded-inset border bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-ring ${
                     errors.confirmPassword
                       ? "border-danger"
                       : "border-stroke"
@@ -338,7 +338,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirm((s) => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink"
+                  className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center text-ink-tertiary hover:text-ink"
                   aria-label={showConfirm ? "Hide password" : "Show password"}
                 >
                   {showConfirm ? (

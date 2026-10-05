@@ -140,7 +140,7 @@ function DevicePageContent() {
         <p className="mt-1 text-sm text-ink-secondary">
           The terminal that showed code {userCode} now holds your credentials. You can close this tab.
         </p>
-        <div className="mt-5 rounded-inset bg-glass-inset-gray p-3.5 text-xs text-ink-secondary">
+        <div className="mt-5 rounded-inset bg-glass-inset-gray p-3.5 text-sm text-ink-secondary">
           Run <code className="rounded bg-glass-inset px-1.5 py-0.5 font-mono text-ink">aim-sdk status</code> to confirm.
         </div>
       </div>
@@ -156,7 +156,7 @@ function DevicePageContent() {
         <h1 className="mt-4 text-[22px] font-bold tracking-[-0.03em] text-ink">Code expired</h1>
         <p className="mt-1 text-sm text-ink-secondary">
           This code is no longer valid. Run{" "}
-          <code className="rounded bg-glass-inset px-1.5 py-0.5 font-mono text-xs text-ink">aim-sdk login</code> again
+          <code className="rounded bg-glass-inset px-1.5 py-0.5 font-mono text-ink">aim-sdk login</code> again
           to get a new one.
         </p>
       </div>
@@ -178,7 +178,7 @@ function DevicePageContent() {
         {deviceState === "enter_code" ? (
           <>
             <h2 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Enter the code from your terminal</h2>
-            <p className="mt-1 text-xs text-ink-secondary">
+            <p className="mt-1 text-sm text-ink-secondary">
               <code className="font-mono">aim-sdk login</code> prints it as XXXX-XXXX.
             </p>
             <form onSubmit={handleCodeSubmit} className="mt-5" noValidate>
@@ -198,7 +198,7 @@ function DevicePageContent() {
                 spellCheck={false}
                 aria-invalid={!!errorMessage}
               />
-              {errorMessage && <p className="mt-2 text-xs font-semibold text-danger-text">{errorMessage}</p>}
+              {errorMessage && <p className="mt-2 text-sm font-semibold text-danger-text">{errorMessage}</p>}
               <Button type="submit" className="mt-4 w-full" size="lg">
                 Continue
               </Button>
@@ -207,7 +207,7 @@ function DevicePageContent() {
         ) : (
           <>
             <h2 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Confirm the code</h2>
-            <p className="mt-1 text-xs text-ink-secondary">
+            <p className="mt-1 text-sm text-ink-secondary">
               {clientLabel ? <>Requested by {clientLabel}.</> : <>Looking up the request…</>}
             </p>
             <div className="mt-4 rounded-inset bg-glass-inset-gray p-4 text-center">
@@ -216,7 +216,7 @@ function DevicePageContent() {
 
             <div className="mt-4 flex items-start gap-2 rounded-inset border border-warning-border bg-warning-fill p-3">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-text" aria-hidden="true" />
-              <p className="text-xs text-ink-body">
+              <p className="text-sm text-ink-body">
                 Approve only if you started this login yourself, just now, and this code matches the one in your
                 terminal. Approving signs that command line in as you.
               </p>
@@ -224,14 +224,14 @@ function DevicePageContent() {
 
             {errorMessage && deviceState === "error" && (
               <div className="mt-4 rounded-inset border border-danger-border bg-danger-fill p-3">
-                <p className="text-xs font-semibold text-danger-text">{errorMessage}</p>
+                <p className="text-sm font-semibold text-danger-text">{errorMessage}</p>
               </div>
             )}
 
             <div className="mt-5 space-y-3">
               {!signedIn ? (
                 <>
-                  <p className="text-center text-xs text-ink-secondary">Sign in to continue.</p>
+                  <p className="text-center text-sm text-ink-secondary">Sign in to continue.</p>
                   <Button type="button" className="w-full" size="lg" onClick={goToLogin}>
                     Sign in to authorize
                   </Button>
@@ -262,7 +262,7 @@ function DevicePageContent() {
                   setClientLabel(null);
                   setErrorMessage("");
                 }}
-                className="w-full py-2 text-xs font-semibold text-ink-secondary hover:text-ink"
+                className="w-full py-2 text-sm font-semibold text-ink-secondary hover:text-ink"
               >
                 Enter a different code
               </button>
@@ -271,7 +271,7 @@ function DevicePageContent() {
         )}
       </div>
 
-      <p className="mt-5 text-center text-xs text-ink-tertiary">
+      <p className="mt-5 text-center text-sm text-ink-tertiary">
         Approving signs that command line in as you. Only approve a code you asked for.
       </p>
     </>
