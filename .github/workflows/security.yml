@@ -35,8 +35,8 @@ jobs:
       npm_deps: ${{ steps.filter.outputs.npm_deps }}
       crypto: ${{ steps.filter.outputs.crypto }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         id: filter
         with:
           filters: |
@@ -112,12 +112,12 @@ jobs:
     # Intentional placeholder files (e.g. .env.example) are
     # allowlisted via .hmaignore at the repo root.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
@@ -152,19 +152,19 @@ jobs:
     name: Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
 
       - name: Trivy filesystem scan (Go)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e # master
         with:
           scan-type: fs
           scan-ref: apps/backend
@@ -172,7 +172,7 @@ jobs:
           exit-code: 0
 
       - name: Trivy filesystem scan (Frontend)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e # master
         with:
           scan-type: fs
           scan-ref: apps/web
@@ -198,9 +198,9 @@ jobs:
       run:
         working-directory: apps/backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
@@ -211,7 +211,7 @@ jobs:
           gosec -fmt sarif -out gosec-results.sarif -exclude-dir=vendor ./... || true
 
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
         if: always()
         with:
           sarif_file: apps/backend/gosec-results.sarif
@@ -240,7 +240,7 @@ jobs:
             dockerfile: infrastructure/docker/Dockerfile.frontend
             context: .
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Build image
         run: |
@@ -250,7 +250,7 @@ jobs:
             ${{ matrix.context }}
 
       - name: Trivy container scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e # master
         with:
           image-ref: aim-${{ matrix.image }}:scan
           severity: CRITICAL,HIGH
@@ -265,7 +265,7 @@ jobs:
       (github.event_name == 'pull_request' && needs.changes.outputs.crypto == 'true')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Run crypto audit
         run: |
@@ -292,14 +292,14 @@ jobs:
       GO_LICENSES_VERSION: v2.0.1
       GO_LICENSES_SUM: h1:ti+9bi5o7DKbeeg5eBb/uZTgsaPNoJaLCh93cRcXsW8=
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
 
@@ -346,10 +346,10 @@ jobs:
       run:
         working-directory: apps/backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: needs.changes.outputs.backend == 'true'
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: needs.changes.outputs.backend == 'true'
         with:
           go-version: "1.25"
@@ -357,7 +357,7 @@ jobs:
 
       - name: Run golangci-lint (security linters, blocking)
         if: needs.changes.outputs.backend == 'true'
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: v2.12.2
           working-directory: apps/backend
@@ -374,9 +374,9 @@ jobs:
       run:
         working-directory: apps/backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "1.25"
           cache-dependency-path: apps/backend/go.sum
@@ -386,7 +386,7 @@ jobs:
         # Findings post as inline PR annotations so they stay visible; this job is made
         # blocking once the backlog reaches zero. Tracked in
         # todo/2026-06-26-aim-golangci-lint-silently-disabled.md.
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         continue-on-error: true
         with:
           version: v2.12.2
