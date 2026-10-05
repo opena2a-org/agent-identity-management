@@ -664,6 +664,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — a deleted webhook's name can be used again
+
+- Deleting a webhook only marks it deleted, but the per-organization name uniqueness still counted deleted
+  webhooks. Once a webhook was deleted, creating a new webhook with the same name, or renaming another webhook to
+  it, failed with a duplicate-key error. Migration 113 replaces the `webhooks_name_unique_per_org` constraint with a
+  unique index of the same name over webhooks that are not deleted. Two live webhooks in one organization still
+  cannot share a name.
+
 ### Fixed — the alert detail panel presents a user-account alert as an account, not as an unknown agent
 
 - Alerts raised on a dashboard user account (`account_locked`, `auth_failure_pattern`) opened a detail panel built
