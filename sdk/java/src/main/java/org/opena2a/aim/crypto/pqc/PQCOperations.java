@@ -236,9 +236,14 @@ public final class PQCOperations {
     }
 
     /**
-     * Create request signature headers for hybrid mode.
-     * Returns headers compatible with the Go backend.
+     * Create hybrid Ed25519+ML-DSA signature headers for a request.
+     *
+     * @deprecated AIM's request verification does not accept these headers. AIM
+     *     verifies a signature over the method, path, timestamp and body joined
+     *     by newlines; these headers sign {@code timestamp:METHOD:path:sha256(body)},
+     *     so a request carrying them does not authenticate as the agent.
      */
+    @Deprecated
     public static java.util.Map<String, String> createHybridRequestHeaders(
             HybridKeyPair keys,
             String method,
