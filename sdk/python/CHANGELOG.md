@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `client.secrets.resolve()` refuses a namespace or operation that contains a line feed, a carriage
+  return or `|`, raising `SecretsError` before anything is signed or sent. The request signature covers
+  the text `namespace|operation|nonce`, so a field cannot carry the separator or a line break; such a
+  value used to be signed and sent as given.
+
 - `aim-sdk status` always states a verdict, and its exit code follows it. On an upgraded install holding only a
   legacy `~/.aim/credentials.json` (snake_case keys, a refresh token, no access token) it printed Server, `User:
   Unknown` and Credentials, then nothing, with exit 0. It now reads the legacy keys, prints `Authenticated ...` or
