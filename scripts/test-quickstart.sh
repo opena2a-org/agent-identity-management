@@ -27,7 +27,7 @@ fi
 # Build backend with local code changes
 info "Building backend image..."
 docker build -q -t aim-server:test \
-  -f "$REPO/apps/backend/infrastructure/docker/Dockerfile.backend" \
+  -f "$REPO/infrastructure/docker/Dockerfile.backend" \
   "$REPO" >/dev/null
 
 # Setup test directory

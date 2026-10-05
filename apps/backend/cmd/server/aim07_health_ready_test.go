@@ -305,16 +305,17 @@ func TestAIM07CommitStamping(t *testing.T) {
 		assert.Contains(t, string(body), `"commit":null`)
 	})
 
-	t.Run("AIM-07.AC2 Dockerfile.backend declares ARG GIT_COMMIT and stamps main.buildCommit", func(t *testing.T) {
-		b, err := os.ReadFile(aim07Path(t, filepath.Join("..", "..", "infrastructure", "docker", "Dockerfile.backend")))
+	t.Run("AIM-07.AC2 Dockerfile.backend declares ARG COMMIT and stamps main.buildCommit", func(t *testing.T) {
+		// The repository-root Dockerfile.backend, the one docker-publish.yml builds.
+		b, err := os.ReadFile(aim07Path(t, filepath.Join("..", "..", "..", "..", "infrastructure", "docker", "Dockerfile.backend")))
 		require.NoError(t, err)
 		src := string(b)
 
-		argIdx := strings.Index(src, "ARG GIT_COMMIT")
-		ldflagIdx := strings.Index(src, "-X main.buildCommit=")
-		require.GreaterOrEqual(t, argIdx, 0, "Dockerfile.backend must declare ARG GIT_COMMIT")
-		require.GreaterOrEqual(t, ldflagIdx, 0, "Dockerfile.backend must stamp -X main.buildCommit=")
-		assert.Less(t, argIdx, ldflagIdx, "ARG GIT_COMMIT must precede the build step that uses it")
+		argIdx := strings.Index(src, "ARG COMMIT\n")
+		ldflagIdx := strings.Index(src, "-X main.buildCommit=${COMMIT}")
+		require.GreaterOrEqual(t, argIdx, 0, "Dockerfile.backend must declare ARG COMMIT")
+		require.GreaterOrEqual(t, ldflagIdx, 0, "Dockerfile.backend must stamp -X main.buildCommit=${COMMIT}")
+		assert.Less(t, argIdx, ldflagIdx, "ARG COMMIT must precede the build step that uses it")
 	})
 }
 
