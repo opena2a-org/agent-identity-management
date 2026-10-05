@@ -88,7 +88,7 @@ All three share the same audit-event schema. Local agents can push history to a 
 |---|---|---|---|
 | Python | `pip install aim-sdk` | Server (today) | `secure("name")` + `@perform_action` |
 | Java | `cd sdk/java && mvn install` (from source) | Server | `AIMClient.secure("name")` + `@SecureAction` |
-| TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMClient({ agentId })` |
+| TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMCore({ agentName })` |
 
 Working examples for all three live in [`examples/`](examples/).
 
@@ -121,13 +121,24 @@ Version 1.0.0, built from source. Same Ed25519 signing, same FGA flow, same audi
 ### TypeScript
 
 ```typescript
-import { AIMClient } from "@opena2a/aim-core";
+import { AIMCore } from "@opena2a/aim-core";
 
-const agent = new AIMClient({ agentId: "my-first-agent" });
-await agent.verify({ capability: "db:read", resource: "users_table" });
+const agent = new AIMCore({ agentName: "my-first-agent" });
+agent.getIdentity(); // creates the Ed25519 keypair on first use
+
+agent.loadPolicy({ allow: ["db:read"], default: "deny" });
+const allowed = agent.checkCapability("db:read"); // true; "db:write" is false
+agent.logEvent({
+  plugin: "my-first-agent",
+  action: "db:read",
+  target: "users_table",
+  result: allowed ? "allowed" : "denied",
+});
 ```
 
-The only SDK that runs without a server today. Backs local mode. See [`sdk/typescript/README.md`](sdk/typescript/README.md).
+The only SDK that runs without a server today. Backs local mode: the example writes `identity.json` and one `audit.jsonl` line under `~/.opena2a/aim-core/`. It runs as written with `@opena2a/aim-core` 0.2.0 (measured 2026-10-04). Source: [`packages/aim-core`](https://github.com/opena2a-org/opena2a/tree/main/packages/aim-core).
+
+The client for an AIM server is a separate package, `@opena2a/aim-sdk`, documented in [`sdk/typescript/README.md`](sdk/typescript/README.md). In 1.3.1 its `verifyAction` does not yet complete against a self-hosted server: it requests `/oauth/token` and then `/api/v1/verify` (measured 2026-10-04 on the published package), and the server registers neither path. Tracked for a fix.
 
 ## Server features
 
