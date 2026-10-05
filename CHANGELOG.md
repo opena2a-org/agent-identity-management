@@ -319,6 +319,148 @@ reason: the score is measured, not asserted. No migration: the column was alread
   `next/image`, so nothing rendered changes. GHSA-2xp9-vwfh-vxw4 needs a same-origin image
   source, which a default deployment does not have; if a proxy or CDN in front of this app
   serves user-supplied files on that origin, check your access logs for `/_next/image`.
+- Java SDK: `jackson.version` moves from 2.18.8 to 2.18.11 in both Java manifests
+  (`sdk/java/pom.xml` and `examples/a2a-multi-agent-demo/java/pom.xml`). 2.18.11 is the lowest
+  2.18.x release outside the published ranges of four advisories: GHSA-wv8q-qhhj-9h54
+  (CVE-2026-91776) and GHSA-cxp5-3px4-pw24 (CVE-2026-91777) in `jackson-databind`, and
+  GHSA-7hhh-6rmp-j9qf (CVE-2026-89425) and GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) in
+  `jackson-core`. It is also outside the range of GHSA-q4xh-88c3-wmh7 (CVE-2026-68497), which
+  contains 2.18.8. (#560)
+- Earlier dependency bumps in this cycle. Java SDK (`sdk/java/pom.xml`): jackson 2.16.1 to 2.18.8
+  (CVE-2026-54512, CVE-2026-54513) (#340); bouncycastle 1.79 to 1.84 (CVE-2026-5598) (#294), then
+  to 1.85 (CVE-2026-8763, CVE-2026-13506) (#500). The Java demo under
+  `examples/a2a-multi-agent-demo` takes the same jackson and bouncycastle lines as the SDK, and
+  the Python examples install from exact locks (#511). `apps/backend/go.mod`:
+  `golang.org/x/crypto` 0.52.0 and `golang.org/x/net` 0.55.0 (#340), then `golang.org/x/net`
+  v0.56.0 (CVE-2026-46600, GHSA-gg3m-vvp2-p2c5) (#405).
+- Both dashboard Dockerfiles pin their base images, and the runtime stage is rooted on alpine
+  (#496). The runtime base is re-pinned to alpine 3.21.8, which carries openssl 3.3.7-r1
+  (CVE-2026-45447 in 3.3.7-r0) (#509).
+- Java SDK: `LocalAtxVerifier` accepted a credential whose declared ML-DSA-65 signature was
+  forged as long as its Ed25519 signature was intact; the post-quantum entry was recorded as
+  present and never checked. Every declared signature entry is now verified (#550).
+- Java SDK: `LocalAtxVerifier` took the authorities allowed to sign a v1.1 credential from the
+  credential's own signed `issuerChain` without requiring them to be trusted issuers, so a
+  signer whose key was configured under a DID-URL key id could name itself in the chain and
+  sign for a trusted issuer. The chain's contribution is now intersected with the trust
+  anchors' trusted issuers (#462).
+- Java SDK: `LocalAtxVerifier.verify(byte[])` and `verify(String)` strict-parse the credential
+  and reject a duplicate object member at any depth, including case variants a lenient parser
+  folds together, before any field is interpreted (#337).
+- `POST /api/v1/verification-events` accepted a verification outcome reported by the caller. It
+  now refuses every authenticated member with 403 and the code
+  `verificationEventWriteNotAccepted`; the server's own verification paths still record events,
+  and the read routes and DELETE are unchanged. The service behind it also refuses an agent of
+  another organization before reading it, with the same error as an unknown agent
+  (#556, #559).
+- `POST /api/v1/sdk-api/verifications/:id/result` and `.../execution-status` were registered
+  outside the SDK API group with a rate limiter as their only middleware, so both served
+  unauthenticated writes, and `/result` set the verification's decision: an agent holding its
+  pending verification id could approve its own action. Both routes now sit behind the SDK API
+  group's agent authentication with an agent ownership check, and `/result` no longer writes
+  the decision (#372).
+- `POST /api/v1/oauth/token` had no agent-status check, so a revoked agent that still held its private
+  key could keep minting service tokens. Status is now enforced at issuance and again when a
+  service token is used. The endpoint also read only the `sub` claim of the assertion; it now
+  requires `aud` and `exp` (RFC 7523 section 3) with a bounded lifetime, checked after the
+  signature (#363).
+- Secrets namespaces: creating a namespace took the agent id from the request body, and listing
+  namespaces and reading the audit log took it from a query parameter, none with an owner
+  check. All now scope through the agent's organization. The agent bulk-status lookup filters
+  by organization in SQL, and `GET /api/v1/a2a/tasks`, which had no organization predicate,
+  returns a task only when one of its two agents belongs to the caller's organization. The
+  tenant-scoping lint now also watches query parameters, and API-call analytics record calls
+  to unauthenticated routes (#363).
+- A revoked or suspended agent that still held its key material authenticated successfully on
+  the Ed25519 signature, post-quantum signature and API-key paths, because those middlewares
+  never read the agent's status. All of them now check it against one allow-list: `verified`
+  and `pending` pass, every other value is denied (#353).
+- OAuth service tokens carried `role: "service"`, which the member gate admitted, so a token
+  obtained by one agent reached every member-gated route, including
+  `GET /api/v1/agents/:id/credentials`. Service tokens now carry their own issuer and no role,
+  the session middleware refuses them, and the member gates are allow-lists. `PUT /api/v1/agents/:id`
+  accepts a member or a service principal acting on its own agent (#347).
+- `GET /api/v1/agents/:id/credentials` and `GET /api/v1/agents/:id/sdk`, which return an
+  agent's private key material, were reachable with an organization-scoped API key. Both now
+  require a signed-in member; viewers get 403 (#343).
+- `POST /api/v1/agents/:id/mcp-servers/detect` read a file path from the request body and
+  opened it without validation, which let a signed-in member read any file the server could.
+  The path must now be one of the standard desktop-client config locations (#326).
+- Session tokens carry a type. An SDK refresh token (90 days) or a login refresh token can no
+  longer be presented as a bearer access token, and the refresh route refuses an access token
+  (#305, #308). Tokens minted before the type claim existed are no longer accepted on either
+  path (#309, #492).
+- The public `did:aip` resolver answers a pending (registered, not yet verified) agent exactly
+  as it answers an unknown DID, so the response no longer tells a caller which ids are
+  registered, and `/api/v1/did/*` is rate limited. The rate limiter's client address is the
+  rightmost `X-Forwarded-For` hop that is not in `TRUSTED_PROXIES`, instead of the leftmost
+  entry, which the client controls (#490).
+- The device grant's token endpoint minted a session for an account that was suspended,
+  deactivated or deleted between approval and the command line's next poll. The poll now
+  answers `access_denied`, as the refresh route does (#506).
+- Dashboard: after sign-in the browser follows only a same-origin return path. A `returnUrl`
+  containing a tab, line feed or carriage return, a double-encoded value, or dot segments
+  resolving to `//host` passed the previous check and left the origin (#526).
+- Dashboard: the landing page no longer adopts a `token=` query parameter as the session. No
+  shipped flow issued such a link; in a signed-in browser it replaced the API session with
+  whatever bearer was on the URL (#505).
+- The FGA context check no longer fails open. An unparseable `context_rules` document used to
+  be allowed with a warning, and a missing risk summary skipped the rules. The decision now
+  follows `contextRules.onUnavailable` (`deny` or `allow`), and an absent key, an unknown value
+  or an unparseable document means `deny`. The result reports it under `contextCheck`
+  (#454).
+- `GET /metrics` served the full Prometheus scrape without authentication. Setting
+  `METRICS_AUTH_TOKEN` makes it require `Authorization: Bearer <token>`; with the variable
+  unset the endpoint stays open, as before, and the server logs a warning at startup (#349).
+
+### Added
+
+- Server-side token revocation. Logout revokes the presented access and refresh tokens in a
+  Redis-backed denylist for their remaining lifetime; the session middleware and
+  `POST /api/v1/auth/refresh` refuse a revoked token. A store outage refuses by default
+  (`AUTH_REVOCATION_FAIL_OPEN=true` prefers availability); without Redis, revocation is off
+  and tokens end at their expiry. `CORS_ALLOW_VERCEL_PREVIEWS=true` opts in to preview
+  origins (#307).
+- Dashboard sessions end after 30 minutes without activity, with a two-minute warning, and
+  eight hours after sign-in. `GET /api/v1/auth/me` returns `organizationName`, and the refresh
+  route reports the real access-token lifetime (#305). A sign-in over a stale stored session
+  starts a new eight-hour window instead of being signed out at once (#369).
+- `aim-sdk login` completes through the OAuth 2.0 device grant (RFC 8628) the backend serves,
+  and the dashboard gains the `/device` consent page where a signed-in user approves the code
+  (#504).
+- Agents accept an optional `declaredPurpose` (category, task scopes, capability
+  justification, autonomy, data scopes, egress scopes), validated against a closed core
+  vocabulary plus organization-namespaced values. Migration 100 (#289).
+- Machine API keys can register agents: `POST /api/v1/agents` admits an organization-scoped
+  API key or a signed-in member. Every other member-gated route still requires a member, and
+  registering with an API key does not mint a further API key (#341).
+- Honeytoken capabilities: an operator can mark a granted capability as a decoy. A
+  verification that matches it raises a high-severity alert and an audit event and leaves the
+  authorization decision unchanged. Migration 102 (#316).
+- MCP manifest drift detection: a baseline of each MCP server's tool manifest, and a drift
+  record with a severity when tools are added, removed or changed, wired into the capability
+  and attestation flows (#274). The recompute runs in one transaction under a per-server lock
+  and raises an operator alert on drift (#313).
+- Agent Trust Credential issuance: AIM computes the agent's trust score and delegates signing
+  and transparency-log recording to the Registry, authenticated with `REGISTRY_ATC_TOKEN`; it
+  fails closed on a missing token or a refused request (#312).
+- An SDK endpoint for an agent's self-reported isolation posture, scored server-side, and the
+  isolation factor on the dashboard (#311). Its route and its scoring were corrected later in
+  this cycle; see the Changed and Fixed entries below.
+- `POST /api/v1/trust-score/agents/:id/feedback` records a 1 to 5 rating for an agent in the
+  caller's organization, audit-logged, and feeds the user-feedback trust factor.
+- FGA intent check: the counters `fga.intent_checks` and `fga.intent_skipped` (#322); the
+  check distinguishes a classified answer, an abstention and an operational failure, and a
+  non-2xx classifier response counts as `fail_open` rather than an abstention (#323). The
+  `fga.authorize` span carries `gen_ai.agent.*` authorization attributes (#324).
+- Registration accepts three optional profile questions (role, primary use case, referral
+  source), and `GET /api/v1/admin/registration-requests`, which the admin registrations page
+  already called, exists (#291).
+- Agent type `demo`, used by the `aim-sdk demo` command: shown as a demo in every list and
+  counted against the plan quota (#431).
+- Java SDK: local ATX credential verification (`org.opena2a.aim.atx`), including the binding
+  of a DID-URL key to its issuer (#300), and a `CrlCache` that refreshes the revocation list
+  in the background so verification makes no network call (#318).
 
 ### Changed
 
@@ -368,14 +510,77 @@ reason: the score is measured, not asserted. No migration: the column was alread
 - `AgentService.EnforceKeyExpiry` returns `ErrKeyExpiryEnforcementUnavailable`
   rather than reporting success for work it cannot do. It is unimplementable as
   written — `List` does not select `key_expires_at`, and suspending via `Update`
-  would clear the agent's key material — and it has no caller. See #359.
+  would clear the agent's key material — and it has no caller. See #359. A later change in
+  this cycle replaced it with a working implementation; see the key-expiry entry below.
 - The tenant-scoping lint fails when an allowlist key names a method that does not
   exist. Fourteen of thirty-two entries resolved to nothing, presenting as reviewed
   exemptions while covering nothing. All fourteen were removed and the lint still
   passes, which is the evidence that none of the real handlers needed exempting.
   Remaining `needs review` entries are tracked in #358.
+- `AgentService.EnforceKeyExpiry` suspends agents whose key has expired and whose grace window,
+  if any, has closed, in one statement that writes only the status and leaves key material,
+  capability grants and the rotation count untouched. It returns the number suspended.
+  Nothing calls it yet (#543).
+- The agent trust score is composed from measured factors only. A factor whose data source is
+  not wired, failed or empty is excluded and its weight redistributed, instead of contributing
+  a neutral 0.5 at full weight; a fresh calculation lists them as `excludedFactors` (#330),
+  and the stored score keeps `execution_isolation` and the excluded set (migration 103, #332).
+  The compliance and user-feedback factors read real data, and the score breakdown reports
+  nine factors whose weights sum to 1.0 instead of eight summing to 0.90.
+- MCP server trust scores are calculated. Every server used to carry the literal 75.0 or 0.0
+  on a column that mixed three scales, so the minimum-trust policy could not refuse an
+  SDK-registered server. The score is now computed from the server's inputs on one 0 to 1
+  scale; migration 104 rescales existing rows and adds a range constraint (#350).
+- The admin security-policy page states that MCP policies are not enforced: nothing evaluates
+  them. Migration 105 disables the six seeded MCP policies and leaves an operator's own
+  policies as set; the blocking banner, the stat tiles and the confirmation dialog no longer
+  count or describe MCP policies as enforcement (#356).
+- `GET /health/ready` answers a fixed body (`ready`, `service`, `commit`, `version`,
+  `checkedAt`, `degraded`, `dependencies`) with `Cache-Control: no-store` on 200 and 503. The
+  database check is bounded at 2 seconds, an unavailable optional Redis reports
+  `degraded: true`, and driver error text never reaches the body. `GET /health` is unchanged
+  (#455).
+- `GET /api/v1/agents` accepts `limit` and `offset` and loads capabilities and tags for the
+  page in one query each instead of two queries per agent; without the parameters the response
+  is unchanged (#295). The MCP server and pending-verification lists load the same way (#297),
+  and the dashboard's A2A page loads progressively (#298).
+- Dashboard: a new visual design with light and dark themes that follow the system preference
+  until the user picks one (#419, #427); an overview with Developer, Security and Executive
+  views (#420); the sign-in, registration, agent, SDK, developer, security, MCP and A2A pages
+  moved onto it (#421, #422, #423, #424); navigation reduced to seven top-level entries with
+  tabs inside each (#430); a live first-check-in listener and whole-number metrics (#428); an
+  app icon (#429); opaque menus and mobile navigation drawer (#433). No route changed its
+  path.
+
+### Removed
+
+- The community-intelligence push. A six-hourly job posted anonymized trust-factor
+  distributions of opted-in organizations to a Registry route that was never registered, so
+  every push failed silently. The job, its opt-in routes (enable, disable, status,
+  benchmarks) and the admin push trigger are gone; the SDKs still accept the registration
+  flag and ignore it (#498).
 
 ### Fixed
+
+- A fresh agent's first calls while it was pending were recorded as failed verifications, so
+  after verification its trust score was composed from refusals, the low-trust policy blocked
+  the action it had been granted, and a recalculation suspended it. A score with no
+  successful verification in the calculator's 30-day window is now not evaluated by the
+  low-trust policy and does not suspend the agent (#502).
+- On a self-hosted install with no `AIM_PLATFORM_ADMINS` allowlist and no active
+  administrator, a sign-up or access request created a pending request nobody could approve.
+  Both are now refused with 503, code `noAdministrators` and a message naming the variable. An
+  allowlisted address is told its account is approved and is sent to sign-in (#425); the
+  refusal log reports truthfully whether the address was listed (#426).
+- MCP drift alerts lower the trust score of agents connected to the drifted server. The drift
+  factor looked alerts up by agent id while MCP drift alerts are keyed by server id, so they
+  never matched (#321).
+- Updating an MCP server no longer writes its cached trust score. Patching an unrelated field
+  could write back a stale score and insert a history row describing a recalculation that
+  never ran (#354).
+- Migration 111 gives the `fga_policies` `onUnavailable` check constraint one name on every
+  deployment; a deployment that applied an earlier variant of migration 110 carried a
+  different name (#489).
 
 - **Every SDK isolation attestation was 404ing.** All three shipped clients POST
   `/api/v1/sdk-api/agents/{id}/isolation-attestation` (`AIMClient.ts:729`,
