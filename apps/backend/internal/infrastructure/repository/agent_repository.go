@@ -1241,11 +1241,19 @@ func (r *AgentRepository) UpdateLastActive(ctx context.Context, agentID uuid.UUI
 	return nil
 }
 
-// UpdateHeartbeat updates the last heartbeat timestamp for an agent
-func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) error {
-	query := `UPDATE agents SET last_heartbeat = NOW(), updated_at = NOW() WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, agentID)
-	return err
+// UpdateHeartbeat sets last_heartbeat to the database's current time and returns it.
+//
+// It writes last_heartbeat and updated_at and nothing else. Update is the wrong path
+// for a heartbeat: its statement has no last_heartbeat column, and it writes every
+// other column from the struct, so a status or key change committed after the caller's
+// read would be overwritten. Returns sql.ErrNoRows when no agent has this id.
+func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	query := `UPDATE agents SET last_heartbeat = NOW(), updated_at = NOW() WHERE id = $1 RETURNING last_heartbeat`
+	var heartbeatAt time.Time
+	if err := r.db.QueryRowContext(ctx, query, agentID).Scan(&heartbeatAt); err != nil {
+		return time.Time{}, err
+	}
+	return heartbeatAt, nil
 }
 
 // GetStaleAgents returns agents whose heartbeat is older than the given time

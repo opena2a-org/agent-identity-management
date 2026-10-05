@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an agent heartbeat stores the heartbeat time and writes nothing else to the agent
+
+- `POST /api/v1/sdk-api/agents/:id/heartbeat` read the agent and then saved its whole copy of the
+  row to record the heartbeat. That save has no `last_heartbeat` column, so no heartbeat time was
+  ever stored, and it wrote status and key material back from the earlier read: a suspension or
+  key rotation saved between that read and that write was overwritten with the values the
+  heartbeat had read.
+- A heartbeat now writes `last_heartbeat` and `updated_at` only, and the response reports the
+  stored heartbeat time and the agent's status after the write.
+
 ### Fixed — the backend image carries the license notices of the Go libraries built into it
 
 - The `aim-server` image held the binaries, the migrations and the SDK directory and no license
