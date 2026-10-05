@@ -90,7 +90,7 @@ func newBTRig(t *testing.T) *btRig {
 		}
 		return c.Next()
 	}
-	rig.app = fiber.New()
+	rig.app = newTestApp()
 	rig.app.Post("/api/v1/onboarding/bootstrap-tokens/exchange", h.Exchange)
 	rig.app.Post("/api/v1/onboarding/bootstrap-tokens/revoke", session, h.Revoke)
 	rig.app.Post("/api/v1/onboarding/bootstrap-tokens", session, h.Mint)
