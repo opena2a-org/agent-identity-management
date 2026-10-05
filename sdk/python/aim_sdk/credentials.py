@@ -25,6 +25,7 @@ import sys
 import json
 import errno
 import shutil
+import stat
 import tempfile
 import threading
 import time
@@ -587,9 +588,20 @@ def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _ensure_private_dir(path: Path) -> None:
+    """Create ``path`` with mode 0700, and narrow it to 0700 if it already exists wider."""
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # A directory written by an earlier SDK version carries the default mode.
+    if stat.S_IMODE(path.stat().st_mode) & 0o077:
+        os.chmod(path, 0o700)
+
+
 def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool:
     """
     Save credentials for a specific agent.
+
+    The agents directory is created with mode 0700 and the agent file with
+    mode 0600; neither is ever readable by other users, not even briefly.
 
     Args:
         agent_name: Name of the agent
@@ -599,7 +611,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
         True if saved successfully
     """
     try:
-        AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(AGENTS_DIR)
 
         # Add schema info
         credentials["schemaVersion"] = SCHEMA_VERSION
@@ -607,9 +619,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
         credentials["name"] = agent_name
 
         agent_file = get_agent_credentials_path(agent_name)
-        with open(agent_file, 'w') as f:
-            json.dump(credentials, f, indent=2)
-        os.chmod(agent_file, 0o600)
+        _write_private_json(agent_file, credentials)
 
         agent_id = credentials.get("agent_id", "")
         security_logger.log_credential_event(
@@ -682,7 +692,7 @@ def list_agent_credentials() -> list:
 def _migrate_legacy_agent_credentials(data: Dict[str, Any]) -> None:
     """Migrate agent credentials from legacy format to new per-agent files."""
     try:
-        AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(AGENTS_DIR)
 
         # Check for nested format: {"agent-name": {...}}
         for key, value in data.items():
