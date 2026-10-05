@@ -11,7 +11,9 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// PublicAgentHandler handles public agent registration (no authentication required)
+// PublicAgentHandler handles agent registration on the /public route group.
+// The group runs no mandatory auth middleware, but an agent belongs to a user
+// and an organization, so Register serves only a signed-in user.
 type PublicAgentHandler struct {
 	agentService *application.AgentService
 	authService  *application.AuthService
@@ -30,6 +32,13 @@ func NewPublicAgentHandler(
 		keyVault:     keyVault,
 	}
 }
+
+// publicRegisterAuthRequiredMessage is the 401 body for a caller this route
+// cannot register an agent for. It names the two registration paths that work,
+// so a caller holding the other kind of credential knows where to send it.
+const publicRegisterAuthRequiredMessage = "Authentication required. Send a signed-in user's access token as " +
+	"'Authorization: Bearer <token>' to this route, or register with an API key in the X-API-Key header at " +
+	"POST /api/v1/agents."
 
 // PublicRegisterRequest represents a public agent registration request
 type PublicRegisterRequest struct {
@@ -92,18 +101,34 @@ func isValidAgentTypeForPublicAPI(agentType domain.AgentType) bool {
 	return validTypes[agentType]
 }
 
-// Register handles public agent self-registration
-// @Summary Public agent self-registration
-// @Description Register an agent without authentication. Returns credentials including private key (ONLY ONCE).
+// Register registers an agent for the signed-in user
+// @Summary Register an agent as a signed-in user
+// @Description Registers an agent in the caller's organization and returns its credentials, including the private key (ONLY ONCE). Requires a user access token in the Authorization header; any other caller gets 401. To register with an API key, send it in the X-API-Key header to POST /agents.
 // @Tags public
 // @Accept json
 // @Produce json
+// @Security BearerAuth
 // @Param request body PublicRegisterRequest true "Registration request"
 // @Success 201 {object} PublicRegisterResponse "Agent registered successfully"
 // @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 401 {object} ErrorResponse "No valid user access token"
+// @Failure 409 {object} ErrorResponse "Agent name already exists"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /public/agents/register [post]
 func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
+	// OptionalAuthMiddleware sets the user and organization only for a valid
+	// user access token. An agent row needs both, so any other caller (no
+	// credential, an API key in any header, a refresh or revoked token) cannot
+	// be registered here. Answer before reading the body: the service would
+	// otherwise generate a keypair and attempt an insert the database refuses.
+	userID, hasUser := c.Locals("user_id").(uuid.UUID)
+	orgID, hasOrg := c.Locals("organization_id").(uuid.UUID)
+	if !hasUser || !hasOrg || userID == uuid.Nil || orgID == uuid.Nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": publicRegisterAuthRequiredMessage,
+		})
+	}
+
 	var req PublicRegisterRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -124,23 +149,13 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		})
 	}
 
-	// Use authenticated user/org if available (set by OptionalAuthMiddleware),
-	// otherwise use zero UUIDs for truly public (unauthenticated) registration.
-	var userID, orgID uuid.UUID
 	var userEmail string
-
-	if uid, ok := c.Locals("user_id").(uuid.UUID); ok {
-		userID = uid
-	}
-	if oid, ok := c.Locals("organization_id").(uuid.UUID); ok {
-		orgID = oid
-	}
 	if req.UserEmail != "" {
 		userEmail = req.UserEmail
 	}
 
 	// Create agent (keys generated automatically by AgentService)
-	// Public registration has no API key or SDK token to track.
+	// This route has no API key or SDK token to track.
 	// Both sdkTokenID and apiKeyID are nil for this flow.
 	agent, err := h.agentService.CreateAgent(c.Context(), &application.CreateAgentRequest{
 		Name:             req.Name,
