@@ -1,0 +1,19 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: accepted, the run-time tools run in a job with no write scope and a write job only attaches the output.
+name: fixture
+on: push
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - run: |
+          go install example.com/tool/cmd/tool@latest
+          npx unlocked-tool --output-file out.json
+  attach:
+    needs: generate
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "attach out.json to the release"

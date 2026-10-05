@@ -1,0 +1,8 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: refused, no permissions block, so the token is the repository default, which can be read-write.
+name: fixture
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npx unlocked-tool

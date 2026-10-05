@@ -1,0 +1,9 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: refused, a write-all job runs npm exec on a package the lockfile does not hold.
+name: fixture
+on: push
+permissions: write-all
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm ci && npm exec --yes -- @scope/unlocked-tool@2.0.0 --flag

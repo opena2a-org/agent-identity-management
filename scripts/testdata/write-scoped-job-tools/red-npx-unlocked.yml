@@ -1,0 +1,13 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: refused, an id-token: write job runs npx on a package the lockfile does not hold.
+name: fixture
+on: push
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - run: npx --yes unlocked-tool --output-file out.json
