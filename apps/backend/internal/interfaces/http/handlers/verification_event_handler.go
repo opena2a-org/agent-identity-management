@@ -55,19 +55,6 @@ func getOrganizationID(c fiber.Ctx) (uuid.UUID, error) {
 	return orgID, nil
 }
 
-// RegisterRoutes registers verification event routes
-func (h *VerificationEventHandler) RegisterRoutes(app *fiber.App, authMiddleware fiber.Handler) {
-	api := app.Group("/api/v1/verification-events")
-	api.Use(authMiddleware)
-
-	api.Get("/", h.ListVerificationEvents)
-	api.Get("/recent", h.GetRecentEvents)
-	api.Get("/statistics", h.GetStatistics)
-	api.Get("/:id", h.GetVerificationEvent)
-	api.Post("/", h.CreateVerificationEvent)
-	api.Delete("/:id", h.DeleteVerificationEvent)
-}
-
 // ListVerificationEvents retrieves verification events for the authenticated user's organization
 // @Summary List verification events
 // @Description Get paginated list of verification events for the organization
@@ -524,7 +511,7 @@ func (h *VerificationEventHandler) GetVerificationStats(c fiber.Ctx) error {
 
 // DeleteVerificationEvent deletes a verification event
 // @Summary Delete verification event
-// @Description Delete a verification event (admin only)
+// @Description Delete a verification event of the caller's organization (manager or admin role)
 // @Tags verification-events
 // @Accept json
 // @Produce json

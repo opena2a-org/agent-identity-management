@@ -673,10 +673,11 @@ func TestVerificationEventService_LogVerificationEvent_Success(t *testing.T) {
 	agentID := uuid.New()
 
 	agent := &domain.Agent{
-		ID:          agentID,
-		DisplayName: "Test Agent",
-		Status:      domain.AgentStatusVerified,
-		TrustScore:  0.85,
+		ID:             agentID,
+		OrganizationID: orgID,
+		DisplayName:    "Test Agent",
+		Status:         domain.AgentStatusVerified,
+		TrustScore:     0.85,
 	}
 
 	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
@@ -746,10 +747,11 @@ func TestVerificationEventService_LogVerificationEvent_PendingAgent(t *testing.T
 	agentID := uuid.New()
 
 	agent := &domain.Agent{
-		ID:          agentID,
-		DisplayName: "Pending Agent",
-		Status:      domain.AgentStatusPending,
-		TrustScore:  0.50,
+		ID:             agentID,
+		OrganizationID: orgID,
+		DisplayName:    "Pending Agent",
+		Status:         domain.AgentStatusPending,
+		TrustScore:     0.50,
 	}
 
 	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
