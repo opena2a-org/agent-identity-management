@@ -117,6 +117,13 @@ func (h *DeviceAuthHandler) PollDeviceToken(c fiber.Ctx) error {
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 				"error": "access_denied",
 			})
+		case errors.Is(err, application.ErrDeviceCodeUsed):
+			// RFC 6749 Section 5.2, which RFC 8628 Section 3.5 inherits: a
+			// grant already exchanged is no longer a valid grant.
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":            "invalid_grant",
+				"errorDescription": "Device code has already been exchanged for tokens",
+			})
 		case errors.Is(err, application.ErrInvalidDeviceCode):
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error":            "invalid_request",
