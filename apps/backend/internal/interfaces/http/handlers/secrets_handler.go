@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/base64"
+	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -85,6 +87,11 @@ type rotateCredentialRequest struct {
 //
 // When authenticated via Ed25519/JWT:
 //   - Falls back to existing flow (body signature + capability table)
+//
+// On both routes the credential is encrypted to the agent's registered key,
+// agentPublicKey must be that key, and a signed request is answered once.
+// When the single-use check cannot run the answer is 503 and nothing is
+// resolved.
 func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 	agentIDValue := c.Locals("agent_id")
 	if agentIDValue == nil {
@@ -129,6 +136,10 @@ func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 
 	result, err := h.secretsService.Resolve(agentID, domainReq)
 	if err != nil {
+		if errors.Is(err, application.ErrSecretsNonceAdmissionUnavailable) {
+			log.Printf("secrets resolve refused: nonce check unavailable (error_class=%s)", freshnessErrorClass(err))
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Nonce check unavailable; retry the request with a new nonce"})
+		}
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": err.Error()})
 	}
 
