@@ -45,7 +45,7 @@ if curl -s http://localhost:8080/health > /dev/null 2>&1; then
 else
     echo "❌ AIM backend is not running!"
     echo "   Please start it first:"
-    echo "   cd apps/backend && ./server"
+    echo "   cd apps/backend && go run ./cmd/server"
     exit 1
 fi
 
