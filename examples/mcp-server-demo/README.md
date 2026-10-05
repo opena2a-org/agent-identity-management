@@ -1,13 +1,12 @@
 # MCP Server Demo — Ed25519 + AIM verification
 
-A minimal MCP (Model Context Protocol) server that ships with an Ed25519 keypair and a `/.well-known/mcp/capabilities` endpoint. Use it to exercise AIM's MCP-server-attestation flow without depending on a third-party MCP server.
+A minimal MCP (Model Context Protocol) server that holds an Ed25519 keypair, signs the challenge AIM sends to `/mcp/.well-known/mcp/verify`, and lists its tools, resources and prompts at `/.well-known/mcp/capabilities`. Use it to exercise AIM's MCP-server verification flow without depending on a third-party MCP server.
 
 ## What this demonstrates
 
-- Standard MCP protocol surface: `/.well-known/mcp/capabilities`, tools (`echo`, `calculate`, `timestamp`), resources, and a prompt
-- Per-request Ed25519 signature on the response — AIM verifies the signature against the public key registered in the dashboard
-- Challenge-response authentication: AIM issues a nonce, the server signs it, AIM checks the signature
-- Auto-detectable capabilities (AIM's MCP scanner reads the capabilities endpoint and registers tools/resources/prompts automatically)
+- Capability discovery: `/.well-known/mcp/capabilities` lists three tools (`echo`, `calculate`, `timestamp`), two resources (`server://status`, `server://config`) and one prompt (`greeting`)
+- Challenge-response verification: AIM sends a nonce, the server signs it with its Ed25519 private key, and AIM checks the signature against the public key registered for the server
+- Capability detection: after a successful verification, AIM reads the capabilities endpoint and records the tools, resources and prompts it lists
 
 This is the server side of the MCP attestation story shown on Talk 1, Slide 12 (May 2026 LF Open Source Summit). On the other side, HackMyAgent scans this server's capabilities and prompts as part of its 209-static-check + 29-semantic-check suite.
 
@@ -19,44 +18,68 @@ This is the server side of the MCP attestation story shown on Talk 1, Slide 12 (
 ## Setup
 
 ```bash
+python3 -m venv .venv
+. .venv/bin/activate
 pip install -r requirements.txt
 python3 mcp-server.py
 ```
 
-On startup the server prints its public key. Copy that value.
+The server listens on port 5151 on all interfaces. On startup it prints its public key (the `Public Key:` line). Copy that value.
+
+Call a tool to see it answer:
+
+```bash
+curl -s -X POST http://localhost:5151/mcp/tools/calculate \
+  -H 'Content-Type: application/json' -d '{"expression": "2 + 2"}'
+```
+
+```
+{"content":[{"text":"2 + 2 = 4","type":"text"}]}
+```
+
+## Check the server against this README
+
+```bash
+python3 -m unittest -v test_readme.py
+```
+
+The test starts its own copy of the server on port 5151 (stop any copy that is already running), sends every route in the Endpoints table its documented method, signs a nonce through the verification URL AIM builds from the registration below, and checks the signature against the public key the server printed.
 
 ## Register with AIM
 
 1. Open `http://localhost:3000/dashboard/mcp`
-2. Click **Register MCP Server**
+2. Click **Register MCP server**
 3. Fill in:
-   - **Name**: `test-mcp-local`
-   - **URL**: `http://localhost:5555`
-   - **Public Key**: (paste the value the server printed)
-4. Click **Save**, then **Verify**
+   - **Server name**: `test-mcp-local`
+   - **Server URL**: `http://localhost:5151/mcp`
+   - **Public key (optional)**: paste the value the server printed. Left empty, AIM generates a keypair of its own, which this server does not hold.
+4. Click **Register server**, open the server's page, and click **Verify**
 
-Once verified, AIM auto-detects the server's tools / resources / prompts from the capabilities endpoint and registers them.
+The registered URL ends in `/mcp` because of how AIM builds its two requests:
+
+- Verification: AIM appends `/.well-known/mcp/verify` to the registered URL, so it posts its challenge to `http://localhost:5151/mcp/.well-known/mcp/verify`, and reads `signedChallenge` from the reply.
+- Capability detection: AIM drops the path and reads `http://localhost:5151/.well-known/mcp/capabilities`.
+
+AIM sends these requests only to addresses that resolve to a public IP. Against `http://localhost:5151/mcp` the **Verify** step reports `Verification failed: server is unreachable`, and the audit log entry for it records `URL hostname "localhost" is not allowed`. To complete verification, register the URL at which the server is reachable from a public address. The signing side is the same either way, and `test_readme.py` checks it locally.
 
 ## Key rotation
 
-The server generates a fresh Ed25519 keypair on every restart. After restarting, re-paste the new public key in the AIM dashboard (the old registration's verification will start failing — that's expected).
-
-To keep a stable keypair across restarts, set `MCP_SERVER_PRIVATE_KEY` to a base64-encoded Ed25519 secret key before launching.
+The server generates a fresh Ed25519 keypair every time it starts. After a restart, update the public key on the server's AIM registration; until then, verification against the old key fails.
 
 ## Endpoints
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/.well-known/mcp/capabilities` | GET | Returns capabilities + public key (signed) |
-| `/tools/echo` | POST | Echoes input back |
-| `/tools/calculate` | POST | Evaluates a math expression |
-| `/tools/timestamp` | POST | Returns current ISO timestamp |
-| `/resources/status` | GET | Server uptime + key fingerprint |
-| `/resources/config` | GET | Server configuration snapshot |
-| `/prompts/greeting` | POST | Returns a greeting given a name parameter |
-| `/auth/challenge` | POST | Signs a nonce with the server's private key |
+| `/.well-known/mcp/capabilities` | GET | Lists the tools, resources and prompts (read by AIM's capability detection) |
+| `/mcp/.well-known/mcp/verify` | POST | Signs the `challenge` string from the JSON body; replies with `signedChallenge`, `publicKey` and `algorithm` |
+| `/mcp/health` | GET | Health status and the server's public key |
+| `/mcp/tools/echo` | POST | Echoes `message` from the JSON body |
+| `/mcp/tools/calculate` | POST | Evaluates the arithmetic `expression` from the JSON body (numbers, `+ - * / % **` and unary minus) |
+| `/mcp/tools/timestamp` | POST | Returns the current UTC timestamp |
+| `/mcp/resources/server/status` | GET | The `server://status` resource |
+| `/mcp/prompts/greeting` | GET | The `greeting` prompt; optional `name` query parameter |
 
-All responses include an Ed25519 signature header so AIM can verify the response wasn't tampered with in transit.
+The `server://config` resource is listed in the capabilities but has no route. Only the verification reply is signed; every other response is plain JSON.
 
 ## Related demos
 
