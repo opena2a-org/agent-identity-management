@@ -30,6 +30,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   so every credential issued this way failed schema validation in a conformance verifier. AIM now sends the bare
   hex digest. A credential issued before this change keeps its prefixed value until it is reissued or expires.
 
+### Changed — dashboard charts render through one chart layer
+
+- The charts on the A2A, compliance, MCP supply-chain and security pages and the agent trust-score history now render
+  through one set of components in `apps/web/components/charts`, which take every series, grid, axis and tooltip colour
+  from `--chart-*` tokens declared in `globals.css` for the light and dark themes. The compliance page's trust-score
+  trend and risk donut drop their fixed colours, so their grid, axes and tooltip now follow the dark theme.
+- Each chart is announced to screen readers as one image whose label states what it measures and the values it draws,
+  for example "Tasks by state: COMPLETED 4, FAILED 1". Count axes show whole numbers only.
+- `tests/chart-standard.test.ts` fails the web suite when a file outside `components/charts` imports the charting
+  library, or when chart code carries a hex, rgb/hsl or palette-class colour.
+
 ### Fixed — capability verifications are recorded as capability checks
 
 - `POST /api/v1/sdk-api/verifications` recorded every verification event as `verification_type: identity`, because the

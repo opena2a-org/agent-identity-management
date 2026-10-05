@@ -43,18 +43,7 @@ import {
   ExternalLink,
   X,
 } from "lucide-react";
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-} from "recharts";
+import { DonutChart, TrendChart, chartSeries } from "@/components/charts";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
 import { AuthGuard } from "@/components/auth-guard";
@@ -576,7 +565,7 @@ function RiskDistributionChart({ agents, mcpServers }: { agents: AgentEntry[]; m
     const totalItems = agents.length + mcpServers.length;
     if (totalItems === 0) {
       return [
-        { name: "No Resources", value: 100, color: "#9ca3af", count: 0 },
+        { name: "No Resources", value: 100, color: chartSeries.muted, count: 0 },
       ];
     }
 
@@ -614,10 +603,10 @@ function RiskDistributionChart({ agents, mcpServers }: { agents: AgentEntry[]; m
     }
 
     return [
-      { name: "Low Risk", value: Math.round((lowRisk / totalItems) * 100), color: "#10b981", count: lowRisk },
-      { name: "Medium Risk", value: Math.round((mediumRisk / totalItems) * 100), color: "#f59e0b", count: mediumRisk },
-      { name: "High Risk", value: Math.round((highRisk / totalItems) * 100), color: "#f97316", count: highRisk },
-      { name: "Critical", value: Math.round((critical / totalItems) * 100), color: "#ef4444", count: critical },
+      { name: "Low Risk", value: Math.round((lowRisk / totalItems) * 100), color: chartSeries.green, count: lowRisk },
+      { name: "Medium Risk", value: Math.round((mediumRisk / totalItems) * 100), color: chartSeries.amber, count: mediumRisk },
+      { name: "High Risk", value: Math.round((highRisk / totalItems) * 100), color: chartSeries.orange, count: highRisk },
+      { name: "Critical", value: Math.round((critical / totalItems) * 100), color: chartSeries.red, count: critical },
     ].filter(d => d.count > 0);
   };
 
@@ -627,23 +616,15 @@ function RiskDistributionChart({ agents, mcpServers }: { agents: AgentEntry[]; m
   return (
     <div className="flex items-center gap-6">
       <div className="w-36 h-36">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={35}
-              outerRadius={55}
-              paddingAngle={3}
-              dataKey="value"
-            >
-              {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.color} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
+        <DonutChart
+          title="Risk distribution, share of agents and MCP servers"
+          data={data}
+          formatValue={(v) => `${v}%`}
+          tooltip={false}
+          innerRadius={35}
+          outerRadius={55}
+          paddingAngle={3}
+        />
       </div>
       <div className="space-y-2">
         {data.map((item) => (
@@ -1242,28 +1223,14 @@ export default function CompliancePage() {
                 <TrendingUp className="h-5 w-5 text-gray-400" />
               </div>
               <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={metrics?.metrics?.trustScoreTrend?.map((d) => ({ date: d.date, score: Math.round(d.avgScore * 100) })) || []}>
-                    <defs>
-                      <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                    <XAxis dataKey="date" stroke="#9CA3AF" fontSize={12} />
-                    <YAxis stroke="#9CA3AF" fontSize={12} domain={[0, 100]} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#fff",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
-                      }}
-                    />
-                    <Area type="monotone" dataKey="score" stroke="#10b981" strokeWidth={2} fill="url(#colorScore)" name="Trust Score (%)" />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <TrendChart
+                  title="Average trust score, last 30 days"
+                  data={metrics?.metrics?.trustScoreTrend?.map((d) => ({ date: d.date, score: Math.round(d.avgScore * 100) })) || []}
+                  xKey="date"
+                  series={[{ key: "score", name: "Trust Score (%)", color: chartSeries.green }]}
+                  yDomain={[0, 100]}
+                  formatValue={(v) => `${v}%`}
+                />
               </div>
             </div>
 
