@@ -108,6 +108,16 @@ func (m *MockUserRepoForAdmin) UpdateRole(id uuid.UUID, role domain.UserRole) er
 	return nil
 }
 
+func (m *MockUserRepoForAdmin) UpdateLastLogin(id uuid.UUID, at time.Time) error {
+	user, ok := m.users[id]
+	if !ok {
+		return errors.New("user not found")
+	}
+	user.LastLoginAt = &at
+	user.UpdatedAt = at
+	return nil
+}
+
 func (m *MockUserRepoForAdmin) Delete(id uuid.UUID) error {
 	if m.deleteErr != nil {
 		return m.deleteErr
