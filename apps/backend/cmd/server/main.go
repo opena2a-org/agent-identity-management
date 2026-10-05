@@ -394,24 +394,17 @@ func main() {
 
 	log.Println("Shutting down server...")
 
-	if err := app.Shutdown(); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+	// Stop the listener and drain the FGA worker pool, each within its own
+	// bound. Errors are logged, never fatal, so the deferred cleanup runs.
+	var fga asyncDrainer
+	if services.FGA != nil {
+		fga = services.FGA
 	}
+	shutdownGracefully(app, apiShutdownTimeout, fga, fgaDrainTimeout)
 
 	// No request is in flight any more. Write the refused-request line for the
 	// period that was still open, which would otherwise end with the process.
 	metrics.FlushS1RefusalLine()
-
-	// Drain the FGA async intent-check worker pool. Bound the wait at 10s
-	// so we don't deadlock shutdown on a hung NanoMind daemon — the
-	// per-call HTTP timeout (800ms) caps individual workers regardless.
-	if services.FGA != nil {
-		fgaShutdownCtx, fgaShutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		if err := services.FGA.Shutdown(fgaShutdownCtx); err != nil {
-			log.Printf("⚠️  FGA engine shutdown timed out: %v", err)
-		}
-		fgaShutdownCancel()
-	}
 
 	log.Println("Server exited")
 }
