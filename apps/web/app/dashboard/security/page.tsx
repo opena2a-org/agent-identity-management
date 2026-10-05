@@ -24,20 +24,7 @@ import {
   Folder,
 } from "lucide-react";
 import Link from "next/link";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
-  Area,
-  ComposedChart,
-} from "recharts";
+import { TrendChart, chartSeries } from "@/components/charts";
 import { api } from "@/lib/api";
 import ThreatDetailModal from "@/components/modals/threat-detail-modal";
 import { formatDateTime, formatRelativeTime } from "@/lib/date-utils";
@@ -568,44 +555,15 @@ export default function SecurityPage() {
               <Activity className="h-5 w-5 text-ink-tertiary" />
             </div>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={metrics?.protectionTimeline || []}>
-                  <defs>
-                    <linearGradient id="actionsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="var(--brand)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-divider" />
-                  <XAxis dataKey="date" stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-                  <YAxis stroke="var(--text-tertiary)" tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "var(--glass-fill)",
-                      border: "1px solid var(--glass-border)",
-                      borderRadius: "12px",
-                      boxShadow: "var(--shadow-card)",
-                      color: "var(--text-primary)",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="actions"
-                    fill="url(#actionsGradient)"
-                    stroke="var(--brand)"
-                    strokeWidth={2}
-                    name="Actions"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="blocked"
-                    stroke="var(--red)"
-                    strokeWidth={2}
-                    name="Blocked"
-                    dot={{ fill: "var(--red)", strokeWidth: 2, r: 3 }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+              <TrendChart
+                title="Agent actions and blocked actions, last 30 days"
+                data={metrics?.protectionTimeline || []}
+                xKey="date"
+                series={[
+                  { key: "actions", name: "Actions", color: chartSeries.brand },
+                  { key: "blocked", name: "Blocked", color: chartSeries.red, kind: "line", dots: true },
+                ]}
+              />
             </div>
             {/* Insight Box */}
             {protectionInsight && (
