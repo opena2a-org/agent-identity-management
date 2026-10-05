@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/redis/go-redis/v9"
 )
 
 // buildCommit is stamped at build time via
@@ -84,11 +86,31 @@ func runBoundedCheck(parent context.Context, timeout time.Duration, check func(c
 	}
 }
 
+// errRedisStartupFailed is what the readiness check reports for a configured
+// Redis whose startup connection failed: the service runs without it until a
+// restart, so it stays unavailable even if Redis comes back.
+var errRedisStartupFailed = errors.New("redis: configured but the startup connection failed")
+
+// redisReadyCheck returns the readiness check for Redis. A nil result means
+// no Redis is configured (notConfigured). A configured Redis whose startup
+// connection failed (client nil) always fails the check, so it reads
+// unavailable and degraded rather than notConfigured.
+func redisReadyCheck(configured bool, client *redis.Client) func(context.Context) error {
+	if client != nil {
+		return func(ctx context.Context) error {
+			return client.Ping(ctx).Err()
+		}
+	}
+	if configured {
+		return func(context.Context) error { return errRedisStartupFailed }
+	}
+	return nil
+}
+
 // newHealthReadyHandler builds GET /health/ready. checkDB is the required
 // database ping; a nil checkRedis means Redis is not configured (it is
-// optional and a failed startup connection leaves the client nil). The
-// response is 200 iff every required dependency is ok; an unavailable
-// optional dependency only sets degraded.
+// optional; see redisReadyCheck). The response is 200 iff every required
+// dependency is ok; an unavailable optional dependency only sets degraded.
 func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), healthReadyDeadline)
