@@ -664,6 +664,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — `/health/ready` reports a configured Redis that failed at startup as unavailable
+
+- When `REDIS_HOST` was set and the backend could not connect to Redis at startup, it continued without Redis and
+  `GET /health/ready` reported `"redis": {"status": "notConfigured"}` with `degraded` false, which hid the outage. The
+  readiness body now reads `notConfigured` only when `REDIS_HOST` is unset. A Redis named by `REDIS_HOST` whose
+  startup connection failed reads `unavailable` with `degraded` true until the backend is restarted, as does one that
+  stops answering after startup. Redis stays optional: the response is still 200 while the database is reachable.
+
 ### Changed — `ADMIN_PASSWORD` seeds the first administrator and no longer resets a changed password
 
 - The backend wrote `ADMIN_PASSWORD` over the password of the administrator named by `ADMIN_EMAIL` on every start, so
