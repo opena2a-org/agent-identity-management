@@ -81,6 +81,7 @@ jobs:
           sbom: true
           build-args: |
             VERSION=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+            COMMIT=${{ github.sha }}
 
   verify-frontend:
     runs-on: ubuntu-latest
@@ -302,6 +303,7 @@ jobs:
           sbom: true
           build-args: |
             VERSION=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
+            COMMIT=${{ github.sha }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
