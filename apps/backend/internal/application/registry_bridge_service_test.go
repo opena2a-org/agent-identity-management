@@ -91,6 +91,9 @@ func (m *mockAgentRepoForBridge) MarkAsCompromised(id uuid.UUID) error          
 func (m *mockAgentRepoForBridge) UpdateLastActive(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
+func (m *mockAgentRepoForBridge) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
 func (m *mockAgentRepoForBridge) GetStaleAgents(ctx context.Context, since time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }

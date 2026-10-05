@@ -260,6 +260,9 @@ func (m *MockAgentRepositoryForCapReq) MarkAsCompromised(id uuid.UUID) error    
 func (m *MockAgentRepositoryForCapReq) UpdateLastActive(ctx context.Context, agentID uuid.UUID) error {
 	return nil
 }
+func (m *MockAgentRepositoryForCapReq) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
 func (m *MockAgentRepositoryForCapReq) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }

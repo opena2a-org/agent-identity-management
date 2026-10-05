@@ -124,6 +124,9 @@ func (m *mockAgentRepo) UpdateTrustScore(_ uuid.UUID, _ float64) error          
 func (m *mockAgentRepo) IncrementViolationCount(_ uuid.UUID) error              { return nil }
 func (m *mockAgentRepo) MarkAsCompromised(_ uuid.UUID) error                    { return nil }
 func (m *mockAgentRepo) UpdateLastActive(_ context.Context, _ uuid.UUID) error  { return nil }
+func (m *mockAgentRepo) UpdateHeartbeat(_ context.Context, _ uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
 func (m *mockAgentRepo) GetStaleAgents(_ context.Context, _ time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }
