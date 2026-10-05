@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach, type Mock } from "vite
 import { render, screen, fireEvent, cleanup, act, waitFor } from "@testing-library/react";
 import DevicePage from "./page";
 import { api } from "@/lib/api";
+import { countTextRuns, textBelowFloor } from "@/tests/readability";
 
 /**
  * The consent page for the CLI device login (RFC 8628). A code on the URL is a
@@ -90,5 +91,59 @@ describe("device consent page", () => {
     fireEvent.change(input, { target: { value: "bcdfghjk" } });
     expect((input as HTMLInputElement).value).toBe("BCDF-GHJK");
     expect(api.approveDevice).not.toHaveBeenCalled();
+  });
+});
+
+// The consent page is often opened on a phone next to the terminal: no text on it,
+// in any state, renders below 14px at 375px.
+describe("device consent page readability", () => {
+  it("renders no text below 14px while asking for a code, and with a code error", async () => {
+    searchParams = new URLSearchParams();
+    const { container } = render(<DevicePage />);
+    const input = await screen.findByLabelText(/verification code/i);
+    expect(countTextRuns(container)).toBeGreaterThan(5);
+    expect(textBelowFloor(container)).toEqual([]);
+
+    fireEvent.change(input, { target: { value: "bcd" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText(/the code has 8 characters/i)).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+  });
+
+  it("renders no text below 14px while confirming, signed in or not", async () => {
+    const { container } = render(<DevicePage />);
+    expect(await screen.findByText(/requested by aim-sdk/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Enter a different code" })).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+    cleanup();
+
+    (api.getToken as Mock).mockReturnValue(null);
+    const signedOut = render(<DevicePage />);
+    expect(await screen.findByText("Sign in to continue.")).toBeTruthy();
+    expect(textBelowFloor(signedOut.container)).toEqual([]);
+  });
+
+  it("renders no text below 14px when the code is no longer waiting", async () => {
+    (api.getDeviceVerification as Mock).mockResolvedValue({ ...pending("aim-sdk"), status: "denied" });
+    const { container } = render(<DevicePage />);
+    expect(await screen.findByText(/no longer waiting for approval/i)).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+  });
+
+  it("renders no text below 14px once approved, and once expired", async () => {
+    const { container } = render(<DevicePage />);
+    const button = await screen.findByRole("button", { name: /authorize aim-sdk/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(await screen.findByText(/aim-sdk status/)).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+    cleanup();
+
+    (api.getDeviceVerification as Mock).mockResolvedValue({ ...pending("aim-sdk"), status: "expired" });
+    const expired = render(<DevicePage />);
+    expect(await screen.findByText("Code expired")).toBeTruthy();
+    expect(screen.getByText("aim-sdk login")).toBeTruthy();
+    expect(textBelowFloor(expired.container)).toEqual([]);
   });
 });
