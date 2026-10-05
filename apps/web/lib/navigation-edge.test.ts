@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { filterNavigationByRole } from "@/lib/permissions";
 import { navigationBase, resolveNavHref } from "@/lib/navigation";
-import { HUB_TABS, visibleHubTabs } from "@/lib/hub-tabs";
+import { HUB_TABS, hubTabsForPath, visibleHubTabs } from "@/lib/hub-tabs";
 import { HOSTED_DEPLOYMENT } from "@/lib/deployment";
 import { ALL_ROLES, ROUTE_PERMISSIONS, effectiveEdgeRoles } from "@/lib/route-permissions";
 import { ROUTE_MOVES } from "@/lib/redirects";
@@ -89,6 +89,22 @@ describe("navigation never shows a route the edge gate blocks", () => {
     expect(effectiveEdgeRoles("/dashboard/compliance")).toEqual(["admin"]);
     expect(ROUTE_MOVES).toContainEqual({ source: "/dashboard/admin/compliance", destination: "/dashboard/compliance" });
     expect(effectiveEdgeRoles("/dashboard/admin/compliance")).toEqual(effectiveEdgeRoles("/dashboard/compliance"));
+  });
+
+  it("credentials replaces the API keys and SDK tokens tabs, with the roles both had", () => {
+    // One Developers tab for both kinds, and both old paths redirect to it. Neither old path
+    // had a gate entry, so the new path has none either: all three pass every role, and the
+    // tab shows to the roles the two old tabs showed to.
+    const tab = HUB_TABS.developers.find((t) => t.href === "/dashboard/credentials");
+    expect(tab?.name).toBe("Credentials");
+    expect(tab?.roles).toEqual(["admin", "manager", "member"]);
+    expect(hubTabsForPath("/dashboard/credentials")).toBe(HUB_TABS.developers);
+    expect(effectiveEdgeRoles("/dashboard/credentials")).toEqual(ALL_ROLES);
+    for (const old of ["/dashboard/api-keys", "/dashboard/sdk-tokens"]) {
+      expect(HUB_TABS.developers.map((t) => t.href)).not.toContain(old);
+      expect(ROUTE_MOVES).toContainEqual({ source: old, destination: "/dashboard/credentials" });
+      expect(effectiveEdgeRoles(old)).toEqual(effectiveEdgeRoles("/dashboard/credentials"));
+    }
   });
 
   it("nothing the navigation renders points at a moved path", () => {

@@ -43,8 +43,8 @@ export const HUB_TABS: Record<string, HubTab[]> = {
   developers: [
     { name: "Guide", href: "/dashboard/developers", roles: ["admin", "manager", "member", "viewer"] },
     { name: "SDK & docs", href: "/dashboard/sdk", roles: ["admin", "manager", "member"] },
-    { name: "API keys", href: "/dashboard/api-keys", roles: ["admin", "manager", "member"] },
-    { name: "SDK tokens", href: "/dashboard/sdk-tokens", roles: ["admin", "manager", "member"] },
+    // API keys and SDK tokens on one page; their old paths redirect (lib/redirects.ts).
+    { name: "Credentials", href: "/dashboard/credentials", roles: ["admin", "manager", "member"] },
     // Role set matches the backend gate (MemberMiddleware allow-list) and the
     // matching ROUTE_PERMISSIONS entry that ships in the same commit.
     { name: "Webhooks", href: "/dashboard/webhooks", roles: ["admin", "manager", "member"] },
@@ -56,7 +56,7 @@ export const HUB_TABS: Record<string, HubTab[]> = {
   ],
 };
 
-/** Segment-safe prefix match: /dashboard/sdk never claims /dashboard/sdk-tokens. */
+/** Segment-safe prefix match: /dashboard/sdk claims /dashboard/sdk/x, never a sibling such as /dashboard/sdk-x. */
 export function pathWithinTab(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }

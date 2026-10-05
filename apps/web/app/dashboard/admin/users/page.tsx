@@ -385,7 +385,7 @@ export default function UsersPage() {
               {apiKeysCount}
             </div>
             <Link
-              href="/dashboard/api-keys"
+              href="/dashboard/credentials#api-keys"
               className="text-xs text-blue-600 hover:text-blue-700 hover:underline mt-1 inline-block"
             >
               Manage API Keys →
