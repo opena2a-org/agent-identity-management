@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The agent page reports verify, suspend, reactivate and delete outcomes beside the actions
+
+- The agent page reported these four actions in browser alerts. An alert carries no link, ignores the theme, and on
+  failure showed the server's error text, which for a failed delete was the database's raw foreign-key message. The
+  outcome now renders inline under the action buttons: a success as a status message, a failure as one sentence of
+  reason and one next step, announced to assistive technology. The reason comes from the response's stated `code` or
+  its status (403: your role does not allow it; 404: the agent no longer exists, with a link back to the list; no
+  response: AIM could not be reached), never from the server's text; anything else reads "AIM could not delete this
+  agent." with a next step.
+- `components/ui/action-outcome.tsx` and `lib/action-outcome.ts` are the shared inline outcome for dashboard actions.
+- `tests/no-browser-alert.test.ts` counts the lines under `apps/web/app` that open a browser alert, the same lines as
+  `git grep -n -E 'alert\(' -- apps/web/app ':!*.fmt' ':!*.final' ':!*.bkp' ':!*.bak'`, and fails when the count
+  rises above 21 (27 before this change), with a planted call as its positive control.
+
 ### Fixed — The API reference names the password reset fields the endpoint reads
 
 - The developer page documented `POST /api/v1/public/reset-password` with a `token` field and no confirmation
