@@ -343,3 +343,98 @@ describe('LocalVerifier with a CrlCache (async-refreshed revocation)', () => {
     expect(res.rejectCategory).toBe('REVOKED');
   });
 });
+
+describe('LocalVerifier raw-text entry (strict parse)', () => {
+  // A decoy member placed before the signed one. JSON.parse keeps the last
+  // member, so the parsed object carries only the signed capabilities; a
+  // first-wins parser elsewhere would read the decoy. The raw entry refuses both.
+  function withDecoyCapabilities(atx: Atx): string {
+    return '{"capabilities":["*"],' + JSON.stringify(atx).slice(1);
+  }
+
+  it('verifies a credential from its JSON text and from its bytes as it does the object', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const verifier = new LocalVerifier(anchors(rawHex));
+
+    const fromObject = await verifier.verifyCredential(atx);
+    const fromText = await verifier.verifyCredential(JSON.stringify(atx));
+    const fromBytes = await verifier.verifyCredential(Buffer.from(JSON.stringify(atx), 'utf8'));
+
+    expect(fromObject.valid).toBe(true);
+    expect(fromText).toEqual(fromObject);
+    expect(fromBytes).toEqual(fromObject);
+  });
+
+  it('rejects a duplicate member as MALFORMED and names it', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const verifier = new LocalVerifier(anchors(rawHex));
+
+    const result = await verifier.verifyCredential(withDecoyCapabilities(atx));
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('MALFORMED');
+    expect(result.reason).toContain('duplicate member "capabilities"');
+  });
+
+  it('rejects text that is not a JSON object as MALFORMED without throwing', async () => {
+    const { rawHex } = genKey();
+    const verifier = new LocalVerifier(anchors(rawHex));
+
+    for (const bad of ['', 'null', '[]', '{"agentId":', '{} trailing']) {
+      const result = await verifier.verifyCredential(bad);
+      expect(result.valid, `accepted: ${JSON.stringify(bad)}`).toBe(false);
+      expect(result.rejectCategory).toBe('MALFORMED');
+    }
+  });
+
+  it('authorize() allows a signed capability from the raw text', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const verifier = new LocalVerifier(anchors(rawHex));
+
+    const res = await verifier.authorize(JSON.stringify(atx), { action: 'file:read' });
+
+    expect(res.verified).toBe(true);
+    expect(res.actionAllowed).toBe(true);
+    expect(res.agentId).toBe('agent-123');
+  });
+
+  it('authorize() denies a duplicate-member credential and leaves identity fields empty', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    const verifier = new LocalVerifier(anchors(rawHex));
+
+    const res = await verifier.authorize(withDecoyCapabilities(atx), { action: 'file:read' });
+
+    expect(res.verified).toBe(false);
+    expect(res.actionAllowed).toBe(false);
+    expect(res.rejectCategory).toBe('MALFORMED');
+    expect(res.denialReason).toContain('duplicate member "capabilities"');
+    expect(res.agentId).toBe('');
+    expect(res.agentDid).toBe('');
+    expect(res.issuerDid).toBe('');
+  });
+
+  it('applies the "reject" stale policy to raw input too', async () => {
+    const { privateKey, rawHex } = genKey();
+    const atx = sign(baseAtx(), privateKey);
+    let t = 0;
+    const cache = new CrlCache({
+      fetch: async () => ({ entries: [] }),
+      ttlMs: 1000,
+      onStale: 'reject',
+      now: () => t,
+    });
+    await cache.refreshNow();
+    t += 1001; // stale
+
+    const verifier = new LocalVerifier(anchors(rawHex, { crlCache: cache }));
+    const result = await verifier.verifyCredential(JSON.stringify(atx));
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('REVOKED');
+    expect(result.reason).toMatch(/stale/i);
+  });
+});

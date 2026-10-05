@@ -41,6 +41,15 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   validly signed delegation that `verifyDelegation`, `checkDelegationTemporalValidity` and `verifyDelegationChain`
   must reject at the evaluation time: before `createdAt`, after `expiresAt`, and exactly at `expiresAt`. The
   `createdAt` lower bound itself was enforced in #467 (#417).
+### Added
+
+- `LocalVerifier.verifyCredential` and `LocalVerifier.authorize` accept the credential as raw JSON text or
+  bytes as well as a parsed object. Raw input goes through the strict parse in `@opena2a/atx-verify` before
+  any field is read, so a credential carrying a duplicate member at any depth, including two names that
+  differ only in case, is rejected as `MALFORMED` with a reason naming the member. A parsed object cannot
+  get that check because `JSON.parse` has already dropped one of the duplicates. The two strict-parse ATX
+  conformance fixtures now replay through the SDK and are rejected; a new test replays every vendored
+  fixture through the raw-text entry.
 
 ### Fixed
 
