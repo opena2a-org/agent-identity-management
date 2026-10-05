@@ -52,6 +52,8 @@ import { TrustScoreBreakdown } from "@/components/agent/trust-score-breakdown";
 import { DriftScoreCard } from "@/components/agent/drift-score-card";
 import { AgentTagsTab } from "@/components/agent/tags-tab";
 import { FirstRunPanel } from "@/components/agent/first-run-panel";
+import { RefusedCallFinding } from "@/components/agent/refused-call-finding";
+import { refusedCallFinding, type RefusedCallFinding as RefusedCall } from "@/lib/refused-call";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -952,6 +954,7 @@ export default function AgentDetailsPage({
                     icon: 'alert' | 'trust_up' | 'trust_down' | 'verification' | 'action';
                     badge?: { text: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' };
                     metadata?: Record<string, any>;
+                    refusal?: RefusedCall | null;
                   }> = [];
 
                   // Add alerts
@@ -1048,7 +1051,8 @@ export default function AgentDetailsPage({
                         variant: riskLevel === 'high' || riskLevel === 'critical' ? 'destructive' :
                                  riskLevel === 'medium' ? 'secondary' : 'outline'
                       },
-                      metadata: meta
+                      metadata: meta,
+                      refusal: refusedCallFinding(activity, agent.id)
                     });
                   });
 
@@ -1141,12 +1145,15 @@ export default function AgentDetailsPage({
                                       {event.type === 'verification' && <Shield className="h-4 w-4" />}
                                       {event.type === 'action' && <Bot className="h-4 w-4" />}
                                     </div>
-                                    <div>
+                                    <div className="min-w-0">
                                       <div className="font-medium text-sm">{event.title}</div>
                                       <div className="text-sm text-muted-foreground">{event.description}</div>
                                       <div className="text-xs text-muted-foreground mt-1">
                                         {event.timestamp.toLocaleString()}
                                       </div>
+                                      {event.refusal && (
+                                        <RefusedCallFinding finding={event.refusal} showAdminLinks={userRole === "admin"} />
+                                      )}
                                     </div>
                                   </div>
                                   {event.badge && (
