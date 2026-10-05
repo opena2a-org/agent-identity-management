@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(_AGENT_DIR, 'aim-sdk-python'))
 try:
     from aim_sdk import secure, register_agent
     from aim_sdk.client import AIMClient
-    from aim_sdk.exceptions import ActionDeniedError, VerificationError
+    from aim_sdk.exceptions import AIMError, ActionDeniedError, VerificationError
 except ImportError:
     print("❌ Error: AIM SDK not found. Make sure you're running from the correct directory.")
     print("   Expected path: examples/flight-search-agent/ (with SDK at ../../sdk/python)")
@@ -250,17 +250,23 @@ class FlightAgent:
         """
         Search for flights to a destination
 
-        This action is verified by AIM before execution
+        When the agent is connected to AIM, the search runs only after AIM
+        verifies flights:search. A denial or a failed verification refuses the
+        search: the exception from verify_capability is re-raised and no
+        flights are returned. In standalone mode (registration failed) there
+        is no AIM client and the search runs unverified.
         """
         print(f"\n🔍 Searching flights to {destination}...")
 
         # Verify capability with AIM before executing
-        audit_id = None
+        verification_id = None
         if self.client:
-            try:
-                print("🔐 Requesting verification from AIM...")
+            print("🔐 Requesting verification from AIM...")
 
-                # Request verification for this capability
+            # verify_capability returns only on an allow (waiting for an
+            # approval when one is needed). A denial raises ActionDeniedError;
+            # no decision at all raises VerificationUnavailableError.
+            try:
                 verification = self.client.verify_capability(
                     capability="flights:search",
                     resource=destination,
@@ -270,18 +276,22 @@ class FlightAgent:
                         "risk_level": "low"
                     }
                 )
-
-                audit_id = verification.get('audit_id')
-                print(f"✅ Verification requested (Audit ID: {audit_id})")
+            except ActionDeniedError as e:
+                print(f"🛡️  AIM denied flights:search: {e}")
+                print("   Search refused")
                 print()
-
-                # Note: In real usage, you'd wait for approval here
-                # For demo purposes, we proceed immediately
-
+                self._report_refused(e)
+                raise
             except Exception as e:
                 print(f"⚠️  Verification error: {e}")
-                print("   Proceeding without verification")
+                print("   Search refused: AIM did not verify flights:search")
                 print()
+                self._report_refused(e)
+                raise
+
+            verification_id = verification.get('verification_id')
+            print(f"✅ Verified by AIM (Verification ID: {verification_id})")
+            print()
 
         # Simulate API call delay
         time.sleep(0.5)
@@ -290,28 +300,45 @@ class FlightAgent:
         destination_code = destination.upper()
         flights = MOCK_FLIGHTS.get(destination_code, [])
 
-        if not flights:
-            print(f"   No flights found to {destination}")
-            return []
-
         # Sort by price (cheapest first)
         flights_sorted = sorted(flights, key=lambda x: x['price'])
 
-        print(f"   Found {len(flights_sorted)} flights to {destination}")
+        if flights_sorted:
+            print(f"   Found {len(flights_sorted)} flights to {destination}")
+        else:
+            print(f"   No flights found to {destination}")
         print()
 
-        # Log successful capability with AIM
-        if self.client and audit_id:
-            try:
-                self.client.log_capability_result(
-                    audit_id=audit_id,
-                    success=True,
-                    result_summary=f"Found {len(flights_sorted)} flights to {destination}. Cheapest: ${flights_sorted[0]['price']:.2f}" if flights_sorted else f"No flights found to {destination}"
-                )
-            except Exception as e:
-                print(f"⚠️  Failed to log capability: {e}")
+        # Report the execution against the verification it ran under
+        # (POST /verifications/{id}/execution-status), whether or not it found
+        # flights. Fire-and-forget: a failed report never fails the search.
+        if self.client and verification_id:
+            print(f"📝 Reporting execution to AIM (Verification ID: {verification_id})")
+            print()
+            self.client.report_execution_status(
+                verification_id=verification_id,
+                executed=True,
+                strict_mode=True,
+            )
 
         return flights_sorted
+
+    def _report_refused(self, error: Exception):
+        """Record that a refused search did not run, when AIM issued an ID.
+
+        A denial usually carries a verification ID; a verification that never
+        reached a decision usually does not, and then there is nothing to
+        attach the record to.
+        """
+        decision = getattr(error, "decision", None)
+        verification_id = getattr(decision, "verification_id", None)
+        if self.client and verification_id:
+            self.client.report_execution_status(
+                verification_id=verification_id,
+                executed=False,
+                strict_mode=True,
+                execution_error=f"Refused by flight-search-agent: {error}",
+            )
 
     def display_flights(self, flights: List[Dict]):
         """Display flight results in a nice format"""
@@ -453,7 +480,11 @@ class FlightAgent:
                     departure_date = parts[2] if len(parts) > 2 else None
                     return_date = parts[3] if len(parts) > 3 else None
 
-                    flights = self.search_flights(destination, departure_date, return_date)
+                    try:
+                        flights = self.search_flights(destination, departure_date, return_date)
+                    except AIMError:
+                        # search_flights already printed why it refused
+                        continue
                     self.display_flights(flights)
                     continue
 
