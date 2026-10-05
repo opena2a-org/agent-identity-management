@@ -43,6 +43,10 @@ const (
 
 	// DefaultSignatureTimestampToleranceSeconds is the allowed clock skew
 	DefaultSignatureTimestampToleranceSeconds = 300 // 5 minutes
+
+	// NonceCleanupInterval is how often the server deletes request nonces
+	// that can no longer be replayed
+	NonceCleanupInterval = 60 * time.Second
 )
 
 // Configuration helpers
@@ -1485,9 +1489,14 @@ func (s *A2AService) GetViolationStats(ctx context.Context, orgID uuid.UUID, sin
 // Maintenance Operations
 // ============================================================================
 
-// CleanupExpiredNonces removes expired nonces
+// CleanupExpiredNonces deletes request nonces, and the request hash stored
+// with each, once they can no longer be replayed. A nonce is kept for the
+// signature timestamp tolerance past its expiry: a request whose timestamp
+// is still inside that window would pass the replay check again once its
+// nonce is gone. The scheduled cleanup job and the admin maintenance route
+// both call this.
 func (s *A2AService) CleanupExpiredNonces(ctx context.Context) (int, error) {
-	return s.nonceRepo.DeleteExpired(ctx)
+	return s.nonceRepo.DeleteExpired(ctx, DefaultSignatureTimestampToleranceSeconds*time.Second)
 }
 
 // RefreshExpiredCards refreshes cards with expired attestations
