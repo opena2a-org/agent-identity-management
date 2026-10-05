@@ -51,7 +51,8 @@ go run cmd/bootstrap/main.go \
 If you want the default `admin@opena2a.org` org and admin (the supported path
 for evaluation deployments), use `--default`. Bootstrap will fill in the
 canonical fields and generate a random password if you don't supply one,
-printing the credentials to stdout once.
+printing the credentials to stdout once. A password you supply, with
+`--admin-password` or `DEFAULT_ADMIN_PASSWORD`, is never printed.
 
 ```bash
 # Random password generated, printed once to stdout:
@@ -111,9 +112,8 @@ Agent Identity Management - Initial Setup
 
 ✅ Bootstrap completed successfully!
 
-🔐 Admin Credentials:
-   Email:    admin@company.com
-   Password: SecurePassword123!
+ℹ️  Admin user: admin@company.com
+    Sign in with the password supplied to this run (--admin-password or DEFAULT_ADMIN_PASSWORD); it is not printed.
 
 You can now log in at: http://localhost:3000/auth/login
 
