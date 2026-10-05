@@ -96,11 +96,11 @@ class StubServer {
 
 const stallEverything: Handler = () => 'stall';
 
-/** Answer POST /oauth/token (after delayMs) with the TokenResponse shape from
+/** Answer POST /api/v1/oauth/token (after delayMs) with the TokenResponse shape from
  * the contract; hold every other request (the verify POST) open forever. */
 function tokenThenStall(delayMs: number): Handler {
   return (requestLine) =>
-    requestLine.startsWith('POST /oauth/token')
+    requestLine.startsWith('POST /api/v1/oauth/token')
       ? {
           status: 200,
           delayMs,
@@ -180,7 +180,7 @@ describe('the enforcement deadline (AIM-06)', () => {
       expect((error as Error).message).toMatch(/Request timed out/);
       expect(elapsed).toBeLessThan(1500);
       expect(server.connections).toBe(1);
-      expect(server.requestLines[0]).toMatch(/^POST \/oauth\/token HTTP/);
+      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/oauth\/token HTTP/);
     },
     10000
   );
@@ -202,7 +202,7 @@ describe('the enforcement deadline (AIM-06)', () => {
       const elapsed = performance.now() - start;
 
       expect(elapsed).toBeLessThan(3000);
-      expect(server.requestLines[0]).toMatch(/^POST \/oauth\/token HTTP/);
+      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/oauth\/token HTTP/);
     },
     10000
   );

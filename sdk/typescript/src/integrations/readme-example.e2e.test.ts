@@ -41,7 +41,7 @@ async function startFakeAim(): Promise<{ server: Server; baseUrl: string; seen: 
     const body = await readBody(req);
     seen.push({ method: req.method ?? '', url: req.url ?? '', body });
     res.setHeader('content-type', 'application/json');
-    if (req.method === 'POST' && req.url?.startsWith('/oauth/token')) {
+    if (req.method === 'POST' && req.url?.startsWith('/api/v1/oauth/token')) {
       res.end('{"access_token":"t","token_type":"Bearer","expires_in":300}');
     } else if (req.method === 'GET' && req.url === `/api/v1/agents/${AGENT_ID}`) {
       res.end(JSON.stringify({ id: AGENT_ID, name: 'readme-agent', trustScore: 0.9 }));

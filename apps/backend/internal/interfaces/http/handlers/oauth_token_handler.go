@@ -224,10 +224,8 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 	//
 	// This endpoint previously read only `sub`. RFC 7523 §3 requires `aud` and `exp`, and
 	// without them the assertion never expired: anyone who obtained one once could replay
-	// it forever, against this or any other service the agent talks to. Our own SDK has
-	// been signing `iss`, `sub`, `aud`, `iat` and `exp` all along
-	// (sdk/typescript/src/auth/oauth.ts) — the server simply never read them, so enforcing
-	// them is not a new requirement on clients that were already correct.
+	// it forever, against this or any other service the agent talks to. The TypeScript
+	// SDK (sdk/typescript/src/auth/oauth.ts) signs `iss`, `sub`, `aud`, `iat` and `exp`.
 	if errResp := validateAssertionClaims(c, claims); errResp != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(errResp)
 	}
@@ -245,10 +243,13 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		})
 	}
 
+	// expires_in is the lifetime GenerateServiceToken stamped into the token
+	// (JWT_ACCESS_TTL, 2h by default), so a client that caches by it neither
+	// drops a valid token early nor keeps one past its expiry.
 	return c.JSON(fiber.Map{
 		"access_token": accessToken,
 		"token_type":   "Bearer",
-		"expires_in":   3600,
+		"expires_in":   h.jwtService.AccessTTLSeconds(),
 	})
 }
 

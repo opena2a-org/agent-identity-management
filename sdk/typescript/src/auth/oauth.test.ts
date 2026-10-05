@@ -81,7 +81,7 @@ describe('OAuthTokenManager', () => {
 
       expect(token).toBe('new-access-token');
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://aim.example.com/oauth/token',
+        'https://aim.example.com/api/v1/oauth/token',
         expect.objectContaining({
           method: 'POST',
           headers: {
@@ -174,7 +174,7 @@ describe('OAuthTokenManager', () => {
       const fetchCall = mockFetch.mock.calls[0];
       const body = fetchCall[1].body as URLSearchParams;
 
-      expect(body.get('grant_type')).toBe('client_credentials');
+      expect(body.get('grant_type')).toBe('urn:ietf:params:oauth:grant-type:jwt-bearer');
       expect(body.get('client_id')).toBe('agent-123');
       expect(body.get('client_assertion_type')).toBe(
         'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'

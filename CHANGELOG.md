@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the token endpoint reports the lifetime of the token it issues
+
+- `POST /api/v1/oauth/token` answered `"expires_in": 3600` while the token it returned lived for the configured
+  access-token lifetime, `JWT_ACCESS_TTL`, 2 hours by default. A client caching by `expires_in` dropped a valid token
+  at half its life, and with a lifetime under an hour kept presenting a token the server had already expired.
+  `expires_in` is now the lifetime stamped into the token.
+- The TypeScript SDK requests the JWT-bearer grant this endpoint accepts, at the path it is served on; see
+  `sdk/typescript/CHANGELOG.md`.
+
 ### Fixed — onboarding events are capped per organization, and a token mint is not retried on every error
 
 - `POST /api/v1/onboarding/events` stores the same event (and, for `tab_selected`, the same tab) at most 20

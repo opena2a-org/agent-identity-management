@@ -3,8 +3,30 @@
  */
 
 import type { TokenResponse, AgentCredentials } from '../types';
-import { createRequestSignature, toBase64, fromBase64 } from '../crypto/ed25519';
+import { sign, toBase64, fromBase64 } from '../crypto/ed25519';
 import { AuthenticationError, ConfigurationError, parseAPIError } from '../exceptions';
+
+/**
+ * The grant the AIM token endpoint accepts (RFC 7523 §2.1). It answers any
+ * other grant type, `client_credentials` included, with 400
+ * `unsupported_grant_type`.
+ */
+const JWT_BEARER_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer';
+
+const JWT_BEARER_ASSERTION_TYPE = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
+
+/**
+ * Seconds the client assertion stays valid. The server refuses an assertion
+ * whose `exp` is more than five minutes (plus clock skew) ahead.
+ */
+const ASSERTION_LIFETIME_SECONDS = 300;
+
+/**
+ * Base64url without padding (RFC 7515 §2), the encoding of every JWS segment.
+ */
+function toBase64Url(data: Uint8Array): string {
+  return toBase64(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 /**
  * Token cache entry
@@ -61,37 +83,13 @@ export class OAuthTokenManager {
   }
 
   /**
-   * Acquire a new access token using client credentials grant
+   * Acquire a new access token with the JWT-bearer grant: the agent proves its
+   * identity with a client assertion signed by its Ed25519 key, which the
+   * server verifies against the public key registered for the agent.
    */
   private async acquireToken(deadlineAt?: number): Promise<string> {
-    const tokenEndpoint = `${this.baseUrl}/oauth/token`;
-    const timestamp = Date.now();
-
-    // Create signed assertion
-    const { signature } = await createRequestSignature(
-      this.privateKey,
-      'POST',
-      '/oauth/token',
-      undefined,
-      timestamp
-    );
-
-    // Create JWT-like client assertion
-    const header = toBase64(
-      new TextEncoder().encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT' }))
-    );
-    const payload = toBase64(
-      new TextEncoder().encode(
-        JSON.stringify({
-          iss: this.agentId,
-          sub: this.agentId,
-          aud: this.baseUrl,
-          iat: Math.floor(timestamp / 1000),
-          exp: Math.floor(timestamp / 1000) + 300,
-        })
-      )
-    );
-    const clientAssertion = `${header}.${payload}.${signature}`;
+    const tokenEndpoint = `${this.baseUrl}/api/v1/oauth/token`;
+    const clientAssertion = await this.createClientAssertion(Date.now());
 
     // The abort fires at the time LEFT on the enforcement deadline — the same
     // deadline the verify POST that follows will finish on, never a fresh
@@ -112,9 +110,9 @@ export class OAuthTokenManager {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({
-          grant_type: 'client_credentials',
+          grant_type: JWT_BEARER_GRANT_TYPE,
           client_id: this.agentId,
-          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion_type: JWT_BEARER_ASSERTION_TYPE,
           client_assertion: clientAssertion,
         }),
         signal,
@@ -165,6 +163,32 @@ export class OAuthTokenManager {
     };
 
     return accessToken;
+  }
+
+  /**
+   * Build the client assertion as a compact JWS (RFC 7515): three base64url
+   * segments without padding, the Ed25519 signature taken over the ASCII bytes
+   * of `header.payload`. Those are the bytes the server verifies; a signature
+   * over anything else is refused.
+   */
+  private async createClientAssertion(timestamp: number): Promise<string> {
+    const encoder = new TextEncoder();
+    const iat = Math.floor(timestamp / 1000);
+    const header = toBase64Url(encoder.encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT' })));
+    const payload = toBase64Url(
+      encoder.encode(
+        JSON.stringify({
+          iss: this.agentId,
+          sub: this.agentId,
+          aud: this.baseUrl,
+          iat,
+          exp: iat + ASSERTION_LIFETIME_SECONDS,
+        })
+      )
+    );
+    const signingInput = `${header}.${payload}`;
+    const signature = await sign(encoder.encode(signingInput), this.privateKey);
+    return `${signingInput}.${toBase64Url(signature)}`;
   }
 
   /**
