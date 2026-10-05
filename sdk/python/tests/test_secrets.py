@@ -249,6 +249,57 @@ class TestResolve:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Resolve refuses a field the signed message cannot carry
+# ---------------------------------------------------------------------------
+
+UNSIGNABLE_VALUES = [
+    pytest.param("a\nb", "a line feed", id="LF"),
+    pytest.param("a\rb", "a carriage return", id="CR"),
+    pytest.param("a|b", "'|'", id="pipe"),
+]
+
+
+class TestResolveRefusesUnsignableFields:
+    """resolve() signs "namespace|operation|nonce": neither field may hold LF, CR or "|"."""
+
+    @pytest.mark.parametrize("field", ["namespace", "operation"])
+    @pytest.mark.parametrize("value, named", UNSIGNABLE_VALUES)
+    def test_refuses_before_signing_and_sends_nothing(self, field, value, named):
+        client, _ = make_test_client()
+        fields = {"namespace": "my-ns", "operation": "read", field: value}
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.resolve(fields["namespace"], fields["operation"])
+
+        assert f"{field} contains {named}" in str(excinfo.value)
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
+
+    def test_fields_without_those_characters_are_signed_and_sent_once(self):
+        """Control: the same call with plain fields signs one message and sends one request."""
+        client, signing_key = make_test_client()
+        blob_b64, pub_b64 = encrypt_for_agent(b"cred", bytes(signing_key.verify_key))
+        mock_response = {
+            "encryptedBlob": blob_b64,
+            "ephemeralPubKey": pub_b64,
+            "encryptionAlg": "X25519-ChaCha20-Poly1305",
+        }
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request", return_value=mock_response) as mock_req:
+            result = client.secrets.resolve("my-ns", "read")
+
+        assert result["credential"] == b"cred"
+        mock_req.assert_called_once()
+        payload = mock_req.call_args[1]["data"]
+        signed_message = f"my-ns|read|{payload['nonce']}".encode("utf-8")
+        mock_sign.assert_called_once_with(signed_message)
+        signing_key.verify_key.verify(signed_message, base64.b64decode(payload["signature"]))
+
+
+# ---------------------------------------------------------------------------
 # Tests: Namespace CRUD
 # ---------------------------------------------------------------------------
 
