@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"database/sql"
 	"fmt"
@@ -26,7 +25,6 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
-	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
@@ -926,33 +924,17 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		registry.NewATCClientFromEnv(),
 	)
 
-	// Secrets management: ATC verifier (real + JWT shim composite) + backends + service
-	jwtShimVerifier := infraatc.NewJWTShimVerifier(keyVault.GetServerSigningKey(), "aim-server")
-
-	// Real ATC verifier with trusted issuers and CRL client
+	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
 	issuerURI := getEnvOrDefault("ATC_ISSUER_URI", "https://aim.opena2a.org")
 	crlEndpoint := getEnvOrDefault("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest")
 	crlClient, err := infraatc.NewCachedCRLClient(crlEndpoint)
 	if err != nil {
 		log.Fatalf("invalid CRL endpoint: %v", err)
 	}
-	issuerPubKey, ok := keyVault.GetServerSigningKey().Public().(ed25519.PublicKey)
-	if !ok || len(issuerPubKey) != ed25519.PublicKeySize {
-		log.Fatalf("server signing key is not a valid Ed25519 public key")
+	atcVerifier, err := infraatc.NewServerATCVerifier(issuerURI, keyVault.GetServerSigningKey(), crlClient)
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
-	// Defensive copy: isolate from any future mutation of the source key.
-	issuerPubKeyCopy := make([]byte, ed25519.PublicKeySize)
-	copy(issuerPubKeyCopy, issuerPubKey)
-	trustedIssuers := []atcdomain.TrustedIssuer{
-		{
-			URI:       issuerURI,
-			PublicKey: issuerPubKeyCopy,
-		},
-	}
-	realATCVerifier := infraatc.NewRealATCVerifier(trustedIssuers, crlClient)
-
-	// Composite verifier: tries real ATC first, falls back to JWT shim
-	atcVerifier := infraatc.NewCompositeVerifier(realATCVerifier, jwtShimVerifier)
 	aimNativeBackend := infrasecrets.NewAIMNativeBackend(repos.SecretCredential)
 	secretsBackends := map[domainsecrets.BackendType]domainsecrets.SecretsBackend{
 		domainsecrets.BackendTypeAIMNative: aimNativeBackend,
