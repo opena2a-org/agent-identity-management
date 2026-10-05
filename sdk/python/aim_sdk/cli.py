@@ -520,18 +520,20 @@ def status(args):
     from .credentials import load_sdk_credentials, AIM_DIR
 
     creds = load_sdk_credentials()
-    creds_file = Path(AIM_DIR) / "sdk_credentials.json"
 
     if not creds:
         if getattr(args, 'json', False):
             # Exactly one JSON object on stdout and nothing else -- this is the
             # output a wrapper script parses, so a stray banner line would make
             # `aim-sdk status --json | jq` fail on a working install.
+            # Cite a file only if it exists: with nothing stored there is no
+            # sdk_credentials.json to send the user to.
+            source = _credentials_source()
             print(json.dumps({
                 "authenticated": False,
                 "server": None,
                 "user": None,
-                "credentialsPath": str(creds_file),
+                "credentialsPath": str(source) if source else None,
                 "tokenState": "absent",
             }))
             return 1
