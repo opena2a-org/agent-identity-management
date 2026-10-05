@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import { TrendChart, chartSeries } from '@/components/charts';
 
 interface TrustScoreBreakdownProps {
   agentId: string;
@@ -393,63 +393,36 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
               <div className="space-y-4">
                 {/* Line Chart */}
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={history.history.map(entry => ({
-                        timestamp: new Date(entry.timestamp).toLocaleDateString(),
-                        score: Math.round(entry.trustScore * 100),
-                        fullTimestamp: new Date(entry.timestamp).toLocaleString(),
-                        reason: entry.reason,
-                        changedBy: entry.changedBy,
-                      }))}
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--divider)" />
-                      <XAxis
-                        dataKey="timestamp"
-                        stroke="var(--stroke)"
-                        tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                      />
-                      <YAxis
-                        domain={[0, 100]}
-                        stroke="var(--stroke)"
-                        tick={{ fill: 'var(--text-tertiary)', fontSize: 11 }}
-                        label={{ value: 'Trust score (%)', angle: -90, position: 'insideLeft', fill: 'var(--text-tertiary)', fontSize: 11 }}
-                      />
-                      <RechartsTooltip
-                        content={({ active, payload }: { active?: boolean; payload?: any[] }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload;
-                            return (
-                              <div className="glass p-3 text-ink">
-                                <p className="font-semibold">{data.fullTimestamp}</p>
-                                <p className="text-sm mt-1">
-                                  Score: <span className="font-semibold">{data.score}%</span>
-                                </p>
-                                <p className="text-xs text-ink-secondary mt-1">
-                                  Reason: {data.reason}
-                                </p>
-                                <p className="text-xs text-ink-secondary">
-                                  By: {data.changedBy}
-                                </p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="score"
-                        stroke="var(--brand)"
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                        activeDot={{ r: 6 }}
-                        name="Trust score (%)"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <TrendChart
+                    title="Trust score history"
+                    data={history.history.map(entry => ({
+                      timestamp: new Date(entry.timestamp).toLocaleDateString(),
+                      score: Math.round(entry.trustScore * 100),
+                      fullTimestamp: new Date(entry.timestamp).toLocaleString(),
+                      reason: entry.reason,
+                      changedBy: entry.changedBy,
+                    }))}
+                    xKey="timestamp"
+                    series={[{ key: 'score', name: 'Trust score (%)', color: chartSeries.brand, kind: 'line', dots: true }]}
+                    yDomain={[0, 100]}
+                    yLabel="Trust score (%)"
+                    formatValue={(v) => `${v}%`}
+                    legend
+                    renderTooltip={(data) => (
+                      <div className="glass p-3 text-ink">
+                        <p className="font-semibold">{data.fullTimestamp}</p>
+                        <p className="text-sm mt-1">
+                          Score: <span className="font-semibold">{data.score}%</span>
+                        </p>
+                        <p className="text-xs text-ink-secondary mt-1">
+                          Reason: {data.reason}
+                        </p>
+                        <p className="text-xs text-ink-secondary">
+                          By: {data.changedBy}
+                        </p>
+                      </div>
+                    )}
+                  />
                 </div>
 
                 {/* History Table */}

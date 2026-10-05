@@ -52,19 +52,7 @@ import { getErrorMessage } from "@/lib/error-messages";
 import { AuthGuard } from "@/components/auth-guard";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts";
+import { CategoryBarChart, DonutChart, chartSeries, type ChartColor } from "@/components/charts";
 
 // ============================================
 // TYPES
@@ -90,15 +78,6 @@ interface TabConfig {
   icon: React.ElementType;
   description: string;
 }
-
-// Glass tooltip chrome for recharts. Colors come from tokens, never hex literals.
-const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "var(--glass-fill)",
-  border: "1px solid var(--glass-border)",
-  borderRadius: "12px",
-  boxShadow: "var(--shadow-card)",
-  color: "var(--text-primary)",
-} as const;
 
 const TABS: TabConfig[] = [
   { id: "overview", label: "Overview", icon: BarChart3, description: "A2A protocol dashboard and analytics" },
@@ -290,12 +269,12 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
   const taskStateData = useMemo(() => {
     const counts: Record<string, number> = {};
     tasks.forEach(t => { counts[t.state] = (counts[t.state] || 0) + 1; });
-    const colorMap: Record<string, string> = {
-      COMPLETED: "var(--green)", WORKING: "var(--amber)", FAILED: "var(--red)",
-      SUBMITTED: "var(--brand)", CANCELLED: "var(--text-secondary)", INPUT_NEEDED: "var(--brand-indigo)",
+    const colorMap: Record<string, ChartColor> = {
+      COMPLETED: chartSeries.green, WORKING: chartSeries.amber, FAILED: chartSeries.red,
+      SUBMITTED: chartSeries.brand, CANCELLED: chartSeries.muted, INPUT_NEEDED: chartSeries.indigo,
     };
     return Object.entries(counts).map(([name, value]) => ({
-      name, value, fill: colorMap[name] || "var(--text-tertiary)",
+      name, value, color: colorMap[name] || chartSeries.muted,
     }));
   }, [tasks]);
 
@@ -333,25 +312,11 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
           </h3>
           <div className="h-64">
             {tasksLoading ? <ChartLoading /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={taskStateData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {taskStateData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-              </PieChart>
-            </ResponsiveContainer>
+            <DonutChart
+              title="Tasks by state"
+              data={taskStateData}
+              sliceLabel={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            />
             )}
           </div>
         </div>
@@ -363,15 +328,12 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
           </h3>
           <div className="h-64">
             {trustLoading ? <ChartLoading /> : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trustDistData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-divider" />
-                <XAxis dataKey="range" className="text-xs" stroke="var(--text-tertiary)" />
-                <YAxis className="text-xs" stroke="var(--text-tertiary)" />
-                <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={{ fill: "var(--surface-inset-gray)" }} />
-                <Bar dataKey="count" fill="var(--brand)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <CategoryBarChart
+              title="Agents by trust score range"
+              data={trustDistData}
+              categoryKey="range"
+              valueKey="count"
+            />
             )}
           </div>
         </div>
