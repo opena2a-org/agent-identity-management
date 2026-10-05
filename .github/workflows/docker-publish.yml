@@ -54,18 +54,18 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # The same inputs as build-backend's build step, minus `push`, `tags` and
       # `labels`; the Actions cache is read and written here only.
       - name: Build image (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infrastructure/docker/Dockerfile.backend
@@ -83,18 +83,18 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # The same inputs as build-frontend's build step, minus `push`, `tags` and
       # `labels`; the Actions cache is read and written here only.
       - name: Build image (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infrastructure/docker/Dockerfile.frontend
@@ -127,13 +127,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # The release guard. Runs before any registry login, holds no secret and
       # no inline expression: every workflow value enters through `env`. It
@@ -254,7 +254,7 @@ jobs:
       # flavor (latest=auto) when the X.Y.Z line matches.
       - name: Extract metadata (GHCR)
         id: meta-ghcr
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/opena2a-org/aim-server
           tags: |
@@ -264,7 +264,7 @@ jobs:
 
       - name: Extract metadata (Docker Hub)
         id: meta-hub
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: opena2a/aim-server
           tags: |
@@ -276,7 +276,7 @@ jobs:
       # run can write. The build inputs are verify-backend's.
       - name: Build and push image
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infrastructure/docker/Dockerfile.backend
@@ -292,7 +292,7 @@ jobs:
             VERSION=${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.sha }}
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Sign GHCR image with cosign (keyless)
         env:
@@ -307,7 +307,7 @@ jobs:
           cosign sign --yes "docker.io/opena2a/aim-server@${DIGEST}"
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-name: ${{ env.REGISTRY }}/opena2a-org/aim-server
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -327,13 +327,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # See build-backend for the guard's rationale. The pair it asks about is
       # this job's own, so a half-published release completes by re-running
@@ -445,7 +445,7 @@ jobs:
 
       - name: Extract metadata (GHCR)
         id: meta-ghcr
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/opena2a-org/aim-dashboard
           tags: |
@@ -455,7 +455,7 @@ jobs:
 
       - name: Extract metadata (Docker Hub)
         id: meta-hub
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: opena2a/aim-dashboard
           tags: |
@@ -465,7 +465,7 @@ jobs:
 
       - name: Build and push image
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infrastructure/docker/Dockerfile.frontend
@@ -481,7 +481,7 @@ jobs:
             NEXT_PUBLIC_API_URL=http://localhost:8080
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Sign GHCR image with cosign (keyless)
         env:
@@ -496,7 +496,7 @@ jobs:
           cosign sign --yes "docker.io/opena2a/aim-dashboard@${DIGEST}"
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-name: ${{ env.REGISTRY }}/opena2a-org/aim-dashboard
           subject-digest: ${{ steps.push.outputs.digest }}
