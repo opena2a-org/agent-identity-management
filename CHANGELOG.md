@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the Java SDK and the Java A2A example use jackson 2.18.11
+
+- `sdk/java/pom.xml` and `examples/a2a-multi-agent-demo/java/pom.xml` set `jackson.version` to 2.18.11; platform 1.0.0
+  pinned 2.16.1 in both. The property sets `jackson-databind` and `jackson-datatype-jsr310`, and `jackson-core` and
+  `jackson-annotations` resolve to the same version. 2.18.11 is the first 2.18.x release outside four high-severity
+  advisories published on 2026-09-22, each of which covers every 2.18.x release through 2.18.10: `jackson-databind`
+  GHSA-wv8q-qhhj-9h54 (CVE-2026-91776) and GHSA-cxp5-3px4-pw24 (CVE-2026-91777), and `jackson-core`
+  GHSA-7hhh-6rmp-j9qf (CVE-2026-89425) and GHSA-p6pp-m3f8-5c89 (CVE-2026-89407). (#560)
+- As of 2026-10-05 no published advisory for `jackson-databind`, `jackson-core`, `jackson-annotations` or
+  `jackson-modules-java8` includes 2.18.11 in its vulnerable range. The Java SDK is built from source: rebuild it, and
+  the example, to pick up the new version.
+
+### Removed — the unread token lifetime defaults in the backend configuration
+
 ### Added — an admin or manager can turn off hybrid mode from the agent page
 
 - The agent page's Key Vault tab showed "Hybrid mode enabled" with no way to turn it off; the act existed only as a
