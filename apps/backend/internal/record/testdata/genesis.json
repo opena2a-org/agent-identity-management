@@ -1,0 +1,19 @@
+{
+  "description": "The genesis record of a chain that starts with no earlier rows.",
+  "payloadType": "application/vnd.opena2a.audit-record.v1+json",
+  "firstKey": {
+    "alg": "Ed25519",
+    "publicKey": "deabd9dc2185a9aa25916869e2f8fa93dfd1dfa7c2636fd6294abbee61edf31c",
+    "keyid": "08072a20b63edf383f0ed7592a581c1feb38cb1b0d955d5288f55f64dde49a7d"
+  },
+  "preGenesisSet": "[]",
+  "records": [
+    {
+      "canonical": "{\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000000\",\"opena2a\":{\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":null,\"seq\":0},\"commitments\":{\"tenant\":\"d8332cbed265be04bbe54296dd097dc3f4044d5e0f200cd076b847e136a1220a\"},\"first_key\":{\"alg\":\"Ed25519\",\"keyid\":\"08072a20b63edf383f0ed7592a581c1feb38cb1b0d955d5288f55f64dde49a7d\",\"public_key\":\"deabd9dc2185a9aa25916869e2f8fa93dfd1dfa7c2636fd6294abbee61edf31c\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"pre_genesis\":{\"newest_timestamp\":null,\"row_counts\":{\"audit_logs\":0,\"verification_events\":0},\"set_digest\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\"},\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"system\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:04:05.123456Z\",\"type\":\"opena2a.chain_genesis\"}",
+      "recordHash": "77cabcfd590b41780f043332f48fa74937098a318db417af9018535c4c6f9ac5",
+      "signingInput": "DSSEv1 44 application/vnd.opena2a.audit-record.v1+json 827 {\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000000\",\"opena2a\":{\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":null,\"seq\":0},\"commitments\":{\"tenant\":\"d8332cbed265be04bbe54296dd097dc3f4044d5e0f200cd076b847e136a1220a\"},\"first_key\":{\"alg\":\"Ed25519\",\"keyid\":\"08072a20b63edf383f0ed7592a581c1feb38cb1b0d955d5288f55f64dde49a7d\",\"public_key\":\"deabd9dc2185a9aa25916869e2f8fa93dfd1dfa7c2636fd6294abbee61edf31c\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"pre_genesis\":{\"newest_timestamp\":null,\"row_counts\":{\"audit_logs\":0,\"verification_events\":0},\"set_digest\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\"},\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"system\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:04:05.123456Z\",\"type\":\"opena2a.chain_genesis\"}",
+      "tenantPart": "{\"opena2a\":{\"organization_id\":\"3f2504e0-4f89-41d3-9a0c-0305e82c3301\"},\"trace_id\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}",
+      "tenantSalt": "1010101010101010101010101010101010101010101010101010101010101010"
+    }
+  ]
+}
