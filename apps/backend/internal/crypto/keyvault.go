@@ -46,23 +46,35 @@ func NewKeyVault(masterKeyBase64 string) (*KeyVault, error) {
 	}, nil
 }
 
+// ephemeralKeyEnvironments are the ENVIRONMENT values that may run on a
+// generated master key. Matching is exact: an unset, misspelled or unrecognised
+// value is never treated as development.
+var ephemeralKeyEnvironments = map[string]bool{
+	"development": true,
+	"test":        true,
+}
+
 // NewKeyVaultFromEnv creates a KeyVault using a master key from environment variable
-// SECURITY: Master key MUST be set in production environments
+// SECURITY: Master key MUST be set everywhere except an explicit development or test environment
 func NewKeyVaultFromEnv() (*KeyVault, error) {
 	masterKeyBase64 := os.Getenv("KEYVAULT_MASTER_KEY")
 	environment := os.Getenv("ENVIRONMENT")
 
 	if masterKeyBase64 == "" {
-		// In production, master key is REQUIRED
-		if environment == "production" {
-			return nil, fmt.Errorf("SECURITY ERROR: KEYVAULT_MASTER_KEY environment variable is required in production")
+		// A generated key changes at every restart, which changes the server
+		// signing key and leaves stored agent private keys undecryptable, so
+		// only an explicit development or test setting may accept it.
+		if !ephemeralKeyEnvironments[environment] {
+			return nil, fmt.Errorf("SECURITY ERROR: KEYVAULT_MASTER_KEY is required when ENVIRONMENT=%q; "+
+				"set KEYVAULT_MASTER_KEY (generate one with: openssl rand -base64 32), "+
+				"or set ENVIRONMENT=development to use a key that is regenerated at every start", environment)
 		}
 
 		// Generate a new master key for development only
 		// SECURITY: This key is ephemeral and will be different on each restart
 		// This is acceptable for development but NOT for production
 		fmt.Println("⚠️  SECURITY WARNING: KEYVAULT_MASTER_KEY not set")
-		fmt.Println("   Generating ephemeral master key for development only.")
+		fmt.Printf("   Generating ephemeral master key because ENVIRONMENT=%s.\n", environment)
 		fmt.Println("   Set KEYVAULT_MASTER_KEY environment variable in production!")
 
 		masterKey := make([]byte, 32)
