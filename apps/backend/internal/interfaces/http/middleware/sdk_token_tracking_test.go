@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -280,12 +281,12 @@ func TestSDKTokenTrackingMiddleware_WithBearerToken(t *testing.T) {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	// Create a JWT-like token with JTI claim
-	// This is a valid JWT structure (header.payload.signature) but won't verify
-	// We only need it to be parseable since we use ParseUnverified
-	// eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 = {"alg":"HS256","typ":"JWT"}
-	// eyJqdGkiOiJ0ZXN0LWp0aS0xMjMifQ = {"jti":"test-jti-123"}
-	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJ0ZXN0LWp0aS0xMjMifQ.signature"
+	// A JWT-shaped token carrying a JTI claim. The signature does not verify;
+	// the middleware only needs to parse it (ParseUnverified). Built at run time
+	// so that no token literal is stored in the repository.
+	enc := base64.RawURLEncoding
+	token := enc.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`)) + "." +
+		enc.EncodeToString([]byte(`{"jti":"test-jti-123"}`)) + ".signature"
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)

@@ -24,7 +24,9 @@ def main():
 
     # Configuration
     AGENT_ID = "e237d89d-d366-43e5-808e-32c2ab64de6b"  # python-sdk-test-agent
-    API_KEY = "aim_live_dw4shT8Ng6fyM7OTO9XLVA71NP09KVeBqmJhlQe_cJw="
+    API_KEY = os.environ.get("AIM_API_KEY")
+    if not API_KEY:
+        sys.exit("Set AIM_API_KEY to an API key issued by the local backend before running.")
     AIM_URL = "http://localhost:8080"
 
     print(f"📡 AIM URL: {AIM_URL}")

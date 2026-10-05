@@ -4,13 +4,18 @@ Python SDK Capability Detection Test
 Tests capability detection and reporting similar to Go and JavaScript SDK tests.
 """
 
+import os
+import sys
+
 import requests
 import json
 from datetime import datetime, timezone
 
 # Test configuration
 AGENT_ID = "e237d89d-d366-43e5-808e-32c2ab64de6b"
-API_KEY = "aim_live_dw4shT8Ng6fyM7OTO9XLVA71NP09KVeBqmJhlQe_cJw="
+API_KEY = os.environ.get("AIM_API_KEY")
+if not API_KEY:
+    sys.exit("Set AIM_API_KEY to an API key issued by the local backend before running.")
 AIM_URL = "http://localhost:8080"
 
 def test_grant_capabilities():
