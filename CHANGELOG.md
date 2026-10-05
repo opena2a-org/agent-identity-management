@@ -19,6 +19,41 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed — the SDK authentication guide no longer says quantum attacks cannot break Ed25519
+
+- `docs/sdk/authentication.md` listed "No Known Vulnerabilities" among Ed25519's strengths and
+  said that, unlike RSA, it withstands quantum attacks. Ed25519, like RSA, is not resistant to
+  quantum attacks: a large enough quantum computer running Shor's algorithm could recover a
+  private key from its public key. The guide now says so and links to the Post-Quantum
+  Cryptography guide for ML-DSA signatures.
+
+### Security — a reused SDK-download token ends the chain that grew from it
+
+- Presenting an SDK-download refresh token (the 90-day token embedded in a downloaded SDK) that
+  was already rotated out now ends the chain that grew from it, as a reused login refresh token
+  ends its sign-in (RFC 9700 section 4.14.2). Every token issued from that download by rotation is
+  refused from then on: the family is revoked in the revocation store, and every `sdk_tokens` row
+  of the download is revoked with reason `token_family_revoked`, so the chain also ends where no
+  revocation store is configured. The event is recorded as a login reuse is
+  (`refresh_token_reuse`, then `refresh_session_revoked` for each later member refused), with
+  identifiers only. A rotated-out SDK token used to be refused on its own while the token that
+  replaced it stayed valid.
+- Two presentations of one SDK-download token in the same instant no longer both rotate. The
+  `sdk_tokens` retirement matches only an active row; the presentation whose retirement matches
+  nothing is refused as a reuse and receives no tokens. It used to receive a second live token.
+- `POST /api/v1/auth/sdk/recover` refuses a token whose chain a reuse ended, with the refresh
+  route's 401 answer; the SDK is downloaded again instead. A token its owner revoked is still
+  recovered.
+- SDK-download tokens carry the registered `sid` claim naming their download (the downloaded
+  token's own id, copied on every rotation), and the access tokens minted from them carry it too,
+  so the SDK download, device approval and SDK recovery routes refuse an access token from an
+  ended chain. A download's family never shares an id with the sign-in it was downloaded from.
+  `POST /api/v1/auth/logout` with an SDK-download token revokes that download's family as it does
+  a sign-in's. Each `sdk_tokens` row records its family as `familyId` in its metadata; the
+  `parent_token` and `rotated_from` lineage entries are unchanged, and there is no migration. A
+  token downloaded before this change is the root of its own family and carries it on its first
+  rotation. Tokens are opaque to clients; no SDK change is needed.
+
 ### Fixed — MCP server verification compares what the attesting agents report
 
 - An MCP server was marked verified once at least three agents created by at least two users had
