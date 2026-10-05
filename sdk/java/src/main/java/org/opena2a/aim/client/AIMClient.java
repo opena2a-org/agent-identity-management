@@ -2514,16 +2514,33 @@ public class AIMClient implements AutoCloseable {
 
     // ========== Post-Quantum Cryptography (PQC) Methods ==========
 
+    // Hybrid mode marks an agent as requiring both an Ed25519 and an ML-DSA
+    // signature. No AIM SDK signs requests in that form, so registerPQCKey()
+    // and setHybridMode() refuse to turn it on before sending anything.
+    private static final String HYBRID_MODE_UNAVAILABLE =
+            "Hybrid mode is not available from this SDK: it marks the agent as "
+            + "requiring both an Ed25519 and an ML-DSA signature, and no AIM SDK "
+            + "signs requests in that form yet. Register the key without it: "
+            + "registerPQCKey(pqcPublicKey, algorithm, false).";
+
     /**
-     * Register a PQC public key for this agent.
-     * Enables post-quantum secure signing for action verification.
+     * Register an ML-DSA public key for this agent.
+     *
+     * <p>Sends POST /api/v1/agents/{id}/pqc-key. The server stores the key and
+     * its algorithm, and {@link #getPQCKeyInfo()} then returns them.
      *
      * @param pqcPublicKey Base64-encoded ML-DSA public key
      * @param algorithm The ML-DSA algorithm variant (e.g., Algorithm.ML_DSA_65)
-     * @param enableHybridMode Enable hybrid Ed25519+ML-DSA mode
+     * @param enableHybridMode Must be false. True throws {@link ConfigurationException}
+     *        before any request is sent, because no AIM SDK signs requests in the
+     *        hybrid form.
      * @return Map containing registration result with pqcKeyAlgorithm and hybridModeEnabled
+     * @throws ConfigurationException if enableHybridMode is true
      */
     public Map<String, Object> registerPQCKey(String pqcPublicKey, Algorithm algorithm, boolean enableHybridMode) {
+        if (enableHybridMode) {
+            throw new ConfigurationException(HYBRID_MODE_UNAVAILABLE);
+        }
         if (agentId == null) {
             throw new AuthenticationException("Agent not registered. Call register() first.");
         }
@@ -2557,11 +2574,13 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Register a PQC key using a HybridKeyPair.
+     * Register the ML-DSA public key of a HybridKeyPair for this agent.
      *
      * @param keyPair The hybrid key pair containing ML-DSA keys
-     * @param enableHybridMode Enable hybrid Ed25519+ML-DSA mode
+     * @param enableHybridMode Must be false; true throws {@link ConfigurationException}
+     *        before any request is sent
      * @return Map containing registration result
+     * @throws ConfigurationException if enableHybridMode is true
      */
     public Map<String, Object> registerPQCKey(HybridKeyPair keyPair, boolean enableHybridMode) {
         return registerPQCKey(keyPair.getMldsaPublicKeyBase64(), keyPair.getMldsaVariant(), enableHybridMode);
@@ -2607,13 +2626,22 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Enable or disable hybrid mode for this agent.
-     * Hybrid mode requires both Ed25519 and ML-DSA signatures.
+     * Turn this agent's hybrid mode off.
      *
-     * @param enabled Whether to enable hybrid mode
+     * <p>Sends POST /api/v1/agents/{id}/hybrid-mode, and the response's
+     * hybridModeEnabled is false. {@code setHybridMode(true)} throws
+     * {@link ConfigurationException} before any request is sent: hybrid mode
+     * marks the agent as requiring both an Ed25519 and an ML-DSA signature, and
+     * no AIM SDK signs requests in that form.
+     *
+     * @param enabled Must be false; true throws {@link ConfigurationException}
      * @return Map containing the updated hybrid mode status
+     * @throws ConfigurationException if enabled is true
      */
     public Map<String, Object> setHybridMode(boolean enabled) {
+        if (enabled) {
+            throw new ConfigurationException(HYBRID_MODE_UNAVAILABLE);
+        }
         if (agentId == null) {
             throw new AuthenticationException("Agent not registered. Call register() first.");
         }
@@ -2747,15 +2775,19 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Create request signature headers for hybrid mode.
-     * These headers are compatible with the AIM backend's PQC middleware.
+     * Create hybrid Ed25519+ML-DSA signature headers for a request.
      *
      * @param keys The hybrid key pair
      * @param method HTTP method (GET, POST, etc.)
      * @param path Request path
      * @param body Request body (optional)
      * @return Map of headers to add to the request
+     * @deprecated AIM's request verification does not accept these headers. AIM
+     *     verifies a signature over the method, path, timestamp and body joined
+     *     by newlines; these headers sign {@code timestamp:METHOD:path:sha256(body)},
+     *     so a request carrying them does not authenticate as the agent.
      */
+    @Deprecated
     public static Map<String, String> createHybridRequestHeaders(
             HybridKeyPair keys, String method, String path, String body) {
         return PQCOperations.createHybridRequestHeaders(keys, method, path, body, null);
