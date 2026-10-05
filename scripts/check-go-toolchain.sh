@@ -16,7 +16,7 @@
 #      the `toolchain` line; with the default GOTOOLCHAIN=auto the go command
 #      then switches to the directive by itself. A mismatch here means
 #      GOTOOLCHAIN pins another release, or the switch did not happen.
-#   3. Every `FROM golang:<tag>` in the backend Dockerfiles names that release
+#   3. Every `FROM golang:<tag>` in the backend Dockerfile names that release
 #      (golang:X.Y.Z-alpine). The official golang images set
 #      GOTOOLCHAIN=local, so the builder tag alone decides which release
 #      compiles the published binaries; go.mod cannot move it.
@@ -30,7 +30,7 @@ set -eu
 
 root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 gomod="$root/apps/backend/go.mod"
-dockerfiles="infrastructure/docker/Dockerfile.backend apps/backend/infrastructure/docker/Dockerfile.backend"
+dockerfiles="infrastructure/docker/Dockerfile.backend"
 workflows="$root/.github/workflows"
 
 fail=0

@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — the second backend Dockerfile; the quickstart test builds the published one
+
+- `apps/backend/infrastructure/docker/Dockerfile.backend` was a second backend Dockerfile, built only by
+  `scripts/test-quickstart.sh`. Its runtime stage took `alpine:latest` rather than the published image's
+  `alpine:3.21`, it built the server with cgo and stamped no version, so the quickstart test ran an image no release
+  ships. It is removed, and `scripts/test-quickstart.sh` builds `infrastructure/docker/Dockerfile.backend`, the file
+  the published `aim-server` image is built from. `scripts/check-go-toolchain.sh` checks the builder tag of that one
+  Dockerfile.
+- `sdk/typescript/tests/dockerfile-backend-single-source.test.ts` fails when a Dockerfile other than the one
+  `docker-publish.yml` builds compiles `./cmd/server`, when the quickstart test builds another file, or when any
+  Dockerfile in the tree takes a base with no digest and no tag or the tag `latest`.
+
 ### Fixed — the token endpoint reports the lifetime of the token it issues
 
 - `POST /api/v1/oauth/token` answered `"expires_in": 3600` while the token it returned lived for the configured

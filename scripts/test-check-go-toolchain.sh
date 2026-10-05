@@ -41,13 +41,10 @@ CASE=0
 fixture() {
   CASE=$((CASE + 1))
   local dir="$WORK/case$CASE"
-  mkdir -p "$dir/apps/backend/infrastructure/docker" "$dir/infrastructure/docker" "$dir/.github/workflows"
+  mkdir -p "$dir/apps/backend" "$dir/infrastructure/docker" "$dir/.github/workflows"
   printf 'module example.com/fixture\n\ngo 1.25.0\n\ntoolchain %s\n' "$WANT" > "$dir/apps/backend/go.mod"
-  local df
-  for df in infrastructure/docker/Dockerfile.backend apps/backend/infrastructure/docker/Dockerfile.backend; do
-    printf 'FROM golang:%s-alpine@%s AS builder\nRUN go version\n\nFROM alpine:3.21@%s\n' \
-      "${WANT#go}" "$DIGEST" "$DIGEST" > "$dir/$df"
-  done
+  printf 'FROM golang:%s-alpine@%s AS builder\nRUN go version\n\nFROM alpine:3.21@%s\n' \
+    "${WANT#go}" "$DIGEST" "$DIGEST" > "$dir/infrastructure/docker/Dockerfile.backend"
   cat > "$dir/.github/workflows/ci.yml" <<'EOF'
 jobs:
   backend:
@@ -89,10 +86,6 @@ sed -i.bak 's/golang:1\.26\.8-alpine/golang:1.25-alpine/' "$d/infrastructure/doc
 expect "published Dockerfile builder tag differs" 1 "infrastructure/docker/Dockerfile.backend:1 builds on golang:1.25-alpine" "$d"
 
 fixture
-sed -i.bak 's/golang:1\.26\.8-alpine/golang:1.26.7-alpine/' "$d/apps/backend/infrastructure/docker/Dockerfile.backend"
-expect "apps/backend Dockerfile builder tag differs" 1 "apps/backend/infrastructure/docker/Dockerfile.backend:1 builds on golang:1.26.7-alpine" "$d"
-
-fixture
 sed -i.bak 's/^FROM golang:.*/FROM alpine:3.21/' "$d/infrastructure/docker/Dockerfile.backend"
 expect "Dockerfile lost its golang builder stage" 1 "has no golang builder stage" "$d"
 
@@ -109,8 +102,8 @@ sed -i.bak 's/^toolchain .*/toolchain go1.26/' "$d/apps/backend/go.mod"
 expect "toolchain directive is not a point release" 1 "must name a point release" "$d"
 
 fixture
-rm "$d/apps/backend/infrastructure/docker/Dockerfile.backend"
-expect "a backend Dockerfile is missing" 2 "cannot read apps/backend/infrastructure/docker/Dockerfile.backend" "$d"
+rm "$d/infrastructure/docker/Dockerfile.backend"
+expect "the backend Dockerfile is missing" 2 "cannot read infrastructure/docker/Dockerfile.backend" "$d"
 
 echo
 if [ "$FAILURES" -ne 0 ]; then
