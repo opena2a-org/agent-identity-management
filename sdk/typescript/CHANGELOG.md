@@ -34,6 +34,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   unknown`, and `log` exits 1. A JSON line without the audit record's fields is counted as unreadable instead of
   throwing a raw `TypeError` from the renderer. `readAuditRecords` keeps its return shape; the new `readAuditLog`
   in the signature module returns the records with the unreadable count and read error (#416).
+- `A2AClient.getTaskHistory` and `A2AClient.listSkills` now reach routes the AIM server registers. Both requested
+  paths the server does not serve (`GET /api/v1/a2a/tasks/{agentId}` and `GET /api/v1/a2a/skills`), so every call
+  failed. `getTaskHistory` now lists through `GET /api/v1/a2a/tasks?agentId=...&limit=...` and returns the tasks
+  the target agent took part in as client or remote agent, mapping the server's `externalTaskId`, `contextId` and
+  `state` to the method's existing `taskId`, `taskType` and `status` fields. `listSkills` now returns the current
+  agent's skills from `GET /api/v1/a2a/agents/{agentId}/skills`, the route `getSkills` uses. Both keep their
+  return types.
 - `aimErrorHandler` answers every SDK error as JSON. It handled only denials and
   authentication failures and passed every other SDK error to `next(error)`, so an
   AIM server answering 500 reached Express's default handler, which outside
@@ -55,6 +62,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - `A2AClient.updateTrustScore` is deprecated: the server refuses the write with 405
   because the A2A trust score is measured from recorded interactions, not asserted.
   A routed agent's `trustScore` is `null` while its composite is unscored.
+- `A2AClient.revokeAttestation` is deprecated. The AIM server registers no route that revokes an attestation (it
+  serves only `POST /api/v1/a2a/attestations` and `GET /api/v1/a2a/attestations/{agentId}/{skillId}`), so the method
+  posted to a path the server does not serve. It now rejects with an error that says so, without sending a request,
+  and never resolves. It is kept so existing code still compiles.
 
 ### Security — ARP's L2 no longer sends anything to a vendor by default
 

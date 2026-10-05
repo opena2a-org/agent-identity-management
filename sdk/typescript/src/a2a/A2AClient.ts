@@ -150,15 +150,14 @@ export class A2AClient {
   }
 
   /**
-   * Revoke a previously made attestation.
-   *
-   * @param attestationId ID of the attestation to revoke
-   * @param reason Reason for revocation
+   * @deprecated AIM registers no route that revokes an attestation: the server
+   * serves only `POST /attestations` and `GET /attestations/:agentId/:skillId`.
+   * The method always rejects, without sending a request, and never resolves.
+   * Kept so existing code still compiles.
    */
-  async revokeAttestation(attestationId: string, reason: string): Promise<A2ASkillAttestation> {
-    return this.post<A2ASkillAttestation>(
-      `${A2A_BASE_PATH}/attestations/${attestationId}/revoke`,
-      { reason }
+  async revokeAttestation(_attestationId: string, _reason: string): Promise<A2ASkillAttestation> {
+    throw new Error(
+      'revokeAttestation is not supported: the AIM server registers no route that revokes an attestation'
     );
   }
 
@@ -470,7 +469,9 @@ export class A2AClient {
   }
 
   /**
-   * Get task history for interactions with a target agent.
+   * Get task history for interactions with a target agent: the tasks your
+   * organization can see in which the target agent is the client or the remote
+   * agent, newest first.
    *
    * @param targetAgentId - ID of the target agent
    * @param limit - Maximum number of results
@@ -479,10 +480,29 @@ export class A2AClient {
     targetAgentId: string,
     limit = 50
   ): Promise<Array<{ id: string; taskId: string; taskType: string; status: string; createdAt: string }>> {
-    const response = await this.get<{ tasks: Array<{ id: string; taskId: string; taskType: string; status: string; createdAt: string }> }>(
-      `${A2A_BASE_PATH}/tasks/${targetAgentId}?limit=${limit}`
-    );
-    return response.tasks ?? [];
+    const response = await this.get<{
+      tasks: Array<{
+        id: string;
+        externalTaskId: string;
+        contextId?: string;
+        clientAgentId: string;
+        remoteAgentId: string;
+        state: string;
+        createdAt: string;
+      }> | null;
+    }>(`${A2A_BASE_PATH}/tasks?agentId=${encodeURIComponent(targetAgentId)}&limit=${limit}`);
+    // The server drops an agentId it cannot parse and lists every task instead,
+    // so keep only the tasks the target agent took part in.
+    return (response.tasks ?? [])
+      .filter((task) => task.clientAgentId === targetAgentId || task.remoteAgentId === targetAgentId)
+      .map((task) => ({
+        id: task.id,
+        taskId: task.externalTaskId,
+        // logTask stores taskType as the task's contextId.
+        taskType: task.contextId ?? '',
+        status: task.state,
+        createdAt: task.createdAt,
+      }));
   }
 
   /**
@@ -522,8 +542,7 @@ export class A2AClient {
    * List all skills for the current agent.
    */
   async listSkills(): Promise<A2ASkill[]> {
-    const response = await this.get<{ skills: A2ASkill[] }>(`${A2A_BASE_PATH}/skills`);
-    return response.skills ?? [];
+    return this.getSkills(this.getAgentId());
   }
 
   /**
