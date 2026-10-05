@@ -33,20 +33,29 @@ func (r *ownershipEventRepo) Create(e *domain.VerificationEvent) error {
 type ownershipAgentRepo struct {
 	domain.AgentRepository
 	agents       map[uuid.UUID]*domain.Agent
+	readErr      error
 	lookups      int
 	scoreUpdates []float64
 }
 
 func (r *ownershipAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	r.lookups++
+	if r.readErr != nil {
+		return nil, r.readErr
+	}
 	if a, ok := r.agents[id]; ok {
 		return a, nil
 	}
 	return nil, errors.New("sql: no rows in result set")
 }
 
+// UpdateTrustScore records the write and applies it to the stored agent, so an
+// assertion on the agent's TrustScore fails when a score was written.
 func (r *ownershipAgentRepo) UpdateTrustScore(id uuid.UUID, newScore float64) error {
 	r.scoreUpdates = append(r.scoreUpdates, newScore)
+	if a, ok := r.agents[id]; ok {
+		a.TrustScore = newScore
+	}
 	return nil
 }
 
@@ -194,5 +203,75 @@ func TestCreateVerificationEvent_AgentOfOwnOrganization(t *testing.T) {
 		assert.Len(t, f.events.created, 1)
 		assert.Empty(t, f.agents.scoreUpdates)
 		assert.Empty(t, f.alerts.created)
+	})
+}
+
+// A failed agent read is refused with the same error as an unknown agent, and
+// the cause of the failure reaches the log instead of being lost.
+func TestCreateVerificationEvent_FailedAgentReadLogsItsCause(t *testing.T) {
+	org := uuid.New()
+	agent := registeredAgent(org, 0)
+	f := newOwnershipFixture(agent)
+	f.agents.readErr = errors.New("driver: bad connection")
+
+	var event *domain.VerificationEvent
+	var err error
+	out := captureAllOutput(t, func() {
+		event, err = f.svc.CreateVerificationEvent(context.Background(), eventRequest(org, agent.ID, []string{"unregistered-server"}))
+	})
+
+	assertNothingChanged(t, f, event, err)
+	assert.Equal(t, ErrVerificationEventAgentNotFound.Error(), err.Error(), "the returned error must not carry the cause")
+	assert.Contains(t, out, "driver: bad connection")
+	assert.Contains(t, out, agent.ID.String())
+}
+
+func logEvent(svc *VerificationEventService, org, agentID uuid.UUID) (*domain.VerificationEvent, error) {
+	return svc.LogVerificationEvent(context.Background(), org, agentID,
+		domain.VerificationProtocolA2A, domain.VerificationTypeCapability, domain.VerificationEventStatusSuccess,
+		0, domain.InitiatorTypeAgent, nil, nil)
+}
+
+// LogVerificationEvent compares the agent's organization with the event's on
+// its own, so it does not depend on every caller having checked first.
+func TestLogVerificationEvent_AgentOfAnotherOrganization(t *testing.T) {
+	t.Run("agent of another organization", func(t *testing.T) {
+		agent := registeredAgent(uuid.New(), 0)
+		f := newOwnershipFixture(agent)
+
+		event, err := logEvent(f.svc, uuid.New(), agent.ID)
+
+		assertNothingChanged(t, f, event, err)
+	})
+
+	t.Run("no organization on either side", func(t *testing.T) {
+		agent := registeredAgent(uuid.Nil, 0)
+		f := newOwnershipFixture(agent)
+
+		event, err := logEvent(f.svc, uuid.Nil, agent.ID)
+
+		assertNothingChanged(t, f, event, err)
+	})
+
+	t.Run("unknown agent keeps the cause in the error", func(t *testing.T) {
+		f := newOwnershipFixture()
+
+		event, err := logEvent(f.svc, uuid.New(), uuid.New())
+
+		assertNothingChanged(t, f, event, err)
+		assert.Contains(t, err.Error(), "sql: no rows in result set")
+	})
+
+	t.Run("control: agent of the event's organization is recorded", func(t *testing.T) {
+		org := uuid.New()
+		agent := registeredAgent(org, 0)
+		f := newOwnershipFixture(agent)
+
+		event, err := logEvent(f.svc, org, agent.ID)
+
+		require.NoError(t, err)
+		require.NotNil(t, event)
+		assert.Len(t, f.events.created, 1)
+		assert.Equal(t, org, f.events.created[0].OrganizationID)
 	})
 }

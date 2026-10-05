@@ -10,9 +10,11 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// ErrVerificationEventAgentNotFound is returned by CreateVerificationEvent when
-// the agent does not exist or belongs to a different organization than the
-// event. Both cases return this one value so they cannot be told apart.
+// ErrVerificationEventAgentNotFound is returned by CreateVerificationEvent and
+// LogVerificationEvent when the agent does not exist or belongs to a different
+// organization than the event. CreateVerificationEvent returns this one value
+// in both cases so they cannot be told apart; when the agent read itself
+// failed, it writes the cause to the log rather than into the error.
 var ErrVerificationEventAgentNotFound = errors.New("agent not found")
 
 // VerificationEventService handles verification event business logic
@@ -48,10 +50,15 @@ func (s *VerificationEventService) LogVerificationEvent(
 	initiatorID *uuid.UUID,
 	metadata map[string]interface{},
 ) (*domain.VerificationEvent, error) {
-	// Get agent details
+	// The agent must belong to the organization the event is recorded under.
+	// Callers check ownership before they call; this comparison does not rely
+	// on that. An organization of uuid.Nil is refused on either side.
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
-		return nil, fmt.Errorf("agent not found: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrVerificationEventAgentNotFound, err)
+	}
+	if agent == nil || orgID == uuid.Nil || agent.OrganizationID != orgID {
+		return nil, ErrVerificationEventAgentNotFound
 	}
 
 	now := time.Now()
@@ -117,7 +124,11 @@ func (s *VerificationEventService) CreateVerificationEvent(
 	// of another organization is neither changed nor described. An unknown
 	// agent and an agent of another organization return the same error.
 	agent, err := s.agentRepo.GetByID(req.AgentID)
-	if err != nil || agent == nil || agent.OrganizationID != req.OrganizationID {
+	if err != nil {
+		fmt.Printf("Verification event refused: agent %s could not be read: %v\n", req.AgentID, err)
+		return nil, ErrVerificationEventAgentNotFound
+	}
+	if agent == nil || agent.OrganizationID != req.OrganizationID {
 		return nil, ErrVerificationEventAgentNotFound
 	}
 

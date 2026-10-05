@@ -664,6 +664,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — a verification event refused because its agent could not be read logs the cause
+
+- When a verification event was refused because the agent read failed (for example, a database error), the server
+  logged only "agent not found", so the cause was lost. The log line now names the agent ID and the read error. The
+  error returned to the caller is unchanged, so an unknown agent and an agent of another organization still return
+  the same error.
+- Automatic verification-event logging now checks that the agent belongs to the organization the event is recorded
+  under, as manual recording already did, instead of relying on each caller to check first. Current callers already
+  pass the agent's own organization, so the events they record are unchanged.
+- Removed an unused helper that registered the verification-event routes. The server never called it; the mounted
+  routes, including the manager-or-admin requirement on `DELETE /api/v1/verification-events/:id`, are unchanged, and
+  that route's description now states the manager-or-admin requirement instead of "admin only".
+
 ### Fixed — a deleted webhook's name can be used again
 
 - Deleting a webhook only marks it deleted, but the per-organization name uniqueness still counted deleted
