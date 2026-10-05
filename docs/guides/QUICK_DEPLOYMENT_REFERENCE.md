@@ -60,7 +60,7 @@ GOOGLE_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback/google
 ### ⚠️ Microsoft (NOT CONFIGURED)
 ```bash
 # Azure CLI: Available ✅
-# Logged in as: abdel@csnp.org
+# Logged in as: admin@example.com
 # To configure:
 az ad app create --display-name "AIM"
 ```
