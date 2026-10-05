@@ -3,12 +3,16 @@ package config
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/joho/godotenv"
 )
 
 // knownDevSecrets is the canonical set of plaintexts whose SHA-256 digests
@@ -22,6 +26,9 @@ var knownDevSecrets = []string{
 	"pR1fz62Vd+uDpfdXOzZRx5XXbwsFIbyxhwHZmbRqGmk=",
 	"YsOb1gouG02SWoGY3v7VfnuGlSc6zI3f0IWjLbeVw+w=",
 	"aim-super-secret-jwt-key-2025-development",
+	// The JWT_SECRET placeholder in the root .env.example: long enough to pass
+	// the length floor, so only the blocklist stops a verbatim copy.
+	"CHANGE_ME_run_openssl_rand_hex_32",
 }
 
 func baseValidConfig() *Config {
@@ -250,4 +257,61 @@ func TestLoad_MetricsAuthToken(t *testing.T) {
 	if got := cfg.Server.MetricsAuthToken; got != "" {
 		t.Fatalf("MetricsAuthToken with METRICS_AUTH_TOKEN unset: got %q, want empty", got)
 	}
+}
+
+// TestLoad_RefusesEnvTemplatesCopiedVerbatim starts Load() the way the server
+// starts when an operator copies an environment template to .env without
+// editing it: cmd/server reads the root .env with godotenv, and docker compose
+// supplies the database coordinates the root templates leave out. Every
+// template's JWT_SECRET is a placeholder published in this repository, so the
+// server must refuse to start on it rather than sign tokens with it.
+func TestLoad_RefusesEnvTemplatesCopiedVerbatim(t *testing.T) {
+	templates := []string{
+		".env.example",
+		".env.quickstart",
+		filepath.Join("apps", "backend", ".env.example"),
+	}
+	for _, name := range templates {
+		t.Run(name, func(t *testing.T) {
+			vars, err := godotenv.Read(filepath.Join("..", "..", "..", "..", name))
+			if err != nil {
+				t.Fatalf("read %s: %v", name, err)
+			}
+			t.Setenv("POSTGRES_HOST", "postgres")
+			t.Setenv("POSTGRES_USER", "aim")
+			t.Setenv("POSTGRES_DB", "aim")
+			t.Setenv("JWT_SECRET", "")
+			t.Setenv("KEYVAULT_MASTER_KEY", "")
+			for key, value := range vars {
+				// godotenv reads "KEY=   # note" as the value "# note", so an
+				// empty placeholder with an inline comment is not empty.
+				if strings.HasPrefix(value, "#") {
+					t.Errorf("%s: %s parses as its inline comment; put the comment on its own line", name, key)
+				}
+				t.Setenv(key, value)
+			}
+
+			refusal := loadRefusal()
+			if refusal == "" {
+				t.Fatalf("Load() started with %s copied verbatim; want a refusal naming JWT_SECRET", name)
+			}
+			if !strings.Contains(refusal, "JWT_SECRET") {
+				t.Fatalf("Load() with %s copied verbatim refused for another reason: %s", name, refusal)
+			}
+		})
+	}
+}
+
+// loadRefusal runs Load() and returns why it refused to start: its error, or
+// the panic a missing required variable raises. Empty means Load() succeeded.
+func loadRefusal() (refusal string) {
+	defer func() {
+		if r := recover(); r != nil {
+			refusal = fmt.Sprint(r)
+		}
+	}()
+	if _, err := Load(); err != nil {
+		return err.Error()
+	}
+	return ""
 }
