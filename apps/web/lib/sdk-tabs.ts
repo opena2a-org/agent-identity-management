@@ -1,7 +1,8 @@
 /**
  * The SDK quickstart content shared by the dashboard (zero state and side panel)
- * and cloud's get-started page. The SDK page, the register-agent modal, the agent
- * success page and sdk-setup-guide still carry their own install copy; new
+ * and cloud's get-started page, and the Java steps of the agent first-run panel. The
+ * SDK page, the register-agent modal, the first-run panel's Python steps and
+ * sdk-setup-guide still carry their own install copy; new
  * install-teaching surfaces should read this table instead of adding a fifth.
  *
  * `origin` is this deployment's own web origin, which proxies /api/* to the
