@@ -376,7 +376,9 @@ func TestMCPHandler_GetMCPServer_NotFound(t *testing.T) {
 	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 }
 
-func TestMCPHandler_GetMCPServer_AccessDenied(t *testing.T) {
+// Another organization's server answers 404, the same as an unknown ID, so
+// the response does not confirm that the ID exists.
+func TestMCPHandler_GetMCPServer_OtherOrganizationNotFound(t *testing.T) {
 	orgID := uuid.New()
 	otherOrgID := uuid.New()
 	serverID := uuid.New()
@@ -404,7 +406,7 @@ func TestMCPHandler_GetMCPServer_AccessDenied(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 }
 
 // ===========================

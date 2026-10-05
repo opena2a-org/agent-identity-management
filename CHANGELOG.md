@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — MCP server routes answer 404 for another organization's server, the same as for an unknown ID
+
+- Eleven routes under `/api/v1/mcp-servers/:id` answered `404 {"error":"MCP server not found"}` for an ID that does
+  not exist and `403 {"error":"Access denied"}` for a server in another organization, so a signed-in caller could
+  tell which server IDs exist outside their own organization. They now load the server through the same ownership
+  check as the other tenant-scoped handlers and answer `404 {"error":"not found"}` in both cases. The routes are
+  `GET`, `PUT` and `DELETE /:id`, `POST /:id/verify`, `POST /:id/keys`, `POST /:id/detect-capabilities`, and `GET`
+  on `/:id/verification-status`, `/:id/capabilities`, `/:id/agents`, `/:id/verification-events` and
+  `/:id/audit-logs`. Requests for the caller's own servers are unchanged.
+- `mcp_handler_tenant_scope_test.go` sends an unknown ID and another organization's ID to each route and fails
+  unless both answer 404 with byte-equal bodies; it also checks that the audit-logs route reads no logs for a server
+  the caller does not own, and that the caller's own server still returns its audit timeline.
+
 ### Fixed — `aim_http_requests_total` records the status the client received, and unknown paths share one series
 
 - `PrometheusMiddleware` read the response status before the app's error handler had run, so a request that ended in
