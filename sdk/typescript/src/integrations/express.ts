@@ -2,10 +2,16 @@
  * Express.js middleware for AIM SDK
  */
 
+import { STATUS_CODES } from 'node:http';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { AIMClient } from '../client/AIMClient';
-import type { AIMClientConfig, VerifyActionOptions } from '../types';
-import { classifyVerificationFailure } from './verification-outcome';
+import { AIMError } from '../exceptions';
+import type { VerifyActionOptions } from '../types';
+import {
+  classifyVerificationFailure,
+  type VerificationFailureResponse,
+} from './verification-outcome';
+import { clientFromOptions, type IntegrationClientOptions } from './client-options';
 
 /**
  * AIM context added to requests
@@ -27,7 +33,7 @@ export interface AIMRequest extends Request {
 /**
  * Middleware options
  */
-export interface AIMMiddlewareOptions extends AIMClientConfig {
+export interface AIMMiddlewareOptions extends IntegrationClientOptions {
   /** Skip verification for certain paths */
   skipPaths?: string[];
   /** Custom error handler */
@@ -43,16 +49,18 @@ export interface AIMMiddlewareOptions extends AIMClientConfig {
  * ```typescript
  * import express from 'express';
  * import { createAIMMiddleware } from '@opena2a/aim-sdk/express';
+ * import { loadCredentialsFromFile } from '@opena2a/aim-sdk';
  *
  * const app = express();
  * app.use(createAIMMiddleware({
  *   baseUrl: 'https://aim.example.com',
- *   apiKey: 'your-api-key',
+ *   // A registered agent's identity; omit to read the four AIM_* env vars.
+ *   credentials: await loadCredentialsFromFile('./agent-credentials.json'),
  * }));
  * ```
  */
 export function createAIMMiddleware(options: AIMMiddlewareOptions = {}): RequestHandler {
-  const client = new AIMClient(options);
+  const client = clientFromOptions(options);
   const skipPaths = new Set(options.skipPaths ?? ['/health', '/ready', '/metrics']);
 
   return async (req: AIMRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -171,7 +179,44 @@ export function verifyRouter(
 }
 
 /**
- * Error handler for AIM errors
+ * The response Fastify's default error handler gives an SDK error that the AIM
+ * plugin rethrows: `{ statusCode, code, error, message }`, with the error's own
+ * status when it is a 4xx or 5xx and 500 otherwise. Returns null for an error
+ * that did not come from the SDK.
+ */
+function sdkErrorResponse(error: unknown): VerificationFailureResponse | null {
+  if (!(error instanceof AIMError)) {
+    return null;
+  }
+
+  const status =
+    error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode <= 599
+      ? error.statusCode
+      : 500;
+
+  return {
+    status,
+    body: {
+      statusCode: status,
+      code: error.code,
+      error: STATUS_CODES[status] ?? 'Error',
+      message: error.message,
+    },
+  };
+}
+
+/**
+ * Error handler for AIM errors.
+ *
+ * Denials answer 403 and authentication failures 401, with the bodies
+ * `verifyAction` sends. Every other SDK error (an upstream 5xx, a network
+ * failure, a rate limit) is answered here too, in the shape the Fastify plugin
+ * gives the same error. Passing those on to Express's default handler rendered
+ * an HTML page carrying the stack trace and local file paths outside
+ * `NODE_ENV=production`, and printed the stack to stderr (#450).
+ *
+ * Errors that did not come from the SDK still go to `next(error)`, so the
+ * application's own handlers see them unchanged.
  */
 export function aimErrorHandler(
   error: Error,
@@ -179,7 +224,14 @@ export function aimErrorHandler(
   res: Response,
   next: NextFunction
 ): void {
-  const failure = classifyVerificationFailure(error);
+  // Express's own handler is the only one that can close a response that has
+  // already started.
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
+  const failure = classifyVerificationFailure(error) ?? sdkErrorResponse(error);
   if (failure) {
     res.status(failure.status).json(failure.body);
     return;

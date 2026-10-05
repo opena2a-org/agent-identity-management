@@ -11,7 +11,6 @@
  */
 
 import {
-  readAuditLog,
   auditLogPath,
   isOptedOut,
   signatureTelemetryEnabled,
@@ -28,7 +27,9 @@ import {
   ecosystemOptOut,
   envTruthy,
   optOutMarkerExists,
+  readAuditLog,
 } from '../telemetry/signature';
+import { homeReadError, opena2aHome } from '../telemetry/signature/paths';
 import type { SignatureTelemetryConfig } from '../types';
 import { SDK_VERSION } from '../../version';
 
@@ -47,23 +48,60 @@ export const TELEMETRY_SUBCOMMANDS = [
 
 export type TelemetrySubcommand = (typeof TELEMETRY_SUBCOMMANDS)[number];
 
+/** Usage and description per subcommand: the group help and each subcommand's own help read this. */
+const SUBCOMMAND_HELP: Record<TelemetrySubcommand, { usage: string; lines: string[] }> = {
+  status: { usage: 'status', lines: ['Show telemetry state, sensor identity, and send counts'] },
+  log: { usage: 'log [N]', lines: ['Show the last N audited payloads (default 20)'] },
+  disclosure: { usage: 'disclosure', lines: ['Print the telemetry disclosure'] },
+  'opt-out': {
+    usage: 'opt-out',
+    lines: [
+      'Disable ALL OpenA2A telemetry (also asks the registry to',
+      'delete already-sent signatures; use --no-purge to skip that)',
+    ],
+  },
+  'opt-in': { usage: 'opt-in', lines: ['Remove the local opt-out marker (does not turn the channel on)'] },
+  purge: { usage: 'purge', lines: ['Ask the registry to delete already-sent signatures (right-to-delete)'] },
+};
+
+/** Arguments each subcommand takes, for its own --help. */
+const SUBCOMMAND_ARGS: Partial<Record<TelemetrySubcommand, string[]>> = {
+  log: ['N             How many records to show: a positive integer (default 20)'],
+  'opt-out': ['--no-purge    Keep already-sent signatures on the registry (delete later with purge)'],
+};
+
 export function telemetryHelpText(): string {
+  const rows = TELEMETRY_SUBCOMMANDS.map((sub) => {
+    const { usage, lines } = SUBCOMMAND_HELP[sub];
+    return lines
+      .map((line, i) => `    ${(i === 0 ? usage : '').padEnd(14)}${line}`)
+      .join('\n');
+  }).join('\n');
   return `
   ${SHIPPED_INVOCATION} <subcommand>
 
-    status        Show telemetry state, sensor identity, and send counts
-    log [N]       Show the last N audited payloads (default 20)
-    disclosure    Print the full install-time disclosure
-    opt-out       Disable ALL OpenA2A telemetry (also asks the registry to
-                  delete already-sent signatures; use --no-purge to skip that)
-    opt-in        Remove the local opt-out marker (does not turn the channel on)
-    purge         Ask the registry to delete already-sent signatures (right-to-delete)
+${rows}
 
   Structural signatures are OFF unless you turn them on with AIM_TELEMETRY=1
   or signatureTelemetry.enabled: true. The SHAPE of an anomalous behavior is
   shared (plus a sensor id and org pseudonym), never payloads. Every byte
   sent is recorded locally first — review it with: ${SHIPPED_INVOCATION} log
 `;
+}
+
+/** Help for one subcommand: its usage, what it does, and the arguments it takes. */
+export function telemetrySubcommandHelp(sub: TelemetrySubcommand): string {
+  const { usage, lines } = SUBCOMMAND_HELP[sub];
+  const args = SUBCOMMAND_ARGS[sub] ?? [];
+  const out = ['', `  ${SHIPPED_INVOCATION} ${usage}${sub === 'opt-out' ? ' [--no-purge]' : ''}`, ''];
+  out.push(...lines.map((l) => `    ${l}`));
+  if (args.length > 0) {
+    out.push('', ...args.map((a) => `    ${a}`));
+  } else {
+    out.push('', '    Takes no arguments.');
+  }
+  out.push('', `  All subcommands: ${SHIPPED_INVOCATION} --help`, '');
+  return out.join('\n');
 }
 
 export async function telemetryLog(countArg?: string): Promise<void> {
@@ -174,12 +212,21 @@ export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<
         : optedOut
           ? `Opt back in:     ${SHIPPED_INVOCATION} opt-in`
           : 'Turn on:         AIM_TELEMETRY=1'
-    }\n`,
+    }`,
   );
+  // The footer cites the bin name, which a local (non-global) install does not
+  // put on PATH; name the form that works there once rather than on every line.
+  console.log('  Not on your PATH? Run any of these as: npx @opena2a/aim-sdk telemetry <subcommand>\n');
 }
 
 export function telemetryDisclosure(tcfg?: SignatureTelemetryConfig): void {
-  console.log('\n' + disclosureText(tcfg) + '\n');
+  // Same layout as every other telemetry command: two-space indent and a
+  // box-drawing rule under the title. disclosureText() itself is unchanged: it
+  // is public API and is also what the first-run notice prints.
+  const lines = disclosureText(tcfg).split('\n');
+  const title = lines[0] ?? '';
+  const styled = lines.map((l) => (/^-+$/.test(l) ? '─'.repeat(title.length) : l));
+  console.log('\n' + styled.map((l) => (l.length > 0 ? `  ${l}` : '')).join('\n') + '\n');
 }
 
 export async function telemetryOptOut(
@@ -312,14 +359,25 @@ export async function runTelemetrySubcommand(
   // either way.
   if (!(TELEMETRY_SUBCOMMANDS as readonly string[]).includes(sub)) {
     console.error(`  Unknown telemetry subcommand: ${sub}`);
-    console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+    // `telemetry --no-purge opt-out`: an option ahead of its subcommand. Name
+    // the order that works instead of only calling the option unknown.
+    const intended = rest.find((a) => (TELEMETRY_SUBCOMMANDS as readonly string[]).includes(a));
+    if (sub.startsWith('-') && intended !== undefined) {
+      const others = rest.filter((a) => a !== intended);
+      console.error(
+        `  Options go after the subcommand: ${[SHIPPED_INVOCATION, intended, sub, ...others].join(' ')}`,
+      );
+    } else {
+      console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+    }
     return 1;
   }
   // A help request anywhere in the args is answered with help, never by
   // running the command: `opt-out --help` asks what opt-out does, and
-  // executing it would change the consent state the question was about.
+  // executing it would change the consent state the question was about. The
+  // answer is that subcommand's own usage, not the whole group's.
   if (rest.some(isHelpFlag)) {
-    console.log(telemetryHelpText());
+    console.log(telemetrySubcommandHelp(sub as TelemetrySubcommand));
     return 0;
   }
   const known = KNOWN_SUBCOMMAND_OPTIONS[sub] ?? [];
@@ -352,6 +410,50 @@ export async function runTelemetrySubcommand(
     console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
     return 1;
   }
+  // Every subcommand reads or writes the OpenA2A home. When it exists but
+  // cannot be read, the consent state is unknown: say that instead of printing
+  // defaults ("OFF (not turned on)", "none yet"), which would hide an opt-out
+  // marker behind a permissions problem.
+  const unreadable = homeReadError();
+  if (unreadable !== null) {
+    console.error(`  Cannot read the telemetry state directory ${opena2aHome()} (${unreadable}).`);
+    console.error('  The telemetry state is unknown, not off; nothing was read or changed.');
+    console.error(`  Check its permissions: ls -ld ${opena2aHome()}`);
+    console.error('  (or point OPENA2A_HOME at a directory you can read and write)');
+    if (sub === 'opt-out') {
+      console.error('  To opt out without this directory: set OPENA2A_TELEMETRY=off');
+    }
+    return 1;
+  }
+  try {
+    return await dispatchTelemetrySubcommand(sub as TelemetrySubcommand, rest, positionals, tcfg);
+  } catch (err) {
+    const fsCode = (err as NodeJS.ErrnoException)?.code;
+    const fsPath = (err as NodeJS.ErrnoException)?.path;
+    if (typeof fsCode === 'string' && FS_ERROR_CODES.has(fsCode) && typeof fsPath === 'string') {
+      // A bare Node message ("EACCES: permission denied, open '...'") names
+      // neither what failed nor what to do about it.
+      console.error(`  ${sub} could not write ${fsPath} (${fsCode}); nothing further was changed.`);
+      if (sub === 'opt-out') {
+        console.error('  The opt-out did NOT take effect. To opt out without this directory: set OPENA2A_TELEMETRY=off');
+      }
+      console.error(`  Check its permissions: ls -ld ${opena2aHome()}`);
+      console.error('  (or point OPENA2A_HOME at a directory you can read and write)');
+      return 1;
+    }
+    throw err;
+  }
+}
+
+/** Filesystem failures the telemetry commands answer with guidance rather than a raw error. */
+const FS_ERROR_CODES = new Set(['EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'ENOTDIR', 'EISDIR']);
+
+async function dispatchTelemetrySubcommand(
+  sub: TelemetrySubcommand,
+  rest: string[],
+  positionals: string[],
+  tcfg?: SignatureTelemetryConfig,
+): Promise<number> {
   switch (sub) {
     case 'log':
       await telemetryLog(positionals[0]);

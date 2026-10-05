@@ -12,7 +12,7 @@ import type {
 } from '../types';
 import { RiskLevel } from '../types';
 import { SDK_VERSION } from '../version';
-import { OAuthTokenManager, loadCredentialsFromEnv } from '../auth/oauth';
+import { OAuthTokenManager, loadCredentialsFromEnv, missingAgentCredentialEnvVars } from '../auth/oauth';
 import { generateKeyPair, toBase64, createRequestSignature, fromBase64 } from '../crypto/ed25519';
 import {
   AIMError,
@@ -204,6 +204,24 @@ export class AIMClient {
   /**
    * Log debug message if debug mode is enabled
    */
+  /**
+   * The error for a call that needs an agent identity the client does not
+   * have. When the environment is one variable short of a complete identity,
+   * it names the variable: "No credentials available" alone reads the same as
+   * a clean environment, which sent users hunting for a registration step when
+   * AIM_ORGANIZATION_ID was the only thing missing (#449).
+   */
+  private noCredentialsError(): AuthenticationError {
+    const missing = missingAgentCredentialEnvVars();
+    if (missing.length > 0) {
+      return new AuthenticationError(
+        `No credentials available: the environment is missing ${missing.join(', ')} ` +
+          '(AIM_AGENT_ID, AIM_PRIVATE_KEY, AIM_PUBLIC_KEY and AIM_ORGANIZATION_ID are all required).',
+      );
+    }
+    return new AuthenticationError('No credentials available. Register an agent first.');
+  }
+
   private log(message: string, ...args: unknown[]): void {
     if (this.config.debug) {
       console.log(`[AIM] ${message}`, ...args);
@@ -244,6 +262,12 @@ export class AIMClient {
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
+        }
+        // fetch rejects with a TypeError when AIM cannot be reached; with no
+        // cached token that is the exchange, and it is the same network
+        // failure the request below would report.
+        if (error instanceof TypeError) {
+          throw this.networkError(error, 'POST', `${this.config.baseUrl}/oauth/token`);
         }
         throw error;
       }
@@ -309,22 +333,28 @@ export class AIMClient {
         if (error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
         }
-        // Name the target and the cause: Node's fetch reports connection
-        // failures as a bare "fetch failed" with the errno buried in the cause
-        // chain, which is useless without the URL it was aimed at.
-        const errnoCode = unwrapErrnoCode(error);
-        const causeSuffix = errnoCode ? ` [${errnoCode}]` : '';
-        const hint = this.usedDefaultBaseUrl
-          ? ` (baseUrl defaulted to ${DEFAULT_BASE_URL} — no baseUrl option or AIM_BASE_URL env var was set)`
-          : '';
-        throw new NetworkError(
-          `Network error: ${error.message} (${method} ${url})${causeSuffix}${hint}`,
-          error
-        );
+        throw this.networkError(error, method, url);
       }
 
       throw new NetworkError('Unknown network error');
     }
+  }
+
+  /**
+   * Name the target and the cause: Node's fetch reports connection failures
+   * as a bare "fetch failed" with the errno buried in the cause chain, which
+   * is useless without the URL it was aimed at.
+   */
+  private networkError(error: Error, method: string, url: string): NetworkError {
+    const errnoCode = unwrapErrnoCode(error);
+    const causeSuffix = errnoCode ? ` [${errnoCode}]` : '';
+    const hint = this.usedDefaultBaseUrl
+      ? ` (baseUrl defaulted to ${DEFAULT_BASE_URL} — no baseUrl option or AIM_BASE_URL env var was set)`
+      : '';
+    return new NetworkError(
+      `Network error: ${error.message} (${method} ${url})${causeSuffix}${hint}`,
+      error
+    );
   }
 
   /**
@@ -445,7 +475,7 @@ export class AIMClient {
     const deadlineAt = Date.now() + this.config.enforcementTimeout;
 
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     const payload = {
@@ -729,7 +759,7 @@ export class AIMClient {
    */
   async updateAgent(updates: Partial<RegisterAgentOptions>): Promise<Agent> {
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     this.agent = await this.request<Agent>(
@@ -746,7 +776,7 @@ export class AIMClient {
    */
   async reportCapabilities(capabilities: string[]): Promise<void> {
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     await this.request('POST', `/api/v1/agents/${this.credentials.agentId}/capabilities/report`, {
@@ -816,7 +846,7 @@ export class AIMClient {
     };
 
     if (!this.credentials) {
-      throw new AuthenticationError('No credentials available. Register an agent first.');
+      throw this.noCredentialsError();
     }
 
     const response = await this.request<IsolationAttestationResult>(

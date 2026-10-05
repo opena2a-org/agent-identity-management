@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `aim-sdk status` always states a verdict, and its exit code follows it. On an upgraded install holding only a
+  legacy `~/.aim/credentials.json` (snake_case keys, a refresh token, no access token) it printed Server, `User:
+  Unknown` and Credentials, then nothing, with exit 0. It now reads the legacy keys, prints `Authenticated ...` or
+  `Not authenticated ...` for every token state, and says the check was local. It cites only a credentials file that
+  exists: when adopting the legacy file fails, it names the file it actually read instead of a
+  `sdk_credentials.json` that was never written. A missing server URL is shown with login's default. The adoption and
+  migration notices no longer claim `[OK]` when the write failed, and they go to stderr, so `status --json` stays one
+  JSON object on stdout (#409).
+
+- `aim-sdk login` checks `--url` before touching the network. An empty value or a string that is not an http(s)
+  URL with a host now fails at once with `Error: --url ... is not an http(s) URL` (or `is empty`, `has no host`)
+  and an example; it used to reach the reachability probe and report `could not reach the AIM server ... no HTTP
+  response within 5s`, a network failure that never happened. An unreachable but well-formed URL still fails
+  within the probe bound with the reachability message (#408).
+
 - The "SDK REFRESH TOKEN REJECTED" banner gives the fix that matches the stored credential. A credential
   written by `aim-sdk login` (it carries `accessToken` and `organizationId`, which a dashboard SDK download
   never does) is told to sign in again with `aim-sdk login --url <server> --force`, which replaces the file;

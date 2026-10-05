@@ -30,7 +30,7 @@
  * longer each other's negation.
  */
 
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, statSync, writeFileSync, unlinkSync } from 'fs';
 import { opena2aHome, homePath, OPTOUT_MARKER_FILE } from './paths';
 import type { SignatureTelemetryConfig } from '../../types';
 
@@ -75,9 +75,20 @@ export function ecosystemOptOut(): boolean {
   return s === 'off' || s === '0' || s === 'false' || s === 'no';
 }
 
-/** True if the opt-out marker file is present. */
+/**
+ * True if the opt-out marker file is present, or if its presence cannot be
+ * determined. `existsSync` answers false on EACCES, so an unreadable OpenA2A
+ * home used to read as "no marker": consent that cannot be read is treated as
+ * refused (fail closed), never as absent.
+ */
 export function optOutMarkerExists(): boolean {
-  return existsSync(homePath(OPTOUT_MARKER_FILE));
+  try {
+    statSync(homePath(OPTOUT_MARKER_FILE));
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code !== 'ENOENT' && code !== 'ENOTDIR';
+  }
 }
 
 /**

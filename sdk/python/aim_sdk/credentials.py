@@ -21,6 +21,7 @@ This design ensures:
 """
 
 import os
+import sys
 import json
 import shutil
 from pathlib import Path
@@ -249,7 +250,7 @@ def save_sdk_credentials(credentials: Dict[str, Any]) -> bool:
             success=False,
             error=str(e)
         )
-        print(f"Warning: Failed to save SDK credentials: {e}")
+        print(f"Warning: Failed to save SDK credentials: {e}", file=sys.stderr)
         return False
 
 
@@ -319,19 +320,29 @@ def _install_sdk_credentials(credentials: Dict[str, Any], source_path: Optional[
         origin = str(source_path) if source_path else "a discovered .aim directory"
         print(
             f"INFO: Adopting existing SDK credentials found at {origin} "
-            f"(token {token_id_short}). Long-term source: {SDK_CREDENTIALS_FILE}."
+            f"(token {token_id_short}). Long-term source: {SDK_CREDENTIALS_FILE}.",
+            file=sys.stderr,
         )
-        save_sdk_credentials(credentials)
-        print(f"SDK credentials installed to {SDK_CREDENTIALS_FILE}")
+        if save_sdk_credentials(credentials):
+            print(f"SDK credentials installed to {SDK_CREDENTIALS_FILE}", file=sys.stderr)
+        else:
+            print(f"SDK credentials were not installed to {SDK_CREDENTIALS_FILE}; "
+                  f"using them from {origin} for this run only.", file=sys.stderr)
     except Exception as e:
-        print(f"Failed to install SDK credentials: {e}")
+        print(f"Failed to install SDK credentials: {e}", file=sys.stderr)
 
 
 def _migrate_sdk_credentials(credentials: Dict[str, Any]) -> None:
     """Migrate SDK credentials from legacy to new location."""
     try:
-        save_sdk_credentials(credentials)
-        print(f"[OK] SDK credentials migrated to {SDK_CREDENTIALS_FILE}")
+        # save_sdk_credentials reports its own failure and returns False; the
+        # [OK] line used to print regardless, over a file that was never
+        # written (#409).
+        if save_sdk_credentials(credentials):
+            print(f"[OK] SDK credentials migrated to {SDK_CREDENTIALS_FILE}", file=sys.stderr)
+        else:
+            print(f"SDK credentials were not migrated to {SDK_CREDENTIALS_FILE}; "
+                  f"still reading them from {LEGACY_CREDENTIALS_FILE}.", file=sys.stderr)
     except Exception:
         pass
 
@@ -468,7 +479,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
             success=False,
             error=str(e)
         )
-        print(f"Warning: Failed to save agent credentials: {e}")
+        print(f"Warning: Failed to save agent credentials: {e}", file=sys.stderr)
         return False
 
 
@@ -524,16 +535,16 @@ def _migrate_legacy_agent_credentials(data: Dict[str, Any]) -> None:
         for key, value in data.items():
             if isinstance(value, dict) and ("agent_id" in value or "private_key" in value):
                 save_agent_credentials(key, value)
-                print(f"[OK] Agent '{key}' credentials migrated to {AGENTS_DIR}")
+                print(f"[OK] Agent '{key}' credentials migrated to {AGENTS_DIR}", file=sys.stderr)
 
         # Check for flat format with name field
         if "agent_id" in data or "private_key" in data:
             name = data.get("name") or data.get("agent_name") or "default"
             save_agent_credentials(name, data)
-            print(f"[OK] Agent '{name}' credentials migrated to {AGENTS_DIR}")
+            print(f"[OK] Agent '{name}' credentials migrated to {AGENTS_DIR}", file=sys.stderr)
 
     except Exception as e:
-        print(f"Warning: Failed to migrate agent credentials: {e}")
+        print(f"Warning: Failed to migrate agent credentials: {e}", file=sys.stderr)
 
 
 # =============================================================================

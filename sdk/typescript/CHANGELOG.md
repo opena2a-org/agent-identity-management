@@ -7,7 +7,25 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Tests
+
+- The signed-field enforcement harness now proves that the verifier compares each signed instant to the clock, not
+  only that the signature covers it. Its violations change a field after signing, so the signature check alone
+  rejected every one of them: a verifier that ignored `createdAt` or `expiresAt` (the 1.0.2 `expiresAt` incident, and
+  #417) still passed. Each signed instant (derived from the signed payload) must now also have a clock violation, a
+  validly signed delegation that `verifyDelegation`, `checkDelegationTemporalValidity` and `verifyDelegationChain`
+  must reject at the evaluation time: before `createdAt`, after `expiresAt`, and exactly at `expiresAt`. The
+  `createdAt` lower bound itself was enforced in #467 (#417).
+
 ### Fixed
+
+- The Express middleware and the Fastify plugin accept the agent identity in their options. `createAIMMiddleware`
+  and `aimPlugin` take `credentials` (an `AgentCredentials` object) or a ready `client`; the README examples, which
+  passed only `{ baseUrl, apiKey }`, answered 401 on every verified route without contacting AIM. Passing both
+  options is refused. When the environment holds three of the four `AIM_*` agent variables, the "No credentials
+  available" error now names the missing one (for example `AIM_ORGANIZATION_ID`), which reaches the 401 body. A test
+  drives both README examples with a real client against a fake AIM server and asserts the action is verified
+  there (#449).
 
 - `aim-arp telemetry log` and `telemetry status` no longer read a corrupt or unreadable audit log as an empty one.
   A log holding only unparseable lines printed "No telemetry has been sent yet" and "Sent: 0"; `log` now reports
@@ -16,6 +34,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   unknown`, and `log` exits 1. A JSON line without the audit record's fields is counted as unreadable instead of
   throwing a raw `TypeError` from the renderer. `readAuditRecords` keeps its return shape; the new `readAuditLog`
   in the signature module returns the records with the unreadable count and read error (#416).
+- `aimErrorHandler` answers every SDK error as JSON. It handled only denials and
+  authentication failures and passed every other SDK error to `next(error)`, so an
+  AIM server answering 500 reached Express's default handler, which outside
+  `NODE_ENV=production` rendered an HTML page with the stack trace and local file
+  paths and printed the stack to stderr. Those errors now get the body the Fastify
+  plugin gives them, `{ statusCode, code, error, message }`, keeping a 4xx or 5xx
+  status from the SDK error and using 500 otherwise. Errors that did not come from the
+  SDK still go to `next(error)`, and so does any error once the response has started.
+  A new test drives the README middleware stack against a fake AIM server on loopback
+  (#450).
+- An unreachable AIM server with no cached token now rejects with `NetworkError`, naming
+  the token endpoint and the errno, as every other request does. The token exchange
+  wrapped only a timeout, so the raw `TypeError: fetch failed` from `fetch` reached the
+  caller, and `aimErrorHandler` passed it to Express's default handler, which answered
+  500 with an HTML page carrying the stack trace (#450).
 
 ### Changed
 
@@ -124,6 +157,13 @@ a known channel fails instead of reporting clean. Modules that transmit because
 the caller asked them to — the AIM client, A2A, OAuth, secrets, CRL fetch, the
 ARP proxy forwarder — are listed with the reason rather than filtered out, so
 they stay in scope if one ever grows an observational side-channel.
+
+### Fixed — aim-arp telemetry CLI polish (#412)
+
+- `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.
+- A filesystem failure (EACCES, EROFS, ENOSPC, ...) names the path and the permissions check instead of printing Node's one-line error. When `opt-out` cannot write its marker it says the opt-out did not take effect and names `OPENA2A_TELEMETRY=off`.
+- `<subcommand> --help` prints that subcommand's usage and arguments; `telemetry --no-purge opt-out` names the order that works; `telemetry disclosure` uses the same indent and rule as the other commands; the help says "telemetry disclosure" rather than "install-time disclosure" (nothing prints at install); `telemetry status` names `npx @opena2a/aim-sdk telemetry <subcommand>` for an install whose bin is not on PATH.
+- The internal CLI's `register` guard (help and stray arguments never run it) moves into a module with its own test.
 
 ### Fixed — 1.3.1 release-test P2 findings
 

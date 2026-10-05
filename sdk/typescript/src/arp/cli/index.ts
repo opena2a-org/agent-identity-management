@@ -12,6 +12,7 @@ import { IntelligenceCoordinator, describeL2Status } from '../intelligence/coord
 import { SequenceLogWriter } from '../intelligence/sequence-log-writer';
 import { isOptedOut, enrollSensor, manualEnrollCurl } from '../telemetry/signature';
 import { runTelemetrySubcommand, telemetryHelpText } from './telemetry';
+import { registerAction } from './register-dispatch';
 import type { SignatureTelemetryConfig } from '../types';
 
 const args = process.argv.slice(2);
@@ -274,14 +275,13 @@ async function telemetryCommand(): Promise<void> {
     // Same contract as runTelemetrySubcommand: a help request is answered
     // with help, never by running the command — register builds a signed
     // enrollment proof and POSTs it, the worst possible answer to a question.
-    const rest = args.slice(2);
-    if (rest.some((a) => a === '--help' || a === '-h')) {
+    const action = registerAction(args.slice(2));
+    if (action.kind === 'help') {
       printTelemetryHelpWithInternal();
       return;
     }
-    const unknown = rest.find((a) => a.startsWith('-'));
-    if (unknown !== undefined) {
-      console.error(`  Unknown option for register: ${unknown}`);
+    if (action.kind === 'error') {
+      console.error(`  ${action.message}`);
       console.error('  Run: arp-guard telemetry --help');
       process.exit(1);
     }
