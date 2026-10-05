@@ -32,7 +32,11 @@ var (
 const deviceCodeExpiry = 15 * time.Minute
 
 // defaultPollInterval is the minimum number of seconds between token poll requests.
-const defaultPollInterval = 5
+// Every /oauth/device route shares the strict limiter, 10 requests per minute per
+// address in production. At 10 s a login's busiest minute is the code request, six
+// polls and the dashboard's verify and approve calls: nine requests. At 5 s it was
+// fifteen, so a login not approved within about 45 s was answered 429.
+const defaultPollInterval = 10
 
 // userCodeCharset excludes vowels (to avoid offensive words) and ambiguous characters (0/O/1/I/l).
 const userCodeCharset = "BCDFGHJKLMNPQRSTVWXZ23456789"
