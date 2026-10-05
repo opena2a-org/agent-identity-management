@@ -1,0 +1,8 @@
+{
+  "method": "POST",
+  "path": "/api/v1/agents/{id}/hybrid-mode",
+  "requestType": "EnableHybridModeRequest",
+  "body": {
+    "enable": false
+  }
+}
