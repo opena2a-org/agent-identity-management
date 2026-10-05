@@ -11,10 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// contextTestErrorHandler is a custom error handler that preserves already-sent responses
+// contextTestErrorHandler answers like the server's error handler: a *fiber.Error
+// with its own code and message, anything else with a 500
 func contextTestErrorHandler(c fiber.Ctx, err error) error {
-	if errors.Is(err, ErrUnauthorized) {
-		return nil
+	var fe *fiber.Error
+	if errors.As(err, &fe) {
+		return c.Status(fe.Code).JSON(fiber.Map{"error": fe.Message})
 	}
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error": err.Error(),
@@ -248,7 +250,7 @@ func TestRequireOrgAndUserID_NoOrg(t *testing.T) {
 	var gotErr error
 
 	app.Get("/test", func(c fiber.Ctx) error {
-		// No organization_id set - function will send 401 and return ErrUnauthorized
+		// No organization_id set - returns ErrOrganizationIDNotFound
 		gotOrgID, gotUserID, gotErr = RequireOrgAndUserID(c)
 		return gotErr
 	})
@@ -258,11 +260,11 @@ func TestRequireOrgAndUserID_NoOrg(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// The response status is 401 because RequireOrganizationID called c.Status(401).JSON()
+	// The error handler answers ErrOrganizationIDNotFound with its 401
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 	assert.Equal(t, uuid.Nil, gotOrgID)
 	assert.Equal(t, uuid.Nil, gotUserID)
-	assert.ErrorIs(t, gotErr, ErrUnauthorized)
+	assert.ErrorIs(t, gotErr, ErrOrganizationIDNotFound)
 }
 
 func TestRequireOrgAndUserID_NoUser(t *testing.T) {
@@ -272,7 +274,7 @@ func TestRequireOrgAndUserID_NoUser(t *testing.T) {
 
 	app.Get("/test", func(c fiber.Ctx) error {
 		c.Locals("organization_id", uuid.New())
-		// No user_id set - function will send 401 and return ErrUnauthorized
+		// No user_id set - returns ErrUserIDNotFound
 		gotOrgID, gotUserID, gotErr = RequireOrgAndUserID(c)
 		return gotErr
 	})
@@ -282,12 +284,12 @@ func TestRequireOrgAndUserID_NoUser(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// The response status is 401 because RequireUserID called c.Status(401).JSON()
+	// The error handler answers ErrUserIDNotFound with its 401
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
-	// Both IDs are nil when ErrUnauthorized is returned
+	// Both IDs are nil when the helper fails
 	assert.Equal(t, uuid.Nil, gotOrgID)
 	assert.Equal(t, uuid.Nil, gotUserID)
-	assert.ErrorIs(t, gotErr, ErrUnauthorized)
+	assert.ErrorIs(t, gotErr, ErrUserIDNotFound)
 }
 
 func TestRequireOrgAndUserID_Valid(t *testing.T) {

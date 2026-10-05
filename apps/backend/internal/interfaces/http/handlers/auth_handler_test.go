@@ -14,10 +14,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// authTestErrorHandler is a custom error handler that preserves already-sent responses
+// authTestErrorHandler answers like the server's error handler: a *fiber.Error
+// with its own code and message, anything else with a 500
 func authTestErrorHandler(c fiber.Ctx, err error) error {
-	if errors.Is(err, ErrUnauthorized) {
-		return nil
+	var fe *fiber.Error
+	if errors.As(err, &fe) {
+		return c.Status(fe.Code).JSON(fiber.Map{"error": fe.Message})
 	}
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error": err.Error(),
