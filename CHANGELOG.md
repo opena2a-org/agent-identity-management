@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an SDK refresh no longer leaves two live refresh tokens when the old one cannot be revoked
+
+- `POST /api/v1/auth/refresh` with an SDK refresh token revokes the presented token's `sdk_tokens` row, then records a
+  row for a new refresh token and returns it. When that revocation failed, the handler still created the new row and
+  returned the new token, so the old and the new refresh token were both live. The presented token now comes back
+  unchanged with a fresh access token and `rotated: false`, and no row is created; a later refresh rotates once the old
+  row can be revoked. Login refresh tokens already behaved this way when their denylist write failed.
+- `apps/backend/internal/interfaces/http/handlers/auth_refresh_rotation_test.go` fails when an SDK refresh whose row
+  revocation fails returns a new refresh token or creates a row, and when that failure changes a login token's rotation.
+
 ### Security — the Java SDK and the Java A2A example use jackson 2.18.11
 
 - `sdk/java/pom.xml` and `examples/a2a-multi-agent-demo/java/pom.xml` set `jackson.version` to 2.18.11; platform 1.0.0

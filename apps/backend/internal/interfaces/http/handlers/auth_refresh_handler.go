@@ -309,8 +309,11 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	}
 
 	// SDK-download tokens (a different issuer) are tracked by row: the old
-	// token's row is revoked by hash and a new row is created for the new
-	// token. Rotation is reported only when that revocation succeeded.
+	// token's row is revoked by hash, and only when that revocation succeeded
+	// is a row created for the new token and the new token handed out. When
+	// the old row cannot be revoked, the presented SDK token goes back
+	// unchanged with a fresh access token (rotated=false), so an SDK client
+	// never holds two live refresh tokens.
 	if tokenID != "" {
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
@@ -326,16 +329,20 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		// SECURITY: Revoke the old refresh token after rotation
 		// Each SDK instance has its own token from the download flow, so revoking
 		// one instance's old token doesn't affect other instances.
-		if revokeErr := h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation"); revokeErr == nil {
+		revokeErr := h.sdkTokenService.RevokeByTokenHash(c.Context(), oldTokenHash, "token_rotation")
+		if revokeErr == nil {
 			if claims.Issuer == auth.IssuerSDK {
 				rotated = true
 			}
+		} else if claims.Issuer == auth.IssuerSDK {
+			newRefreshToken = req.RefreshToken
+			log.Printf("⚠️  Refresh: sdk_tokens revocation failed for token id %s; the presented refresh token was returned unchanged: %v", tokenID, revokeErr)
 		} else {
 			log.Printf("⚠️  Refresh: sdk_tokens revocation failed for token id %s: %v", tokenID, revokeErr)
 		}
 
 		// Save the new rotated SDK token to database
-		if oldToken != nil {
+		if revokeErr == nil && oldToken != nil {
 			// Get new token ID from rotated refresh token
 			newTokenID, err := h.jwtService.GetTokenID(newRefreshToken)
 			if err == nil && newTokenID != "" {
@@ -356,7 +363,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 					}
 				}
 
-				// Create new SDK token entry (old token remains valid until expiry)
+				// Create the new token's row (the old token's row was revoked above)
 				// IMPORTANT: Carry forward the parent token's usage count so it's cumulative
 				now := time.Now()
 				newSDKToken := &domain.SDKToken{
