@@ -30,6 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   response within 5s`, a network failure that never happened. An unreachable but well-formed URL still fails
   within the probe bound with the reachability message (#408).
 
+- Processes that share `~/.aim/sdk_credentials.json` now refresh it once. Each refresh token is accepted
+  once, and every process used to present the token it had read at startup, so when two refreshed together
+  the second presented a token the first had already rotated. The server refused it, and for a sign-in from
+  `aim-sdk login` it treats that as reuse and ends the sign-in for every process. Before refreshing, the SDK
+  now takes a lock on the file (`sdk_credentials.json.lock` beside it) and re-reads the file under the lock.
+  If another process already refreshed, the SDK uses that process's access token, stored in the file as
+  `sharedAccessToken` together with a hash of the refresh token it was issued with, and makes no request.
+  Otherwise it presents the refresh token the file holds now, never a copy another process rotated. A
+  refresh token the server refused is not presented again in the same process until the file holds a
+  different one. If another process holds the lock for more than 60 seconds, the refresh is skipped with a
+  warning instead of being sent without the lock. The file is written to a temporary file and moved into
+  place, so another process never reads a partly written file.
 - The "SDK REFRESH TOKEN REJECTED" banner gives the fix that matches the stored credential. A credential
   written by `aim-sdk login` (it carries `accessToken` and `organizationId`, which a dashboard SDK download
   never does) is told to sign in again with `aim-sdk login --url <server> --force`, which replaces the file;
