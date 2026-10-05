@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Removed — the second backend Dockerfile; the quickstart test builds the published one
+
+- `apps/backend/infrastructure/docker/Dockerfile.backend` was a second backend Dockerfile, built only by
+  `scripts/test-quickstart.sh`. Its runtime stage took the floating `alpine:latest`, it built the server with cgo and
+  stamped no version, so the quickstart test ran an image no release ships, on base bytes that could change without a
+  commit. It is removed, and `scripts/test-quickstart.sh` builds `infrastructure/docker/Dockerfile.backend`, the file
+  the published `aim-server` image is built from.
+- `sdk/typescript/tests/dockerfile-backend-single-source.test.ts` fails when a Dockerfile other than the one
+  `docker-publish.yml` builds compiles `./cmd/server`, when the quickstart test builds another file, or when any
+  Dockerfile in the tree takes a base with no digest and no tag or the tag `latest`.
+
 ### Removed — a JWT is no longer accepted as an agent's ATC
 
 - The server checked agent ATCs, in an `Authorization: ATC` header or in the secrets resolve request body, with a
