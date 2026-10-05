@@ -6,6 +6,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 // SDKTokenHandler handles SDK token management operations
@@ -56,8 +58,18 @@ func (h *SDKTokenHandler) ListUserTokens(c fiber.Ctx) error {
 		})
 	}
 
+	// Metadata is stored as each issuing path wrote it, and refresh-token
+	// rotation writes snake_case lineage keys (parent_token, rotated_from).
+	// Map the keys to camelCase on a copy so the response keeps the API's
+	// naming convention without rewriting the stored rows.
+	response := make([]domain.SDKToken, len(tokens))
+	for i, token := range tokens {
+		response[i] = *token
+		response[i].Metadata = utils.CamelCaseKeys(token.Metadata)
+	}
+
 	return c.JSON(fiber.Map{
-		"tokens": tokens,
+		"tokens": response,
 	})
 }
 
