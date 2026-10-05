@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/base64"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -13,21 +15,40 @@ import (
 
 // AIPHandler handles AIP (Agent Identity Protocol) discovery and DID resolution
 type AIPHandler struct {
-	agentRepo domain.AgentRepository
+	agentRepo   domain.AgentRepository
+	providerDID string
 }
 
 // NewAIPHandler creates a new AIP handler
 func NewAIPHandler(agentRepo domain.AgentRepository) *AIPHandler {
 	return &AIPHandler{
-		agentRepo: agentRepo,
+		agentRepo:   agentRepo,
+		providerDID: providerDIDFromEnv(),
 	}
+}
+
+// providerDIDFromEnv derives the provider's did:web identifier from FRONTEND_URL, the
+// dashboard origin, which also proxies /.well-known/aip. It is read from configuration
+// and never from the request, so the dashboard and API hosts name the same provider
+// and a Host header cannot rename it. The default matches the one config.Load applies.
+// An origin with no DNS host yields "", and the discovery document omits providerDid.
+func providerDIDFromEnv() string {
+	origin := os.Getenv("FRONTEND_URL")
+	if origin == "" {
+		origin = "http://localhost:3000"
+	}
+	did, err := domain.BuildProviderDID(origin)
+	if err != nil {
+		log.Printf("AIP discovery: providerDid omitted: FRONTEND_URL: %v", err)
+		return ""
+	}
+	return did
 }
 
 // WellKnownAIP handles GET /.well-known/aip
 // Returns the AIP discovery document describing provider capabilities and endpoints
 func (h *AIPHandler) WellKnownAIP(c fiber.Ctx) error {
-	return c.JSON(fiber.Map{
-		"providerDid":      "did:aip:provider_opena2a",
+	doc := fiber.Map{
 		"version":          "1.0",
 		"conformanceLevel": 2,
 		"endpoints": fiber.Map{
@@ -48,7 +69,11 @@ func (h *AIPHandler) WellKnownAIP(c fiber.Ctx) error {
 			"file", "db", "api", "network", "system", "mcp", "data", "payment",
 		},
 		"supportedProtocols": []string{"mcp", "a2a"},
-	})
+	}
+	if h.providerDID != "" {
+		doc["providerDid"] = h.providerDID
+	}
+	return c.JSON(doc)
 }
 
 // ResolveDID handles GET /api/v1/did/*
