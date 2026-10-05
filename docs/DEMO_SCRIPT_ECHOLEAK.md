@@ -18,7 +18,7 @@ docker compose up -d
 ### **2. Access the Dashboard**
 
 * Open: **[http://localhost:3000](http://localhost:3000)**
-* Log in: `admin@opena2a.org` / the password captured from `aim-bootstrap --default` on first deploy (pre-B2 stacks: `AIM2025!Secure`, rotate immediately)
+* Log in: `admin@opena2a.org` / `<admin-password>`. The password is set per install: it is the `DEFAULT_ADMIN_PASSWORD` value in your `.env` (`./scripts/gen-dev-secrets.sh` generates one), or, if that is unset, a random password that `aim-bootstrap --default` generates and prints once on first deploy. Change it after first login.
 
 ### **3. Verify the Backend**
 
