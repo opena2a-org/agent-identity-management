@@ -36,15 +36,16 @@ func doGet(t *testing.T, app *fiber.App, authHeader string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-func TestMetricsAuth_TokenUnset_StaysOpen(t *testing.T) {
-	// Backward compatibility: with no token configured the endpoint is open, so
-	// existing Prometheus scrapers keep working.
+func TestMetricsAuth_TokenUnset_RefusesEveryRequest(t *testing.T) {
+	// An empty token never opens the route: a surface meant to be open mounts
+	// the handler without this middleware instead.
 	app := mountMetrics("")
 
-	status, body := doGet(t, app, "")
-
-	assert.Equal(t, fiber.StatusOK, status)
-	assert.Equal(t, "metrics-body", body)
+	for _, header := range []string{"", "Bearer ", "Bearer anything"} {
+		status, body := doGet(t, app, header)
+		assert.Equal(t, fiber.StatusUnauthorized, status, "Authorization %q", header)
+		assert.NotContains(t, body, "metrics-body", "Authorization %q", header)
+	}
 }
 
 func TestMetricsAuth_TokenSet_RequiresValidBearer(t *testing.T) {
@@ -76,6 +77,11 @@ func TestMetricsAuth_TokenSet_RequiresValidBearer(t *testing.T) {
 		// Guards against a truncated-compare bug: a value that is a prefix of the
 		// real token must not pass.
 		status, _ := doGet(t, app, "Bearer "+token[:len(token)-1])
+		assert.Equal(t, fiber.StatusUnauthorized, status)
+	})
+
+	t.Run("the token with a suffix is rejected", func(t *testing.T) {
+		status, _ := doGet(t, app, "Bearer "+token+"x")
 		assert.Equal(t, fiber.StatusUnauthorized, status)
 	})
 

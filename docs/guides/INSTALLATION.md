@@ -363,11 +363,49 @@ cat backup.sql | docker exec -i identity-postgres psql -U postgres identity
 
 ### Prometheus
 
+The backend serves `GET /metrics` on its own listener, not on the API port
+(8080), and the dashboard does not proxy it. Two settings control it:
+
+- `METRICS_LISTEN_ADDR` (default `127.0.0.1:9464`): the listener's address. On
+  a loopback address it serves without a token, so a Prometheus on the same
+  host scrapes `http://127.0.0.1:9464/metrics`.
+- `METRICS_AUTH_TOKEN` (32 characters or more, `openssl rand -hex 32`): required
+  for any address that is not loopback, where the backend otherwise refuses to
+  start. When set, the API port also serves `GET /metrics`, and both require
+  `Authorization: Bearer <token>`. Keep a non-loopback listener reachable only
+  from the scraper's network as well.
+
+`docker-compose.yml` runs Prometheus with
+`infrastructure/monitoring/prometheus.yml`, which scrapes `backend:9464` over the
+compose network with the token from `METRICS_AUTH_TOKEN` (`.env`). Port 9464 is
+not published to the host.
+
+To run Prometheus on its own against a backend on the same host, write a scrape
+job to `prometheus-aim.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'aim-backend'
+    static_configs:
+      - targets: ['127.0.0.1:9464']
+```
+
+and start Prometheus on the host network, so it reaches the loopback listener
+(Linux; Docker Desktop needs host networking enabled):
+
 ```bash
-# Start Prometheus
-docker run -d -p 9090:9090 \
-  -v $(pwd)/infrastructure/prometheus.yml:/etc/prometheus/prometheus.yml \
+docker run -d --network host \
+  -v $(pwd)/prometheus-aim.yml:/etc/prometheus/prometheus.yml \
   prom/prometheus
+```
+
+For a scraper on another host, set `METRICS_LISTEN_ADDR` to an address it can
+reach and `METRICS_AUTH_TOKEN` on the backend, and add to its scrape job:
+
+```yaml
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/aim-metrics-token
 ```
 
 ### Grafana

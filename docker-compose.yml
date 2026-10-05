@@ -113,6 +113,10 @@ services:
     volumes:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
+    # The backend's metrics token, mounted at /run/secrets/metrics_auth_token
+    # and named by credentials_file in prometheus.yml.
+    secrets:
+      - metrics_auth_token
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
       interval: 10s
@@ -204,6 +208,13 @@ services:
       # in every environment (not only production) — see apps/backend/internal/config/config.go.
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:?Set KEYVAULT_MASTER_KEY in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
+      # Metrics: /metrics is served on its own listener, not on port 8080. It
+      # listens on all interfaces inside the container so Prometheus reaches
+      # backend:9464 over aim-network; 9464 is not published to the host. Off
+      # loopback the listener requires METRICS_AUTH_TOKEN (32+ characters),
+      # which Prometheus presents from the metrics_auth_token secret.
+      - METRICS_LISTEN_ADDR=0.0.0.0:9464
+      - METRICS_AUTH_TOKEN=${METRICS_AUTH_TOKEN:?Set METRICS_AUTH_TOKEN in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one, or openssl rand -hex 32)}
       # Email Configuration (optional - platform works without email)
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}
@@ -283,6 +294,12 @@ services:
     restart: unless-stopped
     networks:
       - aim-network
+
+# Secrets mounted as files under /run/secrets/, each read from an environment
+# variable (.env), never from a tracked file.
+secrets:
+  metrics_auth_token:
+    environment: METRICS_AUTH_TOKEN
 
 volumes:
   postgres_data:

@@ -62,11 +62,8 @@ const nextConfig: NextConfig = {
           source: '/.well-known/aip',
           destination: `${backendUrl}/.well-known/aip`,
         },
-        // Metrics endpoint
-        {
-          source: '/metrics',
-          destination: `${backendUrl}/metrics`,
-        },
+        // /metrics is not proxied: the backend serves it on its own listener
+        // (METRICS_LISTEN_ADDR), never through the dashboard origin.
       ],
     };
   },

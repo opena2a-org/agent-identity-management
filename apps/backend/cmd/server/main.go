@@ -189,13 +189,13 @@ func main() {
 		StreamRequestBody: false,
 	})
 
-	// Prometheus metrics endpoint. Optionally gated by a bearer token
-	// (METRICS_AUTH_TOKEN); when unset it stays open and a warning is logged
-	// below. See issue #348.
-	// CRITICAL: Must be registered BEFORE Prometheus middleware to avoid circular recording
-	app.Get("/metrics", metrics.MetricsAuthMiddleware(cfg.Server.MetricsAuthToken), metrics.PrometheusHandler())
-	if cfg.Server.MetricsAuthToken == "" {
-		log.Printf("WARNING: /metrics is served without authentication; set METRICS_AUTH_TOKEN to require a bearer token (issue #348)")
+	// Prometheus metrics: a dedicated listener (METRICS_LISTEN_ADDR, loopback by
+	// default) serves /metrics; this listener serves it only behind
+	// METRICS_AUTH_TOKEN. See metrics_wiring.go.
+	// CRITICAL: Must be wired BEFORE Prometheus middleware to avoid circular recording
+	metricsSrv, err := wireMetrics(app, ":"+cfg.Server.Port, metricsListenAddr(), cfg.Server.MetricsAuthToken)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// Global middleware
@@ -407,6 +407,10 @@ func main() {
 	// No request is in flight any more. Write the refused-request line for the
 	// period that was still open, which would otherwise end with the process.
 	metrics.FlushS1RefusalLine()
+
+	if err := metricsSrv.Stop(); err != nil {
+		log.Printf("⚠️  Metrics listener did not drain within %s: %v", metricsShutdownTimeout, err)
+	}
 
 	log.Println("Server exited")
 }

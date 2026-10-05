@@ -66,10 +66,13 @@ type ServerConfig struct {
 	Environment string
 	LogLevel    string
 	FrontendURL string
-	// MetricsAuthToken, when non-empty, gates GET /metrics behind a
-	// `Authorization: Bearer <token>` check. Empty (the default) leaves the
-	// endpoint open for backward compatibility; the server logs a startup
-	// warning in that case. See issue #348.
+	// MetricsAuthToken is METRICS_AUTH_TOKEN as set. The metrics wiring in
+	// cmd/server treats a value shorter than 32 characters as unset. With a
+	// token, GET /metrics answers on the API listener and on the dedicated
+	// metrics listener behind an `Authorization: Bearer <token>` check.
+	// Without one, the API listener has no /metrics route and the dedicated
+	// listener (METRICS_LISTEN_ADDR) serves it only on a loopback address.
+	// See issue #348.
 	MetricsAuthToken string
 }
 

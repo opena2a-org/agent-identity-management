@@ -11,6 +11,48 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed (breaking) — `/metrics` moves off the API port to its own listener, loopback by default
+
+- What to check before upgrading: a Prometheus job that scrapes `/metrics` on port 8080 or through the
+  dashboard without a token stops receiving data. To scrape from the same host, target
+  `http://127.0.0.1:9464/metrics`. To scrape from another host, set `METRICS_AUTH_TOKEN`
+  (`openssl rand -hex 32`) and give Prometheus the token with `authorization` and `credentials_file`.
+- The backend serves `GET /metrics` on a dedicated listener at `METRICS_LISTEN_ADDR`, default
+  `127.0.0.1:9464`, which serves nothing else. On a loopback address it needs no token. Any other
+  address (`0.0.0.0:9464`, `:9464`, a hostname, `localhost` included) requires `METRICS_AUTH_TOKEN`;
+  without it the backend refuses to start and names both settings.
+- Without `METRICS_AUTH_TOKEN` the API port has no `/metrics` route and answers 404. With it, the API
+  port and the dedicated listener both serve `/metrics` behind `Authorization: Bearer <token>`, and
+  each request to the API port's `/metrics` is logged with its status and the connection's peer
+  address. No setting restores an open `/metrics` on the API port.
+- A `METRICS_AUTH_TOKEN` shorter than 32 characters is treated as unset and logged as an error. The
+  token is compared by SHA-256 digest, so response timing reveals neither its content nor its length.
+- If the dedicated listener cannot bind, the backend logs an error naming `METRICS_LISTEN_ADDR` and
+  keeps serving the API without metrics; it never falls back to the API port. At startup the backend
+  logs one line per metrics surface, with its address and whether it requires the token, and one
+  line describing this change.
+- The dashboard no longer proxies `/metrics` to the backend; the dashboard origin answers 404 there.
+- `docker-compose.yml` sets `METRICS_LISTEN_ADDR=0.0.0.0:9464` inside the backend container without
+  publishing the port, requires `METRICS_AUTH_TOKEN` in `.env` (`./scripts/gen-dev-secrets.sh` now
+  emits one), and hands it to Prometheus as a compose secret. `infrastructure/monitoring/prometheus.yml`
+  scrapes `backend:9464` with that token instead of `host.docker.internal:8080`.
+- The `aim_trust_score{agent_id,agent_name}` and `aim_mcp_attestations_total{agent_id,mcp_id,status}`
+  families are removed, so no metric carries an agent, MCP server, organization or user identifier.
+  `aim_trust_score_distribution` remains. A test fails when a label name outside the reviewed set,
+  or one that identifies an entity, is registered.
+
+### Security — `/metrics` was readable without authentication on the API port and the dashboard origin
+
+- Since 2025-11-21 (7d9e157d) the API port served `/metrics` to anyone who could reach it, and since
+  2026-04-13 (2c6ba110, #101) the dashboard origin proxied it as well. Both are in `platform-v1.0.0`,
+  which has no option to require a token. The response lists the API's endpoints with request counts,
+  statuses and latencies, and a request path a caller sent could appear in it as a label value.
+- Builds from 2026-08-04 (#349) accept `METRICS_AUTH_TOKEN` but leave `/metrics` open when it is
+  unset. Operators who cannot upgrade yet should set `METRICS_AUTH_TOKEN` on such a build, or on
+  `platform-v1.0.0` and earlier block `/metrics` at their proxy on both the API origin and the
+  dashboard origin. The API did not log requests to `/metrics` on those builds, so its own logs
+  cannot show whether a deployment's metrics were read.
+
 ### Changed — the Java SDK's `reportCapabilities` follows the enforcement mode and raises when a registration fails
 
 - What to check before upgrading: in strict mode a reported capability stays pending until an
