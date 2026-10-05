@@ -12,14 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testErrorHandler is a custom error handler that preserves already-sent responses
-// and only returns 500 for truly unexpected errors
+// testErrorHandler answers like the server's error handler: a *fiber.Error
+// with its own code and message, anything else with a 500
 func testErrorHandler(c fiber.Ctx, err error) error {
-	// If response is already committed or error is ErrUnauthorized, don't override
-	if errors.Is(err, ErrUnauthorized) {
-		return nil
+	var fe *fiber.Error
+	if errors.As(err, &fe) {
+		return c.Status(fe.Code).JSON(fiber.Map{"error": fe.Message})
 	}
-	// For other errors, return 500
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error": err.Error(),
 	})
