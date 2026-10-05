@@ -38,8 +38,7 @@ export const navigationBase: NavEntry[] = [
   { key: "agents", name: "Agents", href: "/dashboard/agents", icon: Shield, roles: ["admin", "manager", "member", "viewer"] },
   { key: "mcp", name: "MCP servers", href: "/dashboard/mcp", icon: Server, roles: ["admin", "manager", "member"] },
   { key: "security", name: "Security", href: "/dashboard/security", icon: AlertTriangle, roles: ["admin", "manager"] },
-  // Direct route until the Stage 2 move to /dashboard/compliance (with its gate entry).
-  { key: "compliance", name: "Compliance", href: "/dashboard/admin/compliance", icon: ClipboardCheck, roles: ["admin"] },
+  { key: "compliance", name: "Compliance", href: "/dashboard/compliance", icon: ClipboardCheck, roles: ["admin"] },
   { key: "developers", name: "Developers", href: "/dashboard/developers", icon: Code, roles: ["admin", "manager", "member", "viewer"] },
   // Ships as "Organization" until an OSS /settings surface exists.
   {

@@ -212,7 +212,7 @@ export function ExecutiveLens({
                   </div>
                 ))}
               </dl>
-              <Link href="/dashboard/admin/compliance" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
+              <Link href="/dashboard/compliance" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
                 Open compliance <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
             </>
