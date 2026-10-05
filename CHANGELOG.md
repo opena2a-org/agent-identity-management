@@ -11,6 +11,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an issued trust credential's content hash matches the ATX schema
+
+- `POST /api/v1/agents/:id/atc` sent the Registry a `contentHash` of the form `sha256:<hex>`, and the Registry
+  signs that field as given. The ATX v1.1 credential schema requires 64 lowercase hex characters with no prefix,
+  so every credential issued this way failed schema validation in a conformance verifier. AIM now sends the bare
+  hex digest. A credential issued before this change keeps its prefixed value until it is reissued or expires.
+
 ### Fixed — capability verifications are recorded as capability checks
 
 - `POST /api/v1/sdk-api/verifications` recorded every verification event as `verification_type: identity`, because the
