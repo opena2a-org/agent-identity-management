@@ -215,6 +215,30 @@
     --ring: 210 100% 58%;
   }
 
+  /* Charts. components/charts reads every series, grid, axis and tooltip colour
+     from these and carries no colour of its own. The slots alias the tokens
+     above and resolve on whichever element carries the theme, so they hold for
+     light and dark and follow any contrast correction made there. */
+  :root,
+  .dark {
+    --chart-1: var(--brand);
+    --chart-2: var(--green);
+    --chart-3: var(--amber);
+    --chart-4: var(--red);
+    --chart-5: var(--brand-indigo);
+    --chart-6: var(--brand-sky);
+    --chart-7: #f97316;
+    --chart-muted: var(--text-tertiary);
+    --chart-grid: var(--divider);
+    --chart-axis-line: var(--stroke);
+    --chart-axis-text: var(--text-tertiary);
+    --chart-cursor: var(--surface-inset-gray);
+    --chart-tooltip-bg: var(--glass-fill);
+    --chart-tooltip-border: var(--glass-border);
+    --chart-tooltip-text: var(--text-primary);
+    --chart-tooltip-shadow: var(--shadow-card);
+  }
+
   /* Reduced transparency, or no backdrop-filter support: solid composites of the same glass */
   @media (prefers-reduced-transparency: reduce) {
     :root,

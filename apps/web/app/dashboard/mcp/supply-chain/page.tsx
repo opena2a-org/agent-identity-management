@@ -46,21 +46,7 @@ import {
   Code,
   Key,
 } from "lucide-react";
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  Legend,
-} from "recharts";
+import { DonutChart, TrendChart, chartSeries, type DonutSlice } from "@/components/charts";
 import { api } from "@/lib/api";
 import { escapeHtml } from "@/lib/html-escape";
 import { formatDateTime } from "@/lib/date-utils";
@@ -105,16 +91,6 @@ interface SupplyChainStats {
   attestationsLast24h: number;
   capabilityDriftAlerts: number;
 }
-
-// Colors for charts
-const CHART_COLORS = {
-  primary: "var(--brand)",
-  success: "var(--green)",
-  warning: "var(--amber)",
-  danger: "var(--red)",
-  info: "var(--brand-sky)",
-  purple: "var(--brand-indigo)",
-};
 
 const CONFIDENCE_COLORS = [
   { range: "90-100%", color: "var(--green)", fill: "var(--green-fill)" },
@@ -306,7 +282,7 @@ function SupplyChainPage() {
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const [connections, setConnections] = useState<AgentMCPConnection[]>([]);
   const [attestationTrend, setAttestationTrend] = useState<any[]>([]);
-  const [confidenceDistribution, setConfidenceDistribution] = useState<any[]>(
+  const [confidenceDistribution, setConfidenceDistribution] = useState<DonutSlice[]>(
     []
   );
   const [driftAlerts, setDriftAlerts] = useState<CapabilityDriftAlert[]>([]);
@@ -415,7 +391,7 @@ function SupplyChainPage() {
           name: "High (90-100%)",
           value: servers.filter((s: MCPServer) => (s.confidenceScore || 0) >= 90)
             .length,
-          color: CHART_COLORS.success,
+          color: chartSeries.green,
         },
         {
           name: "Good (70-89%)",
@@ -423,7 +399,7 @@ function SupplyChainPage() {
             (s: MCPServer) =>
               (s.confidenceScore || 0) >= 70 && (s.confidenceScore || 0) < 90
           ).length,
-          color: CHART_COLORS.primary,
+          color: chartSeries.brand,
         },
         {
           name: "Medium (50-69%)",
@@ -431,7 +407,7 @@ function SupplyChainPage() {
             (s: MCPServer) =>
               (s.confidenceScore || 0) >= 50 && (s.confidenceScore || 0) < 70
           ).length,
-          color: CHART_COLORS.warning,
+          color: chartSeries.amber,
         },
         {
           name: "Low (0-49%)",
@@ -439,7 +415,7 @@ function SupplyChainPage() {
             (s: MCPServer) =>
               (s.confidenceScore || 0) < 50
           ).length,
-          color: CHART_COLORS.danger,
+          color: chartSeries.red,
         },
       ];
       setConfidenceDistribution(distribution);
@@ -1038,56 +1014,12 @@ function SupplyChainPage() {
             Attestation activity (7 days)
           </h3>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={attestationTrend}>
-                <defs>
-                  <linearGradient
-                    id="attestationGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="5%"
-                      stopColor={CHART_COLORS.primary}
-                      stopOpacity={0.3}
-                    />
-                    <stop
-                      offset="95%"
-                      stopColor={CHART_COLORS.primary}
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  className="stroke-divider"
-                />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "var(--text-tertiary)", fontSize: 12 }}
-                />
-                <YAxis tick={{ fill: "var(--text-tertiary)", fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--glass-fill)",
-                    border: "1px solid var(--glass-border)",
-                    borderRadius: "12px",
-                    boxShadow: "var(--shadow-card)",
-                    color: "var(--text-primary)",
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="attestations"
-                  stroke={CHART_COLORS.primary}
-                  fill="url(#attestationGradient)"
-                  strokeWidth={2}
-                  name="Attestations"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <TrendChart
+              title="Attestations, last 7 days"
+              data={attestationTrend}
+              xKey="date"
+              series={[{ key: "attestations", name: "Attestations", color: chartSeries.brand }]}
+            />
           </div>
         </div>
 
@@ -1098,41 +1030,12 @@ function SupplyChainPage() {
             Confidence score distribution
           </h3>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={confidenceDistribution}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  label={({ name, value }: { name: string; value: number }) => (value > 0 ? `${value}` : "")}
-                >
-                  {confidenceDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--glass-fill)",
-                    border: "1px solid var(--glass-border)",
-                    borderRadius: "12px",
-                    boxShadow: "var(--shadow-card)",
-                    color: "var(--text-primary)",
-                  }}
-                />
-                <Legend
-                  wrapperStyle={{ paddingTop: "20px" }}
-                  formatter={(value: string) => (
-                    <span className="text-ink-secondary text-sm">
-                      {value}
-                    </span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <DonutChart
+              title="MCP servers by confidence score"
+              data={confidenceDistribution}
+              sliceLabel={({ value }) => (value > 0 ? `${value}` : "")}
+              legend
+            />
           </div>
         </div>
       </div>
