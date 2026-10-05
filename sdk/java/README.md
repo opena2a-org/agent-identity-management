@@ -280,13 +280,15 @@ Credential files are written with mode 0600. Agent private keys are returned **o
 
 ## Dependencies
 
+The version of each library is pinned in [`pom.xml`](pom.xml).
+
 | Library | Purpose |
 |---|---|
-| OkHttp 4.12 | HTTP client |
-| Jackson 2.16 | JSON processing |
-| BouncyCastle 1.79 | Ed25519 cryptography |
-| AspectJ 1.9.21 | AOP for `@SecureAction` |
-| SLF4J 2.0 | Logging |
+| OkHttp | HTTP client |
+| Jackson | JSON processing |
+| BouncyCastle | Ed25519 cryptography |
+| AspectJ | AOP for `@SecureAction` |
+| SLF4J | Logging |
 
 ## Requirements
 

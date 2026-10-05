@@ -11,6 +11,38 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the Java SDK documentation no longer states dependency versions its pom contradicts
+
+- `sdk/java/README.md`, which ships in the SDK download, listed Jackson 2.16 and BouncyCastle 1.79,
+  and `docs/sdk/java.md` listed Jackson 2.16 and BouncyCastle 1.77. `sdk/java/pom.xml` pins Jackson
+  2.18.11 and BouncyCastle 1.85.
+- Both documents now name each library and its purpose, and point at `sdk/java/pom.xml` for the
+  version. A test in the Java SDK fails when either document states a version the pom contradicts.
+
+### Changed — the Java SDK's `reportCapabilities` follows the enforcement mode and raises when a registration fails
+
+- What to check before upgrading: in strict mode a reported capability stays pending until an
+  administrator approves it, and the result counts it under `pending`, not `granted`. A
+  registration that AIM refuses or fails now throws `AIMException` with the HTTP status, and the
+  capabilities after it are not sent. Failures used to be swallowed, and one whose message
+  contained "500" was counted as granted.
+- `reportCapabilities` sends one `POST /api/v1/sdk-api/agents/{id}/capabilities/register` per
+  distinct capability, one at a time in the order each first appears, with the body
+  `{"capabilityType": ...}`, and reads the outcome AIM answers with. It used to post to
+  `/api/v1/sdk-api/agents/{id}/capabilities`.
+- The result keeps `granted` and `total` and adds `pending` and `results`. `granted` counts
+  capabilities granted now or already held, `pending` counts those awaiting approval, `total`
+  counts distinct capabilities, and `results` has one entry per capability with its `status`
+  (`granted`, `already_exists` or `pending`) and, for a new pending request, its `requestId`.
+- `reportCapabilities(List)` is new. `reportCapabilities(List, Map)` is deprecated: its `scope` is
+  ignored, and passing one logs a warning. A null or empty entry throws `ConfigurationException`
+  before anything is sent.
+- `registerCapability(String, String)` sends `capabilityType`. It sent `capability`, which the
+  route does not read, so every call was refused with 400.
+- `registerCapability(String, String, String)` reads `status` from a 409 answer, which can be
+  `pending` as well as `already_exists`; it used to report every 409 as `already_exists`. A 404
+  now throws; it used to be reported as `success: true` with status `not_tracked`.
+
 ### Fixed — a password sign-in records the sign-in time and writes nothing else to the user
 
 - Both password sign-in routes (`POST /api/v1/auth/login/local` and `POST /api/v1/public/login`)
