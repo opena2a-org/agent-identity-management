@@ -11,6 +11,33 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an empty `talks_to` list no longer allows every MCP server in the agent-signed action check
+
+- `PublicMCPHandler.VerifyMCPAction` approved any MCP server in the agent's organization when the agent's `talks_to`
+  list was empty, and refused only servers missing from a non-empty list. An empty list now names no servers, so the
+  check returns 403 `unauthorized_mcp_access` for every server, which matches how
+  `AgentService.GetAgentMCPServers` reads the same list. The handler is not mounted on any route in this release.
+- `public_mcp_handler_talks_to_test.go` sends signed requests through the handler and fails when an agent with a nil
+  or empty `talks_to` list is approved, when a server listed by name is refused, or when an unlisted server is
+  approved.
+
+### Security — a check fails on token-shaped literals in tracked files
+
+- `node scripts/lint-token-literals.mjs` reads every file `git ls-files` returns, binary files included, and fails on
+  a three-segment base64url token (the JWT shape), a private key block, an AIM API key, an AWS, GitHub, Slack, Stripe,
+  Google or `sk-` prefixed key, or a credential-named field assigned a high-entropy string. It prints the path, line,
+  rule and a fingerprint of each finding, never the matched text.
+- Each run also scans a synthetic file it plants in a temporary directory, carrying one sample per rule. If any sample
+  is missed, the run reports INCONCLUSIVE and exits 2 instead of passing. A tracked path it cannot read, or an empty
+  file list, also exits 2.
+- Literals reviewed as non-credentials are listed, each with a reason, in `scripts/token-literal-allowlist.txt`. An
+  entry covers one literal at one path, and an entry that no longer matches fails the run.
+- The SDK token tracking middleware test builds its JWT at run time instead of storing one, and the Python scripts
+  under `tests/scripts/` read the API key from `AIM_API_KEY` instead of carrying a key issued by a local backend.
+- `scripts/test-lint-token-literals.mjs` (`node --test scripts/test-lint-token-literals.mjs`) fails when a tracked
+  token is not reported or is printed, when a missed planted sample or an unreadable path does not make the run
+  inconclusive, or when this repository's tracked tree has a finding.
+
 ### Fixed — an SDK refresh no longer hands out a refresh token that has no row
 
 - `POST /api/v1/auth/refresh` with an SDK refresh token revoked the presented token's `sdk_tokens` row, then inserted
