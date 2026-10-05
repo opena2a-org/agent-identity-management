@@ -1202,12 +1202,19 @@ func (h *VerificationHandler) writeVerificationResponse(c fiber.Ctx, event *doma
 // @Failure 403 {object} ErrorResponse "Endpoint withdrawn"
 // @Router /api/v1/sdk-api/verifications/{id}/result [post]
 func (h *VerificationHandler) SubmitVerificationResult(c fiber.Ctx) error {
-	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+	return c.Status(fiber.StatusForbidden).JSON(withReasonCode(fiber.Map{
 		"error": "verification result reporting is not accepted on this endpoint; " +
 			"result and status are the authorization-decision channel",
-		"code": "executionOutcomeNotAccepted",
-	})
+	}, ExecutionOutcomeNotAcceptedCode))
 }
+
+// Machine-readable reasons the SDK write endpoints refuse with.
+const (
+	// ExecutionOutcomeNotAcceptedCode: SubmitVerificationResult refuses every caller.
+	ExecutionOutcomeNotAcceptedCode = "executionOutcomeNotAccepted"
+	// EnforcementModeUnavailableCode: UpdateExecutionStatus cannot read the organization's enforcement mode.
+	EnforcementModeUnavailableCode = "enforcementModeUnavailable"
+)
 
 // determineAlertSeverity determines the alert severity based on action type and context
 func (h *VerificationHandler) determineAlertSeverity(actionType string, context map[string]interface{}, riskLevel string) domain.AlertSeverity {
@@ -1852,17 +1859,15 @@ func (h *VerificationHandler) UpdateExecutionStatus(c fiber.Ctx) error {
 	// response data, not a persisted record an incident is later reconstructed from.
 	orgRepo := h.getOrgRepo()
 	if orgRepo == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+		return c.Status(fiber.StatusServiceUnavailable).JSON(withReasonCode(fiber.Map{
 			"error": "cannot determine organization enforcement mode; execution status not recorded",
-			"code":  "enforcementModeUnavailable",
-		})
+		}, EnforcementModeUnavailableCode))
 	}
 	org, err := orgRepo.GetByID(event.OrganizationID)
 	if err != nil || org == nil {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+		return c.Status(fiber.StatusServiceUnavailable).JSON(withReasonCode(fiber.Map{
 			"error": "cannot determine organization enforcement mode; execution status not recorded",
-			"code":  "enforcementModeUnavailable",
-		})
+		}, EnforcementModeUnavailableCode))
 	}
 	strictMode := org.EnforcementMode == domain.EnforcementModeStrict
 

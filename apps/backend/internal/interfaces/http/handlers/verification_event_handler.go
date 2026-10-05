@@ -202,11 +202,13 @@ func (h *VerificationEventHandler) GetVerificationEvent(c fiber.Ctx) error {
 // @Failure 403 {object} map[string]interface{} "Endpoint disabled"
 // @Router /api/v1/verification-events [post]
 func (h *VerificationEventHandler) CreateVerificationEvent(c fiber.Ctx) error {
-	return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+	return c.Status(fiber.StatusForbidden).JSON(withReasonCode(fiber.Map{
 		"error": "verification events are recorded by the server; this endpoint does not accept them",
-		"code":  "verificationEventWriteNotAccepted",
-	})
+	}, VerificationEventWriteNotAcceptedCode))
 }
+
+// VerificationEventWriteNotAcceptedCode is the machine-readable reason CreateVerificationEvent refuses with.
+const VerificationEventWriteNotAcceptedCode = "verificationEventWriteNotAccepted"
 
 // GetRecentEvents retrieves recent verification events for real-time monitoring
 // @Summary Get recent verification events

@@ -186,6 +186,7 @@ func TestVerificationEventsPostIsRefusedForEveryRole(t *testing.T) {
 
 				assert.Equal(t, http.StatusForbidden, status, raw)
 				assert.Equal(t, "verificationEventWriteNotAccepted", out["code"], raw)
+				assert.Equal(t, out["code"], out["reasonCode"], raw)
 				assert.NotContains(t, raw, target.DisplayName)
 				assert.NotContains(t, out, "trustScore")
 				assert.NotContains(t, out, "agentName")
