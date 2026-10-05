@@ -810,7 +810,7 @@ func registrationErrorResponse(err error) (int, string) {
 	if strings.Contains(err.Error(), "password validation failed") {
 		return fiber.StatusBadRequest, err.Error()
 	}
-	return fiber.StatusInternalServerError, "An internal error occurred. Please try again later."
+	return fiber.StatusInternalServerError, ServerErrorMessage
 }
 
 // registrationSuccessMessage states the outcome of a successful sign-up: an allowlisted

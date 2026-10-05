@@ -167,23 +167,19 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		DocumentationURL: req.DocumentationURL,
 	}, orgID, userID, nil, nil, userEmail)
 	if err != nil {
-		// The service already maps DB constraint violations to safe messages, so
-		// surface err.Error() directly — do NOT re-prefix with "Failed to create
-		// agent:" (the service message is already "failed to create agent: ..."),
-		// which produced a doubled prefix. registrationErrorStatus mirrors the
-		// authenticated handler: 409 for a duplicate name, 400 for an invalid
-		// org/user, 500 otherwise.
-		return c.Status(registrationErrorStatus(err)).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		// respondRegistrationError mirrors the authenticated handler: 409 for a
+		// duplicate name and 400 for an invalid org/user carry the service's
+		// message as is — do NOT re-prefix with "Failed to create agent:" (the
+		// service message already starts "failed to create agent: ..."), which
+		// produced a doubled prefix. Anything else is a 500 with
+		// ServerErrorMessage.
+		return respondRegistrationError(c, err)
 	}
 
 	// Get the actual keys from the created agent
 	publicKey, privateKey, err := h.agentService.GetAgentCredentials(c.Context(), agent.ID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to retrieve agent credentials: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Calculate initial trust score

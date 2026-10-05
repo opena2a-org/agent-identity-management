@@ -1423,9 +1423,7 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 
 	events, total, counts, err := h.getVerificationEventService().SearchVerifications(c.Context(), orgID, params)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to get verification requests: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	totalPages := 1

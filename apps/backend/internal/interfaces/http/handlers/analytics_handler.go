@@ -1255,9 +1255,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	if err != nil {
 		// 🔍 LOG DETAILED ERROR for debugging
 		log.Printf("❌ Failed to fetch agents for org %s: %v", orgID.String(), err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to fetch agents: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Fetch MCP servers

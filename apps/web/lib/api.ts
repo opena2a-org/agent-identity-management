@@ -3,9 +3,17 @@
 import { toast } from "sonner";
 import { forgetOnboardingViewed } from "./onboarding-viewed";
 import { normalizeViolation, type SecurityViolation } from "./violations";
+import { SERVER_ERROR_MESSAGE, isServerErrorStatus } from "./error-messages";
 
 /** An Error thrown for a non-2xx response, carrying the status and the backend's code when it sent one. */
 export type ApiRequestError = Error & { status?: number; code?: string };
+
+/** The error a 5xx answer becomes: SERVER_ERROR_MESSAGE, whatever the body said. */
+function serverError(status: number): ApiRequestError {
+  const err = new Error(SERVER_ERROR_MESSAGE) as ApiRequestError;
+  err.status = status;
+  return err;
+}
 
 const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
@@ -808,21 +816,24 @@ class APIClient {
         .json()
         .catch(() => ({ message: "Request failed" }));
 
-      // Backend can return either 'error' or 'message'. Some layers (the
-      // panic handler) set `error` to a BOOLEAN with the text in `message`;
-      // only ever surface strings, never a stringified true.
-      const errorMessage =
-        (typeof error?.error === "string" && error.error) ||
-        (typeof error?.message === "string" && error.message) ||
-        `HTTP ${response.status}`;
-      const requestError = new Error(errorMessage) as ApiRequestError;
-      requestError.status = response.status;
       // The refusal's machine-readable reason: reasonCode is the API's member
       // for it; code is the older member the same refusals still carry.
       const reasonCode =
         (typeof error?.reasonCode === "string" && error.reasonCode) ||
         (typeof error?.code === "string" && error.code) ||
         undefined;
+      // A 5xx shows SERVER_ERROR_MESSAGE whatever its body says; only a
+      // refusal that names its reason (a 503 noAdministrators) keeps its line.
+      // Otherwise the backend returns either 'error' or 'message'. Some layers
+      // (the panic handler) set `error` to a BOOLEAN with the text in
+      // `message`; only ever surface strings, never a stringified true.
+      const errorMessage =
+        (isServerErrorStatus(response.status) && !reasonCode && SERVER_ERROR_MESSAGE) ||
+        (typeof error?.error === "string" && error.error) ||
+        (typeof error?.message === "string" && error.message) ||
+        `HTTP ${response.status}`;
+      const requestError = new Error(errorMessage) as ApiRequestError;
+      requestError.status = response.status;
       if (reasonCode) {
         requestError.code = reasonCode;
       }
@@ -919,6 +930,9 @@ class APIClient {
     );
 
     if (!response.ok) {
+      if (isServerErrorStatus(response.status)) {
+        throw serverError(response.status);
+      }
       const error = await response.json();
       throw new Error(error.error || "Failed to change password");
     }
@@ -2593,6 +2607,9 @@ class APIClient {
     }
 
     if (!response.ok) {
+      if (isServerErrorStatus(response.status)) {
+        throw serverError(response.status);
+      }
       const error = await response
         .json()
         .catch(() => ({ error: "Failed to download SDK" }));
@@ -2842,6 +2859,9 @@ class APIClient {
     });
 
     if (!response.ok) {
+      if (isServerErrorStatus(response.status)) {
+        throw serverError(response.status);
+      }
       throw new Error(`Export failed: ${response.status}`);
     }
 
@@ -3068,6 +3088,9 @@ class APIClient {
     });
 
     if (!response.ok) {
+      if (isServerErrorStatus(response.status)) {
+        throw serverError(response.status);
+      }
       throw new Error(`Export failed: ${response.status}`);
     }
 

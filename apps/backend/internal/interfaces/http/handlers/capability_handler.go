@@ -155,9 +155,7 @@ func (h *CapabilityHandler) GrantCapability(c fiber.Ctx) error {
 		req.ExecutionMode,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(capability)
@@ -294,9 +292,7 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 			"",  // Default execution mode based on risk level
 		)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-				Error: err.Error(),
-			})
+			return respondServerError(c, fiber.StatusInternalServerError, err)
 		}
 
 		return c.Status(fiber.StatusCreated).JSON(RegisterCapabilityResponse{
@@ -332,9 +328,7 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 				Message:        "A pending request for this capability already exists",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusAccepted).JSON(RegisterCapabilityResponse{
@@ -390,9 +384,7 @@ func (h *CapabilityHandler) GetAgentCapabilities(c fiber.Ctx) error {
 		activeOnly,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(capabilities)
@@ -460,9 +452,7 @@ func (h *CapabilityHandler) RevokeCapability(c fiber.Ctx) error {
 		capabilityID,
 		&userID,
 	); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(SuccessResponse{
@@ -543,9 +533,7 @@ func (h *CapabilityHandler) MarkHoneytoken(c fiber.Ctx) error {
 				Error: err.Error(),
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(updated)
@@ -607,9 +595,7 @@ func (h *CapabilityHandler) VerifyAction(c fiber.Ctx) error {
 		req.Metadata,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(result)
@@ -672,9 +658,7 @@ func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
 		offset,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(ViolationsResponse{
@@ -714,9 +698,7 @@ func (h *CapabilityHandler) ListCapabilities(c fiber.Ctx) error {
 	capSvc := h.getCapabilityService()
 	response, err := capSvc.ListCapabilitiesWithMetadata(context.Background(), orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error: err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(response)

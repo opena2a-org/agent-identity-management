@@ -1,3 +1,13 @@
+// The line the API answers an unexpected 5xx with. The client shows it for
+// every 5xx, whatever the body holds: a proxy's HTML page or an older
+// server's error text tells the user nothing they can act on.
+export const SERVER_ERROR_MESSAGE =
+  "An internal error occurred. Please try again later.";
+
+export function isServerErrorStatus(status: number | null | undefined): boolean {
+  return typeof status === "number" && status >= 500 && status <= 599;
+}
+
 export interface ErrorContext {
   resource?: string;
   action?: string;
@@ -26,6 +36,10 @@ export function getErrorMessage(
   if (error instanceof Error) {
     const statusCode = getStatusCode(error);
 
+    if (isServerErrorStatus(statusCode)) {
+      return SERVER_ERROR_MESSAGE;
+    }
+
     if (statusCode) {
       switch (statusCode) {
         case 400:
@@ -49,20 +63,7 @@ export function getErrorMessage(
         case 429:
           return `Too many requests. Please wait a moment and try again.`;
 
-        case 500:
-          return `Server error occurred. Our team has been notified. Please try again later.`;
-
-        case 502:
-        case 503:
-          return `Service temporarily unavailable. Please try again in a few moments.`;
-
-        case 504:
-          return `Request timed out. Please check your connection and try again.`;
-
         default:
-          if (statusCode >= 500) {
-            return `Server error occurred. Please try again later.`;
-          }
           if (statusCode >= 400) {
             return `Unable to ${action} ${resource}. Please try again.`;
           }

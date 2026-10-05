@@ -69,17 +69,13 @@ func (h *MCPDiscoveryHandler) GetDiscoveredMCPs(c fiber.Ctx) error {
 	// Get all agents for the organization
 	agents, err := h.agentRepository.GetByOrganization(orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch agents: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Get all registered MCP servers
 	mcpServers, err := h.mcpService.ListMCPServers(c.Context(), orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to fetch MCP servers: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Create lookup maps for registered MCP servers

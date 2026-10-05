@@ -115,10 +115,7 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 			}
 		}
 
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "failed to create capability request",
-			"details": errMsg,
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(request)
@@ -292,9 +289,7 @@ func (h *CapabilityRequestHandlers) ApproveCapabilityRequest(c fiber.Ctx) error 
 				"error": "capability request not found",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -357,9 +352,7 @@ func (h *CapabilityRequestHandlers) RejectCapabilityRequest(c fiber.Ctx) error {
 				"error": "capability request not found",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{

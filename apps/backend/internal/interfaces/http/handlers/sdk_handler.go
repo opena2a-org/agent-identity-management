@@ -123,17 +123,13 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 		role,
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to generate SDK token: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Extract token ID (JTI) from JWT for tracking
 	tokenID, err := h.jwtService.GetTokenID(refreshToken)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to extract token ID: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Hash the token for secure storage (SHA-256)
@@ -200,9 +196,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// Generate SDK zip with embedded credentials
 	zipData, version, err := h.createSDKZip(credentials, sdkType)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": fmt.Sprintf("Failed to create SDK package: %v", err),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Set response headers for file download with version

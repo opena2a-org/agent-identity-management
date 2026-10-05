@@ -116,9 +116,7 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 		CardData: req.CardData,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -201,9 +199,7 @@ func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
 
 	card, err := h.a2aService.RefreshAttestation(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -276,9 +272,7 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 		[]byte(req.Body),
 	)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -301,9 +295,7 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 
 	result, err := h.a2aService.VerifyA2ARequest(c.Context(), req)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	if !result.Valid {
@@ -396,9 +388,7 @@ func (h *A2AHandler) ComputeA2ATrustScore(c fiber.Ctx) error {
 
 	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -504,9 +494,7 @@ func (h *A2AHandler) ListTasks(c fiber.Ctx) error {
 
 	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), orgID, agentID, state, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -709,9 +697,7 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 	}
 
 	if err := h.a2aService.UpdateA2ATaskState(c.Context(), taskID, state, req.ErrorCode, req.ErrorMessage); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -746,9 +732,7 @@ func (h *A2AHandler) GetAgentSkills(c fiber.Ctx) error {
 
 	skills, err := h.a2aService.GetAgentSkills(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -777,9 +761,7 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 
 	skills, err := h.a2aService.SearchSkills(c.Context(), query, limit)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -813,9 +795,7 @@ func (h *A2AHandler) RouteByIntent(c fiber.Ctx) error {
 
 	resp, err := h.a2aService.RouteByIntent(c.Context(), intent, minTrustScore)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	if resp.Agent == nil {
@@ -857,9 +837,7 @@ func (h *A2AHandler) CapableOf(c fiber.Ctx) error {
 
 	agents, err := h.a2aService.CapableOf(c.Context(), intent, minTrustScore, limit)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -910,9 +888,7 @@ func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
 				"error": "Grantor agent not found",
 			})
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -991,9 +967,7 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 	// anything — free to range across organizations.
 	hasConsent, err := h.a2aService.CheckConsent(c.Context(), orgID, userID, grantorUUID, recipientUUID, scope)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1044,9 +1018,7 @@ func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
 	}
 
 	if err := h.a2aService.RevokeConsent(c.Context(), consentID, req.Reason); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Log audit
@@ -1094,9 +1066,7 @@ func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
 	// existence side channel is exposed.
 	consents, err := h.a2aService.ListUserConsents(c.Context(), userID, orgID, includeRevoked)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1127,9 +1097,7 @@ func (h *A2AHandler) ListAllConsents(c fiber.Ctx) error {
 
 	consents, total, err := h.a2aService.ListAllConsents(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1156,9 +1124,7 @@ func (h *A2AHandler) ListAllTrustScores(c fiber.Ctx) error {
 
 	scores, total, err := h.a2aService.ListAllTrustScores(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1185,9 +1151,7 @@ func (h *A2AHandler) EvaluatePolicy(c fiber.Ctx) error {
 
 	decision, err := h.a2aService.EvaluateA2APolicy(c.Context(), req)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(decision)
@@ -1249,9 +1213,7 @@ func (h *A2AHandler) GetPublicAgentCard(c fiber.Ctx) error {
 func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 	count, err := h.a2aService.CleanupExpiredNonces(c.Context())
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1266,9 +1228,7 @@ func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 func (h *A2AHandler) RefreshExpiredCards(c fiber.Ctx) error {
 	count, err := h.a2aService.RefreshExpiredCards(c.Context())
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1325,9 +1285,7 @@ func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
 	}
 
 	if err := h.a2aService.RegisterSkill(c.Context(), skill); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(skill)
@@ -1392,9 +1350,7 @@ func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
 
 	attestation, err := h.a2aService.AttestSkill(c.Context(), attestReq)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(attestation)
@@ -1440,9 +1396,7 @@ func (h *A2AHandler) GetConsensusStatus(c fiber.Ctx) error {
 
 	result, err := h.a2aService.GetConsensusStatus(c.Context(), agentID, skillID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(result)
@@ -1478,9 +1432,7 @@ func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
 
 	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(attestations)
@@ -1511,9 +1463,7 @@ func (h *A2AHandler) GetAgentAttestations(c fiber.Ctx) error {
 
 	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1566,9 +1516,7 @@ func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
 
 	result, err := h.a2aService.CheckA2ASecurity(c.Context(), checkReq)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(result)
@@ -1586,9 +1534,7 @@ func (h *A2AHandler) GetSecuritySettings(c fiber.Ctx) error {
 
 	settings, err := h.a2aService.GetSecuritySettings(c.Context(), orgID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(settings)
@@ -1615,9 +1561,7 @@ func (h *A2AHandler) UpdateSecuritySettings(c fiber.Ctx) error {
 	settings.OrganizationID = orgID
 
 	if err := h.a2aService.UpdateSecuritySettings(c.Context(), &settings); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(settings)
@@ -1655,9 +1599,7 @@ func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
 
 	signature, err := h.a2aService.SignA2ARequest(c.Context(), agentID, req.Method, req.Path, []byte(req.Body))
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(signature)
@@ -1725,9 +1667,7 @@ func (h *A2AHandler) RouteByIntentPost(c fiber.Ctx) error {
 
 	result, err := h.a2aService.RouteByIntent(c.Context(), req.Intent, req.MinTrustScore)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(result)
@@ -1944,9 +1884,7 @@ func (h *A2AHandler) ListAgentCards(c fiber.Ctx) error {
 
 	cards, err := h.a2aService.ListAgentCards(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1994,9 +1932,7 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 		CardURL: req.CardURL,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to register agent card: " + err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(card)
@@ -2059,9 +1995,7 @@ func (h *A2AHandler) ListPeerTrusts(c fiber.Ctx) error {
 
 	peers, err := h.a2aService.ListPeerTrusts(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	if peers == nil {
 		peers = make([]*domain.A2APeerTrust, 0)
