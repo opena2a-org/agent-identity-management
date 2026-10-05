@@ -1081,6 +1081,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		}
 	}
 
+	// Admission store for signed requests: action-request statements and
+	// secrets resolve requests each admit a nonce once through it.
+	actionRequestNonces := application.NewActionRequestNonceService(repository.NewAgentRequestNonceRepository(db))
+
 	secretsService := application.NewSecretsService(
 		repos.SecretNamespace,
 		repos.SecretAudit,
@@ -1088,7 +1092,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		repos.Capability,
 		atcVerifier,
 		secretsBackends,
-	)
+	).WithNonceAdmission(actionRequestNonces)
 
 	// Fine-Grained Authorization engine. Wired with the OTel-bridged slog
 	// logger so per-decision log lines auto-attach trace.id / span.id and
@@ -1137,8 +1141,8 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		ATCIssuance:       atcIssuanceService,                                   // Registry-delegated ATC issuance
 		SigningKeys:       signingKeys,                                          // Per-purpose server signing keys
 
-		// Admission store for signed action-request statements
-		ActionRequestNonces: application.NewActionRequestNonceService(repository.NewAgentRequestNonceRepository(db)),
+		// Admission store for signed action-request statements and secrets resolve requests
+		ActionRequestNonces: actionRequestNonces,
 	}, keyVault
 }
 

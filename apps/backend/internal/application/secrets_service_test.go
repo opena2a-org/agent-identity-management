@@ -210,7 +210,8 @@ func (m *mockATCVerifier) IsRevoked(atcID string) (bool, error) {
 }
 
 type mockBackend struct {
-	creds map[uuid.UUID]*secrets.SecretCredential
+	creds     map[uuid.UUID]*secrets.SecretCredential
+	retrieves int
 }
 
 func newMockBackend() *mockBackend {
@@ -229,6 +230,7 @@ func (m *mockBackend) Store(nsID uuid.UUID, blob []byte, alg string) error {
 }
 
 func (m *mockBackend) Retrieve(nsID uuid.UUID) (*secrets.SecretCredential, error) {
+	m.retrieves++
 	cred, ok := m.creds[nsID]
 	if !ok {
 		return nil, fmt.Errorf("no credential found")
@@ -269,7 +271,7 @@ func setupTestService(t *testing.T) (*SecretsService, *mockNamespaceRepo, *mockA
 		map[secrets.BackendType]secrets.SecretsBackend{
 			secrets.BackendTypeAIMNative: backend,
 		},
-	)
+	).WithNonceAdmission(newFakeResolveNonceAdmitter())
 
 	return svc, nsRepo, auditRepo, agentRepo, capRepo, atcVerifier, backend
 }

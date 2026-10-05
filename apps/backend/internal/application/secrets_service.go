@@ -1,11 +1,14 @@
 package application
 
 import (
+	"context"
 	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -26,7 +29,23 @@ const (
 	// maxCredentialBlobSize is the maximum size of a credential blob (1 MiB).
 	// Prevents DoS via oversized blobs in encryption/decryption.
 	maxCredentialBlobSize = 1 << 20
+
+	// resolveNonceKeyLabel separates the admission keys of resolve requests
+	// from other keys in the same admission store.
+	resolveNonceKeyLabel = "aim/secrets-resolve/v1\x00"
 )
+
+// ErrSecretsNonceAdmissionUnavailable means the single-use check for a resolve
+// request could not run. Nothing was resolved.
+var ErrSecretsNonceAdmissionUnavailable = errors.New("secrets resolve: nonce check unavailable")
+
+// SecretsNonceAdmitter records a signed resolve request once: it checks the
+// signed time against the database clock and inserts the key in one
+// statement, inserting nothing when the time is outside the window or the key
+// exists. ActionRequestNonceService implements it.
+type SecretsNonceAdmitter interface {
+	Admit(ctx context.Context, agentID, organizationID uuid.UUID, nonce []byte, signedAt time.Time) (domain.ActionRequestAdmission, error)
+}
 
 // SecretsService implements identity-native secrets management.
 // The 8-step Resolve() ordering is non-negotiable.
@@ -37,6 +56,7 @@ type SecretsService struct {
 	capabilityRepo domain.CapabilityRepository
 	atcVerifier    atcdomain.ATCVerifier
 	backends       map[secrets.BackendType]secrets.SecretsBackend
+	nonceAdmitter  SecretsNonceAdmitter
 }
 
 func NewSecretsService(
@@ -57,14 +77,23 @@ func NewSecretsService(
 	}
 }
 
+// WithNonceAdmission sets the store that admits each signed resolve request
+// once. Without one, every resolve request is refused.
+func (s *SecretsService) WithNonceAdmission(admitter SecretsNonceAdmitter) *SecretsService {
+	s.nonceAdmitter = admitter
+	return s
+}
+
 // Resolve executes the non-negotiable 8-step credential resolution.
 //
-//  1. Verify Ed25519 signature over namespace|operation|nonce
+//  1. Verify Ed25519 signature over namespace|operation|nonce, refuse an
+//     agentPublicKey that is not the registered key, check the nonce time,
+//     and admit the signed request once
 //  2. Verify ATC via atcVerifier.Verify()
 //  3. Load namespace, verify agent ownership + status + operation + URL pattern
 //  4. Check AIM capability (secrets:resolve)
 //  5. Retrieve encrypted blob from backend
-//  6. Encrypt with agent's X25519 public key via ECDH
+//  6. Encrypt to the agent's registered key (as X25519) via ECDH
 //  7. Zeroize raw credential
 //  8. Write audit entry (always — granted or denied)
 func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionRequest) (*secrets.ResolutionResult, error) {
@@ -112,14 +141,34 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 		return nil, fmt.Errorf("signature verification failed for agent %s", agentID)
 	}
 
-	// Validate nonce freshness (replay protection — CR-003)
-	nonceParts := strings.SplitN(req.Nonce, ":", 2)
-	if len(nonceParts) == 2 {
-		ts, parseErr := time.Parse(time.RFC3339Nano, nonceParts[0])
-		if parseErr == nil && time.Since(ts) > maxNonceAge {
-			denyReason = "nonce expired (replay protection)"
-			return nil, fmt.Errorf("nonce expired: submitted %s, max age %s", time.Since(ts), maxNonceAge)
-		}
+	// The credential is encrypted to the registered key only. agentPublicKey
+	// is not covered by the signature, so a request naming any other key is
+	// refused here, before anything is admitted or read.
+	if len(req.AgentPublicKey) != 0 && subtle.ConstantTimeCompare(req.AgentPublicKey, pubKeyBytes) != 1 {
+		denyReason = "agentPublicKey is not the agent's registered key"
+		return nil, fmt.Errorf("agentPublicKey is not the registered key of agent %s", agentID)
+	}
+
+	// Nonce freshness (replay protection): the nonce must carry an
+	// RFC 3339 time within maxNonceAge of this server's clock, either way.
+	signedAt, err := parseResolveNonceTime(req.Nonce)
+	if err != nil {
+		denyReason = "nonce has no RFC 3339 time"
+		return nil, err
+	}
+	if age := time.Since(signedAt); age > maxNonceAge {
+		denyReason = "nonce expired (replay protection)"
+		return nil, fmt.Errorf("nonce expired: submitted %s, max age %s", age, maxNonceAge)
+	} else if -age > maxNonceAge {
+		denyReason = "nonce time is ahead of the server clock"
+		return nil, fmt.Errorf("nonce time is %s ahead of the server clock, max %s", -age, maxNonceAge)
+	}
+
+	// Single use: the signed request is admitted once, by one statement that
+	// checks its time on the database clock and inserts its key.
+	if reason, err := s.admitResolveRequest(agentID, agent.OrganizationID, message, signedAt); err != nil {
+		denyReason = reason
+		return nil, err
 	}
 
 	// Step 2: Verify ATC
@@ -229,8 +278,8 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 	rawBlob := make([]byte, len(cred.EncryptedBlob))
 	copy(rawBlob, cred.EncryptedBlob)
 
-	// Step 6: Encrypt with agent's X25519 public key via ECDH
-	encryptedResult, ephemeralPub, err := s.encryptForAgent(rawBlob, req.AgentPublicKey)
+	// Step 6: Encrypt to the agent's registered key via ECDH
+	encryptedResult, ephemeralPub, err := s.encryptForAgent(rawBlob, pubKeyBytes)
 	if err != nil {
 		denyReason = "ECDH encryption failed"
 		// Step 7 (zeroize) happens even on error
@@ -246,6 +295,59 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 		EphemeralPubKey: ephemeralPub,
 		EncryptionAlg:   "X25519-ChaCha20-Poly1305",
 	}, nil
+}
+
+// parseResolveNonceTime returns the time a resolve nonce carries. A nonce is
+// "<RFC 3339 time>:<random part>"; the time contains colons itself, so the
+// random part starts after the last one.
+func parseResolveNonceTime(nonce string) (time.Time, error) {
+	i := strings.LastIndex(nonce, ":")
+	if i <= 0 || i == len(nonce)-1 {
+		return time.Time{}, fmt.Errorf("nonce must be <RFC 3339 time>:<random part>")
+	}
+	ts, err := time.Parse(time.RFC3339Nano, nonce[:i])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("nonce time is not RFC 3339")
+	}
+	return ts, nil
+}
+
+// resolveNonceKey is the 16-byte key the admission store records for a signed
+// resolve request: a labelled digest of the signed message.
+func resolveNonceKey(message []byte) []byte {
+	h := sha256.New()
+	h.Write([]byte(resolveNonceKeyLabel))
+	h.Write(message)
+	return h.Sum(nil)[:16]
+}
+
+// admitResolveRequest records the signed message once for the agent. It
+// returns the audit deny reason with the error when the request is refused.
+func (s *SecretsService) admitResolveRequest(agentID, organizationID uuid.UUID, message []byte, signedAt time.Time) (string, error) {
+	const unavailable = "nonce check unavailable"
+	if s.nonceAdmitter == nil {
+		return unavailable, ErrSecretsNonceAdmissionUnavailable
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*domain.ActionRequestAdmissionTimeout)
+	defer cancel()
+	admission, err := s.nonceAdmitter.Admit(ctx, agentID, organizationID, resolveNonceKey(message), signedAt)
+	if err != nil {
+		return unavailable, fmt.Errorf("%w: %w", ErrSecretsNonceAdmissionUnavailable, err)
+	}
+
+	switch admission {
+	case domain.ActionRequestAdmitted:
+		return "", nil
+	case domain.ActionRequestNonceReused:
+		return "nonce already used (replay protection)", fmt.Errorf("nonce already used by agent %s", agentID)
+	case domain.ActionRequestBehindClock:
+		return "nonce expired (replay protection)", fmt.Errorf("nonce expired on the database clock")
+	case domain.ActionRequestAheadOfClock:
+		return "nonce time is ahead of the server clock", fmt.Errorf("nonce time is ahead of the database clock")
+	default:
+		return unavailable, ErrSecretsNonceAdmissionUnavailable
+	}
 }
 
 // ATCVerifier returns the ATC verifier used by this service.

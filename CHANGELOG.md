@@ -2663,6 +2663,18 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   from an error value. A status counts as 5xx when it is a 5xx constant, a local variable set to one, or a call to a
   package function that returns one.
 
+### Fixed — secrets resolve encrypts the credential to the agent's registered key and answers a signed request once
+
+- `POST /api/v1/secrets/resolve` encrypts the credential to the agent's registered Ed25519 key, however the agent
+  authenticated (ATC or signed request). A request whose `agentPublicKey` is not that key is refused with 403 before
+  the credential is read and before its nonce is spent.
+- `nonce` must be `<RFC 3339 time>:<random part>`, the form both SDKs send, with a time no more than 30 seconds from
+  the server clock in either direction. Any other nonce is refused with 403.
+- Each signed request (namespace, operation and nonce) is answered once. It is admitted through the same single
+  statement and table, `agent_request_nonces`, as signed action-request statements, and the same purge deletes it. A
+  repeat is refused with 403. When the check cannot run, including before the first purge after start, the answer is
+  503 and nothing is resolved.
+
 ### Added — action verification accepts a signed statement with a nonce and a 30-second window
 
 - `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications` accept a second body form: exactly
