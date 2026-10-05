@@ -4,6 +4,7 @@ import { navigationBase, resolveNavHref } from "@/lib/navigation";
 import { HUB_TABS, visibleHubTabs } from "@/lib/hub-tabs";
 import { HOSTED_DEPLOYMENT } from "@/lib/deployment";
 import { ALL_ROLES, ROUTE_PERMISSIONS, effectiveEdgeRoles } from "@/lib/route-permissions";
+import { ROUTE_MOVES } from "@/lib/redirects";
 import { tabsForRole } from "@/components/mobile-tab-bar";
 
 /**
@@ -76,5 +77,33 @@ describe("navigation never shows a route the edge gate blocks", () => {
     // First nav exposure of /dashboard/webhooks ships with its explicit gate
     // entry in the same commit; the role set mirrors MemberMiddleware.
     expect(ROUTE_PERMISSIONS["/dashboard/webhooks"]).toEqual(["admin", "manager", "member"]);
+  });
+
+  it("compliance has its own path and gate entry, with the roles the old path had", () => {
+    // /dashboard/compliance no longer inherits "/dashboard/admin", so it names its roles
+    // itself. The nav entry, the gate entry and the redirected old path must all agree, and
+    // the set stays admin-only (AdminMiddleware on the backend's /compliance group).
+    const entry = navigationBase.find((e) => e.key === "compliance");
+    expect(entry?.href).toBe("/dashboard/compliance");
+    expect(ROUTE_PERMISSIONS["/dashboard/compliance"]).toEqual(entry?.roles);
+    expect(effectiveEdgeRoles("/dashboard/compliance")).toEqual(["admin"]);
+    expect(ROUTE_MOVES).toContainEqual({ source: "/dashboard/admin/compliance", destination: "/dashboard/compliance" });
+    expect(effectiveEdgeRoles("/dashboard/admin/compliance")).toEqual(effectiveEdgeRoles("/dashboard/compliance"));
+  });
+
+  it("nothing the navigation renders points at a moved path", () => {
+    // A moved path still answers, through its redirect, but the navigation links to the
+    // destination so a click is one request and the active state matches the URL.
+    const moved = ROUTE_MOVES.map((m) => m.source);
+    for (const role of ALL_ROLES) {
+      const hrefs = [
+        ...filterNavigationByRole(navigationBase, role).map((e) => resolveNavHref(e, role)),
+        ...Object.values(HUB_TABS).flatMap((tabs) => visibleHubTabs(tabs, role).map((t) => t.href)),
+        ...tabsForRole(role).map((t) => t.href),
+      ];
+      for (const href of hrefs) {
+        expect(moved, `${href} is shown to ${role} but has moved`).not.toContain(href.split("?")[0]);
+      }
+    }
   });
 });
