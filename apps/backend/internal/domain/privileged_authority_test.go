@@ -187,6 +187,15 @@ func TestAuthorizePrivilegedAction_RefusesSignaturesThatDoNotVerify(t *testing.T
 			},
 		},
 		{
+			name: "signed for another action",
+			want: "different action",
+			auth: func() ActionAuthority {
+				st := f.statement()
+				st.Action = "write"
+				return f.sign(t, f.priv, st)
+			},
+		},
+		{
 			name: "expired",
 			want: "has expired",
 			auth: func() ActionAuthority {
