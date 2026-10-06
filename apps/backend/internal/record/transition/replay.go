@@ -30,6 +30,19 @@ func (e *ContinuityError) Error() string {
 		e.AgentID, e.Seq, e.PreviousSeq)
 }
 
+// UnopenedError reports an agent whose first transition is neither its
+// registration nor its opening state, so replay has no state to start from.
+type UnopenedError struct {
+	AgentID uuid.UUID
+	Seq     int64
+	Trigger Trigger
+}
+
+func (e *UnopenedError) Error() string {
+	return fmt.Sprintf("transition: agent %s: its first record, at seq %d, is %s, not its registration or its opening state",
+		e.AgentID, e.Seq, e.Trigger)
+}
+
 // MismatchError reports an agent whose state rebuilt from its records is not
 // its state in the state tables.
 type MismatchError struct {
@@ -61,10 +74,12 @@ type Replayed struct {
 
 // Replay verifies an organization's chain with the record key and rebuilds
 // each agent's state from its authorization_transition records alone. An
-// agent's first record opens its history; each later record's
-// previous_state must equal the new_state before it, or Replay returns a
-// *ContinuityError. A registration's previous_state is null, and a
-// registration that is not the agent's first record is a *ContinuityError.
+// agent's first record opens its history and must be its registration or
+// its opening state, or Replay returns an *UnopenedError; each later
+// record's previous_state must equal the new_state before it, or Replay
+// returns a *ContinuityError. A registration's previous_state is null, an
+// opening state's previous_state equals its new_state, and either one that
+// is not the agent's first record is a *ContinuityError.
 // A deletion's new_state is null, and any record of the agent after its
 // deletion is a *ContinuityError. A chain that does not verify, a transition
 // whose tenant part has been erased, and a null previous_state or new_state
@@ -122,8 +137,15 @@ func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key 
 		if err != nil || (tenant.NewState == nil) != closes || (tenant.PreviousState == nil) != opens {
 			return Replayed{}, fmt.Errorf("transition: the record at seq %d has no agent, or a previous_state or new_state its trigger does not take", seq)
 		}
-		if seqs := out.Seqs[agentID]; len(seqs) > 0 &&
-			(opens || out.Deleted[agentID] || !Equal(out.States[agentID], tenant.PreviousState.state())) {
+		if trigger == TriggerOpeningState && !Equal(tenant.PreviousState.state(), tenant.NewState.state()) {
+			return Replayed{}, fmt.Errorf("transition: the opening state at seq %d changes the agent's state", seq)
+		}
+		seqs := out.Seqs[agentID]
+		if len(seqs) == 0 && !trigger.first() {
+			return Replayed{}, &UnopenedError{AgentID: agentID, Seq: seq, Trigger: trigger}
+		}
+		if len(seqs) > 0 &&
+			(trigger.first() || out.Deleted[agentID] || !Equal(out.States[agentID], tenant.PreviousState.state())) {
 			return Replayed{}, &ContinuityError{AgentID: agentID, Seq: seq, PreviousSeq: seqs[len(seqs)-1]}
 		}
 		if closes {

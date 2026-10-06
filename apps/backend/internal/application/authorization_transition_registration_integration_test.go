@@ -107,6 +107,7 @@ func TestTransitionTriggerOnRegistrationOpensTheAgentsHistory(t *testing.T) {
 		assert.Equal(t, "registration_baseline", r.Trigger, "seq %d", r.Seq)
 		assert.True(t, r.PreviousNull, "seq %d: a registration has no previous state", r.Seq)
 		assert.Equal(t, w.agent.ID.String(), r.Agent, "seq %d", r.Seq)
+		assert.Equal(t, transition.OpeningEventID(w.agent.ID), r.EventID, "seq %d: a registration opens the agent's history", r.Seq)
 		assert.Equal(t, "user:"+f.userID.String(), r.Actor, "seq %d", r.Seq)
 		assert.Empty(t, r.Parent, "seq %d", r.Seq)
 		assert.Empty(t, r.Outcome, "seq %d", r.Seq)

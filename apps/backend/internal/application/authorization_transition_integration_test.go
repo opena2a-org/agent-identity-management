@@ -263,7 +263,35 @@ type transitionStateJSON struct {
 	} `json:"opena2a"`
 }
 
+// transitions returns the chain's transitions other than the opening states
+// that open the histories of agents inserted before the change: the records
+// of the paths under test. Each opening state it leaves out is checked: the
+// system wrote it, at its agent's opening event id, as the agent's first
+// record, with its previous_state equal to its new_state.
 func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
+	t.Helper()
+	var out []transitionRecord
+	seen := map[string]bool{}
+	for _, r := range f.allTransitions(t) {
+		if r.Trigger == string(transition.TriggerOpeningState) {
+			require.False(t, seen[r.Agent], "seq %d: an opening state after the agent's first record", r.Seq)
+			require.Equal(t, transition.OpeningEventID(uuid.MustParse(r.Agent)), r.EventID, "seq %d", r.Seq)
+			require.Equal(t, "system", r.Actor, "seq %d", r.Seq)
+			require.False(t, r.PreviousNull || r.NewNull, "seq %d", r.Seq)
+			require.Equal(t, r.Previous, r.New, "seq %d: an opening state changed the agent's state", r.Seq)
+			require.Empty(t, r.Parent, "seq %d", r.Seq)
+			seen[r.Agent] = true
+			continue
+		}
+		seen[r.Agent] = true
+		out = append(out, r)
+	}
+	return out
+}
+
+// allTransitions returns every transition of the chain, opening states
+// included.
+func (f *transitionFixture) allTransitions(t *testing.T) []transitionRecord {
 	t.Helper()
 	records, err := store.ReadChain(context.Background(), f.db, f.chainID)
 	require.NoError(t, err)
@@ -401,7 +429,8 @@ func TestTransitionTriggersOnEveryLifecyclePathReplayToTheTables(t *testing.T) {
 	}
 	for i, w := range want {
 		r := got[i]
-		assert.Equal(t, int64(i+1), r.Seq)
+		// The agent's opening state, written with the grant, is at seq 1.
+		assert.Equal(t, int64(i+2), r.Seq)
 		assert.Equal(t, w.trigger, r.Trigger, "seq %d", r.Seq)
 		assert.Equal(t, w.actor, r.Actor, "seq %d", r.Seq)
 		assert.Equal(t, f.agentID.String(), r.Agent, "seq %d", r.Seq)
@@ -435,7 +464,7 @@ func TestTransitionTriggersOnEveryLifecyclePathReplayToTheTables(t *testing.T) {
 
 	replayed, err := transition.CheckReplay(ctx, f.db, f.orgID, f.keys.publicKey())
 	require.NoError(t, err)
-	assert.Equal(t, []int64{1, 2, 3, 4, 5, 6, 7}, replayed.Seqs[f.agentID])
+	assert.Equal(t, []int64{1, 2, 3, 4, 5, 6, 7, 8}, replayed.Seqs[f.agentID])
 	tables, err := transition.CurrentState(ctx, f.db, f.orgID, f.agentID)
 	require.NoError(t, err)
 	assert.True(t, transition.Equal(tables, replayed.States[f.agentID]))
@@ -468,8 +497,9 @@ func TestTransitionTriggerReplayFindsAChangeWithoutARecord(t *testing.T) {
 	var broken *transition.ContinuityError
 	require.True(t, errors.As(err, &broken), "want *ContinuityError, got %v", err)
 	assert.Equal(t, f.agentID, broken.AgentID)
-	assert.Equal(t, int64(2), broken.Seq)
-	assert.Equal(t, int64(1), broken.PreviousSeq)
+	// Seq 1 is the agent's opening state, seq 2 the grant.
+	assert.Equal(t, int64(3), broken.Seq)
+	assert.Equal(t, int64(2), broken.PreviousSeq)
 }
 
 // With record writes failing, a widening is refused and changes nothing,

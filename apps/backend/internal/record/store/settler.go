@@ -222,7 +222,7 @@ func (s *Settler) settle(ctx context.Context, organizationID, debtID string) (bo
 	if err := addSalts(&d); err != nil {
 		return fail(ReasonOther, err)
 	}
-	if _, reason, err := w.appendLocked(ctx, tx, organizationID, &d, nil, waitStart, deadline, true); reason != "" {
+	if _, reason, err := w.appendLocked(ctx, tx, organizationID, &d, nil, nil, waitStart, deadline, true); reason != "" {
 		return fail(reason, err)
 	}
 	if err := tx.Commit(); err != nil {

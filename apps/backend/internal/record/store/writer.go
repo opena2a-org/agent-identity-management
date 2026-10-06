@@ -14,8 +14,9 @@
 //     state change.
 //  3. It takes the append lock by locking the chain's record_chains row.
 //     From here every statement runs under StatementTimeout.
-//  4. It reads the chain state, runs the caller's guard, signs the record,
-//     appends it, moves the head and commits.
+//  4. It reads the chain state, runs the caller's guard and lead, signs the
+//     record and any record the lead returned, appends the lead's record
+//     and then the record, moves the head and commits.
 //
 // A chain has connectionsPerChain slots per process, so writes of one
 // organization never hold more of the pool than that, however fast they
@@ -146,7 +147,8 @@ var reasons = []Reason{
 }
 
 // ErrInvalidWrite is wrapped by the error of a write the writer refuses
-// before it starts: an unknown class or a malformed organization id.
+// before it starts: an unknown class, a malformed organization id, or a lead
+// on a reduction that would commit with a debt.
 var ErrInvalidWrite = errors.New("store: invalid write")
 
 // ErrChainStarted is returned by Start when the organization already has a
@@ -197,7 +199,21 @@ type Write struct {
 	// whole on that failure, as an expansion is, and its draft need not be
 	// one a debt row can hold.
 	NoDebt bool
+	// Lead, when set, runs under the append lock after the guard, unless the
+	// guard ended the write. A draft it returns is appended first, in the same
+	// transaction, at the position before the record's: a record the write's
+	// record follows, such as the opening state of an agent whose first
+	// record it is. Lead reads the chain only through probe. Its draft takes
+	// the record's timestamp, a part with members gets a random salt, and a
+	// draft trace.Check refuses is refused with reason trace. It refuses the
+	// write by returning an error. A debt row holds one record, so a
+	// reduction that sets Lead must set NoDebt.
+	Lead Lead
 }
+
+// Lead returns the record to append before a write's record, or nil for
+// none.
+type Lead func(ctx context.Context, probe *Probe) (*record.Draft, error)
 
 // Appended is what a write left in its chain.
 type Appended struct {
@@ -211,6 +227,9 @@ type Appended struct {
 	// Existing is true when the guard ended the write with a record already
 	// in the chain, and nothing was appended.
 	Existing bool
+	// LeadEventID is the event id of the record the write's Lead returned,
+	// appended at Seq-1, and "" when none was.
+	LeadEventID string
 	// Debt is set when the write was a reduction whose record could not be
 	// appended: its state change committed without the record, and nothing
 	// was appended.
@@ -386,6 +405,9 @@ func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 	if !canonicalUUID(req.OrganizationID) {
 		return Appended{}, fmt.Errorf("%w: the organization id is not a lowercase hyphenated UUID", ErrInvalidWrite)
 	}
+	if req.Lead != nil && req.Class == ClassReduction && !req.NoDebt {
+		return Appended{}, fmt.Errorf("%w: a reduction with a lead must set NoDebt, as a debt row holds one record", ErrInvalidWrite)
+	}
 	out, reason, err := w.write(ctx, req)
 	if reason != "" {
 		if ctx.Err() != nil {
@@ -503,7 +525,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 		}
 	}
 
-	out, reason, err := w.appendLocked(ctx, tx, req.OrganizationID, &d, req.Guard, waitStart, deadline, req.Apply != nil)
+	out, reason, err := w.appendLocked(ctx, tx, req.OrganizationID, &d, req.Guard, req.Lead, waitStart, deadline, req.Apply != nil)
 	if reason == "" {
 		if err := tx.Commit(); err != nil {
 			return Appended{}, ReasonDatabase, err
@@ -608,9 +630,10 @@ func debtSlotKey(organizationID string) string { return "debt/" + organizationID
 // appendLocked takes the append lock in tx and appends d to the
 // organization's chain. It does not commit. When applied is true, a state
 // change ran in tx first, and the lock wait is bounded by what remains of
-// the deadline.
+// the deadline. When lead is set and returns a draft, that draft is appended
+// first, under the same lock, and d after it.
 func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID string, d *record.Draft,
-	guard Guard, waitStart, deadline time.Time, applied bool) (Appended, Reason, error) {
+	guard Guard, lead Lead, waitStart, deadline time.Time, applied bool) (Appended, Reason, error) {
 	if applied {
 		remaining := time.Until(deadline)
 		if remaining < time.Millisecond {
@@ -670,37 +693,102 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 		}
 	}
 
-	body, err := record.NewRecord(head, *d)
+	var leadEventID string
+	if lead != nil {
+		ld, reason, err := runLead(ctx, lead, tx, organizationID, chainID, *d)
+		if reason != "" {
+			return Appended{}, reason, err
+		}
+		if ld != nil {
+			if head, reason, err = w.appendOne(ctx, tx, head, *ld); reason != "" {
+				return Appended{}, reason, err
+			}
+			leadEventID = ld.EventID
+		}
+	}
+
+	next, reason, err := w.appendOne(ctx, tx, head, *d)
+	if reason != "" {
+		return Appended{}, reason, err
+	}
+	return Appended{ChainID: chainID, Seq: next.Seq, EventID: d.EventID, RecordHash: next.Hash,
+		LeadEventID: leadEventID}, "", nil
+}
+
+// appendOne signs d as the record after head, appends it and moves the
+// chain's head to it, in tx under the append lock. It returns the new head.
+func (w *Writer) appendOne(ctx context.Context, tx *sql.Tx, head record.Head, d record.Draft) (record.Head, Reason, error) {
+	body, err := record.NewRecord(head, d)
 	if err != nil {
-		return Appended{}, ReasonCanonical, err
+		return record.Head{}, ReasonCanonical, err
 	}
 	rec, err := record.Sign(ctx, body, w.keys)
 	if err != nil {
-		return Appended{}, ReasonSigner, err
+		return record.Head{}, ReasonSigner, err
 	}
 	if _, err := record.Open(rec.Envelope, record.ClassRecordV1, keyVerifier{w.key}); err != nil {
-		return Appended{}, ReasonSigner, fmt.Errorf("store: the record's signature is not by the chain's key: %w", err)
+		return record.Head{}, ReasonSigner, fmt.Errorf("store: the record's signature is not by the chain's key: %w", err)
 	}
 	signature, err := base64.StdEncoding.DecodeString(rec.Envelope.Signatures[0].Sig)
 	if err != nil {
-		return Appended{}, ReasonSigner, err
+		return record.Head{}, ReasonSigner, err
 	}
 	next := body.Head()
 	res, err := tx.ExecContext(ctx, appendQuery,
-		chainID, next.Seq, d.EventID, d.Type, d.Timestamp, next.Hash,
+		head.ChainID, next.Seq, d.EventID, d.Type, d.Timestamp, next.Hash,
 		rec.Envelope.PayloadType, body.Canonical(), rec.Envelope.Signatures[0].KeyID, signature,
 		nullable(rec.TenantPart), nullable(rec.TenantSalt), nullable(rec.PersonalPart), nullable(rec.PersonalSalt),
 		head.Seq)
 	if err != nil {
 		if code := pqCode(err); len(code) == 5 && code[:2] == "23" {
-			return Appended{}, ReasonConstraint, err
+			return record.Head{}, ReasonConstraint, err
 		}
-		return Appended{}, ReasonDatabase, err
+		return record.Head{}, ReasonDatabase, err
 	}
 	if n, err := res.RowsAffected(); err != nil || n != 1 {
-		return Appended{}, ReasonChainHead, errors.New("store: the head moved under the append lock")
+		return record.Head{}, ReasonChainHead, errors.New("store: the head moved under the append lock")
 	}
-	return Appended{ChainID: chainID, Seq: next.Seq, EventID: d.EventID, RecordHash: next.Hash}, "", nil
+	return record.Head{ChainID: head.ChainID, Seq: next.Seq, Hash: next.Hash}, "", nil
+}
+
+// runLead calls the lead with a probe open only for the call, and completes
+// the draft it returned: the record's timestamp, and salts for its parts. A
+// draft with no place in a trace is refused as the write's own draft is,
+// and one with a parent only when the parent is a record of the
+// organization's chain in its trace.
+func runLead(ctx context.Context, lead Lead, tx *sql.Tx, organizationID, chainID string, d record.Draft) (*record.Draft, Reason, error) {
+	probe := &Probe{q: tx, chainID: chainID, open: true}
+	got, err := lead(ctx, probe)
+	probe.open = false
+	switch {
+	case probe.err != nil:
+		return nil, ReasonChainGuardProbe, probe.err
+	case err != nil:
+		return nil, ReasonGuard, err
+	case got == nil:
+		return nil, "", nil
+	case got.EventID == d.EventID:
+		return nil, ReasonGuard, errors.New("store: the lead record has the event id of the record it leads")
+	}
+	ld := cloneDraft(*got)
+	if ld.Timestamp.IsZero() {
+		ld.Timestamp = d.Timestamp
+	}
+	ld.Timestamp = ld.Timestamp.UTC().Truncate(time.Microsecond)
+	link, err := trace.Check(ld)
+	if err != nil {
+		return nil, ReasonTrace, err
+	}
+	if link.ParentID != "" {
+		if reason, err := checkParent(ctx, tx, organizationID, link); reason != "" {
+			return nil, reason, err
+		}
+	}
+	if err := addSalts(&ld); err != nil {
+		return nil, ReasonOther, err
+	}
+	dropUnusedSalts(&ld)
+	return &ld, "", nil
 }
 
 // checkParent refuses a record whose parent is not a record of the

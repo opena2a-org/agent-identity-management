@@ -91,7 +91,8 @@ type Change struct {
 	ParentID string
 	// EventID, when set, is the record's event_id; otherwise the recorder
 	// mints a random one. A pending capability request's record takes
-	// RequestEventID of the request.
+	// RequestEventID of the request. A registration takes none: its record
+	// takes OpeningEventID of the agent.
 	EventID string
 	// Apply makes the change in tx, after the agent's row is locked and its
 	// previous state read. It runs statements only.
@@ -105,11 +106,16 @@ type Result struct {
 	Previous, New State
 	// Recorded is false for a reduction that committed without its record.
 	Recorded bool
-	// Appended is the record, when Recorded.
+	// Appended is the record, when Recorded. Its LeadEventID is set when the
+	// agent had no record before the change, and the change's record follows
+	// the agent's opening_state.
 	Appended store.Appended
 }
 
-// Record makes the change and appends its record in one transaction.
+// Record makes the change and appends its record in one transaction. When no
+// record opens the agent's history, as for an agent stored before records
+// were written, the agent's opening_state is appended first, in the same
+// transaction: the state read under the agent's row lock before the change.
 //
 // When the record cannot be written, an expansion or a destruction is
 // refused with an error that wraps ErrRecordUnavailable and the record
@@ -140,12 +146,35 @@ func (r *Recorder) Record(ctx context.Context, c Change) (Result, error) {
 		}
 		return nil, nil
 	}
+	// The opening state, when the agent has none, takes the change's class:
+	// it commits or fails with the change. It joins the change's trace when
+	// the server minted that trace, and has one of its own when the change
+	// joined a parent's.
+	var lead store.Lead
+	if !c.Trigger.opens() {
+		lead = func(ctx context.Context, probe *store.Probe) (*record.Draft, error) {
+			existing, err := opened(ctx, probe, c.AgentID)
+			if err != nil || existing != nil {
+				return nil, err
+			}
+			traceID := c.TraceID
+			if c.ParentID != "" {
+				if traceID, err = NewTraceID(); err != nil {
+					return nil, err
+				}
+			}
+			d := r.openingDraft(c.OrganizationID, c.AgentID, traceID)
+			withState(&d, prev)
+			return &d, nil
+		}
+	}
 	out, err := r.w.Write(ctx, store.Write{
 		Class:          class,
 		OrganizationID: c.OrganizationID.String(),
 		Draft:          r.draft(c),
 		Apply:          apply,
 		Guard:          guard,
+		Lead:           lead,
 		// A reduction whose record cannot be written commits below, with
 		// its SECURITY line, not with a debt row.
 		NoDebt: true,
@@ -182,6 +211,8 @@ func (r *Recorder) check(c Change) (store.Class, error) {
 		return "", fmt.Errorf("%w: %s needs the class its lists give, an expansion or a reduction", ErrInvalidChange, c.Trigger)
 	case !c.Trigger.ClassedByComparison() && c.Class != "":
 		return "", fmt.Errorf("%w: %s takes the class of its trigger, not one given", ErrInvalidChange, c.Trigger)
+	case c.Trigger == TriggerOpeningState:
+		return "", fmt.Errorf("%w: %s is written by the recorder, before an agent's first change or by the sweep", ErrInvalidChange, c.Trigger)
 	case !ok:
 		return "", fmt.Errorf("%w: %q is not an agent-space trigger", ErrInvalidChange, c.Trigger)
 	case c.OrganizationID == uuid.Nil || c.AgentID == uuid.Nil:
@@ -194,6 +225,8 @@ func (r *Recorder) check(c Change) (store.Class, error) {
 		return "", fmt.Errorf("%w: parent_id is not a lowercase hyphenated UUID", ErrInvalidChange)
 	case c.EventID != "" && !isCanonicalUUID(c.EventID):
 		return "", fmt.Errorf("%w: event_id is not a lowercase hyphenated UUID", ErrInvalidChange)
+	case c.EventID != "" && c.Trigger.opens():
+		return "", fmt.Errorf("%w: %s takes the agent's opening event id, not one given", ErrInvalidChange, c.Trigger)
 	case c.Apply == nil:
 		return "", fmt.Errorf("%w: the change has no statement", ErrInvalidChange)
 	}
@@ -208,7 +241,10 @@ func (r *Recorder) draft(c Change) record.Draft {
 		origin, parent = "parent", c.ParentID
 	}
 	eventID := c.EventID
-	if eventID == "" {
+	switch {
+	case c.Trigger.opens():
+		eventID = OpeningEventID(c.AgentID)
+	case eventID == "":
 		eventID = uuid.NewString()
 	}
 	retained := map[string]any{

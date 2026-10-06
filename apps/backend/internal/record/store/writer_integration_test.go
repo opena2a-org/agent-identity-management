@@ -249,7 +249,7 @@ func TestRecordChainStateCell(t *testing.T) {
 			require.Equal(t, record.ChainNotExtendable, status.State)
 			require.Equal(t, NotExtendableRecordModified, status.Reason)
 			d := testDraft()
-			_, reason, err := h.w.appendLocked(ctx, tx, org, &d, nil, time.Now(), time.Now().Add(time.Second), false)
+			_, reason, err := h.w.appendLocked(ctx, tx, org, &d, nil, nil, time.Now(), time.Now().Add(time.Second), false)
 			require.Error(t, err)
 			require.Equal(t, ReasonChainHead, reason)
 		})

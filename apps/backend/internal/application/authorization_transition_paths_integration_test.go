@@ -170,7 +170,9 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 	}
 	for i, w := range want {
 		r := got[i]
-		assert.Equal(t, int64(i+1), r.Seq)
+		// The agent's opening state, written with its first change, is at
+		// seq 1.
+		assert.Equal(t, int64(i+2), r.Seq)
 		assert.Equal(t, f.agentID.String(), r.Agent, "seq %d", r.Seq)
 		assert.Equal(t, w.trigger, r.Trigger, "seq %d", r.Seq)
 		assert.Equal(t, w.actor, r.Actor, "seq %d", r.Seq)
@@ -236,8 +238,9 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 
 	replayed, err := transition.CheckReplay(ctx, f.db, f.orgID, f.keys.publicKey())
 	require.NoError(t, err)
-	assert.Len(t, replayed.Seqs[f.agentID], 12)
-	assert.Len(t, replayed.Seqs[other], 1)
+	// Each agent's history starts with its opening state.
+	assert.Len(t, replayed.Seqs[f.agentID], 13)
+	assert.Len(t, replayed.Seqs[other], 2)
 	for _, id := range []uuid.UUID{f.agentID, other} {
 		tables, err := transition.CurrentState(ctx, f.db, f.orgID, id)
 		require.NoError(t, err)

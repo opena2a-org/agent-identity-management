@@ -31,6 +31,17 @@
 // agent has no state after it, so its record's new_state is null, and replay
 // accepts no record of the agent after it.
 //
+// An agent that has a row and no record, such as one stored before records
+// were written, has its history opened by an opening_state record: its
+// state read under its row lock, as both previous_state and new_state, with
+// the system as the actor. The recorder writes it before the agent's first
+// change, in that change's transaction and class, and the sweep
+// (OpenStates) writes it for every agent of an organization that has none.
+// It claims nothing about the agent's history before it. The record that
+// opens an agent's history, its registration or its opening state, takes
+// the event id OpeningEventID derives from the agent's id, so a chain holds
+// at most one, and replay refuses an agent whose first record is neither.
+//
 // A pending capability request and a rejected one are null transitions: the
 // recorder refuses either when its previous and new states differ. A
 // rejection's record carries opena2a.outcome "rejected" in the retained part.
@@ -53,8 +64,7 @@
 // nothing else.
 //
 // Not built here: the debt row that lets such a record be written late and
-// its settlement, the opening_state record and its sweep, and the record of
-// a hybrid mode change.
+// its settlement, and the record of a hybrid mode change.
 package transition
 
 import (
@@ -107,6 +117,11 @@ const (
 	TriggerTalksToAdded               Trigger = "talks_to_added"
 	TriggerTalksToRemoved             Trigger = "talks_to_removed"
 	TriggerDetectionReported          Trigger = "detection_reported"
+	// TriggerOpeningState opens the history of an agent that has a row and
+	// no record. Only the recorder writes it: before the agent's first
+	// change, in that change's transaction and class, or in the sweep
+	// (OpenStates), as an observation.
+	TriggerOpeningState Trigger = "opening_state"
 )
 
 // classes is the class of each agent-space trigger. An expansion widens what
@@ -194,6 +209,13 @@ func subset(a, b map[string]bool) bool {
 // no row before the change, and the record's previous_state is null.
 func (t Trigger) opens() bool {
 	return t == TriggerRegistrationBaseline
+}
+
+// first reports whether a trigger's record is the one an agent's history
+// starts with: its registration, or the opening state of an agent stored
+// without one.
+func (t Trigger) first() bool {
+	return t.opens() || t == TriggerOpeningState
 }
 
 // closes reports whether a trigger closes the agent's history: the agent has
