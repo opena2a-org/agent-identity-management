@@ -19,6 +19,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed — an agent that took part in A2A tasks, messages or consent records can be deleted
+
+- `DELETE /api/v1/agents/:id` (Delete agent in the dashboard) failed with a 500 for any agent
+  named in an A2A task, an A2A message or an A2A consent record: those five references to the
+  agent had no delete rule, so the database refused the delete. Migration 120 makes them cascade,
+  as the other per-agent A2A tables already do. Deleting an agent now also deletes the A2A tasks
+  it was the client or remote agent of (with their messages), the A2A messages it sent, and the
+  A2A consent records that name it as grantor or recipient. An A2A attestation between two other
+  agents that cited one of those tasks is kept, with its task link cleared.
+
 ### Fixed — the SDK authentication guide no longer says quantum attacks cannot break Ed25519
 
 - `docs/sdk/authentication.md` listed "No Known Vulnerabilities" among Ed25519's strengths and
