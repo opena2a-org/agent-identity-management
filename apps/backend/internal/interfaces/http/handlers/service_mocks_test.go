@@ -599,12 +599,12 @@ func (m *MockAlertServiceImpl) CountBySeverity(ctx context.Context, orgID uuid.U
 
 // MockVerificationEventServiceImpl implements VerificationEventServicer interface
 type MockVerificationEventServiceImpl struct {
-	LogVerificationEventFunc func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	LogVerificationEventFunc func(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
 }
 
-func (m *MockVerificationEventServiceImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
+func (m *MockVerificationEventServiceImpl) LogVerificationEvent(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
 	if m.LogVerificationEventFunc != nil {
-		return m.LogVerificationEventFunc(ctx, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
+		return m.LogVerificationEventFunc(ctx, source, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
 	}
 	return &domain.VerificationEvent{ID: uuid.New()}, nil
 }
@@ -1320,13 +1320,13 @@ func (m *MockComplianceServiceExtendedImpl) GetEvidenceForCheck(ctx context.Cont
 
 // MockVerificationEventServiceExtendedImpl implements VerificationEventServicerExtended interface
 type MockVerificationEventServiceExtendedImpl struct {
-	LogVerificationEventFunc     func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	LogVerificationEventFunc     func(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
 	GetLast24HoursStatisticsFunc func(ctx context.Context, orgID uuid.UUID) (*domain.VerificationStatistics, error)
 }
 
-func (m *MockVerificationEventServiceExtendedImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
+func (m *MockVerificationEventServiceExtendedImpl) LogVerificationEvent(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
 	if m.LogVerificationEventFunc != nil {
-		return m.LogVerificationEventFunc(ctx, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
+		return m.LogVerificationEventFunc(ctx, source, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
 	}
 	return &domain.VerificationEvent{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentID}, nil
 }
@@ -1483,24 +1483,24 @@ func (m *MockAlertServiceForVerificationImpl) DetectUnusualAccessPatterns(ctx co
 
 // MockVerificationEventServiceForVerificationImpl implements VerificationEventServicerForVerification interface
 type MockVerificationEventServiceForVerificationImpl struct {
-	LogVerificationEventFunc     func(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
-	CreateVerificationEventFunc  func(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
+	LogVerificationEventFunc     func(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	CreateVerificationEventFunc  func(ctx context.Context, source domain.VerificationEventSource, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
 	GetVerificationEventFunc     func(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error)
 	UpdateVerificationResultFunc func(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error
 	SearchVerificationsFunc      func(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error)
 	UpdateExecutionStatusFunc    func(ctx context.Context, id uuid.UUID, executed bool, strictMode bool, executedAt time.Time, executionError *string) error
 }
 
-func (m *MockVerificationEventServiceForVerificationImpl) LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
+func (m *MockVerificationEventServiceForVerificationImpl) LogVerificationEvent(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error) {
 	if m.LogVerificationEventFunc != nil {
-		return m.LogVerificationEventFunc(ctx, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
+		return m.LogVerificationEventFunc(ctx, source, orgID, agentID, protocol, verificationType, status, durationMs, initiatorType, initiatorID, metadata)
 	}
 	return &domain.VerificationEvent{ID: uuid.New(), OrganizationID: orgID, AgentID: &agentID}, nil
 }
 
-func (m *MockVerificationEventServiceForVerificationImpl) CreateVerificationEvent(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error) {
+func (m *MockVerificationEventServiceForVerificationImpl) CreateVerificationEvent(ctx context.Context, source domain.VerificationEventSource, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error) {
 	if m.CreateVerificationEventFunc != nil {
-		return m.CreateVerificationEventFunc(ctx, req)
+		return m.CreateVerificationEventFunc(ctx, source, req)
 	}
 	return &domain.VerificationEvent{ID: uuid.New(), OrganizationID: req.OrganizationID, AgentID: &req.AgentID}, nil
 }

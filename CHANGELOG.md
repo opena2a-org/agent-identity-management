@@ -872,6 +872,22 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — trust scoring counts only verification outcomes the server observed
+
+- Every verification event now records who stands behind its outcome, in a new `source` column (migration 124):
+  `service` (the server ran the check), `system` (a server-internal process recorded it), `caller_reported` or
+  `agent_reported`. The server sets it from the code path that writes the event; no request field sets it, and an
+  event without a known source is not written.
+- The verification statistics behind trust factors 1 to 3 (verification status, uptime, action success rate) and the
+  score's confidence count only `service` and `system` events. The outcome an agent reports through
+  `POST /api/v1/agents/:id/log-capability/:audit_id` is recorded as `agent_reported` and is absent from the total, the
+  success and failure counts, the averages and the last verification time. A source value not on that list counts
+  nothing.
+- Events written before the column existed carry no source and keep counting as they did.
+- **Upgrading:** for an agent whose only events in the last 30 days are action-result reports recorded after the
+  upgrade, factors 1 to 3 use the agent-status baseline they use when no events are recorded. No client change is
+  needed.
+
 ### Fixed — a revoked agent can no longer be reactivated, verified or suspended
 
 - `POST /api/v1/agents/:id/reactivate` set any agent to `verified`, a revoked one included, and the agent's keys were

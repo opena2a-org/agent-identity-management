@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -21,8 +22,37 @@ func NewVerificationEventRepository(db *sql.DB) *VerificationEventRepositorySimp
 	return &VerificationEventRepositorySimple{db: db}
 }
 
-// Create inserts a new verification event
+// observedVerificationEventSources is the allowlist of sources whose events
+// count toward trust scoring: outcomes the server observed itself. A source
+// not on this list counts as zero observations, including any value added
+// later, so the list only grows by a deliberate change here. Never express
+// this filter as an exclusion of asserted sources.
+var observedVerificationEventSources = []string{
+	string(domain.VerificationEventSourceService),
+	string(domain.VerificationEventSourceSystem),
+}
+
+// observedVerificationEventPredicate returns the WHERE term that keeps the
+// events trust scoring may count; sourcesParam is the placeholder number bound
+// to pq.Array(observedVerificationEventSources). A NULL source counts only on a
+// row created before the source column existed (the instant migration 124
+// recorded); a NULL row created after it is a write defect and counts nothing.
+// If the cutover row is missing the comparison is NULL and the row is excluded.
+// Every verification_events reader that feeds trust scoring applies it.
+func observedVerificationEventPredicate(sourcesParam int) string {
+	return fmt.Sprintf(`(
+			source = ANY($%d::text[])
+			OR (source IS NULL AND created_at < (SELECT source_added_at FROM verification_event_source_cutover))
+		)`, sourcesParam)
+}
+
+// Create inserts a new verification event. The event must carry a known
+// source; created_at is always the database clock.
 func (r *VerificationEventRepositorySimple) Create(event *domain.VerificationEvent) error {
+	if !event.Source.IsKnown() {
+		return fmt.Errorf("%w: got %q", domain.ErrVerificationEventSourceRequired, event.Source)
+	}
+
 	query := `
 		INSERT INTO verification_events (
 			organization_id, agent_id, agent_name, protocol, verification_type,
@@ -30,10 +60,10 @@ func (r *VerificationEventRepositorySimple) Create(event *domain.VerificationEve
 			confidence, trust_score, duration_ms, error_code, error_reason,
 			initiator_type, initiator_id, initiator_name, initiator_ip,
 			action, resource_type, resource_id, location,
-			started_at, completed_at, details, metadata
+			started_at, completed_at, details, metadata, source
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-			$17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+			$17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 		) RETURNING id, created_at`
 
 	metadataJSON, err := json.Marshal(event.Metadata)
@@ -48,7 +78,7 @@ func (r *VerificationEventRepositorySimple) Create(event *domain.VerificationEve
 		event.Confidence, event.TrustScore, event.DurationMs, event.ErrorCode, event.ErrorReason,
 		event.InitiatorType, event.InitiatorID, event.InitiatorName, event.InitiatorIP,
 		event.Action, event.ResourceType, event.ResourceID, event.Location,
-		event.StartedAt, event.CompletedAt, event.Details, metadataJSON,
+		event.StartedAt, event.CompletedAt, event.Details, metadataJSON, string(event.Source),
 	).Scan(&event.ID, &event.CreatedAt)
 }
 
@@ -1214,7 +1244,9 @@ func (r *VerificationEventRepositorySimple) SearchAdminVerifications(
 	return events, total, statusCounts, rows.Err()
 }
 
-// GetAgentStatistics calculates per-agent verification statistics for trust scoring
+// GetAgentStatistics calculates per-agent verification statistics for trust
+// scoring. It counts only events whose outcome the server observed; an event a
+// caller or the agent reported is absent from every figure it returns.
 func (r *VerificationEventRepositorySimple) GetAgentStatistics(agentID uuid.UUID, startTime, endTime time.Time) (*domain.AgentVerificationStatistics, error) {
 	query := `
 		SELECT
@@ -1226,13 +1258,14 @@ func (r *VerificationEventRepositorySimple) GetAgentStatistics(agentID uuid.UUID
 			COALESCE(MAX(created_at), NOW()) as last_verification
 		FROM verification_events
 		WHERE agent_id = $1
-		AND created_at BETWEEN $2 AND $3`
+		AND created_at BETWEEN $2 AND $3
+		AND ` + observedVerificationEventPredicate(4)
 
 	var total, successCount, failedCount int
 	var avgDuration, avgConfidence sql.NullFloat64
 	var lastVerification time.Time
 
-	err := r.db.QueryRow(query, agentID, startTime, endTime).Scan(
+	err := r.db.QueryRow(query, agentID, startTime, endTime, pq.Array(observedVerificationEventSources)).Scan(
 		&total, &successCount, &failedCount,
 		&avgDuration, &avgConfidence, &lastVerification,
 	)

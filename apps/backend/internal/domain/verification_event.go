@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,6 +58,37 @@ const (
 	InitiatorTypeScheduler InitiatorType = "scheduler"
 )
 
+// VerificationEventSource records who stands behind an event's outcome. The
+// server sets it from the code path that writes the event; no request body
+// can set it.
+type VerificationEventSource string
+
+const (
+	// VerificationEventSourceService: the server ran the check and set the outcome.
+	VerificationEventSourceService VerificationEventSource = "service"
+	// VerificationEventSourceSystem: a server-internal process recorded the event.
+	VerificationEventSourceSystem VerificationEventSource = "system"
+	// VerificationEventSourceCallerReported: an API caller's claim about the agent.
+	VerificationEventSourceCallerReported VerificationEventSource = "caller_reported"
+	// VerificationEventSourceAgentReported: the agent's own report about itself.
+	VerificationEventSourceAgentReported VerificationEventSource = "agent_reported"
+)
+
+// ErrVerificationEventSourceRequired is returned for an event whose source is
+// empty or not one the server records. No verification event is written
+// without a known source.
+var ErrVerificationEventSourceRequired = errors.New("verification event source is required")
+
+// IsKnown reports whether s is one of the sources a writer may record.
+func (s VerificationEventSource) IsKnown() bool {
+	switch s {
+	case VerificationEventSourceService, VerificationEventSourceSystem,
+		VerificationEventSourceCallerReported, VerificationEventSourceAgentReported:
+		return true
+	}
+	return false
+}
+
 // VerificationEvent represents a real-time verification event for monitoring
 type VerificationEvent struct {
 	ID             uuid.UUID `json:"id"`
@@ -94,6 +126,10 @@ type VerificationEvent struct {
 	InitiatorID   *uuid.UUID    `json:"initiatorId,omitempty"`
 	InitiatorName *string       `json:"initiatorName,omitempty"`
 	InitiatorIP   *string       `json:"initiatorIp,omitempty"`
+
+	// Who stands behind the outcome. Written on create; not yet read back by
+	// the list and detail queries, so it is not serialized.
+	Source VerificationEventSource `json:"-"`
 
 	// Context
 	Action       *string `json:"action,omitempty"`

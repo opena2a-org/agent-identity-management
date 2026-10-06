@@ -549,7 +549,8 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 
 	// Save verification event using service
 	// SECURITY: No error logging to prevent information leakage
-	event, err := h.getVerificationEventService().CreateVerificationEvent(c.Context(), verificationEventReq)
+	// The server decided this outcome itself, so the event is an observation.
+	event, err := h.getVerificationEventService().CreateVerificationEvent(c.Context(), domain.VerificationEventSourceService, verificationEventReq)
 	if err == nil {
 		// Use the actual database ID from the created event
 		verificationID = event.ID

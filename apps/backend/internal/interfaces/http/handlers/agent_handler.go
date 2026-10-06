@@ -746,8 +746,10 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		}
 	}
 
+	// decision is the server's capability check, so the event is an observation.
 	h.verificationEventService.LogVerificationEvent(
 		c.Context(),
+		domain.VerificationEventSourceService,
 		orgID,
 		agentID,
 		protocol, // SDK auto-detects protocol or user explicitly declares in secure()

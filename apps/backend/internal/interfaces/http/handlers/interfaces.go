@@ -113,7 +113,7 @@ type AlertServicer interface {
 
 // VerificationEventServicer defines the methods from VerificationEventService that handlers use
 type VerificationEventServicer interface {
-	LogVerificationEvent(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
+	LogVerificationEvent(ctx context.Context, source domain.VerificationEventSource, orgID uuid.UUID, agentID uuid.UUID, protocol domain.VerificationProtocol, verificationType domain.VerificationType, status domain.VerificationEventStatus, durationMs int, initiatorType domain.InitiatorType, initiatorID *uuid.UUID, metadata map[string]interface{}) (*domain.VerificationEvent, error)
 }
 
 // MCPAttestationServicer defines the methods from MCPAttestationService that handlers use
@@ -291,7 +291,7 @@ type AlertServicerForVerification interface {
 // VerificationEventServicerForVerification extends VerificationEventServicer with full verification methods
 type VerificationEventServicerForVerification interface {
 	VerificationEventServicer
-	CreateVerificationEvent(ctx context.Context, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
+	CreateVerificationEvent(ctx context.Context, source domain.VerificationEventSource, req *application.CreateVerificationEventRequest) (*domain.VerificationEvent, error)
 	GetVerificationEvent(ctx context.Context, id uuid.UUID) (*domain.VerificationEvent, error)
 	UpdateVerificationResult(ctx context.Context, id uuid.UUID, result domain.VerificationResult, reason *string, metadata map[string]interface{}) error
 	SearchVerifications(ctx context.Context, orgID uuid.UUID, params domain.VerificationQueryParams) ([]*domain.VerificationEvent, int, *domain.VerificationStatusCounts, error)

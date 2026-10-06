@@ -184,7 +184,7 @@ func TestVerificationEventWithDriftDetection(t *testing.T) {
 		}
 
 		// Execute
-		event, err := verificationService.CreateVerificationEvent(context.Background(), req)
+		event, err := verificationService.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, req)
 
 		// Assert
 		assert.NoError(t, err)
@@ -237,7 +237,7 @@ func TestVerificationEventWithDriftDetection(t *testing.T) {
 		}
 
 		// Execute
-		event, err := verificationService.CreateVerificationEvent(context.Background(), req)
+		event, err := verificationService.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, req)
 
 		// Assert
 		assert.NoError(t, err)
