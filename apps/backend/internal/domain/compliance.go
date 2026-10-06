@@ -229,24 +229,29 @@ type AuditActivityReport struct {
 	RecentActions       []AuditLogEntry        `json:"recentActions"`     // Last 50 actions
 }
 
-// UserActivitySummary summarizes a user's audit activity
+// UserActivitySummary summarizes one actor's audit activity. UserID is the id
+// of the party ActorType names, a user's or an agent's.
 type UserActivitySummary struct {
 	UserID          string `json:"userId"`
 	UserEmail       string `json:"userEmail"`
+	ActorType       string `json:"actorType"`
 	ActionCount     int    `json:"actionCount"`
 	LastAction      string `json:"lastAction"`
 	LastActionTime  string `json:"lastActionTime"`
 }
 
-// AuditLogEntry represents a single audit log entry for export
+// AuditLogEntry represents a single audit log entry for export. UserID is the
+// id of the party ActorType names, a user's or an agent's, and is absent for
+// the system's acts. IPAddress is absent when the row recorded none.
 type AuditLogEntry struct {
 	ID           string `json:"id"`
 	Action       string `json:"action"`
 	ResourceType string `json:"resourceType"`
 	ResourceID   string `json:"resourceId"`
-	UserID       string `json:"userId"`
+	UserID       string `json:"userId,omitempty"`
 	UserEmail    string `json:"userEmail,omitempty"`
-	IPAddress    string `json:"ipAddress"`
+	ActorType    string `json:"actorType"`
+	IPAddress    string `json:"ipAddress,omitempty"`
 	Timestamp    string `json:"timestamp"`
 }
 

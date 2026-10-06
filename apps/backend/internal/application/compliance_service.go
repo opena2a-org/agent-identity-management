@@ -261,15 +261,21 @@ func (s *ComplianceService) ExportAuditLog(
 			orgID.String(), len(filteredLogs), startDate.Format(time.RFC3339), endDate.Format(time.RFC3339)), nil
 	case "csv":
 		// Simple CSV export
-		csv := "timestamp,user_id,action,resource_type,resource_id,ip_address\n"
+		csv := "timestamp,user_id,action,resource_type,resource_id,ip_address,actor_type\n"
 		for _, log := range filteredLogs {
-			csv += fmt.Sprintf("%s,%s,%s,%s,%s,%s\n",
+			// An agent's or the system's act has no user id: its cell is empty.
+			userID := ""
+			if log.UserID != nil {
+				userID = log.UserID.String()
+			}
+			csv += fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s\n",
 				log.Timestamp.Format(time.RFC3339),
-				log.UserID.String(),
+				userID,
 				log.Action,
 				log.ResourceType,
 				log.ResourceID.String(),
 				log.IPAddress,
+				log.ActorType(),
 			)
 		}
 		return csv, nil
@@ -1929,13 +1935,18 @@ func (s *ComplianceService) CollectEvidence(
 			phiLogs := []map[string]interface{}{}
 			for _, log := range logs {
 				if log.Action == domain.AuditActionView || log.Action == domain.AuditActionExport {
-					phiLogs = append(phiLogs, map[string]interface{}{
+					entry := map[string]interface{}{
 						"id":        log.ID.String(),
 						"action":    string(log.Action),
 						"resource":  log.ResourceType,
 						"timestamp": log.Timestamp.Format(time.RFC3339),
-						"userId":    log.UserID.String(),
-					})
+						"actorType": string(log.ActorType()),
+					}
+					// userId names the actor; the system's act has none.
+					if actorID := log.ActorID(); actorID != nil {
+						entry["userId"] = actorID.String()
+					}
+					phiLogs = append(phiLogs, entry)
 				}
 			}
 			evidence.Title = "PHI Access Log Report"
@@ -2545,15 +2556,12 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 	userActivity := make(map[uuid.UUID]*domain.UserActivitySummary)
 
 	for _, log := range logs {
-		// Get actor ID (user or agent)
-		var actorID uuid.UUID
-		if log.UserID != nil {
-			actorID = *log.UserID
-		} else if log.AgentID != nil {
-			actorID = *log.AgentID
-		} else {
-			continue // Skip logs without an actor
+		// The actor is the party the row's actorType names
+		id := log.ActorID()
+		if id == nil {
+			continue // Skip the system's acts: they name no actor
 		}
+		actorID := *id
 		uniqueActors[actorID] = true
 
 		// Count by time period
@@ -2575,13 +2583,10 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 
 		// Track actor activity
 		if _, exists := userActivity[actorID]; !exists {
-			actorEmail := userEmails[actorID]
-			if actorEmail == "" && log.AgentID != nil {
-				actorEmail = "agent:" + actorID.String()[:8]
-			}
 			userActivity[actorID] = &domain.UserActivitySummary{
 				UserID:    actorID.String(),
-				UserEmail: actorEmail,
+				UserEmail: auditActorLabel(log, userEmails),
+				ActorType: string(log.ActorType()),
 			}
 		}
 		ua := userActivity[actorID]
@@ -2616,30 +2621,36 @@ func (s *ComplianceService) buildAuditActivityReport(logs []*domain.AuditLog, us
 	// Get last 50 actions
 	for i := 0; i < len(logs) && i < 50; i++ {
 		log := logs[i]
-		// Get actor ID (user or agent)
-		var actorID uuid.UUID
-		var actorEmail string
-		if log.UserID != nil {
-			actorID = *log.UserID
-			actorEmail = userEmails[actorID]
-		} else if log.AgentID != nil {
-			actorID = *log.AgentID
-			actorEmail = "agent:" + actorID.String()[:8]
-		}
 		entry := domain.AuditLogEntry{
 			ID:           log.ID.String(),
 			Action:       string(log.Action),
 			ResourceType: log.ResourceType,
 			ResourceID:   log.ResourceID.String(),
-			UserID:       actorID.String(),
-			UserEmail:    actorEmail,
+			UserEmail:    auditActorLabel(log, userEmails),
+			ActorType:    string(log.ActorType()),
 			IPAddress:    log.IPAddress,
 			Timestamp:    log.Timestamp.Format(time.RFC3339),
+		}
+		if actorID := log.ActorID(); actorID != nil {
+			entry.UserID = actorID.String()
 		}
 		report.RecentActions = append(report.RecentActions, entry)
 	}
 
 	return report
+}
+
+// auditActorLabel names a row's actor in the report's email column: a user's
+// email, an agent's short id, and nothing for the system's acts.
+func auditActorLabel(log *domain.AuditLog, userEmails map[uuid.UUID]string) string {
+	switch log.ActorType() {
+	case domain.AuditActorUser:
+		return userEmails[*log.UserID]
+	case domain.AuditActorAgent:
+		return "agent:" + log.AgentID.String()[:8]
+	default:
+		return ""
+	}
 }
 
 // buildSecurityAlertsReport creates the security alerts section
@@ -3222,22 +3233,23 @@ func (s *ComplianceService) ExportToCSV(
 	csv.WriteString("\n")
 
 	csv.WriteString("Top Users by Activity\n")
-	csv.WriteString("User ID,User Email,Action Count,Last Action,Last Action Time\n")
+	csv.WriteString("User ID,User Email,Action Count,Last Action,Last Action Time,Actor Type\n")
 	for _, user := range auditActivity.TopUsers {
-		csv.WriteString(fmt.Sprintf("%s,%s,%d,%s,%s\n",
+		csv.WriteString(fmt.Sprintf("%s,%s,%d,%s,%s,%s\n",
 			user.UserID,
 			user.UserEmail,
 			user.ActionCount,
 			user.LastAction,
 			user.LastActionTime,
+			user.ActorType,
 		))
 	}
 	csv.WriteString("\n")
 
 	csv.WriteString("Recent Actions (Last 50)\n")
-	csv.WriteString("ID,Action,Resource Type,Resource ID,User ID,User Email,IP Address,Timestamp\n")
+	csv.WriteString("ID,Action,Resource Type,Resource ID,User ID,User Email,IP Address,Timestamp,Actor Type\n")
 	for _, entry := range auditActivity.RecentActions {
-		csv.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s\n",
+		csv.WriteString(fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
 			entry.ID,
 			entry.Action,
 			entry.ResourceType,
@@ -3246,6 +3258,7 @@ func (s *ComplianceService) ExportToCSV(
 			entry.UserEmail,
 			entry.IPAddress,
 			entry.Timestamp,
+			entry.ActorType,
 		))
 	}
 	csv.WriteString("\n")

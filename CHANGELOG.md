@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: the compliance report and an MCP server's audit timeline name who acted by the audit record's own rule
+
+- The audit section of `GET /api/v1/compliance/export` names each record's actor the way the audit
+  record's `actorType` does. Each of `recentActions` and `topUsers` carries `actorType`, and its
+  `userId` is the id of the party that type names, a user's or an agent's. The verification of an
+  agent's action, which also stores the agent's owner, is counted for the agent, not the owner. A
+  system act has no `userId`, rather than the all-zero id, and is not listed among the top actors.
+  A recent action's `ipAddress` is absent when the record holds none.
+- The CSV form of that export gains an `Actor Type` column at the end of its Recent Actions and Top
+  Users tables. A system act's `User ID` cell is empty.
+- PHI access evidence collected by `POST /api/v1/compliance/evidence/collect` carries `actorType`
+  and the actor's `userId` for each access. It no longer fails with 500 for an organization holding
+  a view or export record with no user id; such an access has no `userId`.
+- An audit event on `GET /api/v1/mcp-servers/{id}/audit-logs` takes `actorType`, `actorId` and
+  `actorName` from the same rule, so an agent's verified action reads as the agent's, not its
+  owner's.
+
 ### Changed: audit records say who acted, and leave out an address or user agent that was never recorded
 
 - Every audit record returned by `GET /api/v1/admin/audit-logs`, `GET /api/v1/admin/audit-logs/{id}`,

@@ -123,6 +123,19 @@ func (a AuditLog) ActorType() AuditActorType {
 	}
 }
 
+// ActorID returns the id of the party ActorType names: the agent's id for an
+// agent's act, the user's id for a user's act, and nil for the system's.
+func (a AuditLog) ActorID() *uuid.UUID {
+	switch a.ActorType() {
+	case AuditActorAgent:
+		return a.AgentID
+	case AuditActorUser:
+		return a.UserID
+	default:
+		return nil
+	}
+}
+
 // MarshalJSON writes the row's members and its actorType, so that every
 // route returning an AuditLog carries the actor type the same way.
 func (a AuditLog) MarshalJSON() ([]byte, error) {

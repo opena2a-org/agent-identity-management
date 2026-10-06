@@ -1227,29 +1227,7 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		// callerSeesAuditRequestDetail.
 		seesRequestDetail := callerSeesAuditRequestDetail(c)
 		for _, log := range logs {
-			actorType := "system"
-			var actorID *string
-			actorName := "System"
-
-			if log.UserID != nil && *log.UserID != uuid.Nil {
-				actorType = "user"
-				idStr := log.UserID.String()
-				actorID = &idStr
-				if log.UserName != "" {
-					actorName = log.UserName
-				} else {
-					actorName = "User"
-				}
-			} else if log.AgentID != nil && *log.AgentID != uuid.Nil {
-				actorType = "agent"
-				idStr := log.AgentID.String()
-				actorID = &idStr
-				if log.AgentName != "" {
-					actorName = log.AgentName
-				} else {
-					actorName = "Agent"
-				}
-			}
+			actorType, actorID, actorName := auditTimelineActor(log)
 
 			// Build description based on action
 			description := h.buildAuditDescription(string(log.Action), mcpServer.Name, log.Metadata)
@@ -1376,6 +1354,32 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// auditTimelineActor names the party an audit row's act belongs to on an MCP
+// server's timeline: the row's own actorType, the id that type names, and a
+// display name.
+func auditTimelineActor(log *domain.AuditLog) (actorType string, actorID *string, actorName string) {
+	kind := log.ActorType()
+	if id := log.ActorID(); id != nil {
+		idStr := id.String()
+		actorID = &idStr
+	}
+	switch kind {
+	case domain.AuditActorAgent:
+		actorName = log.AgentName
+		if actorName == "" {
+			actorName = "Agent"
+		}
+	case domain.AuditActorUser:
+		actorName = log.UserName
+		if actorName == "" {
+			actorName = "User"
+		}
+	default:
+		actorName = "System"
+	}
+	return string(kind), actorID, actorName
 }
 
 // buildAuditDescription creates a human-readable description for audit events
