@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -705,13 +706,17 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 
 		// Capability removal is always allowed (safe direction - reducing privileges)
 		revokedCaps := make([]string, 0)
-		for capType, cap := range currentCapTypes {
-			if !requestedCapTypes[capType] {
-				now := time.Now()
-				if err := s.capabilityRepo.RevokeCapability(cap.ID, now); err != nil {
-					fmt.Printf("Warning: failed to revoke capability '%s': %v\n", capType, err)
-				} else {
-					revokedCaps = append(revokedCaps, capType)
+		if s.transitions != nil {
+			revokedCaps = s.revokeOnReregistration(ctx, agent, currentCapTypes, requestedCapTypes, requestedBy)
+		} else {
+			for capType, cap := range currentCapTypes {
+				if !requestedCapTypes[capType] {
+					now := time.Now()
+					if err := s.capabilityRepo.RevokeCapability(cap.ID, now); err != nil {
+						fmt.Printf("Warning: failed to revoke capability '%s': %v\n", capType, err)
+					} else {
+						revokedCaps = append(revokedCaps, capType)
+					}
 				}
 			}
 		}
@@ -737,6 +742,45 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	return agent, nil
 }
 
+// revokeOnReregistration revokes every capability in current that a
+// re-registration no longer declares, in one transaction with one
+// revocation_on_reregistration record. The actor is the one the context names,
+// else the user who re-registered. It returns the capability types revoked.
+func (s *AgentService) revokeOnReregistration(
+	ctx context.Context,
+	agent *domain.Agent,
+	current map[string]*domain.AgentCapability,
+	declared map[string]bool,
+	requestedBy uuid.UUID,
+) []string {
+	var dropped []string
+	for capType := range current {
+		if !declared[capType] {
+			dropped = append(dropped, capType)
+		}
+	}
+	if len(dropped) == 0 {
+		return []string{}
+	}
+	sort.Strings(dropped)
+	now := time.Now()
+	err := recordAgentChange(ctx, s.transitions, agent, transition.TriggerRevocationOnReregistration,
+		requesterActor(requestedBy),
+		func(ctx context.Context, tx *sql.Tx) error {
+			for _, capType := range dropped {
+				if err := repository.RevokeCapabilityTx(ctx, tx, current[capType].ID, now); err != nil {
+					return fmt.Errorf("revoke capability '%s': %w", capType, err)
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		fmt.Printf("Warning: failed to revoke capabilities %v: %v\n", dropped, err)
+		return []string{}
+	}
+	return dropped
+}
+
 // DeleteAgent deletes an agent
 func (s *AgentService) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	return s.agentRepo.Delete(id)
@@ -759,7 +803,7 @@ func (s *AgentService) VerifyAgent(ctx context.Context, id uuid.UUID) error {
 	agent.Status = to
 	agent.VerifiedAt = &now
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentVerified); err != nil {
 		return fmt.Errorf("failed to verify agent: %w", err)
 	}
 
@@ -2189,15 +2233,15 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 }
 
 // changeAgentStatus stores agent.Status (and agent.VerifiedAt, for a
-// reactivation). With a transition recorder it writes only those columns,
-// together with the transition's record; without one it saves the whole row
-// as before.
+// reactivation or a verification). With a transition recorder it writes only
+// those columns, together with the transition's record; without one it saves
+// the whole row as before.
 func (s *AgentService) changeAgentStatus(ctx context.Context, agent *domain.Agent, trigger transition.Trigger) error {
 	if s.transitions == nil {
 		return s.agentRepo.Update(agent)
 	}
 	var verifiedAt *time.Time
-	if trigger == transition.TriggerAgentReactivated {
+	if trigger == transition.TriggerAgentReactivated || trigger == transition.TriggerAgentVerified {
 		verifiedAt = agent.VerifiedAt
 	}
 	return recordAgentChange(ctx, s.transitions, agent, trigger, transition.System(),
@@ -2308,7 +2352,15 @@ func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UU
 	agent.RotationCount++
 
 	// 5. Update agent in database
-	if err := s.agentRepo.Update(agent); err != nil {
+	if s.transitions != nil {
+		err = recordAgentChange(ctx, s.transitions, agent, transition.TriggerKeyUpdated, transition.System(),
+			func(ctx context.Context, tx *sql.Tx) error {
+				return repository.SetAgentPublicKeyTx(ctx, tx, agent)
+			})
+	} else {
+		err = s.agentRepo.Update(agent)
+	}
+	if err != nil {
 		return fmt.Errorf("failed to update agent public key: %w", err)
 	}
 
@@ -2334,7 +2386,15 @@ func (s *AgentService) UpdateAgentPQCKey(ctx context.Context, agentID uuid.UUID,
 	agent.HybridModeEnabled = hybridMode
 	agent.UpdatedAt = now
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if s.transitions != nil {
+		err = recordAgentChange(ctx, s.transitions, agent, transition.TriggerKeyUpdated, transition.System(),
+			func(ctx context.Context, tx *sql.Tx) error {
+				return repository.SetAgentPQCKeyTx(ctx, tx, agent.ID, pqcPublicKey, algorithm, now, hybridMode)
+			})
+	} else {
+		err = s.agentRepo.Update(agent)
+	}
+	if err != nil {
 		return fmt.Errorf("failed to update agent PQC key: %w", err)
 	}
 
@@ -2362,7 +2422,15 @@ func (s *AgentService) RotateAgentPQCKey(ctx context.Context, agentID uuid.UUID,
 	// rotated its PQC key, hiding rotation activity from operators.
 	agent.RotationCount++
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if s.transitions != nil {
+		err = recordAgentChange(ctx, s.transitions, agent, transition.TriggerKeyRotated, transition.System(),
+			func(ctx context.Context, tx *sql.Tx) error {
+				return repository.RotateAgentPQCKeyTx(ctx, tx, agent.ID, newPQCPublicKey, algorithm, now)
+			})
+	} else {
+		err = s.agentRepo.Update(agent)
+	}
+	if err != nil {
 		return fmt.Errorf("failed to rotate agent PQC key: %w", err)
 	}
 
@@ -2556,12 +2624,71 @@ func (s *AgentService) CreateCapabilityViolation(
 //
 // It has no caller yet. Where it runs (a scheduled sweep, or a check at authentication) is
 // a separate decision. The agent auth middlewares already deny the `suspended` status.
+//
+// With a transition recorder, each agent is suspended in a transaction of its own with a
+// key_expired_suspension record, and every record of one run shares its trace id.
 func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
+	if s.transitions != nil {
+		return s.enforceKeyExpiryRecorded(ctx, time.Now())
+	}
 	ids, err := s.agentRepo.SuspendAgentsWithExpiredKeys(time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
 	}
 	return len(ids), nil
+}
+
+// expiredKeyAgents is the part of the agent repository the recorded key-expiry sweep reads
+// its candidates from.
+type expiredKeyAgents interface {
+	AgentsWithExpiredKeys(ctx context.Context, now time.Time) ([]repository.AgentRef, error)
+}
+
+// errKeyNoLongerExpired ends the transaction of an agent that no longer qualifies for the
+// sweep when its row is locked.
+var errKeyNoLongerExpired = errors.New("the agent's key is no longer expired")
+
+func (s *AgentService) enforceKeyExpiryRecorded(ctx context.Context, now time.Time) (int, error) {
+	lister, ok := s.agentRepo.(expiredKeyAgents)
+	if !ok {
+		return 0, errors.New("failed to suspend agents with expired keys: the agent repository cannot list them")
+	}
+	refs, err := lister.AgentsWithExpiredKeys(ctx, now)
+	if err != nil {
+		return 0, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
+	}
+	trace, err := transition.NewTraceID()
+	if err != nil {
+		return 0, err
+	}
+	suspended := 0
+	var errs []error
+	for _, ref := range refs {
+		_, err := s.transitions.Record(ctx, transition.Change{
+			OrganizationID: ref.OrganizationID,
+			AgentID:        ref.ID,
+			Trigger:        transition.TriggerKeyExpiredSuspension,
+			Actor:          transition.System(),
+			TraceID:        trace,
+			Apply: func(ctx context.Context, tx *sql.Tx) error {
+				done, err := repository.SuspendAgentWithExpiredKeyTx(ctx, tx, ref.ID, now)
+				if err == nil && !done {
+					err = errKeyNoLongerExpired
+				}
+				return err
+			},
+		})
+		switch {
+		case err == nil:
+			suspended++
+		case !errors.Is(err, errKeyNoLongerExpired):
+			errs = append(errs, fmt.Errorf("agent %s: %w", ref.ID, err))
+		}
+	}
+	if err := errors.Join(errs...); err != nil {
+		return suspended, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
+	}
+	return suspended, nil
 }
 
 // RecordHeartbeat stores a heartbeat time for an agent and returns the agent as it

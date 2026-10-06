@@ -2,11 +2,14 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 type CapabilityRequestService struct {
@@ -14,6 +17,7 @@ type CapabilityRequestService struct {
 	capabilityRepo domain.CapabilityRepository
 	agentRepo      domain.AgentRepository
 	orgRepo        domain.OrganizationRepository
+	transitions    *transition.Recorder // Optional: set by SetTransitionRecorder
 }
 
 func NewCapabilityRequestService(
@@ -82,6 +86,10 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 		RequestedBy:    input.RequestedBy,
 	}
 
+	if isMonitoringMode && s.transitions != nil {
+		return s.autoApprove(ctx, agent, request)
+	}
+
 	if err := s.requestRepo.Create(request); err != nil {
 		return nil, fmt.Errorf("failed to create capability request: %w", err)
 	}
@@ -114,6 +122,73 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 		agent.Name, input.CapabilityType, input.Reason)
 
 	return request, nil
+}
+
+// autoApprove creates request as automatically approved and grants its
+// capability, in one transaction with the request_auto_approved record. The
+// actor is the one the context names, else the requesting user.
+func (s *CapabilityRequestService) autoApprove(ctx context.Context, agent *domain.Agent, request *domain.CapabilityRequest) (*domain.CapabilityRequest, error) {
+	requester := request.RequestedBy
+	capability := &domain.AgentCapability{
+		AgentID:        request.AgentID,
+		CapabilityType: request.CapabilityType,
+		GrantedBy:      &requester,
+		GrantedAt:      time.Now(),
+	}
+	err := recordAgentChange(ctx, s.transitions, agent, transition.TriggerRequestAutoApproved, requesterActor(requester),
+		func(ctx context.Context, tx *sql.Tx) error {
+			if err := repository.CreateCapabilityRequestTx(ctx, tx, request); err != nil {
+				return fmt.Errorf("create capability request: %w", err)
+			}
+			if err := repository.DecideCapabilityRequestTx(ctx, tx, request.ID, domain.CapabilityRequestStatusAutoApproved, requester); err != nil {
+				return err
+			}
+			return repository.CreateCapabilityTx(ctx, tx, capability)
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to auto-approve capability request: %w", err)
+	}
+	request.Status = domain.CapabilityRequestStatusAutoApproved
+	fmt.Printf("✅ Capability request AUTO-APPROVED (monitoring mode): agent=%s, capability=%s\n",
+		agent.Name, request.CapabilityType)
+	return request, nil
+}
+
+// requesterActor is the user who asked for a capability, or the system when
+// the request names none.
+func requesterActor(requester uuid.UUID) transition.Actor {
+	if requester == uuid.Nil {
+		return transition.System()
+	}
+	return transition.User(requester)
+}
+
+// decideRequest moves a pending request to status, and runs grant (when set)
+// in the same transaction, together with the decision's record. The actor is
+// the reviewer.
+func (s *CapabilityRequestService) decideRequest(
+	ctx context.Context,
+	request *domain.CapabilityRequestWithDetails,
+	status domain.CapabilityRequestStatus,
+	trigger transition.Trigger,
+	reviewerID uuid.UUID,
+	grant *domain.AgentCapability,
+) error {
+	agent, err := s.agentRepo.GetByID(request.AgentID)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+	return recordAgentChange(transition.WithActor(ctx, transition.User(reviewerID)), s.transitions, agent, trigger,
+		transition.User(reviewerID),
+		func(ctx context.Context, tx *sql.Tx) error {
+			if err := repository.DecideCapabilityRequestTx(ctx, tx, request.ID, status, reviewerID); err != nil {
+				return err
+			}
+			if grant == nil {
+				return nil
+			}
+			return repository.CreateCapabilityTx(ctx, tx, grant)
+		})
 }
 
 // ListRequests lists capability requests with optional filtering
@@ -149,17 +224,28 @@ func (s *CapabilityRequestService) ApproveRequest(ctx context.Context, id uuid.U
 		return fmt.Errorf("capability request is not pending (current status: %s)", request.Status)
 	}
 
-	// Update request status to approved
-	if err := s.requestRepo.UpdateStatus(id, domain.CapabilityRequestStatusApproved, reviewerID); err != nil {
-		return fmt.Errorf("failed to approve capability request: %w", err)
-	}
-
 	// Grant the capability to the agent
 	capability := &domain.AgentCapability{
 		AgentID:        request.AgentID,
 		CapabilityType: request.CapabilityType,
 		GrantedBy:      &reviewerID,
 		GrantedAt:      time.Now(),
+	}
+
+	if s.transitions != nil {
+		// The approval and the grant commit together or not at all.
+		if err := s.decideRequest(ctx, request, domain.CapabilityRequestStatusApproved,
+			transition.TriggerRequestApproved, reviewerID, capability); err != nil {
+			return fmt.Errorf("failed to approve capability request: %w", err)
+		}
+		fmt.Printf("✅ Capability request approved and capability granted: agent=%s, capability=%s, reviewer=%s\n",
+			request.AgentName, request.CapabilityType, reviewerID)
+		return nil
+	}
+
+	// Update request status to approved
+	if err := s.requestRepo.UpdateStatus(id, domain.CapabilityRequestStatusApproved, reviewerID); err != nil {
+		return fmt.Errorf("failed to approve capability request: %w", err)
 	}
 
 	if err := s.capabilityRepo.CreateCapability(capability); err != nil {
@@ -187,8 +273,14 @@ func (s *CapabilityRequestService) RejectRequest(ctx context.Context, id uuid.UU
 		return fmt.Errorf("capability request is not pending (current status: %s)", request.Status)
 	}
 
-	// Update request status to rejected
-	if err := s.requestRepo.UpdateStatus(id, domain.CapabilityRequestStatusRejected, reviewerID); err != nil {
+	// Update request status to rejected. With a recorder, the rejection is
+	// recorded as a transition that leaves the agent's state as it was.
+	if s.transitions != nil {
+		if err := s.decideRequest(ctx, request, domain.CapabilityRequestStatusRejected,
+			transition.TriggerRequestRejected, reviewerID, nil); err != nil {
+			return fmt.Errorf("failed to reject capability request: %w", err)
+		}
+	} else if err := s.requestRepo.UpdateStatus(id, domain.CapabilityRequestStatusRejected, reviewerID); err != nil {
 		return fmt.Errorf("failed to reject capability request: %w", err)
 	}
 

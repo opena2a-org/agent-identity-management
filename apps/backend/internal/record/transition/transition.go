@@ -23,6 +23,10 @@
 // retained part; the trace, the organization, the agent and both states in
 // the tenant part; the actor in the personal part.
 //
+// A rejected capability request is a null transition: its record carries
+// opena2a.outcome "rejected" in the retained part, and the recorder refuses
+// the change when its previous and new states differ.
+//
 // The class of a trigger decides what a failed record write does. An
 // expansion or a destruction is refused whole: no record and no change, and
 // the error wraps ErrRecordUnavailable. A reduction is never blocked by the
@@ -31,9 +35,11 @@
 // organization, the trigger and the agent.
 //
 // Not built here: the debt row that lets such a record be written late and
-// its settlement, the opening_state record and its sweep, and the paths other
-// than a direct grant, a capability revocation, a suspension, a reactivation,
-// an agent revocation and a credential rotation.
+// its settlement, the opening_state record and its sweep, and the records of
+// a registration (whose agent has no state before it), a pending capability
+// request, a talks_to change, an agent's deletion, a hybrid mode change, a
+// compromise suspension and the key the service generates for an agent that
+// signs through it.
 package transition
 
 import (
@@ -113,6 +119,19 @@ var classes = map[Trigger]store.Class{
 func (t Trigger) Class() (store.Class, bool) {
 	c, ok := classes[t]
 	return c, ok
+}
+
+// OutcomeRejected is opena2a.outcome of a request_rejected record.
+const OutcomeRejected = "rejected"
+
+// outcome is opena2a.outcome of a trigger's record: OutcomeRejected for a
+// null transition, which records a decision that left the agent's state as
+// it was, and "" for every other trigger, whose record carries no outcome.
+func (t Trigger) outcome() string {
+	if t == TriggerRequestRejected {
+		return OutcomeRejected
+	}
+	return ""
 }
 
 // ActorType is the kind of party that caused a transition.

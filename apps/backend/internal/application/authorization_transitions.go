@@ -16,11 +16,29 @@ func (s *CapabilityService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
 
-// SetTransitionRecorder makes SuspendAgent, ReactivateAgent, RevokeAgent and
-// RotateCredentials change the agent through r, so each change commits
-// together with its authorization_transition record. When unset, they change
-// the agent as before and write no record.
+// SetTransitionRecorder makes SuspendAgent, ReactivateAgent, RevokeAgent,
+// VerifyAgent, RotateCredentials, UpdateAgentPublicKey, UpdateAgentPQCKey,
+// RotateAgentPQCKey, EnforceKeyExpiry and the capability revocations of
+// UpdateAgent change the agent through r, so each change commits together
+// with its authorization_transition record. When unset, they change the agent
+// as before and write no record.
 func (s *AgentService) SetTransitionRecorder(r *transition.Recorder) {
+	s.transitions = r
+}
+
+// SetTransitionRecorder makes an approval, a rejection and a monitoring-mode
+// automatic approval of a capability request commit together with its
+// authorization_transition record. When unset, requests are decided as before
+// and no record is written.
+func (s *CapabilityRequestService) SetTransitionRecorder(r *transition.Recorder) {
+	s.transitions = r
+}
+
+// SetTransitionRecorder makes the suspension of an agent whose trust score
+// fell below the critical threshold commit together with its
+// authorization_transition record. When unset, the agent is suspended as
+// before and no record is written.
+func (s *SecurityPolicyService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
 

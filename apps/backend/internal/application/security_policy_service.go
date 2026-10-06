@@ -2,12 +2,15 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // SecurityPolicyService handles security policy evaluation and management
@@ -20,6 +23,7 @@ type SecurityPolicyService struct {
 	dataTransferRepo      domain.DataTransferRepository      // For data exfiltration detection
 	verificationEventRepo domain.VerificationEventRepository // For the not-evaluable branch (no allowed action)
 	exfiltrationConfig    domain.DataExfiltrationConfig      // Exfiltration detection thresholds
+	transitions           *transition.Recorder               // Optional: set by SetTransitionRecorder
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -541,7 +545,16 @@ func (s *SecurityPolicyService) suspendAgentForLowTrustScore(ctx context.Context
 		return nil
 	}
 	agent.Status = to
-	return s.agentRepo.Update(agent)
+	if s.transitions == nil {
+		return s.agentRepo.Update(agent)
+	}
+	// The service suspends the agent on its own, whoever caused the score to
+	// fall.
+	return recordAgentChange(transition.WithActor(ctx, transition.System()), s.transitions, agent,
+		transition.TriggerAgentSuspended, transition.System(),
+		func(ctx context.Context, tx *sql.Tx) error {
+			return repository.SetAgentStatusTx(ctx, tx, agent.ID, to, nil)
+		})
 }
 
 // EvaluateUnusualActivity evaluates security policies for unusual activity patterns

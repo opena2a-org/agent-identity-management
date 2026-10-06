@@ -530,42 +530,6 @@ func (s *CapabilityService) MarkHoneytoken(
 	return capability, nil
 }
 
-// AutoDetectCapabilities attempts to automatically detect and register capabilities for MCP servers
-// This is called during MCP registration to capture capabilities without user input
-func (s *CapabilityService) AutoDetectCapabilities(
-	ctx context.Context,
-	agentID uuid.UUID,
-	mcpMetadata map[string]interface{},
-) error {
-	// Extract tools/capabilities from MCP metadata
-	// MCP servers typically declare their tools in the registration payload
-	if tools, ok := mcpMetadata["tools"].([]interface{}); ok {
-		for _, tool := range tools {
-			if toolMap, ok := tool.(map[string]interface{}); ok {
-				// Extract tool name and convert to capability type
-				toolName, _ := toolMap["name"].(string)
-				capabilityType := s.mcpToolToCapabilityType(toolName)
-
-				// Create capability with tool metadata as scope
-				capability := &domain.AgentCapability{
-					AgentID:         agentID,
-					CapabilityType:  capabilityType,
-					CapabilityScope: toolMap,
-					GrantedBy:       nil, // Auto-detected, not manually granted
-					GrantedAt:       time.Now(),
-				}
-
-				if err := s.capabilityRepo.CreateCapability(capability); err != nil {
-					// Log error but continue with other capabilities
-					fmt.Printf("Warning: failed to auto-register capability %s: %v\n", capabilityType, err)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // mcpToolToCapabilityType maps MCP tool names to standard capability types
 func (s *CapabilityService) mcpToolToCapabilityType(toolName string) string {
 	// Map common MCP tool patterns to capability types

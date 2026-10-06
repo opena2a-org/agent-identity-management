@@ -319,7 +319,9 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 		input.Reason = "Capability registered via SDK"
 	}
 
-	request, err := h.capabilityRequestService.CreateRequest(c.Context(), input)
+	// The agent asked for the capability; an automatic approval names it.
+	request, err := h.capabilityRequestService.CreateRequest(
+		transition.WithActor(c.Context(), transition.Agent(agentID)), input)
 	if err != nil {
 		errMsg := err.Error()
 		// Check if pending request already exists

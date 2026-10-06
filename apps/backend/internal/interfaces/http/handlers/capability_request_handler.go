@@ -97,7 +97,7 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 	}
 
 	// Create the request
-	request, err := h.service.CreateRequest(c.Context(), input)
+	request, err := h.service.CreateRequest(withTransitionActor(c), input)
 	if err != nil {
 		// Check for specific error types
 		errMsg := err.Error()

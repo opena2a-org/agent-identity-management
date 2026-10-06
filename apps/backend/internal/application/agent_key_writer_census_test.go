@@ -145,15 +145,18 @@ var agentKeyWriterCensus = []agentKeyWriter{
 		},
 	},
 	{
-		label:     "public key update (the caller supplies the key)",
-		file:      "internal/application/agent_service.go",
-		function:  "AgentService.UpdateAgentPublicKey",
-		table:     "agents",
+		label:    "public key update (the caller supplies the key)",
+		file:     "internal/application/agent_service.go",
+		function: "AgentService.UpdateAgentPublicKey",
+		table:    "agents",
+		// With a transition recorder set, the update writes the key through
+		// repository.SetAgentPublicKeyTx with its transition record instead.
 		sinks:     []string{"agentRepo.Update"},
 		generates: false,
 		// Refuses an agent-authenticated caller when the agent already has a key.
-		replaces: true,
-		proof:    proofNone,
+		replaces:   true,
+		proof:      proofNone,
+		transition: "TriggerKeyUpdated",
 		entries: []agentKeyWriterEntry{
 			{method: "Put", path: "/api/v1/agents/:id/keys", middleware: "MemberMiddleware",
 				handler: "Agent.UpdateAgentKeys", handlerFn: "AgentHandler.UpdateAgentKeys", record: "audit log"},
@@ -176,29 +179,35 @@ var agentKeyWriterCensus = []agentKeyWriter{
 		},
 	},
 	{
-		label:     "PQC key registration",
-		file:      "internal/application/agent_service.go",
-		function:  "AgentService.UpdateAgentPQCKey",
-		table:     "agents",
+		label:    "PQC key registration",
+		file:     "internal/application/agent_service.go",
+		function: "AgentService.UpdateAgentPQCKey",
+		table:    "agents",
+		// With a transition recorder set, the registration writes the key
+		// through repository.SetAgentPQCKeyTx with its transition record instead.
 		sinks:     []string{"agentRepo.Update"},
 		generates: false,
 		// The handler refuses with 409 when the agent already has a PQC key.
-		replaces: false,
-		proof:    proofNone,
+		replaces:   false,
+		proof:      proofNone,
+		transition: "TriggerKeyUpdated",
 		entries: []agentKeyWriterEntry{
 			{method: "Post", path: "/api/v1/agents/:id/pqc-key", middleware: "MemberMiddleware",
 				handler: "Agent.RegisterPQCKey", handlerFn: "AgentHandler.RegisterPQCKey", record: "audit log"},
 		},
 	},
 	{
-		label:     "PQC key rotation (the caller supplies the key)",
-		file:      "internal/application/agent_service.go",
-		function:  "AgentService.RotateAgentPQCKey",
-		table:     "agents",
-		sinks:     []string{"agentRepo.Update"},
-		generates: false,
-		replaces:  true,
-		proof:     proofNone,
+		label:    "PQC key rotation (the caller supplies the key)",
+		file:     "internal/application/agent_service.go",
+		function: "AgentService.RotateAgentPQCKey",
+		table:    "agents",
+		// With a transition recorder set, the rotation writes the key through
+		// repository.RotateAgentPQCKeyTx with its transition record instead.
+		sinks:      []string{"agentRepo.Update"},
+		generates:  false,
+		replaces:   true,
+		proof:      proofNone,
+		transition: "TriggerKeyRotated",
 		entries: []agentKeyWriterEntry{
 			{method: "Put", path: "/api/v1/agents/:id/pqc-key", middleware: "MemberMiddleware",
 				handler: "Agent.RotatePQCKey", handlerFn: "AgentHandler.RotatePQCKey", record: "audit log"},
@@ -236,9 +245,13 @@ var agentKeyWriterCensus = []agentKeyWriter{
 var agentKeyColumnSinks = []string{
 	"internal/infrastructure/repository/agent_repository.go:AgentRepository.Create",
 	"internal/infrastructure/repository/agent_repository.go:AgentRepository.Update",
-	// A credential rotation's key columns, written in the transaction of its
-	// authorization transition record.
+	// The key columns of a credential rotation, a public key update, a PQC
+	// key registration and a PQC key rotation, each written in the
+	// transaction of its authorization transition record.
 	"internal/infrastructure/repository/agent_transition_statements.go:RotateAgentKeyTx",
+	"internal/infrastructure/repository/agent_transition_statements.go:SetAgentPublicKeyTx",
+	"internal/infrastructure/repository/agent_transition_statements.go:SetAgentPQCKeyTx",
+	"internal/infrastructure/repository/agent_transition_statements.go:RotateAgentPQCKeyTx",
 }
 
 // agentKeyStartupWriter is a function outside the repository whose own SQL
