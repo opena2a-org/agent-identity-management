@@ -677,6 +677,36 @@ func TestRecordReductionWithNoFreeSlotCommitsWithADebt(t *testing.T) {
 	wg.Wait()
 }
 
+// A reduction that sets NoDebt is written like any other class: a draft no
+// debt row can hold is appended, and when the append fails the write is
+// refused whole, leaving no debt and no state change for its caller to undo.
+func TestRecordReductionWithNoDebtIsRefusedWholeWhenTheAppendFails(t *testing.T) {
+	db, _ := openTapped(t, 0)
+	plain := openPlain(t)
+	h := newHarness(t, db, nil)
+	ctx := context.Background()
+	org := seedOrg(t, plain)
+	_, err := h.w.start(ctx, org)
+	require.NoError(t, err)
+
+	unholdable := func() record.Draft {
+		d := testDraft()
+		d.Personal["email"] = "someone@example.com"
+		return d
+	}
+	out, err := h.w.Write(ctx, Write{Class: ClassReduction, OrganizationID: org, Draft: unholdable(), NoDebt: true})
+	require.NoError(t, err, "a draft no debt can hold is appended when the write owes no debt")
+	require.Nil(t, out.Debt)
+	require.Equal(t, 2, positions(t, plain, org))
+
+	breakHead(t, plain, org)
+	_, err = h.w.Write(ctx, Write{Class: ClassReduction, OrganizationID: org, Draft: unholdable(), NoDebt: true,
+		Apply: markOrg(org)})
+	wantWriteError(t, err, ClassReduction, ReasonChainHead)
+	require.False(t, marked(t, plain, org), "the state change rolls back with the record")
+	require.Empty(t, debtRows(t, plain, org))
+}
+
 // A reduction on the debt path is held to the append path's trace rule: when
 // it names a parent that is no record of the organization's chain, it is
 // refused whole before its state change runs, and no debt is written.

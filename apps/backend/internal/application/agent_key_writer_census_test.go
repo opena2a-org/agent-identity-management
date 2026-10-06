@@ -81,7 +81,11 @@ type agentKeyWriter struct {
 	generates bool     // the deployment generates the new key pair (custody: server); otherwise the caller supplies it
 	replaces  bool     // can overwrite a key the agent already has (read from the code, not computed)
 	proof     string   // what proves possession of the new private key
-	entries   []agentKeyWriterEntry
+	// transition is the transition package's Trigger constant the function
+	// records the key change with when a transition recorder is set; "" when
+	// it records none.
+	transition string
+	entries    []agentKeyWriterEntry
 }
 
 // agentKeyWriterEntry is one route that reaches a census row.
@@ -124,14 +128,17 @@ var agentKeyWriterCensus = []agentKeyWriter{
 		},
 	},
 	{
-		label:     "credential rotation (the deployment generates the pair and returns the private half)",
-		file:      "internal/application/agent_service.go",
-		function:  "AgentService.RotateCredentials",
-		table:     "agents",
-		sinks:     []string{"agentRepo.Update"},
-		generates: true,
-		replaces:  true,
-		proof:     proofNone,
+		label:    "credential rotation (the deployment generates the pair and returns the private half)",
+		file:     "internal/application/agent_service.go",
+		function: "AgentService.RotateCredentials",
+		table:    "agents",
+		// With a transition recorder set, the rotation writes the key through
+		// repository.RotateAgentKeyTx with its transition record instead.
+		sinks:      []string{"agentRepo.Update"},
+		generates:  true,
+		replaces:   true,
+		proof:      proofNone,
+		transition: "TriggerKeyRotated",
 		entries: []agentKeyWriterEntry{
 			{method: "Post", path: "/api/v1/agents/:id/rotate-credentials", middleware: "MemberMiddleware",
 				handler: "Agent.RotateCredentials", handlerFn: "AgentHandler.RotateCredentials", record: "audit log"},
@@ -229,6 +236,9 @@ var agentKeyWriterCensus = []agentKeyWriter{
 var agentKeyColumnSinks = []string{
 	"internal/infrastructure/repository/agent_repository.go:AgentRepository.Create",
 	"internal/infrastructure/repository/agent_repository.go:AgentRepository.Update",
+	// A credential rotation's key columns, written in the transaction of its
+	// authorization transition record.
+	"internal/infrastructure/repository/agent_transition_statements.go:RotateAgentKeyTx",
 }
 
 // agentKeyStartupWriter is a function outside the repository whose own SQL
@@ -987,26 +997,69 @@ func TestAgentKeyWriterCensus_ProofColumnMatchesSource(t *testing.T) {
 	}
 }
 
-// No path records a key replacement as an authorization transition yet; the
-// audit log line written by the handler is the only record. When a transition
-// writer lands, each replacing row records it and this assertion is replaced
-// by one that every replacing path calls it.
+// agentKeyTransitionTriggers are the transition package's triggers that
+// record a change of an agent's key, by constant name and value.
+var agentKeyTransitionTriggers = map[string]string{
+	"TriggerKeyRotated": "key_rotated",
+	"TriggerKeyUpdated": "key_updated",
+}
+
+// agentKeyTransitionVocabulary is the one file that spells the key triggers'
+// values.
+const agentKeyTransitionVocabulary = "internal/record/transition/transition.go"
+
+// Each agents census row records its key change as an authorization
+// transition with the trigger its transition column names, and a row whose
+// column is empty records none. The key triggers' values are spelled only in
+// the transition vocabulary, so a path cannot record a key change under a
+// value the census does not know.
 func TestAgentKeyWriterCensus_TransitionColumnMatchesSource(t *testing.T) {
 	fset, files := backendSource(t)
-	var found []string
 	for _, pf := range files {
 		ast.Inspect(pf.file, func(n ast.Node) bool {
 			lit, ok := n.(*ast.BasicLit)
 			if !ok || lit.Kind != token.STRING {
 				return true
 			}
-			if s, err := strconv.Unquote(lit.Value); err == nil && (strings.Contains(s, "key_rotated") || strings.Contains(s, "key_updated")) {
-				found = append(found, fset.Position(lit.Pos()).String())
+			if s, err := strconv.Unquote(lit.Value); err == nil {
+				for _, value := range agentKeyTransitionTriggers {
+					if strings.Contains(s, value) {
+						assert.Equal(t, agentKeyTransitionVocabulary, pf.rel,
+							"%s spells the key trigger %q outside the transition vocabulary", fset.Position(lit.Pos()), value)
+					}
+				}
 			}
 			return true
 		})
 	}
-	assert.Empty(t, found, "a key transition vocabulary now exists in the source: record it in the census rows")
+	for _, row := range agentKeyWriterCensus {
+		if row.table != "agents" {
+			continue
+		}
+		fn := findFuncDecl(files, filepath.ToSlash(filepath.Dir(row.file))+"/", row.function)
+		if !assert.NotNil(t, fn, "%s not found", row.function) {
+			continue
+		}
+		recorded := map[string]bool{}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "transition" {
+				if _, key := agentKeyTransitionTriggers[sel.Sel.Name]; key {
+					recorded[sel.Sel.Name] = true
+				}
+			}
+			return true
+		})
+		want := []string{}
+		if row.transition != "" {
+			want = []string{row.transition}
+		}
+		assert.Equal(t, want, sortedKeys(recorded),
+			"%s: the key trigger it records as an authorization transition; update its census row deliberately", row.function)
+	}
 }
 
 func TestAgentKeyWriterCensus_PlantedWriterIsReported(t *testing.T) {

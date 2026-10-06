@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -24,6 +25,20 @@ func NewCapabilityRepository(db *sqlx.DB) *CapabilityRepositoryPostgres {
 
 // CreateCapability creates a new agent capability
 func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.AgentCapability) error {
+	return insertCapability(context.Background(), r.db, capability)
+}
+
+// CreateCapabilityTx runs the statement of CreateCapability in tx.
+func CreateCapabilityTx(ctx context.Context, tx *sql.Tx, capability *domain.AgentCapability) error {
+	return insertCapability(ctx, tx, capability)
+}
+
+// execer runs one statement. *sql.Tx and *sqlx.DB satisfy it.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func insertCapability(ctx context.Context, db execer, capability *domain.AgentCapability) error {
 	scopeJSON, _ := json.Marshal(capability.CapabilityScope)
 
 	query := `
@@ -39,7 +54,7 @@ func (r *CapabilityRepositoryPostgres) CreateCapability(capability *domain.Agent
 		capability.ExecutionMode = domain.ExecutionModeAuto
 	}
 
-	_, err := r.db.Exec(query,
+	_, err := db.ExecContext(ctx, query,
 		capability.ID,
 		capability.AgentID,
 		capability.CapabilityType,
@@ -285,13 +300,22 @@ func (r *CapabilityRepositoryPostgres) GetCapabilitiesByAgentIDs(agentIDs []uuid
 
 // RevokeCapability marks a capability as revoked
 func (r *CapabilityRepositoryPostgres) RevokeCapability(id uuid.UUID, revokedAt time.Time) error {
+	return revokeCapability(context.Background(), r.db, id, revokedAt)
+}
+
+// RevokeCapabilityTx runs the statement of RevokeCapability in tx.
+func RevokeCapabilityTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, revokedAt time.Time) error {
+	return revokeCapability(ctx, tx, id, revokedAt)
+}
+
+func revokeCapability(ctx context.Context, db execer, id uuid.UUID, revokedAt time.Time) error {
 	query := `
 		UPDATE agent_capabilities
 		SET revoked_at = $1, updated_at = $2
 		WHERE id = $3
 	`
 
-	_, err := r.db.Exec(query, revokedAt, time.Now(), id)
+	_, err := db.ExecContext(ctx, query, revokedAt, time.Now(), id)
 	return err
 }
 

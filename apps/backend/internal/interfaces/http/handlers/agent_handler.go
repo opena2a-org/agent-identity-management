@@ -12,6 +12,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/sdkgen"
 )
 
@@ -1895,7 +1896,7 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 
 	// Suspend the agent
 	before := agent.Status
-	if err := h.agentService.SuspendAgent(c.Context(), agentID); err != nil {
+	if err := h.agentService.SuspendAgent(transition.WithActor(c.Context(), transition.User(userID)), agentID); err != nil {
 		return respondAgentStatusActError(c, err)
 	}
 
@@ -1967,7 +1968,7 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 
 	// Reactivate the agent
 	before := agent.Status
-	if err := h.agentService.ReactivateAgent(c.Context(), agentID); err != nil {
+	if err := h.agentService.ReactivateAgent(transition.WithActor(c.Context(), transition.User(userID)), agentID); err != nil {
 		return respondAgentStatusActError(c, err)
 	}
 
@@ -2038,7 +2039,7 @@ func (h *AgentHandler) RevokeAgent(c fiber.Ctx) error {
 	}
 
 	// Revoke the agent
-	if err := h.agentService.RevokeAgent(c.Context(), agentID); err != nil {
+	if err := h.agentService.RevokeAgent(transition.WithActor(c.Context(), transition.User(userID)), agentID); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
@@ -2110,7 +2111,7 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 	}
 
 	// Rotate credentials (generates new keypair)
-	publicKey, privateKey, err := h.agentService.RotateCredentials(c.Context(), agentID)
+	publicKey, privateKey, err := h.agentService.RotateCredentials(transition.WithActor(c.Context(), transition.User(userID)), agentID)
 	if err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}

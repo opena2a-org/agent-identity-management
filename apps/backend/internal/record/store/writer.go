@@ -192,6 +192,11 @@ type Write struct {
 	Apply func(ctx context.Context, tx *sql.Tx) error
 	// Guard, when set, runs under the append lock.
 	Guard Guard
+	// NoDebt, on a reduction, is set by a caller that commits the reduction
+	// itself when its record cannot be appended. The write is then refused
+	// whole on that failure, as an expansion is, and its draft need not be
+	// one a debt row can hold.
+	NoDebt bool
 }
 
 // Appended is what a write left in its chain.
@@ -372,7 +377,8 @@ var placeholderHead = record.Head{
 // hold (debtFromDraft), or it is refused before anything waits, with reason
 // canonical. Once its state change has run, a failure to append its record
 // is counted and logged as any other, but Write returns no error: the state
-// change commits with a debt, reported in Appended.Debt.
+// change commits with a debt, reported in Appended.Debt. A reduction that
+// sets NoDebt is not the exception: it is refused whole as any other class.
 func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 	if !req.Class.valid() {
 		return Appended{}, fmt.Errorf("%w: %q is not a write class", ErrInvalidWrite, req.Class)
@@ -447,7 +453,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 		return Appended{}, ReasonTrace, err
 	}
 	var owed *debt
-	if req.Class == ClassReduction {
+	if req.Class == ClassReduction && !req.NoDebt {
 		row, err := debtFromDraft(req.OrganizationID, d)
 		if err != nil {
 			return Appended{}, ReasonCanonical, err
