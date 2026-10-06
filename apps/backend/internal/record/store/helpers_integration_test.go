@@ -201,6 +201,7 @@ func seedOrg(t *testing.T, db *sql.DB) string {
 	id := uuid.NewString()
 	suffix := id[:8]
 	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM record_debts WHERE organization_id = $1`, id)
 		_, _ = db.Exec(`DELETE FROM audit_records WHERE chain_id IN (SELECT id FROM record_chains WHERE organization_id = $1)`, id)
 		_, _ = db.Exec(`DELETE FROM record_chains WHERE organization_id = $1`, id)
 		_, _ = db.Exec(`DELETE FROM audit_logs WHERE organization_id = $1`, id)
@@ -359,4 +360,92 @@ func waitForLockWaiters(t *testing.T, db *sql.DB, n int, within time.Duration) b
 		time.Sleep(10 * time.Millisecond)
 	}
 	return false
+}
+
+// value returns the value of the one series of a counter or gauge family
+// that carries no label.
+func (h harness) value(t *testing.T, name string) float64 {
+	t.Helper()
+	families, err := h.reg.Gather()
+	require.NoError(t, err)
+	for _, f := range families {
+		if f.GetName() != name {
+			continue
+		}
+		require.Len(t, f.GetMetric(), 1, "%s has one series", name)
+		m := f.GetMetric()[0]
+		if m.GetCounter() != nil {
+			return m.GetCounter().GetValue()
+		}
+		return m.GetGauge().GetValue()
+	}
+	t.Fatalf("no series named %s", name)
+	return 0
+}
+
+func (h harness) counter(t *testing.T, name string) float64 { return h.value(t, name) }
+
+// breakHead makes the organization's stored head name no record, so its
+// chain reads notExtendable, and returns the function that restores it.
+func breakHead(t *testing.T, db *sql.DB, organizationID string) (restore func()) {
+	t.Helper()
+	var hash string
+	require.NoError(t, db.QueryRow(`SELECT head_hash FROM record_chains WHERE organization_id = $1`, organizationID).Scan(&hash))
+	_, err := db.Exec(`UPDATE record_chains SET head_hash = repeat('0', 64) WHERE organization_id = $1`, organizationID)
+	require.NoError(t, err)
+	return func() {
+		t.Helper()
+		_, err := db.Exec(`UPDATE record_chains SET head_hash = $2 WHERE organization_id = $1`, organizationID, hash)
+		require.NoError(t, err)
+	}
+}
+
+// debtRows returns the organization's debt rows as JSON objects, by id.
+func debtRows(t *testing.T, db *sql.DB, organizationID string) map[string]string {
+	t.Helper()
+	rows, err := db.Query(`SELECT id, row_to_json(d)::text FROM record_debts d WHERE organization_id = $1`, organizationID)
+	require.NoError(t, err)
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, row string
+		require.NoError(t, rows.Scan(&id, &row))
+		out[id] = row
+	}
+	require.NoError(t, rows.Err())
+	return out
+}
+
+// positions counts the records of the organization's chain.
+func positions(t *testing.T, db *sql.DB, organizationID string) int {
+	t.Helper()
+	var n int
+	require.NoError(t, db.QueryRow(`
+SELECT count(*) FROM audit_records r JOIN record_chains c ON c.id = r.chain_id
+ WHERE c.organization_id = $1`, organizationID).Scan(&n))
+	return n
+}
+
+// markOrg is a state change a test can see: it sets the organization's
+// max_agents to markedMaxAgents.
+const markedMaxAgents = 4321
+
+func markOrg(organizationID string) func(context.Context, *sql.Tx) error {
+	return func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE organizations SET max_agents = $2 WHERE id = $1`, organizationID, markedMaxAgents)
+		return err
+	}
+}
+
+func marked(t *testing.T, db *sql.DB, organizationID string) bool {
+	t.Helper()
+	var n sql.NullInt64
+	require.NoError(t, db.QueryRow(`SELECT max_agents FROM organizations WHERE id = $1`, organizationID).Scan(&n))
+	return n.Valid && n.Int64 == markedMaxAgents
+}
+
+func unmark(t *testing.T, db *sql.DB, organizationID string) {
+	t.Helper()
+	_, err := db.Exec(`UPDATE organizations SET max_agents = 1 WHERE id = $1`, organizationID)
+	require.NoError(t, err)
 }

@@ -20,9 +20,13 @@
 // do not wait for a connection.
 //
 // A write that fails is refused whole: the state change rolls back with the
-// record. Every failure is counted in aim_record_write_failures_total by the
-// class of the write and a reason from a closed set, and writes one SECURITY
-// console line with both.
+// record. The one exception is a reduction, which removes or narrows what
+// someone may do: once its state change has run, a failure to append its
+// record rolls back to a savepoint taken after the state change, and the
+// state change commits with a record_debts row from which the debt settler
+// appends the record later. Every failure is counted in
+// aim_record_write_failures_total by the class of the write and a reason
+// from a closed set, and writes one SECURITY console line with both.
 package store
 
 import (
@@ -178,6 +182,21 @@ type Appended struct {
 	// Existing is true when the guard ended the write with a record already
 	// in the chain, and nothing was appended.
 	Existing bool
+	// Debt is set when the write was a reduction whose record could not be
+	// appended: its state change committed without the record, and nothing
+	// was appended.
+	Debt *Debt
+}
+
+// Debt is what a reduction whose record could not be appended committed in
+// its place.
+type Debt struct {
+	// ID is the id of its record_debts row, which is also the event id of the
+	// late record the settler appends. It is empty when the row could not be
+	// written either, and the state change committed with no record.
+	ID string
+	// Reason is why the record could not be appended.
+	Reason Reason
 }
 
 // Config configures a Writer.
@@ -204,6 +223,7 @@ type Writer struct {
 	log     *log.Logger
 	now     func() time.Time
 	waits   lockWaitPeriod
+	health  pathHealth
 
 	mu    sync.Mutex
 	slots map[string]chan struct{}
@@ -279,6 +299,10 @@ UPDATE record_chains c
    SET head_seq = a.seq, head_hash = a.record_hash, updated_at = NOW()
   FROM appended a
  WHERE c.id = a.chain_id AND c.head_seq = $15`
+	// A reduction's record is tried in this savepoint, taken after its state
+	// change, so a failed append rolls back to the state change alone.
+	savepointQuery           = `SAVEPOINT record_append`
+	rollbackToSavepointQuery = `ROLLBACK TO SAVEPOINT record_append`
 )
 
 // placeholderHead lets a draft be serialized before its chain position is
@@ -291,6 +315,12 @@ var placeholderHead = record.Head{
 // Write appends one record to the organization's chain, in one transaction
 // with req.Apply. A *WriteError reports a failed record write; any other
 // error is req.Apply's or a refusal of the request itself.
+//
+// A reduction is the exception. Its draft must be one a record_debts row can
+// hold (debtFromDraft), or it is refused before anything waits, with reason
+// canonical. Once its state change has run, a failure to append its record
+// is counted and logged as any other, but Write returns no error: the state
+// change commits with a debt, reported in Appended.Debt.
 func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 	if !req.Class.valid() {
 		return Appended{}, fmt.Errorf("%w: %q is not a write class", ErrInvalidWrite, req.Class)
@@ -303,15 +333,34 @@ func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 		if ctx.Err() != nil {
 			reason = ReasonOther
 		}
-		w.metrics.failures.WithLabelValues(string(req.Class), string(reason)).Inc()
+		w.noteFailure(req.Class, reason)
+		if out.Debt != nil {
+			out.Debt.Reason = reason
+			id := out.Debt.ID
+			if id == "" {
+				id = "none"
+			}
+			w.log.Printf("SECURITY %s class=%s reason=%s debt=%s", EventRecordWriteFailed, req.Class, reason, id)
+			return out, nil
+		}
 		w.log.Printf("SECURITY %s class=%s reason=%s", EventRecordWriteFailed, req.Class, reason)
 		return Appended{}, &WriteError{Class: req.Class, Reason: reason, err: err}
+	}
+	if err == nil {
+		w.health.succeeded(w.now())
 	}
 	return out, err
 }
 
+// noteFailure counts one failed record write.
+func (w *Writer) noteFailure(class Class, reason Reason) {
+	w.metrics.failures.WithLabelValues(string(class), string(reason)).Inc()
+	w.health.failed(w.now(), class, reason)
+}
+
 // write returns a reason when the record write failed, and an error with no
-// reason when req.Apply did.
+// reason when req.Apply did. A reduction that committed with a debt returns
+// its reason and an Appended whose Debt is set.
 func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error) {
 	d := cloneDraft(req.Draft)
 	if d.Timestamp.IsZero() {
@@ -324,12 +373,23 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 	if _, err := record.NewRecord(placeholderHead, d); err != nil {
 		return Appended{}, ReasonCanonical, err
 	}
+	var owed *debt
+	if req.Class == ClassReduction {
+		row, err := debtFromDraft(req.OrganizationID, d)
+		if err != nil {
+			return Appended{}, ReasonCanonical, err
+		}
+		owed = &row
+	}
 
 	waitStart := time.Now()
 	deadline := waitStart.Add(LockTimeout)
 	release, err := w.takeSlot(ctx, req.OrganizationID, deadline)
 	if err != nil {
 		w.observeWait(time.Since(waitStart))
+		if owed != nil {
+			return w.commitDebtOnly(ctx, req, *owed, err)
+		}
 		return Appended{}, ReasonLockTimeout, err
 	}
 	defer release()
@@ -352,6 +412,112 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 		if err := req.Apply(ctx, tx); err != nil {
 			return Appended{}, "", err
 		}
+	}
+	if owed != nil {
+		if _, err := tx.ExecContext(ctx, savepointQuery); err != nil {
+			return Appended{}, ReasonDatabase, err
+		}
+	}
+
+	out, reason, err := w.appendLocked(ctx, tx, req.OrganizationID, &d, req.Guard, waitStart, deadline, req.Apply != nil)
+	if reason == "" {
+		if err := tx.Commit(); err != nil {
+			return Appended{}, ReasonDatabase, err
+		}
+		committed = true
+		return out, "", nil
+	}
+	if owed == nil {
+		return Appended{}, reason, err
+	}
+
+	// The reduction commits without its record, with a debt.
+	if _, rerr := tx.ExecContext(ctx, rollbackToSavepointQuery); rerr != nil {
+		return Appended{}, reason, errors.Join(err, rerr)
+	}
+	debtID := w.insertDebt(ctx, tx, *owed)
+	if cerr := tx.Commit(); cerr != nil {
+		return Appended{}, reason, errors.Join(err, cerr)
+	}
+	committed = true
+	return w.debtCommitted(*owed, debtID), reason, err
+}
+
+// commitDebtOnly runs a reduction whose write found no free connection slot
+// of its chain within the lock timeout: it takes one of the chain's debt
+// slots instead, runs the state change and commits it with a debt, without
+// waiting for the append lock.
+func (w *Writer) commitDebtOnly(ctx context.Context, req Write, owed debt, cause error) (Appended, Reason, error) {
+	release, err := w.takeSlot(ctx, debtSlotKey(req.OrganizationID), time.Now().Add(LockTimeout))
+	if err != nil {
+		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
+	}
+	defer release()
+	tx, err := w.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if _, err := tx.ExecContext(ctx, setSessionTimeoutsQuery,
+		millis(LockTimeout), millis(IdleInTransactionTimeout)); err != nil {
+		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
+	}
+	if req.Apply != nil {
+		if err := req.Apply(ctx, tx); err != nil {
+			return Appended{}, "", err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, savepointQuery); err != nil {
+		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
+	}
+	debtID := w.insertDebt(ctx, tx, owed)
+	if err := tx.Commit(); err != nil {
+		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
+	}
+	committed = true
+	return w.debtCommitted(owed, debtID), ReasonLockTimeout, cause
+}
+
+// insertDebt writes the debt row inside the savepoint. When the insert
+// fails it rolls back to the savepoint, so the state change still commits,
+// and returns an empty id.
+func (w *Writer) insertDebt(ctx context.Context, tx *sql.Tx, owed debt) string {
+	args, err := owed.args()
+	if err == nil {
+		_, err = tx.ExecContext(ctx, insertDebtQuery, args...)
+	}
+	if err != nil {
+		_, _ = tx.ExecContext(ctx, rollbackToSavepointQuery)
+		return ""
+	}
+	return owed.id
+}
+
+// debtCommitted counts and logs a debt once the transaction that wrote it
+// committed, and returns what the write reports. debtID is empty when the
+// row could not be written.
+func (w *Writer) debtCommitted(owed debt, debtID string) Appended {
+	if debtID != "" {
+		w.metrics.debtsWritten.Inc()
+		w.log.Print(owed.line())
+	}
+	return Appended{EventID: owed.id, Debt: &Debt{ID: debtID}}
+}
+
+func debtSlotKey(organizationID string) string { return "debt/" + organizationID }
+
+// appendLocked takes the append lock in tx and appends d to the
+// organization's chain. It does not commit. When applied is true, a state
+// change ran in tx first, and the lock wait is bounded by what remains of
+// the deadline.
+func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID string, d *record.Draft,
+	guard Guard, waitStart, deadline time.Time, applied bool) (Appended, Reason, error) {
+	if applied {
 		remaining := time.Until(deadline)
 		if remaining < time.Millisecond {
 			w.observeWait(time.Since(waitStart))
@@ -364,7 +530,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 
 	// The append lock. Everything after this statement is covered by it.
 	var chainID string
-	err = tx.QueryRowContext(ctx, lockChainQuery, req.OrganizationID).Scan(&chainID)
+	err := tx.QueryRowContext(ctx, lockChainQuery, organizationID).Scan(&chainID)
 	w.observeWait(time.Since(waitStart))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -378,7 +544,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 		return Appended{}, ReasonDatabase, err
 	}
 
-	status, err := ReadChainState(ctx, tx, req.OrganizationID)
+	status, err := ReadChainState(ctx, tx, organizationID)
 	if err != nil {
 		return Appended{}, ReasonDatabase, err
 	}
@@ -390,22 +556,18 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 	}
 	head := record.Head{ChainID: chainID, Seq: status.Head.Seq, Hash: status.Head.Hash}
 
-	if req.Guard != nil {
-		existing, reason, err := runGuard(ctx, req.Guard, tx, chainID, &d)
+	if guard != nil {
+		existing, reason, err := runGuard(ctx, guard, tx, chainID, d)
 		if reason != "" {
 			return Appended{}, reason, err
 		}
 		if existing != nil {
-			if err := tx.Commit(); err != nil {
-				return Appended{}, ReasonDatabase, err
-			}
-			committed = true
 			return Appended{ChainID: chainID, Seq: existing.Seq, EventID: existing.EventID,
 				RecordHash: existing.RecordHash, Existing: true}, "", nil
 		}
 	}
 
-	body, err := record.NewRecord(head, d)
+	body, err := record.NewRecord(head, *d)
 	if err != nil {
 		return Appended{}, ReasonCanonical, err
 	}
@@ -435,10 +597,6 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 	if n, err := res.RowsAffected(); err != nil || n != 1 {
 		return Appended{}, ReasonChainHead, errors.New("store: the head moved under the append lock")
 	}
-	if err := tx.Commit(); err != nil {
-		return Appended{}, ReasonDatabase, err
-	}
-	committed = true
 	return Appended{ChainID: chainID, Seq: next.Seq, EventID: d.EventID, RecordHash: next.Hash}, "", nil
 }
 
