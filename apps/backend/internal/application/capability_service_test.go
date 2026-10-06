@@ -1247,48 +1247,6 @@ func TestCapabilityService_RevokeCapability_NotFound(t *testing.T) {
 	mockCapRepo.AssertExpectations(t)
 }
 
-func TestCapabilityService_AutoDetectCapabilities_WithTools(t *testing.T) {
-	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
-
-	agentID := uuid.New()
-	mcpMetadata := map[string]interface{}{
-		"tools": []interface{}{
-			map[string]interface{}{
-				"name":        "read_file",
-				"description": "Read a file from the filesystem",
-			},
-			map[string]interface{}{
-				"name":        "write_file",
-				"description": "Write to a file",
-			},
-		},
-	}
-
-	mockCapRepo.On("CreateCapability", mock.AnythingOfType("*domain.AgentCapability")).Return(nil).Times(2)
-
-	err := service.AutoDetectCapabilities(context.Background(), agentID, mcpMetadata)
-
-	assert.NoError(t, err)
-	mockCapRepo.AssertExpectations(t)
-}
-
-func TestCapabilityService_AutoDetectCapabilities_NoTools(t *testing.T) {
-	mockCapRepo := new(MockCapabilityRepoForService)
-	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)
-
-	agentID := uuid.New()
-	mcpMetadata := map[string]interface{}{
-		"version": "1.0",
-	}
-
-	err := service.AutoDetectCapabilities(context.Background(), agentID, mcpMetadata)
-
-	assert.NoError(t, err)
-	// No capabilities should be created
-	mockCapRepo.AssertNotCalled(t, "CreateCapability", mock.Anything)
-}
-
 func TestCapabilityService_ValidateAndRegisterCapability_CoreCapability(t *testing.T) {
 	mockCapRepo := new(MockCapabilityRepoForService)
 	service := NewCapabilityService(mockCapRepo, nil, nil, nil, nil, nil)

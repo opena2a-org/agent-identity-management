@@ -654,10 +654,7 @@ func (r *AgentRepository) SuspendAgentsWithExpiredKeys(now time.Time) ([]uuid.UU
 	const query = `
 		UPDATE agents
 		SET status = $1, updated_at = $2
-		WHERE key_expires_at IS NOT NULL
-		  AND key_expires_at < $2
-		  AND (key_rotation_grace_until IS NULL OR key_rotation_grace_until <= $2)
-		  AND status NOT IN ($1, $3)
+		WHERE` + expiredKeyPredicate + `
 		RETURNING id
 	`
 

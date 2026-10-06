@@ -176,18 +176,22 @@ func (r *Recorder) draft(c Change) record.Draft {
 	if c.ParentID != "" {
 		origin, parent = "parent", c.ParentID
 	}
+	retained := map[string]any{
+		"issuer":         r.issuer,
+		"writer_version": WriterVersion,
+		"source":         Source,
+		"state_space":    StateSpaceAgent,
+		"trace_origin":   origin,
+	}
+	if o := c.Trigger.outcome(); o != "" {
+		retained["outcome"] = o
+	}
 	return record.Draft{
 		EventID: uuid.NewString(),
 		Type:    RecordType,
 		Retained: map[string]any{
 			"trigger": map[string]any{"type": string(c.Trigger)},
-			"opena2a": map[string]any{
-				"issuer":         r.issuer,
-				"writer_version": WriterVersion,
-				"source":         Source,
-				"state_space":    StateSpaceAgent,
-				"trace_origin":   origin,
-			},
+			"opena2a": retained,
 		},
 		Tenant: map[string]any{
 			"trace_id":       c.TraceID,
@@ -204,7 +208,8 @@ func (r *Recorder) draft(c Change) record.Draft {
 }
 
 // change locks the agent, reads its state, makes the change and reads the
-// state again, all in tx.
+// state again, all in tx. A null transition whose statement changed the
+// state is refused, and its transaction rolls back.
 func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err error) {
 	if prev, err = readState(ctx, tx, c.OrganizationID, c.AgentID, true); err != nil {
 		return State{}, State{}, err
@@ -214,6 +219,9 @@ func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err er
 	}
 	if next, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false); err != nil {
 		return State{}, State{}, err
+	}
+	if c.Trigger.outcome() != "" && !Equal(prev, next) {
+		return State{}, State{}, fmt.Errorf("%w: %s changed the agent's authorization state", ErrInvalidChange, c.Trigger)
 	}
 	return prev, next, nil
 }

@@ -564,7 +564,7 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 	}
 
 	before := agent.Status
-	if err := h.agentService.VerifyAgent(c.Context(), agentID); err != nil {
+	if err := h.agentService.VerifyAgent(transition.WithActor(c.Context(), transition.User(userID)), agentID); err != nil {
 		return respondAgentStatusActError(c, err)
 	}
 
@@ -2210,7 +2210,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 	}
 
 	// Update public key (passes auth method for key replacement security check)
-	if err := h.agentService.UpdateAgentPublicKey(c.Context(), agentID, req.PublicKey, authMethod); err != nil {
+	if err := h.agentService.UpdateAgentPublicKey(withTransitionActor(c), agentID, req.PublicKey, authMethod); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 

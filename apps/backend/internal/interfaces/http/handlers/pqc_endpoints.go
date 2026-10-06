@@ -129,7 +129,7 @@ func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 	now := time.Now()
 	algStr := string(pureAlg)
 
-	if err := h.agentService.UpdateAgentPQCKey(c.Context(), agentID, req.PublicKey, algStr, req.EnableHybrid); err != nil {
+	if err := h.agentService.UpdateAgentPQCKey(withTransitionActor(c), agentID, req.PublicKey, algStr, req.EnableHybrid); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to register PQC key",
 		})
@@ -254,7 +254,7 @@ func (h *AgentHandler) RotatePQCKey(c fiber.Ctx) error {
 	now := time.Now()
 	algStr := string(alg)
 
-	if err := h.agentService.RotateAgentPQCKey(c.Context(), agentID, req.NewPublicKey, algStr); err != nil {
+	if err := h.agentService.RotateAgentPQCKey(withTransitionActor(c), agentID, req.NewPublicKey, algStr); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to rotate PQC key",
 		})

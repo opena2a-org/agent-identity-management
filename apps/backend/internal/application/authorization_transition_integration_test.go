@@ -104,16 +104,19 @@ func (transitionTrust) CalculateFactors(*domain.Agent) (*domain.TrustScoreFactor
 }
 
 type transitionFixture struct {
-	db       *sql.DB
-	orgID    uuid.UUID
-	userID   uuid.UUID
-	agentID  uuid.UUID
-	keys     *transitionKeys
-	reg      *prometheus.Registry
-	logs     *transitionLogs
-	chainID  string
-	capSvc   *CapabilityService
-	agentSvc *AgentService
+	db        *sql.DB
+	orgID     uuid.UUID
+	userID    uuid.UUID
+	agentID   uuid.UUID
+	keys      *transitionKeys
+	reg       *prometheus.Registry
+	logs      *transitionLogs
+	chainID   string
+	rec       *transition.Recorder
+	capSvc    *CapabilityService
+	agentSvc  *AgentService
+	reqSvc    *CapabilityRequestService
+	policySvc *SecurityPolicyService
 }
 
 func newTransitionFixture(t *testing.T) *transitionFixture {
@@ -135,19 +138,13 @@ func newTransitionFixture(t *testing.T) *transitionFixture {
 		_, _ = db.Exec(`DELETE FROM audit_records WHERE chain_id IN (SELECT id FROM record_chains WHERE organization_id = $1)`, f.orgID)
 		_, _ = db.Exec(`DELETE FROM record_chains WHERE organization_id = $1`, f.orgID)
 		_, _ = db.Exec(`DELETE FROM audit_logs WHERE organization_id = $1`, f.orgID)
-		_, _ = db.Exec(`DELETE FROM trust_scores WHERE agent_id = $1`, f.agentID)
-		_, _ = db.Exec(`DELETE FROM agents WHERE id = $1`, f.agentID)
+		_, _ = db.Exec(`DELETE FROM trust_scores WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)`, f.orgID)
+		_, _ = db.Exec(`DELETE FROM capability_requests WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)`, f.orgID)
+		_, _ = db.Exec(`DELETE FROM agent_capabilities WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)`, f.orgID)
+		_, _ = db.Exec(`DELETE FROM agents WHERE organization_id = $1`, f.orgID)
 	})
 
-	agentKey, _, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	_, err = db.Exec(`
-		INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score,
-		                    public_key, key_algorithm, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $3, 'ai_agent', 'verified', 0.5, $4, 'Ed25519', $5, NOW(), NOW())`,
-		f.agentID, f.orgID, "transition-agent-"+f.agentID.String()[:8],
-		base64.StdEncoding.EncodeToString(agentKey), f.userID)
-	require.NoError(t, err)
+	f.insertAgent(t, f.agentID)
 
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
@@ -177,7 +174,29 @@ func newTransitionFixture(t *testing.T) *transitionFixture {
 	f.capSvc.SetTransitionRecorder(rec)
 	f.agentSvc = NewAgentService(agentRepo, transitionTrust{}, trustRepo, vault, nil, nil, capRepo, nil, nil, nil, nil, nil)
 	f.agentSvc.SetTransitionRecorder(rec)
+	f.rec = rec
+	f.reqSvc = NewCapabilityRequestService(repository.NewCapabilityRequestRepository(sqlx.NewDb(db, "postgres")),
+		capRepo, agentRepo, repository.NewOrganizationRepository(db))
+	f.reqSvc.SetTransitionRecorder(rec)
+	f.policySvc = NewSecurityPolicyService(nil, nil, nil)
+	f.policySvc.SetAgentRepository(agentRepo)
+	f.policySvc.SetTransitionRecorder(rec)
 	return f
+}
+
+// insertAgent adds a verified agent with an Ed25519 key it holds itself to
+// the fixture's organization.
+func (f *transitionFixture) insertAgent(t *testing.T, id uuid.UUID) {
+	t.Helper()
+	agentKey, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	_, err = f.db.Exec(`
+		INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score,
+		                    public_key, key_algorithm, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $3, 'ai_agent', 'verified', 0.5, $4, 'Ed25519', $5, NOW(), NOW())`,
+		id, f.orgID, "transition-agent-"+id.String()[:8],
+		base64.StdEncoding.EncodeToString(agentKey), f.userID)
+	require.NoError(t, err)
 }
 
 // startTestChain writes an organization's chain genesis the way the record
@@ -221,6 +240,8 @@ type transitionRecord struct {
 	Actor    string
 	Agent    string
 	Trace    string
+	// Outcome is opena2a.outcome, "" when the record has none.
+	Outcome string
 }
 
 type transitionStateJSON struct {
@@ -250,6 +271,7 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 			} `json:"trigger"`
 			Opena2a struct {
 				StateSpace string `json:"state_space"`
+				Outcome    string `json:"outcome"`
 				Chain      struct {
 					Seq int64 `json:"seq"`
 				} `json:"chain"`
@@ -279,7 +301,7 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		out = append(out, transitionRecord{
 			Seq: retained.Opena2a.Chain.Seq, Trigger: retained.Trigger.Type,
 			Previous: tenant.Previous, New: tenant.New, Actor: personal.Actor,
-			Agent: tenant.Opena2a.SubjectAgentID, Trace: tenant.TraceID,
+			Agent: tenant.Opena2a.SubjectAgentID, Trace: tenant.TraceID, Outcome: retained.Opena2a.Outcome,
 		})
 	}
 	return out

@@ -121,6 +121,21 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 	assert.False(t, ran, "a refused change ran its statement")
 }
 
+// A rejected request's record says it was rejected; no other trigger's record
+// carries an outcome.
+func TestOnlyARejectionCarriesAnOutcome(t *testing.T) {
+	r := &Recorder{issuer: "urn:uuid:" + uuid.NewString()}
+	for trigger := range classes {
+		d := r.draft(Change{Trigger: trigger, Actor: System(), TraceID: strings.Repeat("ab", 16)})
+		outcome, ok := d.Retained["opena2a"].(map[string]any)["outcome"]
+		if trigger == TriggerRequestRejected {
+			assert.Equal(t, OutcomeRejected, outcome)
+		} else {
+			assert.False(t, ok, "%s carries an outcome", trigger)
+		}
+	}
+}
+
 func TestNewRecorderNeedsAnIssuer(t *testing.T) {
 	db, err := sql.Open("postgres", "postgres://unused.invalid/none")
 	require.NoError(t, err)

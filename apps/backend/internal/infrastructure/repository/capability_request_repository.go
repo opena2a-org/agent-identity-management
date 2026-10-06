@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -20,6 +21,10 @@ func NewCapabilityRequestRepository(db *sqlx.DB) domain.CapabilityRequestReposit
 }
 
 func (r *capabilityRequestRepository) Create(req *domain.CapabilityRequest) error {
+	return insertCapabilityRequest(context.Background(), r.db, req)
+}
+
+func insertCapabilityRequest(ctx context.Context, db execer, req *domain.CapabilityRequest) error {
 	query := `
 		INSERT INTO capability_requests (
 			id, agent_id, capability_type, reason, metadata, status,
@@ -37,7 +42,8 @@ func (r *capabilityRequestRepository) Create(req *domain.CapabilityRequest) erro
 	req.Status = domain.CapabilityRequestStatusPending
 
 	// Use JSONBMap's Value() method for metadata serialization
-	_, err := r.db.Exec(
+	_, err := db.ExecContext(
+		ctx,
 		query,
 		req.ID,
 		req.AgentID,
