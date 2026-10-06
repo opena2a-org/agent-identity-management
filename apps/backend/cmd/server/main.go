@@ -59,6 +59,11 @@ func main() {
 		log.Println("No .env file found in project root, using environment variables")
 	}
 
+	// `aim-server migrate` applies the migrations and exits; see migrate_command.go.
+	if len(os.Args) > 1 && os.Args[1] == migrateCommandName {
+		os.Exit(runMigrateCommand())
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -2097,8 +2102,18 @@ func runMigrations(db *sql.DB) error {
 	return nil
 }
 
-// createMigrationsTable creates the schema_migrations table if it doesn't exist
+// createMigrationsTable creates the schema_migrations table if it doesn't exist.
+// It looks first because CREATE TABLE IF NOT EXISTS still needs CREATE on the
+// schema: a server connected as a role that owns no table (see
+// migrate_command.go) would otherwise stop here with every migration applied.
 func createMigrationsTable(db *sql.DB) error {
+	var exists bool
+	if err := db.QueryRow(`SELECT to_regclass('schema_migrations') IS NOT NULL`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
 	query := `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			id SERIAL PRIMARY KEY,
