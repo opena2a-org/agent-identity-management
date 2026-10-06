@@ -118,7 +118,8 @@ func TestSDKVerificationRoutesRequireJustifiedBareMount(t *testing.T) {
 			groupMiddlewareRan = true
 			return c.Next()
 		}},
-		Handlers: sdkAPITestHandlers(func(c fiber.Ctx) error { return c.SendStatus(sentinelStatus) }),
+		AgentNameResolver: sdkAPITestNameResolver,
+		Handlers:          sdkAPITestHandlers(func(c fiber.Ctx) error { return c.SendStatus(sentinelStatus) }),
 	})
 	require.NotEmpty(t, table, "registerSDKAPIRoutes returned no routes")
 
