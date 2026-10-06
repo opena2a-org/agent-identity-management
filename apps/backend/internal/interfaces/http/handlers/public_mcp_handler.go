@@ -10,6 +10,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // PublicMCPHandler handles public (no user auth) MCP server operations
@@ -166,7 +167,10 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 	}
 
 	// Note: sdkTokenID and apiKeyID are nil for agent-authenticated requests (uses cryptographic signature auth)
-	server, err := h.mcpService.CreateMCPServer(c.Context(), createReq, agent.OrganizationID, agentID, &agentID, nil, nil)
+	// The agent signed the request, so it is the actor of the talks_to entry
+	// the registration adds.
+	actorCtx := transition.WithActor(c.Context(), transition.Agent(agentID))
+	server, err := h.mcpService.CreateMCPServer(actorCtx, createReq, agent.OrganizationID, agentID, &agentID, nil, nil)
 	if err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}

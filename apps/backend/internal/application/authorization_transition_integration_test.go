@@ -255,6 +255,7 @@ type transitionStateJSON struct {
 		GrantedScope []string         `json:"granted_scope"`
 		Status       string           `json:"status"`
 		Keys         []transition.Key `json:"keys"`
+		TalksTo      []string         `json:"talks_to"`
 	} `json:"opena2a"`
 }
 

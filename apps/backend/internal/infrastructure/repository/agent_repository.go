@@ -22,32 +22,7 @@ type AgentRepository struct {
 // Format 1: ["uuid1", "uuid2"] - simple string array
 // Format 2: [{"id": "uuid1", "name": "server-name"}] - object array
 func unmarshalTalksTo(data []byte) ([]string, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-
-	// Try format 1: string array
-	strings := make([]string, 0)
-	if err := json.Unmarshal(data, &strings); err == nil {
-		return strings, nil
-	}
-
-	// Try format 2: object array
-	var objects []map[string]interface{}
-	if err := json.Unmarshal(data, &objects); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal talks_to: %w", err)
-	}
-
-	// Extract IDs and names from objects
-	result := make([]string, 0, len(objects))
-	for _, obj := range objects {
-		if id, ok := obj["id"].(string); ok && id != "" {
-			result = append(result, id)
-		} else if name, ok := obj["name"].(string); ok && name != "" {
-			result = append(result, name)
-		}
-	}
-	return result, nil
+	return domain.DecodeTalksTo(data)
 }
 
 // NewAgentRepository creates a new agent repository

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -93,6 +94,73 @@ func RotateAgentPQCKeyTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, publicKe
 		return fmt.Errorf("rotate agent PQC key: %w", err)
 	}
 	return oneRow(res, "rotate agent PQC key")
+}
+
+// AgentTalksToTx reads an agent's talks_to entries in tx, as the agent's
+// readers see them.
+func AgentTalksToTx(ctx context.Context, tx *sql.Tx, id uuid.UUID) ([]string, error) {
+	var raw []byte
+	if err := tx.QueryRowContext(ctx, `SELECT talks_to FROM agents WHERE id = $1`, id).Scan(&raw); err != nil {
+		return nil, fmt.Errorf("read agent talks_to: %w", err)
+	}
+	entries, err := domain.DecodeTalksTo(raw)
+	if err != nil {
+		return nil, fmt.Errorf("read agent talks_to: %w", err)
+	}
+	return entries, nil
+}
+
+// SetAgentTalksToTx stores an agent's talks_to entries in tx, as an array of
+// strings. No entries are stored as an empty array.
+func SetAgentTalksToTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, entries []string) error {
+	if entries == nil {
+		entries = []string{}
+	}
+	raw, err := json.Marshal(entries)
+	if err != nil {
+		return fmt.Errorf("set agent talks_to: %w", err)
+	}
+	res, err := tx.ExecContext(ctx, `UPDATE agents SET talks_to = $2, updated_at = NOW() WHERE id = $1`, id, raw)
+	if err != nil {
+		return fmt.Errorf("set agent talks_to: %w", err)
+	}
+	return oneRow(res, "set agent talks_to")
+}
+
+// UpdateProfile stores an agent's descriptive columns: its display name,
+// description, type, version, links, metadata and declared purpose. It writes
+// no status, key, talks_to, capability or trust score column.
+func (r *AgentRepository) UpdateProfile(agent *domain.Agent) error {
+	metadata := []byte("{}")
+	if agent.Metadata != nil {
+		raw, err := json.Marshal(agent.Metadata)
+		if err != nil {
+			return fmt.Errorf("update agent profile: metadata: %w", err)
+		}
+		metadata = raw
+	}
+	var declaredPurpose interface{}
+	if agent.DeclaredPurpose != nil {
+		raw, err := json.Marshal(agent.DeclaredPurpose)
+		if err != nil {
+			return fmt.Errorf("update agent profile: declared purpose: %w", err)
+		}
+		declaredPurpose = raw
+	}
+	agent.UpdatedAt = time.Now()
+	res, err := r.db.Exec(`
+		UPDATE agents
+		   SET display_name = $2, description = $3, agent_type = $4, version = $5,
+		       certificate_url = $6, repository_url = $7, documentation_url = $8,
+		       metadata = $9, declared_purpose = $10, updated_at = $11
+		 WHERE id = $1`,
+		agent.ID, agent.DisplayName, agent.Description, agent.AgentType, agent.Version,
+		agent.CertificateURL, agent.RepositoryURL, agent.DocumentationURL,
+		metadata, declaredPurpose, agent.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("update agent profile: %w", err)
+	}
+	return oneRow(res, "update agent profile")
 }
 
 // expiredKeyPredicate selects an agent whose key expired before $2, whose

@@ -2,7 +2,7 @@
 // accompanies a change of an agent's authorization state, and replays an
 // organization's chain to rebuild each agent's state from its records alone.
 //
-// An agent's authorization state has four members:
+// An agent's authorization state has five members:
 //
 //   - scope: the capability types in force, empty while the agent is
 //     suspended or revoked;
@@ -10,7 +10,9 @@
 //   - opena2a.status: the agent's status;
 //   - opena2a.keys: each key the agent row holds, with its algorithm, its role
 //     and an identifier from which the public key is recovered (the did:key
-//     form for an Ed25519 key).
+//     form for an Ed25519 key);
+//   - opena2a.talks_to: the entries of the agent's talks_to list, the MCP
+//     servers it may talk to, as exact strings.
 //
 // The recorder reads the state before a change from the state tables inside
 // the change's transaction, under a row lock on the agent, and the state after
@@ -41,11 +43,17 @@
 // one, the record writer counts the failure, and a SECURITY line names the
 // organization, the trigger and the agent.
 //
+// A talks_to change takes the class its lists give, never one its trigger
+// names (TalksToClass): a list that keeps some of its entries and gains none
+// is a reduction, and any other change, one that empties the list included,
+// is an expansion. Apart from the registration that opens an agent's
+// history, only a talks_to trigger may change the list, and it may change
+// nothing else.
+//
 // Not built here: the debt row that lets such a record be written late and
 // its settlement, the opening_state record and its sweep, and the records of
-// a talks_to change, an agent's deletion, a hybrid mode change, a compromise
-// suspension and the key the service generates for an agent that signs
-// through it.
+// an agent's deletion, a hybrid mode change, a compromise suspension and the
+// key the service generates for an agent that signs through it.
 package transition
 
 import (
@@ -65,8 +73,8 @@ const (
 	StateSpaceAgent = "agent"
 	// WriterVersion is opena2a.writer_version of every record this package
 	// writes. It changes when the meaning of a member this package writes
-	// changes.
-	WriterVersion = "transition-1"
+	// changes: transition-2 added opena2a.talks_to to the agent's state.
+	WriterVersion = "transition-2"
 	// Source is opena2a.source: the record states a change the service made.
 	Source = "service"
 )
@@ -94,6 +102,10 @@ const (
 	TriggerKeyUpdated                 Trigger = "key_updated"
 	TriggerKeyExpiredSuspension       Trigger = "key_expired_suspension"
 	TriggerCompromiseSuspension       Trigger = "compromise_suspension"
+	TriggerTalksToReplaced            Trigger = "talks_to_replaced"
+	TriggerTalksToAdded               Trigger = "talks_to_added"
+	TriggerTalksToRemoved             Trigger = "talks_to_removed"
+	TriggerDetectionReported          Trigger = "detection_reported"
 )
 
 // classes is the class of each agent-space trigger. An expansion widens what
@@ -120,11 +132,61 @@ var classes = map[Trigger]store.Class{
 	TriggerCompromiseSuspension:       store.ClassReduction,
 }
 
+// talksToTriggers change an agent's talks_to list. Each names the act; its
+// class is read from the lists (TalksToClass).
+var talksToTriggers = map[Trigger]bool{
+	TriggerTalksToReplaced:   true,
+	TriggerTalksToAdded:      true,
+	TriggerTalksToRemoved:    true,
+	TriggerDetectionReported: true,
+}
+
 // Class returns the class of a trigger, and false for a trigger outside the
-// set.
+// set or one classed by comparison.
 func (t Trigger) Class() (store.Class, bool) {
 	c, ok := classes[t]
 	return c, ok
+}
+
+// ClassedByComparison reports whether a trigger's class is read from the
+// change it records rather than from its name: the talks_to triggers.
+func (t Trigger) ClassedByComparison() bool {
+	return talksToTriggers[t]
+}
+
+// TalksToClass classes a change of an agent's talks_to list from its entries
+// before and after, compared as sets of exact strings. A non-empty list whose
+// entries were all in the old one, with at least one old entry gone, is a
+// reduction. Any other change is an expansion: an entry added, one replaced,
+// and a list emptied, because a reader in the service treats an empty list
+// as unrestricted. Equal sets are no change, and changed is false.
+func TalksToClass(before, after []string) (class store.Class, changed bool) {
+	old, next := stringSet(before), stringSet(after)
+	if len(old) == len(next) && subset(next, old) {
+		return "", false
+	}
+	if len(next) > 0 && subset(next, old) {
+		return store.ClassReduction, true
+	}
+	return store.ClassExpansion, true
+}
+
+func stringSet(s []string) map[string]bool {
+	set := make(map[string]bool, len(s))
+	for _, v := range s {
+		set[v] = true
+	}
+	return set
+}
+
+// subset reports whether every member of a is in b.
+func subset(a, b map[string]bool) bool {
+	for v := range a {
+		if !b[v] {
+			return false
+		}
+	}
+	return true
 }
 
 // opens reports whether a trigger opens the agent's history: the agent has

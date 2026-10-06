@@ -43,6 +43,107 @@ func TestTriggerClasses(t *testing.T) {
 	}
 	_, ok := Trigger("drift_approved").Class()
 	assert.False(t, ok, "a trigger outside the agent-space set has no class")
+	assert.False(t, Trigger("drift_approved").ClassedByComparison(), "drift_approved has no writer")
+
+	for _, trigger := range []Trigger{TriggerTalksToReplaced, TriggerTalksToAdded, TriggerTalksToRemoved, TriggerDetectionReported} {
+		assert.True(t, trigger.ClassedByComparison(), trigger)
+		_, ok := trigger.Class()
+		assert.False(t, ok, "%s takes its class from its lists, never from its name", trigger)
+	}
+	assert.False(t, TriggerDirectGrant.ClassedByComparison())
+}
+
+// A talks_to change is a reduction only when the new list is non-empty and
+// every entry of it was in the old one; entries compare as exact strings,
+// and order and repeats do not count.
+func TestTalksToClass(t *testing.T) {
+	for name, tc := range map[string]struct {
+		before, after []string
+		class         store.Class
+		changed       bool
+	}{
+		"an entry added":          {[]string{"a"}, []string{"a", "b"}, store.ClassExpansion, true},
+		"the first entry":         {nil, []string{"a"}, store.ClassExpansion, true},
+		"an entry removed":        {[]string{"a", "b"}, []string{"b"}, store.ClassReduction, true},
+		"the last entry removed":  {[]string{"a"}, []string{}, store.ClassExpansion, true},
+		"one removed, one added":  {[]string{"a", "b"}, []string{"a", "c"}, store.ClassExpansion, true},
+		"a replacement":           {[]string{"a"}, []string{"b"}, store.ClassExpansion, true},
+		"a case change":           {[]string{"github"}, []string{"GitHub"}, store.ClassExpansion, true},
+		"an entry split in two":   {[]string{"a,b"}, []string{"a", "b"}, store.ClassExpansion, true},
+		"the same set reordered":  {[]string{"a", "b"}, []string{"b", "a"}, "", false},
+		"a repeat dropped":        {[]string{"a", "a", "b"}, []string{"a", "b"}, "", false},
+		"both empty":              {nil, []string{}, "", false},
+		"a repeat kept, one gone": {[]string{"a", "a", "b"}, []string{"a", "a"}, store.ClassReduction, true},
+	} {
+		class, changed := TalksToClass(tc.before, tc.after)
+		assert.Equal(t, tc.changed, changed, name)
+		assert.Equal(t, tc.class, class, name)
+	}
+}
+
+// A talks_to trigger needs the class its lists give, and no other trigger
+// takes a class from its caller.
+func TestRecordRefusesAClassItsTriggerDoesNotTake(t *testing.T) {
+	r := newUnusedRecorder(t)
+	ran := false
+	base := Change{
+		OrganizationID: uuid.New(),
+		AgentID:        uuid.New(),
+		Actor:          User(uuid.New()),
+		TraceID:        strings.Repeat("ab", 16),
+		Apply:          func(context.Context, *sql.Tx) error { ran = true; return nil },
+	}
+	for name, c := range map[string]Change{
+		"a talks_to trigger with no class":       {Trigger: TriggerTalksToAdded},
+		"a talks_to trigger as a destruction":    {Trigger: TriggerTalksToRemoved, Class: store.ClassDestruction},
+		"a talks_to trigger as an observation":   {Trigger: TriggerDetectionReported, Class: store.ClassObservation},
+		"a suspension given the reduction class": {Trigger: TriggerAgentSuspended, Class: store.ClassReduction},
+		"a grant given the reduction class":      {Trigger: TriggerDirectGrant, Class: store.ClassReduction},
+	} {
+		c.OrganizationID, c.AgentID, c.Actor, c.TraceID, c.Apply = base.OrganizationID, base.AgentID, base.Actor, base.TraceID, base.Apply
+		_, err := r.Record(context.Background(), c)
+		require.ErrorIs(t, err, ErrInvalidChange, name)
+	}
+	assert.False(t, ran, "a refused change ran its statement")
+}
+
+// Under the agent's row lock, a talks_to trigger must change the list, only
+// the list, and in the class its caller read; any other trigger must leave
+// the list as it was.
+func TestCheckStatesOfATalksToChange(t *testing.T) {
+	prev := State{Scope: []string{"api:call"}, GrantedScope: []string{"api:call"}, Status: "verified",
+		Keys: []Key{}, TalksTo: []string{"a", "b"}}
+	with := func(edit func(s *State)) State {
+		s := prev
+		edit(&s)
+		return s
+	}
+	removed := with(func(s *State) { s.TalksTo = []string{"a"} })
+	added := with(func(s *State) { s.TalksTo = []string{"a", "b", "c"} })
+
+	reduction := Change{Trigger: TriggerTalksToRemoved, Class: store.ClassReduction}
+	require.NoError(t, checkStates(reduction, prev, removed))
+	require.ErrorIs(t, checkStates(reduction, prev, prev), ErrNoChange)
+	require.ErrorIs(t, checkStates(reduction, prev, added), ErrInvalidChange, "a removal that became an addition")
+	emptied := with(func(s *State) { s.TalksTo = []string{} })
+	require.ErrorIs(t, checkStates(reduction, prev, emptied), ErrInvalidChange, "an emptied list is not a reduction")
+	suspended := with(func(s *State) { s.TalksTo = []string{"a"}; s.Status = "suspended"; s.Scope = []string{} })
+	require.ErrorIs(t, checkStates(reduction, prev, suspended), ErrInvalidChange, "a talks_to change that also suspends")
+
+	expansion := Change{Trigger: TriggerTalksToAdded, Class: store.ClassExpansion}
+	require.NoError(t, checkStates(expansion, prev, added))
+	require.NoError(t, checkStates(expansion, prev, emptied))
+	require.ErrorIs(t, checkStates(expansion, prev, removed), ErrInvalidChange, "an addition that became a removal")
+
+	grant := Change{Trigger: TriggerDirectGrant}
+	granted := with(func(s *State) { s.GrantedScope = []string{"api:call", "files:read"}; s.Scope = s.GrantedScope })
+	require.NoError(t, checkStates(grant, prev, granted))
+	require.ErrorIs(t, checkStates(grant, prev, with(func(s *State) {
+		s.GrantedScope = []string{"api:call", "files:read"}
+		s.Scope = s.GrantedScope
+		s.TalksTo = []string{"a", "b", "c"}
+	})), ErrInvalidChange, "a grant that also widens talks_to")
+	require.NoError(t, checkStates(Change{Trigger: TriggerRegistrationBaseline}, State{}, added))
 }
 
 func TestNewTraceID(t *testing.T) {
@@ -242,6 +343,7 @@ func TestStateMemberRoundTrip(t *testing.T) {
 				{Alg: "ML-DSA-65", ID: "uBBBB", Role: KeyRolePrevious},
 			},
 		},
+		{Scope: []string{}, GrantedScope: []string{}, Status: "verified", Keys: []Key{}, TalksTo: []string{"filesystem", "github"}},
 	} {
 		raw, err := json.Marshal(s.member())
 		require.NoError(t, err)
@@ -249,6 +351,16 @@ func TestStateMemberRoundTrip(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &m))
 		assert.True(t, Equal(s, m.state()), "%s", raw)
 	}
+	talks := State{Scope: []string{}, GrantedScope: []string{}, Status: "verified", Keys: []Key{}, TalksTo: []string{"github"}}
+	raw, err := json.Marshal(talks.member())
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"talks_to":["github"]`)
+	none := talks
+	none.TalksTo = nil
+	raw, err = json.Marshal(none.member())
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"talks_to":[]`, "an empty list is written, not left out")
+	assert.False(t, Equal(talks, none), "talks_to is part of the state")
 	a := State{Scope: []string{}, GrantedScope: []string{}, Status: "verified", Keys: []Key{{Alg: "Ed25519", ID: "x", Role: KeyRolePrevious}}}
 	b := a
 	b.Keys = []Key{{Alg: "Ed25519", ID: "x", Role: KeyRolePrevious, GraceUntil: &grace}}
@@ -274,7 +386,8 @@ func TestTransitionRecordGoldenBytes(t *testing.T) {
 	d.TenantSalt = bytes.Repeat([]byte{0x21}, record.SaltSize)
 	d.PersonalSalt = bytes.Repeat([]byte{0x22}, record.SaltSize)
 	prev := State{Scope: []string{"files:read"}, GrantedScope: []string{"files:read"}, Status: "verified",
-		Keys: []Key{{Alg: "Ed25519", ID: "did:key:z6MkOld", Role: KeyRoleCurrent, Custody: KeyCustodyExternal}}}
+		Keys:    []Key{{Alg: "Ed25519", ID: "did:key:z6MkOld", Role: KeyRoleCurrent, Custody: KeyCustodyExternal}},
+		TalksTo: []string{"filesystem", "github"}}
 	next := prev
 	next.Keys = []Key{
 		{Alg: "Ed25519", ID: "did:key:z6MkNew", Role: KeyRoleCurrent, Custody: KeyCustodyServer},
@@ -293,7 +406,7 @@ func TestTransitionRecordGoldenBytes(t *testing.T) {
 	assert.Equal(t, goldenTransitionHash, sum, "canonical bytes:\n%s", body.Canonical())
 }
 
-const goldenTransitionHash = "e2ce1845137680d018661662880f38ee91665b2bf3a3a7888087a989ca28fcae"
+const goldenTransitionHash = "397ed37f91441f10cee02d132b651a5a6f7b326a8776a3794919cdedbb878ba7"
 
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
