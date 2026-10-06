@@ -27,18 +27,20 @@ func callerSeesAuditRequestDetail(c fiber.Ctx) bool {
 }
 
 // auditLogMemberView is domain.AuditLog without ipAddress, userAgent and
-// metadata. The members are absent from the JSON, not empty.
+// metadata. The members are absent from the JSON, not empty. actorType is
+// derived from userId and agentId, which the view already carries.
 type auditLogMemberView struct {
-	ID             uuid.UUID          `json:"id"`
-	OrganizationID uuid.UUID          `json:"organizationId"`
-	UserID         *uuid.UUID         `json:"userId,omitempty"`
-	AgentID        *uuid.UUID         `json:"agentId,omitempty"`
-	Action         domain.AuditAction `json:"action"`
-	ResourceType   string             `json:"resourceType"`
-	ResourceID     uuid.UUID          `json:"resourceId"`
-	Timestamp      time.Time          `json:"timestamp"`
-	AgentName      string             `json:"agentName,omitempty"`
-	UserName       string             `json:"userName,omitempty"`
+	ID             uuid.UUID             `json:"id"`
+	OrganizationID uuid.UUID             `json:"organizationId"`
+	UserID         *uuid.UUID            `json:"userId,omitempty"`
+	AgentID        *uuid.UUID            `json:"agentId,omitempty"`
+	Action         domain.AuditAction    `json:"action"`
+	ResourceType   string                `json:"resourceType"`
+	ResourceID     uuid.UUID             `json:"resourceId"`
+	Timestamp      time.Time             `json:"timestamp"`
+	AgentName      string                `json:"agentName,omitempty"`
+	UserName       string                `json:"userName,omitempty"`
+	ActorType      domain.AuditActorType `json:"actorType"`
 }
 
 // auditLogsForCaller returns logs unchanged for an admin and as
@@ -63,6 +65,7 @@ func auditLogsForCaller(c fiber.Ctx, logs []*domain.AuditLog) interface{} {
 			Timestamp:      log.Timestamp,
 			AgentName:      log.AgentName,
 			UserName:       log.UserName,
+			ActorType:      log.ActorType(),
 		})
 	}
 	return views

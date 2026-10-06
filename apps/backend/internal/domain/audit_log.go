@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,14 +83,54 @@ type AuditLog struct {
 	Action         AuditAction            `json:"action"`
 	ResourceType   string                 `json:"resourceType"` // agent, api_key, user, etc.
 	ResourceID     uuid.UUID              `json:"resourceId"`
-	IPAddress      string                 `json:"ipAddress"`
-	UserAgent      string                 `json:"userAgent"`
+	IPAddress      string                 `json:"ipAddress,omitempty"` // Absent when the row recorded none
+	UserAgent      string                 `json:"userAgent,omitempty"` // Absent when the row recorded none
 	Metadata       map[string]interface{} `json:"metadata"`
 	Timestamp      time.Time              `json:"timestamp"`
 
 	// Populated via JOIN queries (not stored in DB)
 	AgentName string `json:"agentName,omitempty"` // Name of agent that performed the action
 	UserName  string `json:"userName,omitempty"`  // Name of user that performed the action
+}
+
+// AuditActorType names the kind of party that performed an audited act. Every
+// route that returns an audit record carries it as actorType.
+type AuditActorType string
+
+const (
+	AuditActorUser   AuditActorType = "user"
+	AuditActorAgent  AuditActorType = "agent"
+	AuditActorSystem AuditActorType = "system"
+	// AuditActorOperatorCommand is the deployment operator's command. No
+	// audit_logs row records an operator's act yet, so ActorType never
+	// returns it.
+	AuditActorOperatorCommand AuditActorType = "operator_command"
+)
+
+// ActorType reports who performed the act the row records. An agent id names
+// the agent even when the row also carries a user id: the verification of an
+// agent's action stores the agent's owner as user_id beside the agent's id. A
+// row with only a user id was that user's act, and a row with neither was the
+// system's. A nil UUID counts as absent.
+func (a AuditLog) ActorType() AuditActorType {
+	switch {
+	case a.AgentID != nil && *a.AgentID != uuid.Nil:
+		return AuditActorAgent
+	case a.UserID != nil && *a.UserID != uuid.Nil:
+		return AuditActorUser
+	default:
+		return AuditActorSystem
+	}
+}
+
+// MarshalJSON writes the row's members and its actorType, so that every
+// route returning an AuditLog carries the actor type the same way.
+func (a AuditLog) MarshalJSON() ([]byte, error) {
+	type row AuditLog
+	return json.Marshal(struct {
+		row
+		ActorType AuditActorType `json:"actorType"`
+	}{row(a), a.ActorType()})
 }
 
 // AuditLogRepository defines the interface for audit log persistence.
