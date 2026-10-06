@@ -148,7 +148,7 @@ func TestCreateVerificationEvent_AgentOfAnotherOrganization(t *testing.T) {
 			agent := registeredAgent(uuid.New(), tc.prior)
 			f := newOwnershipFixture(agent)
 
-			event, err := f.svc.CreateVerificationEvent(context.Background(), eventRequest(callerOrg, agent.ID, tc.servers))
+			event, err := f.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(callerOrg, agent.ID, tc.servers))
 
 			assertNothingChanged(t, f, event, err)
 			assert.Equal(t, 0.91, agent.TrustScore)
@@ -163,10 +163,10 @@ func TestCreateVerificationEvent_UnknownAndForeignAgentAreIndistinguishable(t *t
 	foreign := registeredAgent(uuid.New(), 0)
 
 	fForeign := newOwnershipFixture(foreign)
-	_, errForeign := fForeign.svc.CreateVerificationEvent(context.Background(), eventRequest(callerOrg, foreign.ID, nil))
+	_, errForeign := fForeign.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(callerOrg, foreign.ID, nil))
 
 	fUnknown := newOwnershipFixture()
-	event, errUnknown := fUnknown.svc.CreateVerificationEvent(context.Background(), eventRequest(callerOrg, uuid.New(), nil))
+	event, errUnknown := fUnknown.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(callerOrg, uuid.New(), nil))
 	assertNothingChanged(t, fUnknown, event, errUnknown)
 
 	require.Error(t, errForeign)
@@ -183,7 +183,7 @@ func TestCreateVerificationEvent_AgentOfOwnOrganization(t *testing.T) {
 		agent := registeredAgent(org, 0)
 		f := newOwnershipFixture(agent)
 
-		event, err := f.svc.CreateVerificationEvent(context.Background(), eventRequest(org, agent.ID, []string{"registered-server"}))
+		event, err := f.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(org, agent.ID, []string{"registered-server"}))
 
 		require.NoError(t, err)
 		require.NotNil(t, event)
@@ -197,7 +197,7 @@ func TestCreateVerificationEvent_AgentOfOwnOrganization(t *testing.T) {
 		agent := registeredAgent(org, 0)
 		f := newOwnershipFixture(agent)
 
-		_, err := f.svc.CreateVerificationEvent(context.Background(), eventRequest(org, agent.ID, nil))
+		_, err := f.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(org, agent.ID, nil))
 
 		require.NoError(t, err)
 		assert.Len(t, f.events.created, 1)
@@ -217,7 +217,7 @@ func TestCreateVerificationEvent_FailedAgentReadLogsItsCause(t *testing.T) {
 	var event *domain.VerificationEvent
 	var err error
 	out := captureAllOutput(t, func() {
-		event, err = f.svc.CreateVerificationEvent(context.Background(), eventRequest(org, agent.ID, []string{"unregistered-server"}))
+		event, err = f.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(org, agent.ID, []string{"unregistered-server"}))
 	})
 
 	assertNothingChanged(t, f, event, err)
@@ -227,7 +227,7 @@ func TestCreateVerificationEvent_FailedAgentReadLogsItsCause(t *testing.T) {
 }
 
 func logEvent(svc *VerificationEventService, org, agentID uuid.UUID) (*domain.VerificationEvent, error) {
-	return svc.LogVerificationEvent(context.Background(), org, agentID,
+	return svc.LogVerificationEvent(context.Background(), domain.VerificationEventSourceService, org, agentID,
 		domain.VerificationProtocolA2A, domain.VerificationTypeCapability, domain.VerificationEventStatusSuccess,
 		0, domain.InitiatorTypeAgent, nil, nil)
 }
