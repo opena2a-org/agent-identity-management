@@ -15,14 +15,16 @@ func intPtr(v int) *int             { return &v }
 
 func sampleRequest() ATCIssuanceRequest {
 	return ATCIssuanceRequest{
-		AgentID:      "11111111-1111-1111-1111-111111111111",
-		AgentDID:     "did:aip:aim_11111111-1111-1111-1111-111111111111",
-		Publisher:    "Acme Org",
-		Version:      "agent-v1",
-		ContentHash:  "sha256:abc",
-		Capabilities: []string{"file:read"},
-		TrustScore:   float64Ptr(0.82),
-		TrustLevel:   intPtr(3),
+		AgentID:          "11111111-1111-1111-1111-111111111111",
+		AgentDID:         "did:aip:aim_11111111-1111-1111-1111-111111111111",
+		Publisher:        "Acme Org",
+		PublisherDID:     "did:opena2a:publisher:aim_33333333-3333-3333-3333-333333333333",
+		Version:          "agent-v1",
+		ContentHash:      "sha256:abc",
+		BuildAttestation: "https://aim.example.com/api/v1/did/did:aip:aim_11111111-1111-1111-1111-111111111111",
+		Capabilities:     []string{"file:read"},
+		TrustScore:       float64Ptr(82),
+		TrustLevel:       intPtr(3),
 		BehavioralProfile: &ATCBehavioralProfile{
 			Checksum:        "sha256:deadbeef",
 			GeneratedAt:     time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC),
@@ -57,7 +59,7 @@ func TestClient_IssueATC_Success(t *testing.T) {
 			"transparencyLogIndex":7,
 			"scanSummary":{"hma":"pass","criticalFindings":0,"highFindings":0},
 			"issuerChain":["did:web:registry.oa2a.org"],
-			"trustScore":0.82,
+			"trustScore":82,
 			"trustLevel":3,
 			"expiresAt":"2026-06-27T00:00:00Z",
 			"signatures":[{"keyId":"k1","algorithm":"Ed25519","value":"sig"}]
@@ -83,8 +85,14 @@ func TestClient_IssueATC_Success(t *testing.T) {
 	if gotReq.AgentDID != sampleRequest().AgentDID {
 		t.Errorf("agentDid round-trip = %q", gotReq.AgentDID)
 	}
-	if gotReq.TrustScore == nil || *gotReq.TrustScore != 0.82 {
+	if gotReq.TrustScore == nil || *gotReq.TrustScore != 82 {
 		t.Errorf("trustScore not carried in request body: %+v", gotReq.TrustScore)
+	}
+	if gotReq.PublisherDID != sampleRequest().PublisherDID {
+		t.Errorf("publisherDid not carried in request body: %q", gotReq.PublisherDID)
+	}
+	if gotReq.BuildAttestation != sampleRequest().BuildAttestation {
+		t.Errorf("buildAttestation not carried in request body: %q", gotReq.BuildAttestation)
 	}
 	if cred.TransparencyLogIndex != 7 {
 		t.Errorf("transparencyLogIndex = %d, want 7", cred.TransparencyLogIndex)

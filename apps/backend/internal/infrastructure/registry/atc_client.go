@@ -54,12 +54,19 @@ type ATCBehavioralProfile struct {
 // Registry applies when the subject is a did:aip agent (rather than a package).
 // For an AIM agent they are always set: they carry AIM's behavioral score, not
 // the Registry's supply-chain package score.
+//
+// Every field here is copied into the credential the Registry signs, so each
+// value follows the ATX v1.1 credential schema (schemas/atx-credential-v1.1.schema.json
+// in atx-spec). PublisherDID and BuildAttestation are mandatory credential fields
+// with no omitempty, and TrustScore is on the 0-100 wire scale, not 0-1.
 type ATCIssuanceRequest struct {
 	AgentID           string                `json:"agentId"`
 	AgentDID          string                `json:"agentDid"`
 	Publisher         string                `json:"publisher"`
+	PublisherDID      string                `json:"publisherDid"`
 	Version           string                `json:"version"`
 	ContentHash       string                `json:"contentHash"`
+	BuildAttestation  string                `json:"buildAttestation"`
 	Capabilities      []string              `json:"capabilities,omitempty"`
 	TrustScore        *float64              `json:"trustScore,omitempty"`
 	TrustLevel        *int                  `json:"trustLevel,omitempty"`
@@ -87,7 +94,7 @@ type AgentTrustCredential struct {
 	TransparencyLogIndex int64                 `json:"transparencyLogIndex"`
 	Capabilities         []string              `json:"capabilities"`
 	BehavioralProfile    *ATCBehavioralProfile `json:"behavioralProfile,omitempty"`
-	TrustScore           float64               `json:"trustScore"`
+	TrustScore           float64               `json:"trustScore"` // 0-100 (ATX v1.1 wire scale)
 	TrustLevel           int                   `json:"trustLevel"`
 	IssuedAt             time.Time             `json:"issuedAt"`
 	ExpiresAt            time.Time             `json:"expiresAt"`
