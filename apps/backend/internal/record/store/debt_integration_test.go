@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/stretchr/testify/require"
 )
 
@@ -254,7 +255,8 @@ func recordParts(t *testing.T, rec record.Record) (retained, tenant, personal ma
 
 // Every column of record_debts becomes exactly one member of the late
 // record, in its part, and the late record carries nothing else but the
-// record package's own members and the two that mark it late.
+// record package's own members, the two that mark it late, and
+// opena2a.trace_origin, which follows from parent_id.
 func TestRecordDebtColumnsAreTheLateRecordsMembers(t *testing.T) {
 	db, _ := openTapped(t, 0)
 	plain := openPlain(t)
@@ -283,6 +285,9 @@ func TestRecordDebtColumnsAreTheLateRecordsMembers(t *testing.T) {
 
 	restore := breakHead(t, plain, org)
 	drafts := []record.Draft{agentDebtDraft(), operatorDebtDraft()}
+	// The agent's draft follows the genesis in its trace; the operator's is
+	// the first record of a trace of its own, so its parent_id is null.
+	parents := []*trace.Parent{genesis.AsParent(), nil}
 	for i := range drafts {
 		drafts[i].EventID = uuid.NewString()
 		if ext, ok := drafts[i].Tenant["opena2a"].(map[string]any); ok {
@@ -290,6 +295,9 @@ func TestRecordDebtColumnsAreTheLateRecordsMembers(t *testing.T) {
 			ext["organization_id"] = org
 			drafts[i].Tenant["opena2a"] = ext
 		}
+		traced, err := trace.Begin(ctx)
+		require.NoError(t, err)
+		require.NoError(t, trace.Stamp(traced, &drafts[i], parents[i]))
 		out, err := h.w.Write(ctx, Write{Class: ClassReduction, OrganizationID: org, Draft: drafts[i]})
 		require.NoError(t, err)
 		require.NotEmpty(t, out.Debt.ID)
@@ -335,6 +343,13 @@ func TestRecordDebtColumnsAreTheLateRecordsMembers(t *testing.T) {
 				if c.name == "actor" || c.name == "actor_class" {
 					continue // both become actor; the other one may set it
 				}
+				if c.name == "parent_id" && row["trace_id"] != nil {
+					// The first record of a trace carries parent_id null.
+					require.True(t, present, "a traced record carries parent_id")
+					require.Nil(t, got.value, "a NULL parent_id is a null parent_id")
+					delete(members, c.member)
+					continue
+				}
 				require.False(t, present, "%s is NULL, so %s is absent", c.name, c.member)
 				continue
 			}
@@ -343,6 +358,11 @@ func TestRecordDebtColumnsAreTheLateRecordsMembers(t *testing.T) {
 			require.Equal(t, columnText(t, c, value), memberText(t, got.value), "%s carries %s", c.member, c.name)
 			delete(members, c.member)
 		}
+		// opena2a.trace_origin is no column: it follows from parent_id.
+		origin := members["opena2a.trace_origin"]
+		require.Equal(t, partRetained, origin.part)
+		require.Equal(t, traceOrigin(row["parent_id"]), origin.value, "trace_origin follows parent_id")
+		delete(members, "opena2a.trace_origin")
 		for name := range own {
 			delete(members, name)
 		}
@@ -654,5 +674,54 @@ func TestRecordReductionWithNoFreeSlotCommitsWithADebt(t *testing.T) {
 	require.True(t, marked(t, plain, org))
 	require.Len(t, debtRows(t, plain, org), 1)
 	require.Less(t, elapsed, LockTimeout+time.Second, "the debt path does not wait for the append lock")
+	wg.Wait()
+}
+
+// A reduction on the debt path is held to the append path's trace rule: when
+// it names a parent that is no record of the organization's chain, it is
+// refused whole before its state change runs, and no debt is written.
+func TestRecordReductionWithNoFreeSlotAndAnUnknownParentIsRefused(t *testing.T) {
+	db, _ := openTapped(t, 0)
+	plain := openPlain(t)
+	h := newHarness(t, db, nil)
+	ctx := context.Background()
+	org := seedOrg(t, plain)
+	genesis, err := h.w.start(ctx, org)
+	require.NoError(t, err)
+
+	const hold = `SELECT pg_sleep(3.1)`
+	var wg sync.WaitGroup
+	for i := 0; i < connectionsPerChain; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = h.w.Write(ctx, Write{Class: ClassExpansion, OrganizationID: org, Draft: testDraft(),
+				Apply: func(ctx context.Context, tx *sql.Tx) error {
+					_, err := tx.ExecContext(ctx, hold)
+					return err
+				}})
+		}()
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var running int
+		require.NoError(t, plain.QueryRow(`SELECT count(*) FROM pg_stat_activity
+ WHERE datname = current_database() AND query = $1`, hold).Scan(&running))
+		if running == connectionsPerChain {
+			break
+		}
+		require.True(t, time.Now().Before(deadline), "the slot holders did not start")
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	draft := testDraft()
+	unknown := &trace.Parent{EventID: uuid.NewString(), TraceID: genesis.TraceID}
+	require.NoError(t, trace.Stamp(ctx, &draft, unknown))
+	applied := false
+	_, err = h.w.Write(ctx, Write{Class: ClassReduction, OrganizationID: org, Draft: draft,
+		Apply: func(context.Context, *sql.Tx) error { applied = true; return nil }})
+	wantWriteError(t, err, ClassReduction, ReasonTrace)
+	require.False(t, applied, "the state change does not run")
+	require.Empty(t, debtRows(t, plain, org), "no debt is owed for a record that cannot be written")
 	wg.Wait()
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 	recordstore "github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 )
 
@@ -217,6 +218,7 @@ func main() {
 
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
+	app.Use(trace.Middleware())                     // Mints each request's audit record trace; reads only traceparent's trace-id
 	app.Use(middleware.SecurityHeadersMiddleware()) // SECURITY: Add HTTP security headers (HSTS, CSP, etc.)
 	app.Use(middleware.LoggerMiddleware())
 	app.Use(metrics.PrometheusMiddleware())   // Prometheus metrics collection

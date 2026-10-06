@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -320,8 +321,10 @@ func (h harness) failures(t *testing.T, class Class, reason Reason) (one, total 
 	return one, total
 }
 
+// testDraft is an administrative record that is the first of a trace minted
+// for it alone.
 func testDraft() record.Draft {
-	return record.Draft{
+	d := record.Draft{
 		EventID: uuid.NewString(),
 		Type:    "opena2a.administrative",
 		Retained: map[string]any{"opena2a": map[string]any{
@@ -333,6 +336,14 @@ func testDraft() record.Draft {
 		}},
 		Personal: map[string]any{"actor": uuid.NewString()},
 	}
+	ctx, err := trace.Begin(context.Background())
+	if err == nil {
+		err = trace.Stamp(ctx, &d, nil)
+	}
+	if err != nil {
+		panic(err)
+	}
+	return d
 }
 
 func wantWriteError(t *testing.T, err error, class Class, reason Reason) {

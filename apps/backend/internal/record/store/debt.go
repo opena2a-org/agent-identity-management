@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 )
 
 // A debt is a pending copy of the record a reduction could not append: one
@@ -86,6 +87,16 @@ const (
 	memberOccurredAt = "occurred_at"
 )
 
+// The trace members a column does not hold as written. A traced record's
+// parent_id is null on the first record of its trace, which the parent_id
+// column holds as NULL, and its opena2a.trace_origin follows from parent_id
+// (trace.Check refuses any other), so the late record rebuilds both.
+const (
+	memberTraceID     = "trace_id"
+	memberParentID    = "parent_id"
+	memberTraceOrigin = "opena2a.trace_origin"
+)
+
 // operatorActorClass is the one actor value that names no person, agent or
 // key: an operator's act. It is retained; any other actor is personal.
 const operatorActorClass = "operator_command"
@@ -150,6 +161,9 @@ func debtFromDraft(organizationID string, d record.Draft) (debt, error) {
 	}{{partRetained, d.Retained}, {partTenant, d.Tenant}, {partPersonal, d.Personal}}
 	for _, p := range parts {
 		for name, value := range p.members {
+			if name == memberParentID && p.name == partTenant && value == nil {
+				continue
+			}
 			if name != "opena2a" {
 				if err := out.take(p.name, name, value, resourceType); err != nil {
 					return debt{}, err
@@ -168,10 +182,26 @@ func debtFromDraft(organizationID string, d record.Draft) (debt, error) {
 					}
 					continue
 				}
+				if member == memberTraceOrigin && p.name == partRetained {
+					if v != traceOrigin(d.Tenant[memberParentID]) {
+						return debt{}, errors.New("store: the draft's opena2a.trace_origin does not follow from its parent_id")
+					}
+					continue
+				}
 				if err := out.take(p.name, member, v, resourceType); err != nil {
 					return debt{}, err
 				}
 			}
+		}
+	}
+
+	if _, traced := out.values[memberTraceID]; traced {
+		if _, set := d.Tenant[memberParentID]; !set {
+			return debt{}, errors.New("store: a traced draft has no parent_id")
+		}
+		ext, _ := d.Retained["opena2a"].(map[string]any)
+		if _, set := ext["trace_origin"]; !set {
+			return debt{}, errors.New("store: a traced draft has no opena2a.trace_origin")
 		}
 	}
 
@@ -300,6 +330,14 @@ func (d debt) lateDraft(now time.Time) (record.Draft, error) {
 		}
 		part[c.member] = value
 	}
+	if _, traced := d.values[memberTraceID]; traced {
+		parent, set := d.values[memberParentID]
+		if !set {
+			parent = nil
+			parts[partTenant][memberParentID] = nil
+		}
+		parts[partRetained]["opena2a"].(map[string]any)["trace_origin"] = traceOrigin(parent)
+	}
 	draft := record.Draft{
 		EventID:   d.id,
 		Type:      d.recordType,
@@ -311,6 +349,15 @@ func (d debt) lateDraft(now time.Time) (record.Draft, error) {
 		draft.Personal = parts[partPersonal]
 	}
 	return draft, nil
+}
+
+// traceOrigin is the opena2a.trace_origin of a record whose parent_id is
+// parent: the parent's trace when it has one, the server's otherwise.
+func traceOrigin(parent any) string {
+	if parent == nil {
+		return trace.OriginServer
+	}
+	return trace.OriginParent
 }
 
 // args are the insert's arguments, in debtColumns order.

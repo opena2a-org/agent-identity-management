@@ -20,7 +20,7 @@ const (
 var debtTime = time.Date(2026, time.October, 6, 12, 30, 45, 123456000, time.UTC)
 
 // agentDebtDraft is a reduction on an agent that carries a member for every
-// column but the operator columns.
+// column but the operator columns. It follows a parent in the parent's trace.
 func agentDebtDraft() record.Draft {
 	return record.Draft{
 		EventID:   debtEventID,
@@ -31,9 +31,10 @@ func agentDebtDraft() record.Draft {
 			"trigger_type":  "operator_suspended",
 			"admin_action":  "agent_suspended",
 			"resource_type": "agent",
+			"trace_origin":  "parent",
 		}},
 		Tenant: map[string]any{
-			"trace_id":  "trace-1",
+			"trace_id":  "4bf92f3577b34da6a3ce929d0e0e4736",
 			"parent_id": "b2b2b2b2-0000-4000-8000-000000000002",
 			"opena2a": map[string]any{
 				"organization_id":  debtOrg,
@@ -47,7 +48,7 @@ func agentDebtDraft() record.Draft {
 		Personal: map[string]any{
 			"actor": debtUser,
 			"opena2a": map[string]any{
-				"request_trace_id": "req-1",
+				"request_trace_id": "0af7651916cd43dd8448eb211c80319c",
 				"reason":           "left the team",
 			},
 		},
