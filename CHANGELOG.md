@@ -872,6 +872,24 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+
+### Added — `aim-server migrate` applies the migrations and can provision a role that is not a superuser
+
+- `aim-server migrate` applies the pending migrations and exits. It reads only the `POSTGRES_*` variables. With
+  `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set it first provisions that role (login, not a superuser, no
+  BYPASSRLS, no CREATE on schema `public`, read and write on the tables and sequences the migrations create), refuses
+  a `POSTGRES_APP_USER` that names the role it connects as, and after the migrations logs the role's measured state:
+  `Application role aim_app: superuser=false bypassrls=false ownedRelations=0`. Existing tables are granted to the
+  role only when it is created; a later run leaves table grants alone, so a privilege revoked from the role stays
+  revoked.
+- The server's startup migration step no longer runs `CREATE TABLE IF NOT EXISTS schema_migrations` when the table
+  exists. That statement needs CREATE on the schema even then, and stopped a server connected as a role without it.
+- `docker-compose.quickstart.yml` is unchanged and still connects the backend as `postgres`: it pulls the published
+  `aim-server` image, and no published image has the `migrate` command yet.
+- An integration test provisions a role against a migrated database and checks its attributes, that it owns no
+  relation, reads and writes the tables, cannot create one, passes the startup migration step, and keeps a revoked
+  privilege on a second run.
+
 ### Changed — every sign-in records the token family it issued
 
 - Each route that issues a sign-in token pair now writes one `login` audit row in the user's organization whose

@@ -138,16 +138,7 @@ func Load() (*Config, error) {
 			FrontendURL:      getEnv("FRONTEND_URL", "http://localhost:3000"),
 			MetricsAuthToken: getEnv("METRICS_AUTH_TOKEN", ""),
 		},
-		Database: DatabaseConfig{
-			Host:            getEnvRequired("POSTGRES_HOST"),
-			Port:            getEnvAsInt("POSTGRES_PORT", 5432),
-			User:            getEnvRequired("POSTGRES_USER"),
-			Password:        getEnv("POSTGRES_PASSWORD", ""), // Optional for local dev with no password
-			Database:        getEnvRequired("POSTGRES_DB"),
-			SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
-			MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
-			ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
-		},
+		Database: LoadDatabase(),
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
@@ -189,6 +180,22 @@ func Load() (*Config, error) {
 	config.printSecurityWarnings()
 
 	return config, nil
+}
+
+// LoadDatabase reads the database connection settings, the same POSTGRES_*
+// variables Load reads. `aim-server migrate` reads only these, so the
+// migration step needs no other secret in its environment.
+func LoadDatabase() DatabaseConfig {
+	return DatabaseConfig{
+		Host:            getEnvRequired("POSTGRES_HOST"),
+		Port:            getEnvAsInt("POSTGRES_PORT", 5432),
+		User:            getEnvRequired("POSTGRES_USER"),
+		Password:        getEnv("POSTGRES_PASSWORD", ""), // Optional for local dev with no password
+		Database:        getEnvRequired("POSTGRES_DB"),
+		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
+		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
+		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
+	}
 }
 
 // printSecurityWarnings logs warnings for potentially insecure configurations
