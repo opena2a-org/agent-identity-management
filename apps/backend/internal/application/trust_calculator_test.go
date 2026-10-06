@@ -330,6 +330,11 @@ func (m *TrustCalcMockAgentRepository) UpdateHeartbeat(ctx context.Context, agen
 	return args.Get(0).(time.Time), args.Error(1)
 }
 
+func (m *TrustCalcMockAgentRepository) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	args := m.Called(ctx, agentID)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func (m *TrustCalcMockAgentRepository) IncrementViolationCount(agentID uuid.UUID) error {
 	args := m.Called(agentID)
 	return args.Error(0)

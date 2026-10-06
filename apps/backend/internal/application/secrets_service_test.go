@@ -127,6 +127,9 @@ func (m *mockAgentRepo) UpdateLastActive(_ context.Context, _ uuid.UUID) error  
 func (m *mockAgentRepo) UpdateHeartbeat(_ context.Context, _ uuid.UUID) (time.Time, error) {
 	return time.Time{}, nil
 }
+func (m *mockAgentRepo) UpdateLastCapabilityCheck(_ context.Context, _ uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
 func (m *mockAgentRepo) GetStaleAgents(_ context.Context, _ time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }

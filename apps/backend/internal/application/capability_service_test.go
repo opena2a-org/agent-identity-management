@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
@@ -831,6 +832,11 @@ func (m *MockAgentRepoForCapability) UpdateHeartbeat(ctx context.Context, agentI
 	return args.Get(0).(time.Time), args.Error(1)
 }
 
+func (m *MockAgentRepoForCapability) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	args := m.Called(ctx, agentID)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func (m *MockAgentRepoForCapability) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	args := m.Called(ctx, staleSince)
 	if args.Get(0) == nil {
@@ -1168,6 +1174,61 @@ func TestCapabilityService_GrantCapability_Success(t *testing.T) {
 	assert.Equal(t, "file:read", result.CapabilityType)
 	mockCapRepo.AssertExpectations(t)
 	mockAgentRepo.AssertExpectations(t)
+}
+
+// An authorized capability check stores its time through
+// UpdateLastCapabilityCheck, never through Update, which writes the whole row
+// from the copy read before it and so would put back a status or a key
+// another request changed meanwhile.
+func TestCapabilityService_VerifyAction_AuthorizedWritesOnlyTheCheckTime(t *testing.T) {
+	mockCapRepo := new(MockCapabilityRepoForService)
+	mockAgentRepo := new(MockAgentRepoForCapability)
+
+	service := NewCapabilityService(mockCapRepo, mockAgentRepo, nil, nil, nil, nil)
+
+	agentID := uuid.New()
+	agent := &domain.Agent{
+		ID:             agentID,
+		OrganizationID: uuid.New(),
+		DisplayName:    "Test Agent",
+		TrustScore:     0.85,
+	}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockCapRepo.On("GetActiveCapabilitiesByAgentID", agentID).Return([]*domain.AgentCapability{{AgentID: agentID, CapabilityType: "file:read"}}, nil)
+	mockCapRepo.On("GetCapabilityDefinition", "file", "read", mock.AnythingOfType("*uuid.UUID")).Return(&domain.CapabilityDefinition{RiskLevel: domain.RiskLevelLow}, nil)
+	mockAgentRepo.On("UpdateLastCapabilityCheck", mock.Anything, agentID).Return(time.Now(), nil)
+
+	result, err := service.VerifyAction(context.Background(), agentID, "file:read", nil, nil, nil, nil)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsAuthorized, result.Message)
+	mockCapRepo.AssertExpectations(t)
+	mockAgentRepo.AssertExpectations(t)
+	mockAgentRepo.AssertNotCalled(t, "Update", mock.Anything)
+}
+
+// A failure to store the check time does not refuse an authorized check.
+func TestCapabilityService_VerifyAction_AuthorizedWhenTheCheckTimeIsNotStored(t *testing.T) {
+	mockCapRepo := new(MockCapabilityRepoForService)
+	mockAgentRepo := new(MockAgentRepoForCapability)
+
+	service := NewCapabilityService(mockCapRepo, mockAgentRepo, nil, nil, nil, nil)
+
+	agentID := uuid.New()
+	agent := &domain.Agent{ID: agentID, OrganizationID: uuid.New(), DisplayName: "Test Agent", TrustScore: 0.85}
+
+	mockAgentRepo.On("GetByID", agentID).Return(agent, nil)
+	mockCapRepo.On("GetActiveCapabilitiesByAgentID", agentID).Return([]*domain.AgentCapability{{AgentID: agentID, CapabilityType: "file:read"}}, nil)
+	mockCapRepo.On("GetCapabilityDefinition", "file", "read", mock.AnythingOfType("*uuid.UUID")).Return(&domain.CapabilityDefinition{RiskLevel: domain.RiskLevelLow}, nil)
+	mockAgentRepo.On("UpdateLastCapabilityCheck", mock.Anything, agentID).Return(time.Time{}, errors.New("connection reset"))
+
+	result, err := service.VerifyAction(context.Background(), agentID, "file:read", nil, nil, nil, nil)
+
+	assert.NoError(t, err)
+	assert.True(t, result.IsAuthorized, result.Message)
+	mockAgentRepo.AssertExpectations(t)
+	mockAgentRepo.AssertNotCalled(t, "Update", mock.Anything)
 }
 
 func TestCapabilityService_GrantCapability_AgentNotFound(t *testing.T) {

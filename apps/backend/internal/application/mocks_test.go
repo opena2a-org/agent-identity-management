@@ -107,6 +107,11 @@ func (m *SharedMockAgentRepository) UpdateHeartbeat(ctx context.Context, agentID
 	return args.Get(0).(time.Time), args.Error(1)
 }
 
+func (m *SharedMockAgentRepository) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	args := m.Called(ctx, agentID)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func (m *SharedMockAgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	args := m.Called(ctx, staleSince)
 	if args.Get(0) == nil {

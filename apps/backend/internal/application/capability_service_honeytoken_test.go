@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -129,7 +130,7 @@ func TestCapabilityService_VerifyAction_Honeytoken_RaisesAlertAndAudit(t *testin
 	capRepo.On("GetActiveCapabilitiesByAgentID", agentID).Return(caps, nil)
 	// No capability definition → trust-threshold check is skipped.
 	capRepo.On("GetCapabilityDefinition", "admin", "exfiltrate", mock.Anything).Return(nil, errors.New("not found"))
-	agentRepo.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
+	agentRepo.On("UpdateLastCapabilityCheck", mock.Anything, agentID).Return(time.Now(), nil)
 
 	var capturedAlert *domain.Alert
 	alertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Run(func(args mock.Arguments) {

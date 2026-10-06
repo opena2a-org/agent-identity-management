@@ -192,6 +192,11 @@ func (m *MockAgentRepoForTags) UpdateHeartbeat(ctx context.Context, agentID uuid
 	return args.Get(0).(time.Time), args.Error(1)
 }
 
+func (m *MockAgentRepoForTags) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	args := m.Called(ctx, agentID)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func (m *MockAgentRepoForTags) List(limit, offset int) ([]*domain.Agent, error) {
 	args := m.Called(limit, offset)
 	if args.Get(0) == nil {

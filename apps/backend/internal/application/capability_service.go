@@ -255,10 +255,10 @@ func (s *CapabilityService) VerifyAction(
 		}, nil
 	}
 
-	// Update last capability check timestamp
-	now := time.Now()
-	agent.LastCapabilityCheckAt = &now
-	if err := s.agentRepo.Update(agent); err != nil {
+	// Store the time of the check. Only last_capability_check_at and updated_at
+	// are written: Update would write the whole row from the copy read above,
+	// putting back a status or key another request changed since.
+	if _, err := s.agentRepo.UpdateLastCapabilityCheck(ctx, agentID); err != nil {
 		// Log error but don't fail the request
 		fmt.Printf("Warning: failed to update last_capability_check_at: %v\n", err)
 	}

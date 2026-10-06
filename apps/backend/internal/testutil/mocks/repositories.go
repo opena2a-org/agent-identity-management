@@ -97,6 +97,11 @@ func (m *MockAgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.
 	return args.Get(0).(time.Time), args.Error(1)
 }
 
+func (m *MockAgentRepository) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	args := m.Called(ctx, agentID)
+	return args.Get(0).(time.Time), args.Error(1)
+}
+
 func (m *MockAgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	args := m.Called(ctx, staleSince)
 	if args.Get(0) == nil {

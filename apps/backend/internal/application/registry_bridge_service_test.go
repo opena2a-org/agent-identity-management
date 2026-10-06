@@ -94,6 +94,9 @@ func (m *mockAgentRepoForBridge) UpdateLastActive(ctx context.Context, id uuid.U
 func (m *mockAgentRepoForBridge) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
 	return time.Time{}, nil
 }
+func (m *mockAgentRepoForBridge) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
 func (m *mockAgentRepoForBridge) GetStaleAgents(ctx context.Context, since time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }

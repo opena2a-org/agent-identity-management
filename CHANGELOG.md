@@ -757,6 +757,17 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - A heartbeat now writes `last_heartbeat` and `updated_at` only, and the response reports the
   stored heartbeat time and the agent's status after the write.
 
+### Fixed — an authorized capability check stores its time and writes nothing else to the agent
+
+- The capability check service, which no route serves, stored the time of an authorized check by
+  setting it on the agent it had read and saving that whole copy of the row. That save has no
+  `last_capability_check_at` column, so the time was never stored, and it wrote status and key
+  material back from the earlier read: a suspension or key rotation saved between that read and that
+  write was overwritten with the values the check had read.
+- An authorized check now writes `last_capability_check_at` and `updated_at` only, with the
+  database's time. The check's result is unchanged, and a failure to store the time still does not
+  refuse the check.
+
 ### Fixed — the backend image carries the license notices of the Go libraries built into it
 
 - The `aim-server` image held the binaries, the migrations and the SDK directory and no license
