@@ -16,40 +16,72 @@ docker pull opena2a/aim-server
 docker pull opena2a/aim-dashboard
 ```
 
-Create `docker-compose.yml`:
+In an empty directory, generate the server's secrets into a `.env` file. Docker Compose reads `.env` from the directory it runs in:
+
+```bash
+cat > .env <<EOF
+JWT_SECRET=$(openssl rand -hex 32)
+KEYVAULT_MASTER_KEY=$(openssl rand -base64 32)
+POSTGRES_PASSWORD=$(openssl rand -hex 16)
+EOF
+```
+
+`JWT_SECRET` signs the access tokens the server issues. The server refuses to start when it is shorter than 32 characters. `KEYVAULT_MASTER_KEY` encrypts the agent private keys the server stores in the database. Keep `.env` for as long as you keep the database volume: a server started with a different key cannot decrypt the keys stored under the old one.
+
+Create `docker-compose.yml` in the same directory:
 
 ```yaml
-version: "3.8"
 services:
   aim-server:
     image: opena2a/aim-server:latest
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgres://aim:aim@db:5432/aim
-      - JWT_SECRET=change-this-to-a-random-value
+      - POSTGRES_HOST=db
+      - POSTGRES_USER=aim
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=aim
+      - REDIS_HOST=redis
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
+      - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:?Set KEYVAULT_MASTER_KEY in .env}
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   aim-dashboard:
     image: opena2a/aim-dashboard:latest
     ports:
       - "3000:3000"
     environment:
-      - API_URL=http://aim-server:8080
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      aim-server:
+        condition: service_started
 
   db:
     image: postgres:16
     environment:
       - POSTGRES_USER=aim
-      - POSTGRES_PASSWORD=aim
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       - POSTGRES_DB=aim
     volumes:
       - aim-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aim -d aim"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
 
 volumes:
   aim-data:
 ```
+
+The server connects to the database once, when it starts, so it waits for the `db` healthcheck. It keeps its list of revoked tokens in Redis. Without Redis it still runs, but revoking a token, by logging out or otherwise, has no effect before the token expires.
 
 Start the stack:
 
@@ -57,16 +89,7 @@ Start the stack:
 docker compose up -d
 ```
 
-Expected output:
-
-```
-[+] Running 3/3
- - Container aim-db-1          Started
- - Container aim-aim-server-1  Started
- - Container aim-aim-dashboard-1 Started
-```
-
-Verify the server is running:
+The server applies its database migrations when it starts. Verify it is running:
 
 ```bash
 curl http://localhost:8080/health
@@ -75,8 +98,10 @@ curl http://localhost:8080/health
 Expected output:
 
 ```json
-{"status": "healthy", "version": "1.0.0", "database": "connected"}
+{"service":"agent-identity-management","status":"healthy","time":"2026-03-16T14:00:00.123456789Z"}
 ```
+
+`time` is the server's clock in UTC when it answered.
 
 The dashboard is available at [http://localhost:3000](http://localhost:3000).
 
