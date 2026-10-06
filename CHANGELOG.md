@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: audit records say who acted, and leave out an address or user agent that was never recorded
+
+- Every audit record returned by `GET /api/v1/admin/audit-logs`, `GET /api/v1/admin/audit-logs/{id}`,
+  `GET /api/v1/admin/audit-logs/export?format=json`, `GET /api/v1/agents/{id}/audit-logs` and
+  `GET /api/v1/agents/{id}/activity` carries `actorType`: `agent` when the record names an agent,
+  otherwise `user` when it names a user, otherwise `system`. The verification of an agent's action,
+  which also stores the agent's owner as `userId`, reads `agent`. `operator_command` belongs to the
+  same vocabulary; no record carries it yet.
+- In those records `ipAddress` and `userAgent` are absent when the record holds none, rather than
+  empty strings. On the two agent routes only an admin reads `ipAddress`, `userAgent` and the full
+  `metadata`, as before; every other caller gets `actorType` and none of those three members.
+- The CSV export gains an `ActorType` column after `Metadata`. It no longer fails with 500 for an
+  organization holding a record of an agent's or the system's act; such a record has an empty
+  `UserID` cell.
+
 ### Added: `aim-breakglass chain status`, the operator's read of an organization's audit record chain
 
 - `aim-breakglass chain status --organization <id>` reports one organization's chain through the

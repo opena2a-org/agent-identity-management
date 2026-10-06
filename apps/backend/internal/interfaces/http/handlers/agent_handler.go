@@ -2312,10 +2312,16 @@ func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 			"resourceId":   log.ResourceID,
 			"timestamp":    log.Timestamp,
 			"agentName":    log.AgentName,
+			"actorType":    log.ActorType(),
 		}
 		if seesRequestDetail {
-			activity["ipAddress"] = log.IPAddress
-			activity["userAgent"] = log.UserAgent
+			// Absent, not empty, when the row recorded none.
+			if log.IPAddress != "" {
+				activity["ipAddress"] = log.IPAddress
+			}
+			if log.UserAgent != "" {
+				activity["userAgent"] = log.UserAgent
+			}
 			activity["metadata"] = log.Metadata
 		} else if decision := agentActivityDecision(log.Metadata); decision != nil {
 			activity["metadata"] = decision

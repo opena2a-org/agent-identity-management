@@ -848,7 +848,7 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 
 	// Return as CSV
 	var csvBuilder strings.Builder
-	csvBuilder.WriteString("ID,Timestamp,Action,ResourceType,ResourceID,UserID,IPAddress,UserAgent,Metadata\n")
+	csvBuilder.WriteString("ID,Timestamp,Action,ResourceType,ResourceID,UserID,IPAddress,UserAgent,Metadata,ActorType\n")
 
 	for _, log := range logs {
 		// Serialize metadata to JSON string for CSV
@@ -859,17 +859,24 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 			}
 		}
 
+		// An agent's or the system's act has no user id: its cell is empty.
+		userID := ""
+		if log.UserID != nil {
+			userID = log.UserID.String()
+		}
+
 		// Format: escape quotes in fields and wrap in quotes
-		csvBuilder.WriteString(fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+		csvBuilder.WriteString(fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
 			log.ID.String(),
 			log.Timestamp.Format(time.RFC3339),
 			log.Action,
 			log.ResourceType,
 			log.ResourceID.String(),
-			log.UserID.String(),
+			userID,
 			log.IPAddress,
 			strings.ReplaceAll(log.UserAgent, "\"", "\"\""),
 			metadataJSON,
+			log.ActorType(),
 		))
 	}
 
