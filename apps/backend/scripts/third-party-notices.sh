@@ -187,9 +187,10 @@ rm -f "$pairs" "$allowlist_rows"
 cat > "$staging/README" <<'EOF'
 Third-party license notices for the AIM server image
 
-The aim-server, aim-migrate and aim-bootstrap binaries in /app are built from
-the Go module github.com/opena2a-org/agent-identity-management/apps/backend
-and the libraries it links. This directory was generated from that module's
+The aim-server, aim-migrate, aim-bootstrap and aim-breakglass binaries in /app
+are built from the Go module
+github.com/opena2a-org/agent-identity-management/apps/backend and the libraries
+it links. This directory was generated from that module's
 dependency graph when the image was built.
 
 manifest.csv  One row per library: library,licenseURL,licenseName. The

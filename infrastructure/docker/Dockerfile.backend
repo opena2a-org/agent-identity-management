@@ -37,8 +37,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w" \
     -o /bin/aim-bootstrap ./cmd/bootstrap
+# The operator's command (`aim-breakglass chain status --organization <id>`)
+# reads the server's database through the server's POSTGRES_* variables.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags="-s -w" \
+    -o /bin/aim-breakglass ./cmd/breakglass
 
-# Third-party license notices. Every library linked into the three binaries is
+# Third-party license notices. Every library linked into the four binaries is
 # redistributed in this image, so the image carries each one's license text, a
 # pointer to its source and, for the MPL-2.0 libraries, the source itself. The
 # script installs go-licenses at this pin, writes /third_party and verifies it;
@@ -59,7 +64,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
 # Copy the binaries from builder
-COPY --from=builder /bin/aim-server /bin/aim-migrate /bin/aim-bootstrap ./
+COPY --from=builder /bin/aim-server /bin/aim-migrate /bin/aim-bootstrap /bin/aim-breakglass ./
 
 # Copy migrations
 COPY apps/backend/migrations ./migrations

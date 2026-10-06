@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: `aim-breakglass chain status`, the operator's read of an organization's audit record chain
+
+- `aim-breakglass chain status --organization <id>` reports one organization's chain through the
+  same chain-state read as `GET /api/v1/admin/audit-logs/chain/head`: `chainState`, `chainId`,
+  `head`, `latestCheckpoint`, and `reason` when the chain cannot be extended. With `--json` it prints
+  the route's body, member for member; without it, one line per member with what the state and the
+  reason mean.
+- It reads the server's database through the server's `POSTGRES_HOST`, `POSTGRES_PORT`,
+  `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `POSTGRES_SSL_MODE`, or through
+  `DATABASE_URL` when `POSTGRES_HOST` is not set. A configuration error names the variable, never
+  its value.
+- An id that names no organization exits 1 with `no organization has id <id>`, rather than reading
+  as a chain that has not started. Exit codes: 0 done, whatever the chain's state; 1 failed; 2 usage
+  or configuration error.
+- The backend image ships the command as `/app/aim-breakglass`, next to `aim-migrate` and
+  `aim-bootstrap`.
+
 ### Added: admins can read the state of their organization's audit record chain
 
 - `GET /api/v1/admin/audit-logs/chain/head` answers with `chainState` (`notStarted`, `extendable` or
