@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // SDK-API route table.
@@ -88,6 +90,24 @@ type sdkAPIRoute struct {
 	// still registered and still served; it is not advertised.
 	Deprecated bool
 
+	// AgentParam names the path parameter that must equal the authenticated
+	// agent. registerSDKAPIRoutes puts middleware.AgentPathBinding in front of
+	// the handler, so when an agent principal is set a different ID is refused
+	// 403 before the handler runs; a user JWT caller is unaffected. Every
+	// grouped route with an agent parameter declares either this or
+	// AgentBindingException, and registration panics on one that declares
+	// neither.
+	AgentParam string
+
+	// AgentParamMayBeName also admits the caller's own agent name in
+	// AgentParam. The name is resolved through sdkAPIDeps.AgentNameResolver for
+	// the caller only, never for the agent the path names.
+	AgentParamMayBeName bool
+
+	// AgentBindingException records why a grouped route with an agent
+	// parameter serves agent principals other than the one the path names.
+	AgentBindingException string
+
 	// Note records why the route is shaped the way it is.
 	Note string
 }
@@ -115,6 +135,11 @@ type sdkAPIDeps struct {
 	// registered after it.
 	GroupMiddleware []fiber.Handler
 
+	// AgentNameResolver returns an agent's name by ID. It backs the routes that
+	// declare AgentParamMayBeName and is only ever asked about the caller.
+	// Required when the table has such a route.
+	AgentNameResolver middleware.AgentNameResolver
+
 	// Handlers supplies one handler per table entry.
 	Handlers sdkAPIHandlers
 }
@@ -138,29 +163,40 @@ func sdkAPIRouteTable(h sdkAPIHandlers) []sdkAPIRoute {
 		// Grouped routes: authenticated by the group's middleware chain.
 		{Method: http.MethodPost, Path: "/verifications/:id/result", Handler: h.SubmitVerificationResult, Note: "withdrawn: 403 for every caller"},
 		{Method: http.MethodPost, Path: "/verifications/:id/execution-status", Handler: h.UpdateExecutionStatus, Note: "agent-owned execution report"},
-		{Method: http.MethodGet, Path: "/agents/:identifier", Handler: h.GetAgentByIdentifier, Note: "get agent by ID or name (SDK)"},
-		{Method: http.MethodPost, Path: "/agents/:id/capabilities", Handler: h.GrantCapability, Note: "SDK capability reporting (legacy)"},
-		{Method: http.MethodPost, Path: "/agents/:id/capabilities/register", Handler: h.RegisterCapability, Note: "SDK capability registration (respects enforcement mode)"},
-		{Method: http.MethodGet, Path: "/agents/:id/capability-requests", Handler: h.ListAgentCapabilityRequests, Note: "SDK list agent's capability requests"},
-		{Method: http.MethodPost, Path: "/agents/:id/capability-requests", Handler: h.CreateCapabilityRequest, Note: "SDK capability request creation"},
-		{Method: http.MethodPost, Path: "/agents/:id/mcp-servers", Handler: h.CreateMCPServer, Note: "SDK MCP registration (create new MCP server)"},
-		{Method: http.MethodGet, Path: "/agents/:id/mcp-servers", Handler: h.ListMCPServers, Note: "SDK list MCP servers for agent's org"},
-		{Method: http.MethodGet, Path: "/agents/:id/mcp-servers/by-name", Handler: h.GetMCPServerByName, Note: "SDK get MCP by name (capability caching)"},
-		{Method: http.MethodPost, Path: "/agents/:id/mcp-connections", Handler: h.RecordMCPConnection, Note: "SDK record agent-MCP connection (use_mcp_tool)"},
-		{Method: http.MethodPost, Path: "/agents/:id/mcp-usage-report", Handler: h.RecordMCPUsageReport, Note: "SDK MCP supply chain usage analytics"},
-		{Method: http.MethodPost, Path: "/agents/:id/detection/report", Handler: h.ReportDetection, Note: "SDK MCP detection and integration reporting"},
-		{Method: http.MethodPost, Path: "/agents/:id/heartbeat", Handler: h.Heartbeat, Note: "SDK agent heartbeat (liveness)"},
+		//
+		// Every /agents/ route binds its agent parameter to the authenticated
+		// agent: the shipped SDKs call each one with their own ID, and an agent
+		// credential must not reach a sibling agent's record. The name lookup
+		// on /agents/:identifier runs under a user token during first-run setup
+		// and is unaffected; under an agent principal it admits only the
+		// caller's own ID or name.
+		{
+			Method: http.MethodGet, Path: "/agents/:identifier", Handler: h.GetAgentByIdentifier,
+			AgentParam: "identifier", AgentParamMayBeName: true,
+			Note: "get agent by ID or name (SDK)",
+		},
+		{Method: http.MethodPost, Path: "/agents/:id/capabilities", Handler: h.GrantCapability, AgentParam: "id", Note: "SDK capability reporting (legacy)"},
+		{Method: http.MethodPost, Path: "/agents/:id/capabilities/register", Handler: h.RegisterCapability, AgentParam: "id", Note: "SDK capability registration (respects enforcement mode)"},
+		{Method: http.MethodGet, Path: "/agents/:id/capability-requests", Handler: h.ListAgentCapabilityRequests, AgentParam: "id", Note: "SDK list agent's capability requests"},
+		{Method: http.MethodPost, Path: "/agents/:id/capability-requests", Handler: h.CreateCapabilityRequest, AgentParam: "id", Note: "SDK capability request creation"},
+		{Method: http.MethodPost, Path: "/agents/:id/mcp-servers", Handler: h.CreateMCPServer, AgentParam: "id", Note: "SDK MCP registration (create new MCP server)"},
+		{Method: http.MethodGet, Path: "/agents/:id/mcp-servers", Handler: h.ListMCPServers, AgentParam: "id", Note: "SDK list MCP servers for agent's org"},
+		{Method: http.MethodGet, Path: "/agents/:id/mcp-servers/by-name", Handler: h.GetMCPServerByName, AgentParam: "id", Note: "SDK get MCP by name (capability caching)"},
+		{Method: http.MethodPost, Path: "/agents/:id/mcp-connections", Handler: h.RecordMCPConnection, AgentParam: "id", Note: "SDK record agent-MCP connection (use_mcp_tool)"},
+		{Method: http.MethodPost, Path: "/agents/:id/mcp-usage-report", Handler: h.RecordMCPUsageReport, AgentParam: "id", Note: "SDK MCP supply chain usage analytics"},
+		{Method: http.MethodPost, Path: "/agents/:id/detection/report", Handler: h.ReportDetection, AgentParam: "id", Note: "SDK MCP detection and integration reporting"},
+		{Method: http.MethodPost, Path: "/agents/:id/heartbeat", Handler: h.Heartbeat, AgentParam: "id", Note: "SDK agent heartbeat (liveness)"},
 
 		// Trust factor 9. Canonical path first, alias second; both reach the
 		// same handler, so an agent's posture lands the same row either way.
 		{
 			Method: http.MethodPost, Path: sdkAPIIsolationAttestationPath,
-			Handler: h.SubmitIsolationAttestation,
-			Note:    "SDK self-report of runtime isolation posture (trust factor 9); canonical path per the recorded architecture decision of 2026-08-29",
+			Handler: h.SubmitIsolationAttestation, AgentParam: "id",
+			Note: "SDK self-report of runtime isolation posture (trust factor 9); canonical path per the recorded architecture decision of 2026-08-29",
 		},
 		{
 			Method: http.MethodPost, Path: sdkAPIIsolationAliasPath,
-			Handler: h.SubmitIsolationAttestation, Deprecated: true,
+			Handler: h.SubmitIsolationAttestation, Deprecated: true, AgentParam: "id",
 			Note: "deprecated alias for " + sdkAPIIsolationAttestationPath + "; kept because BD6 forbids removing a published path",
 		},
 	}
@@ -170,7 +206,19 @@ func sdkAPIRouteTable(h sdkAPIHandlers) []sdkAPIRoute {
 // it registered, so a caller (in practice, a test) can assert against the real
 // table rather than against a second copy of the paths.
 func registerSDKAPIRoutes(app *fiber.App, deps sdkAPIDeps) []sdkAPIRoute {
-	table := sdkAPIRouteTable(deps.Handlers)
+	return mountSDKAPIRoutes(app, deps, sdkAPIRouteTable(deps.Handlers))
+}
+
+// mountSDKAPIRoutes mounts table. It is registerSDKAPIRoutes with the table as
+// an argument, so a test can show that registration refuses a row the real
+// table must never contain.
+func mountSDKAPIRoutes(app *fiber.App, deps sdkAPIDeps, table []sdkAPIRoute) []sdkAPIRoute {
+	// Every binding is built before anything is mounted, so a misdeclared row
+	// stops the boot before a single route is served.
+	bindings := make([]fiber.Handler, len(table))
+	for i, route := range table {
+		bindings[i] = sdkAPIAgentBinding(route, deps.AgentNameResolver)
+	}
 
 	// SECURITY: bare routes are registered first and deliberately. Fiber matches
 	// in registration order, so these are not reached by the group middleware
@@ -202,21 +250,68 @@ func registerSDKAPIRoutes(app *fiber.App, deps sdkAPIDeps) []sdkAPIRoute {
 	for _, mw := range deps.GroupMiddleware {
 		group.Use(mw)
 	}
-	for _, route := range table {
+	for i, route := range table {
 		if route.Bare {
 			continue
 		}
+		// The agent binding sits on the route, between the group chain and the
+		// handler: Fiber fills Params only after route matching, so it cannot
+		// be a group Use().
+		chain := []any{route.Handler}
+		if bindings[i] != nil {
+			chain = []any{bindings[i], route.Handler}
+		}
 		switch route.Method {
 		case http.MethodGet:
-			group.Get(route.Path, route.Handler)
+			group.Get(route.Path, chain[0], chain[1:]...)
 		case http.MethodPost:
-			group.Post(route.Path, route.Handler)
+			group.Post(route.Path, chain[0], chain[1:]...)
 		default:
 			panic(unsupportedSDKAPIMethod(route))
 		}
 	}
 
 	return table
+}
+
+// sdkAPIAgentBinding returns the middleware.AgentPathBinding a route declares,
+// or nil for a route with no agent parameter or an admitted exception. It
+// panics, as unsupportedSDKAPIMethod does, on a declaration that cannot be
+// honoured: a grouped route with an agent parameter and neither AgentParam nor
+// AgentBindingException, an AgentParam the path does not contain, a name
+// lookup with no resolver, or a binding on a bare route, which the group's
+// authentication never reaches.
+func sdkAPIAgentBinding(route sdkAPIRoute, resolveName middleware.AgentNameResolver) fiber.Handler {
+	name := route.Method + " " + route.FullPath()
+	switch {
+	case route.Bare && (route.AgentParam != "" || route.AgentBindingException != ""):
+		panic("registerSDKAPIRoutes: " + name + " is bare, so no agent principal is set on it; an agent binding there means nothing")
+	case route.Bare:
+		return nil
+	case route.AgentParam != "" && route.AgentBindingException != "":
+		panic("registerSDKAPIRoutes: " + name + " declares both AgentParam and AgentBindingException")
+	case route.AgentParamMayBeName && route.AgentParam == "":
+		panic("registerSDKAPIRoutes: " + name + " sets AgentParamMayBeName without AgentParam")
+	case route.AgentBindingException != "":
+		return nil
+	case route.AgentParam != "":
+		if !pathHasParam(route.Path, route.AgentParam) {
+			panic("registerSDKAPIRoutes: " + name + " binds :" + route.AgentParam + " but its path has no such parameter")
+		}
+		var resolve middleware.AgentNameResolver
+		if route.AgentParamMayBeName {
+			if resolveName == nil {
+				panic("registerSDKAPIRoutes: " + name + " admits the caller's name but sdkAPIDeps.AgentNameResolver is nil")
+			}
+			resolve = resolveName
+		}
+		return middleware.AgentPathBinding(name, route.AgentParam, resolve)
+	case agentPathParam(route.Path) != "":
+		panic("registerSDKAPIRoutes: " + name + " has an agent parameter but declares neither AgentParam nor " +
+			"AgentBindingException; an agent credential would reach every agent in its organization on this route")
+	default:
+		return nil
+	}
 }
 
 // unsupportedSDKAPIMethod is unreachable in practice: the table is a literal in

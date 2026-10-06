@@ -1084,32 +1084,10 @@ func TestTrustScoreHandler_SubmitIsolationAttestation_CrossOrgDenied(t *testing.
 	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode)
 }
 
-func TestTrustScoreHandler_SubmitIsolationAttestation_CrossAgentDenied(t *testing.T) {
-	orgID := uuid.New()
-	authAgentID := uuid.New()   // the authenticated SDK caller
-	targetAgentID := uuid.New() // a DIFFERENT agent in the same org
-
-	agentMock := &MockAgentServiceImpl{
-		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
-			return &domain.Agent{ID: targetAgentID, OrganizationID: orgID, Name: "sibling-agent"}, nil
-		},
-	}
-	trustMock := &MockTrustCalculatorServicerImpl{
-		RecordIsolationAttestationFunc: func(ctx context.Context, aID uuid.UUID, s domain.SandboxType, n domain.NetworkIsolation, f domain.FilesystemIsolation, p domain.ProcessIsolation) (*domain.IsolationAttestation, error) {
-			t.Fatal("an agent must not be able to attest for a different agent, even in its own org")
-			return nil, nil
-		},
-	}
-
-	handler := NewTrustScoreHandlerWithInterfaces(trustMock, agentMock, &MockAuditServiceImpl{})
-	// Authenticated as authAgentID, but POSTing to a different agent's path.
-	app := agentAuthIsolationApp(handler.SubmitIsolationAttestation, orgID, authAgentID)
-
-	resp, err := app.Test(submitIsolationRequest(targetAgentID, `{"sandbox":"firecracker","network":"airgap","filesystem":"readonly","process":"full"}`))
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, fiber.StatusForbidden, resp.StatusCode, "an agent self-report endpoint must not let one agent attest for another")
-}
+// An agent attesting for a sibling agent is refused on the route, before this
+// handler runs: the SDK-API table binds :id to the authenticated agent. That
+// is asserted against the mounted table in
+// apps/backend/cmd/server/agent_binding_routes_test.go.
 
 func TestTrustScoreHandler_SubmitIsolationAttestation_UserJWTPathAuditsAsUser(t *testing.T) {
 	orgID := uuid.New()

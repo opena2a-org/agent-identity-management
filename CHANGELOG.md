@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — an agent credential acts only on its own agent ID on the SDK-API and detection routes
+
+- Every `/api/v1/sdk-api/agents/:id/...` route (heartbeat, capabilities, capability requests, MCP servers,
+  connections and usage, detection report, and isolation attestation with its `/isolation` alias) checked only that
+  the agent in the path belonged to the caller's organization, so one agent's key could report for any other agent
+  in it. When the caller authenticated as an agent, a path ID other than its own is now refused
+  `403 {"reasonCode":"agent_path_mismatch"}` before any lookup, and another agent's ID gets the same response as an
+  ID that names no agent. Requests made with a user token are unchanged.
+- `GET /api/v1/sdk-api/agents/:identifier` accepts, from an agent caller, only its own ID or its own name, and
+  resolves the name from the caller's own record. The lookup by name the SDKs make with a user token during setup is
+  unchanged.
+- The same check applies to the four `/api/v1/detection/agents/:id/` routes and to
+  `POST /api/v1/a2a/agents/:id/card`, `.../card/refresh`, `.../sign` and `.../trust-score/compute`.
+- The server refuses to start with an SDK-API `/agents/:` route that declares neither the check nor a reason it is
+  exempt, and a test walks the backend source for every agent-ID route under a group that authenticates agents. The
+  remaining `/api/v1/agents/:id/...` and A2A read routes are enumerated there and are unchanged in this release.
+
 ### Fixed — a request-analytics row that fails to insert is counted, not dropped without a trace
 
 `AnalyticsTracking` writes each `api_calls` row after the response, and an insert that failed was discarded with no log line and no counter, so a low or zero API-call count could not be told apart from rows that were lost. A failed insert is now counted by error class: the two-character SQLSTATE class read from the driver's error code, `timeout`, `pool` (no connection before the deadline) or `other`. The server writes one line per 64-second period that had a failure, and the pending line on shutdown, in the form `api_calls_insert_failed period_start=<UTC> period_end=<UTC> <class>=<count> ...`. The line carries only the period and the counts: never the error's text, which can repeat the rejected value, and no endpoint, address, user agent or identifier from the row. An insert now has a 30-second deadline, the wait for a connection included, so one that cannot finish is counted rather than left waiting.

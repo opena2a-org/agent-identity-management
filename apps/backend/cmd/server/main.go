@@ -328,6 +328,10 @@ func main() {
 			middleware.AgentActivityTouchMiddleware(services.Agent), // Touches agents.last_active on agent-authed responses (#167)
 			middleware.RateLimitMiddleware(),
 		},
+		// Every /agents/ route in the table binds its agent parameter to the
+		// authenticated agent; GET /agents/:identifier also admits the agent's
+		// own name, read from the agent's own row.
+		AgentNameResolver: agentNameResolver(services.Agent),
 		Handlers: sdkAPIHandlers{
 			CreateVerification:          h.Verification.CreateVerification,
 			GetVerificationSDK:          h.Verification.GetVerificationSDK,
@@ -1474,11 +1478,14 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	detection.Use(middleware.AuthMiddleware(jwtService))                   // ✅ Fallback to JWT (for web UI)
 	detection.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	detection.Use(middleware.RateLimitMiddleware())
-	detection.Post("/agents/:id/report", h.Detection.ReportDetection)
-	detection.Get("/agents/:id/status", h.Detection.GetDetectionStatus) // ✅ Now accessible from web UI with JWT
+	// Every caller here that is not a user JWT is a signed agent, and an agent
+	// may only report or read its own detections: :id is bound to it.
+	detectionBound := bindAgentRoutes(detection)
+	detectionBound.Post("/agents/:id/report", h.Detection.ReportDetection)
+	detectionBound.Get("/agents/:id/status", h.Detection.GetDetectionStatus) // ✅ Now accessible from web UI with JWT
 	// ⭐ Agent Capability Detection endpoints - Report detected agent capabilities
-	detection.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
-	detection.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
+	detectionBound.Post("/agents/:id/capabilities/report", h.Detection.ReportCapabilities)
+	detectionBound.Get("/agents/:id/capabilities/latest", h.Detection.GetLatestCapabilityReport) // ✅ Fetch latest capability report
 
 	// Agents routes - All other agent endpoints with quad authentication (ATC, API key, Ed25519, or JWT)
 	agents := v1.Group("/agents")
@@ -1846,17 +1853,22 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Use(middleware.AuthMiddleware(jwtService))
 	a2a.Use(middleware.RateLimitMiddleware())
 
+	// Writes under /agents/:id bind :id to the authenticated agent: an agent
+	// may not register, refresh, sign or compute for another agent. A user JWT
+	// caller is unaffected. The reads stay open to peers for discovery.
+	a2aBound := bindAgentRoutes(a2a)
+
 	// Agent Card management
-	a2a.Post("/agents/:id/card", middleware.MemberMiddleware(), h.A2A.RegisterAgentCard)
+	a2aBound.Post("/agents/:id/card", middleware.MemberMiddleware(), h.A2A.RegisterAgentCard)
 	a2a.Get("/agents/:id/card", h.A2A.GetAgentCard)
-	a2a.Post("/agents/:id/card/refresh", middleware.MemberMiddleware(), h.A2A.RefreshCardAttestation)
+	a2aBound.Post("/agents/:id/card/refresh", middleware.MemberMiddleware(), h.A2A.RefreshCardAttestation)
 
 	// Request signing (SDK/programmatic)
-	a2a.Post("/agents/:id/sign", h.A2A.SignRequest)
+	a2aBound.Post("/agents/:id/sign", h.A2A.SignRequest)
 
 	// A2A Trust Scores
 	a2a.Get("/agents/:id/trust-score", h.A2A.GetA2ATrustScore)
-	a2a.Post("/agents/:id/trust-score/compute", middleware.ManagerMiddleware(), h.A2A.ComputeA2ATrustScore)
+	a2aBound.Post("/agents/:id/trust-score/compute", middleware.ManagerMiddleware(), h.A2A.ComputeA2ATrustScore)
 	a2a.Get("/agents/:id/peers/:peer_id/trust", h.A2A.GetPeerTrustScore)
 
 	// A2A Skills
