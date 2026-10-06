@@ -5,6 +5,16 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Copy, Check, Key, Shield, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -23,13 +33,19 @@ interface KeyVault {
 
 interface KeyVaultTabProps {
   agentId: string;
+  // Admin or manager of the agent's organization. Only they are offered the
+  // hybrid mode turn-off; for anyone else the control is not rendered.
+  canManage?: boolean;
 }
 
-export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
+export function KeyVaultTab({ agentId, canManage = false }: KeyVaultTabProps) {
   const [keyVault, setKeyVault] = useState<KeyVault | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [pqcCopied, setPqcCopied] = useState(false);
+  const [showTurnOffConfirm, setShowTurnOffConfirm] = useState(false);
+  const [turningOff, setTurningOff] = useState(false);
+  const [hybridModeError, setHybridModeError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchKeyVault = async () => {
@@ -60,6 +76,28 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
       navigator.clipboard.writeText(keyVault.pqcPublicKey);
       setPqcCopied(true);
       setTimeout(() => setPqcCopied(false), 2000);
+    }
+  };
+
+  const turnOffHybridMode = async () => {
+    setTurningOff(true);
+    setHybridModeError(null);
+    try {
+      await api.turnOffAgentHybridMode(agentId);
+    } catch (error: any) {
+      setHybridModeError(error?.message || 'Hybrid mode could not be turned off.');
+      setTurningOff(false);
+      return;
+    }
+    try {
+      // Show the value the server stored, never an assumed one.
+      setKeyVault(await api.getAgentKeyVault(agentId));
+    } catch {
+      setHybridModeError(
+        'Hybrid mode was turned off, but the key vault could not be read again. Reload the page to see the current state.'
+      );
+    } finally {
+      setTurningOff(false);
     }
   };
 
@@ -177,7 +215,25 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
           ) : (
             <Badge variant="outline" className="ml-2">Not registered</Badge>
           )}
+          {canManage && keyVault.pqcPublicKey && keyVault.hybridModeEnabled && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setShowTurnOffConfirm(true)}
+              disabled={turningOff}
+            >
+              {turningOff ? 'Turning off...' : 'Turn off hybrid mode'}
+            </Button>
+          )}
         </div>
+
+        {hybridModeError && (
+          <p role="alert" className="text-sm text-danger-text mb-4">
+            {hybridModeError}
+          </p>
+        )}
 
         {keyVault.pqcPublicKey ? (
           <div className="space-y-6">
@@ -278,6 +334,28 @@ export function KeyVaultTab({ agentId }: KeyVaultTabProps) {
           </ul>
         </div>
       </Card>
+
+      <AlertDialog open={showTurnOffConfirm} onOpenChange={setShowTurnOffConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turn off hybrid mode</AlertDialogTitle>
+            <AlertDialogDescription>
+              With hybrid mode off, AIM accepts this agent&apos;s requests signed with its Ed25519
+              key alone and no longer requires the post-quantum signature. The ML-DSA-65 companion
+              key stays registered. This page does not turn hybrid mode back on.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={turnOffHybridMode}
+              className="rounded-pill bg-warning text-warning-foreground hover:opacity-90"
+            >
+              Turn off hybrid mode
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

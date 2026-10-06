@@ -2472,6 +2472,17 @@ class APIClient {
     return this.request(`/api/v1/agents/${agentId}/key-vault`);
   }
 
+  // Turn-off only: no shipped SDK signs the hybrid form the server verifies,
+  // so turning hybrid mode on from the dashboard would lock the agent out.
+  async turnOffAgentHybridMode(
+    agentId: string
+  ): Promise<{ agentId: string; hybridModeEnabled: boolean; message: string }> {
+    return this.request(`/api/v1/agents/${agentId}/hybrid-mode`, {
+      method: "POST",
+      body: JSON.stringify({ enable: false }),
+    });
+  }
+
   // MCP Server Tags
   async getMCPServerTags(mcpServerId: string): Promise<Tag[]> {
     return this.request(`/api/v1/mcp-servers/${mcpServerId}/tags`);
