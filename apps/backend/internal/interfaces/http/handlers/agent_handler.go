@@ -269,6 +269,19 @@ func respondRegistrationError(c fiber.Ctx, err error) error {
 	}
 }
 
+// respondAgentStatusActError answers a verify, suspend or reactivate failure. An act the
+// agent's status does not allow (domain.AgentStatusTransition) is a 409 that states the
+// refusal and the act that applies instead; anything else is a server error.
+func respondAgentStatusActError(c fiber.Ctx, err error) error {
+	var refusal *domain.AgentStatusTransitionError
+	if errors.As(err, &refusal) {
+		return c.Status(fiber.StatusConflict).JSON(withReasonCode(fiber.Map{
+			"error": refusal.Message(),
+		}, "agentStatusTransitionRefused"))
+	}
+	return respondServerError(c, fiber.StatusInternalServerError, err)
+}
+
 func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
@@ -549,8 +562,9 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 		return nil
 	}
 
+	before := agent.Status
 	if err := h.agentService.VerifyAgent(c.Context(), agentID); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondAgentStatusActError(c, err)
 	}
 
 	// Get updated agent to return in response
@@ -574,6 +588,7 @@ func (h *AgentHandler) VerifyAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"verified":   true,
+		"changed":    agent.Status != before,
 		"trustScore": agent.TrustScore,
 		"verifiedAt": agent.VerifiedAt,
 	})
@@ -1839,13 +1854,14 @@ func (h *AgentHandler) RecalculateAgentTrustScore(c fiber.Ctx) error {
 
 // SuspendAgent suspends an agent by setting its status to suspended
 // @Summary Suspend agent
-// @Description Suspend an agent by setting its status to suspended. The agent will be unable to perform actions.
+// @Description Suspend a pending or verified agent. The agent will be unable to perform actions. A suspended agent answers 200 with changed false; a revoked agent is refused with 409.
 // @Tags agents
 // @Produce json
 // @Param id path string true "Agent ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
 // @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
+// @Failure 409 {object} ErrorResponse "The agent's status does not allow this act (reasonCode agentStatusTransitionRefused)"
 // @Router /agents/{id}/suspend [post]
 func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
@@ -1872,8 +1888,9 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 	}
 
 	// Suspend the agent
+	before := agent.Status
 	if err := h.agentService.SuspendAgent(c.Context(), agentID); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondAgentStatusActError(c, err)
 	}
 
 	// Get updated agent to return in response
@@ -1901,6 +1918,7 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 		"success":    true,
 		"message":    "Agent suspended successfully",
 		"status":     agent.Status,
+		"changed":    agent.Status != before,
 		"trustScore": agent.TrustScore,
 		"agent":      agent,
 	})
@@ -1908,13 +1926,14 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 
 // ReactivateAgent reactivates a suspended agent by setting its status to verified
 // @Summary Reactivate agent
-// @Description Reactivate a suspended agent by setting its status to verified. The agent will be able to perform actions again.
+// @Description Reactivate a suspended agent by setting its status to verified. The agent will be able to perform actions again. A verified agent answers 200 with changed false; a pending or revoked agent is refused with 409 and its status is unchanged.
 // @Tags agents
 // @Produce json
 // @Param id path string true "Agent ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
 // @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
+// @Failure 409 {object} ErrorResponse "The agent's status does not allow this act (reasonCode agentStatusTransitionRefused)"
 // @Router /agents/{id}/reactivate [post]
 func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
@@ -1941,8 +1960,9 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 	}
 
 	// Reactivate the agent
+	before := agent.Status
 	if err := h.agentService.ReactivateAgent(c.Context(), agentID); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondAgentStatusActError(c, err)
 	}
 
 	// Get updated agent to return in response
@@ -1970,15 +1990,16 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 		"success":    true,
 		"message":    "Agent reactivated successfully",
 		"status":     agent.Status,
+		"changed":    agent.Status != before,
 		"trustScore": agent.TrustScore,
 		"verifiedAt": agent.VerifiedAt,
 		"agent":      agent,
 	})
 }
 
-// RevokeAgent revokes an agent with 30-day data retention
+// RevokeAgent revokes an agent
 // @Summary Revoke agent
-// @Description Revoke an agent. Data is retained for 30 days and can be restored via reactivate.
+// @Description Revoke an agent. A revoked agent cannot be reactivated, verified or suspended.
 // @Tags agents
 // @Produce json
 // @Param id path string true "Agent ID"
@@ -2040,7 +2061,7 @@ func (h *AgentHandler) RevokeAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"success":        true,
-		"message":        "Agent revoked. Data retained for 30 days. Run reactivate within 30 days to restore.",
+		"message":        "Agent revoked.",
 		"retentionUntil": retentionUntil.Format(time.RFC3339),
 		"status":         agent.Status,
 		"trustScore":     agent.TrustScore,
