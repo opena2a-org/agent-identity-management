@@ -1274,6 +1274,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Registration, // ✅ Renamed from OAuth to Registration
 			services.Auth,
 			jwtService,
+			services.Audit, // records each sign-in with the token family it issued
 		),
 		Tag: handlers.NewTagHandler(
 			services.Tag,

@@ -15,7 +15,7 @@ import (
 // ===========================
 
 func TestNewPublicRegistrationHandler_NilDeps(t *testing.T) {
-	handler := NewPublicRegistrationHandler(nil, nil, nil)
+	handler := NewPublicRegistrationHandler(nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

@@ -105,6 +105,18 @@ func assertRefusedRow(t *testing.T, f *mintFixture, route string) {
 	assert.Equal(t, route, row.Metadata["route"])
 }
 
+// refusedRows keeps the credential_mint_refused rows; a route that mints also
+// records its sign-in.
+func refusedRows(rows []*domain.AuditLog) []*domain.AuditLog {
+	var refused []*domain.AuditLog
+	for _, row := range rows {
+		if row.Action == domain.AuditActionCredentialMintRefused {
+			refused = append(refused, row)
+		}
+	}
+	return refused
+}
+
 // ---- S: GET /sdk/download -------------------------------------------------
 
 func sdkDownloadApp(t *testing.T, f *mintFixture, family string) (*fiber.App, *rotationSDKRepo) {
@@ -301,7 +313,7 @@ func TestSDKRecover_LiveSessionRecovers(t *testing.T) {
 	status, _ := doRequest(t, app, "POST", "/auth/sdk/recover", recoverBody(old))
 	assert.Equal(t, fiber.StatusOK, status)
 	assert.Len(t, repo.created, 1)
-	assert.Empty(t, f.audit.rows)
+	assert.Empty(t, refusedRows(f.audit.rows), "no refusal is recorded")
 }
 
 // V3/V4: an unanswered store follows the fail-open setting and records nothing.
@@ -318,7 +330,7 @@ func TestSDKRecover_UnansweredStoreFollowsFailOpen(t *testing.T) {
 	status, _ = doRequest(t, app, "POST", "/auth/sdk/recover", recoverBody(old))
 	assert.Equal(t, fiber.StatusOK, status)
 	assert.Len(t, repo.created, 1)
-	assert.Empty(t, open.audit.rows)
+	assert.Empty(t, refusedRows(open.audit.rows), "no refusal is recorded")
 }
 
 // V5: no family, the existing behaviour.

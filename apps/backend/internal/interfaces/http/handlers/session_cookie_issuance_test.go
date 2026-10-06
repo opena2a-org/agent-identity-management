@@ -113,7 +113,7 @@ func TestSignIn_IssuesNoSessionCookie(t *testing.T) {
 			jwtService := auth.NewJWTService()
 
 			app := fiber.New()
-			public := NewPublicRegistrationHandler(application.NewRegistrationService(refusalRegistrationRepo{}, users, nil, nil, nil), authService, jwtService)
+			public := NewPublicRegistrationHandler(application.NewRegistrationService(refusalRegistrationRepo{}, users, nil, nil, nil), authService, jwtService, nil)
 			app.Post("/api/v1/public/login", public.Login)
 			app.Post("/api/v1/public/change-password", public.ChangePassword)
 			local := NewAuthHandler(authService, jwtService, nil, application.NewAuditService(&familyAuditRepo{}), nil)

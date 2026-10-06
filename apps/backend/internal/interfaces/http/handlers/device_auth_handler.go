@@ -136,6 +136,7 @@ func (h *DeviceAuthHandler) PollDeviceToken(c fiber.Ctx) error {
 			})
 		}
 	}
+	recordSignIn(c, h.audit, h.jwtService, resp.RefreshToken, fiber.Map{"method": "device_code"})
 
 	return c.JSON(fiber.Map{
 		"accessToken":  resp.AccessToken,

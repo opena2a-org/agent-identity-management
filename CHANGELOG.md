@@ -872,6 +872,18 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — every sign-in records the token family it issued
+
+- Each route that issues a sign-in token pair now writes one `login` audit row in the user's organization whose
+  metadata carries `familyId`, the session id (`sid`) the issued tokens carry. A family named later on a refresh, a
+  logout or a refusal row resolves to the user and organization that signed in.
+- `POST /api/v1/auth/login/local` already wrote a `login` row; it now carries `familyId`. `POST /api/v1/public/login`
+  (an account that must change its password first included, and the sign-in that follows
+  `POST /api/v1/public/change-password`), `POST /api/v1/oauth/device/token` and `POST /api/v1/auth/sdk/recover` wrote
+  no row and now write one.
+- `metadata.method` names how the user signed in: `password`, `device_code` or `sdk_token_recovery`. A recovery's row
+  also carries `recoveredFrom`, the id of the revoked SDK token. The rows carry identifiers only, never a token.
+
 ### Changed — trust scoring counts only verification outcomes the server observed
 
 - Every verification event now records who stands behind its outcome, in a new `source` column (migration 124):

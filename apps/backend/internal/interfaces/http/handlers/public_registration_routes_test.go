@@ -43,7 +43,7 @@ func TestPublicRegistrationRoutes_RefuseWith503AndCodeWhenNoAdministratorExists(
 	service := application.NewRegistrationService(refusalRegistrationRepo{}, refusalUserRepo{}, nil, nil, nil)
 	// The access-request route asks the auth service for the user first; it only forwards to the repo.
 	authService := application.NewAuthService(refusalUserRepo{}, nil, nil, nil, nil, nil)
-	handler := NewPublicRegistrationHandler(service, authService, nil)
+	handler := NewPublicRegistrationHandler(service, authService, nil, nil)
 
 	app := fiber.New()
 	app.Post("/register", handler.RegisterUser)

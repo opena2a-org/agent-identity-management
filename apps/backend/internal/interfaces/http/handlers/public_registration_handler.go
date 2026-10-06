@@ -16,6 +16,7 @@ type PublicRegistrationHandler struct {
 	registrationService *application.RegistrationService
 	authService         *application.AuthService
 	jwtService          *auth.JWTService
+	auditService        *application.AuditService
 }
 
 // NewPublicRegistrationHandler creates a new public registration handler
@@ -23,11 +24,13 @@ func NewPublicRegistrationHandler(
 	registrationService *application.RegistrationService,
 	authService *application.AuthService,
 	jwtService *auth.JWTService,
+	auditService *application.AuditService,
 ) *PublicRegistrationHandler {
 	return &PublicRegistrationHandler{
 		registrationService: registrationService,
 		authService:         authService,
 		jwtService:          jwtService,
+		auditService:        auditService,
 	}
 }
 
@@ -357,6 +360,7 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 			"error":   "Failed to generate tokens",
 		})
 	}
+	recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{"method": "password"})
 
 	response := &LoginResponse{
 		Success:      true,
@@ -385,6 +389,7 @@ func (h *PublicRegistrationHandler) generatePasswordChangeRequiredResponse(c fib
 			"error":   "Failed to generate tokens",
 		})
 	}
+	recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{"method": "password"})
 
 	response := &LoginResponse{
 		Success:                true,

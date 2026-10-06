@@ -190,6 +190,7 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 			"error": "Failed to save new token",
 		})
 	}
+	recordSignIn(c, h.audit, h.jwtService, newRefreshToken, fiber.Map{"method": "sdk_token_recovery", "recoveredFrom": tokenID})
 
 	return c.JSON(RecoverTokenResponse{
 		AccessToken:  newAccessToken,
