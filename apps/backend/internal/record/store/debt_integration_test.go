@@ -152,7 +152,8 @@ func TestRecordReductionDebtPerReason(t *testing.T) {
 }
 
 // A reduction whose debt row cannot be written either still commits, with
-// no record and no debt, and its SECURITY line says so.
+// no record and no debt, and its SECURITY line says so: debt=unwritten, which
+// no refused write's line carries.
 func TestRecordReductionWhoseDebtCannotBeWrittenStillCommits(t *testing.T) {
 	db, _ := openTapped(t, 0)
 	plain := openPlain(t)
@@ -180,7 +181,7 @@ func TestRecordReductionWhoseDebtCannotBeWrittenStillCommits(t *testing.T) {
 	require.True(t, marked(t, plain, org), "the reduction committed")
 	require.Equal(t, before, debtRows(t, plain, org), "the first debt is unchanged")
 	require.Equal(t, 0.0, h.counter(t, "aim_record_debts_written_total"))
-	require.Equal(t, []string{"SECURITY record_write_failed class=reduction reason=chain_head debt=none"}, h.logs.lines())
+	require.Equal(t, []string{"SECURITY record_write_failed class=reduction reason=chain_head debt=unwritten"}, h.logs.lines())
 	restore()
 }
 

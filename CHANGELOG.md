@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: admins can read the state of their organization's audit record chain
+
+- `GET /api/v1/admin/audit-logs/chain/head` answers with `chainState` (`notStarted`, `extendable` or
+  `notExtendable`), `chainId`, `head` (`seq` and `hash`) and `latestCheckpoint`, and with `reason`
+  (`no_records`, `head_mismatch` or `record_modified`) when the chain cannot be extended. It reads the
+  caller's organization only, through the same chain-state read the record writer runs before it
+  extends a chain.
+- An organization with no chain is answered 200 with `chainState` `notStarted` and `chainId`, `head`
+  and `latestCheckpoint` null. No chain starts on the schema as shipped, whose foreign keys still
+  remove audit rows by cascade, so every organization reads `notStarted` for now. `latestCheckpoint`
+  is null until chain checkpoints are written.
+
 ### Fixed — an alert's repeat count is in the alerts API and dashboard, and concurrent repeats of one dedupe key share one alert (#633)
 
 - Alerts returned by `GET /api/v1/admin/alerts`, `GET /api/v1/security/alerts` and

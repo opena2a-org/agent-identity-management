@@ -62,6 +62,28 @@ func TestRecordWriteRefusesAnUnknownClassOrOrganization(t *testing.T) {
 	require.Empty(t, logs.String())
 }
 
+// Every failed write's line names its debt. A write refused whole committed
+// nothing and owes no record, so its line says debt=none, whatever its class.
+func TestRecordRefusedWriteLineSaysNoDebt(t *testing.T) {
+	for _, class := range classes {
+		t.Run(string(class), func(t *testing.T) {
+			w, _, logs := offlineWriter(t)
+			_, err := w.Write(context.Background(), Write{
+				Class:          class,
+				OrganizationID: "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+				Draft: record.Draft{
+					EventID:  "a1a1a1a1-0000-4000-8000-000000000001",
+					Type:     "opena2a.administrative",
+					Retained: map[string]any{"score": 0.5},
+				},
+			})
+			var we *WriteError
+			require.True(t, errors.As(err, &we), "want a *WriteError, got %v", err)
+			require.Equal(t, "SECURITY record_write_failed class="+string(class)+" reason=canonical debt=none\n", logs.String())
+		})
+	}
+}
+
 // A draft that cannot be canonicalized fails before the write takes a
 // connection or waits for the lock.
 func TestRecordCanonicalFailureComesBeforeTheLock(t *testing.T) {
@@ -79,7 +101,7 @@ func TestRecordCanonicalFailureComesBeforeTheLock(t *testing.T) {
 	require.True(t, errors.As(err, &we), "want a *WriteError, got %v", err)
 	require.Equal(t, ReasonCanonical, we.Reason)
 	require.Equal(t, 1.0, failureTotal(t, reg))
-	require.Equal(t, "SECURITY record_write_failed class=reduction reason=canonical\n", logs.String())
+	require.Equal(t, "SECURITY record_write_failed class=reduction reason=canonical debt=none\n", logs.String())
 }
 
 func TestRecordFailureSeriesExistAtZeroWithNoOrganizationLabel(t *testing.T) {
