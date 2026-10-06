@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -462,6 +463,10 @@ func (h *AgentHandler) UpdateAgent(c fiber.Ctx) error {
 	return c.JSON(h.enrichAgentResponse(c, agent))
 }
 
+// agentDeleteFailedMessage is the `error` DELETE /api/v1/agents/:id answers when the
+// delete itself fails. The delete is one statement, so a failure removes nothing.
+const agentDeleteFailedMessage = "The agent was not deleted and nothing was removed. Try again, and if it fails again, contact your administrator."
+
 // DeleteAgent deletes an agent
 func (h *AgentHandler) DeleteAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
@@ -486,9 +491,13 @@ func (h *AgentHandler) DeleteAgent(c fiber.Ctx) error {
 		return nil
 	}
 
+	// The cause stays in the server log. The dashboard shows `error` to the person who
+	// pressed Delete, and a database error names tables, constraints and key values they
+	// can do nothing with.
 	if err := h.agentService.DeleteAgent(c.Context(), agentID); err != nil {
+		log.Printf("Delete agent %s for org %s failed: %v", agentID, orgID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
+			"error": agentDeleteFailedMessage,
 		})
 	}
 
