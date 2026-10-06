@@ -11,6 +11,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a request-analytics row that fails to insert is counted, not dropped without a trace
+
+`AnalyticsTracking` writes each `api_calls` row after the response, and an insert that failed was discarded with no log line and no counter, so a low or zero API-call count could not be told apart from rows that were lost. A failed insert is now counted by error class: the two-character SQLSTATE class read from the driver's error code, `timeout`, `pool` (no connection before the deadline) or `other`. The server writes one line per 64-second period that had a failure, and the pending line on shutdown, in the form `api_calls_insert_failed period_start=<UTC> period_end=<UTC> <class>=<count> ...`. The line carries only the period and the counts: never the error's text, which can repeat the rejected value, and no endpoint, address, user agent or identifier from the row. An insert now has a 30-second deadline, the wait for a connection included, so one that cannot finish is counted rather than left waiting.
+
 ### Fixed — an agent that took part in A2A tasks, messages or consent records can be deleted
 
 - `DELETE /api/v1/agents/:id` (Delete agent in the dashboard) failed with a 500 for any agent
