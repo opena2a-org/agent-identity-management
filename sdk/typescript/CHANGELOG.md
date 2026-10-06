@@ -9,6 +9,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `createAgentRequestHeaders` signs a request as an agent with `agent-request-v1`, the Ed25519 request signature AIM
+  verifies, and returns the four headers to send with it: `X-Agent-ID`, `X-Timestamp`, `X-Signature` and
+  `X-Public-Key`. The signed bytes are the method, the path and query string of the URL, `X-Timestamp`, and, when the
+  body is not empty, the body exactly as sent; the URL's host is not signed. `X-Timestamp` is this host's clock in
+  Unix seconds, and AIM accepts the request only within 30 seconds of its own clock, earlier or later. There is no
+  nonce: anyone who obtains the request can send it to AIM again until AIM's clock is more than 30 seconds past
+  `X-Timestamp`. The method must be GET, POST, PUT, PATCH or DELETE in upper case, and the URL absolute http or https
+  with no username or password. The private key must be standard base64 of 32 bytes (a seed) or 64 bytes (the seed,
+  then its public key, as AIM issues it), and its public key must equal the configured one. Anything else throws
+  `ConfigurationError`, and nothing is signed. This change does not alter how `AIMClient`, `SecretsClient` and
+  `A2AClient` send requests.
+
 - `npx @opena2a/aim-sdk init` registers a first agent with a bootstrap token from the onboarding screen. The token
   is read from `AIM_BOOTSTRAP_TOKEN` (or `--token`, with a note that a flag value is visible in the process list) and
   sent only in the `X-AIM-Bootstrap-Token` header to `POST /api/v1/onboarding/bootstrap-tokens/exchange`. The

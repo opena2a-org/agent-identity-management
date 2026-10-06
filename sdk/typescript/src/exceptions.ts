@@ -196,16 +196,26 @@ export function unwrapErrnoCode(error: unknown, seen = new Set<unknown>()): stri
 }
 
 /**
+ * A server error string as an error message: 'Unknown error' when it is not a
+ * non-empty string, and cut to MAX_API_ERROR_MESSAGE characters when longer.
+ *
+ * @internal
+ */
+export function capAPIErrorMessage(raw: unknown): string {
+  const message = typeof raw === 'string' && raw.length > 0 ? raw : 'Unknown error';
+  if (message.length > MAX_API_ERROR_MESSAGE) {
+    return `${message.slice(0, MAX_API_ERROR_MESSAGE)}… [truncated]`;
+  }
+  return message;
+}
+
+/**
  * Parse API error response. When the response headers are supplied, a 429's
  * Retry-After header takes precedence over the body's retryAfter field.
  */
 export function parseAPIError(statusCode: number, body: unknown, headers?: HeaderLookup): AIMError {
   const errorBody = body as Record<string, unknown>;
-  const raw = errorBody?.message ?? errorBody?.error;
-  let message = typeof raw === 'string' && raw.length > 0 ? raw : 'Unknown error';
-  if (message.length > MAX_API_ERROR_MESSAGE) {
-    message = `${message.slice(0, MAX_API_ERROR_MESSAGE)}… [truncated]`;
-  }
+  const message = capAPIErrorMessage(errorBody?.message ?? errorBody?.error);
 
   switch (statusCode) {
     case 401:
