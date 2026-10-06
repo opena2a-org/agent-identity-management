@@ -35,6 +35,16 @@ type ChainStatus struct {
 	keyID string
 }
 
+// ChainReport is a chain state as every surface that reports one answers
+// it: the members of the ChainStatus that ReadChainState read, and
+// latestCheckpoint. The body of GET /api/v1/admin/audit-logs/chain/head and
+// the output of aim-breakglass chain status --json are both this value.
+type ChainReport struct {
+	ChainStatus
+	// LatestCheckpoint is always nil: no chain checkpoint is written yet.
+	LatestCheckpoint *struct{} `json:"latestCheckpoint"`
+}
+
 // HeadView is a stored chain head.
 type HeadView struct {
 	Seq  int64  `json:"seq"`

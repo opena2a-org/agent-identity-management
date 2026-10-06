@@ -19,16 +19,11 @@ func NewAuditChainHandler(db recordstore.Querier) *AuditChainHandler {
 	return &AuditChainHandler{db: db}
 }
 
-// chainHeadResponse is the body of GET /admin/audit-logs/chain/head.
-type chainHeadResponse struct {
-	recordstore.ChainStatus
-	// LatestCheckpoint is always null: no chain checkpoint is written yet.
-	LatestCheckpoint *struct{} `json:"latestCheckpoint"`
-}
-
 // GetChainHead reports the state of the caller's organization's chain, as
 // the one chain-state read of the record store reads it: chainState, chainId,
 // head and latestCheckpoint, and reason when the chain cannot be extended.
+// The body is the record store's ChainReport of that read, the same value
+// aim-breakglass chain status --json prints.
 // An organization with no chain gets 200 with chainState notStarted and
 // chainId, head and latestCheckpoint null.
 //
@@ -45,5 +40,5 @@ func (h *AuditChainHandler) GetChainHead(c fiber.Ctx) error {
 			"error": "Failed to read the audit record chain",
 		})
 	}
-	return c.JSON(chainHeadResponse{ChainStatus: status})
+	return c.JSON(recordstore.ChainReport{ChainStatus: status})
 }
