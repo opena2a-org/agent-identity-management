@@ -15,6 +15,11 @@ import (
 const (
 	EventRecordWriteFailed = "record_write_failed"
 	EventAppendLockWaits   = "record_append_lock_waits"
+	// EventRecordDebtWritten is written once per committed debt row. Unlike
+	// the other lines it names the debt's organization and subject.
+	EventRecordDebtWritten = "record_debt_written"
+	// EventDebtSettlerRun is written once per settler run.
+	EventDebtSettlerRun = "record_debt_settler_run"
 )
 
 // lockWaitBuckets are the upper bounds, in seconds, of the append-lock wait
@@ -22,10 +27,17 @@ const (
 // period's line has the same fields.
 var lockWaitBuckets = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2}
 
-// Metrics are the writer's series. No series carries an organization label.
+// Metrics are the writer's and the debt settler's series. No series carries
+// an organization label.
 type Metrics struct {
 	failures *prometheus.CounterVec
 	lockWait prometheus.Histogram
+
+	debtsWritten       prometheus.Counter
+	debtsSettled       prometheus.Counter
+	debtsOpen          prometheus.Gauge
+	debtOldestOpen     prometheus.Gauge
+	settlerLastSuccess prometheus.Gauge
 }
 
 // NewMetrics registers the writer's series with reg, every failure series at
@@ -41,8 +53,29 @@ func NewMetrics(reg prometheus.Registerer) (*Metrics, error) {
 			Help:    "Time a record write waited for its chain's append lock, in process and in the database",
 			Buckets: lockWaitBuckets,
 		}),
+		debtsWritten: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "aim_record_debts_written_total",
+			Help: "Debt rows committed by reductions whose record could not be appended, counted in this process",
+		}),
+		debtsSettled: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "aim_record_debts_settled_total",
+			Help: "Debts whose late record this process appended, deleting the debt row",
+		}),
+		debtsOpen: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "aim_record_debts_open",
+			Help: "Open debts over every organization, as the last settler run counted them",
+		}),
+		debtOldestOpen: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "aim_record_debt_oldest_open_seconds",
+			Help: "Age of the oldest open debt over every organization at the last settler run, 0 when none is open",
+		}),
+		settlerLastSuccess: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "aim_record_debt_settler_last_success_timestamp_seconds",
+			Help: "Unix time at which the last settler run that read every organization's debts ended",
+		}),
 	}
-	for _, c := range []prometheus.Collector{m.failures, m.lockWait} {
+	for _, c := range []prometheus.Collector{m.failures, m.lockWait,
+		m.debtsWritten, m.debtsSettled, m.debtsOpen, m.debtOldestOpen, m.settlerLastSuccess} {
 		if err := reg.Register(c); err != nil {
 			return nil, fmt.Errorf("store: register metrics: %w", err)
 		}

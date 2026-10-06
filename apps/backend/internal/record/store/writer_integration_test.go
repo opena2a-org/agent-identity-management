@@ -207,7 +207,9 @@ func TestRecordChainStateCell(t *testing.T) {
 }
 
 // Each class and reason is counted once per failed write, other series stay
-// at zero, and each failure writes one SECURITY line with both.
+// at zero, and each failure writes one SECURITY line with both. A reduction
+// whose state change ran commits with a debt instead of failing: its
+// SECURITY line names the debt, and the debt's own line comes first.
 func TestRecordWriteFailuresCountOncePerClassAndReason(t *testing.T) {
 	db, _ := openTapped(t, 0)
 	plain := openPlain(t)
@@ -225,67 +227,59 @@ func TestRecordWriteFailuresCountOncePerClassAndReason(t *testing.T) {
 
 	type fault struct {
 		reason Reason
-		run    func(h harness, class Class) error
+		run    func(h harness, class Class) (Appended, error)
 	}
 	faults := []fault{
-		{ReasonChainHead, func(h harness, class Class) error {
-			_, err := h.w.Write(ctx, Write{Class: class, OrganizationID: planted, Draft: testDraft()})
-			return err
+		{ReasonChainHead, func(h harness, class Class) (Appended, error) {
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: planted, Draft: testDraft()})
 		}},
-		{ReasonCanonical, func(h harness, class Class) error {
+		{ReasonCanonical, func(h harness, class Class) (Appended, error) {
 			d := testDraft()
 			d.Retained["score"] = 0.5
-			_, err := h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: d})
-			return err
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: d})
 		}},
-		{ReasonSigner, func(h harness, class Class) error {
+		{ReasonSigner, func(h harness, class Class) (Appended, error) {
 			h.keys.fail = errors.New("injected signer fault")
 			defer func() { h.keys.fail = nil }()
-			_, err := h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
-			return err
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
 		}},
-		{ReasonGuard, func(h harness, class Class) error {
-			_, err := h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft(),
+		{ReasonGuard, func(h harness, class Class) (Appended, error) {
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft(),
 				Guard: func(context.Context, time.Time, *Probe, *record.Draft) (*Stored, error) {
 					return nil, errors.New("refused by the guard")
 				}})
-			return err
 		}},
-		{ReasonChainGuardProbe, func(h harness, class Class) error {
-			_, err := h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft(),
+		{ReasonChainGuardProbe, func(h harness, class Class) (Appended, error) {
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft(),
 				Guard: func(ctx context.Context, _ time.Time, p *Probe, _ *record.Draft) (*Stored, error) {
 					_, _ = p.Newest(ctx, MaxProbeRows+1)
 					return nil, nil
 				}})
-			return err
 		}},
-		{ReasonConstraint, func(h harness, class Class) error {
+		{ReasonConstraint, func(h harness, class Class) (Appended, error) {
 			first, err := h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
 			if err != nil {
-				return fmt.Errorf("setup write: %w", err)
+				return Appended{}, fmt.Errorf("setup write: %w", err)
 			}
 			d := testDraft()
 			d.EventID = first.EventID
-			_, err = h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: d})
-			return err
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: d})
 		}},
-		{ReasonLockTimeout, func(h harness, class Class) error {
+		{ReasonLockTimeout, func(h harness, class Class) (Appended, error) {
 			holder, err := plain.Begin()
 			if err != nil {
-				return err
+				return Appended{}, err
 			}
 			defer func() { _ = holder.Rollback() }()
 			if _, err := holder.Exec(lockChainQuery, okOrg); err != nil {
-				return err
+				return Appended{}, err
 			}
-			_, err = h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
-			return err
+			return h.w.Write(ctx, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
 		}},
-		{ReasonOther, func(h harness, class Class) error {
+		{ReasonOther, func(h harness, class Class) (Appended, error) {
 			cancelled, cancel := context.WithCancel(ctx)
 			cancel()
-			_, err := h.w.Write(cancelled, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
-			return err
+			return h.w.Write(cancelled, Write{Class: class, OrganizationID: okOrg, Draft: testDraft()})
 		}},
 	}
 
@@ -293,16 +287,31 @@ func TestRecordWriteFailuresCountOncePerClassAndReason(t *testing.T) {
 		for _, f := range faults {
 			t.Run(string(class)+"/"+string(f.reason), func(t *testing.T) {
 				h := newHarness(t, db, healthy.keys)
-				err := f.run(h, class)
-				wantWriteError(t, err, class, f.reason)
+				out, err := f.run(h, class)
 
 				one, total := h.failures(t, class, f.reason)
 				require.Equal(t, 1.0, one)
 				require.Equal(t, 1.0, total, "a failed write increments exactly one series")
 
 				lines := h.logs.lines()
-				require.Len(t, lines, 1)
-				require.Equal(t, fmt.Sprintf("SECURITY %s class=%s reason=%s", EventRecordWriteFailed, class, f.reason), lines[0])
+				if class == ClassReduction && f.reason != ReasonCanonical && f.reason != ReasonOther {
+					// A reduction whose state change ran commits with a debt.
+					require.NoError(t, err)
+					require.NotNil(t, out.Debt)
+					require.Equal(t, f.reason, out.Debt.Reason)
+					require.NotEmpty(t, out.Debt.ID)
+					require.Equal(t, 1.0, h.counter(t, "aim_record_debts_written_total"))
+					require.Len(t, lines, 2)
+					require.True(t, strings.HasPrefix(lines[0], EventRecordDebtWritten+" debt_id="+out.Debt.ID+" "), lines[0])
+					lines = lines[1:]
+					require.Equal(t, fmt.Sprintf("SECURITY %s class=%s reason=%s debt=%s",
+						EventRecordWriteFailed, class, f.reason, out.Debt.ID), lines[0])
+				} else {
+					wantWriteError(t, err, class, f.reason)
+					require.Equal(t, 0.0, h.counter(t, "aim_record_debts_written_total"))
+					require.Len(t, lines, 1)
+					require.Equal(t, fmt.Sprintf("SECURITY %s class=%s reason=%s", EventRecordWriteFailed, class, f.reason), lines[0])
+				}
 				require.NotContains(t, lines[0], okOrg)
 				require.NotContains(t, lines[0], planted)
 			})
