@@ -202,3 +202,118 @@ func TestAdminAuditLogByID_ReturnsCanaries(t *testing.T) {
 		assert.True(t, strings.Contains(string(raw), canary), "admin route must return %q", canary)
 	}
 }
+
+// GET /agents/:id/activity returns the records an agent wrote (verification
+// requests, capability violations, honeytoken hits), some of which
+// GET /agents/:id/audit-logs also returns. A non-admin must not read through
+// it the address, user agent or metadata the other route withholds. What it
+// keeps of the metadata is AIM's decision on the agent's call, which the agent
+// page shows.
+func canaryAgentActivityLog(orgID, agentID uuid.UUID) *domain.AuditLog {
+	creator := uuid.New()
+	return &domain.AuditLog{
+		ID:             uuid.New(),
+		OrganizationID: orgID,
+		UserID:         &creator,
+		AgentID:        &agentID,
+		UserName:       "Colleague Admin",
+		AgentName:      "billing-agent",
+		Action:         "file:read",
+		ResourceType:   "agent_action",
+		ResourceID:     agentID,
+		IPAddress:      canaryIP,
+		UserAgent:      canaryUA,
+		Metadata: map[string]interface{}{
+			"verificationId": uuid.NewString(),
+			"actionType":     "file:read",
+			"resource":       "reports/q3.csv",
+			"riskLevel":      "high",
+			"trustScore":     0.82,
+			"autoApproved":   false,
+			"denialReason":   "Agent does not have capability 'file:read'",
+			"context":        map[string]interface{}{"requestedBy": canaryEmail},
+			"note":           canaryMetadata,
+		},
+		Timestamp: time.Now(),
+	}
+}
+
+func newAgentActivityHandler(orgID, agentID uuid.UUID, logs ...*domain.AuditLog) *AgentHandler {
+	agentSvc := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "billing-agent"}, nil
+		},
+	}
+	auditSvc := &MockAuditServiceImpl{
+		GetAgentActivityFunc: func(ctx context.Context, gotOrgID, gotAgentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error) {
+			return logs, nil
+		},
+	}
+	return NewAgentHandlerWithInterfaces(agentSvc, nil, auditSvc, nil, nil, nil, nil, nil, nil, nil, nil)
+}
+
+// decodeActivities returns each record of the response's "activities" array as a member map.
+func decodeActivities(t *testing.T, raw []byte) []map[string]json.RawMessage {
+	t.Helper()
+	var body struct {
+		Activities []map[string]json.RawMessage `json:"activities"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &body))
+	return body.Activities
+}
+
+func TestAgentActivity_NonAdminGetsNoNetworkAddressUserAgentOrPersonalMetadata(t *testing.T) {
+	orgID, agentID := uuid.New(), uuid.New()
+	h := newAgentActivityHandler(orgID, agentID, canaryAgentActivityLog(orgID, agentID))
+
+	for _, role := range nonAdminRoles {
+		t.Run("role="+role, func(t *testing.T) {
+			raw := serveAuditRoute(t, "/agents/"+agentID.String()+"/activity", "/agents/:id/activity", role, orgID, h.GetAgentActivity)
+			for _, canary := range auditCanaries {
+				assert.NotContains(t, string(raw), canary)
+			}
+			activities := decodeActivities(t, raw)
+			require.Len(t, activities, 1)
+			for _, member := range []string{"ipAddress", "userAgent"} {
+				assert.NotContains(t, activities[0], member, "member %q must be absent, not empty", member)
+			}
+			// The decision on the call stays, so the agent page can still say
+			// what was refused and why.
+			assert.JSONEq(t, `{
+				"actionType":   "file:read",
+				"resource":     "reports/q3.csv",
+				"riskLevel":    "high",
+				"trustScore":   0.82,
+				"autoApproved": false,
+				"denialReason": "Agent does not have capability 'file:read'"
+			}`, string(activities[0]["metadata"]))
+			assert.JSONEq(t, `"file:read"`, string(activities[0]["action"]))
+		})
+	}
+}
+
+func TestAgentActivity_NonAdminRecordWithoutDecisionHasNoMetadataMember(t *testing.T) {
+	orgID, agentID := uuid.New(), uuid.New()
+	record := canaryAuditLog(orgID, agentID, "agent")
+	record.AgentID = &agentID
+	h := newAgentActivityHandler(orgID, agentID, record)
+
+	raw := serveAuditRoute(t, "/agents/"+agentID.String()+"/activity", "/agents/:id/activity", string(domain.RoleViewer), orgID, h.GetAgentActivity)
+	activities := decodeActivities(t, raw)
+	require.Len(t, activities, 1)
+	assert.NotContains(t, activities[0], "metadata", "member must be absent, not empty")
+}
+
+func TestAgentActivity_AdminResponseUnchanged(t *testing.T) {
+	orgID, agentID := uuid.New(), uuid.New()
+	h := newAgentActivityHandler(orgID, agentID, canaryAgentActivityLog(orgID, agentID))
+
+	raw := serveAuditRoute(t, "/agents/"+agentID.String()+"/activity", "/agents/:id/activity", string(domain.RoleAdmin), orgID, h.GetAgentActivity)
+	for _, canary := range auditCanaries {
+		assert.Contains(t, string(raw), canary)
+	}
+	activities := decodeActivities(t, raw)
+	require.Len(t, activities, 1)
+	assert.JSONEq(t, `"`+canaryIP+`"`, string(activities[0]["ipAddress"]))
+	assert.JSONEq(t, `"`+canaryUA+`"`, string(activities[0]["userAgent"]))
+}

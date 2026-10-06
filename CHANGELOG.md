@@ -19,6 +19,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed: an agent's activity returns no network address, user agent or personal metadata to a non-admin
+
+- `GET /api/v1/agents/:id/activity` is open to every principal in the organization and returns the audit records an
+  agent wrote: its verification requests, capability violations and honeytoken hits. It returned each record's
+  `ipAddress`, `userAgent` and full `metadata`, including the context the agent sent with its call. Some of these
+  records are also returned by `GET /api/v1/agents/:id/audit-logs`, which withholds those members from a non-admin, so
+  a manager, member, viewer, API key or agent could read them through the activity route instead.
+- For every caller except an admin, the route now returns each record without `ipAddress` and `userAgent` (absent,
+  not empty), and its `metadata` holds only AIM's decision on the call: `actionType`, `resource`, `riskLevel`,
+  `trustScore`, `autoApproved` and `denialReason`. The agent page builds its activity timeline and refused-call
+  findings from these. A record with none of them has no `metadata` member. An admin's response is unchanged.
+- Tests write an activity record with a canary address, user agent, email and metadata value, then check that a
+  manager's, member's, viewer's and role-less caller's response contains none of them and keeps the decision members,
+  and that an admin's response still contains them.
+
 ### Fixed: the per-agent and per-MCP-server audit logs return no network address, user agent or metadata to a non-admin
 
 - `GET /api/v1/agents/:id/audit-logs` and `GET /api/v1/mcp-servers/:id/audit-logs` are open to every principal in
