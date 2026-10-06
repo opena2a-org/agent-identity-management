@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"strings"
 	"time"
 
@@ -11,6 +14,11 @@ import (
 
 // AnalyticsTracking middleware tracks API calls for real-time analytics
 func AnalyticsTracking(db *sql.DB) fiber.Handler {
+	if db != nil {
+		startInsertFailureReporting.Do(func() {
+			go apiCallInsertFailures.run(time.NewTicker(insertFailureReportPeriod).C)
+		})
+	}
 	return func(c fiber.Ctx) error {
 		// Record start time
 		start := time.Now()
@@ -146,7 +154,27 @@ func logAPICall(db *sql.DB, log APICallLog) {
 	// or retain them differently — but a route that cannot be seen is a route that cannot
 	// be investigated.
 
-	query := `
+	class := insertAPICall(db,
+		log.OrganizationID,
+		log.AgentID,
+		log.UserID,
+		log.Method,
+		log.Endpoint,
+		log.StatusCode,
+		log.DurationMs,
+		log.RequestSizeBytes,
+		log.ResponseSizeBytes,
+		log.UserAgent,
+		log.IPAddress,
+		log.ErrorMessage,
+	)
+	if class != "" {
+		// The request has already been answered; the loss is counted, never the row.
+		apiCallInsertFailures.record(class)
+	}
+}
+
+const apiCallInsertQuery = `
 		INSERT INTO api_calls (
 			organization_id,
 			agent_id,
@@ -163,27 +191,38 @@ func logAPICall(db *sql.DB, log APICallLog) {
 			called_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
-	`
+`
 
-	_, err := db.Exec(
-		query,
-		log.OrganizationID,
-		log.AgentID,
-		log.UserID,
-		log.Method,
-		log.Endpoint,
-		log.StatusCode,
-		log.DurationMs,
-		log.RequestSizeBytes,
-		log.ResponseSizeBytes,
-		log.UserAgent,
-		log.IPAddress,
-		log.ErrorMessage,
-	)
+// insertAPICall writes one api_calls row and returns the class of the failure, or ""
+// when the row was written.
+//
+// The connection is taken from the pool before the statement runs, so that a deadline
+// spent waiting for a connection (pool) is told apart from one spent on the statement
+// (timeout). A connection the driver reports broken is replaced once before the row is
+// counted as lost.
+func insertAPICall(db *sql.DB, args ...any) insertFailureClass {
+	ctx, cancel := context.WithTimeout(context.Background(), apiCallInsertTimeout)
+	defer cancel()
 
-	if err != nil {
-		// Log error but don't fail the request
-		// In production, you might want to use a proper logging framework
-		// log.Printf("Failed to log API call: %v", err)
+	for attempt := 0; ; attempt++ {
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return insertFailurePool
+			}
+			return classifyInsertFailure(err)
+		}
+		_, err = conn.ExecContext(ctx, apiCallInsertQuery, args...)
+		_ = conn.Close()
+		switch {
+		case err == nil:
+			return ""
+		case ctx.Err() != nil:
+			return insertFailureTimeout
+		case errors.Is(err, driver.ErrBadConn) && attempt == 0:
+			continue
+		default:
+			return classifyInsertFailure(err)
+		}
 	}
 }
