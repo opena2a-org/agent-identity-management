@@ -1286,7 +1286,7 @@ export default function AgentDetailsPage({
             <ViolationsTab agentId={agent.id} />
           </section>
           <section id={agentDetailSectionId("key-vault")} aria-label="Identity and signing" className="scroll-mt-4 space-y-4">
-            <KeyVaultTab agentId={agent.id} />
+            <KeyVaultTab agentId={agent.id} canManage={canManage} />
           </section>
         </TabsContent>
 
