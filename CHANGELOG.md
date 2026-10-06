@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the fleet governance guide's deployment step starts the server
+
+- Step 1 of `docs/use-cases/fleet-governance.md` gave the server `DATABASE_URL`, which it does not read, so the
+  server stopped at startup on the missing `POSTGRES_HOST`. Its sample `JWT_SECRET` was 29 characters, and the
+  server refuses one under 32. The dashboard was given `API_URL`, which it does not read, and the `/health` output
+  shown was not the one the server returns.
+- The step now writes `JWT_SECRET`, `KEYVAULT_MASTER_KEY` and `POSTGRES_PASSWORD` to `.env` with `openssl rand`, and
+  its compose file gives the server the `POSTGRES_*` settings it reads, a Redis service for token revocation, and a
+  database healthcheck it waits on, since the server connects once at start. The dashboard gets
+  `NEXT_PUBLIC_API_URL`. The fabricated `docker compose up` listing is removed, and the `/health` output is the
+  server's.
+- A test reads the step as docker compose would and loads the server's configuration from it. It checks that the
+  database and Redis hosts name services in the file, that the database credentials match, that each image is one
+  the release publishes, that the dashboard reads each variable it is given, and that the `/health` output has the
+  handler's fields.
+
 ### Fixed — the fleet governance guide describes the access token the server issues, and no longer points at a JWK Set
 
 - `docs/use-cases/fleet-governance.md` told readers to request a token at `/api/v1/token` with `agentId` and `scope`
