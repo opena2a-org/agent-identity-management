@@ -147,6 +147,10 @@ type AgentRepository interface {
 	// UpdateHeartbeat sets last_heartbeat to the database's current time and returns
 	// it. It writes no other agent column besides updated_at.
 	UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error)
+	// UpdateLastCapabilityCheck sets last_capability_check_at to the database's
+	// current time and returns it. It writes no other agent column besides
+	// updated_at.
+	UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error)
 	GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*Agent, error)
 	// GetByIDs returns the agents among ids that belong to callerOrgID. The
 	// organization predicate is REQUIRED and runs in SQL — see the implementation.

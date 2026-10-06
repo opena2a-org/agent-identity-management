@@ -1251,6 +1251,23 @@ func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID
 	return heartbeatAt, nil
 }
 
+// UpdateLastCapabilityCheck sets last_capability_check_at to the database's current
+// time and returns it.
+//
+// It writes last_capability_check_at and updated_at and nothing else, for the reason
+// UpdateHeartbeat gives: Update's statement has no last_capability_check_at column, and
+// it writes every other column from the struct, so a status or key change committed
+// after the caller's read would be overwritten. Returns sql.ErrNoRows when no agent has
+// this id.
+func (r *AgentRepository) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	query := `UPDATE agents SET last_capability_check_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING last_capability_check_at`
+	var checkedAt time.Time
+	if err := r.db.QueryRowContext(ctx, query, agentID).Scan(&checkedAt); err != nil {
+		return time.Time{}, err
+	}
+	return checkedAt, nil
+}
+
 // GetStaleAgents returns agents whose heartbeat is older than the given time
 func (r *AgentRepository) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	query := `

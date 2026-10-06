@@ -263,6 +263,9 @@ func (m *MockAgentRepositoryForCapReq) UpdateLastActive(ctx context.Context, age
 func (m *MockAgentRepositoryForCapReq) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
 	return time.Time{}, nil
 }
+func (m *MockAgentRepositoryForCapReq) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {
+	return time.Time{}, nil
+}
 func (m *MockAgentRepositoryForCapReq) GetStaleAgents(ctx context.Context, staleSince time.Time) ([]*domain.Agent, error) {
 	return nil, nil
 }
