@@ -122,6 +122,14 @@ export {
   type KeyPair,
 } from './crypto/ed25519';
 
+// Agent request signing (agent-request-v1)
+export {
+  createAgentRequestHeaders,
+  type AgentRequest,
+  type AgentRequestHeaders,
+  type AgentRequestMethod,
+} from './crypto/agent-request';
+
 // Delegation chain (cross-engine interop)
 export {
   publicKeyToDidKey,
