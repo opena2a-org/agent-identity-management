@@ -6,7 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +20,19 @@ import (
 // defaultATCVersion is used when an agent has no declared version. The credential
 // carries a non-empty version so downstream verifiers never see an empty field.
 const defaultATCVersion = "agent-v1"
+
+// atcPublisherDIDPrefix names an AIM organization as a credential publisher.
+// ATX core section 2 names publishers with the did:opena2a method and its
+// registered "publisher" type prefix; the identifier is "aim_" plus the
+// organization UUID, the same namespace convention as the agent's
+// did:aip:aim_<uuid>, so it never collides with a Registry-named publisher and
+// always matches the schema's DID pattern whatever the organization is called.
+const atcPublisherDIDPrefix = "did:opena2a:publisher:aim_"
+
+// errATCPublicOriginNotConfigured is returned when the service has no public
+// origin to build the buildAttestation reference from. The field is mandatory in
+// an ATX credential, so issuance fails closed rather than send an empty value.
+var errATCPublicOriginNotConfigured = errors.New("atc issuance: public origin (FRONTEND_URL) is not configured")
 
 // atcAgentReader loads the agent being credentialed.
 type atcAgentReader interface {
@@ -67,20 +83,28 @@ type ATCIssuanceService struct {
 	orgs   atcOrgReader
 	scorer atcTrustScorer
 	client atcRegistryClient
+
+	// publicOrigin is the deployment's public origin (FRONTEND_URL), which serves
+	// the public DID resolver at /api/v1/did/. The credential's buildAttestation
+	// references the agent's DID document there.
+	publicOrigin string
 }
 
-// NewATCIssuanceService wires the issuance trigger.
+// NewATCIssuanceService wires the issuance trigger. publicOrigin is the
+// deployment's public origin (FRONTEND_URL).
 func NewATCIssuanceService(
 	agents atcAgentReader,
 	orgs atcOrgReader,
 	scorer atcTrustScorer,
 	client atcRegistryClient,
+	publicOrigin string,
 ) *ATCIssuanceService {
 	return &ATCIssuanceService{
-		agents: agents,
-		orgs:   orgs,
-		scorer: scorer,
-		client: client,
+		agents:       agents,
+		orgs:         orgs,
+		scorer:       scorer,
+		client:       client,
+		publicOrigin: strings.TrimRight(strings.TrimSpace(publicOrigin), "/"),
 	}
 }
 
@@ -93,6 +117,10 @@ func NewATCIssuanceService(
 // subsequent Registry call fails. This is intentional — the credential carries
 // the freshly-computed score — but it means /atc is not a side-effect-free read.
 func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUID) (*ATCIssuanceResult, error) {
+	if s.publicOrigin == "" {
+		return nil, errATCPublicOriginNotConfigured
+	}
+
 	agent, err := s.agents.GetByID(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("atc issuance: load agent: %w", err)
@@ -103,7 +131,7 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 		return nil, fmt.Errorf("atc issuance: calculate trust score: %w", err)
 	}
 
-	req := buildATCIssuanceRequest(agent, score, s.resolvePublisher(agent), time.Now().UTC())
+	req := buildATCIssuanceRequest(agent, score, s.resolvePublisher(agent), s.publicOrigin, time.Now().UTC())
 
 	cred, err := s.client.IssueATC(ctx, req)
 	if err != nil {
@@ -130,15 +158,17 @@ func (s *ATCIssuanceService) resolvePublisher(agent *domain.Agent) string {
 
 // buildATCIssuanceRequest assembles the Registry issuance request from an agent
 // and its behavioral score. Pure (no I/O) so it is directly unit-testable. now
-// is injected for the same reason.
-func buildATCIssuanceRequest(agent *domain.Agent, score *domain.TrustScore, publisher string, now time.Time) registry.ATCIssuanceRequest {
+// is injected for the same reason. publicOrigin is the deployment's public
+// origin with no trailing slash.
+func buildATCIssuanceRequest(agent *domain.Agent, score *domain.TrustScore, publisher, publicOrigin string, now time.Time) registry.ATCIssuanceRequest {
 	version := agent.Version
 	if version == "" {
 		version = defaultATCVersion
 	}
 
 	level := atcTrustLevel(score.Score)
-	scoreVal := score.Score
+	scoreVal := atcWireTrustScore(score.Score)
+	agentDID := domain.BuildAgentDID(agent.ID)
 
 	generatedAt := score.LastCalculated
 	if generatedAt.IsZero() {
@@ -146,20 +176,45 @@ func buildATCIssuanceRequest(agent *domain.Agent, score *domain.TrustScore, publ
 	}
 
 	return registry.ATCIssuanceRequest{
-		AgentID:      agent.ID.String(),
-		AgentDID:     domain.BuildAgentDID(agent.ID),
-		Publisher:    publisher,
-		Version:      version,
-		ContentHash:  atcContentHash(agent),
-		Capabilities: agent.Capabilities,
-		TrustScore:   &scoreVal,
-		TrustLevel:   &level,
+		AgentID:          agent.ID.String(),
+		AgentDID:         agentDID,
+		Publisher:        publisher,
+		PublisherDID:     atcPublisherDID(agent.OrganizationID),
+		Version:          version,
+		ContentHash:      atcContentHash(agent),
+		BuildAttestation: atcBuildAttestation(publicOrigin, agentDID),
+		Capabilities:     agent.Capabilities,
+		TrustScore:       &scoreVal,
+		TrustLevel:       &level,
 		BehavioralProfile: &registry.ATCBehavioralProfile{
 			Checksum:        atcBehavioralChecksum(score.Factors),
 			GeneratedAt:     generatedAt.UTC(),
 			ObservationDays: atcObservationDays(agent.CreatedAt, now),
 		},
 	}
+}
+
+// atcWireTrustScore converts the 9-factor calculator's 0-1 score to the 0-100
+// scale ATX puts on the wire: "trustScore rides the wire as a 0-100 JSON number"
+// (ATX core section 1.1). It is rounded to six fractional digits, the precision
+// the v1.1 signed form encodes (section 1.3a.2 rule 3, printf %.6f), so 0.29 is
+// sent as 29 rather than 28.999999999999996.
+func atcWireTrustScore(score float64) float64 {
+	return math.Round(score*100*1e6) / 1e6
+}
+
+// atcPublisherDID is the credential's publisherDid for an agent's organization.
+func atcPublisherDID(orgID uuid.UUID) string {
+	return atcPublisherDIDPrefix + orgID.String()
+}
+
+// atcBuildAttestation is the credential's buildAttestation for an AIM agent. An
+// AIM agent is registered, not built, so there is no build provenance to cite.
+// The reference is the agent's DID document on this deployment's public DID
+// resolver. For an agent with a public key, that document publishes the key
+// whose SHA-256 is contentHash, so a verifier can fetch it and recompute the hash.
+func atcBuildAttestation(publicOrigin, agentDID string) string {
+	return publicOrigin + "/api/v1/did/" + agentDID
 }
 
 // atcTrustLevel maps a 0-1 behavioral score to the 0-4 trust level. CDS-documented

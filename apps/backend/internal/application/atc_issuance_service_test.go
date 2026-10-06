@@ -15,6 +15,9 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/registry"
 )
 
+// testATCPublicOrigin stands in for FRONTEND_URL in these tests.
+const testATCPublicOrigin = "https://aim.example.com"
+
 func TestATCTrustLevel(t *testing.T) {
 	cases := []struct {
 		score float64
@@ -89,7 +92,7 @@ func TestBuildATCIssuanceRequest_HashFieldsMatchATXSchema(t *testing.T) {
 		"public key":  {ID: id, PublicKey: &pk},
 		"id fallback": {ID: id},
 	} {
-		req := buildATCIssuanceRequest(agent, score, "Acme Org", now)
+		req := buildATCIssuanceRequest(agent, score, "Acme Org", testATCPublicOrigin, now)
 		if !contentHashPattern.MatchString(req.ContentHash) {
 			t.Errorf("%s: contentHash %q does not match the ATX schema pattern %s",
 				name, req.ContentHash, contentHashPattern)
@@ -97,6 +100,89 @@ func TestBuildATCIssuanceRequest_HashFieldsMatchATXSchema(t *testing.T) {
 		if !checksumPattern.MatchString(req.BehavioralProfile.Checksum) {
 			t.Errorf("%s: behavioralProfile.checksum %q does not match the ATX schema pattern %s",
 				name, req.BehavioralProfile.Checksum, checksumPattern)
+		}
+	}
+}
+
+// TestBuildATCIssuanceRequest_FieldsMatchATXSchema pins every field AIM puts in
+// the issuance request to its rule in the ATX v1.1 credential schema
+// (schemas/atx-credential-v1.1.schema.json in atx-spec). The Registry copies
+// these fields into the credential it signs, so a value that breaks a rule here
+// yields a credential that fails schema validation in a conformance verifier.
+// publisherDid and buildAttestation are required by the schema, and trustScore
+// is a 0-100 number on the wire (ATX core section 1.1).
+func TestBuildATCIssuanceRequest_FieldsMatchATXSchema(t *testing.T) {
+	didPattern := regexp.MustCompile(`^did:[a-z0-9]+:[A-Za-z0-9._:@/-]+(#[A-Za-z0-9._-]+)?$`)
+	capabilityPattern := regexp.MustCompile(`^[a-z0-9_-]+:[A-Za-z0-9_.*-]+$`)
+
+	id := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+	orgID := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+	now := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
+	agent := &domain.Agent{
+		ID:             id,
+		OrganizationID: orgID,
+		Capabilities:   []string{"file:read", "api:call"},
+		CreatedAt:      now.Add(-48 * time.Hour),
+	}
+
+	for _, c := range []struct {
+		score float64
+		want  float64
+	}{
+		{0, 0},
+		{0.29, 29},
+		{0.62, 62},
+		{0.875, 87.5},
+		{1, 100},
+	} {
+		req := buildATCIssuanceRequest(agent, &domain.TrustScore{Score: c.score}, "Acme Org", testATCPublicOrigin, now)
+		if req.TrustScore == nil || *req.TrustScore != c.want {
+			t.Errorf("score %v: trustScore = %+v, want %v on the 0-100 wire scale", c.score, req.TrustScore, c.want)
+		}
+	}
+
+	req := buildATCIssuanceRequest(agent, &domain.TrustScore{Score: 0.62}, "Acme Org", testATCPublicOrigin, now)
+
+	for field, did := range map[string]string{"agentDid": req.AgentDID, "publisherDid": req.PublisherDID} {
+		if !didPattern.MatchString(did) {
+			t.Errorf("%s %q does not match the ATX schema DID pattern %s", field, did, didPattern)
+		}
+	}
+	if want := "did:opena2a:publisher:aim_" + orgID.String(); req.PublisherDID != want {
+		t.Errorf("publisherDid = %q, want %q", req.PublisherDID, want)
+	}
+	if want := testATCPublicOrigin + "/api/v1/did/did:aip:aim_" + id.String(); req.BuildAttestation != want {
+		t.Errorf("buildAttestation = %q, want %q", req.BuildAttestation, want)
+	}
+	for field, v := range map[string]string{"agentId": req.AgentID, "publisher": req.Publisher, "version": req.Version} {
+		if v == "" {
+			t.Errorf("%s is empty; the ATX schema requires minLength 1", field)
+		}
+	}
+	for _, capability := range req.Capabilities {
+		if !capabilityPattern.MatchString(capability) {
+			t.Errorf("capability %q does not match the ATX schema pattern %s", capability, capabilityPattern)
+		}
+	}
+	if req.TrustLevel == nil || *req.TrustLevel < 0 || *req.TrustLevel > 4 {
+		t.Errorf("trustLevel = %+v, want an integer in [0, 4]", req.TrustLevel)
+	}
+	if req.BehavioralProfile == nil || req.BehavioralProfile.ObservationDays < 0 {
+		t.Errorf("behavioralProfile = %+v, want observationDays >= 0", req.BehavioralProfile)
+	}
+
+	// The mandatory credential fields are on the wire under their ATX names.
+	raw, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	for _, key := range []string{"agentId", "agentDid", "publisher", "publisherDid", "version", "contentHash", "buildAttestation", "capabilities", "trustScore", "trustLevel", "behavioralProfile"} {
+		if _, ok := wire[key]; !ok {
+			t.Errorf("issuance request JSON has no %q member", key)
 		}
 	}
 }
@@ -135,7 +221,7 @@ func TestBuildATCIssuanceRequest(t *testing.T) {
 		Factors:        domain.TrustScoreFactors{VerificationStatus: 1},
 	}
 
-	req := buildATCIssuanceRequest(agent, score, "Acme Org", now)
+	req := buildATCIssuanceRequest(agent, score, "Acme Org", testATCPublicOrigin, now)
 
 	if req.AgentDID != "did:aip:aim_"+id.String() {
 		t.Errorf("agentDid = %q", req.AgentDID)
@@ -146,8 +232,8 @@ func TestBuildATCIssuanceRequest(t *testing.T) {
 	if req.Publisher != "Acme Org" {
 		t.Errorf("publisher = %q", req.Publisher)
 	}
-	if req.TrustScore == nil || *req.TrustScore != 0.82 {
-		t.Errorf("trustScore = %+v", req.TrustScore)
+	if req.TrustScore == nil || *req.TrustScore != 82 {
+		t.Errorf("trustScore = %+v, want 82 (0.82 on the 0-100 wire scale)", req.TrustScore)
 	}
 	if req.TrustLevel == nil || *req.TrustLevel != 3 {
 		t.Errorf("trustLevel = %+v, want 3", req.TrustLevel)
@@ -204,6 +290,7 @@ func TestIssueForAgent_HappyPath(t *testing.T) {
 		&fakeOrgReader{org: &domain.Organization{Name: "Acme"}},
 		&fakeScorer{score: score},
 		client,
+		testATCPublicOrigin+"/",
 	)
 
 	res, err := svc.IssueForAgent(context.Background(), id)
@@ -215,6 +302,16 @@ func TestIssueForAgent_HappyPath(t *testing.T) {
 	}
 	if client.gotReq.TrustLevel == nil || *client.gotReq.TrustLevel != 4 {
 		t.Errorf("level in request = %+v, want 4", client.gotReq.TrustLevel)
+	}
+	if client.gotReq.TrustScore == nil || *client.gotReq.TrustScore != 91 {
+		t.Errorf("score in request = %+v, want 91", client.gotReq.TrustScore)
+	}
+	if want := "did:opena2a:publisher:aim_" + agent.OrganizationID.String(); client.gotReq.PublisherDID != want {
+		t.Errorf("publisherDid in request = %q, want %q", client.gotReq.PublisherDID, want)
+	}
+	// The configured origin's trailing slash is not doubled.
+	if want := testATCPublicOrigin + "/api/v1/did/did:aip:aim_" + id.String(); client.gotReq.BuildAttestation != want {
+		t.Errorf("buildAttestation in request = %q, want %q", client.gotReq.BuildAttestation, want)
 	}
 	if res.Credential.TransparencyLogIndex != 5 {
 		t.Errorf("credential index = %d, want 5", res.Credential.TransparencyLogIndex)
@@ -234,7 +331,7 @@ func TestIssueForAgent_PublisherFallbackToOrgID(t *testing.T) {
 	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{}}
 
 	// nil org reader -> fall back to org UUID string.
-	svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil, &fakeScorer{score: &domain.TrustScore{Score: 0.3}}, client)
+	svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil, &fakeScorer{score: &domain.TrustScore{Score: 0.3}}, client, testATCPublicOrigin)
 	if _, err := svc.IssueForAgent(context.Background(), id); err != nil {
 		t.Fatalf("IssueForAgent: %v", err)
 	}
@@ -250,9 +347,32 @@ func TestIssueForAgent_ScoreErrorPropagates(t *testing.T) {
 		nil,
 		&fakeScorer{err: errors.New("boom")},
 		&fakeRegistryClient{cred: &registry.AgentTrustCredential{}},
+		testATCPublicOrigin,
 	)
 	if _, err := svc.IssueForAgent(context.Background(), id); err == nil {
 		t.Fatal("expected score error to propagate")
+	}
+}
+
+// TestIssueForAgent_NoPublicOriginFailsClosed: buildAttestation is a mandatory
+// credential field built from the public origin, so with none configured the
+// service refuses before computing a score or calling the Registry.
+func TestIssueForAgent_NoPublicOriginFailsClosed(t *testing.T) {
+	id := uuid.New()
+	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{}}
+	svc := NewATCIssuanceService(
+		&fakeAgentReader{agent: &domain.Agent{ID: id, OrganizationID: uuid.New()}},
+		nil,
+		&fakeScorer{score: &domain.TrustScore{Score: 0.8}},
+		client,
+		"  ",
+	)
+	_, err := svc.IssueForAgent(context.Background(), id)
+	if !errors.Is(err, errATCPublicOriginNotConfigured) {
+		t.Fatalf("err = %v, want errATCPublicOriginNotConfigured", err)
+	}
+	if client.gotReq.AgentID != "" {
+		t.Errorf("the Registry was called with %+v; want no call", client.gotReq)
 	}
 }
 

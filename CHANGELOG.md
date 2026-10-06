@@ -782,6 +782,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   Block' blocks an evaluable agent below 0.50 (it blocked below 0.30) and 'Low Trust Score Alert' alerts below 0.70.
   The suspension applied when a recalculated score drops below 0.50 stays a platform rule, separate from policy rows.
 
+### Fixed: an issued trust credential carries publisherDid, buildAttestation and a 0-100 trustScore
+
+- `POST /api/v1/agents/:id/atc` sent the issuer the agent's `trustScore` on the 0-1 scale of AIM's 9-factor score, and
+  sent no `publisherDid` and no `buildAttestation`. The ATX v1.1 specification puts `trustScore` on the wire as a
+  0-100 number and makes both other fields mandatory, so a credential issued from that request failed the ATX
+  credential schema in a conformance verifier, and an agent scored 62 out of 100 was described as 0.62.
+- AIM now sends the score on the 0-100 scale (0.62 is sent as 62), `publisherDid` as
+  `did:opena2a:publisher:aim_<organization id>`, and `buildAttestation` as the address of the agent's DID document on
+  the deployment's public DID resolver, `<FRONTEND_URL>/api/v1/did/<agent DID>`. The trust level AIM requests is
+  unchanged. Issuance refuses to run when no public origin is configured.
+- This needs an issuer that reads `trustScore` on the 0-100 scale. An issuer that still reads it on the 0-1 scale
+  refuses these requests.
+- `apps/backend/internal/application/atc_issuance_service_test.go` fails when a field AIM puts in the issuance request
+  breaks its rule in the ATX v1.1 credential schema, or when the score it sends is not on the 0-100 scale.
+
 ### Fixed — an issued trust credential's content hash matches the ATX schema
 
 - `POST /api/v1/agents/:id/atc` sent the Registry a `contentHash` of the form `sha256:<hex>`, and the Registry

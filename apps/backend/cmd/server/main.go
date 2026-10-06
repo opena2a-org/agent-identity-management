@@ -921,11 +921,13 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// ATC issuance: compute the agent's 9-factor behavioral score and delegate
 	// credential signing + transparency-log recording to the Registry (the CA).
 	// Uses REGISTRY_BRIDGE_URL (shared) + REGISTRY_ATC_TOKEN (service-account bearer).
+	// FRONTEND_URL is the public origin the credential's buildAttestation names.
 	atcIssuanceService := application.NewATCIssuanceService(
 		repos.Agent,
 		repos.Organization,
 		trustCalculator,
 		registry.NewATCClientFromEnv(),
+		cfg.Server.FrontendURL,
 	)
 
 	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
