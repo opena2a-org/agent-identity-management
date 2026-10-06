@@ -27,7 +27,9 @@
 //
 // A registration opens an agent's history: the agent has no state before it,
 // so its record's previous_state is null, and replay accepts a null
-// previous_state only on an agent's first record.
+// previous_state only on an agent's first record. A deletion closes it: the
+// agent has no state after it, so its record's new_state is null, and replay
+// accepts no record of the agent after it.
 //
 // A pending capability request and a rejected one are null transitions: the
 // recorder refuses either when its previous and new states differ. A
@@ -51,9 +53,8 @@
 // nothing else.
 //
 // Not built here: the debt row that lets such a record be written late and
-// its settlement, the opening_state record and its sweep, and the records of
-// an agent's deletion, a hybrid mode change, a compromise suspension and the
-// key the service generates for an agent that signs through it.
+// its settlement, the opening_state record and its sweep, and the record of
+// a hybrid mode change.
 package transition
 
 import (
@@ -193,6 +194,12 @@ func subset(a, b map[string]bool) bool {
 // no row before the change, and the record's previous_state is null.
 func (t Trigger) opens() bool {
 	return t == TriggerRegistrationBaseline
+}
+
+// closes reports whether a trigger closes the agent's history: the agent has
+// no row after the change, and the record's new_state is null.
+func (t Trigger) closes() bool {
+	return t == TriggerAgentDeleted
 }
 
 // null reports whether a trigger records an act that leaves the agent's

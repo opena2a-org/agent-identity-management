@@ -36,16 +36,25 @@ type MismatchError struct {
 	AgentID  uuid.UUID
 	Replayed State
 	Tables   State
+	// Deleted reports that the agent's records end in its deletion while the
+	// tables still hold a row with its id. Replayed is then zero.
+	Deleted bool
 }
 
 func (e *MismatchError) Error() string {
+	if e.Deleted {
+		return fmt.Sprintf("transition: agent %s: the records end in the agent's deletion, and the tables still hold it", e.AgentID)
+	}
 	return fmt.Sprintf("transition: agent %s: the state rebuilt from records is not the state in the tables", e.AgentID)
 }
 
 // Replayed is an organization's agent states rebuilt from its chain.
 type Replayed struct {
-	// States is each agent's new_state in its newest transition.
+	// States is each agent's new_state in its newest transition. A deleted
+	// agent has no entry.
 	States map[uuid.UUID]State
+	// Deleted holds each agent whose newest transition is its deletion.
+	Deleted map[uuid.UUID]bool
 	// Seqs is the chain position of each agent's transitions, in order.
 	Seqs map[uuid.UUID][]int64
 }
@@ -56,8 +65,10 @@ type Replayed struct {
 // previous_state must equal the new_state before it, or Replay returns a
 // *ContinuityError. A registration's previous_state is null, and a
 // registration that is not the agent's first record is a *ContinuityError.
-// A chain that does not verify, a transition whose tenant part has been
-// erased, and a null previous_state on any other trigger are errors.
+// A deletion's new_state is null, and any record of the agent after its
+// deletion is a *ContinuityError. A chain that does not verify, a transition
+// whose tenant part has been erased, and a null previous_state or new_state
+// on any other trigger are errors.
 func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key record.PublicKey) (Replayed, error) {
 	status, err := store.ReadChainState(ctx, q, organizationID.String())
 	if err != nil {
@@ -78,7 +89,7 @@ func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key 
 		return Replayed{}, fmt.Errorf("transition: the chain does not verify: %v", res.Failure)
 	}
 
-	out := Replayed{States: map[uuid.UUID]State{}, Seqs: map[uuid.UUID][]int64{}}
+	out := Replayed{States: map[uuid.UUID]State{}, Deleted: map[uuid.UUID]bool{}, Seqs: map[uuid.UUID][]int64{}}
 	for _, rec := range records {
 		head, err := retainedHead(rec)
 		if err != nil {
@@ -106,15 +117,21 @@ func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key 
 			return Replayed{}, fmt.Errorf("transition: the record at seq %d names another organization", seq)
 		}
 		agentID, err := uuid.Parse(tenant.Opena2a.SubjectAgentID)
-		opens := Trigger(head.Trigger.Type).opens()
-		if err != nil || tenant.NewState == nil || (tenant.PreviousState == nil) != opens {
-			return Replayed{}, fmt.Errorf("transition: the record at seq %d has no agent, no new_state, or a previous_state its trigger does not take", seq)
+		trigger := Trigger(head.Trigger.Type)
+		opens, closes := trigger.opens(), trigger.closes()
+		if err != nil || (tenant.NewState == nil) != closes || (tenant.PreviousState == nil) != opens {
+			return Replayed{}, fmt.Errorf("transition: the record at seq %d has no agent, or a previous_state or new_state its trigger does not take", seq)
 		}
 		if seqs := out.Seqs[agentID]; len(seqs) > 0 &&
-			(opens || !Equal(out.States[agentID], tenant.PreviousState.state())) {
+			(opens || out.Deleted[agentID] || !Equal(out.States[agentID], tenant.PreviousState.state())) {
 			return Replayed{}, &ContinuityError{AgentID: agentID, Seq: seq, PreviousSeq: seqs[len(seqs)-1]}
 		}
-		out.States[agentID] = tenant.NewState.state()
+		if closes {
+			delete(out.States, agentID)
+			out.Deleted[agentID] = true
+		} else {
+			out.States[agentID] = tenant.NewState.state()
+		}
 		out.Seqs[agentID] = append(out.Seqs[agentID], seq)
 	}
 	return out, nil
@@ -122,7 +139,8 @@ func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key 
 
 // CheckReplay replays an organization's chain and compares each agent's
 // rebuilt state with its state in the tables. It returns a *MismatchError for
-// the first agent whose states differ.
+// the first agent whose states differ, or whose records end in its deletion
+// while the tables still hold it.
 func CheckReplay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key record.PublicKey) (Replayed, error) {
 	replayed, err := Replay(ctx, q, organizationID, key)
 	if err != nil {
@@ -135,6 +153,16 @@ func CheckReplay(ctx context.Context, q store.Querier, organizationID uuid.UUID,
 		}
 		if !Equal(rebuilt, tables) {
 			return Replayed{}, &MismatchError{AgentID: agentID, Replayed: rebuilt, Tables: tables}
+		}
+	}
+	for agentID := range replayed.Deleted {
+		tables, err := CurrentState(ctx, q, organizationID, agentID)
+		switch {
+		case errors.Is(err, ErrAgentNotFound):
+		case err != nil:
+			return Replayed{}, err
+		default:
+			return Replayed{}, &MismatchError{AgentID: agentID, Tables: tables, Deleted: true}
 		}
 	}
 	return replayed, nil

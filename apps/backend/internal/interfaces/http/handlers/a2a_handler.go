@@ -272,7 +272,7 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 	}
 
 	signature, err := h.a2aService.SignA2ARequest(
-		c.Context(),
+		withTransitionActor(c),
 		agentID,
 		req.Method,
 		req.Path,
@@ -1610,7 +1610,7 @@ func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
 		}
 	}
 
-	signature, err := h.a2aService.SignA2ARequest(c.Context(), agentID, req.Method, req.Path, []byte(req.Body))
+	signature, err := h.a2aService.SignA2ARequest(withTransitionActor(c), agentID, req.Method, req.Path, []byte(req.Body))
 	if err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}

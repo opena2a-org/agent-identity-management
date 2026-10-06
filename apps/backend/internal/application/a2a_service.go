@@ -21,6 +21,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // ErrConsentGrantorNotOwned is returned when a consent record names a grantor
@@ -101,6 +102,7 @@ type A2AService struct {
 	// cardAttestationKey signs agent card attestations and nothing else.
 	cardAttestationKey *crypto.SigningKey
 	httpClient         *http.Client
+	transitions        *transition.Recorder // Optional: set by SetTransitionRecorder
 }
 
 // NewA2AService creates a new A2A service
@@ -414,10 +416,23 @@ func (s *A2AService) SignA2ARequest(
 		if err != nil {
 			return nil, fmt.Errorf("failed to encrypt private key: %w", err)
 		}
-		agent.EncryptedPrivateKey = &encPrivKey
-		agent.PublicKey = &encodedKeys.PublicKeyBase64
-		if err := s.agentRepo.Update(agent); err != nil {
-			return nil, fmt.Errorf("failed to update agent keys: %w", err)
+		if s.transitions != nil {
+			held, err := s.storeServerKey(ctx, agent, encodedKeys.PublicKeyBase64, encPrivKey)
+			if err != nil {
+				return nil, err
+			}
+			if held != nil {
+				agent = held
+			} else {
+				agent.PublicKey = &encodedKeys.PublicKeyBase64
+				agent.EncryptedPrivateKey = &encPrivKey
+			}
+		} else {
+			agent.EncryptedPrivateKey = &encPrivKey
+			agent.PublicKey = &encodedKeys.PublicKeyBase64
+			if err := s.agentRepo.Update(agent); err != nil {
+				return nil, fmt.Errorf("failed to update agent keys: %w", err)
+			}
 		}
 	}
 

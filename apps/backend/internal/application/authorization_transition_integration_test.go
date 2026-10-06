@@ -239,10 +239,12 @@ type transitionRecord struct {
 	// Previous is zero when PreviousNull, as on a registration.
 	Previous     transitionStateJSON
 	PreviousNull bool
-	New          transitionStateJSON
-	Actor        string
-	Agent        string
-	Trace        string
+	// New is zero when NewNull, as on a deletion.
+	New     transitionStateJSON
+	NewNull bool
+	Actor   string
+	Agent   string
+	Trace   string
 	// Parent is parent_id, "" when the record has none.
 	Parent string
 	// Outcome is opena2a.outcome, "" when the record has none.
@@ -291,10 +293,10 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		require.Equal(t, transition.RecordType, retained.Type)
 		require.Equal(t, transition.StateSpaceAgent, retained.Opena2a.StateSpace)
 		var tenant struct {
-			TraceID  string              `json:"trace_id"`
-			ParentID *string             `json:"parent_id"`
-			Previous json.RawMessage     `json:"previous_state"`
-			New      transitionStateJSON `json:"new_state"`
+			TraceID  string          `json:"trace_id"`
+			ParentID *string         `json:"parent_id"`
+			Previous json.RawMessage `json:"previous_state"`
+			New      json.RawMessage `json:"new_state"`
 			Opena2a  struct {
 				OrganizationID string `json:"organization_id"`
 				SubjectAgentID string `json:"subject_agent_id"`
@@ -307,6 +309,11 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		if !previousNull {
 			require.NoError(t, json.Unmarshal(tenant.Previous, &previous))
 		}
+		var next transitionStateJSON
+		newNull := string(tenant.New) == "null"
+		if !newNull {
+			require.NoError(t, json.Unmarshal(tenant.New, &next))
+		}
 		var parent string
 		if tenant.ParentID != nil {
 			parent = *tenant.ParentID
@@ -317,7 +324,7 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		require.NoError(t, json.Unmarshal(rec.PersonalPart, &personal))
 		out = append(out, transitionRecord{
 			Seq: retained.Opena2a.Chain.Seq, EventID: retained.EventID, Trigger: retained.Trigger.Type,
-			Previous: previous, PreviousNull: previousNull, New: tenant.New, Actor: personal.Actor,
+			Previous: previous, PreviousNull: previousNull, New: next, NewNull: newNull, Actor: personal.Actor,
 			Agent: tenant.Opena2a.SubjectAgentID, Trace: tenant.TraceID, Parent: parent,
 			Outcome: retained.Opena2a.Outcome,
 		})

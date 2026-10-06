@@ -158,7 +158,7 @@ func (s *CapabilityService) VerifyAction(
 		// Check if agent should be marked as compromised
 		// IMPORTANT: trust_score is 0.0-1.0 scale, so 30% = 0.30
 		if newViolationCount >= 3 || newTrustScore < 0.30 {
-			if err := s.agentRepo.MarkAsCompromised(agentID); err != nil {
+			if err := s.markAsCompromised(ctx, agent); err != nil {
 				return nil, err
 			}
 		}

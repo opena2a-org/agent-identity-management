@@ -906,9 +906,22 @@ func (s *AgentService) revokeOnReregistration(
 	return dropped
 }
 
-// DeleteAgent deletes an agent
+// DeleteAgent deletes an agent. With a transition recorder set, the agent's
+// row and the rows that cascade from it are deleted in one transaction with
+// an agent_deleted record, whose new_state is null; when the record cannot be
+// written, the deletion is refused and nothing is deleted.
 func (s *AgentService) DeleteAgent(ctx context.Context, id uuid.UUID) error {
-	return s.agentRepo.Delete(id)
+	if s.transitions == nil {
+		return s.agentRepo.Delete(id)
+	}
+	agent, err := s.agentRepo.GetByID(id)
+	if err != nil {
+		return fmt.Errorf("agent not found: %w", err)
+	}
+	return recordAgentChange(ctx, s.transitions, agent, transition.TriggerAgentDeleted, transition.System(),
+		func(ctx context.Context, tx *sql.Tx) error {
+			return repository.DeleteAgentTx(ctx, tx, agent.ID)
+		})
 }
 
 // VerifyAgent moves a pending agent to verified. A verified agent is left as it is; any
