@@ -12,9 +12,10 @@ import (
 // callerSeesAuditRequestDetail reports whether the caller may read the network
 // address, user agent and metadata stored in an audit record.
 //
-// PRIVACY: GET /agents/:id/audit-logs and GET /mcp-servers/:id/audit-logs are
-// open to every principal in the organization, while /admin/audit-logs, which
-// returns the same records, admits only admins. Those three members describe
+// PRIVACY: GET /agents/:id/audit-logs, GET /agents/:id/activity and
+// GET /mcp-servers/:id/audit-logs are open to every principal in the
+// organization, while /admin/audit-logs, which returns the same records,
+// admits only admins. Those three members describe
 // the colleague whose request wrote the record (where it came from, which
 // client sent it, and whatever the action logged, emails included), so only a
 // principal the admin routes admit gets them. A manager, member, viewer, API
@@ -65,4 +66,36 @@ func auditLogsForCaller(c fiber.Ctx, logs []*domain.AuditLog) interface{} {
 		})
 	}
 	return views
+}
+
+// agentActivityDecisionMembers are the metadata members of an agent's own call
+// that record AIM's decision on it: what the agent asked for, on what, at what
+// risk and trust, and whether and why AIM refused it. The agent page builds its
+// activity timeline and its refused-call findings from them.
+var agentActivityDecisionMembers = []string{
+	"actionType",
+	"resource",
+	"riskLevel",
+	"trustScore",
+	"autoApproved",
+	"denialReason",
+}
+
+// agentActivityDecision returns the decision members of an activity record's
+// metadata for a caller that does not see the record's request detail, or nil
+// when the metadata holds none. Every other member (the context the agent sent
+// with its call, anything the action logged about a person) is left out.
+func agentActivityDecision(metadata map[string]interface{}) map[string]interface{} {
+	var decision map[string]interface{}
+	for _, member := range agentActivityDecisionMembers {
+		value, ok := metadata[member]
+		if !ok {
+			continue
+		}
+		if decision == nil {
+			decision = make(map[string]interface{}, len(agentActivityDecisionMembers))
+		}
+		decision[member] = value
+	}
+	return decision
 }
