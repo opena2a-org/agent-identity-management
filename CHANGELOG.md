@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — an admin or manager can turn off hybrid mode from the agent page
+
+- The agent page's Key Vault tab showed "Hybrid mode enabled" with no way to turn it off; the act existed only as a
+  call to `POST /api/v1/agents/:id/hybrid-mode`. The Post-Quantum Companion Key card now carries a "Turn off hybrid
+  mode" control for an admin or manager of the agent's organization while hybrid mode is on. A member or viewer
+  does not see it.
+- The control asks for confirmation before it sends `{"enable": false}`. After the server accepts, the tab reads the
+  key vault again and shows the stored value; a refusal shows the server's reason and leaves the badge as it was.
+- The dashboard does not offer turning hybrid mode on.
+
 ### Security — the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes
 
 - A master key that decodes to 32 zero bytes passed the length check and was used to encrypt agent private keys.
