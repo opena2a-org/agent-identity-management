@@ -100,7 +100,8 @@ type Change struct {
 
 // Result is what a change left.
 type Result struct {
-	// Previous is zero for a registration, whose agent had no state.
+	// Previous is zero for a registration, whose agent had no state, and New
+	// is zero for a deletion, whose agent has none.
 	Previous, New State
 	// Recorded is false for a reduction that committed without its record.
 	Recorded bool
@@ -128,12 +129,15 @@ func (r *Recorder) Record(ctx context.Context, c Change) (Result, error) {
 		return err
 	}
 	// The states are read in Apply, before the append lock; the guard only
-	// places them in the tenant part. A registration has no previous state.
+	// places them in the tenant part. A registration has no previous state,
+	// and a deletion no new state.
 	guard := func(_ context.Context, _ time.Time, _ *store.Probe, d *record.Draft) (*store.Stored, error) {
 		if !c.Trigger.opens() {
 			d.Tenant["previous_state"] = prev.member()
 		}
-		d.Tenant["new_state"] = next.member()
+		if !c.Trigger.closes() {
+			d.Tenant["new_state"] = next.member()
+		}
 		return nil, nil
 	}
 	out, err := r.w.Write(ctx, store.Write{
@@ -240,9 +244,10 @@ func (r *Recorder) draft(c Change) record.Draft {
 
 // change locks the agent, reads its state, makes the change and reads the
 // state again, all in tx. A registration finds no agent before its statement
-// runs and leaves prev zero; one that finds the agent is refused. A change
-// whose states break its trigger's rule (checkStates) is refused. A refused
-// change's transaction rolls back.
+// runs and leaves prev zero; one that finds the agent is refused. A deletion
+// finds no agent after its statement runs and leaves next zero; one that
+// finds the agent is refused. A change whose states break its trigger's rule
+// (checkStates) is refused. A refused change's transaction rolls back.
 func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err error) {
 	if c.Trigger.opens() {
 		_, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false)
@@ -258,7 +263,13 @@ func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err er
 	if err = c.Apply(ctx, tx); err != nil {
 		return State{}, State{}, err
 	}
-	if next, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false); err != nil {
+	next, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false)
+	switch {
+	case c.Trigger.closes() && err == nil:
+		return State{}, State{}, fmt.Errorf("%w: %s left the agent in place", ErrInvalidChange, c.Trigger)
+	case c.Trigger.closes() && errors.Is(err, ErrAgentNotFound):
+		next, err = State{}, nil
+	case err != nil:
 		return State{}, State{}, err
 	}
 	if err = checkStates(c, prev, next); err != nil {
@@ -269,14 +280,14 @@ func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err er
 
 // checkStates refuses a change whose states break its trigger's rule. A null
 // transition changes nothing. Only a talks_to trigger, or the registration
-// that opens the agent, sets the talks_to list. A talks_to trigger changes
-// the list and nothing else, in the class the caller gave; one that changes
-// nothing returns ErrNoChange.
+// that opens the agent, sets the talks_to list; a deletion removes it with
+// the agent. A talks_to trigger changes the list and nothing else, in the
+// class the caller gave; one that changes nothing returns ErrNoChange.
 func checkStates(c Change, prev, next State) error {
 	switch {
 	case c.Trigger.null() && !Equal(prev, next):
 		return fmt.Errorf("%w: %s changed the agent's authorization state", ErrInvalidChange, c.Trigger)
-	case c.Trigger.opens():
+	case c.Trigger.opens() || c.Trigger.closes():
 		return nil
 	case !c.Trigger.ClassedByComparison():
 		if !equalStrings(prev.TalksTo, next.TalksTo) {

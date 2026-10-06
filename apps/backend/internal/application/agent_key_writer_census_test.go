@@ -163,9 +163,12 @@ var agentKeyWriterCensus = []agentKeyWriter{
 		},
 	},
 	{
-		label:     "A2A request signing (generates a server-held pair when the agent has none)",
-		file:      "internal/application/a2a_service.go",
-		function:  "A2AService.SignA2ARequest",
+		label:    "A2A request signing (generates a server-held pair when the agent has none)",
+		file:     "internal/application/a2a_service.go",
+		function: "A2AService.SignA2ARequest",
+		// With a transition recorder set, its helper storeServerKey writes the
+		// generated pair through repository.SetAgentServerKeyTx with a
+		// key_updated record, and this function sets it on the agent.
 		table:     "agents",
 		sinks:     []string{"agentRepo.Update"},
 		generates: true,
@@ -254,6 +257,9 @@ var agentKeyColumnSinks = []string{
 	"internal/infrastructure/repository/agent_transition_statements.go:SetAgentPublicKeyTx",
 	"internal/infrastructure/repository/agent_transition_statements.go:SetAgentPQCKeyTx",
 	"internal/infrastructure/repository/agent_transition_statements.go:RotateAgentPQCKeyTx",
+	// The server-held pair A2A request signing generates for an agent with no
+	// key, written in the transaction of its transition record.
+	"internal/infrastructure/repository/agent_transition_statements.go:SetAgentServerKeyTx",
 }
 
 // agentKeyStartupWriter is a function outside the repository whose own SQL

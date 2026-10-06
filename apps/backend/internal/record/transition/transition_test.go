@@ -251,6 +251,22 @@ func TestOpeningAndNullTriggers(t *testing.T) {
 	}
 }
 
+// Only a deletion closes an agent's history. A deletion is a destruction, and
+// its states are not held to the talks_to rule: the list goes with the agent.
+func TestClosingTrigger(t *testing.T) {
+	for trigger := range classes {
+		assert.Equal(t, trigger == TriggerAgentDeleted, trigger.closes(), trigger)
+	}
+	for trigger := range talksToTriggers {
+		assert.False(t, trigger.closes(), trigger)
+	}
+	class, ok := TriggerAgentDeleted.Class()
+	require.True(t, ok)
+	assert.Equal(t, store.ClassDestruction, class)
+	prev := State{Scope: []string{}, GrantedScope: []string{}, Status: "suspended", Keys: []Key{}, TalksTo: []string{"a"}}
+	require.NoError(t, checkStates(Change{Trigger: TriggerAgentDeleted}, prev, State{}))
+}
+
 // A request's record has an event id derived from the request's id: the same
 // for the same request, another for another request, and never the request's
 // own id.

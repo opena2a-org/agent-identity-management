@@ -218,6 +218,56 @@ func SuspendAgentWithExpiredKeyTx(ctx context.Context, tx *sql.Tx, id uuid.UUID,
 	return n == 1, nil
 }
 
+// SuspendActiveAgentTx suspends an agent in tx unless it is already
+// suspended or revoked, and reports whether it did. It writes only the
+// status.
+func SuspendActiveAgentTx(ctx context.Context, tx *sql.Tx, id uuid.UUID) (bool, error) {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE agents
+		   SET status = $2, updated_at = NOW()
+		 WHERE id = $1 AND status NOT IN ($2, $3)`,
+		id, string(domain.AgentStatusSuspended), string(domain.AgentStatusRevoked))
+	if err != nil {
+		return false, fmt.Errorf("suspend agent: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("suspend agent: %w", err)
+	}
+	return n == 1, nil
+}
+
+// SetAgentServerKeyTx stores an Ed25519 key the service generated for an
+// agent that holds no server key, in tx, and reports whether it did. The
+// public key and its encrypted private key replace the agent's public key,
+// and no previous key is kept. An agent that came to hold a server key after
+// it was read is left as it is.
+func SetAgentServerKeyTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, publicKey, encryptedPrivateKey string) (bool, error) {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE agents
+		   SET public_key = $2, encrypted_private_key = $3, updated_at = NOW()
+		 WHERE id = $1 AND (encrypted_private_key IS NULL OR encrypted_private_key = '')`,
+		id, publicKey, encryptedPrivateKey)
+	if err != nil {
+		return false, fmt.Errorf("set agent server key: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("set agent server key: %w", err)
+	}
+	return n == 1, nil
+}
+
+// DeleteAgentTx deletes an agent's row in tx, and with it the rows that
+// cascade from it.
+func DeleteAgentTx(ctx context.Context, tx *sql.Tx, id uuid.UUID) error {
+	res, err := tx.ExecContext(ctx, `DELETE FROM agents WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete agent: %w", err)
+	}
+	return oneRow(res, "delete agent")
+}
+
 // CreateCapabilityRequestTx runs the statement of the capability request
 // repository's Create in tx: a pending request. A request that already has an
 // id keeps it, so the id is known before the statement runs.
