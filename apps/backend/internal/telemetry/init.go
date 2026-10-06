@@ -85,10 +85,7 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		return nil, fmt.Errorf("telemetry: build resource: %w", err)
 	}
 
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
+	otel.SetTextMapPropagator(Propagator())
 
 	tp, traceShutdown, err := initTraceProvider(ctx, cfg, res)
 	if err != nil {
@@ -126,6 +123,16 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		return errors.Join(errs...)
 	}
 	return shutdown, nil
+}
+
+// Propagator is the text map propagator Init registers as the global one.
+// No request handler applies it to an incoming request: the audit record
+// trace middleware reads the one header field it keeps itself.
+func Propagator() propagation.TextMapPropagator {
+	return propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
 }
 
 func initTraceProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdktrace.TracerProvider, func(context.Context) error, error) {

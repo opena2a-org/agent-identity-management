@@ -9,7 +9,9 @@
 //     parent_id is the parent's event_id.
 //   - server: the record is the first of its trace. Its trace_id is the one
 //     the server minted for the request or job run that wrote it, and
-//     parent_id is null.
+//     parent_id is null. A run that writes records for more than one
+//     organization mints one trace per organization (Run), so no trace_id
+//     is shared by two organizations' chains.
 //
 // A trace_id is 16 bytes from the CSPRNG, never all zeros, in 32 lowercase
 // hexadecimal characters. A caller's traceparent header is never the source
@@ -30,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
@@ -85,12 +88,47 @@ func From(ctx context.Context) (Context, bool) {
 }
 
 // Begin returns a context that carries a newly minted trace, for a job run or
-// any other unit of work that is not a request. It replaces any trace ctx
-// already carries.
+// any other unit of work that is not a request and writes records for one
+// organization. It replaces any trace ctx already carries. A unit of work
+// that writes records for more than one organization takes its traces from
+// a Run instead.
 func Begin(ctx context.Context) (context.Context, error) {
 	id, err := Mint()
 	if err != nil {
 		return nil, err
+	}
+	return With(ctx, Context{TraceID: id}), nil
+}
+
+// Run holds the traces of one job run, or of one platform request, that
+// writes records for more than one organization. A trace_id is never shared
+// by two organizations' chains, so a run has one trace per organization,
+// minted when the run first asks for it. A Run is safe for concurrent use.
+type Run struct {
+	mu     sync.Mutex
+	traces map[string]string
+}
+
+// NewRun returns the traces of a new run, none minted yet.
+func NewRun() *Run { return &Run{traces: map[string]string{}} }
+
+// For returns a context that carries the run's trace for the organization,
+// minting it on the run's first call for that organization. The context
+// carries no request trace: a run's records are the run's, whatever request
+// started it. organizationID is a lowercase hyphenated UUID.
+func (r *Run) For(ctx context.Context, organizationID string) (context.Context, error) {
+	if !canonicalUUID(organizationID) {
+		return nil, fmt.Errorf("%w: the organization id is not a lowercase hyphenated UUID", ErrInvalidTrace)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	id, ok := r.traces[organizationID]
+	if !ok {
+		var err error
+		if id, err = Mint(); err != nil {
+			return nil, err
+		}
+		r.traces[organizationID] = id
 	}
 	return With(ctx, Context{TraceID: id}), nil
 }

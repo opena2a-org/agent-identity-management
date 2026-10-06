@@ -155,6 +155,75 @@ func TestStampRefusesARecordWithNoTraceToTake(t *testing.T) {
 	}
 }
 
+// A run that writes records for several organizations gives each its own
+// trace, and every record the run writes for one organization the same one.
+func TestRunMintsOneTracePerOrganization(t *testing.T) {
+	const (
+		orgA = "0a0a0a0a-0000-4000-8000-00000000000a"
+		orgB = "0b0b0b0b-0000-4000-8000-00000000000b"
+	)
+	// The run starts inside a request that sent a traceparent; its records
+	// still carry only the run's traces.
+	ctx := With(context.Background(), Context{TraceID: "ffffffffffffffffffffffffffffffff", RequestTraceID: callerTraceID})
+	run := NewRun()
+
+	stamp := func(org, eventID string) record.Draft {
+		t.Helper()
+		orgCtx, err := run.For(ctx, org)
+		require.NoError(t, err)
+		d := draft(eventID)
+		require.NoError(t, Stamp(orgCtx, &d, nil))
+		return d
+	}
+	a1 := stamp(orgA, eventA)
+	b1 := stamp(orgB, eventB)
+	a2 := stamp(orgA, "a1a1a1a1-0000-4000-8000-00000000000c")
+
+	traceA, traceB := a1.Tenant["trace_id"].(string), b1.Tenant["trace_id"].(string)
+	require.True(t, ValidID(traceA))
+	require.True(t, ValidID(traceB))
+	require.NotEqual(t, traceA, traceB, "no trace is shared by two organizations")
+	require.Equal(t, traceA, a2.Tenant["trace_id"], "one organization's records of a run share its trace")
+	for _, d := range []record.Draft{a1, b1, a2} {
+		require.NotEqual(t, "ffffffffffffffffffffffffffffffff", d.Tenant["trace_id"], "not the trace of the request that started the run")
+		require.Nil(t, d.Personal, "a run's records carry no request trace")
+		require.Equal(t, OriginServer, d.Retained["opena2a"].(map[string]any)["trace_origin"])
+	}
+
+	// Another run mints other traces for the same organizations.
+	other, err := NewRun().For(ctx, orgA)
+	require.NoError(t, err)
+	tc, _ := From(other)
+	require.NotEqual(t, traceA, tc.TraceID)
+
+	for _, bad := range []string{"", "org-1", strings.ToUpper(orgA)} {
+		_, err := run.For(ctx, bad)
+		require.ErrorIs(t, err, ErrInvalidTrace, bad)
+	}
+}
+
+func TestRunIsSafeForConcurrentUse(t *testing.T) {
+	const org = "0a0a0a0a-0000-4000-8000-00000000000a"
+	run := NewRun()
+	traces := make(chan string, 16)
+	for i := 0; i < cap(traces); i++ {
+		go func() {
+			ctx, err := run.For(context.Background(), org)
+			if err != nil {
+				traces <- err.Error()
+				return
+			}
+			tc, _ := From(ctx)
+			traces <- tc.TraceID
+		}()
+	}
+	first := <-traces
+	require.True(t, ValidID(first), first)
+	for i := 1; i < cap(traces); i++ {
+		require.Equal(t, first, <-traces, "one organization has one trace per run")
+	}
+}
+
 // Stamp copies the "opena2a" object it adds to, so drafts built from one
 // shared map do not see each other's members.
 func TestStampDoesNotWriteIntoASharedExtensionObject(t *testing.T) {

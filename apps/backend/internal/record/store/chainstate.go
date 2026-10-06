@@ -139,6 +139,17 @@ SELECT payload_type, payload, key_id, signature, record_hash,
 	if err != nil {
 		return nil, fmt.Errorf("store: read chain: %w", err)
 	}
+	out, err := scanRecords(rows)
+	if err != nil {
+		return nil, fmt.Errorf("store: read chain: %w", err)
+	}
+	return out, nil
+}
+
+// scanRecords reads rows of payload_type, payload, key_id, signature,
+// record_hash and the two parts with their salts as records, and closes
+// rows.
+func scanRecords(rows *sql.Rows) ([]record.Record, error) {
 	defer rows.Close()
 	var out []record.Record
 	for rows.Next() {
@@ -149,7 +160,7 @@ SELECT payload_type, payload, key_id, signature, record_hash,
 		)
 		if err := rows.Scan(&payloadType, &payload, &keyID, &signature, &recordHash,
 			&rec.TenantPart, &rec.TenantSalt, &rec.PersonalPart, &rec.PersonalSalt); err != nil {
-			return nil, fmt.Errorf("store: read chain: %w", err)
+			return nil, err
 		}
 		rec.Envelope = record.Envelope{
 			Payload:     base64.StdEncoding.EncodeToString(payload),
@@ -160,7 +171,7 @@ SELECT payload_type, payload, key_id, signature, record_hash,
 		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: read chain: %w", err)
+		return nil, err
 	}
 	return out, nil
 }
