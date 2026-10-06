@@ -314,8 +314,18 @@ jobs:
       # summary phrases, and how apps/backend/go-licenses-allowlist.tsv turns
       # a ruled allowance into an --ignore that is re-asserted, every run,
       # against an unignored report.
+      #
+      # GOTOOLCHAIN: local keeps the checker on one Go release, the one setup-go
+      # installs. The script builds go-licenses at the repository root and runs
+      # it in apps/backend, where go.mod's toolchain directive would otherwise
+      # switch the go command to another release. go-licenses tells the
+      # standard library apart by the GOROOT it was built under, so it would
+      # then report every standard-library package as having no module info
+      # and stop before a verdict.
       - name: Check Go licenses
         if: github.event_name == 'schedule' || needs.changes.outputs.go_deps == 'true'
+        env:
+          GOTOOLCHAIN: local
         run: ./scripts/go-licenses-check.sh
 
       - name: Check npm licenses

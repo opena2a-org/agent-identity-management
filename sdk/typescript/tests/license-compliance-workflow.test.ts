@@ -45,7 +45,8 @@ import { load } from 'js-yaml';
  *   AC5  each of those properties refuses a planted regression;
  *   AC6  the workflow's permissions, action set and sibling filters are held,
  *        the Go release is read from apps/backend/go.mod by every job that
- *        sets Go up, and the allowlist reads as the ruling that admitted it.
+ *        sets Go up, the Go step builds and runs the checker on one Go release,
+ *        and the allowlist reads as the ruling that admitted it.
  *
  * The allowances exist because the first real run of the fixed gate read the
  * real dependency set: ten MPL-2.0 HashiCorp modules behind the Vault client
@@ -908,6 +909,26 @@ function assertGoVersionFileIsDelivered(): void {
   ).toMatch(/^go \d+\.\d+(\.\d+)?$/m);
 }
 
+/**
+ * The checker is built and loads packages under one Go release. The script
+ * builds go-licenses at the repository root and runs it in apps/backend, and
+ * go-licenses tells the standard library apart by the GOROOT it was built
+ * under. With the default GOTOOLCHAIN=auto, go.mod's toolchain directive
+ * switches the go command to another release inside apps/backend only, and
+ * the checker then reports every standard-library package as having no module
+ * info and stops before a verdict. GOTOOLCHAIN=local keeps both on the release
+ * setup-go installs.
+ */
+function assertGoStepStaysOnOneGoRelease(source: string): void {
+  const jobEnv = job(source, 'license-check').env ?? {};
+  const stepEnv = stepNamed(source, 'license-check', 'Check Go licenses').env ?? {};
+  const env = { ...jobEnv, ...stepEnv };
+  expect(
+    env.GOTOOLCHAIN,
+    'the license-check job or its Go step must set GOTOOLCHAIN: local, so the checker is built and loads packages under one Go release',
+  ).toBe('local');
+}
+
 function assertSiblingFiltersHeld(source: string): void {
   const filters = pathsFilters(source);
   expect(
@@ -1259,6 +1280,19 @@ function mutateAddGoVersionToAnotherJob(source: string): string {
   expect(target, 'expected a go-version-file: line outside the license-check job').toBeDefined();
   const i = (target as { index: number }).index;
   lines.splice(i, 0, `${indentOf(lines[i])}go-version: "1.25"`);
+  return lines.join('\n');
+}
+
+/** (13) the Go step's GOTOOLCHAIN: local dropped, or replaced by `replacement`. */
+function mutateGoStepGotoolchain(source: string, replacement?: string): string {
+  const lines = source.split('\n');
+  const i = lineIndex(
+    lines,
+    (l) => l.trim() === 'GOTOOLCHAIN: local',
+    'the GOTOOLCHAIN: local line of the Go step',
+  );
+  if (replacement === undefined) lines.splice(i, 1);
+  else lines.splice(i, 1, `${indentOf(lines[i])}${replacement}`);
   return lines.join('\n');
 }
 
@@ -1772,6 +1806,21 @@ describe('each bound property refuses a planted regression', () => {
     expect(() => assertGoVersionComesFromGoMod(mutated)).toThrow();
   });
 
+  it('AC5 (13) the Go step without GOTOOLCHAIN: local, or with GOTOOLCHAIN: auto, is refused', () => {
+    const source = workflowSource();
+    for (const mutated of [
+      mutateGoStepGotoolchain(source),
+      mutateGoStepGotoolchain(source, 'GOTOOLCHAIN: auto'),
+    ]) {
+      // The mutation must have landed on the Go step, or the throw below would
+      // prove nothing about it.
+      expect(
+        stepNamed(mutated, 'license-check', 'Check Go licenses').env?.GOTOOLCHAIN,
+      ).not.toBe('local');
+      expect(() => assertGoStepStaysOnOneGoRelease(mutated)).toThrow();
+    }
+  });
+
   it('QGF-251.AC5 none of those assertions throws on the delivered files', () => {
     const source = workflowSource();
     assertGoStepRunsOnlyTheScript(source);
@@ -1788,6 +1837,7 @@ describe('each bound property refuses a planted regression', () => {
     assertLicenseCheckActionSet(source);
     assertGoVersionComesFromGoMod(source);
     assertGoVersionFileIsDelivered();
+    assertGoStepStaysOnOneGoRelease(source);
     assertSiblingFiltersHeld(source);
     assertBackendCarriesTheRepositoryLicense();
     assertAllowlistIsTheRuling(allowlistSource());
@@ -1817,6 +1867,10 @@ describe('the workflow permissions, action set and sibling filters are held', ()
   it('AC6 every setup-go step reads go-version-file: apps/backend/go.mod and no job hard-codes a go-version', () => {
     assertGoVersionComesFromGoMod(workflowSource());
     assertGoVersionFileIsDelivered();
+  });
+
+  it('AC6 the Go step sets GOTOOLCHAIN: local, so go-licenses is built and loads packages under one Go release', () => {
+    assertGoStepStaysOnOneGoRelease(workflowSource());
   });
 
   it('QGF-251.AC6 the docker filter keeps its five patterns and the backend, frontend and crypto filters keep theirs', () => {
