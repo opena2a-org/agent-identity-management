@@ -363,7 +363,7 @@ func (s *CapabilityService) GrantCapability(
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 
@@ -442,7 +442,7 @@ func (s *CapabilityService) RevokeCapability(
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 

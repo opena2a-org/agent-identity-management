@@ -849,7 +849,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 		trustScore, err := s.trustCalc.Calculate(agent)
 		if err == nil {
 			agent.TrustScore = trustScore.Score
-			s.agentRepo.Update(agent)
+			saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 			if s.trustScoreRepo != nil {
 				s.trustScoreRepo.Create(trustScore)
 			}
@@ -949,7 +949,7 @@ func (s *AgentService) VerifyAgent(ctx context.Context, id uuid.UUID) error {
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 
@@ -972,7 +972,7 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 
 	// Update agent with new score
 	agent.TrustScore = trustScore.Score
-	if err := s.agentRepo.Update(agent); err != nil {
+	if err := saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
 
@@ -2040,7 +2040,7 @@ func (s *AgentService) recalculateAfterTalksToChange(agent *domain.Agent) {
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 }
@@ -2412,7 +2412,7 @@ func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 
@@ -2446,7 +2446,7 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 
@@ -2476,7 +2476,7 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
 		agent.TrustScore = trustScore.Score
-		s.agentRepo.Update(agent)
+		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
 		s.trustScoreRepo.Create(trustScore)
 	}
 
