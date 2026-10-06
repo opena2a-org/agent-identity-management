@@ -18,6 +18,21 @@ INSTALL_DIR="${AIM_DIR:-aim}"
 info()  { printf '\033[1;34m[AIM]\033[0m %s\n' "$*"; }
 error() { printf '\033[1;31m[AIM]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Compose names each volume <project>_<volume>. The project is
+# COMPOSE_PROJECT_NAME when set, otherwise the install directory's base name,
+# lower-cased, with every character outside [a-z0-9_-] dropped.
+compose_project() {
+  local name="${COMPOSE_PROJECT_NAME:-}"
+  if [ -z "$name" ]; then
+    if [ -d "$INSTALL_DIR" ]; then
+      name=$(basename "$(cd "$INSTALL_DIR" && pwd)")
+    else
+      name=$(basename "$INSTALL_DIR")
+    fi
+  fi
+  printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[-_]*//'
+}
+
 # --- Validate install directory ---
 case "$INSTALL_DIR" in
   /*|*..*)  error "AIM_DIR must be a relative path without '..': $INSTALL_DIR" ;;
@@ -37,6 +52,40 @@ if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.quickstart.yml" ];
   cd "$INSTALL_DIR"
   docker compose -f docker-compose.quickstart.yml up -d
 else
+  # --- Stop before writing anything if an earlier install's database remains ---
+  # The postgres image applies POSTGRES_PASSWORD only to an empty data
+  # directory, so the .env this run would generate cannot connect to a volume
+  # an earlier install initialised. The volume is the user's data: never remove it.
+  project=$(compose_project)
+  pg_volume="${project}_postgres_data"
+  if [ -n "$project" ] && docker volume inspect "$pg_volume" >/dev/null 2>&1; then
+    old_volumes="$pg_volume"
+    if docker volume inspect "${project}_redis_data" >/dev/null 2>&1; then
+      old_volumes="$old_volumes ${project}_redis_data"
+    fi
+    old_containers=$(for v in $old_volumes; do
+      docker ps -a --filter "volume=$v" --format '{{.Names}}' 2>/dev/null || true
+    done | sort -u | tr '\n' ' ' | sed 's/ *$//')
+
+    info "Found Docker volume $pg_volume, the database of an earlier AIM install."
+    info "It accepts only the POSTGRES_PASSWORD from the .env of the install that created it,"
+    info "so the new .env this run would generate cannot connect to it. Nothing has been changed."
+    printf '\n'
+    printf '  Keep the data:  put the earlier .env and docker-compose.quickstart.yml back in ./%s,\n' "$INSTALL_DIR"
+    printf '                  then run this script again.\n'
+    printf '\n'
+    if [ -n "$old_containers" ]; then
+      printf '  Start over:     docker rm -f %s\n' "$old_containers"
+      printf '                  docker volume rm %s\n' "$old_volumes"
+    else
+      printf '  Start over:     docker volume rm %s\n' "$old_volumes"
+    fi
+    printf '                  then run this script again. This deletes every agent, user and event\n'
+    printf '                  in that database.\n'
+    printf '\n'
+    error "Stopped before setting up ./$INSTALL_DIR."
+  fi
+
   info "Setting up AIM in ./$INSTALL_DIR"
   mkdir -p "$INSTALL_DIR"
   cd "$INSTALL_DIR"
@@ -67,7 +116,11 @@ max_retries=30
 until curl -sf http://localhost:8080/health >/dev/null 2>&1; do
   retries=$((retries + 1))
   if [ "$retries" -ge "$max_retries" ]; then
-    error "Backend did not become healthy. Check logs: docker compose -f docker-compose.quickstart.yml logs backend"
+    printf '\033[1;31m[AIM]\033[0m %s\n' "Backend did not become healthy. Check logs: docker compose -f docker-compose.quickstart.yml logs backend" >&2
+    printf '      %s\n' \
+      'If the log shows "password authentication failed", the database volume was created' \
+      'by an earlier install with a different POSTGRES_PASSWORD. List volumes: docker volume ls' >&2
+    exit 1
   fi
   sleep 2
 done

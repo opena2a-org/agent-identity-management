@@ -19,6 +19,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed — the quickstart stops when an earlier install's database is still on the machine
+
+- After the install directory was deleted, `scripts/quickstart.sh` started a first run over the earlier
+  install's `<dir>_postgres_data` volume. It generated a new `POSTGRES_PASSWORD`, which an already-initialised
+  database ignores, and the run ended in "Backend did not become healthy" with no cause. If only the compose
+  file had been deleted, it also overwrote the `.env` that held the one password the database accepts. The
+  first-run path now checks for the volume before writing anything; when it exists, the script exits 1 and
+  prints two choices: put the earlier `.env` and compose file back (keeps the data), or the exact
+  `docker rm -f` / `docker volume rm` commands to start over (deletes it). The script never removes a volume.
+  The health-check timeout now names `docker volume ls` for a volume the check does not find.
+
 ### Fixed — a request-analytics row that fails to insert is counted, not dropped without a trace
 
 `AnalyticsTracking` writes each `api_calls` row after the response, and an insert that failed was discarded with no log line and no counter, so a low or zero API-call count could not be told apart from rows that were lost. A failed insert is now counted by error class: the two-character SQLSTATE class read from the driver's error code, `timeout`, `pool` (no connection before the deadline) or `other`. The server writes one line per 64-second period that had a failure, and the pending line on shutdown, in the form `api_calls_insert_failed period_start=<UTC> period_end=<UTC> <class>=<count> ...`. The line carries only the period and the counts: never the error's text, which can repeat the rejected value, and no endpoint, address, user agent or identifier from the row. An insert now has a 30-second deadline, the wait for a connection included, so one that cannot finish is counted rather than left waiting.
