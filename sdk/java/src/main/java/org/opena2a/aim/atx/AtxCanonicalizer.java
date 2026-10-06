@@ -3,6 +3,7 @@ package org.opena2a.aim.atx;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.erdtman.jcs.JsonCanonicalizer;
 
 import java.math.BigDecimal;
@@ -27,7 +28,7 @@ import java.util.Map;
  */
 public final class AtxCanonicalizer {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = SdkObjectMappers.create();
     private static final DateTimeFormatter RFC3339_SECONDS =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
 

@@ -10,6 +10,7 @@ import org.opena2a.aim.integrations.mcp.discovery.MCPResource;
 import org.opena2a.aim.integrations.mcp.discovery.MCPTool;
 import org.opena2a.aim.security.EventTypes;
 import org.opena2a.aim.security.SecurityLogger;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,7 +65,7 @@ import java.util.stream.Collectors;
 public class AttestationCache {
 
     private static final Logger log = LoggerFactory.getLogger(AttestationCache.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper()
+    private static final ObjectMapper objectMapper = SdkObjectMappers.create()
             .enable(SerializationFeature.INDENT_OUTPUT);
     private static volatile AttestationCache instance;
     private static final Object lock = new Object();

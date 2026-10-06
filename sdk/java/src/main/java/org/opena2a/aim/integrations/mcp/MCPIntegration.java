@@ -9,6 +9,7 @@ import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters;
 import org.bouncycastle.crypto.signers.Ed25519Signer;
 import org.opena2a.aim.client.AIMClient;
 import org.opena2a.aim.exceptions.AIMException;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +64,7 @@ public class MCPIntegration {
         // Utility class
     }
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = SdkObjectMappers.create();
 
     private static final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
