@@ -32,6 +32,12 @@
 //      conclusion on a red predicate comes from this record, never from the
 //      reviewer's reading of a text payload.
 //
+// Invoked with --plan-over-budget, and only after the review action refused
+// the full-file request as over its token budget, it plans the review sent
+// instead: the same request cut into batches on file boundaries, or one
+// diff-only request when the full-file context cannot be batched. The rules
+// are stated at that mode's section below.
+//
 // Node built-ins only: the workflow runs this with the runner's node and no
 // install step precedes it (an install would execute pull-request-controlled
 // scripts before the gate has looked at anything).
@@ -41,6 +47,10 @@
 //     --changed-files <in> --diff <in>
 //     --out-diff <out> --out-context-files <out> --out-report <out>
 //   node scripts/pr-review-generated-files.mjs --enforce-report <file>
+//   node scripts/pr-review-generated-files.mjs --plan-over-budget <new dir>
+//     --measured-tokens <n> --system-prompt <in> --user-message <in>
+//     --header <in> --full-files <in> --diff <in>
+//     --wide-diff <in> --wide-context <n>
 //
 // Exit status: 0 on success (a FAIL verdict is still a successful run of the
 // composer; the enforce mode turns it into exit 1), 2 on a missing
@@ -722,11 +732,418 @@ function enforceReport(file) {
 }
 
 // ---------------------------------------------------------------------------
+// Over-budget plan mode: what the workflow sends when the full-file request
+// does not fit.
+// ---------------------------------------------------------------------------
+//
+// The shared review action measures the request before it sends it and
+// refuses one over its token budget, so the required check is INCONCLUSIVE
+// with no finding and the pull request cannot merge. Measured on 2026-10-06:
+// #573 (34 deleted backup files) at 228,383 input tokens, and #575 (85 changed
+// lines) at 227,980, of which 390,051 bytes are one 194,903-byte line of a
+// tracked tsconfig.tsbuildinfo, shown removed and added again.
+//
+// This mode runs only after that refusal and plans the review sent instead,
+// by the first of two paths that fits:
+//
+//   batch      The measured request, cut on file boundaries. A changed file's
+//              diff section travels with its full-file block, every block and
+//              section lands in exactly one batch, and each batch repeats the
+//              request's header (title, description, the whole changed-file
+//              list). Nothing reviewed is added and nothing is dropped: before
+//              anything is written, the parts are composed again and compared
+//              with the measured user message byte for byte.
+//   diff-only  One request carrying the diff with wider context and no
+//              full-file blocks, when the full-file context cannot be batched:
+//              one file's block and section together estimate over the budget,
+//              or the batches would exceed the action's ceiling.
+//
+// Every size here is an ESTIMATE, and nothing is decided by it except which
+// request to build. The action measures each batch, and the diff-only request,
+// against the same budget immediately before sending it; a batch that errors,
+// is unmeasured, is over budget or returns no verdict bound to its own nonce
+// makes the run INCONCLUSIVE there. The estimate is the measured request's own
+// density, tokens per byte, applied to each planned request. Content denser
+// than the request's average estimates low: on #575 the tsbuildinfo batch
+// estimates near 162,000 tokens and measures near 176,000. So several files
+// share a batch only up to two thirds of the budget, a single file that cannot
+// be split is planned up to the budget itself, and batches are numbered
+// largest first, because the action reviews them in that order and an estimate
+// that proves low is then refused before any review has been paid for.
+
+// The action's defaults. pr-review.yml passes neither input to it, and the
+// cells assert so, so these are the numbers the action applies.
+const REVIEW_TOKEN_BUDGET = 180000;
+const REVIEW_MAX_BATCHES = 8;
+// Several files share a batch up to this estimate: a batch half again as
+// dense as the request it was cut from still measures under the budget.
+const PACK_TARGET_TOKENS = 120000;
+// The context of the diff the gather step fetched from the pull request.
+const GATHERED_CONTEXT_LINES = 3;
+
+// The literal parts of the user message, as the Build review prompt step
+// writes them.
+const FULL_HEADING = toLatin1('\n\nFULL SOURCE FILES (line-numbered — use for verifying mitigations):\n');
+const DIFF_HEADING = '\n\nDIFF (changes introduced in this PR):\n';
+const BLOCK_HEADER = /\n=== (.*) ===\n/g;
+const TRUNCATION_NOTICE = new RegExp(
+  `\\n\\[FULL FILE CONTEXT TRUNCATED at [0-9]+ bytes ${toLatin1('—')} remaining files omitted\\]\\n$`,
+);
+const PLACEHOLDER_START = '=== GENERATED FILE PLACEHOLDER: ';
+// The mode sections are inserted ahead of the system prompt's verdict
+// instruction, so the reply format stays the last thing the prompt states.
+const VERDICT_MARKER = '\n=== VERDICT LINE (required) ===\n';
+
+const BATCH_SECTION = `${[
+  '=== BATCHED REVIEW ===',
+  'The full request for this pull request measured over the review budget, so the gate split it on file boundaries and this request is one batch of it. The user message begins with a line the gate writes, "REVIEW BATCH k OF N", and the lines after it, up to the first blank line, list the changed files whose diff and full source this batch carries. No file\'s diff or full source is split across batches, and the changed-files list after the description still names every file in the pull request.',
+  'Review the changes this batch carries. When a finding depends on code in a file another batch carries, say so in its Mitigation check.',
+  'REQUEST_CHANGES in any batch blocks the whole pull request.',
+].join('\n')}\n`;
+
+const diffOnlySection = (contextLines) => `${[
+  '=== DIFF-ONLY REVIEW ===',
+  `The full request for this pull request measured over the review budget and its full source could not be split into batches under it, so this request carries no FULL SOURCE FILES section. The user message begins with a line the gate writes, "DIFF-ONLY REVIEW". The DIFF shows up to ${contextLines} unchanged lines around each change: verify mitigations against those lines, and when a mitigation could sit outside them, say so in the finding's Mitigation check.`,
+  'For line numbers, count from the new-file start of each hunk header ("+c" in "@@ -a,b +c,d @@") over its context and added lines. This replaces the LINE NUMBERS rule above for this request.',
+].join('\n')}\n`;
+
+const DIFF_ONLY_NOTE = 'DIFF-ONLY REVIEW\n\n';
+const batchNote = (k, n, units) => `REVIEW BATCH ${k} OF ${n}\n${units.map((u) => `${u.display}\n`).join('')}\n`;
+
+// The full-file context as the gather step's loop writes it: one line feed,
+// then per file a line feed, `=== <path> ===` and the file through `nl -ba`,
+// then, if the loop stopped early, its truncation notice. `nl -ba` starts
+// every line it writes with a space or a digit, so a line beginning `=== ` is
+// always a block header.
+function splitFullFiles(full, file) {
+  let body = full;
+  let notice = '';
+  const m = TRUNCATION_NOTICE.exec(full);
+  if (m !== null) {
+    notice = m[0];
+    body = full.slice(0, m.index);
+  }
+  const heads = [...body.matchAll(BLOCK_HEADER)];
+  const lead = heads.length > 0 ? body.slice(0, heads[0].index) : body;
+  if (lead !== '\n' && lead !== '') {
+    throw new InstrumentError(`${file}: --full-files does not begin as the gather step writes it`);
+  }
+  const blocks = heads.map((h, i) => ({
+    path: h[1],
+    text: body.slice(h.index, i + 1 < heads.length ? heads[i + 1].index : body.length),
+  }));
+  return { lead, blocks, notice };
+}
+
+// The composed diff in sections. A generated-file placeholder replaced its
+// file's whole section, `diff --git` line included, so it starts a section of
+// its own; inside a hunk every line starts with a space, `+`, `-` or `\`, so
+// neither start can be written by the pull request at the start of a line.
+function splitComposedDiff(diff) {
+  const starts = [];
+  let pos = 0;
+  while (pos < diff.length) {
+    if (diff.startsWith('diff --git ', pos) || diff.startsWith(PLACEHOLDER_START, pos)) starts.push(pos);
+    const nl = diff.indexOf('\n', pos);
+    if (nl < 0) break;
+    pos = nl + 1;
+  }
+  const preamble = diff.slice(0, starts.length > 0 ? starts[0] : diff.length);
+  const sections = starts.map((s, k) => diff.slice(s, k + 1 < starts.length ? starts[k + 1] : diff.length));
+  return { preamble, sections };
+}
+
+// A section's path (null when it has none this script can read), the line
+// naming it in a batch note, and a signature that is equal for one file's
+// section in two diffs of the same change taken with different context.
+function describeSection(text) {
+  if (text.startsWith(PLACEHOLDER_START)) {
+    const nl = text.indexOf('\n');
+    const first = nl < 0 ? text : text.slice(0, nl);
+    const name = first.slice(PLACEHOLDER_START.length).replace(/ ===$/, '');
+    return { path: null, display: `${escapeToken(name)} (generated file placeholder)`, signature: first };
+  }
+  const c = classifySection(text);
+  if (c.kind === 'section') {
+    return { path: c.path, display: escapeToken(c.path), signature: `${c.status}\t${c.path}\t${c.oldPath ?? ''}` };
+  }
+  return { path: null, display: escapeToken(c.headerLine), signature: c.headerLine };
+}
+
+function sectionSignatures(sections) {
+  return sections.map((s) => describeSection(s).signature).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+// One unit per diff section, carrying the full-file block of the same path;
+// a block whose path no section names is a unit of its own.
+function planUnits(blocks, { preamble, sections }) {
+  const blockByPath = new Map();
+  blocks.forEach((b, i) => {
+    if (!blockByPath.has(b.path)) blockByPath.set(b.path, i);
+  });
+  const used = new Set();
+  const units = [];
+  if (preamble !== '') units.push({ display: '(diff text before the first file section)', fullText: '', diffText: preamble });
+  for (const text of sections) {
+    const d = describeSection(text);
+    let fullText = '';
+    const bi = d.path === null ? undefined : blockByPath.get(d.path);
+    if (bi !== undefined && !used.has(bi)) {
+      used.add(bi);
+      fullText = blocks[bi].text;
+    }
+    units.push({ display: d.display, fullText, diffText: text });
+  }
+  blocks.forEach((b, i) => {
+    if (!used.has(i)) units.push({ display: escapeToken(b.path), fullText: b.text, diffText: '' });
+  });
+  return units;
+}
+
+function composeBatch(k, n, units, parts) {
+  return (
+    batchNote(k, n, units) +
+    parts.header +
+    FULL_HEADING +
+    parts.lead +
+    units.map((u) => u.fullText).join('') +
+    parts.notice +
+    DIFF_HEADING +
+    units.map((u) => u.diffText).join('')
+  );
+}
+
+function withSection(system, section) {
+  const i = system.indexOf(VERDICT_MARKER);
+  return system.slice(0, i + 1) + section + '\n' + system.slice(i + 1);
+}
+
+function planOverBudget(args) {
+  const outDir = args['plan-over-budget'];
+  if (/[\r\n]/.test(outDir)) throw new InstrumentError('usage: --plan-over-budget must be a path on one line');
+  const measuredText = args['measured-tokens'];
+  if (!/^[0-9]+$/.test(measuredText)) {
+    throw new InstrumentError(`--measured-tokens ${JSON.stringify(measuredText)} is not a token count`);
+  }
+  const measured = Number(measuredText);
+  if (measured <= REVIEW_TOKEN_BUDGET) {
+    throw new InstrumentError(
+      `--measured-tokens ${measured} is not over the ${REVIEW_TOKEN_BUDGET}-token review budget; this mode plans only a request the action refused as over it`,
+    );
+  }
+  const wideContextText = args['wide-context'];
+  if (!/^[1-9][0-9]*$/.test(wideContextText)) {
+    throw new InstrumentError(`--wide-context ${JSON.stringify(wideContextText)} is not a positive line count`);
+  }
+  const wideContext = Number(wideContextText);
+  const readInput = (flag) => {
+    try {
+      return fs.readFileSync(args[flag]).toString('latin1');
+    } catch (e) {
+      throw new InstrumentError(`${args[flag]}: --${flag} cannot be read: ${e.code ?? oneLine(e.message)}`);
+    }
+  };
+  const system = readInput('system-prompt');
+  const user = readInput('user-message');
+  const header = readInput('header');
+  const full = readInput('full-files');
+  const diff = readInput('diff');
+  const wideDiff = readInput('wide-diff');
+
+  const at = system.indexOf(VERDICT_MARKER);
+  if (at < 0 || system.indexOf(VERDICT_MARKER, at + 1) >= 0) {
+    throw new InstrumentError(`${args['system-prompt']}: --system-prompt does not carry its verdict instruction heading exactly once`);
+  }
+  // The batches are cut from these parts, so the parts must BE the request
+  // that was measured: any other text would be planned against a measurement
+  // that is not its own, and reviewed as though it were the pull request.
+  if (header + FULL_HEADING + full + DIFF_HEADING + diff !== user) {
+    throw new InstrumentError(
+      `${args['user-message']}: --user-message is not --header, --full-files and --diff composed as the workflow composes them`,
+    );
+  }
+
+  const tokensPerByte = measured / (system.length + user.length);
+  const estimate = (bytes) => Math.ceil(bytes * tokensPerByte);
+
+  const { lead, blocks, notice } = splitFullFiles(full, args['full-files']);
+  const diffParts = splitComposedDiff(diff);
+  const units = planUnits(blocks, diffParts);
+  const parts = { header, lead, notice };
+
+  // 1. Batches. Units are packed in diff order, so neighbouring files share a
+  //    batch, and a batch closes before a unit would carry it over the
+  //    packing target; a unit over the target on its own is a batch of one.
+  const systemBatch = withSection(system, BATCH_SECTION);
+  const fixedBytes = systemBatch.length + composeBatch(1, 1, [], parts).length;
+  const unitBytes = (u) => u.display.length + 1 + u.fullText.length + u.diffText.length;
+  const groups = [];
+  let current = [];
+  let currentBytes = fixedBytes;
+  for (const u of units) {
+    const next = currentBytes + unitBytes(u);
+    if (current.length > 0 && estimate(next) > PACK_TARGET_TOKENS) {
+      groups.push(current);
+      current = [u];
+      currentBytes = fixedBytes + unitBytes(u);
+    } else {
+      current.push(u);
+      currentBytes = next;
+    }
+  }
+  if (current.length > 0) groups.push(current);
+
+  const planned = groups.map((g, i) => ({
+    units: g,
+    order: i,
+    estimatedTokens: estimate(fixedBytes + g.reduce((s, u) => s + unitBytes(u), 0)),
+  }));
+  let batchRefusal = null;
+  const lone = planned.find((p) => p.estimatedTokens > REVIEW_TOKEN_BUDGET);
+  if (planned.length < 2) {
+    batchRefusal = 'the full-file context does not divide into two or more batches';
+  } else if (lone !== undefined) {
+    batchRefusal = `${fromLatin1(lone.units[0].display)} estimates ${lone.estimatedTokens} input tokens on its own with its full source, over the ${REVIEW_TOKEN_BUDGET}-token budget, and one file is never split across batches`;
+  } else if (planned.length > REVIEW_MAX_BATCHES) {
+    batchRefusal = `the full-file context needs ${planned.length} batches, over the action's ceiling of ${REVIEW_MAX_BATCHES}`;
+  }
+
+  // 2. Diff-only. The wide diff is used only when it carries the same file
+  //    sections as the gathered diff and estimates under the budget; the
+  //    gathered diff is otherwise the one sent, and the action measures it.
+  const diffOnlyText = (d) => DIFF_ONLY_NOTE + header + DIFF_HEADING + d;
+  const wideParts = splitComposedDiff(wideDiff);
+  const sameSections =
+    wideParts.preamble === diffParts.preamble &&
+    JSON.stringify(sectionSignatures(wideParts.sections)) === JSON.stringify(sectionSignatures(diffParts.sections));
+  const wideSystem = withSection(system, diffOnlySection(wideContext));
+  const wideEstimate = estimate(wideSystem.length + diffOnlyText(wideDiff).length);
+  let diffOnly;
+  if (sameSections && wideEstimate <= REVIEW_TOKEN_BUDGET) {
+    diffOnly = { contextLines: wideContext, system: wideSystem, text: diffOnlyText(wideDiff), wideDiffUsed: true, reason: null };
+  } else {
+    diffOnly = {
+      contextLines: GATHERED_CONTEXT_LINES,
+      system: withSection(system, diffOnlySection(GATHERED_CONTEXT_LINES)),
+      text: diffOnlyText(diff),
+      wideDiffUsed: false,
+      reason: sameSections
+        ? `the ${wideContext}-line diff estimates ${wideEstimate} input tokens, over the budget`
+        : `the ${wideContext}-line diff does not carry the same file sections as the gathered diff`,
+    };
+  }
+  diffOnly.estimatedTokens = estimate(diffOnly.system.length + diffOnly.text.length);
+
+  const mode = batchRefusal === null ? 'batch' : 'diff-only';
+  // Largest first; equal estimates keep diff order.
+  const ordered =
+    mode === 'batch' ? [...planned].sort((a, b) => b.estimatedTokens - a.estimatedTokens || a.order - b.order) : [];
+  const batchFiles = ordered.map((p, i) => {
+    const text = composeBatch(i + 1, ordered.length, p.units, parts);
+    return {
+      name: `batch-${String(i + 1).padStart(2, '0')}.txt`,
+      text,
+      files: p.units.map((u) => fromLatin1(u.display)),
+      bytes: systemBatch.length + text.length,
+      estimatedTokens: estimate(systemBatch.length + text.length),
+    };
+  });
+
+  const batchDir = path.join(outDir, 'batches');
+  const systemFile = path.join(outDir, 'system_prompt.txt');
+  const diffOnlyFile = path.join(outDir, 'user_msg_diff_only.txt');
+  // In batch mode the action reads the batch directory and not this input.
+  // It names a file that does not exist, so a run that lost its batch
+  // directory would be refused as missing a request, never sent one batch as
+  // though it were the pull request.
+  const noSingleRequest = path.join(outDir, 'no-single-request-in-batch-mode');
+  const outputs =
+    mode === 'batch'
+      ? {
+          mode,
+          batches: String(batchFiles.length),
+          'batch-dir': batchDir,
+          'system-prompt-file': systemFile,
+          'user-message-file': noSingleRequest,
+          'context-lines': '',
+        }
+      : {
+          mode,
+          batches: '',
+          'batch-dir': '',
+          'system-prompt-file': systemFile,
+          'user-message-file': diffOnlyFile,
+          'context-lines': String(diffOnly.contextLines),
+        };
+  const record = {
+    instrument: INSTRUMENT_PATH,
+    mode,
+    measuredTokens: measured,
+    measuredBytes: system.length + user.length,
+    tokensPerByte,
+    budget: REVIEW_TOKEN_BUDGET,
+    packTarget: PACK_TARGET_TOKENS,
+    maxBatches: REVIEW_MAX_BATCHES,
+    batchRefusal,
+    batches: batchFiles.map(({ name, files, bytes, estimatedTokens }) => ({ name, files, bytes, estimatedTokens })),
+    diffOnly: {
+      contextLines: diffOnly.contextLines,
+      wideDiffUsed: diffOnly.wideDiffUsed,
+      reason: diffOnly.reason,
+      bytes: diffOnly.system.length + diffOnly.text.length,
+      estimatedTokens: diffOnly.estimatedTokens,
+    },
+    outputs,
+  };
+
+  // Only now, with every request composed, is anything written.
+  try {
+    fs.mkdirSync(outDir);
+  } catch (e) {
+    throw new InstrumentError(`${outDir}: --plan-over-budget directory cannot be created: ${e.code ?? oneLine(e.message)}`);
+  }
+  if (mode === 'batch') {
+    fs.mkdirSync(batchDir);
+    for (const b of batchFiles) fs.writeFileSync(path.join(batchDir, b.name), Buffer.from(b.text, 'latin1'));
+    fs.writeFileSync(systemFile, Buffer.from(systemBatch, 'latin1'));
+  } else {
+    fs.writeFileSync(diffOnlyFile, Buffer.from(diffOnly.text, 'latin1'));
+    fs.writeFileSync(systemFile, Buffer.from(diffOnly.system, 'latin1'));
+  }
+  fs.writeFileSync(path.join(outDir, 'plan.json'), `${JSON.stringify(record, null, 2)}\n`);
+  fs.writeFileSync(
+    path.join(outDir, 'outputs.txt'),
+    Object.entries(outputs)
+      .map(([k, v]) => `${k}=${v}\n`)
+      .join(''),
+  );
+  const summary =
+    mode === 'batch'
+      ? `${batchFiles.length} batches estimated at ${batchFiles.map((b) => b.estimatedTokens).join(', ')} input tokens`
+      : `one diff-only request with ${diffOnly.contextLines} context lines estimated at ${diffOnly.estimatedTokens} input tokens, because ${batchRefusal}`;
+  process.stdout.write(
+    `${PROG}: the full-file request measured ${measured} input tokens, over the ${REVIEW_TOKEN_BUDGET}-token budget; planned ${summary} (${tokensPerByte.toFixed(4)} tokens per byte, from that measurement)\n`,
+  );
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // CLI.
 // ---------------------------------------------------------------------------
 
 const COMPOSE_FLAGS = ['tree', 'base-tree', 'changed-files', 'diff', 'out-diff', 'out-context-files', 'out-report'];
 const REQUIRED_COMPOSE_FLAGS = COMPOSE_FLAGS.filter((f) => f !== 'base-tree');
+const PLAN_FLAGS = [
+  'plan-over-budget',
+  'measured-tokens',
+  'system-prompt',
+  'user-message',
+  'header',
+  'full-files',
+  'diff',
+  'wide-diff',
+  'wide-context',
+];
 
 function parseArgs(argv) {
   const args = {};
@@ -735,7 +1152,9 @@ function parseArgs(argv) {
     const value = argv[i + 1];
     if (!flag.startsWith('--') || value === undefined) throw new InstrumentError(`usage: ${flag}: expected --flag <value>`);
     const name = flag.slice(2);
-    if (name !== 'enforce-report' && !COMPOSE_FLAGS.includes(name)) throw new InstrumentError(`usage: unknown flag ${flag}`);
+    if (name !== 'enforce-report' && !COMPOSE_FLAGS.includes(name) && !PLAN_FLAGS.includes(name)) {
+      throw new InstrumentError(`usage: unknown flag ${flag}`);
+    }
     if (has(args, name)) throw new InstrumentError(`usage: ${flag} given twice`);
     args[name] = value;
   }
@@ -747,6 +1166,18 @@ function main(argv) {
   if (has(args, 'enforce-report')) {
     if (Object.keys(args).length !== 1) throw new InstrumentError('usage: --enforce-report takes no other flag');
     return enforceReport(args['enforce-report']);
+  }
+  if (has(args, 'plan-over-budget')) {
+    for (const f of Object.keys(args)) {
+      if (!PLAN_FLAGS.includes(f)) throw new InstrumentError(`usage: --${f} is not a --plan-over-budget flag`);
+    }
+    for (const f of PLAN_FLAGS) {
+      if (!has(args, f)) throw new InstrumentError(`usage: --${f} is required`);
+    }
+    return planOverBudget(args);
+  }
+  for (const f of Object.keys(args)) {
+    if (!COMPOSE_FLAGS.includes(f)) throw new InstrumentError(`usage: unknown flag --${f}`);
   }
   for (const f of REQUIRED_COMPOSE_FLAGS) {
     if (!has(args, f)) throw new InstrumentError(`usage: --${f} is required`);
