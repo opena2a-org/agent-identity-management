@@ -120,3 +120,32 @@ func TestAuditLogJSON(t *testing.T) {
 		}
 	})
 }
+
+// ActorID returns the id of the party ActorType names, so a reader that shows
+// one actor id never shows the owner of an agent that acted.
+func TestAuditLogActorID(t *testing.T) {
+	user, agent := uuid.New(), uuid.New()
+	nilID := uuid.Nil
+	cases := []struct {
+		name string
+		row  AuditLog
+		want *uuid.UUID
+	}{
+		{"user id only", AuditLog{UserID: &user}, &user},
+		{"agent id only", AuditLog{AgentID: &agent}, &agent},
+		{"agent id and its owner's user id", AuditLog{UserID: &user, AgentID: &agent}, &agent},
+		{"neither id", AuditLog{}, nil},
+		{"nil uuids count as absent", AuditLog{UserID: &nilID, AgentID: &nilID}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.row.ActorID()
+			switch {
+			case tc.want == nil && got != nil:
+				t.Fatalf("ActorID() = %s, want nil", *got)
+			case tc.want != nil && (got == nil || *got != *tc.want):
+				t.Fatalf("ActorID() = %v, want %s", got, *tc.want)
+			}
+		})
+	}
+}
