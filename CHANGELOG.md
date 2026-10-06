@@ -19,6 +19,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
   wire; the next caller after it settles, or a caller with another session token, sends its own.
 
+### Fixed: the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
+
+- `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server: either `AIM_BASE_URL` or the origin
+  the request arrived on. It built that origin from the host name without its port. With `AIM_BASE_URL` unset, a
+  server reached at `http://localhost:8080` therefore refused `aud` `http://localhost:8080`, which is the value the
+  TypeScript SDK's `OAuthTokenManager` signs when given that base URL, and accepted `http://localhost` instead.
+- The origin now keeps the port from the `Host` header. `http://localhost:8080` and `http://localhost:8080/api/v1`
+  are accepted on that server, and an `aud` naming the same host on another port or scheme is refused. An `aud`
+  equal to `AIM_BASE_URL` is accepted as before, and so is the origin of a server on the scheme's default port.
+- Tests send the request to an address with a port and to one without, and check which audiences each accepts.
+
+### Fixed — the fleet governance guide describes the access token the server issues, and no longer points at a JWK Set
+
+- `docs/use-cases/fleet-governance.md` told readers to request a token at `/api/v1/token` with `agentId` and `scope`
+  in a JSON body, showed a response with `accessToken`, `tokenType`, `expiresIn` and `scope` whose token header read
+  EdDSA, and told other services to verify the token against `/.well-known/jwks.json`. The server mounts the endpoint
+  at `POST /api/v1/oauth/token`, accepts only the RFC 7523 JWT-bearer grant, returns `access_token`, `token_type` and
+  `expires_in`, signs the token with HS256 under `JWT_SECRET`, and publishes no JWK Set. The documented request named
+  a path the server does not mount, and no published key verified the token.
+- The step now documents the grant: the assertion the agent signs with its Ed25519 key, the `sub`, `aud` and `exp`
+  claims the server requires, the `AIM_BASE_URL` setting that `aud` must equal, and the response as the server
+  returns it. A new section says how the token is verified: by AIM Server, on its `/api/v1/agents` routes, which
+  check the signature, the expiry, revocation and the agent's status on each request. It says to keep `JWT_SECRET`
+  on the server and not to hand the access token to another service as proof of the agent's identity.
+- The step's three `OIDC_*` environment variables are removed: the server reads none of them. The guide and the use
+  case index name the endpoint an OAuth 2.0 token endpoint.
+- A test compares the step with a token the handler issues, so a change to the signing method, the path or the
+  response fields fails until the guide is rewritten to match.
+
 ### Fixed — `POST /api/v1/public/agents/register` answers 401 without a user access token, and the API reference says it needs one
 
 - The route registers an agent only for a signed-in user: it takes the user and organization from a user access

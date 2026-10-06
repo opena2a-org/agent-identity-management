@@ -346,10 +346,14 @@ func validateAssertionClaims(c fiber.Ctx, claims map[string]interface{}) fiber.M
 
 // audienceIsThisServer reports whether `aud` names this authorization server.
 //
-// Accepts the configured AIM_BASE_URL when one is set, and otherwise the origin the
-// request actually arrived on. A self-hoster who has configured nothing still gets the
+// Accepts the configured AIM_BASE_URL when one is set, and the origin the request
+// actually arrived on. A self-hoster who has configured nothing still gets the
 // property that matters — an assertion minted for a DIFFERENT service is refused — while
 // not being locked out of their own deployment for want of an env var.
+//
+// The origin keeps the port from the Host header. c.Hostname() would drop it, refusing
+// aud=http://localhost:8080 from an SDK talking to that address and accepting
+// http://localhost, the origin of whatever listens on port 80.
 func audienceIsThisServer(c fiber.Ctx, aud string) bool {
 	trim := func(s string) string { return strings.TrimRight(strings.TrimSpace(s), "/") }
 	got := trim(aud)
@@ -361,7 +365,7 @@ func audienceIsThisServer(c fiber.Ctx, aud string) bool {
 	if base := trim(os.Getenv("AIM_BASE_URL")); base != "" {
 		accepted = append(accepted, base, base+"/api/v1")
 	}
-	if host := c.Hostname(); host != "" {
+	if host := c.Host(); host != "" {
 		origin := trim(c.Scheme() + "://" + host)
 		accepted = append(accepted, origin, origin+"/api/v1")
 	}
