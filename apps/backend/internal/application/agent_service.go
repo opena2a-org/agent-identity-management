@@ -689,8 +689,9 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if req.DocumentationURL != "" {
 		agent.DocumentationURL = req.DocumentationURL
 	}
-	// Update talks_to configuration
-	if req.TalksTo != nil {
+	// Update talks_to configuration. With a transition recorder the list is
+	// replaced below, together with its record.
+	if req.TalksTo != nil && s.transitions == nil {
 		agent.TalksTo = req.TalksTo
 	}
 	// Update metadata
@@ -715,7 +716,24 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 		}
 	}
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if s.transitions != nil {
+		if req.TalksTo != nil {
+			replacement := append([]string(nil), req.TalksTo...)
+			_, stored, err := recordTalksToChange(ctx, s.transitions, agent, transition.TriggerTalksToReplaced,
+				requesterActor(requestedBy), func([]string) []string { return replacement })
+			if err != nil {
+				return nil, fmt.Errorf("failed to update agent talks_to: %w", err)
+			}
+			agent.TalksTo = stored
+		}
+		profiles, ok := s.agentRepo.(agentProfileStore)
+		if !ok {
+			return nil, fmt.Errorf("failed to update agent: the agent store cannot write the descriptive columns alone")
+		}
+		if err := profiles.UpdateProfile(agent); err != nil {
+			return nil, fmt.Errorf("failed to update agent: %w", err)
+		}
+	} else if err := s.agentRepo.Update(agent); err != nil {
 		return nil, fmt.Errorf("failed to update agent: %w", err)
 	}
 
@@ -839,6 +857,14 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	}
 
 	return agent, nil
+}
+
+// agentProfileStore writes an agent's descriptive columns and no other. With
+// a transition recorder set, UpdateAgent stores the descriptive half of an
+// update through it, so the update cannot write back a status, key or
+// talks_to value some recorded change set meanwhile.
+type agentProfileStore interface {
+	UpdateProfile(agent *domain.Agent) error
 }
 
 // revokeOnReregistration revokes every capability in current that a
@@ -1876,6 +1902,10 @@ func (s *AgentService) AddMCPServers(
 	// 2. Sanitize input identifiers (handle malformed entries like "memory,aws-terraform")
 	mcpServerIdentifiers = sanitizeTalksTo(mcpServerIdentifiers)
 
+	if s.transitions != nil {
+		return s.addMCPServersRecorded(ctx, agent, mcpServerIdentifiers)
+	}
+
 	// 3. Initialize talks_to if nil, and sanitize existing entries
 	if agent.TalksTo == nil {
 		agent.TalksTo = []string{}
@@ -1918,6 +1948,107 @@ func (s *AgentService) AddMCPServers(
 	return agent, addedServers, nil
 }
 
+// addMCPServersRecorded adds identifiers to agent's talks_to list in one
+// talks_to_added transition, sanitizing the entries the row holds as
+// AddMCPServers does. The actor is the one the context names, else the
+// system. It returns the identifiers added.
+func (s *AgentService) addMCPServersRecorded(ctx context.Context, agent *domain.Agent, identifiers []string) (*domain.Agent, []string, error) {
+	before, after, err := recordTalksToChange(ctx, s.transitions, agent, transition.TriggerTalksToAdded, transition.System(),
+		func(current []string) []string {
+			list := sanitizeTalksTo(current)
+			present := make(map[string]bool, len(list))
+			for _, entry := range list {
+				present[entry] = true
+			}
+			added := false
+			for _, identifier := range identifiers {
+				if !present[identifier] {
+					list = append(list, identifier)
+					present[identifier] = true
+					added = true
+				}
+			}
+			if !added {
+				return current
+			}
+			return list
+		})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to update agent: %w", err)
+	}
+	agent.TalksTo = after
+	addedServers := newEntries(sanitizeTalksTo(before), after)
+	if len(addedServers) > 0 {
+		s.recalculateAfterTalksToChange(agent)
+	}
+	return agent, addedServers, nil
+}
+
+// removeMCPServersRecorded removes identifiers from agent's talks_to list in
+// one talks_to_removed transition. The actor is the one the context names,
+// else the system. It returns the identifiers removed.
+func (s *AgentService) removeMCPServersRecorded(ctx context.Context, agent *domain.Agent, identifiers []string) (*domain.Agent, []string, error) {
+	remove := make(map[string]bool, len(identifiers))
+	for _, identifier := range identifiers {
+		remove[identifier] = true
+	}
+	before, after, err := recordTalksToChange(ctx, s.transitions, agent, transition.TriggerTalksToRemoved, transition.System(),
+		func(current []string) []string {
+			kept := []string{}
+			for _, entry := range current {
+				if !remove[entry] {
+					kept = append(kept, entry)
+				}
+			}
+			if len(kept) == len(current) {
+				return current
+			}
+			return kept
+		})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to update agent: %w", err)
+	}
+	agent.TalksTo = after
+	removedServers := []string{}
+	for _, entry := range before {
+		if remove[entry] {
+			removedServers = append(removedServers, entry)
+		}
+	}
+	if len(removedServers) > 0 {
+		s.recalculateAfterTalksToChange(agent)
+	}
+	return agent, removedServers, nil
+}
+
+// recalculateAfterTalksToChange recalculates agent's trust score after its
+// talks_to list changed, as AddMCPServers and RemoveMCPServers do.
+func (s *AgentService) recalculateAfterTalksToChange(agent *domain.Agent) {
+	trustScore, err := s.trustCalc.Calculate(agent)
+	if err == nil {
+		agent.TrustScore = trustScore.Score
+		s.agentRepo.Update(agent)
+		s.trustScoreRepo.Create(trustScore)
+	}
+}
+
+// newEntries returns the entries of after that are not in before, in the
+// order of after, each once.
+func newEntries(before, after []string) []string {
+	seen := make(map[string]bool, len(before))
+	for _, entry := range before {
+		seen[entry] = true
+	}
+	out := []string{}
+	for _, entry := range after {
+		if !seen[entry] {
+			out = append(out, entry)
+			seen[entry] = true
+		}
+	}
+	return out
+}
+
 // RemoveMCPServers removes MCP servers from an agent's talks_to list
 func (s *AgentService) RemoveMCPServers(
 	ctx context.Context,
@@ -1928,6 +2059,10 @@ func (s *AgentService) RemoveMCPServers(
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("agent not found: %w", err)
+	}
+
+	if s.transitions != nil {
+		return s.removeMCPServersRecorded(ctx, agent, mcpServerIdentifiers)
 	}
 
 	// 2. Initialize talks_to if nil
@@ -2119,7 +2254,11 @@ func (s *AgentService) DetectMCPServersFromConfig(
 		}
 	}
 
-	// 5. Add detected MCP servers to agent's talks_to list
+	// 5. Add detected MCP servers to agent's talks_to list, naming the user
+	// who asked as the actor when the context names none.
+	if _, ok := transition.ActorFrom(ctx); !ok {
+		ctx = transition.WithActor(ctx, requesterActor(userID))
+	}
 	agent, addedServers, err := s.AddMCPServers(ctx, agentID, mcpServerIdentifiers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to map MCP servers to agent: %w", err)

@@ -23,6 +23,11 @@ const EventTransitionUnrecorded = "authorization_transition_unrecorded"
 // before anything runs.
 var ErrInvalidChange = errors.New("transition: invalid change")
 
+// ErrNoChange is returned for a talks_to change whose list, read under the
+// agent's row lock, is the list it would store, compared as a set. Nothing
+// changed and no record was written.
+var ErrNoChange = errors.New("transition: the change leaves the agent's talks_to as it is")
+
 // ErrRecordUnavailable is wrapped by the error of an expansion or a
 // destruction refused because its record could not be written. Nothing
 // changed.
@@ -71,7 +76,12 @@ type Change struct {
 	OrganizationID uuid.UUID
 	AgentID        uuid.UUID
 	Trigger        Trigger
-	Actor          Actor
+	// Class is set for a trigger classed by comparison, and only for one: the
+	// class TalksToClass gave for the list the caller read before the change.
+	// The change is refused when the list under the agent's row lock gives
+	// another.
+	Class store.Class
+	Actor Actor
 	// TraceID is trace_id: the parent record's trace when ParentID is set,
 	// otherwise one the server minted with NewTraceID for this request or
 	// job run.
@@ -104,7 +114,8 @@ type Result struct {
 // refused with an error that wraps ErrRecordUnavailable and the record
 // writer's *store.WriteError, and nothing changes. A reduction commits
 // without its record and returns Recorded false. An error of Apply is
-// returned as it is, and nothing changes.
+// returned as it is, and nothing changes. A talks_to change that changes
+// nothing returns ErrNoChange.
 func (r *Recorder) Record(ctx context.Context, c Change) (Result, error) {
 	class, err := r.check(c)
 	if err != nil {
@@ -159,7 +170,14 @@ func lockNotAvailable(err error) bool {
 
 func (r *Recorder) check(c Change) (store.Class, error) {
 	class, ok := c.Trigger.Class()
+	if c.Trigger.ClassedByComparison() {
+		class, ok = c.Class, true
+	}
 	switch {
+	case c.Trigger.ClassedByComparison() && c.Class != store.ClassExpansion && c.Class != store.ClassReduction:
+		return "", fmt.Errorf("%w: %s needs the class its lists give, an expansion or a reduction", ErrInvalidChange, c.Trigger)
+	case !c.Trigger.ClassedByComparison() && c.Class != "":
+		return "", fmt.Errorf("%w: %s takes the class of its trigger, not one given", ErrInvalidChange, c.Trigger)
 	case !ok:
 		return "", fmt.Errorf("%w: %q is not an agent-space trigger", ErrInvalidChange, c.Trigger)
 	case c.OrganizationID == uuid.Nil || c.AgentID == uuid.Nil:
@@ -222,8 +240,8 @@ func (r *Recorder) draft(c Change) record.Draft {
 
 // change locks the agent, reads its state, makes the change and reads the
 // state again, all in tx. A registration finds no agent before its statement
-// runs and leaves prev zero; one that finds the agent is refused. A null
-// transition whose statement changed the state is refused. A refused
+// runs and leaves prev zero; one that finds the agent is refused. A change
+// whose states break its trigger's rule (checkStates) is refused. A refused
 // change's transaction rolls back.
 func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err error) {
 	if c.Trigger.opens() {
@@ -243,10 +261,42 @@ func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err er
 	if next, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false); err != nil {
 		return State{}, State{}, err
 	}
-	if c.Trigger.null() && !Equal(prev, next) {
-		return State{}, State{}, fmt.Errorf("%w: %s changed the agent's authorization state", ErrInvalidChange, c.Trigger)
+	if err = checkStates(c, prev, next); err != nil {
+		return State{}, State{}, err
 	}
 	return prev, next, nil
+}
+
+// checkStates refuses a change whose states break its trigger's rule. A null
+// transition changes nothing. Only a talks_to trigger, or the registration
+// that opens the agent, sets the talks_to list. A talks_to trigger changes
+// the list and nothing else, in the class the caller gave; one that changes
+// nothing returns ErrNoChange.
+func checkStates(c Change, prev, next State) error {
+	switch {
+	case c.Trigger.null() && !Equal(prev, next):
+		return fmt.Errorf("%w: %s changed the agent's authorization state", ErrInvalidChange, c.Trigger)
+	case c.Trigger.opens():
+		return nil
+	case !c.Trigger.ClassedByComparison():
+		if !equalStrings(prev.TalksTo, next.TalksTo) {
+			return fmt.Errorf("%w: %s changed the agent's talks_to", ErrInvalidChange, c.Trigger)
+		}
+		return nil
+	}
+	class, changed := TalksToClass(prev.TalksTo, next.TalksTo)
+	if !changed {
+		return ErrNoChange
+	}
+	rest := next
+	rest.TalksTo = prev.TalksTo
+	if !Equal(prev, rest) {
+		return fmt.Errorf("%w: %s changed more than the agent's talks_to", ErrInvalidChange, c.Trigger)
+	}
+	if class != c.Class {
+		return fmt.Errorf("%w: %s is a %s by its lists, not the %s it was made as", ErrInvalidChange, c.Trigger, class, c.Class)
+	}
+	return nil
 }
 
 // commitUnrecorded makes a reduction whose record could not be written, in

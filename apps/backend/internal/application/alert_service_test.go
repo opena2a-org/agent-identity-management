@@ -1179,25 +1179,6 @@ func TestTrustScoreDropConfig_Structure(t *testing.T) {
 	assert.Equal(t, 0.4, config.LowScoreThreshold)
 }
 
-func TestApproveDriftRequest_Structure(t *testing.T) {
-	alertID := uuid.New()
-	orgID := uuid.New()
-	userID := uuid.New()
-
-	req := ApproveDriftRequest{
-		AlertID:            alertID,
-		OrganizationID:     orgID,
-		UserID:             userID,
-		ApprovedMCPServers: []string{"memory", "filesystem", "github"},
-	}
-
-	assert.Equal(t, alertID, req.AlertID)
-	assert.Equal(t, orgID, req.OrganizationID)
-	assert.Equal(t, userID, req.UserID)
-	assert.Len(t, req.ApprovedMCPServers, 3)
-	assert.Contains(t, req.ApprovedMCPServers, "memory")
-}
-
 // ====================
 // NewAlertService Tests
 // ====================

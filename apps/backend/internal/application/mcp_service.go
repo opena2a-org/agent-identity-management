@@ -16,6 +16,7 @@ import (
 	infracrypto "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 type MCPService struct {
@@ -39,6 +40,9 @@ type MCPService struct {
 	trustCalculator *MCPTrustCalculator
 	// In-memory challenge storage (in production, use Redis)
 	challenges map[string]ChallengeData
+	// transitions, when set, records each talks_to entry this service adds
+	// (SetTransitionRecorder).
+	transitions *transition.Recorder
 }
 
 // ChallengeData stores challenge information
@@ -177,7 +181,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 
 			// ✅ Always ensure agent's talks_to field contains this MCP server
 			// This handles both new connections and existing connections created before this fix
-			s.updateAgentTalksTo(*agentID, existing.Name)
+			s.updateAgentTalksTo(ctx, *agentID, existing.Name, requesterActor(userID))
 		}
 
 		// ✅ Update capabilities and version if new ones were detected by the registering agent
@@ -350,7 +354,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 			fmt.Printf("✅ Created agent-MCP connection for agent %s → MCP server %s\n", agentID, server.Name)
 
 			// ✅ Also update agent's talks_to field so GetMCPServerAgents can find this connection
-			s.updateAgentTalksTo(*agentID, server.Name)
+			s.updateAgentTalksTo(ctx, *agentID, server.Name, requesterActor(userID))
 		}
 	}
 
@@ -891,7 +895,12 @@ func (s *MCPService) GetConnectedAgentsCount(ctx context.Context, mcpServerID uu
 
 // updateAgentTalksTo adds an MCP server name to an agent's talks_to field
 // This ensures GetMCPServerAgents can find the connection
-func (s *MCPService) updateAgentTalksTo(agentID uuid.UUID, mcpServerName string) {
+//
+// With a transition recorder set, the sanitized list and the added name are
+// stored in one talks_to_added transition, whose actor is the one the context
+// names, else fallback. When its record cannot be written, the list stays as
+// it was.
+func (s *MCPService) updateAgentTalksTo(ctx context.Context, agentID uuid.UUID, mcpServerName string, fallback transition.Actor) {
 	if s.agentRepo == nil {
 		return
 	}
@@ -899,6 +908,23 @@ func (s *MCPService) updateAgentTalksTo(agentID uuid.UUID, mcpServerName string)
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
 		fmt.Printf("⚠️  Warning: Failed to get agent %s for talks_to update: %v\n", agentID, err)
+		return
+	}
+
+	if s.transitions != nil {
+		_, _, err := recordTalksToChange(ctx, s.transitions, agent, transition.TriggerTalksToAdded, fallback,
+			func(current []string) []string {
+				list := sanitizeTalksToEntries(current)
+				for _, existing := range list {
+					if existing == mcpServerName {
+						return list
+					}
+				}
+				return append(list, mcpServerName)
+			})
+		if err != nil {
+			fmt.Printf("Warning: failed to update agent %s talks_to: %v\n", agentID, err)
+		}
 		return
 	}
 

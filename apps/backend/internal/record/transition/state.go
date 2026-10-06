@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
 )
@@ -41,6 +42,9 @@ type State struct {
 	GrantedScope []string
 	Status       string
 	Keys         []Key
+	// TalksTo is the entries of the agent's talks_to list as exact strings,
+	// sorted by byte order, without duplicates.
+	TalksTo []string
 }
 
 // Key is one key the agent row holds.
@@ -61,7 +65,8 @@ type Key struct {
 // Equal reports whether two states have the same members.
 func Equal(a, b State) bool {
 	if a.Status != b.Status || !equalStrings(a.Scope, b.Scope) ||
-		!equalStrings(a.GrantedScope, b.GrantedScope) || len(a.Keys) != len(b.Keys) {
+		!equalStrings(a.GrantedScope, b.GrantedScope) || !equalStrings(a.TalksTo, b.TalksTo) ||
+		len(a.Keys) != len(b.Keys) {
 		return false
 	}
 	for i := range a.Keys {
@@ -112,6 +117,7 @@ func (s State) member() map[string]any {
 			"granted_scope": stringList(s.GrantedScope),
 			"status":        s.Status,
 			"keys":          keys,
+			"talks_to":      stringList(s.TalksTo),
 		},
 	}
 }
@@ -131,6 +137,7 @@ type stateMember struct {
 		GrantedScope []string `json:"granted_scope"`
 		Status       string   `json:"status"`
 		Keys         []Key    `json:"keys"`
+		TalksTo      []string `json:"talks_to"`
 	} `json:"opena2a"`
 }
 
@@ -140,6 +147,7 @@ func (m stateMember) state() State {
 		GrantedScope: nonNil(m.Opena2a.GrantedScope),
 		Status:       m.Opena2a.Status,
 		Keys:         m.Opena2a.Keys,
+		TalksTo:      nonNil(m.Opena2a.TalksTo),
 	}
 }
 
@@ -155,7 +163,7 @@ const (
 SELECT status, public_key, key_algorithm,
        encrypted_private_key IS NOT NULL AND encrypted_private_key <> '',
        previous_public_key, key_rotation_grace_until,
-       pqc_public_key, pqc_key_algorithm, previous_pqc_public_key
+       pqc_public_key, pqc_key_algorithm, previous_pqc_public_key, talks_to
   FROM agents
  WHERE id = $1 AND organization_id = $2`
 	grantedScopeQuery = `
@@ -181,10 +189,11 @@ func readState(ctx context.Context, q store.Querier, organizationID, agentID uui
 		pqcKey, pqcAlg, previousPQCKey sql.NullString
 		serverCustody                  bool
 		graceUntil                     sql.NullTime
+		talksTo                        []byte
 	)
 	err := q.QueryRowContext(ctx, query, agentID, organizationID).Scan(
 		&status, &publicKey, &keyAlg, &serverCustody, &previousKey, &graceUntil,
-		&pqcKey, &pqcAlg, &previousPQCKey)
+		&pqcKey, &pqcAlg, &previousPQCKey, &talksTo)
 	if errors.Is(err, sql.ErrNoRows) {
 		return State{}, ErrAgentNotFound
 	}
@@ -210,7 +219,12 @@ func readState(ctx context.Context, q store.Querier, organizationID, agentID uui
 	}
 	sort.Strings(granted)
 
-	s := State{Scope: granted, GrantedScope: granted, Status: status, Keys: []Key{}}
+	entries, err := domain.DecodeTalksTo(talksTo)
+	if err != nil {
+		return State{}, fmt.Errorf("transition: read talks_to: %w", err)
+	}
+
+	s := State{Scope: granted, GrantedScope: granted, Status: status, Keys: []Key{}, TalksTo: sortedSet(entries)}
 	if status == "suspended" || status == "revoked" {
 		s.Scope = []string{}
 	}
@@ -249,6 +263,17 @@ func readState(ctx context.Context, q store.Querier, organizationID, agentID uui
 }
 
 func present(s sql.NullString) bool { return s.Valid && s.String != "" }
+
+// sortedSet returns the distinct members of s sorted by byte order, never
+// nil.
+func sortedSet(s []string) []string {
+	out := make([]string, 0, len(s))
+	for v := range stringSet(s) {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
+}
 
 const ed25519Alg = "Ed25519"
 

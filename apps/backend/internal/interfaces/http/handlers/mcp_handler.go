@@ -287,7 +287,7 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	}
 
 	// SECURITY: No error logging to prevent information leakage
-	server, err := h.mcpService.CreateMCPServer(c.Context(), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
+	server, err := h.mcpService.CreateMCPServer(withTransitionActor(c), &req, orgID, userID, agentID, sdkTokenID, apiKeyID)
 	if err != nil {
 		// Return 409 Conflict for duplicate URL errors - include existing server ID for SDK
 		if err.Error() == "mcp server with this URL already exists" {

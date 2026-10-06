@@ -1169,7 +1169,7 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 
 	// Add MCP servers to agent's talks_to list
 	updatedAgent, addedServers, err := h.agentService.AddMCPServers(
-		c.Context(),
+		withTransitionActor(c),
 		agentID,
 		req.MCPServerIDs,
 	)
@@ -1253,7 +1253,7 @@ func (h *AgentHandler) RemoveMCPServerFromAgent(c fiber.Ctx) error {
 
 	// Remove MCP server from agent's talks_to list
 	updatedAgent, err := h.agentService.RemoveMCPServer(
-		c.Context(),
+		withTransitionActor(c),
 		agentID,
 		mcpServerID,
 	)

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // DetectionService handles MCP detection business logic
@@ -19,6 +20,9 @@ type DetectionService struct {
 	trustCalculator       domain.TrustScoreCalculator // ✅ NEW: For proper trust score calculation
 	agentRepo             domain.AgentRepository      // ✅ NEW: For fetching agent data
 	deduplicationWindow   time.Duration
+	// transitions, when set, records the talks_to entries a report adds
+	// (SetTransitionRecorder).
+	transitions *transition.Recorder
 }
 
 // NewDetectionService creates a new detection service
@@ -72,6 +76,9 @@ func (s *DetectionService) ReportDetections(
 	existingMCPs := []string{}
 	totalProcessed := 0
 	significantCount := 0
+	// With a transition recorder, the significant detections' servers are
+	// added to talks_to after the loop, in one transition.
+	var reported []string
 
 	// 2. Process each detection
 	for _, detection := range req.Detections {
@@ -167,6 +174,14 @@ func (s *DetectionService) ReportDetections(
 				continue
 			}
 
+			if s.transitions != nil {
+				reported = append(reported, detection.MCPServer)
+				if detection.SDKVersion != "" {
+					s.updateSDKHeartbeat(ctx, agentID, detection.SDKVersion)
+				}
+				continue
+			}
+
 			// 6. Check if MCP is already in agent's talks_to
 			var talksToJSON []byte
 			err = s.db.QueryRowContext(ctx,
@@ -215,6 +230,15 @@ func (s *DetectionService) ReportDetections(
 		}
 	}
 
+	if len(reported) > 0 {
+		added, existing, err := s.addReportedServers(ctx, agentID, orgID, reported)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update agent talks_to: %w", err)
+		}
+		newMCPs = append(newMCPs, added...)
+		existingMCPs = append(existingMCPs, existing...)
+	}
+
 	// Deduplicate newMCPs and existingMCPs
 	newMCPs = deduplicateSlice(newMCPs)
 	existingMCPs = deduplicateSlice(existingMCPs)
@@ -226,6 +250,53 @@ func (s *DetectionService) ReportDetections(
 		ExistingMCPs:        existingMCPs,
 		Message:             fmt.Sprintf("Processed %d detections (%d significant, %d filtered)", totalProcessed, significantCount, totalProcessed-significantCount),
 	}, nil
+}
+
+// addReportedServers adds the servers of a report's significant detections
+// to the agent's talks_to list: one read under the agent's row lock, one
+// statement, and one detection_reported transition whose actor is the
+// reporting agent. It returns the servers it added and the servers the list
+// already held. When the record cannot be written, the list stays as it was
+// and the error wraps transition.ErrRecordUnavailable.
+func (s *DetectionService) addReportedServers(ctx context.Context, agentID, orgID uuid.UUID, servers []string) (added, existing []string, err error) {
+	agent := &domain.Agent{ID: agentID, OrganizationID: orgID}
+	var raw []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT talks_to FROM agents WHERE id = $1`, agentID).Scan(&raw); err != nil {
+		return nil, nil, fmt.Errorf("read agent talks_to: %w", err)
+	}
+	if agent.TalksTo, err = domain.DecodeTalksTo(raw); err != nil {
+		return nil, nil, err
+	}
+	actor := transition.Agent(agentID)
+	before, after, err := recordTalksToChange(transition.WithActor(ctx, actor), s.transitions, agent,
+		transition.TriggerDetectionReported, actor,
+		func(current []string) []string {
+			list := current
+			present := make(map[string]bool, len(current))
+			for _, entry := range current {
+				present[entry] = true
+			}
+			for _, server := range servers {
+				if !present[server] {
+					list = append(list, server)
+					present[server] = true
+				}
+			}
+			return list
+		})
+	if err != nil {
+		return nil, nil, err
+	}
+	held := make(map[string]bool, len(before))
+	for _, entry := range before {
+		held[entry] = true
+	}
+	for _, server := range servers {
+		if held[server] {
+			existing = append(existing, server)
+		}
+	}
+	return newEntries(before, after), existing, nil
 }
 
 // updateSDKHeartbeat updates the SDK installation heartbeat timestamp
