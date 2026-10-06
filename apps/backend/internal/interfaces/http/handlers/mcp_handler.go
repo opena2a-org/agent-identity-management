@@ -1116,7 +1116,7 @@ func (h *MCPHandler) GetConnectedAgents(c fiber.Ctx) error {
 
 // GetMCPServerAuditLogs returns a unified audit timeline for a specific MCP server
 // @Summary Get MCP server audit logs
-// @Description Get a unified audit timeline including audit logs, attestation events, and capability changes
+// @Description Get a unified audit timeline including audit logs, attestation events, and capability changes. Only an admin's audit events carry ipAddress and metadata; every other caller gets each audit event without them.
 // @Tags mcp-servers
 // @Produce json
 // @Param id path string true "MCP Server ID"
@@ -1197,6 +1197,9 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 		0,
 	)
 	if err == nil && logs != nil {
+		// The address and metadata of an audit record go to admins only; see
+		// callerSeesAuditRequestDetail.
+		seesRequestDetail := callerSeesAuditRequestDetail(c)
 		for _, log := range logs {
 			actorType := "system"
 			var actorID *string
@@ -1225,7 +1228,7 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 			// Build description based on action
 			description := h.buildAuditDescription(string(log.Action), mcpServer.Name, log.Metadata)
 
-			timeline = append(timeline, TimelineEvent{
+			event := TimelineEvent{
 				ID:          log.ID.String(),
 				EventType:   "audit",
 				Action:      string(log.Action),
@@ -1234,9 +1237,12 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 				ActorID:     actorID,
 				ActorName:   actorName,
 				Description: description,
-				Metadata:    log.Metadata,
-				IPAddress:   log.IPAddress,
-			})
+			}
+			if seesRequestDetail {
+				event.Metadata = log.Metadata
+				event.IPAddress = log.IPAddress
+			}
+			timeline = append(timeline, event)
 		}
 	}
 
