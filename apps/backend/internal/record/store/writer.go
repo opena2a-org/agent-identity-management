@@ -30,6 +30,13 @@
 // what the write left owing: debt=none when it was refused whole, the debt
 // row's id, or debt=unwritten when a reduction committed with neither its
 // record nor its debt row.
+//
+// A writer started in the pre-chain state (ReadStartState: no chain has
+// started in the deployment and a foreign key removes audit rows by cascade)
+// commits a write for an organization whose chain has not started with no
+// record and no debt, in every class, and counts it as no failure. An
+// organization whose chain has started is appended to as above. The writer
+// leaves the pre-chain state when it writes a genesis.
 package store
 
 import (
@@ -43,6 +50,7 @@ import (
 	"log"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -189,6 +197,10 @@ type Appended struct {
 	// appended: its state change committed without the record, and nothing
 	// was appended.
 	Debt *Debt
+	// Unchained is true when the writer is in the pre-chain state and the
+	// organization's chain has not started: the state change committed with
+	// no record and no debt, and only EventID is set.
+	Unchained bool
 }
 
 // Debt is what a reduction whose record could not be appended committed in
@@ -215,6 +227,10 @@ type Config struct {
 	Logger *log.Logger
 	// Now is the clock. When nil, time.Now.
 	Now func() time.Time
+	// PreChain starts the writer in the pre-chain state: set it when the
+	// process's start state (ReadStartState) has mode ModePreChain. The
+	// writer leaves that state when it writes a genesis.
+	PreChain bool
 }
 
 // Writer starts and appends to organizations' record chains.
@@ -227,6 +243,8 @@ type Writer struct {
 	now     func() time.Time
 	waits   lockWaitPeriod
 	health  pathHealth
+	// preChain is true while the writer is in the pre-chain state.
+	preChain atomic.Bool
 
 	mu    sync.Mutex
 	slots map[string]chan struct{}
@@ -281,6 +299,7 @@ func NewWriter(cfg Config) (*Writer, error) {
 	if w.now == nil {
 		w.now = time.Now
 	}
+	w.preChain.Store(cfg.PreChain)
 	return w, nil
 }
 
@@ -349,7 +368,7 @@ func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 		w.logFailure(req.Class, reason, lineDebtNone)
 		return Appended{}, &WriteError{Class: req.Class, Reason: reason, err: err}
 	}
-	if err == nil {
+	if err == nil && !out.Unchained {
 		w.health.succeeded(w.now())
 	}
 	return out, err
@@ -553,6 +572,8 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 	err := tx.QueryRowContext(ctx, lockChainQuery, organizationID).Scan(&chainID)
 	w.observeWait(time.Since(waitStart))
 	switch {
+	case errors.Is(err, sql.ErrNoRows) && w.preChain.Load():
+		return Appended{EventID: d.EventID, Unchained: true}, "", nil
 	case errors.Is(err, sql.ErrNoRows):
 		return Appended{}, ReasonChainHead, errors.New("store: the organization's chain has not started")
 	case pqCode(err) == "55P03":
@@ -799,6 +820,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 	if err := tx.Commit(); err != nil {
 		return Appended{}, fmt.Errorf("store: start chain: %w", err)
 	}
+	// A chain has started: the deployment is not pre-chain again.
+	w.preChain.Store(false)
 	return Appended{ChainID: chainID, Seq: head.Seq, EventID: eventID, RecordHash: head.Hash}, nil
 }
 

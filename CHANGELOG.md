@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: the server reports at start whether audit record chains can start
+
+- At start the server reads whether a foreign key can still remove `audit_logs` or
+  `verification_events` rows by cascade, and whether any organization's audit record chain has
+  started. It writes one `record_path_start` console line and serves two gauges on `/metrics`:
+  `aim_record_path_pre_chain` and `aim_record_cascading_foreign_keys{constraint}`. Neither names an
+  organization.
+- On the schema as shipped no chain has started and five foreign keys remove audit rows by cascade,
+  so the line reads `state=pre_chain` and names them, with
+  `missing_migration=cascading_foreign_key_replacement`, `aim_record_path_pre_chain` is 1 and each of
+  the five is a series. No chain starts in this state. Once a migration replaces them, the line reads
+  `state=chained`.
+- If a chain has started and such a foreign key exists, the line is a `SECURITY` line ending
+  `finding=cascading_foreign_keys`: a cascade there would remove chained rows with no record.
+
 ### Changed: the compliance report and an MCP server's audit timeline name who acted by the audit record's own rule
 
 - The audit section of `GET /api/v1/compliance/export` names each record's actor the way the audit

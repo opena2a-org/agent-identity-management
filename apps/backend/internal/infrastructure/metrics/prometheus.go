@@ -346,6 +346,12 @@ func RecordAuditLog(action, resourceType string) {
 	auditLogsTotal.WithLabelValues(action, resourceType).Inc()
 }
 
+// Registerer returns the registry PrometheusHandler serves, for a package
+// that registers series of its own.
+func Registerer() prometheus.Registerer {
+	return registry
+}
+
 // PrometheusHandler returns a Fiber handler that exposes Prometheus metrics
 // Thread-safe implementation that gathers and encodes metrics on each request
 func PrometheusHandler() fiber.Handler {

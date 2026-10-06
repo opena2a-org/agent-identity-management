@@ -36,7 +36,10 @@
 // to it under the chain's append lock and reads a chain's state, which is one
 // of the three ChainState values. A reduction whose record cannot be appended
 // commits with a debt row instead, and the store's settler appends the late
-// record built from that row. Not built here: key rotation and correction
-// records, checkpoints, and the placement table that decides which member
-// sits in which part.
+// record built from that row. At process start the store reads whether a
+// foreign key still removes audit rows by cascade: while one does and no
+// chain has started, the deployment is in the pre-chain state, no chain
+// starts and a write commits with no record. Not built here: key rotation
+// and correction records, checkpoints, and the placement table that decides
+// which member sits in which part.
 package record
