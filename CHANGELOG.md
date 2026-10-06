@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the quickstart stops when an earlier install's database is still on the machine
+
+- After the install directory was deleted, `scripts/quickstart.sh` started a first run over the earlier
+  install's `<dir>_postgres_data` volume. It generated a new `POSTGRES_PASSWORD`, which an already-initialised
+  database ignores, and the run ended in "Backend did not become healthy" with no cause. If only the compose
+  file had been deleted, it also overwrote the `.env` that held the one password the database accepts. The
+  first-run path now checks for the volume before writing anything; when it exists, the script exits 1 and
+  prints two choices: put the earlier `.env` and compose file back (keeps the data), or the exact
+  `docker rm -f` / `docker volume rm` commands to start over (deletes it). The script never removes a volume.
+  The health-check timeout now names `docker volume ls` for a volume the check does not find.
+
 ### Security — an agent credential acts only on its own agent ID on the SDK-API and detection routes
 
 - Every `/api/v1/sdk-api/agents/:id/...` route (heartbeat, capabilities, capability requests, MCP servers,
