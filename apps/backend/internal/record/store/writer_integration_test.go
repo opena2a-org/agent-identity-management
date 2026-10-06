@@ -310,7 +310,7 @@ func TestRecordWriteFailuresCountOncePerClassAndReason(t *testing.T) {
 					wantWriteError(t, err, class, f.reason)
 					require.Equal(t, 0.0, h.counter(t, "aim_record_debts_written_total"))
 					require.Len(t, lines, 1)
-					require.Equal(t, fmt.Sprintf("SECURITY %s class=%s reason=%s", EventRecordWriteFailed, class, f.reason), lines[0])
+					require.Equal(t, fmt.Sprintf("SECURITY %s class=%s reason=%s debt=none", EventRecordWriteFailed, class, f.reason), lines[0])
 				}
 				require.NotContains(t, lines[0], okOrg)
 				require.NotContains(t, lines[0], planted)

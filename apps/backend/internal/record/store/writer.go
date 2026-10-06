@@ -26,7 +26,10 @@
 // state change commits with a record_debts row from which the debt settler
 // appends the record later. Every failure is counted in
 // aim_record_write_failures_total by the class of the write and a reason
-// from a closed set, and writes one SECURITY console line with both.
+// from a closed set, and writes one SECURITY console line with both and with
+// what the write left owing: debt=none when it was refused whole, the debt
+// row's id, or debt=unwritten when a reduction committed with neither its
+// record nor its debt row.
 package store
 
 import (
@@ -336,14 +339,14 @@ func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 		w.noteFailure(req.Class, reason)
 		if out.Debt != nil {
 			out.Debt.Reason = reason
-			id := out.Debt.ID
-			if id == "" {
-				id = "none"
+			owed := out.Debt.ID
+			if owed == "" {
+				owed = lineDebtUnwritten
 			}
-			w.log.Printf("SECURITY %s class=%s reason=%s debt=%s", EventRecordWriteFailed, req.Class, reason, id)
+			w.logFailure(req.Class, reason, owed)
 			return out, nil
 		}
-		w.log.Printf("SECURITY %s class=%s reason=%s", EventRecordWriteFailed, req.Class, reason)
+		w.logFailure(req.Class, reason, lineDebtNone)
 		return Appended{}, &WriteError{Class: req.Class, Reason: reason, err: err}
 	}
 	if err == nil {
@@ -356,6 +359,23 @@ func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 func (w *Writer) noteFailure(class Class, reason Reason) {
 	w.metrics.failures.WithLabelValues(string(class), string(reason)).Inc()
 	w.health.failed(w.now(), class, reason)
+}
+
+// What a failed write's line says it left owing, besides a debt row's id.
+const (
+	// lineDebtNone: the write was refused whole and committed nothing, so no
+	// record is owed.
+	lineDebtNone = "none"
+	// lineDebtUnwritten: a reduction's state change committed, and neither its
+	// record nor its debt row could be written, so a record is owed and no row
+	// holds it.
+	lineDebtUnwritten = "unwritten"
+)
+
+// logFailure writes a failed write's SECURITY line. owed is the id of the
+// debt row the write committed, lineDebtNone or lineDebtUnwritten.
+func (w *Writer) logFailure(class Class, reason Reason, owed string) {
+	w.log.Printf("SECURITY %s class=%s reason=%s debt=%s", EventRecordWriteFailed, class, reason, owed)
 }
 
 // write returns a reason when the record write failed, and an error with no

@@ -235,7 +235,7 @@ func TestRecordReductionThatNoDebtCanHoldIsRefusedBeforeTheLock(t *testing.T) {
 	require.True(t, errors.As(err, &we), "want a *WriteError, got %v", err)
 	require.Equal(t, ReasonCanonical, we.Reason)
 	require.Equal(t, 1.0, failureTotal(t, reg))
-	require.Equal(t, "SECURITY record_write_failed class=reduction reason=canonical\n", logs.String())
+	require.Equal(t, "SECURITY record_write_failed class=reduction reason=canonical debt=none\n", logs.String())
 
 	// The same draft is no debt's business when the write is an expansion:
 	// it fails later, at the unreachable database, not as canonical.

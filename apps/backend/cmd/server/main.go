@@ -1096,6 +1096,7 @@ type Handlers struct {
 	APIKey             *handlers.APIKeyHandler
 	TrustScore         *handlers.TrustScoreHandler
 	Admin              *handlers.AdminHandler
+	AuditChain         *handlers.AuditChainHandler
 	Compliance         *handlers.ComplianceHandler
 	MCP                *handlers.MCPHandler
 	MCPAttestation     *handlers.MCPAttestationHandler // ✅ For agent attestation of MCPs
@@ -1176,6 +1177,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Security,     // ✅ For security incidents tracking
 			repos.User,            // A3d-v: ApproveUser / RejectUser handler-layer LoadOwned guard
 		),
+		AuditChain: handlers.NewAuditChainHandler(db),
 		Compliance: handlers.NewComplianceHandler(
 			services.Compliance,
 			services.Audit,
@@ -1699,6 +1701,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)
 	admin.Get("/audit-logs/export", h.Admin.ExportAuditLogs)
+	admin.Get("/audit-logs/chain/head", h.AuditChain.GetChainHead)
 	admin.Get("/audit-logs/:id", h.Admin.GetAuditLogByID)
 
 	// Alerts
