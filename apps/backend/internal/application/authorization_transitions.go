@@ -14,8 +14,10 @@ import (
 // SetTransitionRecorder makes GrantCapability and RevokeCapability change the
 // agent's capabilities through r, and VerifyAction suspend an agent whose
 // violations cross the compromise threshold through r, so each change commits
-// together with its authorization_transition record. When unset, they change
-// the agent as before and write no record.
+// together with its authorization_transition record. The trust score
+// recalculated after a grant or a revocation is then stored through its
+// history row alone (saveRecalculatedAgent). When unset, they change the
+// agent as before and write no record.
 func (s *CapabilityService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
@@ -26,8 +28,10 @@ func (s *CapabilityService) SetTransitionRecorder(r *transition.Recorder) {
 // RemoveMCPServers, and the talks_to replacement and capability revocations
 // of UpdateAgent change the agent through r, so each change commits together
 // with its authorization_transition record. UpdateAgent then stores the
-// agent's descriptive columns through a statement of their own. When unset,
-// they change the agent as before and write no record.
+// agent's descriptive columns through a statement of their own, and the trust
+// score recalculated after a change, or by RecalculateTrustScore, is stored
+// through its history row alone (saveRecalculatedAgent). When unset, they
+// change the agent as before and write no record.
 func (s *AgentService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
@@ -70,6 +74,21 @@ func (s *DetectionService) SetTransitionRecorder(r *transition.Recorder) {
 // record. When unset, the key is stored as before and no record is written.
 func (s *A2AService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
+}
+
+// saveRecalculatedAgent saves agent's whole row after its trust score was
+// recalculated, as the services did before a transition recorder existed.
+// With a recorder set it writes nothing: the trust_scores row the caller
+// inserts next sets agents.trust_score through the trigger of migration 093,
+// which writes no other column. agent was read before the change that led to
+// the recalculation, so saving its whole row would put back a status, a key
+// or a talks_to list that another request changed since, and no record would
+// show it.
+func saveRecalculatedAgent(agents domain.AgentRepository, recorded bool, agent *domain.Agent) error {
+	if recorded {
+		return nil
+	}
+	return agents.Update(agent)
 }
 
 // errAgentNotActive is returned by the statement of a compromise suspension
