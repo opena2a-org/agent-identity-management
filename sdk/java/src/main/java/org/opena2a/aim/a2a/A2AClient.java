@@ -9,6 +9,7 @@ import okhttp3.*;
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters;
 import org.bouncycastle.crypto.signers.Ed25519Signer;
 import org.opena2a.aim.client.AIMClient;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,7 +80,7 @@ public class A2AClient {
         this.aimClient = aimClient;
         this.timeoutSeconds = timeoutSeconds;
 
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = SdkObjectMappers.create();
         this.objectMapper.registerModule(new JavaTimeModule());
 
         this.httpClient = new OkHttpClient.Builder()
@@ -543,7 +544,7 @@ public class A2AClient {
             String response = get(A2A_BASE_PATH + "/peers");
             JsonNode root = objectMapper.readTree(response);
             JsonNode peersNode = root.has("peers") ? root.get("peers") : root;
-            return objectMapper.convertValue(peersNode, new TypeReference<List<A2APeerTrust>>() {});
+            return objectMapper.readerFor(new TypeReference<List<A2APeerTrust>>() {}).readValue(peersNode);
         } catch (Exception e) {
             throw new A2AException("Failed to list peer trusts: " + e.getMessage(), e);
         }

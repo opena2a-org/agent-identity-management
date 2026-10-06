@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryResult;
 import org.opena2a.aim.integrations.mcp.discovery.MCPTool;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,7 +65,7 @@ import java.util.stream.Collectors;
 public class SupplyChainReporter {
 
     private static final Logger log = LoggerFactory.getLogger(SupplyChainReporter.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper()
+    private static final ObjectMapper objectMapper = SdkObjectMappers.create()
             .enable(SerializationFeature.INDENT_OUTPUT);
     private static volatile SupplyChainReporter instance;
     private static final Object lock = new Object();

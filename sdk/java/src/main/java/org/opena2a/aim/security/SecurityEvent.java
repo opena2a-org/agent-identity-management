@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.opena2a.aim.json.SdkObjectMappers;
 
 import java.net.InetAddress;
 import java.time.Instant;
@@ -22,7 +23,7 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class SecurityEvent {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
+    private static final ObjectMapper MAPPER = SdkObjectMappers.create()
             .disable(SerializationFeature.INDENT_OUTPUT);
     private static final String SDK_VERSION = "aim-sdk-java@1.0.0";
     private static String HOSTNAME;

@@ -3,8 +3,8 @@ package org.opena2a.aim.atx;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import org.opena2a.aim.crypto.pqc.Algorithm;
 import org.opena2a.aim.crypto.pqc.PQCOperations;
+import org.opena2a.aim.json.SdkObjectMappers;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -52,7 +52,7 @@ public final class LocalAtxVerifier {
      * feature additionally fails an exact-name duplicate at the databind layer,
      * so a bug in the pre-scan could not let one through.
      */
-    private static final ObjectMapper CREDENTIAL_MAPPER = JsonMapper.builder()
+    private static final ObjectMapper CREDENTIAL_MAPPER = SdkObjectMappers.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .build();
 
