@@ -3,6 +3,7 @@ package org.opena2a.aim.integrations.mcp.discovery;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.opena2a.aim.json.SdkObjectMappers;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,7 +28,7 @@ import java.util.*;
  */
 public class MCPDiscoveryCache {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper()
+    private static final ObjectMapper objectMapper = SdkObjectMappers.create()
             .enable(SerializationFeature.INDENT_OUTPUT);
     private static final long DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
     private static final Path CACHE_DIR = Path.of(System.getProperty("user.home"), ".aim", "mcp_cache");

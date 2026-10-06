@@ -2,6 +2,7 @@ package org.opena2a.aim.security;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +55,7 @@ import java.util.*;
 public class SecureCredentialStorage {
 
     private static final Logger log = LoggerFactory.getLogger(SecureCredentialStorage.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = SdkObjectMappers.create();
     private static volatile SecureCredentialStorage instance;
     private static final Object lock = new Object();
 

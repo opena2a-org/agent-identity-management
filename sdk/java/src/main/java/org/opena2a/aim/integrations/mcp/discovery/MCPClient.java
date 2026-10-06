@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.opena2a.aim.json.SdkObjectMappers;
 
 import java.io.*;
 import java.util.*;
@@ -22,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MCPClient implements AutoCloseable {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = SdkObjectMappers.create();
     private static final String MCP_PROTOCOL_VERSION = "2024-11-05";
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
 

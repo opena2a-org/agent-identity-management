@@ -163,6 +163,7 @@
                     <argLine>-Xshare:off</argLine>
                     <systemPropertyVariables>
                         <org.slf4j.simpleLogger.defaultLogLevel>warn</org.slf4j.simpleLogger.defaultLogLevel>
+                        <aim.test.jacksonVersion>${jackson.version}</aim.test.jacksonVersion>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

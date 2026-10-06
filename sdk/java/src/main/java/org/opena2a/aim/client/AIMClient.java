@@ -17,6 +17,7 @@ import org.opena2a.aim.isolation.*;
 import org.opena2a.aim.exceptions.ConfigurationException;
 import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryResult;
 import org.opena2a.aim.integrations.mcp.discovery.MCPDiscoveryService;
+import org.opena2a.aim.json.SdkObjectMappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,7 +108,7 @@ public class AIMClient implements AutoCloseable {
         this.sdkTokenId = builder.sdkTokenId;
         this.credentials = builder.credentials;
 
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = SdkObjectMappers.create();
         this.objectMapper.registerModule(new JavaTimeModule());
 
         // Build auth client for token refresh (no authenticator to avoid infinite loops)
