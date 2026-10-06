@@ -164,7 +164,7 @@ func TestTransitionTriggerOfAServerKeyACompromiseAndADeletion(t *testing.T) {
 	assert.True(t, replayed.Deleted[f.agentID])
 	_, held := replayed.States[f.agentID]
 	assert.False(t, held, "a deleted agent has no state")
-	require.Len(t, replayed.Seqs[f.agentID], 4)
+	require.Len(t, replayed.Seqs[f.agentID], 5, "the opening state and the four changes")
 	assert.Equal(t, "revoked", replayed.States[revoked].Status)
 }
 
@@ -256,6 +256,7 @@ func TestTransitionTriggerReplayEndsAnAgentAtItsDeletion(t *testing.T) {
 	var broken *transition.ContinuityError
 	require.True(t, errors.As(err, &broken), "want *ContinuityError, got %v", err)
 	assert.Equal(t, f.agentID, broken.AgentID)
-	assert.Equal(t, int64(2), broken.Seq)
-	assert.Equal(t, int64(1), broken.PreviousSeq)
+	// Seq 1 is the agent's opening state, seq 2 its deletion.
+	assert.Equal(t, int64(3), broken.Seq)
+	assert.Equal(t, int64(2), broken.PreviousSeq)
 }

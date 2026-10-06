@@ -111,7 +111,7 @@ func TestTransitionTriggersOfEveryTalksToWriterReplayToTheTables(t *testing.T) {
 
 	replayed, err := transition.CheckReplay(ctx, f.db, f.orgID, f.keys.publicKey())
 	require.NoError(t, err)
-	assert.Len(t, replayed.Seqs[f.agentID], 5)
+	assert.Len(t, replayed.Seqs[f.agentID], 6, "the opening state and the five changes")
 	assert.Equal(t, []string{"memory", "postgres", "redis", "slack"}, replayed.States[f.agentID].TalksTo)
 	var displayName string
 	require.NoError(t, f.db.QueryRow(`SELECT display_name FROM agents WHERE id = $1`, f.agentID).Scan(&displayName))

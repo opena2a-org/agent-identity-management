@@ -297,6 +297,95 @@ func TestDraftEventID(t *testing.T) {
 	assert.Equal(t, c.EventID, r.draft(c).EventID)
 }
 
+// The record that opens an agent's history has an event id derived from the
+// agent's id: the same for the same agent, another for another agent, never
+// the agent's own id, and never the event id a request of the same id has.
+func TestOpeningEventID(t *testing.T) {
+	agent := uuid.New()
+	id := OpeningEventID(agent)
+	parsed, err := uuid.Parse(id)
+	require.NoError(t, err)
+	assert.Equal(t, parsed.String(), id, "not lowercase hyphenated")
+	assert.Equal(t, uuid.Version(5), parsed.Version())
+	assert.Equal(t, id, OpeningEventID(agent))
+	assert.NotEqual(t, agent.String(), id)
+	assert.NotEqual(t, id, OpeningEventID(uuid.New()))
+	assert.NotEqual(t, RequestEventID(agent), id)
+	assert.Equal(t, "c9e2e5af-cc42-50eb-9680-b0a9573f10e7",
+		OpeningEventID(uuid.MustParse("3f2504e0-4f89-41d3-9a0c-0305e82c3301")),
+		"the derivation changed, so the recorder no longer finds the records that opened agents' histories before it")
+}
+
+// A registration's record and an opening state's take the agent's opening
+// event id. An opening state is the system's, joins the trace it is written
+// in, has no parent and no outcome, and holds one state as both its states.
+func TestOpeningDrafts(t *testing.T) {
+	r := &Recorder{issuer: "urn:uuid:" + uuid.NewString()}
+	org, agent := uuid.New(), uuid.New()
+	trace := strings.Repeat("ab", 16)
+	reg := r.draft(Change{OrganizationID: org, AgentID: agent, Trigger: TriggerRegistrationBaseline,
+		Actor: User(uuid.New()), TraceID: trace})
+	assert.Equal(t, OpeningEventID(agent), reg.EventID)
+
+	d := r.openingDraft(org, agent, trace)
+	assert.Equal(t, OpeningEventID(agent), d.EventID)
+	assert.Equal(t, RecordType, d.Type)
+	assert.Equal(t, map[string]any{"type": "opening_state"}, d.Retained["trigger"])
+	retained := d.Retained["opena2a"].(map[string]any)
+	assert.Equal(t, "server", retained["trace_origin"])
+	assert.Equal(t, StateSpaceAgent, retained["state_space"])
+	_, hasOutcome := retained["outcome"]
+	assert.False(t, hasOutcome, "an opening state carries an outcome")
+	assert.Equal(t, map[string]any{"actor": "system"}, d.Personal)
+	assert.Equal(t, trace, d.Tenant["trace_id"])
+	assert.Nil(t, d.Tenant["parent_id"])
+	s := State{Scope: []string{}, GrantedScope: []string{"files:read"}, Status: "suspended", Keys: []Key{}, TalksTo: []string{"a"}}
+	withState(&d, s)
+	assert.Equal(t, s.member(), d.Tenant["previous_state"])
+	assert.Equal(t, s.member(), d.Tenant["new_state"])
+}
+
+// Only the recorder writes an opening state, and only a registration and an
+// opening state start an agent's history. A change that names an opening
+// state, a registration that names an event id, and a sweep of no
+// organization are refused before anything runs.
+func TestOpeningStateIsTheRecordersOwn(t *testing.T) {
+	_, ok := TriggerOpeningState.Class()
+	assert.False(t, ok, "an opening state takes the class of the change it leads, or is the sweep's observation")
+	assert.False(t, TriggerOpeningState.ClassedByComparison())
+	assert.True(t, TriggerOpeningState.first())
+	assert.False(t, TriggerOpeningState.opens(), "an opening state's previous_state is not null")
+	for trigger := range classes {
+		assert.Equal(t, trigger == TriggerRegistrationBaseline, trigger.first(), trigger)
+	}
+	for trigger := range talksToTriggers {
+		assert.False(t, trigger.first(), trigger)
+	}
+
+	r := newUnusedRecorder(t)
+	ran := false
+	base := Change{
+		OrganizationID: uuid.New(),
+		AgentID:        uuid.New(),
+		Actor:          System(),
+		TraceID:        strings.Repeat("ab", 16),
+		Apply:          func(context.Context, *sql.Tx) error { ran = true; return nil },
+	}
+	opening := base
+	opening.Trigger = TriggerOpeningState
+	_, err := r.Record(context.Background(), opening)
+	require.ErrorIs(t, err, ErrInvalidChange)
+	registration := base
+	registration.Trigger = TriggerRegistrationBaseline
+	registration.EventID = uuid.NewString()
+	_, err = r.Record(context.Background(), registration)
+	require.ErrorIs(t, err, ErrInvalidChange)
+	assert.False(t, ran, "a refused change ran its statement")
+
+	_, err = r.OpenStates(context.Background(), uuid.Nil)
+	require.ErrorIs(t, err, ErrInvalidChange)
+}
+
 func TestNewRecorderNeedsAnIssuer(t *testing.T) {
 	db, err := sql.Open("postgres", "postgres://unused.invalid/none")
 	require.NoError(t, err)
