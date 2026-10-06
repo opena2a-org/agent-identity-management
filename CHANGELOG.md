@@ -872,6 +872,25 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Fixed — a revoked agent can no longer be reactivated, verified or suspended
+
+- `POST /api/v1/agents/:id/reactivate` set any agent to `verified`, a revoked one included, and the agent's keys were
+  not changed, so the key it held when it was revoked authenticated again. `POST /api/v1/agents/:id/verify` did the
+  same, and the agent page offered Verify and Suspend on a revoked agent.
+- Each lifecycle route now reads one transition table: verify moves `pending` to `verified`, suspend moves `pending`
+  or `verified` to `suspended`, and reactivate moves `suspended` to `verified`. Any other status is refused with
+  `409 {"error": "<reason>", "reasonCode": "agentStatusTransitionRefused"}` (with the same value in `code`) and nothing
+  is written; the reason names the act that applies instead, for a revoked agent `register a new agent to replace it`.
+- An agent already in the act's target status answers 200 and nothing is written. The 200 bodies of verify, suspend
+  and reactivate carry `changed`, false exactly in that case.
+- The revoke response's `message` is now `Agent revoked.` It said to run reactivate within 30 days to restore the
+  agent, and that its data is retained for 30 days, which no code enforces. `retentionUntil` is unchanged.
+- The agent page offers Verify only for a pending agent (a verified agent shows a Verified badge), Suspend only for a
+  pending or verified agent, Reactivate only for a suspended agent, and none of them on a revoked agent.
+- **Upgrading:** a client that reactivated or verified a revoked agent, verified a suspended agent, or reactivated a
+  pending agent now receives the 409. Verify a pending agent, reactivate a suspended one, and register a new agent to
+  replace a revoked one.
+
 ### Fixed — a 5xx response carries a fixed line, never the server's error text
 
 - 129 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`,
