@@ -2,9 +2,12 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,12 +26,35 @@ import (
 // shape on the path-id helper side.
 var ErrAlertNotFound = errors.New("alert not found")
 
+// AlertCoalesceWindow is how long an unacknowledged alert absorbs repeats that
+// carry its dedupe key, measured from the alert's creation. Within the window a
+// repeat increments the alert's occurrence count and fires no webhook, so a
+// producer that sets a dedupe key creates at most one alert, and one
+// alert.created delivery, per key per window per organization.
+const AlertCoalesceWindow = 10 * time.Minute
+
+// CapabilityViolationDedupeKey identifies repeats of one capability violation:
+// the same agent attempting the same capability on the same resource. The
+// capability and resource are caller-supplied and unbounded, so they enter the
+// key as a fixed-length digest; the length prefix keeps ("a:b", "c") and
+// ("a", "b:c") distinct.
+func CapabilityViolationDedupeKey(agentID uuid.UUID, capability, resource string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s%s", len(capability), capability, resource)))
+	return "capability_violation:" + agentID.String() + ":" + hex.EncodeToString(sum[:])
+}
+
+// alertEventDispatcher is the part of WebhookService that AlertService uses.
+type alertEventDispatcher interface {
+	TriggerEvent(ctx context.Context, orgID uuid.UUID, event domain.WebhookEvent, data map[string]interface{}) error
+}
+
 // AlertService handles alert management
 type AlertService struct {
 	alertRepo      domain.AlertRepository
 	agentRepo      domain.AgentRepository
 	db             *sql.DB // For anomaly detection queries
-	webhookService *WebhookService
+	webhookService alertEventDispatcher
+	now            func() time.Time
 }
 
 // NewAlertService creates a new alert service
@@ -37,20 +63,47 @@ func NewAlertService(
 	agentRepo domain.AgentRepository,
 	db *sql.DB,
 ) *AlertService {
+	log.Printf("Alert coalescing window: %s", AlertCoalesceWindow)
 	return &AlertService{
 		alertRepo: alertRepo,
 		agentRepo: agentRepo,
 		db:        db,
+		now:       time.Now,
 	}
 }
 
 // SetWebhookService sets the webhook service for triggering webhooks
 func (s *AlertService) SetWebhookService(webhookService *WebhookService) {
+	// A nil *WebhookService stored in the interface field would compare
+	// non-nil, and CreateAlert would call through it.
+	if webhookService == nil {
+		s.webhookService = nil
+		return
+	}
 	s.webhookService = webhookService
 }
 
-// CreateAlert creates a new alert and triggers webhooks
+// CreateAlert creates a new alert and triggers webhooks.
+//
+// An alert with a DedupeKey is coalesced: when an unacknowledged alert in the
+// same organization with the same key was created within AlertCoalesceWindow,
+// the repeat is counted on that alert and no alert is created and no webhook
+// fires.
 func (s *AlertService) CreateAlert(ctx context.Context, alert *domain.Alert) error {
+	if alert.DedupeKey != "" {
+		now := s.now()
+		existing, err := s.alertRepo.FindOpenByDedupeKey(alert.OrganizationID, alert.DedupeKey, now.Add(-AlertCoalesceWindow))
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			return s.alertRepo.IncrementOccurrence(existing.ID, now)
+		}
+		if alert.CreatedAt.IsZero() {
+			alert.CreatedAt = now
+		}
+	}
+
 	if err := s.alertRepo.Create(alert); err != nil {
 		return err
 	}
@@ -81,8 +134,11 @@ func (s *AlertService) triggerAlertWebhook(ctx context.Context, alert *domain.Al
 		data["agentName"] = alert.AgentName
 	}
 
+	// Delivery runs after the request that created the alert has returned, so
+	// it must not use that request's context: a deadline or cancellation set
+	// on the request would end the delivery with it.
 	go func() {
-		if err := s.webhookService.TriggerEvent(ctx, alert.OrganizationID, event, data); err != nil {
+		if err := s.webhookService.TriggerEvent(context.Background(), alert.OrganizationID, event, data); err != nil {
 			fmt.Printf("⚠️  Failed to trigger %s webhook: %v\n", event, err)
 		}
 	}()

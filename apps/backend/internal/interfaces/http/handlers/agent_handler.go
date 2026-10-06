@@ -797,6 +797,10 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 			ResourceType: "agent",
 			ResourceID:   agentID,
 			AgentName:    agent.DisplayName, // Denormalized for display in alerts
+			// An agent retrying one denied action repeats this violation at
+			// the request rate; repeats of the same agent, capability and
+			// resource are counted on one open alert (AlertCoalesceWindow).
+			DedupeKey: application.CapabilityViolationDedupeKey(agentID, req.Capability, req.Resource),
 		}
 
 		// Create alert (non-blocking - don't fail the verification if alert creation fails)

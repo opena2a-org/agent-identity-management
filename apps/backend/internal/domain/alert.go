@@ -66,6 +66,12 @@ type Alert struct {
 	AcknowledgedBy *uuid.UUID             `json:"acknowledgedBy"`
 	AcknowledgedAt *time.Time             `json:"acknowledgedAt"`
 	CreatedAt      time.Time              `json:"createdAt"`
+
+	// DedupeKey opts the alert into coalescing. While an unacknowledged alert
+	// with the same organization and key was created inside the coalescing
+	// window, AlertService.CreateAlert counts a repeat on that alert instead of
+	// inserting a new one. Empty means every alert is a new row.
+	DedupeKey string `json:"-"`
 }
 
 // AlertRepository defines the interface for alert persistence
@@ -83,4 +89,11 @@ type AlertRepository interface {
 	Acknowledge(id, userID uuid.UUID) error
 	BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID) (int, error)
 	Delete(id uuid.UUID) error
+
+	// FindOpenByDedupeKey returns the newest unacknowledged alert in orgID with
+	// dedupeKey created at or after since, or nil when there is none.
+	FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*Alert, error)
+	// IncrementOccurrence counts one more occurrence on an alert and records
+	// when it was seen.
+	IncrementOccurrence(id uuid.UUID, seenAt time.Time) error
 }
