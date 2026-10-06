@@ -605,6 +605,65 @@ func TestAgentHandler_DeleteAgent_NotFound(t *testing.T) {
 	assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
 }
 
+// A failed delete answered 500 with the database's own error as `error`, which the
+// dashboard shows to the person who pressed Delete. For an agent named in an A2A task
+// that was the foreign-key message below. The answer states the outcome and a next step.
+func TestAgentHandler_DeleteAgent_FailureStatesAReasonNotTheDatabaseError(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	dbErr := errors.New(`pq: update or delete on table "agents" violates foreign key constraint "a2a_tasks_client_agent_id_fkey" on table "a2a_tasks"`)
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "agent-to-delete"}, nil
+		},
+		DeleteAgentFunc: func(ctx context.Context, id uuid.UUID) error {
+			return dbErr
+		},
+	}
+	audited := false
+	mockAuditService := &MockAuditServiceImpl{
+		LogActionFunc: func(ctx context.Context, orgID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress, userAgent string, metadata map[string]interface{}) error {
+			audited = true
+			return nil
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		mockAuditService,
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Delete("/agents/:id", handler.DeleteAgent)
+
+	resp, err := app.Test(httptest.NewRequest("DELETE", "/agents/"+agentID.String(), nil))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(raw, &body))
+	assert.Equal(t, "The agent was not deleted and nothing was removed. Try again, and if it fails again, contact your administrator.", body["error"])
+	for _, leaked := range []string{"pq:", "foreign key", "a2a_tasks", "constraint"} {
+		assert.NotContains(t, string(raw), leaked, "the response must not carry the database error")
+	}
+	assert.False(t, audited, "a delete that failed must not be audited as a delete")
+}
+
 // ===========================
 // AgentHandler.VerifyAgent Tests with Mocks
 // ===========================
