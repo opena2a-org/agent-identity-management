@@ -390,7 +390,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 				InitiatorType:    domain.InitiatorTypeSystem,
 			}
 
-			if _, err := s.verificationEventService.CreateVerificationEvent(ctx, verificationReq); err != nil {
+			if _, err := s.verificationEventService.CreateVerificationEvent(ctx, domain.VerificationEventSourceSystem, verificationReq); err != nil {
 				fmt.Printf("⚠️  Warning: failed to create verification event: %v\n", err)
 			} else {
 				fmt.Printf("✅ Created verification event for agent %s\n", agent.Name)
@@ -1611,10 +1611,13 @@ func (s *AgentService) LogCapabilityResult(
 	}
 	metadata["auditId"] = auditID.String()
 
-	// Create the verification event for audit trail
+	// Create the verification event for audit trail. success is the agent's own
+	// report of its action, so the event is recorded as agent_reported and no
+	// trust factor counts it.
 	if s.verificationEventService != nil {
 		_, err := s.verificationEventService.LogVerificationEvent(
 			ctx,
+			domain.VerificationEventSourceAgentReported,
 			agent.OrganizationID,
 			agentID,
 			domain.VerificationProtocolA2A,

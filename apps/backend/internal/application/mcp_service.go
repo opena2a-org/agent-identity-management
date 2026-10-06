@@ -637,6 +637,7 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 		StartedAt:        startTime,
 		CompletedAt:      &completedAt,
 		CreatedAt:        time.Now(),
+		Source:           domain.VerificationEventSourceService,
 	}
 
 	// Store the verification event
@@ -803,6 +804,7 @@ func (s *MCPService) VerifyMCPCapability(
 		Details:          &reason,
 		Metadata:         metadata,
 		CreatedAt:        now,
+		Source:           domain.VerificationEventSourceSystem,
 	}
 
 	// Non-blocking - don't fail the action if audit fails

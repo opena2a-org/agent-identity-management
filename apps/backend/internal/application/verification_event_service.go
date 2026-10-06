@@ -37,9 +37,12 @@ func NewVerificationEventService(
 	}
 }
 
-// LogVerificationEvent creates a new verification event (for automatic logging)
+// LogVerificationEvent creates a new verification event (for automatic logging).
+// source is set by the calling code path, never from a request body; an
+// unknown source is refused before anything is read or written.
 func (s *VerificationEventService) LogVerificationEvent(
 	ctx context.Context,
+	source domain.VerificationEventSource,
 	orgID uuid.UUID,
 	agentID uuid.UUID,
 	protocol domain.VerificationProtocol,
@@ -50,6 +53,10 @@ func (s *VerificationEventService) LogVerificationEvent(
 	initiatorID *uuid.UUID,
 	metadata map[string]interface{},
 ) (*domain.VerificationEvent, error) {
+	if !source.IsKnown() {
+		return nil, fmt.Errorf("%w: got %q", domain.ErrVerificationEventSourceRequired, source)
+	}
+
 	// The agent must belong to the organization the event is recorded under.
 	// Callers check ownership before they call; this comparison does not rely
 	// on that. An organization of uuid.Nil is refused on either side.
@@ -104,6 +111,7 @@ func (s *VerificationEventService) LogVerificationEvent(
 		CompletedAt:      &now,
 		CreatedAt:        now,
 		Metadata:         metadata,
+		Source:           source,
 	}
 
 	if err := s.eventRepo.Create(event); err != nil {
@@ -113,11 +121,19 @@ func (s *VerificationEventService) LogVerificationEvent(
 	return event, nil
 }
 
-// CreateVerificationEvent creates a manual verification event with full details
+// CreateVerificationEvent creates a verification event with full details.
+// source is set by the calling code path and is deliberately not a field of
+// CreateVerificationEventRequest, so nothing bound from a request can set it.
+// An unknown source is refused before anything is read or written.
 func (s *VerificationEventService) CreateVerificationEvent(
 	ctx context.Context,
+	source domain.VerificationEventSource,
 	req *CreateVerificationEventRequest,
 ) (*domain.VerificationEvent, error) {
+	if !source.IsKnown() {
+		return nil, fmt.Errorf("%w: got %q", domain.ErrVerificationEventSourceRequired, source)
+	}
+
 	// The agent must belong to the organization the event is recorded under.
 	// This comparison runs before any attribute of the agent is read and
 	// before drift detection or the event repository is called, so an agent
@@ -177,6 +193,7 @@ func (s *VerificationEventService) CreateVerificationEvent(
 		CreatedAt:        now,
 		Details:          req.Details,
 		Metadata:         req.Metadata,
+		Source:           source,
 
 		// Store runtime configuration for drift tracking
 		CurrentMCPServers:   req.CurrentMCPServers,

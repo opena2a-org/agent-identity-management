@@ -690,6 +690,7 @@ func TestVerificationEventService_LogVerificationEvent_Success(t *testing.T) {
 
 	event, err := service.LogVerificationEvent(
 		ctx,
+		domain.VerificationEventSourceService,
 		orgID,
 		agentID,
 		domain.VerificationProtocolMCP,
@@ -723,6 +724,7 @@ func TestVerificationEventService_LogVerificationEvent_AgentNotFound(t *testing.
 
 	event, err := service.LogVerificationEvent(
 		ctx,
+		domain.VerificationEventSourceService,
 		orgID,
 		agentID,
 		domain.VerificationProtocolMCP,
@@ -764,6 +766,7 @@ func TestVerificationEventService_LogVerificationEvent_PendingAgent(t *testing.T
 
 	event, err := service.LogVerificationEvent(
 		ctx,
+		domain.VerificationEventSourceService,
 		orgID,
 		agentID,
 		domain.VerificationProtocolA2A,
