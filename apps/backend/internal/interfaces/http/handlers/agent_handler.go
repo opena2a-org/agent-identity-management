@@ -2227,7 +2227,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 // GetAgentActivity retrieves all actions performed BY an agent
 // This includes attestations, verifications, and other agent-initiated actions
 // @Summary Get agent activity
-// @Description Retrieve all actions performed by an agent (attestations, verifications, etc.)
+// @Description Retrieve all actions performed by an agent (attestations, verifications, etc.). Only an admin's records carry ipAddress, userAgent and the full metadata; every other caller gets each record without ipAddress and userAgent, with metadata holding only actionType, resource, riskLevel, trustScore, autoApproved and denialReason.
 // @Tags agents
 // @Produce json
 // @Param id path string true "Agent ID"
@@ -2273,20 +2273,29 @@ func (h *AgentHandler) GetAgentActivity(c fiber.Ctx) error {
 		})
 	}
 
-	// Transform audit logs to activity response format
+	// Transform audit logs to activity response format. The address, user
+	// agent and full metadata of a record go to admins only; every other
+	// caller keeps the decision members of the metadata. See
+	// callerSeesAuditRequestDetail and agentActivityDecision.
+	seesRequestDetail := callerSeesAuditRequestDetail(c)
 	activityList := make([]fiber.Map, 0, len(activities))
 	for _, log := range activities {
-		activityList = append(activityList, fiber.Map{
+		activity := fiber.Map{
 			"id":           log.ID,
 			"action":       log.Action,
 			"resourceType": log.ResourceType,
 			"resourceId":   log.ResourceID,
 			"timestamp":    log.Timestamp,
-			"ipAddress":    log.IPAddress,
-			"userAgent":    log.UserAgent,
-			"metadata":     log.Metadata,
 			"agentName":    log.AgentName,
-		})
+		}
+		if seesRequestDetail {
+			activity["ipAddress"] = log.IPAddress
+			activity["userAgent"] = log.UserAgent
+			activity["metadata"] = log.Metadata
+		} else if decision := agentActivityDecision(log.Metadata); decision != nil {
+			activity["metadata"] = decision
+		}
+		activityList = append(activityList, activity)
 	}
 
 	return c.JSON(fiber.Map{
