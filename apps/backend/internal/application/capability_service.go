@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"crypto/ed25519"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // ErrHoneytokenNotAllowed is returned by MarkHoneytoken when a capability cannot be
@@ -38,6 +41,7 @@ type CapabilityService struct {
 	alertRepo      domain.AlertRepository
 	trustCalc      domain.TrustScoreCalculator
 	trustScoreRepo domain.TrustScoreRepository
+	transitions    *transition.Recorder // Optional: set by SetTransitionRecorder
 }
 
 // NewCapabilityService creates a new capability service
@@ -316,7 +320,20 @@ func (s *CapabilityService) GrantCapability(
 		GrantedAt:       time.Now(),
 	}
 
-	if err := s.capabilityRepo.CreateCapability(capability); err != nil {
+	if s.transitions != nil {
+		actor := transition.System()
+		if grantedBy != nil {
+			actor = transition.User(*grantedBy)
+		}
+		err := recordAgentChange(ctx, s.transitions, agent,
+			transition.TriggerFrom(ctx, transition.TriggerDirectGrant), actor,
+			func(ctx context.Context, tx *sql.Tx) error {
+				return repository.CreateCapabilityTx(ctx, tx, capability)
+			})
+		if err != nil {
+			return nil, err
+		}
+	} else if err := s.capabilityRepo.CreateCapability(capability); err != nil {
 		return nil, err
 	}
 
@@ -382,7 +399,20 @@ func (s *CapabilityService) RevokeCapability(
 	}
 
 	// Revoke capability
-	if err := s.capabilityRepo.RevokeCapability(capabilityID, time.Now()); err != nil {
+	if s.transitions != nil {
+		actor := transition.System()
+		if revokedBy != nil {
+			actor = transition.User(*revokedBy)
+		}
+		revokedAt := time.Now()
+		err := recordAgentChange(ctx, s.transitions, agent, transition.TriggerRevocation, actor,
+			func(ctx context.Context, tx *sql.Tx) error {
+				return repository.RevokeCapabilityTx(ctx, tx, capabilityID, revokedAt)
+			})
+		if err != nil {
+			return err
+		}
+	} else if err := s.capabilityRepo.RevokeCapability(capabilityID, time.Now()); err != nil {
 		return err
 	}
 

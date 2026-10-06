@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // Registration errors returned by CreateAgent for known, client-correctable
@@ -46,6 +49,7 @@ type AgentService struct {
 	capabilityRequestService *CapabilityRequestService     // For routing re-registration capability adds through the mode-aware approval workflow (monitoring auto-approves, strict creates pending request)
 	auditRepo                domain.AuditLogRepository     // Optional (issue #293): records the audit event on a honeytoken verification hit; injected via SetHoneytokenAuditing
 	onboardingEvents         FirstAgentEventSink           // Optional: records first_agent_registered; injected via SetOnboardingEvents
+	transitions              *transition.Recorder          // Optional: set by SetTransitionRecorder
 }
 
 // FirstAgentEventSink is told after every agent registration so it can record
@@ -2105,7 +2109,7 @@ func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	}
 	agent.Status = to
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentSuspended); err != nil {
 		return fmt.Errorf("failed to suspend agent: %w", err)
 	}
 
@@ -2139,7 +2143,7 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 	agent.Status = to
 	agent.VerifiedAt = &now
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentReactivated); err != nil {
 		return fmt.Errorf("failed to reactivate agent: %w", err)
 	}
 
@@ -2169,7 +2173,7 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	// Set status to revoked
 	agent.Status = domain.AgentStatusRevoked
 
-	if err := s.agentRepo.Update(agent); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentRevoked); err != nil {
 		return fmt.Errorf("failed to revoke agent: %w", err)
 	}
 
@@ -2182,6 +2186,24 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// changeAgentStatus stores agent.Status (and agent.VerifiedAt, for a
+// reactivation). With a transition recorder it writes only those columns,
+// together with the transition's record; without one it saves the whole row
+// as before.
+func (s *AgentService) changeAgentStatus(ctx context.Context, agent *domain.Agent, trigger transition.Trigger) error {
+	if s.transitions == nil {
+		return s.agentRepo.Update(agent)
+	}
+	var verifiedAt *time.Time
+	if trigger == transition.TriggerAgentReactivated {
+		verifiedAt = agent.VerifiedAt
+	}
+	return recordAgentChange(ctx, s.transitions, agent, trigger, transition.System(),
+		func(ctx context.Context, tx *sql.Tx) error {
+			return repository.SetAgentStatusTx(ctx, tx, agent.ID, agent.Status, verifiedAt)
+		})
 }
 
 // RotateCredentials rotates an agent's cryptographic credentials by generating new Ed25519 keypair
@@ -2227,7 +2249,15 @@ func (s *AgentService) RotateCredentials(ctx context.Context, id uuid.UUID) (pub
 	agent.RotationCount++
 
 	// 7. Update agent in database
-	if err := s.agentRepo.Update(agent); err != nil {
+	if s.transitions != nil {
+		err = recordAgentChange(ctx, s.transitions, agent, transition.TriggerKeyRotated, transition.System(),
+			func(ctx context.Context, tx *sql.Tx) error {
+				return repository.RotateAgentKeyTx(ctx, tx, agent)
+			})
+	} else {
+		err = s.agentRepo.Update(agent)
+	}
+	if err != nil {
 		return "", "", fmt.Errorf("failed to update agent credentials: %w", err)
 	}
 

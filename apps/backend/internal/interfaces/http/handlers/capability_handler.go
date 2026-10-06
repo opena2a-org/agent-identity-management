@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
 // CapabilityHandler handles capability-related HTTP requests
@@ -282,9 +283,11 @@ func (h *CapabilityHandler) RegisterCapability(c fiber.Ctx) error {
 			})
 		}
 
-		// Auto-grant the capability
+		// Auto-grant the capability. The agent asked for it, and the
+		// organization's monitoring mode approved it.
 		capability, err := capSvc.GrantCapability(
-			context.Background(),
+			transition.WithActor(transition.WithTrigger(context.Background(),
+				transition.TriggerRequestAutoApproved), transition.Agent(agentID)),
 			agentID,
 			req.CapabilityType,
 			nil, // No scope
