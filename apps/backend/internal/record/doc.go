@@ -31,8 +31,10 @@
 // package does not build yet. An empty sequence is reported as no chain
 // started, never as verified.
 //
-// The package is pure: it reads and writes no database, serves no route and
-// is called by no writer yet. Not built here: key rotation and correction
+// The package is pure: it reads and writes no database and serves no route.
+// Its subpackage store keeps chains in PostgreSQL: it starts a chain, appends
+// to it under the chain's append lock and reads a chain's state, which is one
+// of the three ChainState values. Not built here: key rotation and correction
 // records, checkpoints, the placement table that decides which member sits in
-// which part, the writer, the debt settler and the chain-state read.
+// which part, and the debt settler.
 package record
