@@ -36,6 +36,7 @@ import (
 	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
+	recordstore "github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 )
 
@@ -105,6 +106,11 @@ func main() {
 		log.Fatal("❌ Database migrations failed:", err)
 	}
 	log.Println("✅ Database migrations completed successfully")
+
+	// The audit record path's start state: pre-chain while no chain has
+	// started and a foreign key removes audit rows by cascade. It is read once,
+	// written as one console line and served as gauges on /metrics.
+	reportRecordPathStart(db)
 
 	// Report how AIM_PLATFORM_ADMINS was read; a mistyped entry is visible, not silent.
 	application.ReportPlatformAdminAllowlist()
@@ -2052,6 +2058,22 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 		"message":   message,
 		"timestamp": time.Now().UTC(),
 	})
+}
+
+// reportRecordPathStart reads the audit record path's start state, writes its
+// start line and sets its gauges. A failed read is logged and the server
+// starts.
+func reportRecordPathStart(db *sql.DB) {
+	m, err := recordstore.NewStartMetrics(metrics.Registerer())
+	if err != nil {
+		log.Printf("WARNING: failed to register the record path's start metrics: %v", err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := recordstore.ReportStart(ctx, db, log.Default(), m); err != nil {
+		log.Printf("WARNING: failed to read the record path's start state: %v", err)
+	}
 }
 
 // runMigrations executes all pending database migrations automatically on startup
