@@ -161,6 +161,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The TypeScript SDK requests the JWT-bearer grant this endpoint accepts, at the path it is served on; see
   `sdk/typescript/CHANGELOG.md`.
 
+### Security — an agent credential acts only on its own agent ID on the SDK-API and detection routes
+
+- Every `/api/v1/sdk-api/agents/:id/...` route (heartbeat, capabilities, capability requests, MCP servers,
+  connections and usage, detection report, and isolation attestation with its `/isolation` alias) checked only that
+  the agent in the path belonged to the caller's organization, so one agent's key could report for any other agent
+  in it. When the caller authenticated as an agent, a path ID other than its own is now refused
+  `403 {"reasonCode":"agent_path_mismatch"}` before any lookup, and another agent's ID gets the same response as an
+  ID that names no agent. Requests made with a user token are unchanged.
+- `GET /api/v1/sdk-api/agents/:identifier` accepts, from an agent caller, only its own ID or its own name, and
+  resolves the name from the caller's own record. The lookup by name the SDKs make with a user token during setup is
+  unchanged.
+- The same check applies to the four `/api/v1/detection/agents/:id/` routes and to
+  `POST /api/v1/a2a/agents/:id/card`, `.../card/refresh`, `.../sign` and `.../trust-score/compute`.
+- The server refuses to start with an SDK-API `/agents/:` route that declares neither the check nor a reason it is
+  exempt, and a test walks the backend source for every agent-ID route under a group that authenticates agents. The
+  remaining `/api/v1/agents/:id/...` and A2A read routes are enumerated there and are unchanged in this release.
+
 ### Security — agent-signature authentication reads an agent's status only after the signature verifies
 
 The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endpoint, `POST /api/v1/sdk-api/verifications` and `GET /api/v1/sdk-api/verifications/:id` read the agent row before checking the request's signature and answered from it. A caller holding only an agent id could tell an unknown agent from one with no key or a different key, and could read whether the agent was suspended or revoked. They now read only the agent's registered keys until the signature verifies. An unknown agent, an agent with no registered key, a registered key that does not decode to its algorithm's key length and a presented key that is not the registered one all get one 401, `{"error":"the signing key is not the registered key of a known agent","reasonCode":"agentKeyNotRecognized"}`. On the token endpoint those causes, and a signature that does not verify, get `invalid_client` with the `error_description` `the assertion is not signed by the registered key of a known agent`; a stored key that does not decode was a 500 there and is now this 401. In every case a stored key that does not decode writes one server log line naming the agent, never the key. The middlewares still count the four causes apart in `aim_s1_refusals_total` (`agent_lookup_failed`, `no_registered_key`, `registered_key_malformed`, `public_key_mismatch`), which only an operator reads; an ML-DSA key of another level than the request names is counted as `no_registered_key`. The status refusal, `Agent is not permitted to authenticate (status: <status>)`, now comes only after the signature verifies; the middlewares and `GET /api/v1/sdk-api/verifications/:id` send it with `"reasonCode":"agentStatusDenied"`, and the middlewares send a signature that does not verify with `"reasonCode":"signatureInvalid"`. `POST /api/v1/sdk-api/verifications` still answers an unknown agent 404. `GET /api/v1/sdk-api/verifications/:id` now refuses a revoked or suspended agent, which could read its own verification events before. Hybrid `Ed25519+ML-DSA-*` requests now verify: the ML-DSA half was checked against the hybrid algorithm's name, which no key matches, so every hybrid request was refused.

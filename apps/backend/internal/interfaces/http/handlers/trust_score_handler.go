@@ -407,16 +407,11 @@ func (h *TrustScoreHandler) SubmitIsolationAttestation(c fiber.Ctx) error {
 		})
 	}
 
-	// Self-attestation guard: an agent may only report its OWN posture. Under
-	// agent (Ed25519) auth the middleware sets agent_id to the authenticated
-	// caller; reject an attempt to attest for a different agent in the same org.
-	// A user/JWT caller (no agent_id local, e.g. an operator) may attest on an
+	// An agent may only report its OWN posture. That is enforced on the route,
+	// not here: the SDK-API table binds :id to the authenticated agent
+	// (middleware.AgentPathBinding), so an agent caller reaches this handler
+	// only for itself. A user/JWT caller (e.g. an operator) may attest on an
 	// agent's behalf, still constrained to the org check above.
-	if authAgentID, ok := c.Locals("agent_id").(uuid.UUID); ok && authAgentID != agentID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "An agent may only attest its own isolation posture",
-		})
-	}
 
 	var body struct {
 		Sandbox    string `json:"sandbox"`

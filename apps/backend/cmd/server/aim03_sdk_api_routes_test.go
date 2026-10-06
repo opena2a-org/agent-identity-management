@@ -169,7 +169,8 @@ func newAIM03Fixture(t *testing.T) *aim03Fixture {
 			c.Locals("agent_id", agentID)
 			return c.Next()
 		}},
-		Handlers: set,
+		AgentNameResolver: sdkAPITestNameResolver,
+		Handlers:          set,
 	})
 
 	return &aim03Fixture{app: app, table: table, mock: mock, repo: repo, audit: audit, agentID: agentID}
