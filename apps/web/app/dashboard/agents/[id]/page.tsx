@@ -44,6 +44,7 @@ import { MCPServerSelector } from "@/components/agents/mcp-server-selector";
 import { MCPServerList } from "@/components/agents/mcp-server-list";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
 import { api, Agent } from "@/lib/api";
+import { agentLifecycleActs } from "@/lib/agent-lifecycle-acts";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { ViolationsTab } from "@/components/agent/violations-tab";
 import { KeyVaultTab } from "@/components/agent/key-vault-tab";
@@ -379,6 +380,9 @@ export default function AgentDetailsPage({
 
   // Check if agent is verified
   const isVerified = agent?.status === "verified";
+  // Verify, Suspend and Reactivate render only where the server's transition table allows
+  // the act; no act is offered on a revoked agent.
+  const lifecycleActs = agentLifecycleActs(agent?.status);
 
   // Status-badge color mapping (mirrors the agents list page so the detail
   // header and the list page describe the same agent the same way — fixes
@@ -581,7 +585,7 @@ export default function AgentDetailsPage({
                 Verified
               </Badge>
             )}
-            {canManage && !isVerified && (
+            {canManage && lifecycleActs.verify === "offered" && (
               <Button
                 onClick={handleVerify}
                 disabled={verifying}
@@ -599,7 +603,7 @@ export default function AgentDetailsPage({
                 )}
               </Button>
             )}
-            {canManage && agent.status !== "suspended" && (
+            {canManage && lifecycleActs.suspend && (
               <Button
                 variant="outline"
                 onClick={() => setShowSuspendConfirm(true)}
@@ -618,7 +622,7 @@ export default function AgentDetailsPage({
                 )}
               </Button>
             )}
-            {canManage && agent.status === "suspended" && (
+            {canManage && lifecycleActs.reactivate && (
               <Button
                 variant="outline"
                 onClick={handleReactivate}

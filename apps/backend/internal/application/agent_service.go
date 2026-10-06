@@ -732,15 +732,21 @@ func (s *AgentService) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	return s.agentRepo.Delete(id)
 }
 
-// VerifyAgent verifies an agent
+// VerifyAgent moves a pending agent to verified. A verified agent is left as it is; any
+// other status is refused with a *domain.AgentStatusTransitionError and nothing is written.
 func (s *AgentService) VerifyAgent(ctx context.Context, id uuid.UUID) error {
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {
 		return err
 	}
 
+	to, write, err := domain.AgentStatusTransition(domain.AgentStatusActVerify, agent.Status)
+	if err != nil || !write {
+		return err
+	}
+
 	now := time.Now()
-	agent.Status = domain.AgentStatusVerified
+	agent.Status = to
 	agent.VerifiedAt = &now
 
 	if err := s.agentRepo.Update(agent); err != nil {
@@ -2075,15 +2081,20 @@ func (s *AgentService) GetAgentByName(ctx context.Context, orgID uuid.UUID, name
 	return s.agentRepo.GetByName(orgID, name)
 }
 
-// SuspendAgent suspends an agent by setting its status to suspended
+// SuspendAgent moves a pending or verified agent to suspended. A suspended agent is left as
+// it is; any other status, revoked included, is refused with a
+// *domain.AgentStatusTransitionError and nothing is written.
 func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {
 		return fmt.Errorf("agent not found: %w", err)
 	}
 
-	// Update status to suspended
-	agent.Status = domain.AgentStatusSuspended
+	to, write, err := domain.AgentStatusTransition(domain.AgentStatusActSuspend, agent.Status)
+	if err != nil || !write {
+		return err
+	}
+	agent.Status = to
 
 	if err := s.agentRepo.Update(agent); err != nil {
 		return fmt.Errorf("failed to suspend agent: %w", err)
@@ -2100,16 +2111,23 @@ func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// ReactivateAgent reactivates a suspended agent by setting its status to verified
+// ReactivateAgent moves a suspended agent to verified. A verified agent is left as it is;
+// any other status is refused with a *domain.AgentStatusTransitionError and nothing is
+// written. A revoked agent is refused because reactivation keeps the agent's keys, so the
+// key it held when it was revoked would authenticate again.
 func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error {
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {
 		return fmt.Errorf("agent not found: %w", err)
 	}
 
-	// Update status to verified
+	to, write, err := domain.AgentStatusTransition(domain.AgentStatusActReactivate, agent.Status)
+	if err != nil || !write {
+		return err
+	}
+
 	now := time.Now()
-	agent.Status = domain.AgentStatusVerified
+	agent.Status = to
 	agent.VerifiedAt = &now
 
 	if err := s.agentRepo.Update(agent); err != nil {
@@ -2127,8 +2145,8 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 	return nil
 }
 
-// RevokeAgent permanently revokes an agent. Data is retained for 30 days before cleanup.
-// During the retention period, the agent can be reactivated with ReactivateAgent.
+// RevokeAgent revokes an agent. No lifecycle act returns a revoked agent to verified or
+// suspended (domain.AgentStatusTransition).
 func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {

@@ -383,8 +383,9 @@ curl -s http://localhost:8080/api/v1/agents/YOUR_AGENT_ID \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" | jq '.status'
 ```
 
-Revoked agents are retained for 30 days before cleanup and can be reinstated in
-that window. Reinstating is a privileged action — ask an organization admin.
+A revoked agent cannot be reactivated, verified or suspended: the server refuses
+each with `409` and `reasonCode` `agentStatusTransitionRefused`. Register a new
+agent to replace it.
 
 #### 2. The agent was suspended by key expiry
 
