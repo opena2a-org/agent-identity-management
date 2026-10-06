@@ -400,8 +400,11 @@ func main() {
 
 	log.Println("Shutting down server...")
 
-	if err := app.Shutdown(); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+	shutdownErr := app.Shutdown()
+	// Write the failed-insert counts of the unfinished period before the process exits.
+	middleware.FlushAPICallInsertFailures()
+	if shutdownErr != nil {
+		log.Fatal("Server forced to shutdown:", shutdownErr)
 	}
 
 	// No request is in flight any more. Write the refused-request line for the
