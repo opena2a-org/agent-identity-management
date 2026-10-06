@@ -16,20 +16,21 @@ func (s *CapabilityService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
 
-// SetTransitionRecorder makes SuspendAgent, ReactivateAgent, RevokeAgent,
-// VerifyAgent, RotateCredentials, UpdateAgentPublicKey, UpdateAgentPQCKey,
-// RotateAgentPQCKey, EnforceKeyExpiry and the capability revocations of
-// UpdateAgent change the agent through r, so each change commits together
-// with its authorization_transition record. When unset, they change the agent
-// as before and write no record.
+// SetTransitionRecorder makes CreateAgent, SuspendAgent, ReactivateAgent,
+// RevokeAgent, VerifyAgent, RotateCredentials, UpdateAgentPublicKey,
+// UpdateAgentPQCKey, RotateAgentPQCKey, EnforceKeyExpiry and the capability
+// revocations of UpdateAgent change the agent through r, so each change
+// commits together with its authorization_transition record. When unset,
+// they change the agent as before and write no record.
 func (s *AgentService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
 
-// SetTransitionRecorder makes an approval, a rejection and a monitoring-mode
-// automatic approval of a capability request commit together with its
-// authorization_transition record. When unset, requests are decided as before
-// and no record is written.
+// SetTransitionRecorder makes a pending capability request, its approval or
+// rejection, and a monitoring-mode automatic approval commit together with
+// its authorization_transition record. A decision's record names the pending
+// request's record as its parent. When unset, requests are filed and decided
+// as before and no record is written.
 func (s *CapabilityRequestService) SetTransitionRecorder(r *transition.Recorder) {
 	s.transitions = r
 }
@@ -53,21 +54,30 @@ func recordAgentChange(
 	fallback transition.Actor,
 	apply func(ctx context.Context, tx *sql.Tx) error,
 ) error {
-	trace, err := transition.NewTraceID()
-	if err != nil {
-		return err
+	return recordChange(ctx, r, transition.Change{
+		OrganizationID: agent.OrganizationID,
+		AgentID:        agent.ID,
+		Trigger:        trigger,
+		Apply:          apply,
+	}, fallback)
+}
+
+// recordChange makes c through r. Its actor is the one the context names,
+// else fallback. A change that does not join its parent's trace mints a trace
+// id of its own.
+func recordChange(ctx context.Context, r *transition.Recorder, c transition.Change, fallback transition.Actor) error {
+	if c.TraceID == "" {
+		trace, err := transition.NewTraceID()
+		if err != nil {
+			return err
+		}
+		c.TraceID = trace
 	}
 	actor, ok := transition.ActorFrom(ctx)
 	if !ok {
 		actor = fallback
 	}
-	_, err = r.Record(ctx, transition.Change{
-		OrganizationID: agent.OrganizationID,
-		AgentID:        agent.ID,
-		Trigger:        trigger,
-		Actor:          actor,
-		TraceID:        trace,
-		Apply:          apply,
-	})
+	c.Actor = actor
+	_, err := r.Record(ctx, c)
 	return err
 }

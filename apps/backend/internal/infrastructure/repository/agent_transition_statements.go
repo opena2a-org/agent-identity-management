@@ -151,7 +151,8 @@ func SuspendAgentWithExpiredKeyTx(ctx context.Context, tx *sql.Tx, id uuid.UUID,
 }
 
 // CreateCapabilityRequestTx runs the statement of the capability request
-// repository's Create in tx: a pending request.
+// repository's Create in tx: a pending request. A request that already has an
+// id keeps it, so the id is known before the statement runs.
 func CreateCapabilityRequestTx(ctx context.Context, tx *sql.Tx, req *domain.CapabilityRequest) error {
 	return insertCapabilityRequest(ctx, tx, req)
 }

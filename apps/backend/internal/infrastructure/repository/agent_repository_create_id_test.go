@@ -12,10 +12,10 @@ import (
 )
 
 // agentInsertArgs expects the agent ID as the first INSERT argument and accepts
-// any value for the other 36.
+// any value for the other 37, verified_at last.
 func agentInsertArgs(id driver.Value) []driver.Value {
 	args := []driver.Value{id}
-	for i := 0; i < 36; i++ {
+	for i := 0; i < 37; i++ {
 		args = append(args, sqlmock.AnyArg())
 	}
 	return args

@@ -24,6 +24,8 @@ func (r *capabilityRequestRepository) Create(req *domain.CapabilityRequest) erro
 	return insertCapabilityRequest(context.Background(), r.db, req)
 }
 
+// insertCapabilityRequest stores req as pending. A request that already has
+// an id keeps it; otherwise one is minted.
 func insertCapabilityRequest(ctx context.Context, db execer, req *domain.CapabilityRequest) error {
 	query := `
 		INSERT INTO capability_requests (
@@ -35,7 +37,9 @@ func insertCapabilityRequest(ctx context.Context, db execer, req *domain.Capabil
 	`
 
 	now := time.Now()
-	req.ID = uuid.New()
+	if req.ID == uuid.Nil {
+		req.ID = uuid.New()
+	}
 	req.CreatedAt = now
 	req.UpdatedAt = now
 	req.RequestedAt = now

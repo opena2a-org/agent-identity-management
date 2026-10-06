@@ -243,7 +243,9 @@ var agentKeyWriterCensus = []agentKeyWriter{
 // agentKeyColumnSinks are the functions whose SQL writes the agents table's
 // key columns. Every census row with table "agents" reaches one of them.
 var agentKeyColumnSinks = []string{
-	"internal/infrastructure/repository/agent_repository.go:AgentRepository.Create",
+	// The agents INSERT, run by AgentRepository.Create and by InsertAgentTx,
+	// a registration's insert in the transaction of its transition record.
+	"internal/infrastructure/repository/agent_repository.go:insertAgent",
 	"internal/infrastructure/repository/agent_repository.go:AgentRepository.Update",
 	// The key columns of a credential rotation, a public key update, a PQC
 	// key registration and a PQC key rotation, each written in the

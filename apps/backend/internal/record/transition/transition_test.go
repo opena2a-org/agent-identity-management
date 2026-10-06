@@ -26,14 +26,16 @@ import (
 // names: a widening fails closed, a narrowing is never blocked.
 func TestTriggerClasses(t *testing.T) {
 	for trigger, want := range map[Trigger]store.Class{
-		TriggerDirectGrant:         store.ClassExpansion,
-		TriggerRequestAutoApproved: store.ClassExpansion,
-		TriggerAgentReactivated:    store.ClassExpansion,
-		TriggerKeyRotated:          store.ClassExpansion,
-		TriggerRevocation:          store.ClassReduction,
-		TriggerAgentSuspended:      store.ClassReduction,
-		TriggerAgentRevoked:        store.ClassReduction,
-		TriggerAgentDeleted:        store.ClassDestruction,
+		TriggerRegistrationBaseline: store.ClassExpansion,
+		TriggerCapabilityRequested:  store.ClassExpansion,
+		TriggerDirectGrant:          store.ClassExpansion,
+		TriggerRequestAutoApproved:  store.ClassExpansion,
+		TriggerAgentReactivated:     store.ClassExpansion,
+		TriggerKeyRotated:           store.ClassExpansion,
+		TriggerRevocation:           store.ClassReduction,
+		TriggerAgentSuspended:       store.ClassReduction,
+		TriggerAgentRevoked:         store.ClassReduction,
+		TriggerAgentDeleted:         store.ClassDestruction,
 	} {
 		got, ok := trigger.Class()
 		require.True(t, ok, trigger)
@@ -111,7 +113,10 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 		"a system with an id": func(c *Change) { c.Actor = Actor{Type: ActorSystem, ID: uuid.New()} },
 		"no agent":            func(c *Change) { c.AgentID = uuid.Nil },
 		"a malformed parent":  func(c *Change) { c.ParentID = "not-a-uuid" },
-		"no statement":        func(c *Change) { c.Apply = nil },
+		"an uppercase event id": func(c *Change) {
+			c.EventID = strings.ToUpper(uuid.NewString())
+		},
+		"no statement": func(c *Change) { c.Apply = nil },
 	} {
 		c := valid
 		edit(&c)
@@ -134,6 +139,45 @@ func TestOnlyARejectionCarriesAnOutcome(t *testing.T) {
 			assert.False(t, ok, "%s carries an outcome", trigger)
 		}
 	}
+}
+
+// Only a registration opens an agent's history, and only a pending request
+// and a rejection are null transitions.
+func TestOpeningAndNullTriggers(t *testing.T) {
+	for trigger := range classes {
+		assert.Equal(t, trigger == TriggerRegistrationBaseline, trigger.opens(), trigger)
+		assert.Equal(t, trigger == TriggerCapabilityRequested || trigger == TriggerRequestRejected, trigger.null(), trigger)
+	}
+}
+
+// A request's record has an event id derived from the request's id: the same
+// for the same request, another for another request, and never the request's
+// own id.
+func TestRequestEventID(t *testing.T) {
+	request := uuid.New()
+	id := RequestEventID(request)
+	parsed, err := uuid.Parse(id)
+	require.NoError(t, err)
+	assert.Equal(t, parsed.String(), id, "not lowercase hyphenated")
+	assert.Equal(t, uuid.Version(5), parsed.Version())
+	assert.Equal(t, id, RequestEventID(request))
+	assert.NotEqual(t, request.String(), id)
+	assert.NotEqual(t, id, RequestEventID(uuid.New()))
+	assert.Equal(t, "d791c794-14bc-5b5d-a1a5-33bdf99b351a",
+		RequestEventID(uuid.MustParse("3f2504e0-4f89-41d3-9a0c-0305e82c3301")),
+		"the derivation changed, so a decision no longer finds the records of requests filed before it")
+}
+
+// A change's record takes the event id the change names, and a random one
+// otherwise.
+func TestDraftEventID(t *testing.T) {
+	r := &Recorder{issuer: "urn:uuid:" + uuid.NewString()}
+	c := Change{Trigger: TriggerCapabilityRequested, Actor: System(), TraceID: strings.Repeat("ab", 16)}
+	first, second := r.draft(c), r.draft(c)
+	assert.True(t, isCanonicalUUID(first.EventID), first.EventID)
+	assert.NotEqual(t, first.EventID, second.EventID)
+	c.EventID = RequestEventID(uuid.New())
+	assert.Equal(t, c.EventID, r.draft(c).EventID)
 }
 
 func TestNewRecorderNeedsAnIssuer(t *testing.T) {

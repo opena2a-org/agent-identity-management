@@ -233,13 +233,18 @@ func startTestChain(t *testing.T, db *sql.DB, orgID uuid.UUID, keys *transitionK
 
 // transitionRecord is one stored transition, decoded.
 type transitionRecord struct {
-	Seq      int64
-	Trigger  string
-	Previous transitionStateJSON
-	New      transitionStateJSON
-	Actor    string
-	Agent    string
-	Trace    string
+	Seq     int64
+	EventID string
+	Trigger string
+	// Previous is zero when PreviousNull, as on a registration.
+	Previous     transitionStateJSON
+	PreviousNull bool
+	New          transitionStateJSON
+	Actor        string
+	Agent        string
+	Trace        string
+	// Parent is parent_id, "" when the record has none.
+	Parent string
 	// Outcome is opena2a.outcome, "" when the record has none.
 	Outcome string
 }
@@ -266,6 +271,7 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		require.NoError(t, err)
 		var retained struct {
 			Type    string `json:"type"`
+			EventID string `json:"event_id"`
 			Trigger struct {
 				Type string `json:"type"`
 			} `json:"trigger"`
@@ -285,7 +291,8 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		require.Equal(t, transition.StateSpaceAgent, retained.Opena2a.StateSpace)
 		var tenant struct {
 			TraceID  string              `json:"trace_id"`
-			Previous transitionStateJSON `json:"previous_state"`
+			ParentID *string             `json:"parent_id"`
+			Previous json.RawMessage     `json:"previous_state"`
 			New      transitionStateJSON `json:"new_state"`
 			Opena2a  struct {
 				OrganizationID string `json:"organization_id"`
@@ -294,14 +301,24 @@ func (f *transitionFixture) transitions(t *testing.T) []transitionRecord {
 		}
 		require.NoError(t, json.Unmarshal(rec.TenantPart, &tenant))
 		require.Equal(t, f.orgID.String(), tenant.Opena2a.OrganizationID)
+		var previous transitionStateJSON
+		previousNull := string(tenant.Previous) == "null"
+		if !previousNull {
+			require.NoError(t, json.Unmarshal(tenant.Previous, &previous))
+		}
+		var parent string
+		if tenant.ParentID != nil {
+			parent = *tenant.ParentID
+		}
 		var personal struct {
 			Actor string `json:"actor"`
 		}
 		require.NoError(t, json.Unmarshal(rec.PersonalPart, &personal))
 		out = append(out, transitionRecord{
-			Seq: retained.Opena2a.Chain.Seq, Trigger: retained.Trigger.Type,
-			Previous: tenant.Previous, New: tenant.New, Actor: personal.Actor,
-			Agent: tenant.Opena2a.SubjectAgentID, Trace: tenant.TraceID, Outcome: retained.Opena2a.Outcome,
+			Seq: retained.Opena2a.Chain.Seq, EventID: retained.EventID, Trigger: retained.Trigger.Type,
+			Previous: previous, PreviousNull: previousNull, New: tenant.New, Actor: personal.Actor,
+			Agent: tenant.Opena2a.SubjectAgentID, Trace: tenant.TraceID, Parent: parent,
+			Outcome: retained.Opena2a.Outcome,
 		})
 	}
 	return out

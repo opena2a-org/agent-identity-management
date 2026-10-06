@@ -328,24 +328,19 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
-	if err := s.agentRepo.Create(agent); err != nil {
-		// Map known database constraint violations to safe, user-facing messages.
-		// Raw PostgreSQL driver errors (the `pq:` prefix, table/constraint names like
-		// `agents_organization_id_fkey`) must never reach the API response — surfacing
-		// them leaks the schema and is an information-disclosure bug.
-		msg := err.Error()
-		switch {
-		case strings.Contains(msg, "duplicate key value"), strings.Contains(msg, "unique constraint"):
-			return nil, ErrAgentNameExists
-		case strings.Contains(msg, "foreign key constraint"):
-			return nil, ErrInvalidOrgOrUser
-		case strings.Contains(msg, "pq:"):
-			// Any other PostgreSQL driver error: log the detail server-side, return generic.
-			fmt.Printf("agent creation failed (database error): %v\n", err)
-			return nil, fmt.Errorf("failed to create agent")
-		default:
-			return nil, fmt.Errorf("failed to create agent: %w", err)
+	if s.transitions != nil {
+		if err := s.registerAgent(ctx, agent, req.Capabilities, orgID, userID); err != nil {
+			return nil, err
 		}
+		if s.onboardingEvents != nil {
+			s.onboardingEvents.FirstAgentRegistered(orgID)
+		}
+		s.applyRegistrationTags(ctx, agent, req.TagIds, orgID, userID)
+		return agent, nil
+	}
+
+	if err := s.agentRepo.Create(agent); err != nil {
+		return nil, agentCreateError(err)
 	}
 
 	if s.onboardingEvents != nil {
@@ -369,12 +364,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	// AUTO-VERIFICATION: Only in monitoring mode. In strict mode, agents must be manually verified.
 	// This ensures strict environments require explicit approval before agents can operate.
-	var isStrictMode bool
-	if s.orgRepo != nil {
-		org, orgErr := s.orgRepo.GetByID(orgID)
-		isStrictMode = orgErr == nil && org != nil && org.EnforcementMode == domain.EnforcementModeStrict
-	}
-	shouldAutoVerify := !isStrictMode && s.shouldAutoVerifyAgent(agent)
+	shouldAutoVerify := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
 	if shouldAutoVerify {
 		now := time.Now()
 		agent.Status = domain.AgentStatusVerified
@@ -386,27 +376,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
 		}
 
-		// ✅ CREATE VERIFICATION EVENT for dashboard chart
-		// This populates the Agent Verification Activity chart
-		if s.verificationEventService != nil {
-			verifiedResult := domain.VerificationResultVerified
-			verificationReq := &CreateVerificationEventRequest{
-				OrganizationID:   orgID,
-				AgentID:          agent.ID,
-				Protocol:         domain.VerificationProtocolA2A,
-				VerificationType: domain.VerificationTypeIdentity,
-				Status:           domain.VerificationEventStatusSuccess,
-				Result:           &verifiedResult,
-				DurationMs:       0,
-				InitiatorType:    domain.InitiatorTypeSystem,
-			}
-
-			if _, err := s.verificationEventService.CreateVerificationEvent(ctx, domain.VerificationEventSourceSystem, verificationReq); err != nil {
-				fmt.Printf("⚠️  Warning: failed to create verification event: %v\n", err)
-			} else {
-				fmt.Printf("✅ Created verification event for agent %s\n", agent.Name)
-			}
-		}
+		s.createAutoVerificationEvent(ctx, orgID, agent)
 
 		// Recalculate trust score with verified status (verification boosts score)
 		updatedTrustScore, err := s.trustCalc.Calculate(agent)
@@ -447,12 +417,143 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
+	s.applyRegistrationTags(ctx, agent, req.TagIds, orgID, userID)
+
+	return agent, nil
+}
+
+// agentCreateError maps the error of storing a new agent to a safe,
+// user-facing one. Raw PostgreSQL driver errors (the `pq:` prefix,
+// table/constraint names like `agents_organization_id_fkey`) must never reach
+// the API response: surfacing them leaks the schema and is an
+// information-disclosure bug. A registration refused because its record
+// could not be written keeps its cause.
+func agentCreateError(err error) error {
+	if errors.Is(err, transition.ErrRecordUnavailable) || errors.Is(err, transition.ErrInvalidChange) {
+		return fmt.Errorf("failed to create agent: %w", err)
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "duplicate key value"), strings.Contains(msg, "unique constraint"):
+		return ErrAgentNameExists
+	case strings.Contains(msg, "foreign key constraint"):
+		return ErrInvalidOrgOrUser
+	case strings.Contains(msg, "pq:"):
+		// Any other PostgreSQL driver error: log the detail server-side, return generic.
+		fmt.Printf("agent creation failed (database error): %v\n", err)
+		return fmt.Errorf("failed to create agent")
+	default:
+		return fmt.Errorf("failed to create agent: %w", err)
+	}
+}
+
+// inStrictMode reports whether the organization requires agents to be
+// verified by hand.
+func (s *AgentService) inStrictMode(orgID uuid.UUID) bool {
+	if s.orgRepo == nil {
+		return false
+	}
+	org, err := s.orgRepo.GetByID(orgID)
+	return err == nil && org != nil && org.EnforcementMode == domain.EnforcementModeStrict
+}
+
+// registerAgent stores a new agent and grants the capabilities it declared
+// as its baseline, in one transaction with its registration_baseline record.
+// The status is decided before the agent is stored: verified when the
+// organization is not in strict mode and the agent qualifies, else pending.
+// The record's new state is therefore the state the registration committed,
+// and no second transition records a pending state that never committed. The
+// trust score is computed for that status and stored with the agent, and its
+// history row is written after the commit. The actor is the one the context
+// names, else the registering user.
+func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, capabilities []string, orgID, userID uuid.UUID) error {
+	repository.PrepareNewAgent(agent)
+	var trustScore *domain.TrustScore
+	if score, err := s.trustCalc.Calculate(agent); err != nil {
+		fmt.Printf("Warning: failed to calculate trust score: %v\n", err)
+	} else {
+		trustScore, agent.TrustScore = score, score.Score
+	}
+	verified := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
+	if verified {
+		now := time.Now()
+		agent.Status = domain.AgentStatusVerified
+		agent.VerifiedAt = &now
+		if score, err := s.trustCalc.Calculate(agent); err == nil {
+			trustScore, agent.TrustScore = score, score.Score
+		}
+	}
+
+	err := recordAgentChange(ctx, s.transitions, agent, transition.TriggerRegistrationBaseline, requesterActor(userID),
+		func(ctx context.Context, tx *sql.Tx) error {
+			if err := repository.InsertAgentTx(ctx, tx, agent); err != nil {
+				return err
+			}
+			for _, capabilityType := range capabilities {
+				if err := repository.CreateCapabilityTx(ctx, tx, &domain.AgentCapability{
+					AgentID:        agent.ID,
+					CapabilityType: capabilityType,
+					GrantedBy:      &userID,
+					GrantedAt:      time.Now(),
+				}); err != nil {
+					return fmt.Errorf("grant baseline capability '%s': %w", capabilityType, err)
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return agentCreateError(err)
+	}
+	if len(capabilities) > 0 {
+		fmt.Printf("✅ Granted %d baseline capabilities for agent %s: %v\n", len(capabilities), agent.Name, capabilities)
+	}
+	if trustScore != nil {
+		if err := s.trustScoreRepo.Create(trustScore); err != nil {
+			fmt.Printf("Warning: failed to save trust score: %v\n", err)
+		}
+	}
+	if verified {
+		fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
+		s.createAutoVerificationEvent(ctx, orgID, agent)
+	}
+	return nil
+}
+
+// createAutoVerificationEvent records an agent's automatic verification at
+// registration as a verification event, which populates the Agent
+// Verification Activity chart.
+func (s *AgentService) createAutoVerificationEvent(ctx context.Context, orgID uuid.UUID, agent *domain.Agent) {
+	if s.verificationEventService == nil {
+		return
+	}
+	verifiedResult := domain.VerificationResultVerified
+	verificationReq := &CreateVerificationEventRequest{
+		OrganizationID:   orgID,
+		AgentID:          agent.ID,
+		Protocol:         domain.VerificationProtocolA2A,
+		VerificationType: domain.VerificationTypeIdentity,
+		Status:           domain.VerificationEventStatusSuccess,
+		Result:           &verifiedResult,
+		DurationMs:       0,
+		InitiatorType:    domain.InitiatorTypeSystem,
+	}
+
+	if _, err := s.verificationEventService.CreateVerificationEvent(ctx, domain.VerificationEventSourceSystem, verificationReq); err != nil {
+		fmt.Printf("⚠️  Warning: failed to create verification event: %v\n", err)
+	} else {
+		fmt.Printf("✅ Created verification event for agent %s\n", agent.Name)
+	}
+}
+
+// applyRegistrationTags applies the tags named at registration to a new
+// agent.
+func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.Agent, tagIDs []string, orgID, userID uuid.UUID) {
 	// ✅ AUTO-APPLY TAGS: Apply tags during registration (no separate API call needed)
 	// Supports both tag UUIDs and tag names (keys). If a name is provided, it will
 	// find an existing tag or create a new one automatically.
-	if len(req.TagIds) > 0 && s.tagRepo != nil {
-		tagUUIDs := make([]uuid.UUID, 0, len(req.TagIds))
-		for _, tagIDStr := range req.TagIds {
+	if len(tagIDs) > 0 && s.tagRepo != nil {
+		tagUUIDs := make([]uuid.UUID, 0, len(tagIDs))
+		for _, tagIDStr := range tagIDs {
 			// Try to parse as UUID first
 			tagID, err := uuid.Parse(tagIDStr)
 			if err == nil {
@@ -508,8 +609,6 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			}
 		}
 	}
-
-	return agent, nil
 }
 
 // shouldAutoVerifyAgent determines if an agent meets criteria for automatic verification

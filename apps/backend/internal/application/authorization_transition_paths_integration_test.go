@@ -90,13 +90,14 @@ func multibaseID(t *testing.T, stored string) string {
 	return "u" + base64.RawURLEncoding.EncodeToString(raw)
 }
 
-// A capability request's automatic approval, approval and rejection, a
-// re-registration that drops a capability, a low trust score suspension, a
+// A capability request's automatic approval, filing, approval and rejection,
+// a re-registration that drops a capability, a low trust score suspension, a
 // reactivation, an agent's own key update, a PQC key update and rotation and
 // the key expiry sweep each write exactly one transition record with the
-// trigger of its path and the agent's state before and after. A rejection
-// leaves the state as it was and says so. Replaying the chain rebuilds both
-// agents' states in the tables.
+// trigger of its path and the agent's state before and after. A pending
+// request and a rejection leave the state as it was, and only the rejection
+// carries an outcome. Replaying the chain rebuilds both agents' states in the
+// tables.
 func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToTheTables(t *testing.T) {
 	f := newTransitionFixture(t)
 	ctx := context.Background()
@@ -116,7 +117,7 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 	f.setEnforcement(t, domain.EnforcementModeStrict)
 	approved := f.request(t, agentCtx, "db:write")
 	require.Equal(t, domain.CapabilityRequestStatusPending, approved.Status)
-	require.Len(t, f.transitions(t), 1, "a pending request changes no authorization")
+	require.Len(t, f.transitions(t), 2, "a pending request has its own record")
 	require.NoError(t, f.reqSvc.ApproveRequest(ctx, approved.ID, f.userID))
 	assert.Equal(t, "approved", f.requestStatus(t, approved.ID))
 	rejected := f.request(t, agentCtx, "net:egress")
@@ -149,14 +150,16 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 	assert.Equal(t, 0, suspended, "a second run finds nothing to suspend")
 
 	got := f.transitions(t)
-	require.Len(t, got, 11, "one record per change")
+	require.Len(t, got, 13, "one record per change")
 	user, agentActor := "user:"+f.userID.String(), "agent:"+f.agentID.String()
 	want := []struct {
 		trigger, actor, status string
 		granted, scope         []string
 	}{
 		{"request_auto_approved", agentActor, "verified", []string{"db:read"}, []string{"db:read"}},
+		{"capability_requested", agentActor, "verified", []string{"db:read"}, []string{"db:read"}},
 		{"request_approved", user, "verified", []string{"db:read", "db:write"}, []string{"db:read", "db:write"}},
+		{"capability_requested", agentActor, "verified", []string{"db:read", "db:write"}, []string{"db:read", "db:write"}},
 		{"request_rejected", user, "verified", []string{"db:read", "db:write"}, []string{"db:read", "db:write"}},
 		{"revocation_on_reregistration", user, "verified", []string{"db:write"}, []string{"db:write"}},
 		{"agent_suspended", "system", "suspended", []string{"db:write"}, []string{}},
@@ -179,17 +182,19 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 		}
 		if w.trigger == "request_rejected" {
 			assert.Equal(t, transition.OutcomeRejected, r.Outcome)
-			assert.Equal(t, r.Previous, r.New, "a rejection changed the agent's state")
 		} else {
 			assert.Empty(t, r.Outcome, "seq %d", r.Seq)
+		}
+		if w.trigger == "request_rejected" || w.trigger == "capability_requested" {
+			assert.Equal(t, r.Previous, r.New, "seq %d changed the agent's state", r.Seq)
 		}
 	}
 
 	// The agent's own key replaces the original one, which stays as the
 	// previous key; the PQC key is added and then rotated.
 	ed := original.Keys[0]
-	assert.Equal(t, original.Keys, got[5].New.Opena2a.Keys)
-	edKeys := got[6].New.Opena2a.Keys
+	assert.Equal(t, original.Keys, got[7].New.Opena2a.Keys)
+	edKeys := got[8].New.Opena2a.Keys
 	require.Len(t, edKeys, 2)
 	assert.True(t, strings.HasPrefix(edKeys[0].ID, "did:key:z6Mk"), edKeys[0].ID)
 	assert.NotEqual(t, ed.ID, edKeys[0].ID)
@@ -198,15 +203,15 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 	assert.Equal(t, transition.Key{Alg: "Ed25519", ID: ed.ID, Role: transition.KeyRolePrevious}, edKeys[1])
 	assert.Equal(t, append(append([]transition.Key{}, edKeys...), transition.Key{
 		Alg: "ML-DSA-65", ID: multibaseID(t, firstPQC), Role: transition.KeyRoleCurrent, Custody: transition.KeyCustodyExternal,
-	}), got[7].New.Opena2a.Keys)
+	}), got[9].New.Opena2a.Keys)
 	assert.Equal(t, append(append([]transition.Key{}, edKeys...),
 		transition.Key{Alg: "ML-DSA-65", ID: multibaseID(t, secondPQC), Role: transition.KeyRoleCurrent, Custody: transition.KeyCustodyExternal},
 		transition.Key{Alg: "ML-DSA-65", ID: multibaseID(t, firstPQC), Role: transition.KeyRolePrevious},
-	), got[8].New.Opena2a.Keys)
+	), got[10].New.Opena2a.Keys)
 
 	// The sweep suspends each agent under its own record, and one run shares
 	// its trace.
-	swept := got[9:]
+	swept := got[11:]
 	agents := []string{swept[0].Agent, swept[1].Agent}
 	wantAgents := []string{f.agentID.String(), other.String()}
 	sort.Strings(wantAgents)
@@ -218,18 +223,20 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 		assert.Equal(t, "suspended", r.New.Opena2a.Status)
 		assert.Equal(t, "verified", r.Previous.Opena2a.Status)
 		if r.Agent == f.agentID.String() {
-			assert.Equal(t, got[8].New, r.Previous)
+			assert.Equal(t, got[10].New, r.Previous)
 		}
 	}
+	// A decision joins its request's trace; the sweep's second suspension
+	// joins the first. No other record shares a trace with the one before it.
 	for i := 1; i < len(got); i++ {
 		if got[i].Trace == got[i-1].Trace {
-			assert.True(t, i == 10, "seq %d shares a trace with the record before it", got[i].Seq)
+			assert.Contains(t, []int{2, 4, 12}, i, "seq %d shares a trace with the record before it", got[i].Seq)
 		}
 	}
 
 	replayed, err := transition.CheckReplay(ctx, f.db, f.orgID, f.keys.publicKey())
 	require.NoError(t, err)
-	assert.Len(t, replayed.Seqs[f.agentID], 10)
+	assert.Len(t, replayed.Seqs[f.agentID], 12)
 	assert.Len(t, replayed.Seqs[other], 1)
 	for _, id := range []uuid.UUID{f.agentID, other} {
 		tables, err := transition.CurrentState(ctx, f.db, f.orgID, id)
@@ -336,7 +343,7 @@ func TestTransitionTriggerOnRequestAndKeyPathsWhenTheRecordPathFails(t *testing.
 
 	assert.Equal(t, float64(5), f.failures(t, store.ClassExpansion, store.ReasonSigner))
 	assert.Equal(t, float64(4), f.failures(t, store.ClassReduction, store.ReasonSigner))
-	require.Len(t, f.transitions(t), 2, "only the grants made before the fault have records")
+	require.Len(t, f.transitions(t), 4, "only the grants and requests made before the fault have records")
 
 	var lines []string
 	for _, line := range strings.Split(f.logs.String(), "\n") {
