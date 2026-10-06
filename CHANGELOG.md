@@ -11,6 +11,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the per-agent and per-MCP-server audit logs return no network address, user agent or metadata to a non-admin
+
+- `GET /api/v1/agents/:id/audit-logs` and `GET /api/v1/mcp-servers/:id/audit-logs` are open to every principal in
+  the organization, while `/api/v1/admin/audit-logs`, which returns the same records, admits only admins. Both
+  routes returned each record's `ipAddress` and `metadata`, and the per-agent route also its `userAgent`, so a
+  manager, member, viewer, API key or agent could read the network address and client of every colleague who acted
+  on the agent or server, and any email the action logged.
+- For every caller except an admin, both routes now return each audit record without `ipAddress`, `userAgent` and
+  `metadata`: the members are absent, not empty. `userName`, the action, the actor and the timestamp stay. An
+  admin's response is unchanged. Attestation and capability events in the MCP server timeline keep their metadata,
+  which holds no data about a person.
+- Tests write a record with a canary address, user agent, email and metadata value, then check that a manager's,
+  member's, viewer's and role-less caller's response to each route contains none of them, and that an admin's
+  response and `GET /api/v1/admin/audit-logs/:id` still contain them.
+
+### Fixed: the fleet governance guide's deployment step starts the server
+
+- Step 1 of `docs/use-cases/fleet-governance.md` gave the server `DATABASE_URL`, which it does not read, so the
+  server stopped at startup on the missing `POSTGRES_HOST`. Its sample `JWT_SECRET` was 29 characters, and the
+  server refuses one under 32. The dashboard was given `API_URL`, which it does not read, and the `/health` output
+  shown was not the one the server returns.
+- The step now writes `JWT_SECRET`, `KEYVAULT_MASTER_KEY` and `POSTGRES_PASSWORD` to `.env` with `openssl rand`, and
+  its compose file gives the server the `POSTGRES_*` settings it reads, a Redis service for token revocation, and a
+  database healthcheck it waits on, since the server connects once at start. The dashboard gets
+  `NEXT_PUBLIC_API_URL`. The fabricated `docker compose up` listing is removed, and the `/health` output is the
+  server's.
+- A test reads the step as docker compose would and loads the server's configuration from it. It checks that the
+  database and Redis hosts name services in the file, that the database credentials match, that each image is one
+  the release publishes, that the dashboard reads each variable it is given, and that the `/health` output has the
+  handler's fields.
+
 ### Fixed: the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
 
 - `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server: either `AIM_BASE_URL` or the origin

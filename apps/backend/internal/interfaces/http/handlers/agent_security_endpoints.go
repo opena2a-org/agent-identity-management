@@ -94,7 +94,7 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 
 // GetAgentAuditLogs returns audit logs for a specific agent with pagination
 // @Summary Get agent audit logs
-// @Description Get audit logs for a specific agent with pagination support
+// @Description Get audit logs for a specific agent with pagination support. Only an admin's records carry ipAddress, userAgent and metadata; every other caller gets each record without them.
 // @Tags agents
 // @Produce json
 // @Param id path string true "Agent ID"
@@ -197,7 +197,7 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"agentId":   agentID.String(),
 		"agentName": agent.Name,
-		"logs":       logs,
+		"logs":       auditLogsForCaller(c, logs),
 		"total":      total,
 		"limit":      limit,
 		"offset":     offset,
