@@ -1,4 +1,4 @@
-# Agent Identity Management (AIM)
+# OpenA2A AIM (Agent Identity Management)
 
 [![Status: stable](https://img.shields.io/badge/status-stable-brightgreen)](./STATUS.md)
 
