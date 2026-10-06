@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — repeated capability violations are counted on one open alert
+
+- A denied `POST /api/v1/agents/:id/verify-capability` created a new security alert on every request, so an agent
+  retrying one denied action wrote one alert per request, up to the 100 a minute the route's rate limit allows. A
+  repeat of the same agent, capability and resource is now counted on the existing alert while that alert is
+  unacknowledged and was created less than 10 minutes earlier: the alert's `occurrence_count` goes up and
+  `last_seen_at` records the latest repeat (migration 126 adds both columns). Acknowledging the alert ends this, and
+  the next repeat creates a new alert. The audit log still records every verification, and other alert types are
+  unchanged.
+
 ### Fixed — the Java SDK's token recovery carries the access token the route requires, and other follow-ups (#625)
 
 - After the server refuses a refresh, the Java SDK's `AIMClient` sends its request to

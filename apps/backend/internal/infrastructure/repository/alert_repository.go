@@ -20,8 +20,8 @@ func NewAlertRepository(db *sql.DB) *AlertRepository {
 
 func (r *AlertRepository) Create(alert *domain.Alert) error {
 	query := `
-		INSERT INTO alerts (id, organization_id, alert_type, severity, title, description, resource_type, resource_id, audit_id, agent_name, source_ip, metadata, is_acknowledged, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO alerts (id, organization_id, alert_type, severity, title, description, resource_type, resource_id, audit_id, agent_name, source_ip, metadata, is_acknowledged, created_at, dedupe_key)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
 	if alert.ID == uuid.Nil {
@@ -49,6 +49,12 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 		sourceIP = &alert.SourceIP
 	}
 
+	// An alert without a dedupe key stores NULL and never coalesces.
+	var dedupeKey *string
+	if alert.DedupeKey != "" {
+		dedupeKey = &alert.DedupeKey
+	}
+
 	_, err = r.db.Exec(query,
 		alert.ID,
 		alert.OrganizationID,
@@ -64,6 +70,7 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 		metadataJSON,
 		alert.IsAcknowledged,
 		alert.CreatedAt,
+		dedupeKey,
 	)
 	return err
 }
@@ -220,6 +227,48 @@ func (r *AlertRepository) Acknowledge(id, userID uuid.UUID) error {
 func (r *AlertRepository) Delete(id uuid.UUID) error {
 	query := `DELETE FROM alerts WHERE id = $1`
 	_, err := r.db.Exec(query, id)
+	return err
+}
+
+// FindOpenByDedupeKey returns the newest unacknowledged alert in orgID with
+// dedupeKey created at or after since, or nil when there is none.
+func (r *AlertRepository) FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*domain.Alert, error) {
+	query := `
+		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		FROM alerts
+		WHERE organization_id = $1 AND dedupe_key = $2 AND is_acknowledged = false AND created_at >= $3
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	rows, err := r.db.Query(query, orgID, dedupeKey, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	alerts, err := r.scanAlerts(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(alerts) == 0 {
+		return nil, nil
+	}
+	alerts[0].DedupeKey = dedupeKey
+	return alerts[0], nil
+}
+
+// IncrementOccurrence counts one more occurrence on an alert and records when
+// it was seen.
+func (r *AlertRepository) IncrementOccurrence(id uuid.UUID, seenAt time.Time) error {
+	query := `
+		UPDATE alerts
+		SET occurrence_count = occurrence_count + 1, last_seen_at = $1
+		WHERE id = $2
+	`
+
+	_, err := r.db.Exec(query, seenAt, id)
 	return err
 }
 

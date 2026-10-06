@@ -190,6 +190,19 @@ func (m *MockAlertRepository) GetUnacknowledgedByResourceID(resourceID uuid.UUID
 	return args.Get(0).([]*domain.Alert), args.Error(1)
 }
 
+func (m *MockAlertRepository) FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*domain.Alert, error) {
+	args := m.Called(orgID, dedupeKey, since)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Alert), args.Error(1)
+}
+
+func (m *MockAlertRepository) IncrementOccurrence(id uuid.UUID, seenAt time.Time) error {
+	args := m.Called(id, seenAt)
+	return args.Error(0)
+}
+
 func (m *MockAlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status string, limit, offset int) ([]*domain.Alert, error) {
 	args := m.Called(orgID, status, limit, offset)
 	if args.Get(0) == nil {

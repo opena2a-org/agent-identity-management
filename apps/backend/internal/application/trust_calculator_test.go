@@ -406,6 +406,19 @@ func (m *TrustCalcMockAlertRepository) GetUnacknowledgedByResourceID(resourceID 
 	return args.Get(0).([]*domain.Alert), args.Error(1)
 }
 
+func (m *TrustCalcMockAlertRepository) FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*domain.Alert, error) {
+	args := m.Called(orgID, dedupeKey, since)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Alert), args.Error(1)
+}
+
+func (m *TrustCalcMockAlertRepository) IncrementOccurrence(id uuid.UUID, seenAt time.Time) error {
+	args := m.Called(id, seenAt)
+	return args.Error(0)
+}
+
 func (m *TrustCalcMockAlertRepository) Acknowledge(id, userID uuid.UUID) error {
 	args := m.Called(id, userID)
 	return args.Error(0)
