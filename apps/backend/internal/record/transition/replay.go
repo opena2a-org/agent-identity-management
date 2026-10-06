@@ -54,8 +54,10 @@ type Replayed struct {
 // each agent's state from its authorization_transition records alone. An
 // agent's first record opens its history; each later record's
 // previous_state must equal the new_state before it, or Replay returns a
-// *ContinuityError. A chain that does not verify, or a transition whose
-// tenant part has been erased, is an error.
+// *ContinuityError. A registration's previous_state is null, and a
+// registration that is not the agent's first record is a *ContinuityError.
+// A chain that does not verify, a transition whose tenant part has been
+// erased, and a null previous_state on any other trigger are errors.
 func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key record.PublicKey) (Replayed, error) {
 	status, err := store.ReadChainState(ctx, q, organizationID.String())
 	if err != nil {
@@ -104,11 +106,12 @@ func Replay(ctx context.Context, q store.Querier, organizationID uuid.UUID, key 
 			return Replayed{}, fmt.Errorf("transition: the record at seq %d names another organization", seq)
 		}
 		agentID, err := uuid.Parse(tenant.Opena2a.SubjectAgentID)
-		if err != nil || tenant.PreviousState == nil || tenant.NewState == nil {
-			return Replayed{}, fmt.Errorf("transition: the record at seq %d has no agent or no states", seq)
+		opens := Trigger(head.Trigger.Type).opens()
+		if err != nil || tenant.NewState == nil || (tenant.PreviousState == nil) != opens {
+			return Replayed{}, fmt.Errorf("transition: the record at seq %d has no agent, no new_state, or a previous_state its trigger does not take", seq)
 		}
 		if seqs := out.Seqs[agentID]; len(seqs) > 0 &&
-			!Equal(out.States[agentID], tenant.PreviousState.state()) {
+			(opens || !Equal(out.States[agentID], tenant.PreviousState.state())) {
 			return Replayed{}, &ContinuityError{AgentID: agentID, Seq: seq, PreviousSeq: seqs[len(seqs)-1]}
 		}
 		out.States[agentID] = tenant.NewState.state()

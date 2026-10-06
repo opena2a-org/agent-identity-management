@@ -23,9 +23,16 @@
 // retained part; the trace, the organization, the agent and both states in
 // the tenant part; the actor in the personal part.
 //
-// A rejected capability request is a null transition: its record carries
-// opena2a.outcome "rejected" in the retained part, and the recorder refuses
-// the change when its previous and new states differ.
+// A registration opens an agent's history: the agent has no state before it,
+// so its record's previous_state is null, and replay accepts a null
+// previous_state only on an agent's first record.
+//
+// A pending capability request and a rejected one are null transitions: the
+// recorder refuses either when its previous and new states differ. A
+// rejection's record carries opena2a.outcome "rejected" in the retained part.
+// A pending request's record takes an event id derived from the request's id
+// (RequestEventID), so the decision on the request finds it and names it as
+// its parent_id, in the request's trace.
 //
 // The class of a trigger decides what a failed record write does. An
 // expansion or a destruction is refused whole: no record and no change, and
@@ -36,10 +43,9 @@
 //
 // Not built here: the debt row that lets such a record be written late and
 // its settlement, the opening_state record and its sweep, and the records of
-// a registration (whose agent has no state before it), a pending capability
-// request, a talks_to change, an agent's deletion, a hybrid mode change, a
-// compromise suspension and the key the service generates for an agent that
-// signs through it.
+// a talks_to change, an agent's deletion, a hybrid mode change, a compromise
+// suspension and the key the service generates for an agent that signs
+// through it.
 package transition
 
 import (
@@ -121,12 +127,24 @@ func (t Trigger) Class() (store.Class, bool) {
 	return c, ok
 }
 
+// opens reports whether a trigger opens the agent's history: the agent has
+// no row before the change, and the record's previous_state is null.
+func (t Trigger) opens() bool {
+	return t == TriggerRegistrationBaseline
+}
+
+// null reports whether a trigger records an act that leaves the agent's
+// state as it was: a pending capability request, or a rejected one.
+func (t Trigger) null() bool {
+	return t == TriggerCapabilityRequested || t == TriggerRequestRejected
+}
+
 // OutcomeRejected is opena2a.outcome of a request_rejected record.
 const OutcomeRejected = "rejected"
 
 // outcome is opena2a.outcome of a trigger's record: OutcomeRejected for a
-// null transition, which records a decision that left the agent's state as
-// it was, and "" for every other trigger, whose record carries no outcome.
+// rejection, which records a decision that left the agent's state as it was,
+// and "" for every other trigger, whose record carries no outcome.
 func (t Trigger) outcome() string {
 	if t == TriggerRequestRejected {
 		return OutcomeRejected

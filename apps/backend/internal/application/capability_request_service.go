@@ -89,6 +89,9 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 	if isMonitoringMode && s.transitions != nil {
 		return s.autoApprove(ctx, agent, request)
 	}
+	if s.transitions != nil {
+		return s.filePending(ctx, agent, request)
+	}
 
 	if err := s.requestRepo.Create(request); err != nil {
 		return nil, fmt.Errorf("failed to create capability request: %w", err)
@@ -154,6 +157,30 @@ func (s *CapabilityRequestService) autoApprove(ctx context.Context, agent *domai
 	return request, nil
 }
 
+// filePending creates request as pending, in one transaction with its
+// capability_requested record, which leaves the agent's state as it was. The
+// record's event id is derived from the request's id, so the decision on the
+// request names it as its parent. The actor is the one the context names,
+// else the requesting user.
+func (s *CapabilityRequestService) filePending(ctx context.Context, agent *domain.Agent, request *domain.CapabilityRequest) (*domain.CapabilityRequest, error) {
+	request.ID = uuid.New()
+	err := recordChange(ctx, s.transitions, transition.Change{
+		OrganizationID: agent.OrganizationID,
+		AgentID:        agent.ID,
+		Trigger:        transition.TriggerCapabilityRequested,
+		EventID:        transition.RequestEventID(request.ID),
+		Apply: func(ctx context.Context, tx *sql.Tx) error {
+			return repository.CreateCapabilityRequestTx(ctx, tx, request)
+		},
+	}, requesterActor(request.RequestedBy))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create capability request: %w", err)
+	}
+	fmt.Printf("✅ Capability request created: agent=%s, capability=%s, reason=%s\n",
+		agent.Name, request.CapabilityType, request.Reason)
+	return request, nil
+}
+
 // requesterActor is the user who asked for a capability, or the system when
 // the request names none.
 func requesterActor(requester uuid.UUID) transition.Actor {
@@ -165,7 +192,10 @@ func requesterActor(requester uuid.UUID) transition.Actor {
 
 // decideRequest moves a pending request to status, and runs grant (when set)
 // in the same transaction, together with the decision's record. The actor is
-// the reviewer.
+// the reviewer. When the request has a capability_requested record, the
+// decision's record names it as its parent and joins its trace. An approval
+// whose request's record cannot be read is refused; a rejection narrows
+// nothing, so it is never held back by that read and goes without the link.
 func (s *CapabilityRequestService) decideRequest(
 	ctx context.Context,
 	request *domain.CapabilityRequestWithDetails,
@@ -178,9 +208,11 @@ func (s *CapabilityRequestService) decideRequest(
 	if err != nil {
 		return fmt.Errorf("agent not found: %w", err)
 	}
-	return recordAgentChange(transition.WithActor(ctx, transition.User(reviewerID)), s.transitions, agent, trigger,
-		transition.User(reviewerID),
-		func(ctx context.Context, tx *sql.Tx) error {
+	change := transition.Change{
+		OrganizationID: agent.OrganizationID,
+		AgentID:        agent.ID,
+		Trigger:        trigger,
+		Apply: func(ctx context.Context, tx *sql.Tx) error {
 			if err := repository.DecideCapabilityRequestTx(ctx, tx, request.ID, status, reviewerID); err != nil {
 				return err
 			}
@@ -188,7 +220,20 @@ func (s *CapabilityRequestService) decideRequest(
 				return nil
 			}
 			return repository.CreateCapabilityTx(ctx, tx, grant)
-		})
+		},
+	}
+	parent, found, err := s.transitions.RequestParent(ctx, agent.OrganizationID, agent.ID, request.ID)
+	switch {
+	case err != nil && trigger != transition.TriggerRequestRejected:
+		return fmt.Errorf("%w (%s): %w", transition.ErrRecordUnavailable, trigger, err)
+	case err != nil:
+		fmt.Printf("Warning: capability request %s: the rejection is recorded without a link to the request's record: %v\n",
+			request.ID, err)
+	case found:
+		change.ParentID, change.TraceID = parent.EventID, parent.TraceID
+	}
+	return recordChange(transition.WithActor(ctx, transition.User(reviewerID)), s.transitions, change,
+		transition.User(reviewerID))
 }
 
 // ListRequests lists capability requests with optional filtering

@@ -57,17 +57,14 @@ func NewAgentRepository(db *sql.DB) *AgentRepository {
 
 // Create creates a new agent
 func (r *AgentRepository) Create(agent *domain.Agent) error {
-	query := `
-		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
-		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
-		                    trust_score, talks_to, capabilities, metadata,
-		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
-		                    pqc_public_key, pqc_key_algorithm, hybrid_mode_enabled, pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
-		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id,
-		                    declared_purpose)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37)
-	`
+	PrepareNewAgent(agent)
+	return insertAgent(context.Background(), r.db, agent)
+}
 
+// PrepareNewAgent gives a new agent its id, its creation times and the
+// defaults Create stores for a trust score, a status and a key algorithm left
+// unset.
+func PrepareNewAgent(agent *domain.Agent) {
 	now := time.Now()
 	// Keep an ID the caller assigned: a server-generated private key is
 	// encrypted bound to the row's ID before the row is inserted.
@@ -85,6 +82,24 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 	if agent.KeyAlgorithm == "" {
 		agent.KeyAlgorithm = "Ed25519" // Default algorithm
 	}
+}
+
+// InsertAgentTx stores an agent PrepareNewAgent prepared, in tx.
+func InsertAgentTx(ctx context.Context, tx *sql.Tx, agent *domain.Agent) error {
+	return insertAgent(ctx, tx, agent)
+}
+
+func insertAgent(ctx context.Context, db execer, agent *domain.Agent) error {
+	query := `
+		INSERT INTO agents (id, organization_id, name, display_name, description, agent_type, status, version,
+		                    public_key, encrypted_private_key, key_algorithm, certificate_url, repository_url, documentation_url,
+		                    trust_score, talks_to, capabilities, metadata,
+		                    key_created_at, key_expires_at, key_rotation_grace_until, previous_public_key, rotation_count,
+		                    pqc_public_key, pqc_key_algorithm, hybrid_mode_enabled, pqc_key_created_at, pqc_key_expires_at, previous_pqc_public_key,
+		                    created_at, updated_at, created_by, created_by_name, created_by_email, created_by_sdk_token_id, created_by_api_key_id,
+		                    declared_purpose, verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
+	`
 
 	// Marshal talks_to to JSONB
 	talksToJSON, err := json.Marshal(agent.TalksTo)
@@ -117,7 +132,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		declaredPurposeParam = declaredPurposeJSON
 	}
 
-	_, err = r.db.Exec(query,
+	_, err = db.ExecContext(ctx, query,
 		agent.ID,
 		agent.OrganizationID,
 		agent.Name,
@@ -155,6 +170,7 @@ func (r *AgentRepository) Create(agent *domain.Agent) error {
 		agent.CreatedBySDKTokenID,
 		agent.CreatedByAPIKeyID,
 		declaredPurposeParam,
+		agent.VerifiedAt,
 	)
 
 	return err

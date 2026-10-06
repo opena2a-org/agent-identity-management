@@ -79,6 +79,10 @@ type Change struct {
 	// ParentID, when set, is parent_id: the event id of the record that
 	// caused this change.
 	ParentID string
+	// EventID, when set, is the record's event_id; otherwise the recorder
+	// mints a random one. A pending capability request's record takes
+	// RequestEventID of the request.
+	EventID string
 	// Apply makes the change in tx, after the agent's row is locked and its
 	// previous state read. It runs statements only.
 	Apply func(ctx context.Context, tx *sql.Tx) error
@@ -86,6 +90,7 @@ type Change struct {
 
 // Result is what a change left.
 type Result struct {
+	// Previous is zero for a registration, whose agent had no state.
 	Previous, New State
 	// Recorded is false for a reduction that committed without its record.
 	Recorded bool
@@ -112,9 +117,11 @@ func (r *Recorder) Record(ctx context.Context, c Change) (Result, error) {
 		return err
 	}
 	// The states are read in Apply, before the append lock; the guard only
-	// places them in the tenant part.
+	// places them in the tenant part. A registration has no previous state.
 	guard := func(_ context.Context, _ time.Time, _ *store.Probe, d *record.Draft) (*store.Stored, error) {
-		d.Tenant["previous_state"] = prev.member()
+		if !c.Trigger.opens() {
+			d.Tenant["previous_state"] = prev.member()
+		}
 		d.Tenant["new_state"] = next.member()
 		return nil, nil
 	}
@@ -163,6 +170,8 @@ func (r *Recorder) check(c Change) (store.Class, error) {
 		return "", fmt.Errorf("%w: trace_id is not 32 lowercase hex characters other than all zeros", ErrInvalidChange)
 	case c.ParentID != "" && !isCanonicalUUID(c.ParentID):
 		return "", fmt.Errorf("%w: parent_id is not a lowercase hyphenated UUID", ErrInvalidChange)
+	case c.EventID != "" && !isCanonicalUUID(c.EventID):
+		return "", fmt.Errorf("%w: event_id is not a lowercase hyphenated UUID", ErrInvalidChange)
 	case c.Apply == nil:
 		return "", fmt.Errorf("%w: the change has no statement", ErrInvalidChange)
 	}
@@ -176,6 +185,10 @@ func (r *Recorder) draft(c Change) record.Draft {
 	if c.ParentID != "" {
 		origin, parent = "parent", c.ParentID
 	}
+	eventID := c.EventID
+	if eventID == "" {
+		eventID = uuid.NewString()
+	}
 	retained := map[string]any{
 		"issuer":         r.issuer,
 		"writer_version": WriterVersion,
@@ -187,7 +200,7 @@ func (r *Recorder) draft(c Change) record.Draft {
 		retained["outcome"] = o
 	}
 	return record.Draft{
-		EventID: uuid.NewString(),
+		EventID: eventID,
 		Type:    RecordType,
 		Retained: map[string]any{
 			"trigger": map[string]any{"type": string(c.Trigger)},
@@ -208,10 +221,20 @@ func (r *Recorder) draft(c Change) record.Draft {
 }
 
 // change locks the agent, reads its state, makes the change and reads the
-// state again, all in tx. A null transition whose statement changed the
-// state is refused, and its transaction rolls back.
+// state again, all in tx. A registration finds no agent before its statement
+// runs and leaves prev zero; one that finds the agent is refused. A null
+// transition whose statement changed the state is refused. A refused
+// change's transaction rolls back.
 func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err error) {
-	if prev, err = readState(ctx, tx, c.OrganizationID, c.AgentID, true); err != nil {
+	if c.Trigger.opens() {
+		_, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false)
+		switch {
+		case err == nil:
+			return State{}, State{}, fmt.Errorf("%w: %s for an agent that already exists", ErrInvalidChange, c.Trigger)
+		case !errors.Is(err, ErrAgentNotFound):
+			return State{}, State{}, err
+		}
+	} else if prev, err = readState(ctx, tx, c.OrganizationID, c.AgentID, true); err != nil {
 		return State{}, State{}, err
 	}
 	if err = c.Apply(ctx, tx); err != nil {
@@ -220,7 +243,7 @@ func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err er
 	if next, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false); err != nil {
 		return State{}, State{}, err
 	}
-	if c.Trigger.outcome() != "" && !Equal(prev, next) {
+	if c.Trigger.null() && !Equal(prev, next) {
 		return State{}, State{}, fmt.Errorf("%w: %s changed the agent's authorization state", ErrInvalidChange, c.Trigger)
 	}
 	return prev, next, nil
