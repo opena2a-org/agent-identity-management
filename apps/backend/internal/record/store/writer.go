@@ -5,10 +5,13 @@
 //
 // A write runs in this order, and the append lock covers only the last part:
 //
-//  1. The draft is completed and serialized once, so a draft that cannot be
-//     canonicalized fails before anything waits.
+//  1. The draft is completed and serialized once, and its trace members are
+//     checked, so a draft that cannot be canonicalized or that has no place
+//     in a trace fails before anything waits.
 //  2. The write takes one of its chain's connection slots in this process,
-//     opens a transaction and runs the caller's state change.
+//     opens a transaction, checks that a record with a parent names a record
+//     of the organization's chain in its own trace, and runs the caller's
+//     state change.
 //  3. It takes the append lock by locking the chain's record_chains row.
 //     From here every statement runs under StatementTimeout.
 //  4. It reads the chain state, runs the caller's guard, signs the record,
@@ -56,6 +59,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -118,6 +122,10 @@ const (
 	ReasonSigner Reason = "signer"
 	// ReasonCanonical: the draft cannot be serialized as a record.
 	ReasonCanonical Reason = "canonical"
+	// ReasonTrace: the draft has no valid trace_id or parent reference, or
+	// its parent is not a record of the organization's chain in the same
+	// trace.
+	ReasonTrace Reason = "trace"
 	// ReasonConstraint: the database refused the append on an integrity
 	// constraint.
 	ReasonConstraint Reason = "constraint"
@@ -133,7 +141,7 @@ const (
 )
 
 var reasons = []Reason{
-	ReasonLockTimeout, ReasonChainHead, ReasonSigner, ReasonCanonical, ReasonConstraint,
+	ReasonLockTimeout, ReasonChainHead, ReasonSigner, ReasonCanonical, ReasonTrace, ReasonConstraint,
 	ReasonGuard, ReasonChainGuardProbe, ReasonDatabase, ReasonOther,
 }
 
@@ -165,7 +173,7 @@ func (e *WriteError) Unwrap() error { return e.err }
 // computed before the lock; it may not change the draft's event id, type or
 // timestamp. It reads the chain only through probe. It ends the write without
 // an append by returning a record the probe read; it refuses the write by
-// returning an error.
+// returning an error. It may not change the draft's trace members.
 type Guard func(ctx context.Context, timestamp time.Time, probe *Probe, draft *record.Draft) (*Stored, error)
 
 // Write is one record write.
@@ -174,6 +182,8 @@ type Write struct {
 	OrganizationID string
 	// Draft is the record. A zero Timestamp is set to the writer's clock
 	// before the lock. A part with members and no salt gets a random salt.
+	// Its trace members are set by trace.Stamp; a draft trace.Check refuses
+	// is refused with reason trace.
 	Draft record.Draft
 	// Apply, when set, runs the state change the record accompanies, in the
 	// write's transaction and before the append lock. It runs statements
@@ -190,6 +200,9 @@ type Appended struct {
 	Seq        int64
 	EventID    string
 	RecordHash string
+	// TraceID is the trace_id of the record written. It is empty when
+	// Existing is true.
+	TraceID string
 	// Existing is true when the guard ended the write with a record already
 	// in the chain, and nothing was appended.
 	Existing bool
@@ -212,6 +225,12 @@ type Debt struct {
 	ID string
 	// Reason is why the record could not be appended.
 	Reason Reason
+}
+
+// AsParent names the record written as the parent of a later record of its
+// trace.
+func (a Appended) AsParent() *trace.Parent {
+	return &trace.Parent{EventID: a.EventID, TraceID: a.TraceID}
 }
 
 // Config configures a Writer.
@@ -310,7 +329,18 @@ const (
 	setLockTimeoutQuery      = `SELECT set_config('lock_timeout', $1, true)`
 	setStatementTimeoutQuery = `SELECT set_config('statement_timeout', $1, true)`
 	lockChainQuery           = `SELECT id FROM record_chains WHERE organization_id = $1 FOR UPDATE`
-	appendQuery              = `
+	// parentQuery reads a parent's tenant part from the organization's
+	// chain. A record is never changed once appended, so it runs before the
+	// append lock.
+	parentQuery = `SELECT r.tenant_part
+  FROM record_chains c
+  JOIN audit_records r ON r.chain_id = c.id
+ WHERE c.organization_id = $1 AND r.event_id = $2`
+	startChainQuery = `INSERT INTO record_chains (id, organization_id, key_id, head_seq, head_hash)
+VALUES ($1, $2, $3, $4, $5)`
+	// appendQuery is the one statement that inserts a record. It moves the
+	// chain's head from the record's predecessor ($15) to the record.
+	appendQuery = `
 WITH appended AS (
     INSERT INTO audit_records (chain_id, seq, event_id, record_type, recorded_at, record_hash,
                                payload_type, payload, key_id, signature,
@@ -412,6 +442,10 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 	if _, err := record.NewRecord(placeholderHead, d); err != nil {
 		return Appended{}, ReasonCanonical, err
 	}
+	link, err := trace.Check(d)
+	if err != nil {
+		return Appended{}, ReasonTrace, err
+	}
 	var owed *debt
 	if req.Class == ClassReduction {
 		row, err := debtFromDraft(req.OrganizationID, d)
@@ -427,7 +461,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 	if err != nil {
 		w.observeWait(time.Since(waitStart))
 		if owed != nil {
-			return w.commitDebtOnly(ctx, req, *owed, err)
+			return w.commitDebtOnly(ctx, req, link, *owed, err)
 		}
 		return Appended{}, ReasonLockTimeout, err
 	}
@@ -447,6 +481,11 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 		millis(time.Until(deadline)), millis(IdleInTransactionTimeout)); err != nil {
 		return Appended{}, ReasonDatabase, err
 	}
+	if link.ParentID != "" {
+		if reason, err := checkParent(ctx, tx, req.OrganizationID, link); reason != "" {
+			return Appended{}, reason, err
+		}
+	}
 	if req.Apply != nil {
 		if err := req.Apply(ctx, tx); err != nil {
 			return Appended{}, "", err
@@ -464,6 +503,9 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 			return Appended{}, ReasonDatabase, err
 		}
 		committed = true
+		if !out.Existing && !out.Unchained {
+			out.TraceID = link.TraceID
+		}
 		return out, "", nil
 	}
 	if owed == nil {
@@ -486,7 +528,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 // of its chain within the lock timeout: it takes one of the chain's debt
 // slots instead, runs the state change and commits it with a debt, without
 // waiting for the append lock.
-func (w *Writer) commitDebtOnly(ctx context.Context, req Write, owed debt, cause error) (Appended, Reason, error) {
+func (w *Writer) commitDebtOnly(ctx context.Context, req Write, link trace.Link, owed debt, cause error) (Appended, Reason, error) {
 	release, err := w.takeSlot(ctx, debtSlotKey(req.OrganizationID), time.Now().Add(LockTimeout))
 	if err != nil {
 		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
@@ -505,6 +547,13 @@ func (w *Writer) commitDebtOnly(ctx context.Context, req Write, owed debt, cause
 	if _, err := tx.ExecContext(ctx, setSessionTimeoutsQuery,
 		millis(LockTimeout), millis(IdleInTransactionTimeout)); err != nil {
 		return Appended{}, ReasonLockTimeout, errors.Join(cause, err)
+	}
+	// A record with a parent is owed only when the parent is a record of the
+	// organization's chain in its trace, as on the append path.
+	if link.ParentID != "" {
+		if reason, err := checkParent(ctx, tx, req.OrganizationID, link); reason != "" {
+			return Appended{}, reason, err
+		}
 	}
 	if req.Apply != nil {
 		if err := req.Apply(ctx, tx); err != nil {
@@ -598,6 +647,10 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 	head := record.Head{ChainID: chainID, Seq: status.Head.Seq, Hash: status.Head.Hash}
 
 	if guard != nil {
+		before, err := trace.Check(*d)
+		if err != nil {
+			return Appended{}, ReasonTrace, err
+		}
 		existing, reason, err := runGuard(ctx, guard, tx, chainID, d)
 		if reason != "" {
 			return Appended{}, reason, err
@@ -605,6 +658,9 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 		if existing != nil {
 			return Appended{ChainID: chainID, Seq: existing.Seq, EventID: existing.EventID,
 				RecordHash: existing.RecordHash, Existing: true}, "", nil
+		}
+		if after, err := trace.Check(*d); err != nil || after != before {
+			return Appended{}, ReasonGuard, errors.New("store: the guard changed the record's trace members")
 		}
 	}
 
@@ -639,6 +695,29 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 		return Appended{}, ReasonChainHead, errors.New("store: the head moved under the append lock")
 	}
 	return Appended{ChainID: chainID, Seq: next.Seq, EventID: d.EventID, RecordHash: next.Hash}, "", nil
+}
+
+// checkParent refuses a record whose parent is not a record of the
+// organization's chain, or whose trace_id is not its parent's.
+func checkParent(ctx context.Context, tx *sql.Tx, organizationID string, link trace.Link) (Reason, error) {
+	var tenantPart []byte
+	err := tx.QueryRowContext(ctx, parentQuery, organizationID, link.ParentID).Scan(&tenantPart)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ReasonTrace, errors.New("store: parent_id names no record of the organization's chain")
+	case err != nil:
+		return ReasonDatabase, err
+	case tenantPart == nil:
+		return ReasonTrace, errors.New("store: the parent's tenant part is absent or erased, so its trace cannot be read")
+	}
+	parentTrace, err := trace.TraceIDOfPart(tenantPart)
+	if err != nil {
+		return ReasonTrace, err
+	}
+	if parentTrace != link.TraceID {
+		return ReasonTrace, errors.New("store: the record's trace_id is not its parent's")
+	}
+	return "", nil
 }
 
 // runGuard calls the guard with a probe open only for the call, and checks
@@ -741,7 +820,9 @@ SELECT c.conrelid::regclass::text || '.' || c.conname
 
 // Start writes the genesis of the organization's chain. The genesis names the
 // writer's key as the chain's first key and pins every row of audit_logs and
-// verification_events the organization has by table, id and timestamp.
+// verification_events the organization has by table, id and timestamp. It is
+// the first record of its trace: the trace ctx carries, or, when ctx carries
+// none, a trace minted for the start alone.
 //
 // It refuses with *PreChainError while CascadingForeignKeys names any foreign
 // key, and with ErrChainStarted when the organization already has a chain.
@@ -783,11 +864,27 @@ func (w *Writer) start(ctx context.Context, organizationID string) (Appended, er
 	}
 	chainID, eventID := uuid.NewString(), uuid.NewString()
 	timestamp := w.now().UTC().Truncate(time.Microsecond)
+	d := record.Draft{EventID: eventID, Type: record.TypeChainGenesis, Timestamp: timestamp}
+	if _, traced := trace.From(ctx); !traced {
+		if ctx, err = trace.Begin(ctx); err != nil {
+			return Appended{}, err
+		}
+	}
+	if err := trace.Stamp(ctx, &d, nil); err != nil {
+		return Appended{}, err
+	}
+	link, err := trace.Check(d)
+	if err != nil {
+		return Appended{}, err
+	}
+	if err := addSalts(&d); err != nil {
+		return Appended{}, err
+	}
 	body, err := record.NewGenesis(record.Genesis{
 		ChainID:    chainID,
 		FirstKey:   w.key,
 		PreGenesis: pre,
-		Draft:      record.Draft{EventID: eventID, Timestamp: timestamp},
+		Draft:      d,
 	})
 	if err != nil {
 		return Appended{}, err
@@ -801,28 +898,32 @@ func (w *Writer) start(ctx context.Context, organizationID string) (Appended, er
 		return Appended{}, err
 	}
 	head := body.Head()
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO record_chains (id, organization_id, key_id, head_seq, head_hash)
-VALUES ($1, $2, $3, $4, $5)`, chainID, organizationID, w.key.KeyID(), head.Seq, head.Hash); err != nil {
+	if _, err := tx.ExecContext(ctx, startChainQuery, chainID, organizationID, w.key.KeyID(), head.Seq, head.Hash); err != nil {
 		if pqCode(err) == "23505" {
 			return Appended{}, ErrChainStarted
 		}
 		return Appended{}, fmt.Errorf("store: start chain: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO audit_records (chain_id, seq, event_id, record_type, recorded_at, record_hash,
-                           payload_type, payload, key_id, signature)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		chainID, head.Seq, eventID, record.TypeChainGenesis, timestamp,
-		head.Hash, rec.Envelope.PayloadType, body.Canonical(), rec.Envelope.Signatures[0].KeyID, signature); err != nil {
+	// The chain row already names the genesis as its head, so the append
+	// moves the head from the genesis to itself.
+	res, err := tx.ExecContext(ctx, appendQuery,
+		chainID, head.Seq, eventID, record.TypeChainGenesis, timestamp, head.Hash,
+		rec.Envelope.PayloadType, body.Canonical(), rec.Envelope.Signatures[0].KeyID, signature,
+		nullable(rec.TenantPart), nullable(rec.TenantSalt), nullable(rec.PersonalPart), nullable(rec.PersonalSalt),
+		head.Seq)
+	if err != nil {
 		return Appended{}, fmt.Errorf("store: start chain: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n != 1 {
+		return Appended{}, errors.New("store: start chain: the genesis did not become the chain's head")
 	}
 	if err := tx.Commit(); err != nil {
 		return Appended{}, fmt.Errorf("store: start chain: %w", err)
 	}
 	// A chain has started: the deployment is not pre-chain again.
 	w.preChain.Store(false)
-	return Appended{ChainID: chainID, Seq: head.Seq, EventID: eventID, RecordHash: head.Hash}, nil
+	return Appended{ChainID: chainID, Seq: head.Seq, EventID: eventID, RecordHash: head.Hash,
+		TraceID: link.TraceID}, nil
 }
 
 // preGenesisRows reads, in one snapshot, every row the organization has in
