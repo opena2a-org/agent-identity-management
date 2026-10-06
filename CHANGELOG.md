@@ -20,6 +20,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   it was the client or remote agent of (with their messages), the A2A messages it sent, and the
   A2A consent records that name it as grantor or recipient. An A2A attestation between two other
   agents that cited one of those tasks is kept, with its task link cleared.
+- When a delete still fails, `DELETE /api/v1/agents/:id` no longer answers with the database's
+  own error text (for the case above, a foreign-key message naming tables and constraints). Its
+  `error` now reads "The agent was not deleted and nothing was removed. Try again, and if it fails
+  again, contact your administrator." The cause is written to the server log with the agent and
+  organization IDs. The status stays 500.
 
 ### Fixed — the SDK authentication guide no longer says quantum attacks cannot break Ed25519
 
