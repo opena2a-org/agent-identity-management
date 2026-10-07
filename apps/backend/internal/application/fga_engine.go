@@ -43,17 +43,20 @@ const (
 	fgaAsyncQueueSize = 64
 )
 
-// asyncIntentJob is one queued MEDIUM-risk intent check. ctx carries the
-// fga.authorize parent span, detached from the request lifetime so the
-// worker isn't cancelled when the caller returns.
+// asyncIntentJob is one queued HIGH- or MEDIUM-risk intent check. ctx carries
+// the fga.authorize parent span, detached from the request lifetime so the
+// worker isn't cancelled when the caller returns. riskTier is the policy risk
+// level that dispatched the check, recorded on fga.intent_checks.
 type asyncIntentJob struct {
-	ctx context.Context
-	req *FGARequest
+	ctx      context.Context
+	req      *FGARequest
+	riskTier string
 }
 
 // FGAEngine implements the 5-step Fine-Grained Authorization flow.
 // Steps 1-4 must complete in < 10ms P99 (no external calls).
-// Step 5 (NanoMind intent check) adds < 800ms for HIGH risk, async for MEDIUM, skip for LOW.
+// Step 5 (NanoMind intent check) runs async for HIGH and MEDIUM risk and is
+// skipped for LOW. It records the daemon's classification and never denies.
 type FGAEngine struct {
 	db             *sql.DB
 	agentSvc       *AgentService
@@ -98,7 +101,7 @@ type FGARequest struct {
 // FGAResult represents the authorization decision.
 type FGAResult struct {
 	Allowed        bool                `json:"allowed"`
-	Outcome        string              `json:"outcome"`            // ALLOW, DENY, DENY_INTENT, DENY_CONTEXT, DENY_CHAIN, DENY_ATTRIBUTE
+	Outcome        string              `json:"outcome"`            // ALLOW, DENY, DENY_CONTEXT, DENY_CHAIN, DENY_ATTRIBUTE
 	StepsTriggered []string            `json:"stepsTriggered"`     // which steps evaluated
 	DeniedBy       string              `json:"deniedBy,omitempty"` // which step denied
 	DeniedReason   string              `json:"deniedReason,omitempty"`
@@ -148,12 +151,15 @@ const contextUnavailableReason = "ASC summary unavailable"
 
 // IntentCheckResult contains NanoMind daemon intent verification results.
 //
+// Step 5 does not deny on this result at any confidence: the classifier is
+// not admitted to a judging role, so Blocked is always false and the result
+// feeds only the fga.intent_checks counter. It is not attached to FGAResult.
+//
 // Status records why Step 5 reached the verdict it did, so the silent
 // fail-open in #131 becomes observable. As of @nanomind/daemon 0.4.0 (Stage 1)
 // the daemon emits an explicit `classification` field that drives this:
 //   - "classified": the daemon produced a usable verdict — a confident benign
-//     (attackClass "") OR a non-empty attack class. Step 5 blocks only on the
-//     latter, above the confidence threshold.
+//     (attackClass "") OR a non-empty attack class.
 //   - "abstain": the daemon ran but could not produce a usable verdict (its
 //     classification was "abstain", or — for a pre-0.4.0 daemon — it returned an
 //     empty attack class, the legacy fallback). Action proceeds; the abstain is
@@ -175,13 +181,6 @@ const (
 	intentStatusAbstain    = "abstain"
 	intentStatusFailOpen   = "fail_open"
 )
-
-// intentBlockConfidence is the minimum daemon confidence (strictly greater) for
-// a non-empty attack class to block in Step 5. The @nanomind/daemon v0.5.0
-// classifier saturates confidence near 1.0, so 0.8 is effectively binary today;
-// the daemon README recommends 0.95. Raising it is a calibration call owned by
-// CDS/CA and is tracked as a separate follow-up, not changed here.
-const intentBlockConfidence = 0.8
 
 // FGAPolicy represents a stored FGA policy.
 type FGAPolicy struct {
@@ -366,7 +365,7 @@ func (e *FGAEngine) runAsyncWorker(job asyncIntentJob) {
 			attribute.String("fga.step", "intent_check_async"),
 		),
 	)
-	e.checkIntentAsync(workerCtx, job.req)
+	e.checkIntentAsync(workerCtx, job.req, job.riskTier)
 	workerSpan.End()
 }
 
@@ -641,34 +640,11 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		return result, nil
 	}
 
-	// Step 5: Intent Check (< 800ms for HIGH, async for MEDIUM, skip for LOW)
-	if policy.RiskLevel == "HIGH" {
-		result.StepsTriggered = append(result.StepsTriggered, "intent_check_sync")
-		intentCtx, intentSpan := e.tracer.Start(ctx, "fga.intent_check_sync",
-			trace.WithAttributes(attribute.String("fga.step", "intent_check_sync")),
-		)
-		intentResult := e.checkIntentSync(intentCtx, req)
-		result.IntentCheck = intentResult
-		e.recordIntentCheck(intentCtx, "HIGH", "sync", intentResult)
-		if intentResult != nil {
-			intentSpan.SetAttributes(
-				attribute.String("fga.intent_class", intentResult.IntentClass),
-				attribute.Float64("fga.intent_confidence", intentResult.Confidence),
-				attribute.Bool("fga.allowed", !intentResult.Blocked),
-			)
-		}
-		if intentResult != nil && intentResult.Blocked {
-			intentSpan.SetStatus(codes.Error, "intent blocked")
-			intentSpan.End()
-			result.Outcome = "DENY_INTENT"
-			result.DeniedBy = "intent_check"
-			result.DeniedReason = fmt.Sprintf("Intent classified as %s (confidence %.2f)", intentResult.IntentClass, intentResult.Confidence)
-			result.LatencyMs = time.Since(start).Milliseconds()
-			e.recordAttestation(ctx, req, result)
-			return result, nil
-		}
-		intentSpan.End()
-	} else if policy.RiskLevel == "MEDIUM" {
+	// Step 5: Intent Check (async for HIGH and MEDIUM, skip for LOW). The
+	// classifier is observed, never obeyed: no tier denies on its verdict, so
+	// HIGH takes the same detached path as MEDIUM and the authorize latency
+	// carries no daemon call.
+	if policy.RiskLevel == "HIGH" || policy.RiskLevel == "MEDIUM" {
 		result.StepsTriggered = append(result.StepsTriggered, "intent_check_async")
 		// Span only marks the dispatch; the async check itself is detached.
 		_, asyncSpan := e.tracer.Start(ctx, "fga.intent_check_async",
@@ -699,7 +675,7 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 			e.recordAsyncDrop(ctx, asyncSpan, req, "shutdown")
 		default:
 			select {
-			case e.asyncQueue <- asyncIntentJob{ctx: detached, req: req}:
+			case e.asyncQueue <- asyncIntentJob{ctx: detached, req: req, riskTier: policy.RiskLevel}:
 				asyncSpan.SetAttributes(attribute.Bool("fga.dispatched", true))
 			default:
 				e.recordAsyncDrop(ctx, asyncSpan, req, "queue_full")
@@ -1160,29 +1136,14 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	// Step 5 status. This is the #131 Stage 1 fix: a confident benign
 	// ("classified", attackClass "") is now distinguishable from "model couldn't
 	// answer" ("abstain", attackClass ""), which previously both read as abstain.
-	//
-	// Evidence beats label: a concrete attack class above the block threshold
-	// blocks regardless of the classification label. A well-behaved 0.4.0 daemon
-	// forces attackClass="" whenever it abstains, so this only matters for a
-	// buggy / downgraded / mixed-version daemon that sends a self-contradictory
-	// response (classification:"abstain" carrying a live attackClass) — there we
-	// fail closed rather than dropping the attack evidence, which also keeps this
-	// from being a weakening vs the pre-#131 criterion. It mirrors the 500-path
-	// "status wins" defense, applied here to the 2xx body.
-	blocked := inferResp.AttackClass != "" && inferResp.Confidence > intentBlockConfidence
-
+	// The status is telemetry only; no status or attack class blocks.
 	var status string
 	switch {
-	case blocked:
-		// A usable, blocking verdict is always classified, whatever the label says.
-		status = intentStatusClassified
 	case inferResp.Classification == intentStatusClassified:
-		// A usable verdict that does not block — a confident benign, or a
-		// non-empty class below the threshold.
+		// A usable verdict — a confident benign or a non-empty attack class.
 		status = intentStatusClassified
 	case inferResp.Classification == intentStatusAbstain:
-		// The model could not produce a usable verdict (and carried no blocking
-		// attack class, per the blocked check above).
+		// The model could not produce a usable verdict.
 		status = intentStatusAbstain
 	default:
 		// Pre-0.4.0 daemon (no classification field, or JSON null): fall back to
@@ -1198,15 +1159,15 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	return &IntentCheckResult{
 		IntentClass: inferResp.AttackClass,
 		Confidence:  inferResp.Confidence,
-		Blocked:     blocked,
+		Blocked:     false,
 		LatencyMs:   time.Since(start).Milliseconds(),
 		Status:      status,
 	}
 }
 
 // recordIntentCheck emits the fga.intent_checks counter for one Step 5
-// evaluation. mode is "sync" (HIGH) or "async" (MEDIUM); riskTier is the
-// policy risk level that triggered the check. result carries the status set by
+// evaluation. mode is "async" (Step 5 runs detached for HIGH and MEDIUM);
+// riskTier is the policy risk level that triggered the check. result carries the status set by
 // checkIntentSync. Safe to call with a nil result (counted as fail_open) or a
 // nil instrument (no-op).
 func (e *FGAEngine) recordIntentCheck(ctx context.Context, riskTier, mode string, result *IntentCheckResult) {
@@ -1229,18 +1190,11 @@ func (e *FGAEngine) recordIntentCheck(ctx context.Context, riskTier, mode string
 	))
 }
 
-func (e *FGAEngine) checkIntentAsync(ctx context.Context, req *FGARequest) {
-	// Fire-and-forget intent check for MEDIUM risk
+// checkIntentAsync runs one detached Step 5 check for a HIGH or MEDIUM risk
+// request and records it under riskTier. The outcome is counted, never acted on.
+func (e *FGAEngine) checkIntentAsync(ctx context.Context, req *FGARequest, riskTier string) {
 	result := e.checkIntentSync(ctx, req)
-	e.recordIntentCheck(ctx, "MEDIUM", "async", result)
-	if result != nil && result.Blocked {
-		e.logger.Warn("async intent check flagged suspicious activity",
-			"agentId", req.AgentID,
-			"capability", req.Capability,
-			"intentClass", result.IntentClass,
-		)
-		// TODO: Write to ASC activeAlerts, create alert in AIM
-	}
+	e.recordIntentCheck(ctx, riskTier, "async", result)
 }
 
 // ============================================================================
