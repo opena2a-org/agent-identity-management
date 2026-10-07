@@ -34,7 +34,7 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		Action:     "read",
 	}
 
-	t.Run("classified non-empty class is classified and blocks", func(t *testing.T) {
+	t.Run("classified non-empty class is classified and does not block", func(t *testing.T) {
 		srv := stubDaemon(t, map[string]interface{}{
 			"attackClass":    "exfiltration_pattern",
 			"confidence":     0.95,
@@ -44,7 +44,7 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		got := engine.checkIntentSync(context.Background(), req)
 		require.NotNil(t, got)
 		assert.Equal(t, intentStatusClassified, got.Status)
-		assert.True(t, got.Blocked)
+		assert.False(t, got.Blocked)
 	})
 
 	t.Run("classified empty class is a confident benign, not abstain", func(t *testing.T) {
@@ -90,11 +90,9 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		assert.False(t, got.Blocked)
 	})
 
-	t.Run("abstain label with live high-confidence attack fails closed", func(t *testing.T) {
-		// A self-contradictory daemon response (abstain label + live attack
-		// class) must not be silently allowed. Evidence beats label: it blocks
-		// and is recorded as classified. This is the symmetric defense to the
-		// 500-path "status wins" guard, applied to the 2xx body.
+	t.Run("abstain label with high-confidence attack class is abstain", func(t *testing.T) {
+		// A self-contradictory daemon response (abstain label + attack class)
+		// is recorded under its label. Step 5 does not deny on any verdict.
 		srv := stubDaemon(t, map[string]interface{}{
 			"attackClass":    "exfiltration_pattern",
 			"confidence":     0.99,
@@ -103,8 +101,8 @@ func TestCheckIntentSyncStatus(t *testing.T) {
 		engine := &FGAEngine{daemonURL: srv.URL, logger: slog.Default()}
 		got := engine.checkIntentSync(context.Background(), req)
 		require.NotNil(t, got)
-		assert.True(t, got.Blocked, "a live high-confidence attack must block regardless of an abstain label")
-		assert.Equal(t, intentStatusClassified, got.Status)
+		assert.False(t, got.Blocked)
+		assert.Equal(t, intentStatusAbstain, got.Status)
 	})
 
 	t.Run("daemon non-2xx is fail_open not abstain", func(t *testing.T) {

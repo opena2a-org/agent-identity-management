@@ -11,13 +11,12 @@ import (
 )
 
 // TestFGAIntentContract pins the wire contract between the NanoMind daemon's
-// /v1/infer response and FGA Step 5's blocking decision.
+// /v1/infer response and FGA Step 5's recorded result.
 //
 // Per @nanomind/daemon 0.4.0 the daemon emits an explicit `classification`
-// field ("classified" | "abstain") alongside `attackClass`. Per
-// fga_engine.go::checkIntentSync, the FGA blocking criterion is:
-//
-//	blocked := classification == "classified" && attackClass != "" && confidence > 0.8
+// field ("classified" | "abstain") alongside `attackClass`. Step 5 does not
+// deny on the daemon's verdict at any confidence, so every case expects
+// Blocked false; the classification only sets the recorded status.
 //
 // A pre-0.4.0 daemon omits `classification`; the consumer then falls back to the
 // legacy heuristic (empty attackClass == abstain). Both the explicit-field and
@@ -40,13 +39,13 @@ func TestFGAIntentContract(t *testing.T) {
 		wantStatus           string
 	}{
 		{
-			// Case (a): classifier flags a malicious intent at high confidence
-			// with an explicit "classified" — FGA Step 5 must block.
-			name:                 "classified non-empty class with high confidence blocks",
+			// Case (a): classifier names an attack class at high confidence
+			// with an explicit "classified" — recorded as classified, not blocked.
+			name:                 "classified non-empty class with high confidence does not block",
 			daemonAttackClass:    "exfiltration_pattern",
 			daemonConfidence:     0.91,
 			daemonClassification: "classified",
-			wantBlocked:          true,
+			wantBlocked:          false,
 			wantIntentClass:      "exfiltration_pattern",
 			wantConfidence:       0.91,
 			wantStatus:           intentStatusClassified,
@@ -78,8 +77,7 @@ func TestFGAIntentContract(t *testing.T) {
 			wantStatus:           intentStatusAbstain,
 		},
 		{
-			// Case (d): classified but confidence below the 0.8 block threshold
-			// — FGA Step 5 must allow.
+			// Case (d): classified non-empty class at low confidence — allow.
 			name:                 "classified non-empty class with low confidence allows",
 			daemonAttackClass:    "exfiltration_pattern",
 			daemonConfidence:     0.7,
@@ -91,12 +89,12 @@ func TestFGAIntentContract(t *testing.T) {
 		},
 		{
 			// Case (e): legacy daemon (no classification field), non-empty class
-			// at high confidence — the fallback heuristic still blocks.
-			name:                 "legacy daemon non-empty class blocks via fallback",
+			// at high confidence — the fallback heuristic records classified.
+			name:                 "legacy daemon non-empty class is classified via fallback",
 			daemonAttackClass:    "prompt_injection",
 			daemonConfidence:     0.95,
 			daemonClassification: "",
-			wantBlocked:          true,
+			wantBlocked:          false,
 			wantIntentClass:      "prompt_injection",
 			wantConfidence:       0.95,
 			wantStatus:           intentStatusClassified,
@@ -116,28 +114,25 @@ func TestFGAIntentContract(t *testing.T) {
 		},
 		{
 			// Case (g): self-contradictory daemon response — "abstain" label but
-			// a live high-confidence attack class. Evidence beats label: Step 5
-			// fails closed (blocks) rather than dropping the attack. A
-			// well-behaved 0.4.0 daemon never sends this; the guard is for a
-			// buggy / downgraded / mixed-version daemon.
-			name:                 "abstain label with live high-confidence attack fails closed",
+			// a high-confidence attack class. The label sets the status; nothing
+			// blocks. A well-behaved 0.4.0 daemon never sends this.
+			name:                 "abstain label with high-confidence attack class is abstain",
 			daemonAttackClass:    "exfiltration_pattern",
 			daemonConfidence:     0.99,
 			daemonClassification: "abstain",
-			wantBlocked:          true,
+			wantBlocked:          false,
 			wantIntentClass:      "exfiltration_pattern",
 			wantConfidence:       0.99,
-			wantStatus:           intentStatusClassified,
+			wantStatus:           intentStatusAbstain,
 		},
 		{
-			// Case (h): malformed classification value (unknown string) with a
-			// live high-confidence attack class — must fall through to the
-			// fallback and still block, never silently allow a real attack.
-			name:                 "malformed classification with live attack still blocks",
+			// Case (h): malformed classification value (unknown string) with an
+			// attack class — falls through to the legacy fallback.
+			name:                 "malformed classification falls back to the legacy heuristic",
 			daemonAttackClass:    "prompt_injection",
 			daemonConfidence:     0.95,
 			daemonClassification: "CLASSIFIED-typo",
-			wantBlocked:          true,
+			wantBlocked:          false,
 			wantIntentClass:      "prompt_injection",
 			wantConfidence:       0.95,
 			wantStatus:           intentStatusClassified,
