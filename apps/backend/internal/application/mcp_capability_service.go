@@ -61,9 +61,8 @@ func NewMCPCapabilityService(
 	return &MCPCapabilityService{
 		capabilityRepo: capabilityRepo,
 		mcpRepo:        mcpRepo,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second, // 30 second timeout for capability discovery
-		},
+		// The server URL is tenant-supplied: no redirects, and every connection's address is checked.
+		httpClient: utils.NewEgressClient(30 * time.Second), // 30 second timeout for capability discovery
 	}
 }
 
