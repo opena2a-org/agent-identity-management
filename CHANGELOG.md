@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the dashboard's Compliance and Credentials pages have new addresses
+
+- Compliance is at `/dashboard/compliance`. It is still shown to admins only, and
+  `/dashboard/admin/compliance` answers with a 308 redirect to it.
+- API keys and SDK tokens are listed on one page, Developers → Credentials at
+  `/dashboard/credentials`, in one section each (`#api-keys`, `#sdk-tokens`).
+  `/dashboard/api-keys` and `/dashboard/sdk-tokens` answer with a 308 redirect to it, so
+  bookmarks keep working.
+- The links from an agent, an MCP server, an alert or a threat to the API key or SDK token
+  that registered it open that section of the Credentials page and mark the key or token
+  they name (`?highlight=<id>`). The former pages did not mark it.
+
 ### Changed — a newly registered agent's page shows its first-run steps, and the old success URL redirects
 
 - `/dashboard/agents/<id>` shows a first-run panel until the agent makes its first successful

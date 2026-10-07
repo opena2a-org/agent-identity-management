@@ -165,7 +165,7 @@ def main():
 
     # Step 5: Instructions for manual verification
     print("\n5️⃣  Manual Verification Required:")
-    print("   1. Go to http://localhost:3000/dashboard/sdk-tokens")
+    print("   1. Go to Developers → Credentials, SDK tokens: http://localhost:3000/dashboard/credentials#sdk-tokens")
     print("   2. Find the token with ID from the SDK config")
     print(f"   3. Verify 'Usage Count' increased by {success_count}")
     print(f"   4. Verify 'Last Used' shows recent timestamp")

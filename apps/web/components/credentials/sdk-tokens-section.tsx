@@ -38,9 +38,18 @@ import { Textarea } from "@/components/ui/textarea";
 
 /**
  * The SDK tokens section of the Credentials page (app/dashboard/credentials): the tokens
- * issued with SDK downloads, their usage, and the revoke and revoke-all actions.
+ * issued with SDK downloads, their usage, and the revoke and revoke-all actions. The token
+ * whose id is highlightId is marked; onLoaded runs each time a load finishes.
  */
-export function SDKTokensSection({ headingId }: { headingId: string }) {
+export function SDKTokensSection({
+  headingId,
+  highlightId,
+  onLoaded,
+}: {
+  headingId: string;
+  highlightId?: string | null;
+  onLoaded?: () => void;
+}) {
   const [tokens, setTokens] = useState<SDKToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +63,10 @@ export function SDKTokensSection({ headingId }: { headingId: string }) {
   useEffect(() => {
     loadTokens();
   }, [includeRevoked]);
+
+  useEffect(() => {
+    if (!loading) onLoaded?.();
+  }, [loading, onLoaded]);
 
   const loadTokens = async () => {
     try {
@@ -221,10 +234,12 @@ export function SDKTokensSection({ headingId }: { headingId: string }) {
         <div className="space-y-4">
           {(includeRevoked ? tokens : activeTokens).map((token) => {
             const status = getTokenStatus(token);
+            const highlighted = token.id === highlightId;
             return (
               <Card
                 key={token.id}
-                className={token.revokedAt ? "opacity-60" : ""}
+                aria-current={highlighted ? "true" : undefined}
+                className={`${token.revokedAt ? "opacity-60" : ""} ${highlighted ? "ring-2 ring-brand" : ""}`}
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
