@@ -97,7 +97,7 @@ export interface Agent {
   status: "pending" | "verified" | "suspended" | "revoked";
   version: string;
   publicKey?: string | null;    // Ed25519 public key
-  lastActive?: string | null;   // Stamped on the agent's first authenticated call; empty until then
+  lastActive?: string | null;   // Time of the agent's latest successful authenticated call; empty until its first one
   trustScore: number;
   talksTo?: string[];
   capabilities?: any[];
