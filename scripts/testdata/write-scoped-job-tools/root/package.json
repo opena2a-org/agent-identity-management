@@ -1,0 +1,7 @@
+{
+  "name": "write-scoped-job-tools-fixture",
+  "version": "0.0.0",
+  "devDependencies": {
+    "locked-tool": "1.0.0"
+  }
+}

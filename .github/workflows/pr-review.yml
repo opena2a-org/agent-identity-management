@@ -4,8 +4,15 @@ name: PR Review
 # The gate fails CLOSED. There are three verdicts: APPROVE passes,
 # REQUEST_CHANGES fails, INCONCLUSIVE fails. Inconclusive covers a missing key,
 # a non-200, empty content, an unparseable verdict, a missing verdict and a
-# request that does not fit the model's context window. Unknown is a third
-# state and it is not a pass.
+# request that does not fit the model's context window even when split as
+# below. Unknown is a third state and it is not a pass.
+#
+# OVER THE BUDGET, THE REVIEW IS SPLIT, NEVER SKIPPED. A full-file request the
+# action measures over its token budget is not sent. The workflow then sends
+# the same request cut into batches on file boundaries or, when the full-file
+# context cannot be batched, one diff-only request, and the verdict is that
+# review's: every batch is measured against the same budget and has to answer
+# with a verdict bound to its own nonce. See "Plan the over-budget review".
 #
 # THE MODEL CALL IS NOT IN THIS FILE. It lives in a SHA-pinned composite action
 # shared across the org. Three defects were found in this gate and all three
@@ -37,7 +44,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # fetch-depth: 0 is load-bearing, not hygiene: the 406 fallback below
           # builds the diff locally from `origin/$BASE_REF...HEAD`, which needs
@@ -245,12 +252,17 @@ jobs:
           # `sed` here — substituting first would consume the placeholder and the
           # action would refuse the prompt for not carrying one.
 
-          # Build user message with full context
+          # Build user message with full context. The header is written on its
+          # own first because an over-budget review repeats it in every batch;
+          # the user message is the same bytes it was before the split.
           {
             printf 'PR #%s: %s\n\nDescription:\n' "$PR_NUMBER" "$PR_TITLE"
             cat /tmp/pr_body.txt
             printf '\n\nChanged files:\n'
             cat /tmp/changed_files.txt
+          } > /tmp/user_msg_header.txt
+          {
+            cat /tmp/user_msg_header.txt
             printf '\n\nFULL SOURCE FILES (line-numbered — use for verifying mitigations):\n'
             cat /tmp/full_files.txt
             printf '\n\nDIFF (changes introduced in this PR):\n'
@@ -266,13 +278,22 @@ jobs:
         # — and copy-paste is how one defect became nine. Pinned to a SHA, never
         # @main: @main would move every consuming repo, and this check is
         # REQUIRED on this repo's main, the instant that file changed.
-        uses: opena2a-org/.github/actions/claude-review@025b1897886f261c12ccc79da3f75d345842c897
+        #
+        # dcb7713 is the revision that adds the action's batch mode, which the
+        # over-budget review below uses. With `batch-dir` unset, as here, its
+        # single mode is byte-identical to 025b1897, the revision this step was
+        # pinned to before: test/single_mode_identity.py in that repository
+        # replays every single-mode case against a frozen copy of 025b1897 and
+        # compares outputs, posted body, logs, exit code and the payload sent.
+        uses: opena2a-org/.github/actions/claude-review@dcb77137b11cb33c11e76cf6435b7676bd568d01
         with:
           # A composite action cannot read `secrets`, so the caller passes it in.
           # A step `env:` is the boundary GitHub actually enforces: this key
-          # exists in exactly one step. That step does read the diff — that is
-          # its job — but no PR-authored text is ever substituted into its script
-          # SOURCE, which is the exposure a `${{ }}` in a `run:` would create.
+          # exists only in the two steps that run this pinned action, this one
+          # and the over-budget review below. Both read the diff — that is
+          # their job — but no PR-authored text is ever substituted into a
+          # script SOURCE, which is the exposure a `${{ }}` in a `run:` would
+          # create.
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           system-prompt-file: /tmp/system_prompt.txt
           user-message-file: /tmp/user_msg.txt
@@ -282,6 +303,157 @@ jobs:
           thinking-budget: "10000"
           max-tokens: "16000"
           fallback-max-tokens: "8192"
+
+      - name: Plan the over-budget review
+        id: plan
+        # Runs on ONE outcome of the review above, the only one that leaves a
+        # measurement and no review path: the action measured the full-file
+        # request over its budget and sent nothing. A missing key or a failed
+        # measurement leaves no measurement, and every request that was sent
+        # leaves a path, so this step is skipped for all of those, and for a
+        # pull request that fits, which is reviewed exactly as before.
+        #
+        # scripts/pr-review-generated-files.mjs plans the first of two paths
+        # that fits, by the rules in its header: the measured request cut into
+        # batches on file boundaries, with every file's diff and full source in
+        # exactly one batch; or, when the full-file context cannot be batched,
+        # one diff-only request with wider context. That diff is composed by
+        # the same instrument as the gathered one, so a lockfile section reaches
+        # the reviewer as its placeholder on this path too. A failure here skips
+        # the over-budget review, and the verdict stays INCONCLUSIVE.
+        #
+        # The review budget is the action's default, and this file passes no
+        # override of it to either review step: the plan sizes each request
+        # under it, and the action measures every one against it again before
+        # sending it.
+        if: steps.review.outputs.verdict == 'INCONCLUSIVE' && steps.review.outputs.review-path == '' && steps.review.outputs.input-tokens != ''
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          MEASURED_TOKENS: ${{ steps.review.outputs.input-tokens }}
+          SINGLE_REVIEW_FILE: ${{ steps.review.outputs.review-file }}
+        run: |
+          # The over-budget review writes its body to the same path as the
+          # review above, so the refusal is kept for the case where it is still
+          # what the job has to report.
+          cp "$SINGLE_REVIEW_FILE" /tmp/review_single_body.txt
+          WIDE_CONTEXT=25
+          git diff -U"$WIDE_CONTEXT" "origin/${BASE_REF}...HEAD" > /tmp/pr_diff_wide.raw.txt
+          node scripts/pr-review-generated-files.mjs --tree . --base-tree /tmp/base-tree --changed-files /tmp/changed_files.txt --diff /tmp/pr_diff_wide.raw.txt --out-diff /tmp/pr_diff_wide.txt --out-context-files /tmp/context_files_wide.txt --out-report /tmp/generated_files_wide.json
+          node scripts/pr-review-generated-files.mjs --plan-over-budget /tmp/review_plan --measured-tokens "$MEASURED_TOKENS" --system-prompt /tmp/system_prompt.txt --user-message /tmp/user_msg.txt --header /tmp/user_msg_header.txt --full-files /tmp/full_files.txt --diff /tmp/pr_diff.txt --wide-diff /tmp/pr_diff_wide.txt --wide-context "$WIDE_CONTEXT"
+          cat /tmp/review_plan/outputs.txt >> "$GITHUB_OUTPUT"
+
+      - name: Run over-budget review
+        id: review_over_budget
+        # The same pinned action and the same review settings as above, sent the
+        # request the plan built. In batch mode the action reviews every batch
+        # file as its own request with its own nonce, measures each against the
+        # same budget before sending it, and aggregates fail-closed: APPROVE
+        # only when every batch returned a verdict bound to its own nonce,
+        # REQUEST_CHANGES when any batch did, INCONCLUSIVE when any batch
+        # errors, is unmeasured, is over budget or returns no verdict.
+        # `max-batches` is not passed: the action's ceiling of 8 is the one the
+        # plan sizes against. In diff-only mode `batch-dir` is empty, and the
+        # action sends the one diff-only request in single mode.
+        if: steps.plan.outputs.mode == 'batch' || steps.plan.outputs.mode == 'diff-only'
+        uses: opena2a-org/.github/actions/claude-review@dcb77137b11cb33c11e76cf6435b7676bd568d01
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          system-prompt-file: ${{ steps.plan.outputs.system-prompt-file }}
+          user-message-file: ${{ steps.plan.outputs.user-message-file }}
+          batch-dir: ${{ steps.plan.outputs.batch-dir }}
+          thinking-budget: "10000"
+          max-tokens: "16000"
+          fallback-max-tokens: "8192"
+
+      - name: Resolve review outcome
+        id: outcome
+        # The one place that decides which review the job reports, and it moves
+        # in one direction only. It starts from the review above and replaces
+        # that result in exactly one case: the review above was INCONCLUSIVE,
+        # the plan succeeded with a mode, and the over-budget review it planned
+        # ran to completion. The verdict is then that review's, reached by the
+        # action's own rules. An APPROVE or a REQUEST_CHANGES above is never
+        # replaced, and an over-budget review that crashed, was skipped or was
+        # never planned leaves the INCONCLUSIVE in place, with a note saying so.
+        #
+        # `always()`, so a crashed step upstream still lands here. If this step
+        # itself fails, its outputs are empty, and both steps below read an
+        # empty verdict as INCONCLUSIVE. The run block holds no workflow
+        # expressions, so it executes verbatim outside Actions; the cells in
+        # scripts/test-pr-review-generated-files.mjs run it that way.
+        if: always()
+        env:
+          SINGLE_VERDICT: ${{ steps.review.outputs.verdict }}
+          SINGLE_REVIEW_FILE: ${{ steps.review.outputs.review-file }}
+          SINGLE_REVIEW_PATH: ${{ steps.review.outputs.review-path }}
+          SINGLE_INPUT_TOKENS: ${{ steps.review.outputs.input-tokens }}
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          PLAN_MODE: ${{ steps.plan.outputs.mode }}
+          OVER_BUDGET_OUTCOME: ${{ steps.review_over_budget.outcome }}
+          OVER_BUDGET_VERDICT: ${{ steps.review_over_budget.outputs.verdict }}
+          OVER_BUDGET_REVIEW_FILE: ${{ steps.review_over_budget.outputs.review-file }}
+          OVER_BUDGET_REVIEW_PATH: ${{ steps.review_over_budget.outputs.review-path }}
+          OVER_BUDGET_INPUT_TOKENS: ${{ steps.review_over_budget.outputs.input-tokens }}
+        run: |
+          VERDICT="${SINGLE_VERDICT:-INCONCLUSIVE}"
+          case "$VERDICT" in
+            APPROVE|REQUEST_CHANGES|INCONCLUSIVE) ;;
+            *) VERDICT="INCONCLUSIVE" ;;
+          esac
+          MODE=single
+          REVIEW_FILE="$SINGLE_REVIEW_FILE"
+          REVIEW_PATH="$SINGLE_REVIEW_PATH"
+          INPUT_TOKENS="$SINGLE_INPUT_TOKENS"
+          NOTE=""
+          if [ "$VERDICT" = "INCONCLUSIVE" ] && [ "$PLAN_OUTCOME" = "success" ]; then
+            case "$PLAN_MODE" in
+              batch|diff-only)
+                MODE="$PLAN_MODE"
+                if [ "$OVER_BUDGET_OUTCOME" = "success" ]; then
+                  VERDICT="${OVER_BUDGET_VERDICT:-INCONCLUSIVE}"
+                  case "$VERDICT" in
+                    APPROVE|REQUEST_CHANGES|INCONCLUSIVE) ;;
+                    *) VERDICT="INCONCLUSIVE" ;;
+                  esac
+                  REVIEW_FILE="$OVER_BUDGET_REVIEW_FILE"
+                  REVIEW_PATH="$OVER_BUDGET_REVIEW_PATH"
+                  INPUT_TOKENS="$OVER_BUDGET_INPUT_TOKENS"
+                else
+                  REVIEW_FILE=/tmp/review_single_body.txt
+                  REVIEW_PATH=""
+                  INPUT_TOKENS=""
+                  NOTE="The full-file request was over the review budget, and the $PLAN_MODE review planned for it did not complete (step outcome: ${OVER_BUDGET_OUTCOME:-none}). See the run log."
+                fi
+                ;;
+              *)
+                NOTE="The full-file request was over the review budget, and the plan named no review to send. See the run log."
+                ;;
+            esac
+          elif [ "$VERDICT" = "INCONCLUSIVE" ] && [ "$PLAN_OUTCOME" = "failure" ]; then
+            NOTE="The full-file request was over the review budget, and no over-budget review could be planned. See the run log."
+          fi
+
+          # Each output is one line, so nothing above may carry a line break
+          # into them.
+          case "$REVIEW_PATH" in
+            primary|fallback|none) ;;
+            *) REVIEW_PATH="" ;;
+          esac
+          case "$INPUT_TOKENS" in
+            *[!0-9]*) INPUT_TOKENS="" ;;
+          esac
+          case "$REVIEW_FILE" in
+            *$'\n'*) REVIEW_FILE="" ;;
+          esac
+          {
+            printf 'verdict=%s\n' "$VERDICT"
+            printf 'mode=%s\n' "$MODE"
+            printf 'review-file=%s\n' "$REVIEW_FILE"
+            printf 'review-path=%s\n' "$REVIEW_PATH"
+            printf 'input-tokens=%s\n' "$INPUT_TOKENS"
+            printf 'note=%s\n' "$NOTE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Review outcome: $VERDICT, from the $MODE review."
 
       - name: Post review
         # Posting is best effort and must never decide the outcome. A run that
@@ -294,10 +466,18 @@ jobs:
           # Bound through `env:` rather than substituted into the shell source
           # with `${{ }}`. An output interpolated directly into `run:` becomes
           # part of the script text before bash ever sees it.
-          VERDICT: ${{ steps.review.outputs.verdict }}
-          REVIEW_FILE: ${{ steps.review.outputs.review-file }}
-          REVIEW_PATH: ${{ steps.review.outputs.review-path }}
-          INPUT_TOKENS: ${{ steps.review.outputs.input-tokens }}
+          #
+          # The review fields are the resolved outcome's, never one review
+          # step's, so the comment describes the review the job concludes on.
+          VERDICT: ${{ steps.outcome.outputs.verdict }}
+          REVIEW_FILE: ${{ steps.outcome.outputs.review-file }}
+          REVIEW_PATH: ${{ steps.outcome.outputs.review-path }}
+          INPUT_TOKENS: ${{ steps.outcome.outputs.input-tokens }}
+          REVIEW_MODE: ${{ steps.outcome.outputs.mode }}
+          REVIEW_NOTE: ${{ steps.outcome.outputs.note }}
+          FULL_REQUEST_TOKENS: ${{ steps.review.outputs.input-tokens }}
+          BATCHES: ${{ steps.plan.outputs.batches }}
+          CONTEXT_LINES: ${{ steps.plan.outputs.context-lines }}
         run: |
           # An absent verdict means the review step never reached a decision —
           # including the case where the action itself failed to run at all.
@@ -353,6 +533,22 @@ jobs:
               ;;
           esac
 
+          # How the review was sent. The full-file request adds nothing to the
+          # footer, so a pull request that fits reads exactly as before; the
+          # other two exist only because that request measured over the review
+          # budget, and the footer says so with its measurement.
+          case "$REVIEW_MODE" in
+            batch)
+              SCOPE=" in ${BATCHES} batches cut on file boundaries, because the full-file request measured ${FULL_REQUEST_TOKENS} input tokens, over the review budget"
+              ;;
+            diff-only)
+              SCOPE=" as one diff-only request with ${CONTEXT_LINES} lines of context and no full source files, because the full-file request measured ${FULL_REQUEST_TOKENS} input tokens, over the review budget, and its full source could not be batched under it"
+              ;;
+            *)
+              SCOPE=""
+              ;;
+          esac
+
           # The "Reviewed N files" sentence is a factual claim about work that
           # happened, so it is emitted ONLY when a request produced a review. On
           # `none` and on empty the machine verdict is correctly INCONCLUSIVE,
@@ -360,17 +556,27 @@ jobs:
           # a human reads failing OPEN.
           case "$REVIEW_PATH" in
             primary|fallback)
-              FOOTER="*Reviewed ${FILE_COUNT} files changed (${DIFF_SIZE} bytes, ${INPUT_TOKENS:-unmeasured} input tokens) — ${PATH_NOTE}*"
+              FOOTER="*Reviewed ${FILE_COUNT} files changed (${DIFF_SIZE} bytes, ${INPUT_TOKENS:-unmeasured} input tokens)${SCOPE} — ${PATH_NOTE}*"
               ;;
             *)
-              FOOTER="*No review was produced. The change measured ${FILE_COUNT} files (${DIFF_SIZE} bytes) — ${PATH_NOTE}*"
+              FOOTER="*No review was produced. The change measured ${FILE_COUNT} files (${DIFF_SIZE} bytes)${SCOPE} — ${PATH_NOTE}*"
               ;;
           esac
+          # A batched review that reached no verdict answered for some batches
+          # and not others, so "Reviewed N files" is false of it even when its
+          # path is primary.
+          if [ "$REVIEW_MODE" = "batch" ] && [ "$VERDICT" = "INCONCLUSIVE" ]; then
+            FOOTER="*Not every batch returned a verdict, so this pull request was not reviewed in full. The change measured ${FILE_COUNT} files (${DIFF_SIZE} bytes) and was planned${SCOPE} — ${PATH_NOTE}*"
+          fi
 
           {
             echo "## Automated code review — $VERDICT"
             echo ""
             cat "$REVIEW_FILE"
+            if [ -n "$REVIEW_NOTE" ]; then
+              echo ""
+              echo "$REVIEW_NOTE"
+            fi
             echo ""
             echo "---"
             echo "$FOOTER"
@@ -394,10 +600,12 @@ jobs:
         # that nothing upstream can turn a REQUEST_CHANGES or an INCONCLUSIVE
         # into a green check by succeeding at something unrelated. `always()`
         # means a crashed or skipped review step still lands here with no verdict
-        # at all, which is INCONCLUSIVE, which is not a pass.
+        # at all, which is INCONCLUSIVE, which is not a pass. The verdict read is
+        # the resolved one: the full-file review's, or, only when that review was
+        # INCONCLUSIVE over the budget, the over-budget review's.
         if: always()
         env:
-          VERDICT: ${{ steps.review.outputs.verdict }}
+          VERDICT: ${{ steps.outcome.outputs.verdict }}
         run: |
           case "${VERDICT:-INCONCLUSIVE}" in
             APPROVE)

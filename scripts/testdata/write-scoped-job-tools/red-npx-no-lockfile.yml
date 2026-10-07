@@ -1,0 +1,11 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: refused, the working directory has no committed lockfile at or above it.
+name: fixture
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - working-directory: ../no-lockfile-here
+        run: npx locked-tool

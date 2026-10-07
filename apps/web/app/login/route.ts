@@ -2,7 +2,7 @@
 // (an alias, not a moved page: a cached 308 would loop if sign-in ever moved here)
 // and carry no query string, so a returnUrl on the alias is never passed on.
 //
-// This is a route handler on purpose: a `redirects()` entry in next.config.js was
+// This is a route handler on purpose: a `redirects()` entry in next.config.ts was
 // measured to pass the query through, and a page calling `redirect()` answered 200
 // with no Location header.
 export function GET() {

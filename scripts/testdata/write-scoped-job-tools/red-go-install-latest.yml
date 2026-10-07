@@ -1,0 +1,12 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: refused, a contents: write job installs a Go tool at @latest.
+name: fixture
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          go install example.com/tool/cmd/tool@latest
+          tool --version

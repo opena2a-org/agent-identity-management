@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates
@@ -16,11 +16,14 @@ RUN go mod download
 # Copy source code
 COPY apps/backend/ ./
 
-# Build the application for the target platform
+# Build the application for the target platform.
+# COMMIT is the full 40-character sha of the commit the image is built from;
+# GET /health/ready reports it. A build that passes none reports "commit": null.
 ARG TARGETARCH
 ARG VERSION=dev
+ARG COMMIT
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags="-s -w -X main.version=${VERSION}" \
+    -ldflags="-s -w -X main.version=${VERSION} -X main.buildCommit=${COMMIT}" \
     -o /bin/aim-server ./cmd/server
 
 # Build the migrate and bootstrap binaries so operators can run them inside the
@@ -35,7 +38,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -o /bin/aim-bootstrap ./cmd/bootstrap
 
 # Runtime stage
-FROM alpine:3.21
+FROM alpine:3.21@sha256:ce64758a109eb420d874a118f87920e625e12d3634e03b4a5573fd9f6e5d3507
 
 RUN apk --no-cache add ca-certificates
 

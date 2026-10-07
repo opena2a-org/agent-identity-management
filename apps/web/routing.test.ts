@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -49,5 +49,19 @@ describe("dashboard routing", () => {
     expect(importers("use-deactivation-check")).toEqual([join("app", "dashboard", "layout.tsx")]);
     expect(importers("idle-timeout-guard")).toEqual([join("app", "dashboard", "layout.tsx")]);
     expect(importers("use-idle-timeout")).toEqual([join("components", "idle-timeout-guard.tsx")]);
+  });
+
+  it("next.config.ts serves its redirects from lib/redirects.ts", async () => {
+    // A stand-in table proves the config reads the module rather than a copy of its rows.
+    // The fork keeps its own config file too, so this cell stays here, not in lib/.
+    const row = { source: "/dashboard/old", destination: "/dashboard", permanent: true };
+    vi.resetModules();
+    vi.doMock("@/lib/redirects", () => ({ dashboardRedirects: () => [row] }));
+    try {
+      const { default: config } = await import("./next.config");
+      expect(await config.redirects?.()).toEqual([row]);
+    } finally {
+      vi.doUnmock("@/lib/redirects");
+    }
   });
 });
