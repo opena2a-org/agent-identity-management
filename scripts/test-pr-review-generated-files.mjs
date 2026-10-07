@@ -1275,7 +1275,7 @@ test('OVER-BUDGET.AC1 a request shaped like #575 (227,980 tokens, a 194,903-byte
   );
 });
 
-test('OVER-BUDGET.AC2 a request shaped like #573 (228,383 tokens, 33 deleted backup files and a .gitignore edit) is planned as 2 batches under the packing target, every section exactly once', (t) => {
+test('OVER-BUDGET.AC2 a request shaped like #573 (228,383 tokens; 32 deleted backup files, a .gitignore edit and one added test file, modelled as the edit and 33 deleted files because only the edit carries full source) is planned as 2 batches under the packing target, every section exactly once', (t) => {
   const sizes = [1082, 1828, 4845, 6388, 16156, 16225, 16230, 16241, 19736, 19805, 19810, 19821, 24598, 24667, 24672, 24683, 26026, 26095, 26100, 26111, 26220, 26289, 26294, 26305, 27187, 27256, 27261, 27272, 28892, 28961, 28966, 28977, 33544];
   const files = [
     modified('.gitignore', { block: 2617, section: 467, seed: 'g' }),
