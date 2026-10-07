@@ -43,18 +43,33 @@ func DefaultWebhookConfig() *WebhookConfig {
 	}
 }
 
+// maxStoredResponseBody is how much of an endpoint's response a delivery keeps.
+const maxStoredResponseBody = 1024
+
 type WebhookService struct {
 	webhookRepo *repository.WebhookRepository
 	config      *WebhookConfig
 	stopChan    chan struct{}
+	// newHTTPClient builds the client a delivery is sent with. Endpoints are
+	// tenant-supplied, so it is the egress client: redirects are not followed and
+	// the address of every connection is checked when it is opened.
+	newHTTPClient func(timeout time.Duration) *http.Client
 }
 
 func NewWebhookService(webhookRepo *repository.WebhookRepository) *WebhookService {
 	return &WebhookService{
-		webhookRepo: webhookRepo,
-		config:      DefaultWebhookConfig(),
-		stopChan:    make(chan struct{}),
+		webhookRepo:   webhookRepo,
+		config:        DefaultWebhookConfig(),
+		stopChan:      make(chan struct{}),
+		newHTTPClient: utils.NewEgressClient,
 	}
+}
+
+func (s *WebhookService) httpClient(timeout time.Duration) *http.Client {
+	if s.newHTTPClient == nil {
+		return utils.NewEgressClient(timeout)
+	}
+	return s.newHTTPClient(timeout)
 }
 
 // SetConfig allows overriding default configuration
@@ -211,15 +226,15 @@ func (s *WebhookService) sendWebhookWithResult(webhook *domain.Webhook, event st
 	req.Header.Set("X-Webhook-Signature", signature)
 	req.Header.Set("X-Webhook-Event", event)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := s.httpClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	// Read response
-	body, _ := io.ReadAll(resp.Body)
+	// Read response (limited, as for every delivery)
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxStoredResponseBody))
 
 	// Record delivery
 	delivery := &domain.WebhookDelivery{
@@ -424,7 +439,7 @@ func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, payload []byte
 	req.Header.Set("User-Agent", "AIM-Webhook/1.0")
 
 	// Send request
-	client := &http.Client{Timeout: timeout}
+	client := s.httpClient(timeout)
 	resp, err := client.Do(req)
 	duration := time.Since(start)
 
@@ -434,7 +449,7 @@ func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, payload []byte
 	defer resp.Body.Close()
 
 	// Read response (limit to 1KB to prevent memory issues)
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxStoredResponseBody))
 
 	return resp.StatusCode, string(body), duration, nil
 }
