@@ -33,6 +33,14 @@ describe("SDK_TABS", () => {
     expect(ts.code(ORIGIN)).not.toContain("api.aim.opena2a.org");
   });
 
+  it("says where the Java SDK gets its credentials, since the install line is a clone that carries none", () => {
+    const java = SDK_TABS.find((t) => t.key === "java")!;
+    expect(java.install("")).toContain("git clone");
+    expect(java.note).toContain("AIM_REFRESH_TOKEN");
+    expect(java.note).toContain("~/.aim/sdk_credentials.json");
+    expect(java.note).toContain("Download the Java SDK from the SDK page");
+  });
+
   it("never leaks an unfilled template into a rendered command", () => {
     for (const t of SDK_TABS) {
       for (const origin of ["", ORIGIN]) {

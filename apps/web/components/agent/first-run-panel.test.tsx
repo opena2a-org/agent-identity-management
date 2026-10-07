@@ -73,6 +73,19 @@ describe("FirstRunPanel, first run", () => {
     expect(screen.getByRole("link", { name: "Go to dashboard" }).getAttribute("href")).toBe("/dashboard");
   });
 
+  it("lets each identity row shrink below its value, so the value truncates and the copy button stays on screen", () => {
+    // A grid item defaults to min-width: auto, which holds the track at the unbroken value's
+    // width and pushes the copy button off a phone screen; jsdom has no layout, so the class
+    // that releases it is the observable part.
+    render(<FirstRunPanel agent={agent()} />);
+    for (const label of ["Agent ID", "Public key (Ed25519)"]) {
+      const row = screen.getByRole("button", { name: `Copy ${label}` }).parentElement!;
+      expect(row.parentElement!.className, label).toContain("grid");
+      expect(row.className.split(/\s+/), label).toContain("min-w-0");
+      expect(row.querySelector(".truncate")?.textContent, label).toBeTruthy();
+    }
+  });
+
   it("leaves the public key row out when the agent has none", () => {
     render(<FirstRunPanel agent={agent({ publicKey: null })} />);
     expect(screen.getByRole("button", { name: "Copy Agent ID" })).toBeTruthy();
@@ -102,6 +115,12 @@ describe("FirstRunPanel, first run", () => {
     expect(screen.getByText('AIMClient agent = AIMClient.secure("billing-bot");')).toBeTruthy();
     expect(container.textContent).toContain(java.code(""));
     expect(screen.getByRole("link", { name: java.docsLabel }).getAttribute("href")).toBe(java.docsHref);
+
+    // A clone carries no credentials, so a step names where AIMClient.secure() gets them.
+    expect(screen.getByRole("heading", { name: "Get the SDK credentials" })).toBeTruthy();
+    expect(container.textContent).toContain("AIM_REFRESH_TOKEN");
+    expect(container.textContent).toContain("~/.aim/sdk_credentials.json");
+    expect(screen.getByRole("link", { name: "Open the SDK page" }).getAttribute("href")).toBe("/dashboard/sdk");
 
     // No control offers a per-agent Java download: the server has no such package.
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();

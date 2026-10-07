@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — a newly registered agent's page shows its first-run steps, and the old success URL redirects
+
+- `/dashboard/agents/<id>` shows a first-run panel until the agent makes its first successful
+  authenticated call (`lastActive` is empty), unless the agent is suspended or revoked: the
+  agent's identifier and public key with copy buttons, and the Python and Java steps that connect
+  it. The server sets `lastActive` after every successful agent-authenticated request, so the
+  panel goes away after the first one.
+- The separate page at `/dashboard/agents/:id/success` is removed. That success URL answers with a
+  permanent (308) redirect to `/dashboard/agents/:id`, so a bookmarked or printed link still
+  reaches the agent.
+- At phone widths the identifier and public-key rows truncate their value instead of widening the
+  page, so both copy buttons stay on screen.
+- The Java steps, on the first-run panel and in the dashboard's SDK quickstart, say where
+  `AIMClient.secure()` reads its credentials (`AIM_REFRESH_TOKEN` or
+  `~/.aim/sdk_credentials.json`) and that the Java download on the SDK page carries them; a clone
+  of the repository carries neither (#583).
+
+### Fixed — the agent page loads when a trust-score answer lacks its fields
+
+- The trust-score card on `/dashboard/agents/<id>` shows its empty state when
+  `GET /api/v1/trust-score/agents/<id>/breakdown` answers without `factors`, or the history
+  answer without `history`. Before, either answer threw while the page rendered and replaced the
+  whole page with "This page could not load." (#583).
+
 ### Fixed — MCP security policy rules mean what the admin page says
 
 - `rules.minTrustScore` on the `mcp_*` security policies is on the [0,1] scale of an MCP server's

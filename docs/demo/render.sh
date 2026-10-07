@@ -99,7 +99,7 @@ if [ "$REHEARSAL" = 1 ]; then
   # A rehearsal installs the checkout's SDK, but through the README's own line:
   # the wheel is built from the (read-only) source mount under Hide and pip is
   # pointed at it, so `pip install aim-sdk` on screen installs that wheel.
-  INSTALL='Hide\nType '"'"'cp -r /work/sdk /tmp/aim-sdk-src && pip wheel -q -w /tmp/dist /tmp/aim-sdk-src 2>&1 | tail -1; export PIP_NO_INDEX=1 PIP_FIND_LINKS=/tmp/dist; clear'"'"'\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 300ms\nShow\nSleep 1s\nType "pip install aim-sdk"\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
+  INSTALL='Hide\nType '"'"'w=$(mktemp -d) && cp -r /work/sdk "$w/src" && pip wheel -q -w "$w/dist" "$w/src" 2>&1 | tail -1; export PIP_NO_INDEX=1 PIP_FIND_LINKS="$w/dist"; clear'"'"'\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 300ms\nShow\nSleep 1s\nType "pip install aim-sdk"\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
 else
   INSTALL='Type "pip install aim-sdk"\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
 fi
