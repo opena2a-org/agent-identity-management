@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: webhook, MCP server and agent card requests follow no redirect and connect only to the addresses registration admits
+
+- A webhook URL, an MCP server's capability and verification URLs and an agent card URL are checked when they are
+  accepted. The request itself was sent by a client that, for webhooks and MCP servers, followed up to 10 redirects,
+  and, for all of them, resolved the hostname again when it connected. An endpoint that redirected, or whose name
+  later resolved to a loopback, private or cloud metadata address, therefore received a request from the server, and
+  the webhook test send returned the status code and the connection error text to the caller.
+- All of these requests now go through one client. It returns a 3xx as the response and never requests its
+  `Location`: a webhook delivery records the 3xx as a failed delivery, so an endpoint that relies on a redirect (for
+  example from http to https) needs to be registered with its final URL. It checks the address of every connection,
+  retries and replays included, after the name is resolved and before it connects, with the same address policy as
+  registration. It ignores `HTTP_PROXY` and `HTTPS_PROXY`.
+- The address policy also refuses 0.0.0.0/8, 240.0.0.0/4, 255.255.255.255, the Azure platform address
+  168.63.129.16, 2001::/32 (Teredo), 100::/64, 2001:db8::/32 and fec0::/10, and judges IPv4-mapped, NAT64
+  (64:ff9b::/96, 64:ff9b:1::/48) and 6to4 (2002::/16) addresses on the IPv4 address they carry.
+- A refused URL or connection is reported by the class of address, for example `destination address is not allowed
+  (loopback)`, without the resolved address or the resolver's error.
+- The webhook test send stores at most 1 KB of the endpoint's response, as deliveries already did.
+- Tests check that a 307 or 302 from an endpoint is recorded and its target is never requested, that a stored URL whose
+  name resolves to loopback is refused when the connection is made, that registration and the connection check agree
+  on every address class, that the proxy environment is not used, that refusal text carries no address, and that
+  each of these services builds its client only through the shared constructor. Each check has a control that shows
+  it can fail.
+
 ### Fixed: an agent's activity returns no network address, user agent or personal metadata to a non-admin
 
 - `GET /api/v1/agents/:id/activity` is open to every principal in the organization and returns the audit records an

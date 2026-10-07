@@ -59,9 +59,8 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 		capabilityService:     capabilityService,
 		capabilityRepo:        capabilityRepo,
 		connectionRepo:        connectionRepo,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second, // 30 second timeout for MCP server communication
-		},
+		// The verification URL is tenant-supplied: no redirects, and every connection's address is checked.
+		httpClient:      utils.NewEgressClient(30 * time.Second), // 30 second timeout for MCP server communication
 		challenges:      make(map[string]ChallengeData),
 		agentRepo:       agentRepo,
 		tagRepo:         tagRepo,

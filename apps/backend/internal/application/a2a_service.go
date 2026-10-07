@@ -124,15 +124,10 @@ func NewA2AService(
 		violationRepo:   violationRepo,
 		agentRepo:       agentRepo,
 		keyVault:        keyVault,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			// SECURITY: Disable redirect following to prevent SSRF bypass.
-			// An attacker could pass URL validation with a safe URL that redirects
-			// to an internal address (e.g., cloud metadata endpoint).
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
+		// SECURITY: The agent card URL is agent-supplied. The egress client follows no
+		// redirect (a safe URL could redirect to an internal address such as the cloud
+		// metadata endpoint) and checks the address of every connection it opens.
+		httpClient: utils.NewEgressClient(30 * time.Second),
 	}
 }
 
