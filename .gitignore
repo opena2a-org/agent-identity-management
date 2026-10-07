@@ -46,6 +46,10 @@ yarn-error.log*
 # Turbo
 .turbo
 
+# TypeScript incremental build cache, rewritten by every typecheck.
+# Guarded by apps/web/tracked-build-cache.test.ts.
+*.tsbuildinfo
+
 # Go
 *.exe
 *.exe~
