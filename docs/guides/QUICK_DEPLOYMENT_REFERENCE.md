@@ -83,7 +83,7 @@ okta apps create
 | Health Check | http://localhost:8080/health | ✅ Healthy |
 | Dashboard | http://localhost:3000/dashboard | ✅ Working |
 | Agents | http://localhost:3000/dashboard/agents | ✅ Working |
-| API Keys | http://localhost:3000/dashboard/api-keys | ❌ 404 |
+| Developers → Credentials (API keys and SDK tokens) | http://localhost:3000/dashboard/credentials | ✅ Page exists |
 | Settings | http://localhost:3000/dashboard/settings | ❌ 404 |
 
 ---
@@ -132,7 +132,7 @@ curl http://localhost:8080/api/v1/auth/login/google
 ## 📋 Pre-Launch Checklist (3 days)
 
 ### Day 1: UI Pages (4 hours)
-- [ ] Create `/apps/web/app/dashboard/api-keys/page.tsx`
+- [x] API keys list, now the API keys section of Developers → Credentials (`/apps/web/app/dashboard/credentials/page.tsx`)
   - List API keys
   - Create new API key
   - Copy to clipboard

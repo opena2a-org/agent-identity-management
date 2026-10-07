@@ -133,7 +133,7 @@ agent = register_agent(name="my-agent")
 **Protections**:
 - File permissions `0600` (owner read/write only)
 - Short-lived access token; the refresh token is **revocable server-side**
-  (dashboard → SDK tokens) and stored server-side only as a SHA-256 hash
+  (dashboard → Developers → Credentials → SDK tokens) and stored server-side only as a SHA-256 hash
 - Full revocation and audit trail per token
 
 > **Not encrypted at rest.** Credentials are plaintext on disk, protected by file
@@ -320,7 +320,7 @@ permissions are the protection. Verify they are owner-only:
 ls -l ~/.aim/sdk_credentials.json
 # -rw-------  ← 0600, owner read/write only. Good.
 ```
-If a credential is ever exposed, revoke it server-side (dashboard → SDK tokens)
+If a credential is ever exposed, revoke it server-side (dashboard → Developers → Credentials → SDK tokens)
 and re-authenticate with `aim-sdk login`.
 
 ### 3. **Rotate Tokens Regularly**

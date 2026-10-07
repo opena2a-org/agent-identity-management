@@ -370,7 +370,7 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 		} else if apiKeyErr != nil {
 			// API key creation failed, but agent was created successfully
 			// User can create API key manually from the dashboard
-			response["apiKeyError"] = "API key generation failed. You can create one manually from the API Keys page."
+			response["apiKeyError"] = "API key generation failed. You can create one manually from Developers → Credentials."
 		}
 	}
 
