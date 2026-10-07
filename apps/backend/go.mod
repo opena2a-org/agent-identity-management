@@ -2,6 +2,8 @@ module github.com/opena2a-org/agent-identity-management/apps/backend
 
 go 1.25.0
 
+toolchain go1.26.8
+
 require (
 	cloud.google.com/go/secretmanager v1.18.0
 	github.com/1Password/connect-sdk-go v1.5.3

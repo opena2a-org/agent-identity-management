@@ -8,10 +8,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// buildCommit is stamped at build time via
-// -ldflags "-X main.buildCommit=<40-hex git commit>" (see
-// infrastructure/docker/Dockerfile.backend). Empty in unstamped builds, which
-// serialises as JSON null in the readiness body.
+// buildCommit is the commit the binary was built from, set by the linker:
+// -ldflags "-X main.buildCommit=<40-hex git commit>". The Dockerfile of the
+// published image (infrastructure/docker/Dockerfile.backend at the repository
+// root) takes it as the COMMIT build argument; the quickstart Dockerfile under
+// apps/backend takes it as GIT_COMMIT. A build that sets nothing, or anything
+// other than a full lowercase 40-hex sha, reports "commit": null in the
+// readiness body: the contract's value for a commit that is not known.
 var buildCommit string
 
 // buildVersion may be stamped the same way; empty serialises as JSON null.
