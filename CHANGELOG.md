@@ -73,9 +73,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `bin/aim-backend`, `bin/server`, `main` and `server`, 108.5 MB together. Nothing used them: the container image
   builds the server from source. They are removed (history is left as is), and ignore rules keep a local
   `go build -o` to those paths out of `git status`.
-- A test in `apps/backend/cmd/server` reads every tracked file and fails if one is a compiled executable, object or
-  library (Mach-O, ELF, PE, ar, WebAssembly or Java class) or has the executable bit without a `#!` line. A second
-  test plants one file of each kind in a scratch repository and checks that the census reports exactly those.
+- A test in `apps/backend/cmd/server` reads every blob of the commit under test, not the working tree, and fails if
+  one is a compiled executable, object or library (Mach-O, ELF, PE, ar, WebAssembly or Java class) or has the
+  executable bit without a `#!` line. A PE file must carry its `PE\0\0` header; a file that only starts with `MZ` is
+  not flagged. No path is exempt. Without `git` on `PATH`, or outside a git checkout, the test fails with the reason
+  instead of skipping. A second test plants one file of each kind in a scratch repository, commits them, deletes one
+  from the working tree and checks that the census reports exactly those. The ignore check covers all six former
+  binary paths, `cmd/server/server` included.
 
 ### Fixed — password reset tokens are stored as a SHA-256 digest
 

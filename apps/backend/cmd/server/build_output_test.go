@@ -24,11 +24,9 @@ func TestTheLocallyBuiltServerBinaryIsNeitherTrackedNorStageable(t *testing.T) {
 	}
 	dir := filepath.Dir(thisFile)
 
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not on PATH")
-	}
+	requireGit(t)
 	if out, err := gitIn(dir, "rev-parse", "--is-inside-work-tree"); err != nil || strings.TrimSpace(out) != "true" {
-		t.Skip("not running from a git checkout")
+		t.Fatalf("not running from a git checkout (%v): this check reads the index and ignore rules and cannot run on an export", err)
 	}
 
 	t.Run("not tracked", func(t *testing.T) {
