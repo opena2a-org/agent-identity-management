@@ -264,7 +264,10 @@ def _captured_output():
                 handler.stream = buffer
 
     rich_console = getattr(console_module.console, "console", None)
-    previous_file = getattr(rich_console, "file", None) if rich_console else None
+    # The raw handle, not the ``file`` property: an unset handle reads back as
+    # whatever sys.stdout is now (this test's capture), and writing that back
+    # would pin the shared console to it for every later test.
+    previous_file = getattr(rich_console, "_file", None) if rich_console else None
     if rich_console is not None:
         rich_console.file = buffer
 
@@ -276,6 +279,41 @@ def _captured_output():
             rich_console.file = previous_file
         for handler, stream in swapped:
             handler.stream = stream
+
+
+class _StreamFollowingConsole:
+    """The output-file contract of rich's Console, for runs without rich: an
+    unset file resolves to the current sys.stdout on every write."""
+
+    _file = None
+
+    @property
+    def file(self):
+        return self._file or sys.stdout
+
+    @file.setter
+    def file(self, new_file):
+        self._file = new_file
+
+
+def test_captured_output_leaves_the_shared_console_following_sys_stdout(monkeypatch):
+    try:
+        from rich.console import Console
+    except ImportError:
+        shared = _StreamFollowingConsole()
+    else:
+        shared = Console()
+    monkeypatch.setattr(console_module.console, "console", shared)
+
+    with _captured_output():
+        pass
+
+    later = io.StringIO()
+    with contextlib.redirect_stdout(later):
+        assert shared.file is later, (
+            "the shared console must write to the sys.stdout of the moment, not "
+            "to the stream that was current when output was last captured"
+        )
 
 
 def _api_key_client(url, **kwargs):

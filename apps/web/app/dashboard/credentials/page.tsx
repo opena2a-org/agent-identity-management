@@ -1,5 +1,7 @@
 "use client";
 
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Key, Monitor } from "lucide-react";
 import { AuthGuard } from "@/components/auth-guard";
 import { APIKeysSection } from "@/components/credentials/api-keys-section";
@@ -9,6 +11,8 @@ import { SDKTokensSection } from "@/components/credentials/sdk-tokens-section";
  * Developers → Credentials: the two kinds of credential that call AIM, explained side by
  * side and then listed one section each. The two pages this replaces redirect here
  * (lib/redirects.ts); each section keeps the data calls and role checks its page had.
+ * Links name a section with #api-keys or #sdk-tokens and the credential they point at with
+ * ?highlight=<id>, which that section marks.
  */
 const KINDS = [
   {
@@ -30,41 +34,72 @@ const KINDS = [
 export default function CredentialsPage() {
   return (
     <AuthGuard>
-      <div className="space-y-10">
-        <div className="space-y-6">
-          <div>
-            <h1 className="text-headline">Credentials</h1>
-            <p className="mt-1 text-sm text-ink-secondary">
-              The two kinds of credential your agents and SDK installs use to call AIM.
-            </p>
-          </div>
+      <Suspense fallback={null}>
+        <Credentials />
+      </Suspense>
+    </AuthGuard>
+  );
+}
 
-          <dl className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {KINDS.map((kind) => (
-              <div key={kind.id} className="glass p-5">
-                <dt className="flex items-center gap-2">
-                  <kind.icon className="h-5 w-5 text-ink-tertiary" aria-hidden="true" />
-                  <a
-                    href={`#${kind.id}`}
-                    className="text-sm font-semibold text-ink hover:text-brand-text transition-colors"
-                  >
-                    {kind.name}
-                  </a>
-                </dt>
-                <dd className="mt-2 text-sm text-ink-secondary">{kind.purpose}</dd>
-              </div>
-            ))}
-          </dl>
+function Credentials() {
+  const highlightId = useSearchParams().get("highlight");
+  const [apiKeysLoaded, setAPIKeysLoaded] = useState(false);
+  const [sdkTokensLoaded, setSDKTokensLoaded] = useState(false);
+  const scrolled = useRef(false);
+
+  // The browser scrolls to a #api-keys or #sdk-tokens link before the AuthGuard renders
+  // this page, when no element has that id. Scroll here instead, once, after both sections
+  // have loaded: the API keys list sets where the SDK tokens section starts.
+  useEffect(() => {
+    if (scrolled.current || !apiKeysLoaded || !sdkTokensLoaded) return;
+    scrolled.current = true;
+    const id = window.location.hash.slice(1);
+    if (KINDS.some((kind) => kind.id === id)) document.getElementById(id)?.scrollIntoView();
+  }, [apiKeysLoaded, sdkTokensLoaded]);
+
+  return (
+    <div className="space-y-10">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-headline">Credentials</h1>
+          <p className="mt-1 text-sm text-ink-secondary">
+            The two kinds of credential your agents and SDK installs use to call AIM.
+          </p>
         </div>
 
-        <section id="api-keys" aria-labelledby="api-keys-heading" className="scroll-mt-4">
-          <APIKeysSection headingId="api-keys-heading" />
-        </section>
-
-        <section id="sdk-tokens" aria-labelledby="sdk-tokens-heading" className="scroll-mt-4">
-          <SDKTokensSection headingId="sdk-tokens-heading" />
-        </section>
+        <dl className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {KINDS.map((kind) => (
+            <div key={kind.id} className="glass p-5">
+              <dt className="flex items-center gap-2">
+                <kind.icon className="h-5 w-5 text-ink-tertiary" aria-hidden="true" />
+                <a
+                  href={`#${kind.id}`}
+                  className="text-sm font-semibold text-ink hover:text-brand-text transition-colors"
+                >
+                  {kind.name}
+                </a>
+              </dt>
+              <dd className="mt-2 text-sm text-ink-secondary">{kind.purpose}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
-    </AuthGuard>
+
+      <section id="api-keys" aria-labelledby="api-keys-heading" className="scroll-mt-4">
+        <APIKeysSection
+          headingId="api-keys-heading"
+          highlightId={highlightId}
+          onLoaded={() => setAPIKeysLoaded(true)}
+        />
+      </section>
+
+      <section id="sdk-tokens" aria-labelledby="sdk-tokens-heading" className="scroll-mt-4">
+        <SDKTokensSection
+          headingId="sdk-tokens-heading"
+          highlightId={highlightId}
+          onLoaded={() => setSDKTokensLoaded(true)}
+        />
+      </section>
+    </div>
   );
 }

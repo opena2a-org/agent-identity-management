@@ -130,9 +130,18 @@ function APIKeysPageSkeleton() {
 
 /**
  * The API keys section of the Credentials page (app/dashboard/credentials): the list, its
- * filters and the create, disable and delete actions.
+ * filters and the create, disable and delete actions. The key whose id is highlightId is
+ * marked; onLoaded runs each time a load finishes.
  */
-export function APIKeysSection({ headingId }: { headingId: string }) {
+export function APIKeysSection({
+  headingId,
+  highlightId,
+  onLoaded,
+}: {
+  headingId: string;
+  highlightId?: string | null;
+  onLoaded?: () => void;
+}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<APIKeyWithAgent[]>([]);
@@ -174,6 +183,10 @@ export function APIKeysSection({ headingId }: { headingId: string }) {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!loading) onLoaded?.();
+  }, [loading, onLoaded]);
 
   const fetchData = async () => {
     try {
@@ -476,7 +489,8 @@ export function APIKeysSection({ headingId }: { headingId: string }) {
               {filteredKeys?.map((key) => (
                 <tr
                   key={key?.id}
-                  className="hover:bg-glass-inset-gray transition-colors"
+                  aria-current={key?.id === highlightId ? "true" : undefined}
+                  className={`${key?.id === highlightId ? "bg-brand-soft" : "hover:bg-glass-inset-gray"} transition-colors`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-ink">

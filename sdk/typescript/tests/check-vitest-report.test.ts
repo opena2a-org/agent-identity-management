@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { load } from 'js-yaml';
@@ -31,7 +31,10 @@ const FIXTURE_ROOT = '/repo/sdk/typescript';
 let workDir: string;
 
 beforeAll(() => {
-  workDir = mkdtempSync(join(tmpdir(), 'check-vitest-report-'));
+  // The real path: the checker's default root is process.cwd(), which resolves
+  // symlinks (macOS /tmp is /private/tmp), so names built from an unresolved
+  // TMPDIR would never sit under it.
+  workDir = realpathSync(mkdtempSync(join(tmpdir(), 'check-vitest-report-')));
 });
 
 afterAll(() => {

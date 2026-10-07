@@ -56,8 +56,18 @@ class StubTwin implements BehavioralRiskScoreable {
   }
 }
 
+/**
+ * A unix socket path is capped at 104 bytes on macOS (108 on Linux), so a long
+ * TMPDIR would make listen() fail with EINVAL. Such a TMPDIR is swapped for
+ * /tmp, which keeps every socket path here well under the cap.
+ */
+const MAX_SOCKET_PATH_BYTES = 103;
+
 function uniqueSocketPath(name: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arp-risk-ipc-'));
+  const prefix = 'arp-risk-ipc-';
+  const longest = path.join(os.tmpdir(), `${prefix}XXXXXX`, `${name}.sock`);
+  const base = Buffer.byteLength(longest) <= MAX_SOCKET_PATH_BYTES ? os.tmpdir() : '/tmp';
+  const dir = fs.mkdtempSync(path.join(base, prefix));
   return path.join(dir, `${name}.sock`);
 }
 
