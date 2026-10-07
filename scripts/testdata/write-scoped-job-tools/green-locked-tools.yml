@@ -1,0 +1,17 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: accepted, a write-scoped job runs only tools the commit fixes.
+name: fixture
+on: push
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          # go install example.com/tool/cmd/tool@latest would be refused; this is a comment
+          go install example.com/tool/cmd/tool@v1.2.3
+          npm ci
+          npx locked-tool --flag
+          npx locked-tool@1.0.0 --flag
+          npx locked-bin
+          npm exec -- locked-tool --flag

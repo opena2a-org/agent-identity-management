@@ -1,0 +1,10 @@
+# Fixture for scripts/lint-write-scoped-job-tools.py: refused, npx asks for a version other than the locked one, so the registry copy runs.
+name: fixture
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - run: npx locked-tool@9.9.9
