@@ -41,6 +41,7 @@ import {
   Calendar,
   Database,
   ExternalLink,
+  X,
 } from "lucide-react";
 import {
   XAxis,
@@ -57,6 +58,7 @@ import {
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/date-utils";
 import { AuthGuard } from "@/components/auth-guard";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Types
 interface ComplianceStatus {
@@ -300,7 +302,7 @@ function ComplianceSummaryCard({
       description: "Audit logs should be recorded daily",
       passedText: "Continuous logging confirmed",
       failedText: (n) => `${n} day${n > 1 ? "s" : ""} without logs`,
-      actionUrl: "/dashboard/admin/compliance",
+      actionUrl: "/dashboard/compliance",
     },
     // Operations Compliance Checks
     "inactiveAgents": {
@@ -747,6 +749,8 @@ export default function CompliancePage() {
   } | null>(null);
   const [runningCheck, setRunningCheck] = useState(false);
   const [exportingReport, setExportingReport] = useState(false);
+  // A failed check or export, shown inline under the header with the step that gets past it.
+  const [actionError, setActionError] = useState<{ title: string; detail: string; nextStep: string } | null>(null);
   // Framework for exports only (not for display)
   const exportFramework = "aim";
 
@@ -819,12 +823,17 @@ export default function CompliancePage() {
 
   const handleRunComplianceCheck = async () => {
     try {
+      setActionError(null);
       setRunningCheck(true);
       const result = await api.runComplianceCheck();
       setCheckResults(result.checks);
     } catch (err) {
       console.error("Failed to run compliance check:", err);
-      alert("Failed to run compliance check: " + (err instanceof Error ? err.message : "Unknown error"));
+      setActionError({
+        title: "The compliance check did not run",
+        detail: err instanceof Error ? err.message : "Unknown error",
+        nextStep: "Reload the page to run the checks again. If they fail again, check that this browser can reach the AIM server.",
+      });
     } finally {
       setRunningCheck(false);
     }
@@ -832,6 +841,7 @@ export default function CompliancePage() {
 
   const handleExportReport = async (format: "csv" | "json") => {
     try {
+      setActionError(null);
       setExportingReport(true);
       const result = await api.exportComplianceReport(format, exportFramework);
 
@@ -858,7 +868,11 @@ export default function CompliancePage() {
       }
     } catch (err) {
       console.error("Failed to export report:", err);
-      alert("Failed to export report: " + (err instanceof Error ? err.message : "Unknown error"));
+      setActionError({
+        title: "The compliance report did not export",
+        detail: err instanceof Error ? err.message : "Unknown error",
+        nextStep: "Choose Export Report again. If it fails again, select Refresh to reload the compliance data, then export.",
+      });
     } finally {
       setExportingReport(false);
     }
@@ -981,6 +995,7 @@ export default function CompliancePage() {
   // Export compliance timeline
   const handleExportAuditLogs = async (format: "csv" | "json") => {
     try {
+      setActionError(null);
       setExportingAuditLogs(true);
       const timeline = unifiedTimeline;
 
@@ -1019,7 +1034,11 @@ export default function CompliancePage() {
       }
     } catch (err) {
       console.error("Failed to export timeline:", err);
-      alert("Failed to export: " + (err instanceof Error ? err.message : "Unknown error"));
+      setActionError({
+        title: "The audit trail did not export",
+        detail: err instanceof Error ? err.message : "Unknown error",
+        nextStep: "Choose Export Logs again. If it fails again, narrow the audit trail with the search or event filter and export the smaller set.",
+      });
     } finally {
       setExportingAuditLogs(false);
     }
@@ -1123,6 +1142,25 @@ export default function CompliancePage() {
 
           </div>
         </div>
+
+        {actionError && (
+          <Alert variant="destructive">
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              aria-label="Dismiss"
+              className="absolute right-3 top-3 rounded p-1 hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            <AlertTitle className="pr-8">{actionError.title}</AlertTitle>
+            <AlertDescription className="pr-8">
+              <p>{actionError.detail}</p>
+              <p className="mt-1">{actionError.nextStep}</p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Key Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
