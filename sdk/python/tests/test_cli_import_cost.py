@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from .star_imports import star_namespace
+
 SDK_ROOT = Path(__file__).resolve().parents[1]
 INIT = SDK_ROOT / "aim_sdk" / "__init__.py"
 
@@ -115,8 +117,8 @@ def test_every_public_name_resolves_to_its_submodule_object():
 
 
 def test_star_import_and_submodule_attributes_still_work():
-    namespace = {}
-    exec("from aim_sdk import *", namespace)
+    # tests/star_imports/aim_sdk_root.py performs the real `from aim_sdk import *`.
+    namespace = star_namespace("aim_sdk_root")
     assert "AIMClient" in namespace and "secure" in namespace
 
     import aim_sdk

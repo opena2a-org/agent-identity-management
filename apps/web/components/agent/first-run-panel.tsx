@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * An agent is in its first run from registration until its first authenticated call: the
- * server stamps lastActive on that call and leaves it empty before it. A suspended or
- * revoked agent cannot connect, so it is never shown the steps.
+ * server sets lastActive after every successful authenticated call, so it is empty until the
+ * first one. A suspended or revoked agent cannot connect, so it is never shown the steps.
  */
 export function isFirstRun(agent: Pick<Agent, "status" | "lastActive">): boolean {
   return !agent.lastActive && agent.status !== "suspended" && agent.status !== "revoked";
@@ -88,8 +88,10 @@ export function FirstRunPanel({ agent }: { agent: Agent }) {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="grid gap-3 md:grid-cols-2">
+          {/* min-w-0 lets each grid row shrink below its unbroken value, so the value truncates
+              and the copy button stays on screen at phone widths. */}
           {identity.map(({ field, label, value }) => (
-            <div key={field} className="flex items-center justify-between gap-2 rounded-inset bg-glass-inset-gray p-3">
+            <div key={field} className="flex min-w-0 items-center justify-between gap-2 rounded-inset bg-glass-inset-gray p-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink-body">{label}</p>
                 <p className="truncate font-mono text-sm text-ink-secondary" title={value}>
@@ -178,7 +180,17 @@ users = get_users()`}</code>
                     <code>{JAVA.install(origin)}</code>
                   </pre>
                 </Step>
-                <Step n={2} title="Connect this agent">
+                <Step n={2} title="Get the SDK credentials">
+                  <p className="text-sm text-ink-secondary">{JAVA.note}</p>
+                  <Link
+                    href="/dashboard/sdk"
+                    className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-brand-text hover:underline"
+                  >
+                    Open the SDK page
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Step>
+                <Step n={3} title="Connect this agent">
                   <p className="text-sm text-ink-secondary">
                     Use this agent&apos;s name. The SDK finds the agent registered here and reconnects to it instead of
                     registering a new one.

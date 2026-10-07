@@ -76,6 +76,20 @@ describe("dashboard redirect table", () => {
   it("serves every row as a permanent redirect", () => {
     expect(dashboardRedirects()).toEqual(ROUTE_MOVES.map((m) => ({ ...m, permanent: true })));
   });
+
+  // Every dashboard URL a page has moved away from. The checks above only judge the rows that
+  // are present, so deleting a row would leave its old URL answering 404 with the suite green;
+  // this list is what a row cannot leave. A new move adds its old path here in the same commit.
+  const RETIRED: readonly RouteMove[] = [
+    { source: "/dashboard/admin/compliance", destination: "/dashboard/compliance" },
+    { source: "/dashboard/api-keys", destination: "/dashboard/credentials" },
+    { source: "/dashboard/sdk-tokens", destination: "/dashboard/credentials" },
+    { source: "/dashboard/agents/:id/success", destination: "/dashboard/agents/:id" },
+  ];
+
+  it.each(RETIRED.map((m) => [m.source, m.destination]))("still redirects %s to %s", (source, destination) => {
+    expect(ROUTE_MOVES.filter((m) => m.source === source)).toEqual([{ source, destination }]);
+  });
 });
 
 describe("the table checks", () => {

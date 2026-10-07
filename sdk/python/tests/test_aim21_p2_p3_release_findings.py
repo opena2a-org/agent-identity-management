@@ -53,6 +53,8 @@ from aim_sdk.exceptions import (
 from aim_sdk.protocol_detection import ProtocolDetector
 from aim_sdk.strict_mode import reset_warning_state
 
+from .star_imports import star_namespace
+
 # Imported defensively so that at the base commit each criterion fails inside
 # its own test instead of erroring this module's collection; AC5 asserts the
 # helper exists inside the test body that needs it.
@@ -1132,9 +1134,8 @@ def test_AIM_21_AC9_module_defines_all_and_every_name_resolves(module):
     ["aim_sdk.detection", "aim_sdk.protocol_detection", "aim_sdk.capability_detection"],
 )
 def test_AIM_21_AC9_star_import_binds_no_stdlib_or_typing_name(module_path):
-    namespace = {}
-    exec(f"from {module_path} import *", namespace)  # noqa: S102 - the property under test
-    bound = set(namespace) - {"__builtins__"}
+    # tests/star_imports/<name>.py performs the real star import; see that package.
+    bound = star_namespace(module_path.rsplit(".", 1)[1])
 
     leaked = bound & {
         "json", "os", "sys", "pathlib", "ast", "inspect", "logging", "warnings",

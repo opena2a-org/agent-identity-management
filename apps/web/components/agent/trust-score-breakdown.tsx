@@ -235,7 +235,9 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
     );
   }
 
-  if (error || !breakdown) {
+  // A 200 answer without a factors object has nothing to break down; show the empty state
+  // instead of letting the maps below throw and take the whole agent page down.
+  if (error || !breakdown?.factors) {
     return (
       <Card>
         <CardHeader>
@@ -296,8 +298,8 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
             {Object.entries(breakdown.factors).map(([key, value]) => {
               const metadata = factorMetadata[key as keyof typeof factorMetadata] ?? fallbackFactorMetadata;
               const Icon = metadata.icon;
-              const weight = breakdown.weights[key as keyof typeof breakdown.weights];
-              const contribution = breakdown.contributions[key as keyof typeof breakdown.contributions];
+              const weight = breakdown.weights?.[key as keyof typeof breakdown.weights] ?? 0;
+              const contribution = breakdown.contributions?.[key as keyof typeof breakdown.contributions] ?? 0;
 
               return (
                 <div key={key} className="group p-4 rounded-panel border border-divider hover:border-brand transition-all">
@@ -383,7 +385,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
               <div className="space-y-4">
                 <Skeleton className="h-64 w-full" />
               </div>
-            ) : historyError || !history || history.history.length === 0 ? (
+            ) : historyError || !history?.history?.length ? (
               <div className="text-center py-12 text-ink-secondary">
                 <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p>{historyError || 'No historical data available yet'}</p>

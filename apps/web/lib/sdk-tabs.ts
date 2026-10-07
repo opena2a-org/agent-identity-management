@@ -79,8 +79,9 @@ const result = await client.verifyAction({
       "git clone https://github.com/opena2a-org/agent-identity-management.git && mvn -f agent-identity-management/sdk/java -DskipTests install",
     docsHref: "https://github.com/opena2a-org/agent-identity-management/tree/main/sdk/java",
     docsLabel: "Java SDK reference",
+    // AIMClient.secure() throws "No SDK credentials found" without one of these, and a clone carries neither.
     note:
-      "The Java SDK is not published to Maven Central. The commands above build it from source and install org.opena2a:aim-sdk:1.0.0 in your local Maven repository, where your pom.xml can depend on it.",
+      "The Java SDK is not published to Maven Central. The commands above build it from source and install org.opena2a:aim-sdk:1.0.0 in your local Maven repository, where your pom.xml can depend on it. AIMClient.secure() reads its credentials from the AIM_REFRESH_TOKEN environment variable or ~/.aim/sdk_credentials.json, and a clone of the repository carries neither. Download the Java SDK from the SDK page: the archive includes .aim/sdk_credentials.json, and the SDK copies it to ~/.aim/ the first time it runs from the unzipped folder.",
     code: () => `import org.opena2a.aim.client.AIMClient;
 
 AIMClient agent = AIMClient.secure("my-first-agent");
