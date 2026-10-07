@@ -37,6 +37,7 @@ import {
   Filter,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { minTrustScoreToPercent, percentToMinTrustScore } from "@/lib/mcp-policy-trust-score";
 import {
   Dialog,
   DialogContent,
@@ -227,6 +228,7 @@ export default function SecurityPoliciesPage() {
   const [allowedNames, setAllowedNames] = useState("");
   const [allowedCapabilities, setAllowedCapabilities] = useState("");
   const [requireVerified, setRequireVerified] = useState(false);
+  // A percentage while editing; stored and sent on the canonical [0,1] scale.
   const [minTrustScore, setMinTrustScore] = useState(0);
   const [minConfidenceScore, setMinConfidenceScore] = useState(0);
   const [minAttestations, setMinAttestations] = useState(0);
@@ -509,7 +511,7 @@ export default function SecurityPoliciesPage() {
       setAllowedNames((rules.allowedNames || []).join(", "));
       setAllowedCapabilities((rules.allowedCapabilities || []).join(", "));
       setRequireVerified(rules.requireVerified || false);
-      setMinTrustScore(rules.minTrustScore || 0);
+      setMinTrustScore(minTrustScoreToPercent(rules.minTrustScore));
       setMinConfidenceScore(rules.minConfidenceScore || 0);
       setMinAttestations(rules.minAttestations || 0);
     } else if (policy.policyType === "mcp_blocklist") {
@@ -539,7 +541,7 @@ export default function SecurityPoliciesPage() {
         allowedNames: allowedNames.split(",").map(s => s.trim()).filter(Boolean),
         allowedCapabilities: allowedCapabilities.split(",").map(s => s.trim()).filter(Boolean),
         requireVerified,
-        minTrustScore,
+        minTrustScore: percentToMinTrustScore(minTrustScore),
         minConfidenceScore,
         minAttestations,
       };

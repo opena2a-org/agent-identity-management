@@ -98,7 +98,9 @@ type MCPAllowlistRules struct {
 	// Example: ["filesystem-mcp", "github-mcp", "slack-mcp"]
 	AllowedNames []string `json:"allowedNames,omitempty"`
 
-	// AllowedCapabilities is a list of allowed capability types
+	// AllowedCapabilities is a list of allowed capability types. When set, every
+	// capability a server declares must be on it (case-insensitive); a server that
+	// declares none passes. Empty means no capability restriction.
 	// Example: ["tools", "resources", "prompts"]
 	AllowedCapabilities []string `json:"allowedCapabilities,omitempty"`
 
