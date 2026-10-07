@@ -2361,7 +2361,7 @@ export const apiDocumentation: EndpointCategory[] = [
         example: `{
   "name": "Trust Score Minimum Policy",
   "rules": {
-    "minTrustScore": 70,
+    "minTrustScore": 0.7,
     "action": "suspend"
   },
   "enabled": true

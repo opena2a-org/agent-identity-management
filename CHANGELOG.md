@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — MCP security policy rules mean what the admin page says
+
+- `rules.minTrustScore` on the `mcp_*` security policies is on the [0,1] scale of an MCP server's
+  trust score. Migration 112 divides every stored value above 1 by 100, including the seeded floors
+  of 50 and 30, which sat above every possible trust score. The admin security-policies page still
+  shows the floor as a percentage and now saves it as a fraction.
+- A bare `*` in `allowedDomains` or `blockedDomains` matches every server. It matched no host
+  before, so the seeded `["*"]` allowlists would have rejected every server.
+- `allowedCapabilities` on an `mcp_allowlist` policy is checked: a server that declares a
+  capability outside the list violates the policy. The field was ignored before.
+- MCP policies are still not evaluated by any running code path, so none of this changes whether
+  a connection is allowed or blocked today (#355).
+
 ### Removed — a JWT is no longer accepted as an agent's ATC
 
 - The server checked agent ATCs, in an `Authorization: ATC` header or in the secrets resolve request body, with a

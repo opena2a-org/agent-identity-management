@@ -23,15 +23,15 @@ import (
 // leave every promise in place with no implementation left to honour it.
 //
 // Migration 105 disables the seeded policies so the surface stops presenting enforcement that
-// does not happen. Three things must be fixed before this can be wired, or it will reject every
-// MCP server:
+// does not happen. The three defects that would have made this reject every MCP server are
+// fixed: migration 112 rescales rules.minTrustScore to the canonical [0,1] scale of
+// MCPServer.TrustScore (migration 104), matchDomainPattern treats a bare "*" as every host, and
+// AllowedCapabilities is enforced as an allowlist.
 //
-//  1. security_policies.rules.minTrustScore is seeded and stored 0-100, while evaluateAllowlist
-//     compares it against MCPServer.TrustScore, which migration 104 made canonical [0,1].
-//  2. matchDomainPattern does not treat a bare "*" as a wildcard -- only the "*." prefix is
-//     special-cased -- so the seeded 'allowedDomains': ['*'] matches no host at all.
-//  3. MCPAllowlistRules.AllowedCapabilities is declared and read by nothing, so an organization
-//     that configures it gets silent non-enforcement.
+// Still undecided, and required before this is wired: where enforcement runs (registration,
+// agent-to-MCP connection, a background sweep), fail-open versus fail-closed when evaluation
+// errors (evaluatePolicy failures are currently skipped), whether block_and_alert may block or
+// the first wired version is alert-only, and whether the six seeded defaults are re-enabled.
 //
 // Tracked in https://github.com/opena2a-org/agent-identity-management/issues/355.
 type MCPPolicyEvaluator struct {
@@ -226,6 +226,26 @@ func (e *MCPPolicyEvaluator) evaluateAllowlist(
 				mcpServer.AttestationCount, rules.MinAttestations)
 			result.Recommendations = append(result.Recommendations, "Obtain more agent attestations")
 			return
+		}
+
+		// Check capability allowlist: every capability the server declares must be on it
+		if len(rules.AllowedCapabilities) > 0 {
+			for _, serverCap := range mcpServer.Capabilities {
+				permitted := false
+				for _, allowedCap := range rules.AllowedCapabilities {
+					if strings.EqualFold(serverCap, allowedCap) {
+						permitted = true
+						break
+					}
+				}
+				if !permitted {
+					result.Triggered = true
+					result.ViolatedRules = append(result.ViolatedRules, "Capability not in allowlist")
+					result.Reason = fmt.Sprintf("MCP server has capability not in allowlist: %s", serverCap)
+					result.Recommendations = append(result.Recommendations, "Add the capability to the allowed capabilities or use an MCP server that does not declare it")
+					return
+				}
+			}
 		}
 	} else if len(rules.AllowedDomains) > 0 || len(rules.AllowedNames) > 0 {
 		// MCP server is not in allowlist
@@ -439,6 +459,11 @@ func extractDomain(rawURL string) string {
 }
 
 func matchDomainPattern(domain, pattern string) bool {
+	// A bare "*" matches every host, including the empty one extractDomain returns for a URL
+	// with no host, so a "*" blocklist cannot be stepped around by registering one.
+	if pattern == "*" {
+		return true
+	}
 	// Handle wildcard patterns like "*.company.com"
 	if strings.HasPrefix(pattern, "*.") {
 		suffix := pattern[1:] // ".company.com"
