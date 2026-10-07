@@ -739,9 +739,10 @@ function enforceReport(file) {
 // The shared review action measures the request before it sends it and
 // refuses one over its token budget, so the required check is INCONCLUSIVE
 // with no finding and the pull request cannot merge. Measured on 2026-10-06:
-// #573 (34 deleted backup files) at 228,383 input tokens, and #575 (85 changed
-// lines) at 227,980, of which 390,051 bytes are one 194,903-byte line of a
-// tracked tsconfig.tsbuildinfo, shown removed and added again.
+// #573 (32 deleted backup files, a .gitignore edit and one added test file)
+// at 228,383 input tokens, and #575 (85 lines added and 14 removed) at
+// 227,980, of which 390,051 bytes are one 194,903-byte line of a tracked
+// tsconfig.tsbuildinfo, shown removed and added again.
 //
 // This mode runs only after that refusal and plans the review sent instead,
 // by the first of two paths that fits:
