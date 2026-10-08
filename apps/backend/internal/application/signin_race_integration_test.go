@@ -177,10 +177,16 @@ func signInRaceCases() []signInRaceCase {
 		{
 			name: "reset token used",
 			setup: func(t *testing.T, f *signInRaceFixture) {
-				require.NoError(t, f.reset.RequestPasswordReset(context.Background(), f.email))
-				issued := f.row(t).resetToken
-				require.True(t, issued.Valid, "RequestPasswordReset did not store a token")
-				f.token = issued.String
+				// The row stores only the token's digest; the token itself
+				// reaches the user in the reset link. Store the digest of a
+				// known token, as RequestPasswordReset does, and present the
+				// token, as the link does.
+				f.token = uuid.New().String()
+				_, err := f.db.Exec(
+					`UPDATE users SET password_reset_token = $1,
+					        password_reset_expires_at = NOW() + INTERVAL '1 hour'
+					 WHERE id = $2`, hashPasswordResetToken(f.token), f.userID)
+				require.NoError(t, err)
 			},
 			commit: func(ctx context.Context, f *signInRaceFixture) error {
 				return f.reset.ResetPassword(ctx, f.token, signInRaceNewPassword, signInRaceNewPassword)
