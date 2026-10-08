@@ -50,7 +50,8 @@ describe("sign-in failures", () => {
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("Invalid email or password");
     expect(screen.getAllByText("Invalid email or password")).toHaveLength(1);
-    expect(document.activeElement).toBe(alert);
+    // Focus moves in a passive effect after the alert is painted, so it is awaited.
+    await waitFor(() => expect(document.activeElement).toBe(alert));
     expect(toast.error).not.toHaveBeenCalled();
     expect(document.getElementById("password-error")).toBeNull();
     expect(screen.getByLabelText("Email address").getAttribute("aria-invalid")).toBe("true");
