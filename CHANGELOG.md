@@ -90,7 +90,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — the backend image carries the license notices of the Go libraries built into it
 
 - The `aim-server` image held the binaries, the migrations and the SDK directory and no license
-  material for the 140 third-party Go libraries linked into `aim-server`, `aim-migrate` and
+  material for the third-party Go libraries linked into `aim-server`, `aim-migrate` and
   `aim-bootstrap`.
 - The image now ships `/app/third_party/`: `licenses/<module path>/` holds each library's license
   and notice files, and for the ten MPL-2.0 HashiCorp modules behind the Vault client, the
