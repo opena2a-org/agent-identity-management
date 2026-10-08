@@ -23,10 +23,13 @@ import (
 // leave every promise in place with no implementation left to honour it.
 //
 // Migration 105 disables the seeded policies so the surface stops presenting enforcement that
-// does not happen. The three defects that would have made this reject every MCP server are
-// fixed: migration 112 rescales rules.minTrustScore to the canonical [0,1] scale of
-// MCPServer.TrustScore (migration 104), matchDomainPattern treats a bare "*" as every host, and
-// AllowedCapabilities is enforced as an allowlist.
+// does not happen. The two defects that would have made this reject every MCP server are fixed:
+// migration 112 rescales rules.minTrustScore to the canonical [0,1] scale of
+// MCPServer.TrustScore (migration 104), and matchDomainPattern treats a bare "*" as every host.
+// A third defect was silent non-enforcement: AllowedCapabilities was read by nothing. It is now
+// checked as an allowlist, but only for a server that AllowedDomains or AllowedNames admit. An
+// mcp_allowlist policy that sets neither list still triggers nothing, so one that sets only
+// AllowedCapabilities is not enforced.
 //
 // Still undecided, and required before this is wired: where enforcement runs (registration,
 // agent-to-MCP connection, a background sweep), fail-open versus fail-closed when evaluation
