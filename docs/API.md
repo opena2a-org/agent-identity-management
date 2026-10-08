@@ -455,6 +455,76 @@ Content-Type: application/json
 
 **Refusals:** `401` with `code` set to `bootstrap_token_invalid`, `bootstrap_token_expired`, `bootstrap_token_used` or `bootstrap_token_revoked`; `400` with `code` `bootstrap_token_in_url` for a token in the query string; `409` when the organization already has an agent with that name (the token stays usable, so retry with another `name`). To recover from any `401`, mint a new token from the onboarding screen.
 
+#### Onboarding telemetry
+
+AIM records onboarding steps per organization so operators can measure how long it takes a new organization to register its first agent. An event row holds the organization, the event name, the SDK tab for `tab_selected`, and a timestamp. It holds no user, email address, client address, user agent or free text.
+
+| Event | Recorded by |
+|---|---|
+| `onboarding_viewed`, `tab_selected`, `onboarding_completed`, `onboarding_skipped` | the dashboard, through `POST /api/v1/onboarding/events` |
+| `token_minted`, `token_exchanged` | the server, when a bootstrap token is minted or exchanged |
+| `first_agent_registered` | the server, once per organization, stamped with the earliest agent's `created_at` |
+
+Server-side events are written after the request that caused them has been answered, and a failed write never fails that request. Migration 116 backfills `first_agent_registered` for every organization that already has an agent.
+
+#### POST /api/v1/onboarding/events
+
+Record a dashboard onboarding event for the caller's organization. Any signed-in role may call it. The organization comes from the session; nothing in the body can choose it. `tab` is required for `tab_selected` (one of `python`, `typescript`, `java`, `go`, `cli`, `mcp`, `claude`, `cursor`) and refused on every other event. Server-side events are refused with `400`.
+
+**Request:**
+```json
+{ "event": "tab_selected", "tab": "python" }
+```
+
+**Response (202):**
+```json
+{ "recorded": true }
+```
+
+#### GET /api/v1/platform-admin/onboarding-metrics
+
+Time to first agent across every organization, and onboarding events in the last 30 days. Requires an organization admin session whose email is listed in `AIM_PLATFORM_ADMINS`; any other caller gets `403`.
+
+`time_to_first_agent` is the earliest agent's `created_at` minus the organization's `created_at`. It is computed from those two columns on every call, so it covers organizations created before any event was recorded. `allTime` covers every organization; `recent` covers organizations created in the last `windowDays`. Percentiles use the nearest-rank method and are `null` when no organization in the set has an agent. `excludedNegative` counts organizations whose earliest agent predates the organization (seeded or migrated data); they count toward `organizationsWithAgent` but not toward the percentiles. An agent deleted since registration no longer counts; the earliest remaining agent stands in for it.
+
+**Response (example shape):**
+```json
+{
+  "generatedAt": "2026-10-08T12:00:00Z",
+  "windowDays": 30,
+  "allTime": {
+    "organizations": 120,
+    "organizationsWithAgent": 48,
+    "conversionRate": 0.4,
+    "medianSeconds": 312,
+    "p75Seconds": 5400,
+    "p90Seconds": 172800,
+    "fastestSeconds": 41,
+    "buckets": [
+      { "label": "under 1 minute", "upperSeconds": 60, "count": 3 },
+      { "label": "1 to 5 minutes", "upperSeconds": 300, "count": 20 },
+      { "label": "5 to 60 minutes", "upperSeconds": 3600, "count": 10 },
+      { "label": "1 to 24 hours", "upperSeconds": 86400, "count": 5 },
+      { "label": "1 to 7 days", "upperSeconds": 604800, "count": 6 },
+      { "label": "over 7 days", "upperSeconds": null, "count": 4 }
+    ],
+    "excludedNegative": 0
+  },
+  "recent": { "organizations": 14, "organizationsWithAgent": 6, "...": "same fields as allTime" },
+  "events": [
+    { "event": "onboarding_viewed", "organizations": 14, "total": 31 },
+    { "event": "tab_selected", "organizations": 9, "total": 17 },
+    { "event": "token_minted", "organizations": 0, "total": 0 },
+    { "event": "token_exchanged", "organizations": 0, "total": 0 },
+    { "event": "first_agent_registered", "organizations": 6, "total": 6 },
+    { "event": "onboarding_completed", "organizations": 0, "total": 0 },
+    { "event": "onboarding_skipped", "organizations": 0, "total": 0 }
+  ]
+}
+```
+
+`events` lists every event type in funnel order, with zero counts for types not seen in the window.
+
 ---
 
 ### MCP Servers Endpoints

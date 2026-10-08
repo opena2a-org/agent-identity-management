@@ -41,6 +41,13 @@ type BootstrapAuditLogger interface {
 	LogAction(ctx context.Context, orgID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress, userAgent string, metadata map[string]interface{}) error
 }
 
+// BootstrapEventSink records the onboarding events a bootstrap token causes.
+// Its methods must not block.
+type BootstrapEventSink interface {
+	TokenMinted(orgID uuid.UUID)
+	TokenExchanged(orgID uuid.UUID)
+}
+
 // BootstrapRequestMeta is the request context recorded in the audit trail.
 type BootstrapRequestMeta struct {
 	IPAddress string
@@ -79,12 +86,19 @@ type BootstrapTokenService struct {
 	repo   domain.BootstrapTokenRepository
 	agents BootstrapAgentRegistrar
 	audit  BootstrapAuditLogger
+	events BootstrapEventSink
 	now    func() time.Time
 }
 
 // NewBootstrapTokenService creates a BootstrapTokenService. audit may be nil.
 func NewBootstrapTokenService(repo domain.BootstrapTokenRepository, agents BootstrapAgentRegistrar, audit BootstrapAuditLogger) *BootstrapTokenService {
 	return &BootstrapTokenService{repo: repo, agents: agents, audit: audit, now: time.Now}
+}
+
+// SetOnboardingEvents wires the onboarding telemetry that records mints and
+// exchanges. When unset, nothing is recorded.
+func (s *BootstrapTokenService) SetOnboardingEvents(events BootstrapEventSink) {
+	s.events = events
 }
 
 // SetClock replaces the service clock. Tests only.
@@ -135,6 +149,9 @@ func (s *BootstrapTokenService) Mint(ctx context.Context, orgID, userID uuid.UUI
 		"scope":         token.Scope,
 		"expiresAt":     token.ExpiresAt,
 	})
+	if s.events != nil {
+		s.events.TokenMinted(orgID)
+	}
 
 	return &MintedBootstrapToken{Token: token, Plaintext: plaintext}, nil
 }
@@ -262,6 +279,9 @@ func (s *BootstrapTokenService) Exchange(ctx context.Context, plaintext string, 
 		"registration":     "bootstrap_token",
 		"bootstrapTokenId": token.ID.String(),
 	})
+	if s.events != nil {
+		s.events.TokenExchanged(token.OrganizationID)
+	}
 
 	return result, nil
 }

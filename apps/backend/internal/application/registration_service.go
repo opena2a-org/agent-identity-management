@@ -764,6 +764,12 @@ func ReportPlatformAdminAllowlist() {
 	log.Printf("AIM_PLATFORM_ADMINS: %d address(es) accepted", len(entries))
 }
 
+// IsPlatformAdmin reports whether email is on the AIM_PLATFORM_ADMINS allowlist,
+// for gates outside registration.
+func IsPlatformAdmin(email string) bool {
+	return isPlatformAdmin(email)
+}
+
 func isPlatformAdmin(email string) bool {
 	target := strings.ToLower(strings.TrimSpace(email))
 	for _, entry := range platformAdminAllowlist() {
