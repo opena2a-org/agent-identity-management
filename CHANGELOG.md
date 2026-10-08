@@ -188,14 +188,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Fixed: the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
 
-- `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server: either `AIM_BASE_URL` or the origin
-  the request arrived on. It built that origin from the host name without its port. With `AIM_BASE_URL` unset, a
-  server reached at `http://localhost:8080` therefore refused `aud` `http://localhost:8080`, which is the value the
-  TypeScript SDK's `OAuthTokenManager` signs when given that base URL, and accepted `http://localhost` instead.
-- The origin now keeps the port from the `Host` header. `http://localhost:8080` and `http://localhost:8080/api/v1`
-  are accepted on that server, and an `aud` naming the same host on another port or scheme is refused. An `aud`
-  equal to `AIM_BASE_URL` is accepted as before, and so is the origin of a server on the scheme's default port.
-- Tests send the request to an address with a port and to one without, and check which audiences each accepts.
+- `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server. It accepted `AIM_BASE_URL` and also
+  the origin the request arrived on, which it built from the host name in the `Host` header without its port. With
+  `AIM_BASE_URL` unset, a server reached at `http://localhost:8080` therefore refused `aud` `http://localhost:8080`,
+  which is the value the TypeScript SDK's `OAuthTokenManager` signs when given that base URL, and accepted
+  `http://localhost` instead.
+- With `AIM_BASE_URL` unset, the accepted origin is taken from the `Host` header the client sends, and now keeps its
+  port. `http://localhost:8080` and `http://localhost:8080/api/v1` are accepted on that server, and an `aud` naming
+  the same host on another port or scheme is refused. The origin of a server on the scheme's default port is
+  accepted as before. Set `AIM_BASE_URL` to have `aud` judged against the configured address instead.
+- With `AIM_BASE_URL` set, only `AIM_BASE_URL` and `AIM_BASE_URL` followed by `/api/v1` are accepted, and the `Host`
+  header is not consulted. It used to be, so a client that named another host in `Host` could have an assertion
+  addressed to that host accepted. A client that signs `aud` with another address of the server is now refused
+  there; it has to sign `AIM_BASE_URL`.
+- Tests send the request to an address with a port and to one without, and check which audiences each accepts. They
+  also send a `Host` header that names another host, with a port and without one, with `AIM_BASE_URL` set and unset.
 
 ### Fixed — `POST /api/v1/public/agents/register` answers 401 without a user access token, and the API reference says it needs one
 
