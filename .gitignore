@@ -8,6 +8,10 @@ coverage/
 .nyc_output
 *.test.js.snap
 
+# Playwright run output
+apps/web/test-results/
+apps/web/playwright-report/
+
 # Production
 build/
 dist/

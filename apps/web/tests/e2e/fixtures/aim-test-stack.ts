@@ -1,7 +1,7 @@
 import { test as base, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
-const ADMIN_EMAIL = process.env.AIM_TEST_ADMIN_EMAIL ?? 'admin@opena2a.org';
+export const ADMIN_EMAIL = process.env.AIM_TEST_ADMIN_EMAIL ?? 'admin@opena2a.org';
 const ADMIN_PASSWORD = process.env.AIM_TEST_ADMIN_PASSWORD ?? process.env.DEFAULT_ADMIN_PASSWORD ?? '';
 
 type Resource = { id: string; name: string };

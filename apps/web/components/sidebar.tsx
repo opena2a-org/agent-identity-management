@@ -377,7 +377,8 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
         <SidebarContent />
       </aside>
 
-      {/* Mobile: drawer opened from the bottom tab bar */}
+      {/* Mobile: drawer opened from the bottom tab bar; it ends above the bar so the
+          account section and Settings at its foot are never covered. */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
@@ -387,7 +388,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
       )}
       <aside
         className={cn(
-          "overlay-surface fixed bottom-3 left-3 top-3 z-50 flex w-[280px] max-w-[85vw] flex-col px-3.5 py-5 transition-transform duration-300 ease-out lg:hidden",
+          "overlay-surface fixed bottom-[calc(var(--mobile-tab-bar-height)+0.75rem)] left-3 top-3 z-50 flex w-[280px] max-w-[85vw] flex-col px-3.5 py-5 transition-transform duration-300 ease-out lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-[120%]"
         )}
         aria-hidden={!mobileOpen}
