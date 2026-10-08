@@ -56,7 +56,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `components/ui/action-outcome.tsx` and `lib/action-outcome.ts` are the shared inline outcome for dashboard actions.
 - `tests/no-browser-alert.test.ts` counts the lines under `apps/web/app` that open a browser alert, the same lines as
   `git grep -n -E 'alert\(' -- apps/web/app ':!*.fmt' ':!*.final' ':!*.bkp' ':!*.bak'`, and fails when the count
-  rises above 21 (27 before this change), with a planted call as its positive control.
+  rises above 16 (22 before this change), with a planted call as its positive control.
 
 ### Fixed — The API reference names the password reset fields the endpoint reads
 
@@ -126,23 +126,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   or empty `talks_to` list is approved, when a server listed by name is refused, or when an unlisted server is
   approved.
 
-### Security — a check fails on token-shaped literals in tracked files
-
-- `node scripts/lint-token-literals.mjs` reads every file `git ls-files` returns, binary files included, and fails on
-  a three-segment base64url token (the JWT shape), a private key block, an AIM API key, an AWS, GitHub, Slack, Stripe,
-  Google or `sk-` prefixed key, or a credential-named field assigned a high-entropy string. It prints the path, line,
-  rule and a fingerprint of each finding, never the matched text.
-- Each run also scans a synthetic file it plants in a temporary directory, carrying one sample per rule. If any sample
-  is missed, the run reports INCONCLUSIVE and exits 2 instead of passing. A tracked path it cannot read, or an empty
-  file list, also exits 2.
-- Literals reviewed as non-credentials are listed, each with a reason, in `scripts/token-literal-allowlist.txt`. An
-  entry covers one literal at one path, and an entry that no longer matches fails the run.
-- The SDK token tracking middleware test builds its JWT at run time instead of storing one, and the Python scripts
-  under `tests/scripts/` read the API key from `AIM_API_KEY` instead of carrying a key issued by a local backend.
-- `scripts/test-lint-token-literals.mjs` (`node --test scripts/test-lint-token-literals.mjs`) fails when a tracked
-  token is not reported or is printed, when a missed planted sample or an unreadable path does not make the run
-  inconclusive, or when this repository's tracked tree has a finding.
-
 ### Fixed — an SDK refresh no longer hands out a refresh token that has no row
 
 - `POST /api/v1/auth/refresh` with an SDK refresh token revoked the presented token's `sdk_tokens` row, then inserted
@@ -184,8 +167,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `jackson-modules-java8` includes 2.18.11 in its vulnerable range. The Java SDK is built from source: rebuild it, and
   the example, to pick up the new version.
 
-### Removed — the unread token lifetime defaults in the backend configuration
-
 ### Added — an admin or manager can turn off hybrid mode from the agent page
 
 - The agent page's Key Vault tab showed "Hybrid mode enabled" with no way to turn it off; the act existed only as a
@@ -204,43 +185,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   same value as its new key.
 - **Upgrading:** a deployment whose `KEYVAULT_MASTER_KEY` is 32 zero bytes no longer starts. Set it to the output of
   `openssl rand -base64 32`; agent private keys stored under the old value cannot be decrypted under the new one.
-
-### Fixed — a 4xx response states its reason instead of carrying an error's text
-
-- 51 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and three 200 fallbacks) put the text of a Go
-  error in the body. Most passed a library or service message through: a UUID or JSON decoding error, a wrapped repository
-  error behind a 400 (`failed to update password: ...` on a password change, the repository error on an API key
-  delete or a device-code approval), or every reason a secrets resolve was refused, agent and namespace names
-  included. Each now answers a line written for the caller.
-- A refusal the caller can fix names the request member and the rule it breaks: `newPassword must be at least 8
-  characters long`, `id must be a UUID`, `signupProfile.role must be one of the listed values`,
-  `sandbox is not a recognized sandbox type`, `encryptedBlob must decode to at most 1048576 bytes`. The services
-  return these refusals as declared errors (for example `ErrCurrentPasswordIncorrect`, `ErrAPIKeyNotDisabled`,
-  `ErrDeviceCodeNotPending`, `ErrCapabilityAlreadyGranted`), and the handlers match them with `errors.Is` or
-  `errors.As` instead of comparing text.
-- A failure behind one of these endpoints that is not the caller's to fix (a repository or hashing error during a
-  password change, password reset, API key delete, device-code approval or capability registration) now answers 500
-  with the fixed server line and goes to the server log.
-- `POST /api/v1/secrets/resolve` still refuses with 403. A malformed, stale or reused nonce and an `agentPublicKey`
-  that is not the registered key are named; every other refusal answers `Secret resolution refused`, and its reason
-  stays in the secrets audit entry and the server log.
-- The census test in the handlers package now covers every status: it fails on any response (`c.JSON`,
-  `c.Status(s).JSON`, `Send`, `SendString`, `fiber.NewError`) and any `fiber.Map` or `ErrorResponse` literal whose
-  body is built from an error value. A second test plants an error text in a server failure and checks that it is
-  in the log line and not in the response.
-
-### Fixed — a 5xx response carries a fixed line, never the server's error text
-
-- 131 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`.
-  A failed `DELETE /api/v1/agents/:id`, for example, answered with the foreign-key violation, naming the table and
-  constraint. Each now answers `{"error":"An internal error occurred. Please try again later."}`, a line declared once
-  in the handlers package, and writes the error to the server log with the status, method and path. Agent
-  registration and the MCP attestation endpoints still answer 400, 403, 404 and 409 with the reason they did before.
-- The dashboard shows the same line for every 5xx, whatever the body holds: an older server's error text or a proxy's
-  HTML page. A 503 refusal that names its reason (`reasonCode`, such as `noAdministrators`) keeps its own line.
-- A test in the handlers package reads every handler file and fails on a response at a 5xx status whose body is built
-  from an error value. A status counts as 5xx when it is a 5xx constant, a local variable set to one, or a call to a
-  package function that returns one.
 
 ### Removed — the source tree no longer carries prebuilt server binaries
 
@@ -263,7 +207,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   receives and looks the user up by that digest, so a value read from the table does not reset a password. The
   link, the request body and the 24-hour expiry are unchanged.
 - No schema change: the digest fits the existing column and index. A reset link sent before the upgrade stops
-  working, and the user requests a new one; the expired-token sweep clears its stored value once it expires.
+  working, and the user requests a new one; the old value stays stored until a new reset request replaces it.
 
 ### Fixed — deployment and installation guides name `KEYVAULT_MASTER_KEY` as required outside development
 
@@ -291,44 +235,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `agentName` with each record that has a user or an agent, as the per-agent and per-resource audit routes already
   do. The CSV export is unchanged.
 
-### Fixed — secrets resolve encrypts the credential to the agent's registered key and answers a signed request once
-
-- `POST /api/v1/secrets/resolve` encrypts the credential to the agent's registered Ed25519 key, however the agent
-  authenticated (ATC or signed request). A request whose `agentPublicKey` is not that key is refused with 403 before
-  the credential is read and before its nonce is spent.
-- `nonce` must be `<RFC 3339 time>:<random part>`, the form both SDKs send, with a time no more than 30 seconds from
-  the server clock in either direction. Any other nonce is refused with 403.
-- Each signed request (namespace, operation and nonce) is answered once. It is admitted through the same single
-  statement and table, `agent_request_nonces`, as signed action-request statements, and the same purge deletes it. A
-  repeat is refused with 403. When the check cannot run, including before the first purge after start, the answer is
-  503 and nothing is resolved.
-
-### Added — action verification accepts a signed statement with a nonce and a 30-second window
-
-- `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications` accept a second body form: exactly
-  `signedBytes`, `signature` and `publicKey`, each unpadded base64url. `signedBytes` is the DSSE v1
-  pre-authentication encoding of the payload type `application/vnd.opena2a.action-request.v1+json` and a JSON
-  payload with `action_type`, `agent_id`, `resource` (a string or `null`), `timestamp` (RFC 3339 in UTC with `Z`)
-  and `nonce` (16 random bytes), and optionally `context`, `delegation_digests` and `risk_level`. The Ed25519
-  signature is checked over the bytes as received, and the action is decided and recorded from the signed payload.
-  Numbers in `context` are recorded with the digits they were signed with.
-- A statement is accepted only when its `timestamp` is within 30 seconds of the database clock, and an agent's nonce
-  is accepted once. The time check and the nonce insert are one database statement, shared by both routes and every
-  replica: a statement accepted on one route is refused on the other. The window is a code constant.
-- Refusals carry a `reasonCode`. The shape checks answer 400 `invalidRequest` or `nonceRequired`, or 422
-  `limitExceeded` for `signedBytes` over 65,536 bytes or a payload nested deeper than 32 levels. An unknown agent and
-  a key that is not the agent's registered key get the same 401 `agentKeyNotRecognized` body. The others are 401
-  `signatureInvalid`, `hybridSignatureRequired`, `timestampOutsideWindow`, `nonceReused` and `agentStatusDenied`,
-  and 503 `freshnessCheckUnavailable` when the database cannot run the check. A refused statement writes no
-  verification event, audit entry or alert.
-- A statement from a suspended or revoked agent whose key and signature check out still spends its nonce. To stop a
-  key someone else holds from writing nonces, rotate or remove the key, or delete the agent.
-- Accepted nonces are kept in a new table, `agent_request_nonces` (migration 116), until 31 seconds after their
-  window ends. A purge deletes them once at start and then every 60 seconds; until a purge has completed, and
-  whenever none has for two intervals, every statement is refused with 503 and nothing is stored.
-- A request in the original form is handled as before. One that also carries a top-level `nonce` or
-  `delegationDigests` is refused with 400: those members are checked only inside a signed statement.
-
 ### Fixed — sample output in the docs shows a placeholder account
 
 - The Azure CLI sample in `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` showed the signed-in account as a real
@@ -336,15 +242,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `scripts/lint-docs-sample-addresses.sh` fails if a Markdown page under `docs/` carries an email address outside
   the reserved example domains, the project's own domain and the generic placeholders the guides already use, and
   names each one with its file and line. `scripts/test-lint-docs-sample-addresses.sh` tests it.
-
-### Fixed — expired A2A request nonces are deleted on a schedule
-
-- An A2A request nonce, and the SHA-256 request hash stored with it, stayed in `a2a_request_nonces` after it expired
-  until an admin called `POST /api/v1/a2a/maintenance/cleanup-nonces`. The server now deletes them every 60 seconds,
-  logs the interval when the job starts, and logs only the count of rows each run deletes.
-- A nonce is kept while a request carrying it could still pass the timestamp check: for the five-minute signature
-  timestamp tolerance past its expiry, and for twice that past its first use.
-- The admin route stays and runs the same cleanup on demand, with the same bound.
 
 ### Removed — a prebuilt server binary is no longer part of the source tree
 
@@ -367,14 +264,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   which does not start without it, and adds the bootstrap step.
 - A test reads each root `docker-compose*.yml` and fails if any service other than a one-shot bootstrap run sets
   `DEFAULT_ADMIN_PASSWORD`.
-
-### Fixed — an expired password reset token is cleared from the account
-
-- A password reset token that was never used stayed on the user's row after it expired, until the user requested
-  another reset. A token stored without an expiry, which the reset lookup never accepts, stayed the same way.
-- The server's five-minute cleanup job now clears both and logs only how many rows it cleared. A reset link that has
-  not expired keeps working.
-- The `users` update trigger still sets `updated_at` on each row the job clears.
 
 ### Fixed — an approved device code is exchanged for one token pair
 
@@ -401,23 +290,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   request did not reach it, or it answered without one), the alert gives a neutral message that does not say the
   credentials were wrong. Client-side validation still shows its errors under the fields.
 
-### Changed — a third party can verify an agent card attestation from the served card and the JWK Set
-
-- A served card's attestation could not be checked by anyone but the server. The signed `issuedAt` was a different
-  instant from the stored one, timestamps were signed with sub-microsecond precision that PostgreSQL does not keep,
-  the served `issuer` was empty, and `cardHash` was not served. A refreshed attestation also signed the hash of the
-  card as stored in JSONB rather than the registered card's hash.
-- Attestations are now signed in the `opena2a-aim/card-attestation/v2` format: the label, a newline, and the JSON
-  payload (`cardHash`, `agentId`, `issuer`, `issuedAt`, `expiresAt`), with both timestamps in UTC and whole seconds.
-  The stored and served timestamps are the signed ones, in UTC. `aim.attestation` in a served card adds `format` and
-  `cardHash`, and `issuer` reads `aim-server`.
-- `docs/specs/card-attestation-v2.md` is the verification procedure. `docs/specs/card-attestation-v2-vector.json` is
-  a conformance vector with seven cases, and `docs/specs/verify-card-attestation.mjs` is a Node.js verifier with no
-  dependencies that checks a served card or the vector. The procedure also covers key rotation with
-  `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and the effect of rotating `KEYVAULT_MASTER_KEY` on derived keys.
-- Cards record the format as `attestationFormat` (migration 115). Attestations issued before the upgrade read no
-  format, are served without `format`, cannot be verified by a third party, and are re-signed in v2 when refreshed.
-
 ### Changed — `aim-bootstrap` prints the admin password only when it generated it
 
 - `aim-bootstrap` ended every run by printing the admin email and password, including a password the operator
@@ -442,8 +314,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   comment on the line above.
 - A test loads each environment template (`.env.example`, `.env.quickstart`, `apps/backend/.env.example`) as written
   and expects startup to refuse its `JWT_SECRET`.
-
-### Changed — each server signing purpose has its own key, and the public keys are published
 
 ### Fixed — on tablet-width screens the end of a dashboard page is no longer hidden beneath the bottom tab bar
 
