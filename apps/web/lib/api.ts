@@ -846,8 +846,21 @@ class APIClient {
     return this.request(`/api/v1/oauth/${provider}/login`);
   }
 
-  async getCurrentUser(): Promise<User> {
-    return this.request("/api/v1/auth/me");
+  // One profile request on the wire at a time. The dashboard shell, the sidebar, the
+  // header and the deactivation check each ask for the signed-in user when a page
+  // loads, and /api/v1/auth/me shares the strict rate limit of the sign-in route, so a
+  // caller that asks while a request for the same token is pending shares its answer.
+  private currentUserInFlight: { token: string | null; promise: Promise<User> } | null = null;
+
+  getCurrentUser(): Promise<User> {
+    const token = this.getToken();
+    const inFlight = this.currentUserInFlight;
+    if (inFlight && inFlight.token === token) return inFlight.promise;
+    const promise: Promise<User> = this.request<User>("/api/v1/auth/me").finally(() => {
+      if (this.currentUserInFlight?.promise === promise) this.currentUserInFlight = null;
+    });
+    this.currentUserInFlight = { token, promise };
+    return promise;
   }
 
   async getCurrentOrganization(): Promise<Organization> {
