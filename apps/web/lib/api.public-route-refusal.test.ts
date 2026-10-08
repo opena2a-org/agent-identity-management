@@ -20,10 +20,12 @@ function answer(status: number, body: unknown) {
   return fetchMock;
 }
 
+// Timers are faked inside each test, after its storage is set up: jsdom's Storage
+// dispatches its storage event through setTimeout, so a token written under fake
+// timers would be counted as a pending timer of the client.
 beforeEach(() => {
   api.clearToken();
   localStorage.clear();
-  vi.useFakeTimers({ toFake: ["setTimeout"] });
 });
 
 afterEach(() => {
@@ -37,6 +39,7 @@ describe("a 401 from the sign-in route", () => {
   it("is the server's refusal, not an expired session", async () => {
     // A refresh token left over from an earlier session must not be spent on it.
     localStorage.setItem("refresh_token", "earlier.refresh.value");
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     const fetchMock = answer(401, { success: false, error: "Invalid email or password" });
 
     const err = await api
@@ -58,6 +61,7 @@ describe("a 401 from the sign-in route", () => {
 
 describe("a 401 from a route that checks the session", () => {
   it("still ends the session", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
     answer(401, { error: "Unauthorized" });
 
     await expect(api.getCurrentUser()).rejects.toThrow("Unauthorized");
