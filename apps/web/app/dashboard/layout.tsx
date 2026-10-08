@@ -9,7 +9,11 @@ import { IdleTimeoutGuard } from "@/components/idle-timeout-guard";
 import { RouteGate } from "@/components/route-gate";
 import { useDeactivationCheck } from "@/hooks/use-deactivation-check";
 import { api } from "@/lib/api";
+import { decodeJwtPayload } from "@/lib/jwt-payload";
 import type { UserRole } from "@/lib/permissions";
+
+const normalizeRole = (role: string | undefined): UserRole | undefined =>
+  (role === "pending" ? "viewer" : role) as UserRole | undefined;
 
 export default function DashboardLayout({
   children,
@@ -23,14 +27,18 @@ export default function DashboardLayout({
 
   useEffect(() => {
     let cancelled = false;
+    // The session store the route gate decides from gives the role at once; /auth/me
+    // refines it. That call shares the strict /auth rate limit, so a refusal there
+    // must not drop an admin to the viewer tab set while the drawer shows admin entries.
+    setRole(normalizeRole(decodeJwtPayload(api.getToken())?.role));
     api
       .getCurrentUser()
       .then((u) => {
-        if (cancelled) return;
-        setRole(u?.role === "pending" ? "viewer" : (u?.role as UserRole | undefined));
+        if (cancelled || !u?.role) return;
+        setRole(normalizeRole(u.role));
       })
       .catch(() => {
-        /* the sidebar and header handle the unauthenticated redirect */
+        /* keep the session-store role; the sidebar and header handle the unauthenticated redirect */
       });
     return () => {
       cancelled = true;
