@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — on tablet-width screens the end of a dashboard page is no longer hidden beneath the bottom tab bar
+
+- From 640 to 1023 pixels wide the dashboard shows the bottom tab bar, but the page's bottom padding fell back to 24
+  pixels there, so the last part of a page, scrolled to its end, stayed beneath the bar and its raised Secure button. The
+  padding now is the bar's height token plus 1.75rem at every width the bar is shown: on a phone without a safe-area
+  inset it is unchanged at 112 pixels, it grows with the inset, and from 1024 pixels up it stays 24 pixels.
+- `apps/web/tests/e2e/mobile-tab-bar.spec.ts` checks, at 375x812, 375x667 and 768x1024 for a role that can register
+  agents, that a page scrolled to its end ends above the raised Secure button, that nothing is painted over that
+  button, and that the navigation drawer ends above it.
+
 ### Changed — the dashboard's Compliance and Credentials pages have new addresses
 
 - Compliance is at `/dashboard/compliance`. It is still shown to admins only, and
