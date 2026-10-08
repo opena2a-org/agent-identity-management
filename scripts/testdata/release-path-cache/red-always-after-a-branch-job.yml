@@ -1,0 +1,31 @@
+# Refused: `always()` runs `report` even when the branch-only job it needs is
+# skipped, so it runs for the tag.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'platform-v*'
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+  report:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.npm
+          key: npm

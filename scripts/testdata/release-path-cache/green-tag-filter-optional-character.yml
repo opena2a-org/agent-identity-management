@@ -1,0 +1,22 @@
+# Passes: `rc1?` matches only `rc` and `rc1`, so a job limited to `rb` never runs
+# for it.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'rc1?'
+
+permissions:
+  contents: read
+
+jobs:
+  other:
+    if: github.ref_name == 'rb'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.npm
+          key: npm

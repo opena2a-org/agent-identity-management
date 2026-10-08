@@ -1,0 +1,22 @@
+# Refused: `\+` is a literal `+`, so the tag `v1+build1` matches the filter and
+# this job runs for it.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'v1\+build*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v1+build')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.npm
+          key: npm
