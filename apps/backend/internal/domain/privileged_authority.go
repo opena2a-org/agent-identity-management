@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -123,7 +124,8 @@ type PrivilegedDecision struct {
 
 // SigningBytes returns the canonical encoding the owner signs: the version
 // line, then one "name:value" line per field, times as Unix seconds. A field
-// containing a control character is rejected so no value can add a line.
+// containing a control character (C0, DEL or C1) or a Unicode line or
+// paragraph separator is rejected so no value can add a line.
 func (s PrivilegedActionStatement) SigningBytes() ([]byte, error) {
 	fields := []struct{ name, value string }{
 		{"agentId", s.AgentID.String()},
@@ -138,7 +140,7 @@ func (s PrivilegedActionStatement) SigningBytes() ([]byte, error) {
 	b.WriteString(privilegedActionStatementV1)
 	b.WriteByte('\n')
 	for _, f := range fields {
-		if strings.ContainsFunc(f.value, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		if strings.ContainsFunc(f.value, endsLine) {
 			return nil, fmt.Errorf("statement field %s contains a control character", f.name)
 		}
 		b.WriteString(f.name)
@@ -147,6 +149,12 @@ func (s PrivilegedActionStatement) SigningBytes() ([]byte, error) {
 		b.WriteByte('\n')
 	}
 	return []byte(b.String()), nil
+}
+
+// endsLine reports whether r is a control character or a Unicode line or
+// paragraph separator, either of which a reader may take as a line break.
+func endsLine(r rune) bool {
+	return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
 }
 
 // AuthorizePrivilegedAction decides whether authority is enough for action.
@@ -181,13 +189,18 @@ func AuthorizePrivilegedAction(action PrivilegedAction, authority ActionAuthorit
 	if st.Nonce == "" {
 		return refuse("owner signature statement has no nonce")
 	}
-	if !st.ExpiresAt.After(st.IssuedAt) || st.ExpiresAt.Sub(st.IssuedAt) > MaxOwnerSignatureLifetime {
+	// The signature covers IssuedAt and ExpiresAt as whole Unix seconds, so
+	// statements that differ only below the second share one signature. The
+	// window is evaluated on the signed values so they get one decision.
+	issuedAt := time.Unix(st.IssuedAt.Unix(), 0)
+	expiresAt := time.Unix(st.ExpiresAt.Unix(), 0)
+	if !expiresAt.After(issuedAt) || expiresAt.Sub(issuedAt) > MaxOwnerSignatureLifetime {
 		return refuse("owner signature validity window must be positive and at most %s", MaxOwnerSignatureLifetime)
 	}
-	if st.IssuedAt.After(now.Add(ownerSignatureClockSkew)) {
+	if issuedAt.After(now.Add(ownerSignatureClockSkew)) {
 		return refuse("owner signature is issued in the future")
 	}
-	if !now.Before(st.ExpiresAt) {
+	if !now.Before(expiresAt) {
 		return refuse("owner signature has expired")
 	}
 
