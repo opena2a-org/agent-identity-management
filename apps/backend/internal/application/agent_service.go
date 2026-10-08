@@ -45,6 +45,19 @@ type AgentService struct {
 	orgRepo                  domain.OrganizationRepository // ✅ For checking enforcement mode
 	capabilityRequestService *CapabilityRequestService     // For routing re-registration capability adds through the mode-aware approval workflow (monitoring auto-approves, strict creates pending request)
 	auditRepo                domain.AuditLogRepository     // Optional (issue #293): records the audit event on a honeytoken verification hit; injected via SetHoneytokenAuditing
+	onboardingEvents         FirstAgentEventSink           // Optional: records first_agent_registered; injected via SetOnboardingEvents
+}
+
+// FirstAgentEventSink is told after every agent registration so it can record
+// an organization's first agent. It must not block.
+type FirstAgentEventSink interface {
+	FirstAgentRegistered(orgID uuid.UUID)
+}
+
+// SetOnboardingEvents wires the onboarding telemetry that records an
+// organization's first agent. When unset, registration records nothing.
+func (s *AgentService) SetOnboardingEvents(sink FirstAgentEventSink) {
+	s.onboardingEvents = sink
 }
 
 // SetHoneytokenAuditing wires an audit-log repository so a honeytoken verification
@@ -322,6 +335,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		default:
 			return nil, fmt.Errorf("failed to create agent: %w", err)
 		}
+	}
+
+	if s.onboardingEvents != nil {
+		s.onboardingEvents.FirstAgentRegistered(orgID)
 	}
 
 	// Calculate initial trust score

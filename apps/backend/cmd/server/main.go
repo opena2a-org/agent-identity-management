@@ -533,6 +533,7 @@ type Repositories struct {
 	UserFeedback         *repository.UserFeedbackRepository         // Factor 8: user feedback
 	NanoMindTME          *repository.NanoMindTMERepository          // TME enrichment of security alerts
 	BootstrapToken       *repository.BootstrapTokenRepository       // Onboarding bootstrap tokens (one agent registration each)
+	OnboardingEvent      *repository.OnboardingEventRepository      // Onboarding telemetry (organization, event, time; no user data)
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -594,6 +595,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		UserFeedback:         repository.NewUserFeedbackRepository(db),
 		NanoMindTME:          repository.NewNanoMindTMERepository(db),
 		BootstrapToken:       repository.NewBootstrapTokenRepository(db),
+		OnboardingEvent:      repository.NewOnboardingEventRepository(db),
 	}, oauthRepo
 }
 
@@ -619,6 +621,7 @@ type Services struct {
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
 	BootstrapToken    *application.BootstrapTokenService
+	Onboarding        *application.OnboardingTelemetryService
 	Capability        *application.CapabilityService
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
@@ -729,6 +732,8 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// event alongside the high-severity alert (issue #293). Setter-injected to keep
 	// the constructor signature stable.
 	agentService.SetHoneytokenAuditing(repos.AuditLog)
+	onboardingTelemetryService := application.NewOnboardingTelemetryService(repos.OnboardingEvent)
+	agentService.SetOnboardingEvents(onboardingTelemetryService)
 
 	apiKeyService := application.NewAPIKeyService(
 		repos.APIKey,
@@ -861,6 +866,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		agentService,
 		auditService,
 	)
+	bootstrapTokenService.SetOnboardingEvents(onboardingTelemetryService)
 
 	capabilityService := application.NewCapabilityService(
 		repos.Capability,
@@ -1072,6 +1078,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
 		BootstrapToken:    bootstrapTokenService,
+		Onboarding:        onboardingTelemetryService,
 		Capability:        capabilityService,
 		CapabilityRequest: capabilityRequestService,                             // ✅ For capability expansion approval workflow
 		Detection:         detectionService,                                     // ✅ For MCP auto-detection (SDK + Direct API)
@@ -1106,6 +1113,7 @@ type Handlers struct {
 	SDK                *handlers.SDKHandler
 	SDKToken           *handlers.SDKTokenHandler
 	BootstrapToken     *handlers.BootstrapTokenHandler
+	Onboarding         *handlers.OnboardingTelemetryHandler
 	AuthRefresh        *handlers.AuthRefreshHandler
 	SDKTokenRecovery   *handlers.SDKTokenRecoveryHandler
 	Capability         *handlers.CapabilityHandler
@@ -1252,6 +1260,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		BootstrapToken: handlers.NewBootstrapTokenHandler(
 			services.BootstrapToken,
 		),
+		Onboarding: handlers.NewOnboardingTelemetryHandler(
+			services.Onboarding,
+		),
 		AuthRefresh: handlers.NewAuthRefreshHandler(
 			jwtService,
 			services.SDKToken,
@@ -1388,6 +1399,17 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 		Mint:          h.BootstrapToken.Mint,
 		Revoke:        h.BootstrapToken.Revoke,
 		Exchange:      h.BootstrapToken.Exchange,
+	})
+
+	// Onboarding telemetry: event reports from the dashboard, and the
+	// cross-organization baseline for platform admins.
+	registerOnboardingTelemetryRoutes(v1, onboardingTelemetryRouteDeps{
+		Authenticate:         middleware.AuthMiddleware(jwtService),
+		RequirePlatformAdmin: middleware.PlatformAdminAllowlistMiddleware(application.IsPlatformAdmin),
+		EventLimit:           middleware.RateLimitMiddleware(),
+		MetricsLimit:         middleware.RateLimitMiddleware(),
+		RecordEvent:          h.Onboarding.RecordEvent,
+		Metrics:              h.Onboarding.GetBaseline,
 	})
 
 	// OAuth 2.0 token endpoint (RFC 6749 / RFC 7523 jwt-bearer grant)
