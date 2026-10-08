@@ -206,6 +206,15 @@ func TestAuthorizePrivilegedAction_RefusesSignaturesThatDoNotVerify(t *testing.T
 			},
 		},
 		{
+			name: "expires at the evaluation instant",
+			want: "has expired",
+			auth: func() ActionAuthority {
+				st := f.statement()
+				st.ExpiresAt = f.now
+				return f.sign(t, f.priv, st)
+			},
+		},
+		{
 			name: "issued in the future",
 			want: "issued in the future",
 			auth: func() ActionAuthority {
@@ -247,6 +256,18 @@ func TestAuthorizePrivilegedAction_RefusesSignaturesThatDoNotVerify(t *testing.T
 				return f.sign(t, f.priv, st)
 			},
 		},
+		// Signed as whole seconds, these bounds are the same second, so the
+		// statement as signed has no validity window at all.
+		{
+			name: "validity window inside one second",
+			want: "validity window",
+			auth: func() ActionAuthority {
+				st := f.statement()
+				st.IssuedAt = f.now.Add(10*time.Second + 100*time.Millisecond)
+				st.ExpiresAt = f.now.Add(10*time.Second + 900*time.Millisecond)
+				return f.sign(t, f.priv, st)
+			},
+		},
 		{
 			name: "missing nonce",
 			want: "no nonce",
@@ -283,6 +304,28 @@ func TestAuthorizePrivilegedAction_RefusesSignaturesThatDoNotVerify(t *testing.T
 				t.Errorf("Reason = %q, want it to contain %q", got.Reason, tc.want)
 			}
 		})
+	}
+}
+
+// The signature covers IssuedAt and ExpiresAt as whole seconds, so statements
+// that differ only below the second share one signature. The decision follows
+// the statement as signed, whichever sub-second value is presented with it.
+func TestAuthorizePrivilegedAction_WindowIsEvaluatedAsSigned(t *testing.T) {
+	f := newPrivilegedFixture(t)
+	at := f.now.Add(500 * time.Millisecond)
+
+	st := f.statement()
+	st.ExpiresAt = f.now.Add(10 * time.Millisecond)
+	signed := f.sign(t, f.priv, st)
+	if got := AuthorizePrivilegedAction(f.action, signed, f.keys, at); got.Allowed || !strings.Contains(got.Reason, "has expired") {
+		t.Fatalf("statement as signed: got %+v, want refused as expired", got)
+	}
+
+	presented := *signed.OwnerSignature
+	presented.Statement.ExpiresAt = f.now.Add(990 * time.Millisecond)
+	auth := ActionAuthority{Kind: AuthorityOwnerSignature, OwnerSignature: &presented}
+	if got := AuthorizePrivilegedAction(f.action, auth, f.keys, at); got.Allowed || !strings.Contains(got.Reason, "has expired") {
+		t.Errorf("same signature presented with a later sub-second expiry: got %+v, want refused as expired", got)
 	}
 }
 
@@ -335,7 +378,12 @@ func TestPrivilegedActionStatement_SigningBytes(t *testing.T) {
 
 	// A field that could smuggle an extra line would make two different
 	// statements share one encoding, so it is rejected, not escaped.
-	for _, bad := range []string{"orders\naction:read", "orders\r", "orders\x00"} {
+	// C1 controls (NEL among them) and the Unicode line and paragraph
+	// separators end a line for readers that split on Unicode line breaks.
+	for _, bad := range []string{
+		"orders\naction:read", "orders\r", "orders\x00", "orders\x7f",
+		"orders\u0085action:read", "orders\u009b", "orders\u2028action:read", "orders\u2029",
+	} {
 		st := f.statement()
 		st.Resource = bad
 		if _, err := st.SigningBytes(); err == nil {
