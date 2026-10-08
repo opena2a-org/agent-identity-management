@@ -175,6 +175,14 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			return c.Next()
 		}
 
+		// SECURITY: a service token is minted to an agent, not a user, and its
+		// user ID claim holds the agent's ID (see AuthMiddleware). Setting it as
+		// user_id would hand a public route an agent ID as the signed-in user.
+		// Continue unauthenticated instead.
+		if claims.Issuer == auth.IssuerService {
+			return c.Next()
+		}
+
 		// SECURITY: only access tokens authenticate. A non-access type (e.g. a
 		// refresh token) must not set user context. The empty-type access grace is
 		// retired (see AuthMiddleware): an empty type here is a legacy refresh token,
