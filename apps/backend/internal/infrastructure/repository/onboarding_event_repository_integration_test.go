@@ -192,3 +192,41 @@ func TestOnboardingRepository_TimeToFirstAgentSamplesFromExistingColumns(t *test
 	assert.Len(t, got, 1)
 	assert.Contains(t, got, newOrg)
 }
+
+func TestOnboardingRepository_RecordCappedStopsAtTheLimitPerOrgEventAndTab(t *testing.T) {
+	db := bootstrapTestDB(t)
+	repo := NewOnboardingEventRepository(db)
+	ctx := context.Background()
+	orgA, _ := onboardingSeedOrg(t, db, time.Now().UTC())
+	orgB, _ := onboardingSeedOrg(t, db, time.Now().UTC())
+	at := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)
+	since := at.Add(-24 * time.Hour)
+	python, goTab := "python", "go"
+
+	record := func(org uuid.UUID, event domain.OnboardingEventType, tab *string, when time.Time) bool {
+		t.Helper()
+		ok, err := repo.RecordCapped(ctx, &domain.OnboardingEvent{OrganizationID: org, Event: event, Tab: tab, OccurredAt: when}, since, 2)
+		require.NoError(t, err)
+		return ok
+	}
+
+	// A row before the window does not count toward the cap.
+	assert.True(t, record(orgA, domain.OnboardingEventViewed, nil, since.Add(-time.Minute)))
+	assert.True(t, record(orgA, domain.OnboardingEventViewed, nil, at))
+	assert.True(t, record(orgA, domain.OnboardingEventViewed, nil, at))
+	assert.False(t, record(orgA, domain.OnboardingEventViewed, nil, at))
+	assert.True(t, record(orgB, domain.OnboardingEventViewed, nil, at), "the cap is per organization")
+	assert.True(t, record(orgA, domain.OnboardingEventTabSelected, &python, at))
+	assert.True(t, record(orgA, domain.OnboardingEventTabSelected, &python, at))
+	assert.False(t, record(orgA, domain.OnboardingEventTabSelected, &python, at))
+	assert.True(t, record(orgA, domain.OnboardingEventTabSelected, &goTab, at), "the cap is per tab")
+
+	counts, err := repo.CountEventsSince(ctx, at)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []domain.OnboardingEventCount{
+		{Event: domain.OnboardingEventViewed, Organizations: 2, Total: 3},
+		{Event: domain.OnboardingEventTabSelected, Organizations: 1, Total: 3},
+	}, counts)
+
+	_, _ = db.Exec(`DELETE FROM onboarding_events WHERE organization_id IN ($1, $2)`, orgA, orgB)
+}

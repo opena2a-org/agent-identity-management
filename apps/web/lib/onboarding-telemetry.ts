@@ -1,6 +1,5 @@
 import { api, type OnboardingClientEvent, type OnboardingTab } from "@/lib/api";
-
-const VIEWED_KEY = "aim.onboarding.viewedReported";
+import { ONBOARDING_VIEWED_KEY } from "@/lib/onboarding-viewed";
 
 /**
  * Reports an onboarding step for the signed-in user's organization. Telemetry never
@@ -16,13 +15,15 @@ export function trackOnboardingEvent(event: OnboardingClientEvent, tab?: Onboard
 }
 
 /**
- * Reports onboarding_viewed at most once per browser session, so re-rendering or
- * revisiting the first-run screen does not inflate the funnel.
+ * Reports onboarding_viewed at most once per sign-in in this tab, so re-rendering or
+ * revisiting the first-run screen does not inflate the funnel. Signing out or in clears
+ * the marker (api.clearToken, api.setToken), so another account signing in on the same
+ * tab reports its own view.
  */
 export function trackOnboardingViewedOnce(): void {
   try {
-    if (typeof window === "undefined" || window.sessionStorage.getItem(VIEWED_KEY)) return;
-    window.sessionStorage.setItem(VIEWED_KEY, "1");
+    if (typeof window === "undefined" || window.sessionStorage.getItem(ONBOARDING_VIEWED_KEY)) return;
+    window.sessionStorage.setItem(ONBOARDING_VIEWED_KEY, "1");
   } catch {
     // Storage blocked: report anyway, the server tolerates duplicates.
   }

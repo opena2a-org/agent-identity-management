@@ -26,11 +26,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   is read from `AIM_BOOTSTRAP_TOKEN` (or `--token`, with a note that a flag value is visible in the process list) and
   sent only in the `X-AIM-Bootstrap-Token` header to `POST /api/v1/onboarding/bootstrap-tokens/exchange`. The
   agent's Ed25519 key pair is generated locally and only the public key is sent. Credentials are written to
-  `~/.aim/agents/<name>.json` (file 0600, directory 0700) in the layout the Python SDK reads, and the agent's
-  dashboard URL is printed. `--url` (default `AIM_URL`, then `https://aim.opena2a.org`) points it at a self-hosted
-  server and `--name` (default `my-first-agent`) names the agent. The token is never printed or saved, server text is
-  scrubbed of token-shaped strings, redirects are not followed (so the token header cannot be forwarded to another
-  host), and existing credentials for the name are refused before the single-use token is spent.
+  `~/.aim/agents/<name>.json` (file 0600, directory 0700) in the layout the Python SDK reads, with the file name
+  sanitized as the Python SDK does it (letters and digits of any script, `-` and `_` are kept, so `café` is
+  `café.json` from either SDK), and the agent's dashboard URL is printed. The dashboard address is the one the
+  server reports in the exchange answer (`dashboardUrl`); for a server that reports none it is derived from
+  `--url`, mapping port 8080 to 3000 only on a loopback host and dropping only a trailing `/api` path segment.
+  `--url` (default `AIM_URL`, then `https://aim.opena2a.org`) points it at a self-hosted server and `--name`
+  (default `my-first-agent`) names the agent. The `--token` note about shell history is printed before the value
+  is checked, so it also appears when the value is refused as not a bootstrap token. The token is never printed
+  or saved, server text is scrubbed of token-shaped strings, redirects are not followed (so the token header cannot
+  be forwarded to another host), and existing credentials for the name are refused before the single-use token is
+  spent. The README describes the command under Quick Start.
 
 ### Tests
 

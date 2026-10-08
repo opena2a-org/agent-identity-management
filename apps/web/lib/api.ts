@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
+import { forgetOnboardingViewed } from "./onboarding-viewed";
 import { normalizeViolation, type SecurityViolation } from "./violations";
 
 /** An Error thrown for a non-2xx response, carrying the status and the backend's code when it sent one. */
@@ -605,6 +606,7 @@ class APIClient {
         const t = String(Date.now());
         localStorage.setItem("session_start", t);
         localStorage.setItem("last_activity", t);
+        forgetOnboardingViewed();
       }
     }
   }
@@ -631,6 +633,7 @@ class APIClient {
       // starts a fresh session window instead of inheriting a stale start time.
       localStorage.removeItem("session_start");
       localStorage.removeItem("last_activity");
+      forgetOnboardingViewed();
     }
   }
 

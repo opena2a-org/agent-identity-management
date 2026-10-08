@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -144,6 +145,59 @@ func TestBootstrapMint_RefusesMissingOrgOrUser(t *testing.T) {
 	_, err = rig.svc.Mint(context.Background(), uuid.New(), uuid.Nil, BootstrapRequestMeta{})
 	assert.ErrorIs(t, err, ErrInvalidOrgOrUser)
 	assert.Empty(t, rig.repo.All())
+}
+
+// failingMintRepo fails the first len(errs) CreateReplacingOpen calls with
+// errs, in order, then stores like the memory repository.
+type failingMintRepo struct {
+	*mocks.MemoryBootstrapTokenRepository
+	errs  []error
+	calls int
+}
+
+func (r *failingMintRepo) CreateReplacingOpen(ctx context.Context, t *domain.BootstrapToken, now time.Time) error {
+	r.calls++
+	if r.calls <= len(r.errs) {
+		return r.errs[r.calls-1]
+	}
+	return r.MemoryBootstrapTokenRepository.CreateReplacingOpen(ctx, t, now)
+}
+
+// Only the one-open-token conflict a concurrent mint causes is retried; any
+// other repository error fails the mint after one attempt.
+func TestBootstrapMint_RetriesOnlyTheOpenTokenConflict(t *testing.T) {
+	conflict := fmt.Errorf("insert bootstrap token: %w", domain.ErrBootstrapTokenOpenConflict)
+	unreachable := errors.New("begin bootstrap token mint: dial tcp: connection refused")
+
+	cases := []struct {
+		name      string
+		errs      []error
+		wantCalls int
+		wantErr   error
+	}{
+		{"database unreachable: one attempt", []error{unreachable}, 1, unreachable},
+		{"conflict then success: one retry", []error{conflict}, 2, nil},
+		{"conflict twice: one retry, then the error", []error{conflict, conflict}, 2, domain.ErrBootstrapTokenOpenConflict},
+		{"conflict then unreachable: no third attempt", []error{conflict, unreachable}, 2, unreachable},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &failingMintRepo{MemoryBootstrapTokenRepository: mocks.NewMemoryBootstrapTokenRepository(), errs: tc.errs}
+			svc := NewBootstrapTokenService(repo, &bootstrapFakeRegistrar{}, nil)
+
+			minted, err := svc.Mint(context.Background(), uuid.New(), uuid.New(), BootstrapRequestMeta{})
+			assert.Equal(t, tc.wantCalls, repo.calls)
+			if tc.wantErr == nil {
+				require.NoError(t, err)
+				require.NotNil(t, minted)
+				assert.Len(t, repo.All(), 1)
+				return
+			}
+			assert.ErrorIs(t, err, tc.wantErr)
+			assert.Nil(t, minted)
+			assert.Empty(t, repo.All())
+		})
+	}
 }
 
 func TestBootstrapMint_RevokesOnlyTheCallersPreviousUnusedToken(t *testing.T) {

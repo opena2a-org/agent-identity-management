@@ -39,6 +39,40 @@ func (r *OnboardingEventRepository) Record(ctx context.Context, e *domain.Onboar
 	return nil
 }
 
+// recordCappedQuery inserts the event only while the organization has fewer
+// than $6 events of the same event and tab at or after $5. Two concurrent
+// calls can both see the last free slot, so the cap can be passed by the
+// number of requests in flight at once, never by a loop.
+const recordCappedQuery = `
+	INSERT INTO onboarding_events (organization_id, event, tab, occurred_at)
+	SELECT $1::uuid, $2::varchar, $3::varchar, COALESCE($4::timestamptz, NOW())
+	WHERE (
+		SELECT COUNT(*) FROM onboarding_events
+		WHERE organization_id = $1::uuid AND event = $2::varchar
+		  AND tab IS NOT DISTINCT FROM $3::varchar
+		  AND occurred_at >= $5::timestamptz
+	) < $6::int
+`
+
+// RecordCapped inserts e unless its organization has already reached limit
+// events of the same event and tab since since. A zero OccurredAt takes the
+// database's NOW().
+func (r *OnboardingEventRepository) RecordCapped(ctx context.Context, e *domain.OnboardingEvent, since time.Time, limit int) (bool, error) {
+	var occurredAt interface{}
+	if !e.OccurredAt.IsZero() {
+		occurredAt = e.OccurredAt
+	}
+	res, err := r.db.ExecContext(ctx, recordCappedQuery, e.OrganizationID, string(e.Event), e.Tab, occurredAt, since, limit)
+	if err != nil {
+		return false, fmt.Errorf("record onboarding event: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("record onboarding event: %w", err)
+	}
+	return n > 0, nil
+}
+
 // recordFirstAgentQuery stamps the event with the earliest agent's created_at,
 // not the time of the call, so a late or repeated call records the same
 // instant. An organization with no agent yields no row; one that already has

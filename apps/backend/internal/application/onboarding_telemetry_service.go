@@ -15,14 +15,28 @@ var (
 	ErrOnboardingEventUnknown    = errors.New("unknown onboarding event")
 	ErrOnboardingEventServerOnly = errors.New("this onboarding event is recorded by the server")
 	ErrOnboardingTabInvalid      = errors.New("tab_selected needs a known tab, and only tab_selected takes one")
+	// ErrOnboardingEventCapped is returned for a client event its organization
+	// has already reported OnboardingClientEventCap times in the cap window.
+	// Nothing is stored; it is not a failure of the request.
+	ErrOnboardingEventCapped = errors.New("this organization has already reported this onboarding event as often as the daily cap allows")
 )
 
 // OnboardingBaselineWindowDays is the recent window the platform panel reports
 // next to the all-time baseline.
 const OnboardingBaselineWindowDays = 30
 
-// onboardingRecordTimeout bounds a server-side event write, which runs after
-// the request that caused it has been answered.
+// OnboardingClientEventCap is how many times one organization's dashboards can
+// report the same client event (and, for tab_selected, the same tab) within
+// OnboardingClientEventCapWindow. Any member of the organization can report
+// events, so without it a loop of requests would grow the baseline's event
+// totals without bound.
+const (
+	OnboardingClientEventCap       = 20
+	OnboardingClientEventCapWindow = 24 * time.Hour
+)
+
+// onboardingRecordTimeout bounds a server-side event write, which runs off
+// the request path of the request that caused it.
 const onboardingRecordTimeout = 5 * time.Second
 
 // OnboardingTelemetryService records onboarding events and computes the
@@ -59,7 +73,10 @@ func (s *OnboardingTelemetryService) SetDispatch(dispatch func(func())) {
 }
 
 // RecordClientEvent records an event the dashboard reports for orgID. tab is
-// required for tab_selected and refused for every other event.
+// required for tab_selected and refused for every other event. Once orgID has
+// reported the same event and tab OnboardingClientEventCap times in the cap
+// window, further reports are not stored and ErrOnboardingEventCapped is
+// returned.
 func (s *OnboardingTelemetryService) RecordClientEvent(ctx context.Context, orgID uuid.UUID, event domain.OnboardingEventType, tab string) error {
 	if orgID == uuid.Nil {
 		return ErrInvalidOrgOrUser
@@ -79,7 +96,14 @@ func (s *OnboardingTelemetryService) RecordClientEvent(ctx context.Context, orgI
 	} else if tab != "" {
 		return ErrOnboardingTabInvalid
 	}
-	return s.repo.Record(ctx, e)
+	recorded, err := s.repo.RecordCapped(ctx, e, e.OccurredAt.Add(-OnboardingClientEventCapWindow), OnboardingClientEventCap)
+	if err != nil {
+		return err
+	}
+	if !recorded {
+		return ErrOnboardingEventCapped
+	}
+	return nil
 }
 
 // TokenMinted records token_minted for orgID.

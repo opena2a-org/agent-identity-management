@@ -43,6 +43,28 @@ console.log(`Action allowed: ${result.actionAllowed}`);
 console.log(`Trust score: ${result.trustScore}`);
 ```
 
+### Register a first agent from the terminal
+
+The onboarding screen in the dashboard generates a bootstrap token: it lasts 15 minutes and registers one agent. `init` exchanges it for an agent and saves the agent's credentials:
+
+```bash
+AIM_BOOTSTRAP_TOKEN=<token> npx @opena2a/aim-sdk init --url https://aim.example.com
+```
+
+```
+Registering agent "my-first-agent" with https://aim.example.com ...
+
+Agent "my-first-agent" is registered.
+  Agent ID:     550e8400-e29b-41d4-a716-446655440000
+  Status:       pending
+  Credentials:  /home/you/.aim/agents/my-first-agent.json (owner read/write only)
+  Dashboard:    https://aim.example.com/dashboard/agents/550e8400-e29b-41d4-a716-446655440000
+
+The private key was generated on this machine and has not been sent anywhere.
+```
+
+The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. Prefer `AIM_BOOTSTRAP_TOKEN` to `--token`: a flag value is visible in the process list and shell history. Run `npx @opena2a/aim-sdk init --help` for every option.
+
 ## Features
 
 - **Full TypeScript Support**: Complete type definitions for all APIs

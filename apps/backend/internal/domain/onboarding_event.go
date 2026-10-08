@@ -99,6 +99,10 @@ type TimeToFirstAgentSample struct {
 type OnboardingEventRepository interface {
 	// Record inserts one event.
 	Record(ctx context.Context, e *OnboardingEvent) error
+	// RecordCapped inserts e unless its organization already has limit events
+	// with the same event and tab at or after since, and reports whether it
+	// inserted. The count and the insert are one statement.
+	RecordCapped(ctx context.Context, e *OnboardingEvent, since time.Time, limit int) (bool, error)
 	// RecordFirstAgent records first_agent_registered for orgID, timestamped
 	// with its earliest agent's created_at. It records nothing when the
 	// organization has no agent or already has the event.
