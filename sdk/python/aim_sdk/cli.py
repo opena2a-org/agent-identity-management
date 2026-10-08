@@ -3,6 +3,7 @@ AIM SDK Command Line Interface.
 
 Provides commands for authenticating and managing the SDK:
 - login: Authenticate with an AIM server (OAuth 2.0 device grant, RFC 8628)
+- init: Register a first agent with a bootstrap token from the onboarding screen
 - logout: Revoke credentials and clear local storage
 - status: Check current authentication status
 - version: Show SDK version
@@ -11,6 +12,8 @@ Provides commands for authenticating and managing the SDK:
 Usage:
     aim-sdk login                    # Login to AIM Cloud (aim.opena2a.org)
     aim-sdk login --url http://localhost:8080  # Login to self-hosted
+    AIM_BOOTSTRAP_TOKEN=aim_ob_... aim-sdk init   # Register my-first-agent
+    aim-sdk init --url http://localhost:8080 --name my-agent  # ... on self-hosted
     aim-sdk logout                   # Clear credentials
     aim-sdk status                   # Check authentication status
     aim-sdk status --json            # ... as one JSON object, for scripts
@@ -38,6 +41,7 @@ import time
 import webbrowser
 import base64
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -85,6 +89,16 @@ DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 # command again later" from a login that was denied, expired or refused.
 EXIT_SERVER_UNAVAILABLE = 75
 SERVER_UNAVAILABLE_STATUSES = (502, 503, 504)
+
+# `aim-sdk init`: the bootstrap token minted on the dashboard's onboarding
+# screen registers exactly one agent. The environment variable is the
+# documented channel because an argument is visible in the process list.
+BOOTSTRAP_TOKEN_ENV = "AIM_BOOTSTRAP_TOKEN"
+BOOTSTRAP_TOKEN_PREFIX = "aim_ob_"
+BOOTSTRAP_TOKEN_HEADER = "X-AIM-Bootstrap-Token"
+DEFAULT_INIT_AGENT_NAME = "my-first-agent"
+INIT_REQUEST_TIMEOUT_SECONDS = 30
+
 
 def invalid_server_url_reason(aim_url):
     """
@@ -754,6 +768,189 @@ def status(args):
     return 0 if authenticated else 1
 
 
+def _generate_agent_keypair():
+    """
+    A fresh Ed25519 key pair as (private_key_b64, public_key_b64).
+
+    The private key is the 64-byte seed + public key form the client loads
+    (and Go's ed25519 package uses); it never leaves this machine.
+    """
+    from nacl.signing import SigningKey
+
+    signing_key = SigningKey.generate()
+    seed = bytes(signing_key)
+    public = signing_key.verify_key.encode()
+    return (
+        base64.b64encode(seed + public).decode('ascii'),
+        base64.b64encode(public).decode('ascii'),
+    )
+
+
+def _redact_token(text, token):
+    """`text` with every occurrence of the bootstrap token masked."""
+    text = str(text)
+    if token:
+        text = text.replace(token, f"{BOOTSTRAP_TOKEN_PREFIX}[REDACTED]")
+    return text
+
+
+def exchange_bootstrap_token(aim_url, token, name, public_key):
+    """
+    Register one agent with a bootstrap token:
+    POST /api/v1/onboarding/bootstrap-tokens/exchange.
+
+    The token travels only in the X-AIM-Bootstrap-Token header, never in the
+    URL. Redirects are not followed: requests drops Authorization on a
+    cross-host redirect but keeps custom headers, so following one would hand
+    the token to whatever host the redirect names.
+
+    Returns:
+        dict: the server's answer (agentId, organizationId, name, status,
+        publicKey, aimUrl), or {'error': reason} with a bare reason the caller
+        prefixes. No returned string contains the token.
+    """
+    import requests
+    url = f"{aim_url}/api/v1/onboarding/bootstrap-tokens/exchange"
+    try:
+        response = requests.post(
+            url,
+            json={'name': name, 'agentType': 'custom', 'publicKey': public_key},
+            headers={'Content-Type': 'application/json', BOOTSTRAP_TOKEN_HEADER: token},
+            timeout=INIT_REQUEST_TIMEOUT_SECONDS,
+            allow_redirects=False,
+        )
+    except requests.RequestException as e:
+        from .client import _request_failure_message
+
+        return {'error': _redact_token(_request_failure_message(e, aim_url), token)}
+
+    status_code = response.status_code
+    if status_code in (200, 201):
+        try:
+            data = response.json()
+        except ValueError:
+            data = None
+        if not isinstance(data, dict) or not data.get('agentId'):
+            return {'error': f"the answer from {url} carried no agent ID"}
+        return data
+
+    if 300 <= status_code < 400:
+        location = response.headers.get('Location') or 'another address'
+        return {'error': (f"{url} answered with a redirect to {_redact_token(location, token)}. "
+                          f"The token was not sent on; pass the address the server redirects to as --url.")}
+
+    reason = _redact_token(_server_reason(response, ''), token)
+    if status_code == 401:
+        return {'error': reason or ("The bootstrap token is not valid. "
+                                    "Generate a new one from the onboarding screen.")}
+    if status_code == 409:
+        conflict = reason.rstrip('.') or f"An agent named {name!r} already exists in your organization"
+        return {'error': (f"{conflict}. "
+                          f"The token was not used: run aim-sdk init again with --name <another-name>.")}
+    if status_code == 429:
+        return {'error': "Too many requests to the onboarding endpoint. Wait a minute, then run aim-sdk init again."}
+    if status_code == 404:
+        return {'error': (f"HTTP 404 from {url}. Check that --url is the AIM API address and that the "
+                          f"server runs an AIM version with onboarding tokens.")}
+    return {'error': reason or f"HTTP {status_code} from {url}"}
+
+
+def init(args):
+    """Register a first agent with a bootstrap token from the onboarding screen."""
+    from .credentials import get_agent_credentials_path, save_agent_credentials
+
+    token = (args.token or os.environ.get(BOOTSTRAP_TOKEN_ENV) or '').strip()
+    if not token:
+        print("Error: no bootstrap token.")
+        print("Copy the command from the onboarding screen in the AIM dashboard, or set the token")
+        print("in the environment, which keeps it out of the process list and shell history:")
+        print()
+        print(f"  {BOOTSTRAP_TOKEN_ENV}=<token> aim-sdk init")
+        return 1
+    if not token.startswith(BOOTSTRAP_TOKEN_PREFIX):
+        # Never echo it: a value pasted into the wrong variable may be some
+        # other secret.
+        print(f"Error: the token given is not a bootstrap token (those start with {BOOTSTRAP_TOKEN_PREFIX}).")
+        print("Generate one from the onboarding screen in the AIM dashboard.")
+        return 1
+
+    url_problem = invalid_server_url_reason(args.url)
+    if url_problem:
+        print(f"Error: {url_problem}.")
+        print("Pass the server's http(s) address, for example:")
+        print("  aim-sdk init --url https://aim.example.com")
+        print(f"or omit --url to use {DEFAULT_AIM_URL}.")
+        return 1
+    aim_url = args.url.strip().rstrip('/')
+
+    name = (args.name or '').strip()
+    if not name:
+        print("Error: --name is empty.")
+        return 1
+
+    # An existing file holds the private key of an agent registered earlier.
+    # Refusing here, before the token is sent, keeps that key and the token.
+    creds_path = get_agent_credentials_path(name)
+    if creds_path.exists():
+        print(f"Error: credentials for an agent named {name!r} already exist at {creds_path}.")
+        print("Pick another name, which leaves that agent's key in place:")
+        print()
+        print("  aim-sdk init --name <another-name>")
+        return 1
+
+    private_key, public_key = _generate_agent_keypair()
+
+    print(f"Registering agent {name!r} with {aim_url} ...")
+    result = exchange_bootstrap_token(aim_url, token, name, public_key)
+    if 'error' in result:
+        print(f"\nCould not register the agent: {result['error']}")
+        return 1
+
+    agent_id = result['agentId']
+    returned_key = result.get('publicKey')
+    if returned_key and returned_key != public_key:
+        print(f"\nError: the server registered agent {agent_id} with a public key this machine did not")
+        print("generate, so the local private key cannot sign for it. Nothing was saved.")
+        return 1
+
+    saved = save_agent_credentials(name, {
+        'agent_id': agent_id,
+        'organization_id': result.get('organizationId'),
+        'public_key': public_key,
+        'private_key': private_key,
+        'aim_url': aim_url,
+        'status': result.get('status', 'unknown'),
+        'registered_at': datetime.now(timezone.utc).isoformat(),
+    })
+    if not saved:
+        print(f"\nThe agent {agent_id} was registered, but its credentials could not be saved to {creds_path}.")
+        print("Its private key existed only in this process and is gone; delete the agent in the")
+        print("dashboard and run aim-sdk init again with a new token.")
+        return 1
+
+    from ._dashboard import dashboard_url_for
+
+    dashboard_url = dashboard_url_for(aim_url)
+    print()
+    print("Agent registered.")
+    print()
+    print(f"   Name:        {result.get('name') or name}")
+    print(f"   Agent ID:    {agent_id}")
+    print(f"   Status:      {result.get('status', 'unknown')}")
+    print(f"   Credentials: {creds_path} (owner read/write only)")
+    print()
+    print(f"   Dashboard:   {dashboard_url}/dashboard/agents/{agent_id}")
+    print()
+    print("The private key was generated on this machine and was not sent to the server.")
+    print("Use the agent from Python:")
+    print()
+    print("   from aim_sdk import secure")
+    print()
+    print(f"   agent = secure({name!r})")
+    print()
+    return 0
+
+
 def version_cmd(args):
     """Show SDK version."""
     if getattr(args, 'json', False):
@@ -807,6 +1004,29 @@ def main():
         help='Force re-authentication even if already logged in',
     )
     login_parser.set_defaults(func=login)
+
+    # Init command
+    init_parser = subparsers.add_parser(
+        'init',
+        help='Register a first agent with a bootstrap token from the onboarding screen',
+    )
+    init_parser.add_argument(
+        '--token',
+        default=None,
+        help=(f'Bootstrap token (default: ${BOOTSTRAP_TOKEN_ENV}; the environment variable '
+              f'keeps it out of the process list)'),
+    )
+    init_parser.add_argument(
+        '--url',
+        default=DEFAULT_AIM_URL,
+        help=f'AIM server URL, for a self-hosted server (default: {DEFAULT_AIM_URL})',
+    )
+    init_parser.add_argument(
+        '--name',
+        default=DEFAULT_INIT_AGENT_NAME,
+        help=f'Agent name (default: {DEFAULT_INIT_AGENT_NAME})',
+    )
+    init_parser.set_defaults(func=init)
 
     # Logout command
     logout_parser = subparsers.add_parser('logout', help='Logout and clear credentials')
