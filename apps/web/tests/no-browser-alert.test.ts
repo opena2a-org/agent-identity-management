@@ -7,7 +7,7 @@ import { join } from "node:path";
 // This counts the lines in app/ that call one, the same lines as
 //   git grep -n -E 'alert\(' -- apps/web/app ':!*.fmt' ':!*.final' ':!*.bkp' ':!*.bak'
 // and fails when the count rises. Lower CEILING in the change that converts a page.
-const CEILING = 21;
+const CEILING = 16;
 
 const root = join(__dirname, "..");
 const SKIPPED_SUFFIXES = [".fmt", ".final", ".bkp", ".bak"];
