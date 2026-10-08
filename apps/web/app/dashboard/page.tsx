@@ -11,6 +11,7 @@ import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { getErrorMessage } from "@/lib/error-messages";
 import { usePersona } from "@/lib/persona";
 import { SDK_TABS, type SdkLang } from "@/lib/sdk-tabs";
+import { trackOnboardingEvent, trackOnboardingViewedOnce } from "@/lib/onboarding-telemetry";
 import { AuthGuard } from "@/components/auth-guard";
 import { ActivityTimeline } from "@/components/analytics/activity-timeline";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -156,9 +157,17 @@ function CodeBlock({ lines, className }: { lines: readonly string[]; className?:
 /**
  * The tabbed SDK quickstart, one instance per page. `dark` selects the on-contrast tab
  * styling; the code blocks pick their own tokens from the surface. Extra actions go in
- * `children`, beside the active tab's docs link.
+ * `children`, beside the active tab's docs link. `onSelect` hears a switch to another tab.
  */
-function SdkQuickstart({ dark = false, children }: { dark?: boolean; children?: ReactNode }) {
+function SdkQuickstart({
+  dark = false,
+  children,
+  onSelect,
+}: {
+  dark?: boolean;
+  children?: ReactNode;
+  onSelect?: (lang: SdkLang) => void;
+}) {
   const [lang, setLang] = useState<SdkLang>("python");
   const origin = useOrigin();
   const active = SDK_TABS.find((t) => t.key === lang) ?? SDK_TABS[0];
@@ -174,7 +183,10 @@ function SdkQuickstart({ dark = false, children }: { dark?: boolean; children?: 
             id={`sdk-tab-${t.key}`}
             aria-selected={lang === t.key}
             aria-controls="sdk-tabpanel"
-            onClick={() => setLang(t.key)}
+            onClick={() => {
+              if (t.key !== lang) onSelect?.(t.key);
+              setLang(t.key);
+            }}
             className={cn(
               "rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
               lang === t.key
@@ -304,7 +316,12 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
   );
 }
 
+// Shown only while the organization has no agent, so it is the first-run screen the
+// onboarding funnel counts.
 function FirstAgentCard() {
+  useEffect(() => {
+    trackOnboardingViewedOnce();
+  }, []);
   return (
     <div className="glass flex flex-col gap-4 p-6">
       <div className="flex items-start gap-3">
@@ -318,7 +335,7 @@ function FirstAgentCard() {
           </p>
         </div>
       </div>
-      <SdkQuickstart>
+      <SdkQuickstart onSelect={(lang) => trackOnboardingEvent("tab_selected", lang)}>
         <Link href="/dashboard/agents?register=1" className="inline-flex h-9 items-center gap-2 rounded-pill border border-stroke bg-glass px-4 text-xs font-bold text-ink">
           Secure it in the browser instead
         </Link>

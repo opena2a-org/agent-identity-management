@@ -33,6 +33,7 @@ vi.mock("@/lib/api", () => ({
     getSecurityViolations: vi.fn(),
     getRecentVerificationEvents: vi.fn(),
     getComplianceStatus: vi.fn(),
+    recordOnboardingEvent: vi.fn(),
   },
 }));
 
@@ -64,12 +65,14 @@ function arrange(totalAgents: number) {
   (api.getSecurityViolations as Mock).mockResolvedValue({ total: 0, violations: [] });
   (api.getRecentVerificationEvents as Mock).mockResolvedValue({ events: [] });
   (api.getComplianceStatus as Mock).mockResolvedValue({});
+  (api.recordOnboardingEvent as Mock).mockReset().mockResolvedValue(undefined);
 }
 
 const installBlocks = () => document.querySelectorAll('pre[aria-label="Commands"]');
 
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   searchParams = new URLSearchParams();
   window.history.replaceState({}, "", "/");
 });
@@ -181,5 +184,45 @@ describe("dashboard live check-in panel", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("onboarding telemetry", () => {
+  it("reports the first-run view once and each switch to another tab", async () => {
+    arrange(0);
+    const { unmount } = render(<DashboardPage />);
+    await screen.findByText("Secure your first agent");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Python" })); // already selected: not a switch
+    fireEvent.click(screen.getByRole("tab", { name: "TypeScript" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Java" }));
+    expect((api.recordOnboardingEvent as Mock).mock.calls).toEqual([
+      ["onboarding_viewed", undefined],
+      ["tab_selected", "typescript"],
+      ["tab_selected", "java"],
+    ]);
+
+    // A second visit in the same browser session does not count a second view.
+    unmount();
+    render(<DashboardPage />);
+    await screen.findByText("Secure your first agent");
+    expect((api.recordOnboardingEvent as Mock).mock.calls.filter(([event]) => event === "onboarding_viewed")).toHaveLength(1);
+  });
+
+  it("reports nothing once the organization has an agent", async () => {
+    arrange(1);
+    render(<DashboardPage />);
+    await screen.findByRole("heading", { name: "Quickstart" });
+    fireEvent.click(screen.getByRole("tab", { name: "TypeScript" }));
+    expect(api.recordOnboardingEvent).not.toHaveBeenCalled();
+  });
+
+  it("keeps the first-run screen working when reporting fails", async () => {
+    arrange(0);
+    (api.recordOnboardingEvent as Mock).mockRejectedValue(new Error("HTTP 404"));
+    render(<DashboardPage />);
+    await screen.findByText("Secure your first agent");
+    fireEvent.click(screen.getByRole("tab", { name: "TypeScript" }));
+    expect(installBlocks()[0].textContent).toContain("npm install @opena2a/aim-sdk");
   });
 });
