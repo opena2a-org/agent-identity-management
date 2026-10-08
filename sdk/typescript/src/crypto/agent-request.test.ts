@@ -253,7 +253,7 @@ describe('createAgentRequestHeaders: refusals before signing', () => {
   });
 
   it('refuses a URL with a username or a password', async () => {
-    for (const url of ['http://user@127.0.0.1/p', 'http://:pw@127.0.0.1/p', 'https://u:p@aim.example/p']) {
+    for (const url of ['http://user@127.0.0.1/p', 'http://:pw@127.0.0.1/p', 'https://u:p@aim.example/p']) { // PLACEHOLDER credentials
       const e = await refusalOf(sign({ method: 'GET', url }));
       expect(e.message).toMatch(/^the url carries a username or a password; nothing was signed\nFix: /);
       expect(e.message).not.toContain('pw');
