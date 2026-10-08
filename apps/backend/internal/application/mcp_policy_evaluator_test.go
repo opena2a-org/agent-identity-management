@@ -421,7 +421,9 @@ func TestMCPPolicy_AllowlistEnforcementMatrix(t *testing.T) {
 
 // TestMCPPolicy_AllowedCapabilitiesIsAnAllowlist covers MCPAllowlistRules.AllowedCapabilities,
 // which was declared, editable in the admin form, seeded by migration 052 and read by nothing.
-// Every capability a server declares must appear on the list; a server outside it is rejected.
+// For a server that the policy's allowedDomains admit, every capability it declares must appear
+// on the list; a server that declares one outside it is rejected. The check does not run for a
+// policy that sets neither allowedDomains nor allowedNames.
 func TestMCPPolicy_AllowedCapabilitiesIsAnAllowlist(t *testing.T) {
 	evaluator := &MCPPolicyEvaluator{}
 

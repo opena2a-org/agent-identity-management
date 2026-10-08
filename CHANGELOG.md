@@ -19,8 +19,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   shows the floor as a percentage and now saves it as a fraction.
 - A bare `*` in `allowedDomains` or `blockedDomains` matches every server. It matched no host
   before, so the seeded `["*"]` allowlists would have rejected every server.
-- `allowedCapabilities` on an `mcp_allowlist` policy is checked: a server that declares a
-  capability outside the list violates the policy. The field was ignored before.
+- `allowedCapabilities` on an `mcp_allowlist` policy is checked for a server that the policy's
+  `allowedDomains` or `allowedNames` admit: such a server violates the policy when it declares a
+  capability outside the list. The field was ignored before. A policy that sets neither
+  `allowedDomains` nor `allowedNames` enforces nothing, as before, so `allowedCapabilities` on
+  its own has no effect.
 - MCP policies are still not evaluated by any running code path, so none of this changes whether
   a connection is allowed or blocked today (#355).
 
