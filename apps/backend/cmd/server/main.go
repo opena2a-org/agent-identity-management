@@ -532,6 +532,7 @@ type Repositories struct {
 	IsolationAttestation *repository.IsolationAttestationRepository // Factor 9: execution isolation
 	UserFeedback         *repository.UserFeedbackRepository         // Factor 8: user feedback
 	NanoMindTME          *repository.NanoMindTMERepository          // TME enrichment of security alerts
+	BootstrapToken       *repository.BootstrapTokenRepository       // Onboarding bootstrap tokens (one agent registration each)
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -592,6 +593,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		IsolationAttestation: repository.NewIsolationAttestationRepository(db),
 		UserFeedback:         repository.NewUserFeedbackRepository(db),
 		NanoMindTME:          repository.NewNanoMindTMERepository(db),
+		BootstrapToken:       repository.NewBootstrapTokenRepository(db),
 	}, oauthRepo
 }
 
@@ -616,6 +618,7 @@ type Services struct {
 	Registration      *application.RegistrationService // ✅ Email/password registration workflow (replaced OAuth)
 	Tag               *application.TagService
 	SDKToken          *application.SDKTokenService
+	BootstrapToken    *application.BootstrapTokenService
 	Capability        *application.CapabilityService
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
@@ -853,6 +856,12 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		repos.SDKToken,
 	)
 
+	bootstrapTokenService := application.NewBootstrapTokenService(
+		repos.BootstrapToken,
+		agentService,
+		auditService,
+	)
+
 	capabilityService := application.NewCapabilityService(
 		repos.Capability,
 		repos.Agent,
@@ -1062,6 +1071,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		Registration:      registrationService, // ✅ Email/password registration workflow (replaced OAuth)
 		Tag:               tagService,
 		SDKToken:          sdkTokenService,
+		BootstrapToken:    bootstrapTokenService,
 		Capability:        capabilityService,
 		CapabilityRequest: capabilityRequestService,                             // ✅ For capability expansion approval workflow
 		Detection:         detectionService,                                     // ✅ For MCP auto-detection (SDK + Direct API)
@@ -1095,6 +1105,7 @@ type Handlers struct {
 	Tag                *handlers.TagHandler
 	SDK                *handlers.SDKHandler
 	SDKToken           *handlers.SDKTokenHandler
+	BootstrapToken     *handlers.BootstrapTokenHandler
 	AuthRefresh        *handlers.AuthRefreshHandler
 	SDKTokenRecovery   *handlers.SDKTokenRecoveryHandler
 	Capability         *handlers.CapabilityHandler
@@ -1238,6 +1249,9 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		SDKToken: handlers.NewSDKTokenHandler(
 			services.SDKToken,
 		),
+		BootstrapToken: handlers.NewBootstrapTokenHandler(
+			services.BootstrapToken,
+		),
 		AuthRefresh: handlers.NewAuthRefreshHandler(
 			jwtService,
 			services.SDKToken,
@@ -1361,6 +1375,20 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	public.Post("/forgot-password", h.PublicRegistration.ForgotPassword)                    // 🚀 Password reset request
 	public.Post("/reset-password", h.PublicRegistration.ResetPassword)                      // 🚀 Password reset with token
 	public.Post("/request-access", h.PublicRegistration.RequestAccess)                      // 🚀 Request platform access (no password required)
+
+	// Onboarding bootstrap tokens. Middleware is attached per route, not with
+	// Use(): the exchange route shares the path prefix, and a group Use() would
+	// put the dashboard session check in front of it.
+	registerBootstrapTokenRoutes(v1, bootstrapTokenRouteDeps{
+		Authenticate:  middleware.AuthMiddleware(jwtService),
+		RequireMember: middleware.MemberMiddleware(),
+		MintLimit:     middleware.StrictRateLimitMiddleware(),
+		RevokeLimit:   middleware.RateLimitMiddleware(),
+		ExchangeLimit: middleware.StrictRateLimitMiddleware(),
+		Mint:          h.BootstrapToken.Mint,
+		Revoke:        h.BootstrapToken.Revoke,
+		Exchange:      h.BootstrapToken.Exchange,
+	})
 
 	// OAuth 2.0 token endpoint (RFC 6749 / RFC 7523 jwt-bearer grant)
 	oauth := v1.Group("/oauth")
@@ -1903,8 +1931,9 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 		message = e.Message
 	}
 
-	// 🔍 LOG ALL ERRORS for debugging
-	log.Printf("❌ ERROR [%d] %s %s - %v", code, c.Method(), c.Path(), err)
+	// 🔍 LOG ALL ERRORS for debugging. A 404's error text repeats the path, so
+	// the whole line is redacted, not just the path.
+	log.Print(middleware.RedactBootstrapTokens(fmt.Sprintf("❌ ERROR [%d] %s %s - %v", code, c.Method(), c.Path(), err)))
 
 	return c.Status(code).JSON(fiber.Map{
 		"error":     true,
