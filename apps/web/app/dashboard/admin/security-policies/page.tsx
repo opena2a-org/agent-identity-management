@@ -534,6 +534,14 @@ export default function SecurityPoliciesPage() {
     }
   };
 
+  const openEditDialog = (policy: SecurityPolicy) => {
+    // Reset first: loadPolicyIntoForm only sets the fields of the policy's own type.
+    resetForm();
+    loadPolicyIntoForm(policy);
+    setEditingPolicy(policy);
+    setShowEditDialog(true);
+  };
+
   const buildRulesFromForm = () => {
     if (formPolicyType === "mcp_allowlist") {
       return {
@@ -608,9 +616,10 @@ export default function SecurityPoliciesPage() {
         description: formDescription,
         policyType: formPolicyType,
         enforcementAction: formEnforcement,
-        severityThreshold: "medium",
+        // The form edits neither field, so keep what the policy stores.
+        severityThreshold: editingPolicy.severityThreshold,
         rules,
-        appliesTo: "all",
+        appliesTo: editingPolicy.appliesTo,
         isEnabled: editingPolicy.isEnabled,
         priority: formPriority,
       });
@@ -1144,6 +1153,16 @@ export default function SecurityPoliciesPage() {
                 className="data-[state=checked]:bg-green-600"
               />
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openEditDialog(policy)}
+              aria-label={`Edit ${policy.name}`}
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
           </div>
         </div>
       </div>

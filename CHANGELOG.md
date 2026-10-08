@@ -60,9 +60,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — MCP security policy rules mean what the admin page says
 
 - `rules.minTrustScore` on the `mcp_*` security policies is on the [0,1] scale of an MCP server's
-  trust score. Migration 114 divides every stored value above 1 by 100, including the seeded floors
-  of 50 and 30, which sat above every possible trust score. The admin security-policies page still
-  shows the floor as a percentage and now saves it as a fraction.
+  trust score. Migration 114 divides every stored JSON number above 1 by 100, including the seeded
+  floors of 50 and 30, which sat above every possible trust score. The admin security-policies page
+  still shows the floor as a percentage and now saves it as a fraction.
+- Each MCP policy card on the admin security-policies page has an Edit button. Nothing opened the
+  Edit MCP Policy dialog before, so a stored MCP policy could not be changed from the page. Saving
+  an edit keeps the policy's stored severity threshold and scope; the dialog no longer resets them
+  to `medium` and `all`.
 - A bare `*` in `allowedDomains` or `blockedDomains` matches every server. It matched no host
   before, so the seeded `["*"]` allowlists would have rejected every server.
 - `allowedCapabilities` on an `mcp_allowlist` policy is checked for a server that the policy's
