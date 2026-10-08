@@ -140,6 +140,10 @@ func TestPublicAgentHandler_Register_WithoutUserTokenAnswers401(t *testing.T) {
 	refreshToken, err := jwtService.GenerateRefreshToken(uuid.NewString(), uuid.NewString())
 	require.NoError(t, err)
 
+	// An agent's OAuth access token. Its user ID claim is the agent's ID.
+	serviceToken, err := jwtService.GenerateServiceToken(uuid.NewString(), uuid.NewString())
+	require.NoError(t, err)
+
 	tests := []struct {
 		name   string
 		header string
@@ -151,6 +155,7 @@ func TestPublicAgentHandler_Register_WithoutUserTokenAnswers401(t *testing.T) {
 		{name: "API key in X-API-Key", header: "X-API-Key", value: "not-a-real-key", body: publicRegisterValidBody},
 		{name: "API key as bearer", header: "Authorization", value: "Bearer not-a-real-key", body: publicRegisterValidBody},
 		{name: "refresh token as bearer", header: "Authorization", value: "Bearer " + refreshToken, body: publicRegisterValidBody},
+		{name: "agent's OAuth service token as bearer", header: "Authorization", value: "Bearer " + serviceToken, body: publicRegisterValidBody},
 		{name: "no credential and a body that is not JSON", body: "not json"},
 		{name: "no credential and an unknown agent type", body: `{"name":"test","displayName":"Test Agent","description":"A test agent","agentType":"invalid_type"}`},
 	}

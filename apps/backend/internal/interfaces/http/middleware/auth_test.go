@@ -373,6 +373,38 @@ func TestOptionalAuthMiddleware_RejectsSDKToken(t *testing.T) {
 	assert.False(t, hasUserID, "SDK token must not set user context")
 }
 
+// A service token is an agent's OAuth access token. Its user ID claim is the
+// agent's ID, so it must leave the request anonymous rather than set that ID
+// as the signed-in user.
+func TestOptionalAuthMiddleware_ServiceTokenIsAnonymous(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+
+	serviceToken, err := jwtService.GenerateServiceToken(uuid.New().String(), uuid.New().String())
+	require.NoError(t, err)
+
+	var hasUserID, hasOrgID bool
+
+	app := fiber.New()
+	app.Use(OptionalAuthMiddleware(jwtService))
+	app.Get("/public", func(c fiber.Ctx) error {
+		hasUserID = c.Locals("user_id") != nil
+		hasOrgID = c.Locals("organization_id") != nil
+		return c.JSON(fiber.Map{"message": "success"})
+	})
+
+	req := httptest.NewRequest("GET", "/public", nil)
+	req.Header.Set("Authorization", "Bearer "+serviceToken)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	assert.False(t, hasUserID, "a service token must not set user context")
+	assert.False(t, hasOrgID, "a service token must not set organization context")
+}
+
 func TestOptionalAuthMiddleware_LegacyTokenWithoutTypeIsAnonymous(t *testing.T) {
 	const secret = "test-secret-key-for-testing-purposes-32chars"
 	t.Setenv("JWT_SECRET", secret)
