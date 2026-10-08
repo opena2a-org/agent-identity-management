@@ -513,6 +513,32 @@ export interface GetAgentMCPServersResponse {
   total: number;
 }
 
+/** Onboarding steps the dashboard reports. Token and first-agent events are recorded by the server. */
+export type OnboardingClientEvent = "onboarding_viewed" | "tab_selected" | "onboarding_completed" | "onboarding_skipped";
+export type OnboardingEventName = OnboardingClientEvent | "token_minted" | "token_exchanged" | "first_agent_registered";
+export type OnboardingTab = "python" | "typescript" | "java" | "go" | "cli" | "mcp" | "claude" | "cursor";
+
+/** Time from organization creation to its earliest agent. Seconds are null when nothing was measured. */
+export interface TimeToFirstAgentStats {
+  organizations: number;
+  organizationsWithAgent: number;
+  conversionRate: number;
+  medianSeconds: number | null;
+  p75Seconds: number | null;
+  p90Seconds: number | null;
+  fastestSeconds: number | null;
+  buckets: { label: string; upperSeconds: number | null; count: number }[];
+  excludedNegative: number;
+}
+
+export interface OnboardingBaseline {
+  generatedAt: string;
+  windowDays: number;
+  allTime: TimeToFirstAgentStats;
+  recent: TimeToFirstAgentStats;
+  events: { event: OnboardingEventName; organizations: number; total: number }[];
+}
+
 class APIClient {
   // The session lives in one place, the localStorage pair auth_token and
   // refresh_token, written and cleared here and read fresh on every use; the
@@ -1396,6 +1422,20 @@ class APIClient {
     organizationId: string;
   }> {
     return this.request("/api/v1/analytics/dashboard");
+  }
+
+  // Records an onboarding step for the caller's organization. The server stores the
+  // organization, the event, the tab for tab_selected and the time; nothing about the user.
+  async recordOnboardingEvent(event: OnboardingClientEvent, tab?: OnboardingTab): Promise<void> {
+    await this.request("/api/v1/onboarding/events", {
+      method: "POST",
+      body: JSON.stringify(tab ? { event, tab } : { event }),
+    });
+  }
+
+  // Time to first agent across every organization (platform admins only).
+  async getOnboardingMetrics(): Promise<OnboardingBaseline> {
+    return this.request("/api/v1/platform-admin/onboarding-metrics");
   }
 
   // Admin Dashboard stats - Admin-only endpoint with comprehensive platform metrics
