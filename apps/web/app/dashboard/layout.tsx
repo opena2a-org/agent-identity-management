@@ -51,7 +51,8 @@ export default function DashboardLayout({
       <div className="glass-page-wash" aria-hidden="true" />
       {/* Idle / absolute session timeout (30m idle, 8h cap) */}
       <IdleTimeoutGuard />
-      <div className="flex gap-5 p-4 pb-28 sm:p-6 lg:pb-6">
+      {/* Below lg the content ends clear of the fixed bottom tab bar and its raised Secure action. */}
+      <div className="flex gap-5 p-4 pb-[calc(var(--mobile-tab-bar-height)+1.75rem)] sm:px-6 sm:pt-6 lg:pb-6">
         <Sidebar mobileOpen={mobileNavOpen} onMobileOpenChange={setMobileNavOpen} />
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <DashboardHeader />

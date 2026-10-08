@@ -12,12 +12,15 @@ export const PHONE_VIEWPORTS = [
  */
 export const SHORT_PHONE_VIEWPORT = { width: 375, height: 240 } as const;
 
+/** Tablet viewport: at sm and up the page padding changes, and below lg the bar is still shown. */
+export const TABLET_VIEWPORT = { width: 768, height: 1024 } as const;
+
 /** Desktop viewport: the bottom tab bar is hidden and its height token is 0. */
 export const DESKTOP_VIEWPORT = { width: 1280, height: 800 } as const;
 
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
 
-const intersects = (a: Box, b: Box) =>
+export const intersects = (a: Box, b: Box) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 /**
