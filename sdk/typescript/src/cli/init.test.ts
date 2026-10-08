@@ -250,7 +250,7 @@ describe('refusals before any request', () => {
   });
 
   it('a value that is not a bootstrap token is refused and not printed', async () => {
-    const notAToken = 'sk-live-0123456789abcdef';
+    const notAToken = 'sk-FAKE-not-a-bootstrap-token';
     expect(await runInit(['--url', baseUrl], deps({ AIM_BOOTSTRAP_TOKEN: notAToken }))).toBe(1);
     expect(seen).toHaveLength(0);
     expect(allOutput()).not.toContain(notAToken);
@@ -368,7 +368,7 @@ describe('helpers', () => {
   it('invalidServerUrlReason accepts http(s) server addresses only', () => {
     expect(invalidServerUrlReason('https://aim.example.com')).toBeNull();
     expect(invalidServerUrlReason('http://localhost:8080')).toBeNull();
-    expect(invalidServerUrlReason('https://user:pw@aim.example.com')).not.toBeNull();
+    expect(invalidServerUrlReason('https://FAKEUSER:FAKEPASS@aim.example.com')).not.toBeNull();
   });
 });
 
