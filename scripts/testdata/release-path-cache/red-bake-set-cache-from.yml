@@ -1,0 +1,23 @@
+# Refused: bake takes its cache settings as `set:` overrides, not as inputs.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'platform-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Bake images
+        uses: docker/bake-action@0000000000000000000000000000000000000000 # fixture
+        with:
+          push: false
+          set: |
+            *.platform=linux/amd64
+            *.cache-from=type=gha
