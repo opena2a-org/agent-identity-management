@@ -105,7 +105,7 @@ func TestWebhookDelivery_RedirectIsRecordedAndNotFollowed(t *testing.T) {
 		webhook := &domain.Webhook{ID: uuid.New(), URL: endpoint.URL, Events: []domain.WebhookEvent{"agent.created"}, Secret: "s"}
 
 		// Delivery, retry and replay all send through attemptDelivery.
-		status, _, _, err := svc.attemptDelivery(webhook, []byte(`{}`), 5*time.Second)
+		status, _, _, err := svc.attemptDelivery(webhook, "agent.created", []byte(`{}`), 5*time.Second)
 		require.NoError(t, err)
 		assert.Equal(t, code, status, "delivery returns the redirect status")
 
@@ -148,7 +148,7 @@ func TestWebhookDelivery_RefusesStoredURLThatResolvesToLoopback(t *testing.T) {
 	assert.False(t, ipLiteral.MatchString(result.ErrorMessage), "test result names an address: %q", result.ErrorMessage)
 	assert.NoError(t, mock.ExpectationsWereMet())
 
-	_, _, _, err = svc.attemptDelivery(webhook, []byte(`{}`), 5*time.Second)
+	_, _, _, err = svc.attemptDelivery(webhook, "agent.created", []byte(`{}`), 5*time.Second)
 	require.Error(t, err)
 	assert.False(t, ipLiteral.MatchString(err.Error()), "delivery error names an address: %q", err.Error())
 
@@ -194,7 +194,7 @@ func TestWebhookDelivery_StoresAtMostOneKilobyteOfResponse(t *testing.T) {
 	require.True(t, ok, "response body argument is %T", recordedBody.value)
 	assert.LessOrEqual(t, len(body), 1024, "test send stores the response body")
 
-	status, deliveredBody, _, err := svc.attemptDelivery(webhook, []byte(`{}`), 5*time.Second)
+	status, deliveredBody, _, err := svc.attemptDelivery(webhook, "agent.created", []byte(`{}`), 5*time.Second)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, status)
 	assert.LessOrEqual(t, len(deliveredBody), 1024, "delivery stores the response body")

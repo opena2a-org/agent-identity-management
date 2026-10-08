@@ -368,7 +368,7 @@ func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *doma
 		now := time.Now().UTC()
 		delivery.LastAttemptAt = &now
 
-		statusCode, responseBody, duration, deliveryErr := s.attemptDelivery(webhook, jsonData, timeout)
+		statusCode, responseBody, duration, deliveryErr := s.attemptDelivery(webhook, payload.Event, jsonData, timeout)
 		delivery.StatusCode = statusCode
 		delivery.ResponseBody = responseBody
 		delivery.DurationMs = duration.Milliseconds()
@@ -419,8 +419,10 @@ func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *doma
 	s.webhookRepo.UpdateWebhookStats(webhook.ID, false, completedAt)
 }
 
-// attemptDelivery makes a single delivery attempt
-func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, payload []byte, timeout time.Duration) (int, string, time.Duration, error) {
+// attemptDelivery makes a single delivery attempt of the payload for event. The
+// X-Webhook-Event header names that event, which need not be the first event the
+// webhook subscribes to.
+func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, event domain.WebhookEvent, payload []byte, timeout time.Duration) (int, string, time.Duration, error) {
 	start := time.Now()
 
 	// Create signature
@@ -434,7 +436,7 @@ func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, payload []byte
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", signature)
-	req.Header.Set("X-Webhook-Event", string(webhook.Events[0])) // Primary event
+	req.Header.Set("X-Webhook-Event", string(event))
 	req.Header.Set("X-Webhook-ID", webhook.ID.String())
 	req.Header.Set("User-Agent", "AIM-Webhook/1.0")
 

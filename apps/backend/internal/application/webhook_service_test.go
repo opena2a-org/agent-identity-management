@@ -4,11 +4,17 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultWebhookConfig(t *testing.T) {
@@ -495,4 +501,47 @@ func TestWebhookEvent_Matching(t *testing.T) {
 	}
 
 	assert.False(t, found)
+}
+
+// A webhook subscribed to more than one event receives each delivery with the
+// event it carries in X-Webhook-Event. Deliveries, retries and replays used to
+// name the webhook's first subscribed event there, whatever event the payload
+// carried.
+func TestWebhookDelivery_EventHeaderNamesTheDeliveredEvent(t *testing.T) {
+	var mu sync.Mutex
+	var gotEvents []string
+	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		gotEvents = append(gotEvents, r.Header.Get("X-Webhook-Event"))
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(endpoint.Close)
+
+	svc, mock := newMockedWebhookService(t)
+	svc.newHTTPClient = loopbackAdmittingClient
+	webhook := &domain.Webhook{
+		ID:             uuid.New(),
+		OrganizationID: uuid.New(),
+		URL:            endpoint.URL,
+		Events:         []domain.WebhookEvent{domain.WebhookEventAgentCreated, domain.WebhookEventAgentDeleted},
+		Secret:         "s",
+	}
+	payload := &domain.WebhookPayload{
+		ID:             uuid.NewString(),
+		Event:          domain.WebhookEventAgentDeleted,
+		Timestamp:      time.Now().UTC(),
+		OrganizationID: webhook.OrganizationID.String(),
+		Data:           map[string]interface{}{"agentId": uuid.NewString()},
+	}
+
+	expectDelivery(mock)
+	mock.ExpectExec("UPDATE webhooks").WillReturnResult(sqlmock.NewResult(0, 1))
+
+	svc.deliverWithRetry(webhook, payload)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"agent.deleted"}, gotEvents, "the delivery names the event it carries")
 }
