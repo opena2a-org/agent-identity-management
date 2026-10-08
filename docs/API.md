@@ -11,6 +11,7 @@ Complete REST API reference for AIM (Agent Identity Management).
 3. [API Endpoints](#api-endpoints)
    - [Authentication](#authentication-endpoints)
    - [Agents](#agents-endpoints)
+   - [Onboarding](#onboarding-endpoints)
    - [MCP Servers](#mcp-servers-endpoints)
    - [API Keys](#api-keys-endpoints)
    - [Trust Scores](#trust-scores-endpoints)
@@ -377,6 +378,82 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "revokedAt": "2025-10-08T00:00:00Z"
 }
 ```
+
+---
+
+### Onboarding Endpoints
+
+A bootstrap token lets a signed-in user register a first agent from a terminal with one command. The token:
+
+- registers exactly one agent, in the organization of the user who minted it, owned by that user (scope `agents:register`);
+- expires 15 minutes after it is minted, and is refused once used or revoked;
+- is stored only as a SHA-256 hash plus an 8-character display prefix, and is returned in plaintext once, by the mint call;
+- is accepted only in the `X-AIM-Bootstrap-Token` header or the JSON body. A token sent in a query string is revoked and the request is refused, because URLs are recorded by proxies and access logs.
+
+Minting a new token revokes the caller's previous unused one. Mint and exchange are rate limited (10 requests per minute; per user for mint, per client address for exchange).
+
+#### POST /api/v1/onboarding/bootstrap-tokens
+
+Mint a bootstrap token. Requires a member, manager or admin session.
+
+**Headers:**
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+**Response (201, `Cache-Control: no-store`):**
+```json
+{
+  "id": "7c1e2a4b-9d3f-4e5a-8b6c-0d1e2f3a4b5c",
+  "token": "aim_ob_<43 characters>",
+  "displayPrefix": "Xk3q9TfA",
+  "scope": "agents:register",
+  "expiresAt": "2026-10-08T12:15:00Z"
+}
+```
+
+#### POST /api/v1/onboarding/bootstrap-tokens/revoke
+
+Revoke the caller's unused bootstrap tokens. Requires a member, manager or admin session. Tokens of other users and other organizations are never affected.
+
+**Response:**
+```json
+{ "revoked": 1 }
+```
+
+#### POST /api/v1/onboarding/bootstrap-tokens/exchange
+
+Register one agent with a bootstrap token. The token is the only credential; no session is read. Every body field is optional. `name` defaults to `my-first-agent` and `agentType` to `custom`. Send `publicKey` (base64 Ed25519) to keep the private key on the client; without it the server generates a key pair and returns the private key once.
+
+**Headers:**
+```
+X-AIM-Bootstrap-Token: aim_ob_<43 characters>
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "name": "my-first-agent",
+  "agentType": "custom",
+  "publicKey": "base64-encoded-ed25519-public-key"
+}
+```
+
+**Response (201, `Cache-Control: no-store`):**
+```json
+{
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "organizationId": "660e8400-e29b-41d4-a716-446655440000",
+  "name": "my-first-agent",
+  "displayName": "my-first-agent",
+  "status": "pending",
+  "publicKey": "base64-encoded-ed25519-public-key",
+  "aimUrl": "https://aim.example.com"
+}
+```
+
+**Refusals:** `401` with `code` set to `bootstrap_token_invalid`, `bootstrap_token_expired`, `bootstrap_token_used` or `bootstrap_token_revoked`; `400` with `code` `bootstrap_token_in_url` for a token in the query string; `409` when the organization already has an agent with that name (the token stays usable, so retry with another `name`). To recover from any `401`, mint a new token from the onboarding screen.
 
 ---
 
