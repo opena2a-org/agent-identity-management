@@ -7,6 +7,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `npx @opena2a/aim-sdk init` registers a first agent with a bootstrap token from the onboarding screen. The token
+  is read from `AIM_BOOTSTRAP_TOKEN` (or `--token`, with a note that a flag value is visible in the process list) and
+  sent only in the `X-AIM-Bootstrap-Token` header to `POST /api/v1/onboarding/bootstrap-tokens/exchange`. The
+  agent's Ed25519 key pair is generated locally and only the public key is sent. Credentials are written to
+  `~/.aim/agents/<name>.json` (file 0600, directory 0700) in the layout the Python SDK reads, and the agent's
+  dashboard URL is printed. `--url` (default `AIM_URL`, then `https://aim.opena2a.org`) points it at a self-hosted
+  server and `--name` (default `my-first-agent`) names the agent. The token is never printed or saved, server text is
+  scrubbed of token-shaped strings, redirects are not followed (so the token header cannot be forwarded to another
+  host), and existing credentials for the name are refused before the single-use token is spent.
+
 ### Tests
 
 - The signed-field enforcement harness now proves that the verifier compares each signed instant to the clock, not

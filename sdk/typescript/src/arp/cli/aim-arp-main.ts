@@ -12,14 +12,21 @@
 import { SDK_VERSION } from '../../version';
 import { loadConfig } from '../index';
 import { runTelemetrySubcommand, TELEMETRY_SUBCOMMANDS } from './telemetry';
+import { runInit } from '../../cli/init';
 
 function showHelp(): void {
   console.log(`
-  aim-arp v${SDK_VERSION} — OpenA2A telemetry consent CLI
+  aim-arp v${SDK_VERSION} — OpenA2A AIM SDK CLI
 
   USAGE
+    npx @opena2a/aim-sdk init [--url <url>] [--name <name>]
     aim-arp telemetry <subcommand>
     npx @opena2a/aim-sdk telemetry <subcommand>
+
+  COMMANDS
+    init       Register your first agent with a bootstrap token from the
+               onboarding screen (run \`npx @opena2a/aim-sdk init --help\`)
+    telemetry  Review or change signature telemetry consent
 
   SUBCOMMANDS
     ${TELEMETRY_SUBCOMMANDS.join(', ')}
@@ -32,6 +39,8 @@ function showHelp(): void {
 export async function runAimArp(argv: string[]): Promise<number> {
   const command = argv[0];
   switch (command) {
+    case 'init':
+      return runInit(argv.slice(1));
     case 'telemetry': {
       // loadConfig never throws on a missing config file; the telemetry
       // commands only need the optional signatureTelemetry block.
