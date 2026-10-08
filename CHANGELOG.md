@@ -156,6 +156,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   each of these services builds its client only through the shared constructor. Each check has a control that shows
   it can fail.
 
+### Fixed — a webhook delivery names the event it carries in `X-Webhook-Event`
+
+- A delivery, each of its retries and a replayed delivery sent `X-Webhook-Event` with the first event the webhook
+  subscribes to, not the event being delivered: a webhook subscribed to `agent.created` and `agent.deleted` received
+  `X-Webhook-Event: agent.created` with an `agent.deleted` payload. The header now names the event in the payload's
+  `event` field. The test send already named its own event, `webhook.test`.
+
 ### Fixed: an agent's activity returns no network address, user agent or personal metadata to a non-admin
 
 - `GET /api/v1/agents/:id/activity` is open to every principal in the organization and returns the audit records an
