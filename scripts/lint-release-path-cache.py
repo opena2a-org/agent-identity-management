@@ -12,7 +12,10 @@ Which jobs are on the release path is computed, never listed by hand:
       - `push` with `tags` (one run per pattern), with `tags-ignore`, or with no
         branch or tag filter at all (any tag);
       - `release` (the ref is the release's tag);
-      - `workflow_dispatch` (the ref may be a tag).
+      - `workflow_dispatch` (the ref is any branch or tag the dispatcher picks).
+    A tag filter is read up to its first pattern character: `*`, `+`, `[`, `!` and
+    `\\` end the known prefix where they stand, `?` one character earlier (it makes
+    the character before it optional).
   * a job is on the path when, for one of those runs, its `if:` is not provably false
     and every job it `needs` is on the path too (a job whose `if:` calls `always()`,
     `failure()` or `cancelled()` does not depend on its needs). `if:` is evaluated
@@ -24,35 +27,49 @@ Which jobs are on the release path is computed, never listed by hand:
 
 What is refused in a step of such a job:
 
-  * `cache-from` or `cache-to` in `with:` (docker/build-push-action, bake), or a
-    `--cache-from` / `--cache-to` argument in a `run:` script;
+  * `cache-from` or `cache-to` in `with:` (docker/build-push-action);
+  * a `cache-from=` or `cache-to=` override in `with: set:` (docker/bake-action);
+  * a `--cache-from` / `--cache-to` argument or a bake `--set <target>.cache-from=` /
+    `.cache-to=` override in a `run:` script, or in an `env:` value of the step, the
+    job or the workflow (a script can expand it);
   * `uses: actions/cache` or `uses: actions/cache/restore`;
   * an `actions/setup-*` step with a `cache:` input that is not false or empty;
-  * `actions/setup-go` without `cache: false` (it caches by default);
+  * `actions/setup-go` without `cache: false` (it caches by default, and any other
+    value, empty included, is not `false`);
   * `docker/setup-qemu-action` without `cache-image: false` (by default it restores
     the binfmt image from the Actions cache, loads it, and falls back to it when the
     pull fails).
 
+Input names under `with:` are matched in any case: the runner hands an input to the
+action by its upper-cased name, so `Cache-From:` reaches the action as `cache-from`.
+
     python3 scripts/lint-release-path-cache.py [path ...]
     python3 scripts/lint-release-path-cache.py --self-test
+    python3 scripts/lint-release-path-cache.py --help
 
 With no path it checks `.github/workflows/release.yml` and
 `.github/workflows/docker-publish.yml`. A path may be a workflow file or a directory
-of them. `--self-test` runs every fixture under `scripts/testdata/release-path-cache/`:
-each `red-*.yml` must fail and each `green-*.yml` must pass.
+of them; a path that does not exist, a default file that is missing, or a file that
+is not valid YAML is named and ends the run with exit 2. `--self-test` runs every
+fixture under `scripts/testdata/release-path-cache/` (each `red-*.yml` must fail and
+each `green-*.yml` must pass), then the command-line and condition-parser checks.
 
 Not covered: a cache an action restores without declaring it in the workflow (for
 example a newer setup-node's automatic package-manager cache, or setup-buildx-action's
-`cache-binary`, which applies only when the action downloads or builds buildx), and
-reusable workflows called with `uses:` at job level, which are reported as unread.
-Exit: 0 clean, 1 a refused cache (or a failed self-test), 2 nothing to check or
-PyYAML missing.
+`cache-binary`, which applies only when the action downloads or builds buildx), cache
+settings written in a bake file rather than in the workflow, a flag assembled at run
+time from pieces no single line carries, and reusable workflows called with `uses:` at
+job level, which are reported as unread.
+Exit: 0 clean, 1 a refused cache (or a failed self-test), 2 nothing to check, a
+missing path, a file that is not valid YAML, an unknown option, or PyYAML missing.
 """
 from __future__ import annotations
 
+import contextlib
 import io
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -67,20 +84,35 @@ FIXTURE_DIR = REPO_ROOT / "scripts" / "testdata" / "release-path-cache"
 
 UNKNOWN = object()  # a value the lint cannot decide; it never proves a job cannot run
 STATUS_FUNCTIONS = {"always", "failure", "cancelled"}
-GLOB = re.compile(r"[*?+\[\]!]")
+GLOB = re.compile(r"[*?+\[\]!\\]")
 
 
 class Run:
-    """One kind of run on the release path: an event and what is known of its tag."""
+    """One kind of run on the release path: an event and what is known of its ref.
 
-    def __init__(self, event: str, pattern: str):
+    `pattern` is the tag filter the run matched; None means the ref is any branch or
+    tag (a manual dispatch).
+    """
+
+    def __init__(self, event: str, pattern: str | None):
         self.event = event
         self.pattern = pattern
+        if pattern is None:
+            self.exact, self.name_prefix = False, ""
+            return
         found = GLOB.search(pattern)
         self.exact = found is None
-        self.name_prefix = pattern if found is None else pattern[: found.start()]
+        if found is None:
+            self.name_prefix = pattern
+        elif found.group() == "?":
+            # `?` makes the character before it optional, so that character is not known.
+            self.name_prefix = pattern[: max(found.start() - 1, 0)]
+        else:
+            self.name_prefix = pattern[: found.start()]
 
     def label(self) -> str:
+        if self.pattern is None:
+            return f"{self.event} on any branch or tag"
         return f"{self.event} of tag {self.pattern}"
 
     def context(self, name: str):
@@ -88,6 +120,9 @@ class Run:
         kind = "exact" if self.exact else "prefix"
         if name == "github.event_name":
             return ("exact", self.event)
+        if self.pattern is None:
+            # Any branch or tag: the ref is still a full ref name.
+            return ("prefix", "refs/") if name == "github.ref" else UNKNOWN
         if name == "github.ref_type":
             return ("exact", "tag")
         if name == "github.ref":
@@ -117,9 +152,10 @@ def release_runs(workflow: dict) -> list[Run]:
             runs.extend(Run("push", str(p)) for p in patterns if not str(p).startswith("!"))
         elif "tags-ignore" in push or not ("branches" in push or "branches-ignore" in push):
             runs.append(Run("push", "*"))
-    for event in ("release", "workflow_dispatch"):
-        if event in on:
-            runs.append(Run(event, "*"))
+    if "release" in on:
+        runs.append(Run("release", "*"))
+    if "workflow_dispatch" in on:
+        runs.append(Run("workflow_dispatch", None))
     return runs
 
 
@@ -159,6 +195,7 @@ class Expression:
         self.pos = 0
         self.run = run
         self.status_call = False
+        self.taken = 0  # tokens read; equals len(tokens) when nothing is read twice
 
     def peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else (None, None)
@@ -166,6 +203,7 @@ class Expression:
     def take(self):
         token = self.peek()
         self.pos += 1
+        self.taken += 1
         return token
 
     def parse(self):
@@ -175,7 +213,11 @@ class Expression:
         return value
 
     def parse_or(self):
-        value = truth(self.parse_and())
+        """`a || b`. A lone operand keeps its text, so `(github.ref) == 'x'` still compares."""
+        value = self.parse_and()
+        if self.peek() != ("op", "||"):
+            return value
+        value = truth(value)
         while self.peek() == ("op", "||"):
             self.take()
             right = truth(self.parse_and())
@@ -221,7 +263,7 @@ class Expression:
     def parse_primary(self):
         kind, value = self.take()
         if kind == "op" and value == "(":
-            inner = self.parse_or_raw()
+            inner = self.parse_or()
             if self.take() != ("op", ")"):
                 raise ValueError("unbalanced parenthesis")
             return inner
@@ -237,23 +279,14 @@ class Expression:
             return self.run.context(value)
         raise ValueError("unexpected token")
 
-    def parse_or_raw(self):
-        """`(a)` keeps a text value so `(github.ref) == 'x'` still compares."""
-        start = self.pos
-        value = self.parse_and()
-        if self.peek() == ("op", "||"):
-            self.pos = start
-            return self.parse_or()
-        return value
-
     def call(self, name: str):
         self.take()  # (
         arguments = []
         if self.peek() != ("op", ")"):
-            arguments.append(self.parse_or_raw())
+            arguments.append(self.parse_or())
             while self.peek() == ("op", ","):
                 self.take()
-                arguments.append(self.parse_or_raw())
+                arguments.append(self.parse_or())
         if self.take() != ("op", ")"):
             raise ValueError("unbalanced call")
         lowered = name.lower()
@@ -335,7 +368,7 @@ def evaluate(condition, run: Run) -> tuple[object, bool]:
     expression = Expression(tokens, run)
     try:
         return truth(expression.parse()), expression.status_call
-    except (ValueError, IndexError, TypeError):
+    except (ValueError, IndexError, TypeError, RecursionError):
         return UNKNOWN, True
 
 
@@ -377,26 +410,69 @@ def enabled(value) -> bool:
     return str(value).strip().lower() not in ("", "false")
 
 
-RUN_CACHE_FLAG = re.compile(r"(?<![\w-])--(cache-from|cache-to)\b")
+# A buildx flag (`--cache-from type=gha`) or a bake override (`--set '*.cache-to=...'`,
+# bake-action's `set: backend.cache-from=...`).
+CACHE_SETTING = re.compile(
+    r"(?<![\w-])--(?P<flag>cache-from|cache-to)\b|\.(?P<override>cache-from|cache-to)\s*\+?="
+)
+
+
+def cache_settings(text: str) -> list[str]:
+    """The cache flags and bake cache overrides a script or a value carries."""
+    names = set()
+    for found in CACHE_SETTING.finditer(text):
+        if found.group("flag"):
+            names.add(f"--{found.group('flag')}")
+        else:
+            names.add(f"<target>.{found.group('override')}=")
+    return sorted(names)
+
+
+def shown(value) -> str:
+    """A `with:` value as it reads in the workflow."""
+    if isinstance(value, bool):
+        return str(value).lower()
+    if value is None or value == "":
+        return '""'
+    return str(value)
+
+
+def env_problems(env) -> list[tuple[str, str]]:
+    """[(variable, problem)] for `env:` values a script can expand into a cache flag."""
+    if not isinstance(env, dict):
+        return []
+    return [
+        (str(key), f"`{setting}` in `env: {key}` can reach a script and use a cache shared between runs")
+        for key, value in env.items()
+        if isinstance(value, str)
+        for setting in cache_settings(value)
+    ]
 
 
 def step_problems(step: dict) -> list[str]:
     problems = []
     uses = str(step.get("uses") or "")
     action = uses.split("@", 1)[0].strip().lower().rstrip("/")
-    inputs = step.get("with") if isinstance(step.get("with"), dict) else {}
+    given = step.get("with") if isinstance(step.get("with"), dict) else {}
+    # The runner passes each input as INPUT_<NAME upper-cased>, so case does not matter.
+    inputs = {str(key).lower(): value for key, value in given.items()}
     if enabled(inputs.get("cache-from")):
         problems.append(f"`cache-from: {inputs['cache-from']}` imports a cache another run wrote")
     if enabled(inputs.get("cache-to")):
         problems.append(f"`cache-to: {inputs['cache-to']}` exports a cache other runs import")
+    if isinstance(inputs.get("set"), str):
+        for setting in cache_settings(inputs["set"]):
+            problems.append(f"`{setting}` in `set:` uses a cache shared between runs")
     if action in ("actions/cache", "actions/cache/restore"):
         problems.append(f"`uses: {uses}` restores a cache another run wrote")
     if action.startswith("actions/setup-"):
-        if "cache" in inputs:
-            if enabled(inputs["cache"]):
-                problems.append(f"`{action}` with `cache: {inputs['cache']}` restores a cache another run wrote")
-        elif action == "actions/setup-go":
+        cache = inputs.get("cache")
+        if "cache" in inputs and enabled(cache):
+            problems.append(f"`{action}` with `cache: {shown(cache)}` restores a cache another run wrote")
+        elif action == "actions/setup-go" and "cache" not in inputs:
             problems.append("`actions/setup-go` caches by default; set `cache: false`")
+        elif action == "actions/setup-go" and str(cache).strip().lower() != "false":
+            problems.append(f"`actions/setup-go` turns its cache off only with `cache: false`, not `cache: {shown(cache)}`")
     if action == "docker/setup-qemu-action":
         if "cache-image" not in inputs:
             problems.append(
@@ -404,33 +480,54 @@ def step_problems(step: dict) -> list[str]:
                 "set `cache-image: false`"
             )
         elif str(inputs["cache-image"]).strip().lower() != "false":
-            value = inputs["cache-image"]
-            shown = str(value).lower() if isinstance(value, bool) else value
             problems.append(
-                f"`docker/setup-qemu-action` with `cache-image: {shown}` restores a binfmt image "
+                f"`docker/setup-qemu-action` with `cache-image: {shown(inputs['cache-image'])}` restores a binfmt image "
                 "another run cached; set `cache-image: false`"
             )
     script = step.get("run")
     if isinstance(script, str):
-        for flag in sorted({found.group(1) for found in RUN_CACHE_FLAG.finditer(script)}):
-            problems.append(f"`--{flag}` in a run script uses a cache shared between runs")
+        for setting in cache_settings(script):
+            problems.append(f"`{setting}` in a run script uses a cache shared between runs")
+    problems.extend(problem for _, problem in env_problems(step.get("env")))
     return problems
 
 
-def check_file(path: Path) -> tuple[dict[str, list[Run]], list[tuple[str, str, str]], list[str]]:
-    """(jobs on the release path, [(job, step, problem)], notes)."""
-    workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+class Unreadable(Exception):
+    """A workflow file that cannot be read as YAML; the message is one line."""
+
+
+def load(path: Path):
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.MarkedYAMLError as error:
+        mark = error.problem_mark or error.context_mark
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        raise Unreadable(f"not valid YAML: {error.problem or error.context}{where}") from None
+    except yaml.YAMLError as error:
+        raise Unreadable(f"not valid YAML: {str(error).splitlines()[0] if str(error) else type(error).__name__}") from None
+    except (OSError, UnicodeDecodeError) as error:
+        raise Unreadable(f"cannot be read: {error}") from None
+
+
+def check_file(path: Path) -> tuple[dict[str, list[Run]], list[tuple[str, str]], list[str]]:
+    """(jobs on the release path, [(where, problem)], notes). Raises Unreadable."""
+    workflow = load(path) or {}
     if not isinstance(workflow, dict):
         return {}, [], []
     on_path = jobs_on_path(workflow)
-    findings: list[tuple[str, str, str]] = []
+    findings: list[tuple[str, str]] = []
     notes: list[str] = []
+    if on_path:
+        for key, problem in env_problems(workflow.get("env")):
+            findings.append((f"workflow env {key}", problem))
     for job_id, runs in on_path.items():
         job = (workflow.get("jobs") or {}).get(job_id)
         if not isinstance(job, dict):
             continue
         if "uses" in job:
             notes.append(f"job {job_id}: calls {job['uses']}, which is not read")
+        for key, problem in env_problems(job.get("env")):
+            findings.append((f"job {job_id}, env {key}", problem))
         for index, step in enumerate(job.get("steps") or [], start=1):
             if not isinstance(step, dict):
                 continue
@@ -438,21 +535,25 @@ def check_file(path: Path) -> tuple[dict[str, list[Run]], list[tuple[str, str, s
                 continue
             name = str(step.get("name") or step.get("id") or step.get("uses") or "run")
             for problem in step_problems(step):
-                findings.append((job_id, f'step {index} "{name}"', problem))
+                findings.append((f'job {job_id}, step {index} "{name}"', problem))
     return on_path, findings, notes
 
 
-def workflow_files(args: list[str]) -> list[Path]:
+def workflow_files(args: list[str], defaults: list[Path] = DEFAULT_FILES) -> tuple[list[Path], list[str]]:
+    """(the workflow files to check, the paths named or defaulted that do not exist)."""
     if not args:
-        return [p for p in DEFAULT_FILES if p.is_file()]
+        return [p for p in defaults if p.is_file()], [display(p) for p in defaults if not p.is_file()]
     files: list[Path] = []
+    missing: list[str] = []
     for arg in args:
         target = Path(arg)
         if target.is_dir():
             files.extend(sorted(p for p in target.iterdir() if p.suffix in (".yml", ".yaml")))
         elif target.is_file():
             files.append(target)
-    return files
+        else:
+            missing.append(arg)
+    return files, missing
 
 
 def display(path: Path) -> str:
@@ -462,20 +563,28 @@ def display(path: Path) -> str:
         return str(path)
 
 
-def lint(files: list[Path], out=sys.stdout) -> int:
+def lint(files: list[Path], out=None) -> int:
+    if out is None:
+        out = sys.stdout
     total = 0
+    unreadable = 0
     for path in files:
-        on_path, findings, notes = check_file(path)
-        shown = display(path)
+        name = display(path)
+        try:
+            on_path, findings, notes = check_file(path)
+        except Unreadable as error:
+            print(f"{name}: {error}", file=out)
+            unreadable += 1
+            continue
         if not on_path:
-            print(f"{shown}: no job can run for a tag or a publish", file=out)
+            print(f"{name}: no job can run for a tag or a publish", file=out)
             continue
         for job_id, runs in on_path.items():
-            print(f"{shown}: job {job_id} is on the release path ({'; '.join(r.label() for r in runs)})", file=out)
+            print(f"{name}: job {job_id} is on the release path ({'; '.join(r.label() for r in runs)})", file=out)
         for note in notes:
-            print(f"{shown}: note: {note}", file=out)
-        for job_id, step, problem in findings:
-            print(f"{shown}: REFUSED job {job_id}, {step}: {problem}", file=out)
+            print(f"{name}: note: {note}", file=out)
+        for where, problem in findings:
+            print(f"{name}: REFUSED {where}: {problem}", file=out)
         total += len(findings)
     if total:
         print(
@@ -485,9 +594,60 @@ def lint(files: list[Path], out=sys.stdout) -> int:
             "a job whose `if:` keeps it off tag and publish runs.",
             file=out,
         )
+    if unreadable:
+        print(f"lint-release-path-cache: {unreadable} workflow file(s) could not be checked", file=out)
+        return 2
+    if total:
         return 1
     print(f"lint-release-path-cache: ok, {len(files)} workflow(s), no run-written cache on the release path", file=out)
     return 0
+
+
+def run_main(argv: list[str]) -> tuple[int, str]:
+    """main(argv) with its standard output and standard error captured together."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+        code = main(argv)
+    return code, buffer.getvalue()
+
+
+def nested_or(levels: int) -> str:
+    condition = "github.ref == 'refs/heads/a'"
+    for _ in range(levels):
+        condition = f"({condition} || github.ref == 'refs/heads/b')"
+    return condition
+
+
+def command_checks() -> list[tuple[str, bool]]:
+    """[(what is checked, whether it holds)] for the command line and the condition parser."""
+    checks = []
+    with tempfile.TemporaryDirectory() as scratch:
+        missing = str(Path(scratch) / "missing.yml")
+        green = str(FIXTURE_DIR / "green-no-cache-on-the-release-path.yml")
+        code, output = run_main([green, missing])
+        checks.append(("a missing path is named and exits 2", code == 2 and missing in output))
+        files, absent = workflow_files([], defaults=[Path(green), Path(missing)])
+        checks.append(("a missing default file is reported", absent == [missing] and files == [Path(green)]))
+        code, output = run_main(["--help"])
+        checks.append(("--help prints the usage and exits 0", code == 0 and "--self-test" in output))
+        code, output = run_main(["--no-such-option"])
+        checks.append(("an unknown option exits 2", code == 2 and "--no-such-option" in output))
+        broken = Path(scratch) / "broken.yml"
+        broken.write_text("on: [push\njobs: {\n", encoding="utf-8")
+        code, output = run_main([str(broken)])
+        lines = output.strip().splitlines()
+        checks.append((
+            "a file that is not valid YAML is named on one line and exits 2",
+            code == 2 and len(lines) == 2 and lines[0].startswith(f"{broken}: not valid YAML") and "Traceback" not in output,
+        ))
+    condition = nested_or(12)
+    expression = Expression(tokenize(condition), Run("push", "v*"))
+    value = truth(expression.parse())
+    checks.append((
+        "a nested `||` condition is read once, token by token",
+        value is False and expression.taken == len(expression.tokens),
+    ))
+    return checks
 
 
 def self_test() -> int:
@@ -505,10 +665,14 @@ def self_test() -> int:
             failed += 1
             sys.stdout.write(buffer.getvalue())
         print(f"self-test: {verdict}: {fixture.name} is {'red' if got_red else 'green'}")
+    checks = command_checks()
+    for what, holds in checks:
+        print(f"self-test: {'ok' if holds else 'WRONG'}: {what}")
+        failed += 0 if holds else 1
     if failed:
-        print(f"lint-release-path-cache: self-test failed on {failed} fixture(s)")
+        print(f"lint-release-path-cache: self-test failed on {failed} fixture(s) or check(s)")
         return 1
-    print(f"lint-release-path-cache: self-test ok, {len(fixtures)} fixture(s)")
+    print(f"lint-release-path-cache: self-test ok, {len(fixtures)} fixture(s), {len(checks)} check(s)")
     return 0
 
 
@@ -516,9 +680,20 @@ def main(argv: list[str]) -> int:
     if yaml is None:
         print("lint-release-path-cache: PyYAML is required (pip install pyyaml)", file=sys.stderr)
         return 2
+    if argv and argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
     if argv and argv[0] == "--self-test":
         return self_test()
-    files = workflow_files(argv)
+    unknown = [arg for arg in argv if arg.startswith("-")]
+    if unknown:
+        print(f"lint-release-path-cache: unknown option {unknown[0]} (see --help)", file=sys.stderr)
+        return 2
+    files, missing = workflow_files(argv)
+    for path in missing:
+        print(f"lint-release-path-cache: {path}: no such file or directory", file=sys.stderr)
+    if missing:
+        return 2
     if not files:
         print("lint-release-path-cache: no workflow file to check", file=sys.stderr)
         return 2

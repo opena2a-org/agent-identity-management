@@ -1,0 +1,20 @@
+# Refused: the cache flag is carried in an `env:` value and expanded by the script.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'platform-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build
+        env:
+          CACHE_ARGS: --cache-from type=gha,scope=backend
+        run: docker buildx build $CACHE_ARGS --load .
