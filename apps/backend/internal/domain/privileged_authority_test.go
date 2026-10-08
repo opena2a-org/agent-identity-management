@@ -224,6 +224,29 @@ func TestAuthorizePrivilegedAction_RefusesSignaturesThatDoNotVerify(t *testing.T
 				return f.sign(t, f.priv, st)
 			},
 		},
+		// The next two statements are issued inside the clock-skew allowance
+		// and expire after now, so only the validity window check can refuse
+		// them.
+		{
+			name: "validity window of zero length",
+			want: "validity window",
+			auth: func() ActionAuthority {
+				st := f.statement()
+				st.IssuedAt = f.now.Add(10 * time.Second)
+				st.ExpiresAt = st.IssuedAt
+				return f.sign(t, f.priv, st)
+			},
+		},
+		{
+			name: "expires before it is issued",
+			want: "validity window",
+			auth: func() ActionAuthority {
+				st := f.statement()
+				st.IssuedAt = f.now.Add(20 * time.Second)
+				st.ExpiresAt = f.now.Add(10 * time.Second)
+				return f.sign(t, f.priv, st)
+			},
+		},
 		{
 			name: "missing nonce",
 			want: "no nonce",
