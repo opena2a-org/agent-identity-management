@@ -105,6 +105,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strict mode is set.
 - Test: `tests/test_cli_device_login.py`.
 
+### Added — `aim-sdk init` registers a first agent from a bootstrap token
+
+- `aim-sdk init` registers a first agent with a bootstrap token from the dashboard's onboarding screen, read from
+  `AIM_BOOTSTRAP_TOKEN` or `--token`. It generates the Ed25519 keypair locally and sends only the public key to
+  `POST /api/v1/onboarding/bootstrap-tokens/exchange`, saves the credentials to `~/.aim/agents/<name>.json` with mode
+  0600, and prints the agent's dashboard URL. `--url` targets a self-hosted server and `--name` replaces the default
+  `my-first-agent`. The token travels only in the `X-AIM-Bootstrap-Token` header, redirects are not followed, and the
+  token is never printed. An existing credentials file for the name is kept and the token is not spent.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

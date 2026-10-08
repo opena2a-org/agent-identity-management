@@ -68,6 +68,15 @@ delete_customer(42)
 
 AIM refuses it before the function body runs, and the `ActionDeniedError` it raises says why. Measured with aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
+To register a first agent without a browser round trip, copy the command from the dashboard's onboarding screen. It carries a bootstrap token that is valid for 15 minutes and registers one agent:
+
+```bash
+AIM_BOOTSTRAP_TOKEN=aim_ob_... aim-sdk init                       # registers my-first-agent
+AIM_BOOTSTRAP_TOKEN=aim_ob_... aim-sdk init --url http://localhost:8080 --name my-agent
+```
+
+`init` generates the Ed25519 keypair locally and sends only the public key, saves the credentials to `~/.aim/agents/<name>.json` (mode 0600), and prints the agent's dashboard URL. `secure("<name>")` then uses that agent. The token is read from the environment so it stays out of the process list; `--token` also works.
+
 ## Framework auto-detection
 
 `secure()` reads `sys.modules` to detect the agent's framework or LLM provider from imports:
@@ -245,6 +254,8 @@ The SDK ships with a small CLI for authentication and status:
 ```bash
 aim-sdk login                    # OAuth to AIM Cloud
 aim-sdk login --url <URL>        # OAuth to self-hosted instance
+aim-sdk init                     # Register my-first-agent with $AIM_BOOTSTRAP_TOKEN
+aim-sdk init --url <URL> --name <name>  # ... on a self-hosted instance, with another name
 aim-sdk demo                     # Register a demo agent, watch your dashboard come alive
 aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
 aim-sdk demo --cleanup           # Delete the demo agent again
