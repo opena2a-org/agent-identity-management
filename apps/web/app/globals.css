@@ -127,6 +127,16 @@
     --input: 240 4% 85%;
     --ring: 210 100% 45%;
     --radius: 0.875rem;
+
+    /* Height of the fixed bottom tab bar on small screens, safe-area inset included.
+       The bar sets its height from this, and menus and drawers keep clear of it. */
+    --mobile-tab-bar-height: calc(62px + max(env(safe-area-inset-bottom), 22px));
+  }
+
+  @media (min-width: 1024px) {
+    :root {
+      --mobile-tab-bar-height: 0px;
+    }
   }
 
   .dark {
@@ -333,6 +343,13 @@
     overflow: hidden;
     pointer-events: none;
     z-index: 0;
+  }
+  /* In a layered page the wash is an element ahead of the content, so the content already
+     paints above it without a z-index. Leaving it at auto keeps the content from forming
+     a stacking context: the fixed menus, drawers and dialogs inside it then stack against
+     the fixed bottom tab bar instead of being held beneath it. */
+  .glass-page--layered > :not(.glass-page-wash) {
+    z-index: auto;
   }
 
   .glass {

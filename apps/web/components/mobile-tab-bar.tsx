@@ -68,7 +68,7 @@ export function MobileTabBar({ role, onOpenMenu }: MobileTabBarProps) {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-glass-chrome-border bg-glass-chrome px-2 pb-[max(env(safe-area-inset-bottom),22px)] pt-2.5 backdrop-blur-chrome lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex h-[var(--mobile-tab-bar-height)] items-center justify-around border-t border-glass-chrome-border bg-glass-chrome px-2 pb-[max(env(safe-area-inset-bottom),22px)] pt-2.5 backdrop-blur-chrome lg:hidden"
       style={{ boxShadow: "0 -8px 30px rgba(15, 23, 42, 0.06)" }}
     >
       {renderTab(overview)}
