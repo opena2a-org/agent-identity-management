@@ -57,33 +57,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   private key from its public key. The guide now says so and links to the Post-Quantum
   Cryptography guide for ML-DSA signatures.
 
-### Security — a reused SDK-download token ends the chain that grew from it
-
-- Presenting an SDK-download refresh token (the 90-day token embedded in a downloaded SDK) that
-  was already rotated out now ends the chain that grew from it, as a reused login refresh token
-  ends its sign-in (RFC 9700 section 4.14.2). Every token issued from that download by rotation is
-  refused from then on: the family is revoked in the revocation store, and every `sdk_tokens` row
-  of the download is revoked with reason `token_family_revoked`, so the chain also ends where no
-  revocation store is configured. The event is recorded as a login reuse is
-  (`refresh_token_reuse`, then `refresh_session_revoked` for each later member refused), with
-  identifiers only. A rotated-out SDK token used to be refused on its own while the token that
-  replaced it stayed valid.
-- Two presentations of one SDK-download token in the same instant no longer both rotate. The
-  `sdk_tokens` retirement matches only an active row; the presentation whose retirement matches
-  nothing is refused as a reuse and receives no tokens. It used to receive a second live token.
-- `POST /api/v1/auth/sdk/recover` refuses a token whose chain a reuse ended, with the refresh
-  route's 401 answer; the SDK is downloaded again instead. A token its owner revoked is still
-  recovered.
-- SDK-download tokens carry the registered `sid` claim naming their download (the downloaded
-  token's own id, copied on every rotation), and the access tokens minted from them carry it too,
-  so the SDK download, device approval and SDK recovery routes refuse an access token from an
-  ended chain. A download's family never shares an id with the sign-in it was downloaded from.
-  `POST /api/v1/auth/logout` with an SDK-download token revokes that download's family as it does
-  a sign-in's. Each `sdk_tokens` row records its family as `familyId` in its metadata; the
-  `parent_token` and `rotated_from` lineage entries are unchanged, and there is no migration. A
-  token downloaded before this change is the root of its own family and carries it on its first
-  rotation. Tokens are opaque to clients; no SDK change is needed.
-
 ### Fixed — MCP server verification compares what the attesting agents report
 
 - An MCP server was marked verified once at least three agents created by at least two users had
@@ -127,48 +100,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   checksum as the license check, and fails if any library lacks a license file or a link, or an
   MPL-2.0 library lacks its source.
 
-### Changed (breaking) — `/metrics` moves off the API port to its own listener, loopback by default
-
-- What to check before upgrading: a Prometheus job that scrapes `/metrics` on port 8080 or through the
-  dashboard without a token stops receiving data. To scrape from the same host, target
-  `http://127.0.0.1:9464/metrics`. To scrape from another host, set `METRICS_AUTH_TOKEN`
-  (`openssl rand -hex 32`) and give Prometheus the token with `authorization` and `credentials_file`.
-- The backend serves `GET /metrics` on a dedicated listener at `METRICS_LISTEN_ADDR`, default
-  `127.0.0.1:9464`, which serves nothing else. On a loopback address it needs no token. Any other
-  address (`0.0.0.0:9464`, `:9464`, a hostname, `localhost` included) requires `METRICS_AUTH_TOKEN`;
-  without it the backend refuses to start and names both settings.
-- Without `METRICS_AUTH_TOKEN` the API port has no `/metrics` route and answers 404. With it, the API
-  port and the dedicated listener both serve `/metrics` behind `Authorization: Bearer <token>`, and
-  each request to the API port's `/metrics` is logged with its status and the connection's peer
-  address. No setting restores an open `/metrics` on the API port.
-- A `METRICS_AUTH_TOKEN` shorter than 32 characters is treated as unset and logged as an error. The
-  token is compared by SHA-256 digest, so response timing reveals neither its content nor its length.
-- If the dedicated listener cannot bind, the backend logs an error naming `METRICS_LISTEN_ADDR` and
-  keeps serving the API without metrics; it never falls back to the API port. At startup the backend
-  logs one line per metrics surface, with its address and whether it requires the token, and one
-  line describing this change.
-- The dashboard no longer proxies `/metrics` to the backend; the dashboard origin answers 404 there.
-- `docker-compose.yml` sets `METRICS_LISTEN_ADDR=0.0.0.0:9464` inside the backend container without
-  publishing the port, requires `METRICS_AUTH_TOKEN` in `.env` (`./scripts/gen-dev-secrets.sh` now
-  emits one), and hands it to Prometheus as a compose secret. `infrastructure/monitoring/prometheus.yml`
-  scrapes `backend:9464` with that token instead of `host.docker.internal:8080`.
-- The `aim_trust_score{agent_id,agent_name}` and `aim_mcp_attestations_total{agent_id,mcp_id,status}`
-  families are removed, so no metric carries an agent, MCP server, organization or user identifier.
-  `aim_trust_score_distribution` remains. A test fails when a label name outside the reviewed set,
-  or one that identifies an entity, is registered.
-
-### Security — `/metrics` was readable without authentication on the API port and the dashboard origin
-
-- Since 2025-11-21 (7d9e157d) the API port served `/metrics` to anyone who could reach it, and since
-  2026-04-13 (2c6ba110, #101) the dashboard origin proxied it as well. Both are in `platform-v1.0.0`,
-  which has no option to require a token. The response lists the API's endpoints with request counts,
-  statuses and latencies, and a request path a caller sent could appear in it as a label value.
-- Builds from 2026-08-04 (#349) accept `METRICS_AUTH_TOKEN` but leave `/metrics` open when it is
-  unset. Operators who cannot upgrade yet should set `METRICS_AUTH_TOKEN` on such a build, or on
-  `platform-v1.0.0` and earlier block `/metrics` at their proxy on both the API origin and the
-  dashboard origin. The API did not log requests to `/metrics` on those builds, so its own logs
-  cannot show whether a deployment's metrics were read.
-
 ### Fixed — the Java SDK documentation no longer states dependency versions its pom contradicts
 
 - `sdk/java/README.md`, which ships in the SDK download, listed Jackson 2.16 and BouncyCastle 1.79,
@@ -176,30 +107,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   2.18.11 and BouncyCastle 1.85.
 - Both documents now name each library and its purpose, and point at `sdk/java/pom.xml` for the
   version. A test in the Java SDK fails when either document states a version the pom contradicts.
-
-### Changed — the Java SDK's `reportCapabilities` follows the enforcement mode and raises when a registration fails
-
-- What to check before upgrading: in strict mode a reported capability stays pending until an
-  administrator approves it, and the result counts it under `pending`, not `granted`. A
-  registration that AIM refuses or fails now throws `AIMException` with the HTTP status, and the
-  capabilities after it are not sent. Failures used to be swallowed, and one whose message
-  contained "500" was counted as granted.
-- `reportCapabilities` sends one `POST /api/v1/sdk-api/agents/{id}/capabilities/register` per
-  distinct capability, one at a time in the order each first appears, with the body
-  `{"capabilityType": ...}`, and reads the outcome AIM answers with. It used to post to
-  `/api/v1/sdk-api/agents/{id}/capabilities`.
-- The result keeps `granted` and `total` and adds `pending` and `results`. `granted` counts
-  capabilities granted now or already held, `pending` counts those awaiting approval, `total`
-  counts distinct capabilities, and `results` has one entry per capability with its `status`
-  (`granted`, `already_exists` or `pending`) and, for a new pending request, its `requestId`.
-- `reportCapabilities(List)` is new. `reportCapabilities(List, Map)` is deprecated: its `scope` is
-  ignored, and passing one logs a warning. A null or empty entry throws `ConfigurationException`
-  before anything is sent.
-- `registerCapability(String, String)` sends `capabilityType`. It sent `capability`, which the
-  route does not read, so every call was refused with 400.
-- `registerCapability(String, String, String)` reads `status` from a 409 answer, which can be
-  `pending` as well as `already_exists`; it used to report every 409 as `already_exists`. A 404
-  now throws; it used to be reported as `success: true` with status `not_tracked`.
 
 ### Fixed — a password sign-in records the sign-in time and writes nothing else to the user
 
@@ -224,8 +131,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the `ENVIRONMENT` value it read. The error never contains a key.
 - To upgrade, set `KEYVAULT_MASTER_KEY` (`openssl rand -base64 32`) on every deployment that is not
   local development. The docker-compose files already require it.
-
-### Fixed — the Java SDK's `useMcpTool` reaches the usage report route
 
 ### Fixed: webhook, MCP server and agent card requests follow no redirect and connect only to the addresses registration admits
 
@@ -281,22 +186,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   member's, viewer's and role-less caller's response to each route contains none of them, and that an admin's
   response and `GET /api/v1/admin/audit-logs/:id` still contain them.
 
-### Fixed: the fleet governance guide's deployment step starts the server
-
-- Step 1 of `docs/use-cases/fleet-governance.md` gave the server `DATABASE_URL`, which it does not read, so the
-  server stopped at startup on the missing `POSTGRES_HOST`. Its sample `JWT_SECRET` was 29 characters, and the
-  server refuses one under 32. The dashboard was given `API_URL`, which it does not read, and the `/health` output
-  shown was not the one the server returns.
-- The step now writes `JWT_SECRET`, `KEYVAULT_MASTER_KEY` and `POSTGRES_PASSWORD` to `.env` with `openssl rand`, and
-  its compose file gives the server the `POSTGRES_*` settings it reads, a Redis service for token revocation, and a
-  database healthcheck it waits on, since the server connects once at start. The dashboard gets
-  `NEXT_PUBLIC_API_URL`. The fabricated `docker compose up` listing is removed, and the `/health` output is the
-  server's.
-- A test reads the step as docker compose would and loads the server's configuration from it. It checks that the
-  database and Redis hosts name services in the file, that the database credentials match, that each image is one
-  the release publishes, that the dashboard reads each variable it is given, and that the `/health` output has the
-  handler's fields.
-
 ### Fixed: the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
 
 - `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server: either `AIM_BASE_URL` or the origin
@@ -307,24 +196,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   are accepted on that server, and an `aud` naming the same host on another port or scheme is refused. An `aud`
   equal to `AIM_BASE_URL` is accepted as before, and so is the origin of a server on the scheme's default port.
 - Tests send the request to an address with a port and to one without, and check which audiences each accepts.
-
-### Fixed — the fleet governance guide describes the access token the server issues, and no longer points at a JWK Set
-
-- `docs/use-cases/fleet-governance.md` told readers to request a token at `/api/v1/token` with `agentId` and `scope`
-  in a JSON body, showed a response with `accessToken`, `tokenType`, `expiresIn` and `scope` whose token header read
-  EdDSA, and told other services to verify the token against `/.well-known/jwks.json`. The server mounts the endpoint
-  at `POST /api/v1/oauth/token`, accepts only the RFC 7523 JWT-bearer grant, returns `access_token`, `token_type` and
-  `expires_in`, signs the token with HS256 under `JWT_SECRET`, and publishes no JWK Set. The documented request named
-  a path the server does not mount, and no published key verified the token.
-- The step now documents the grant: the assertion the agent signs with its Ed25519 key, the `sub`, `aud` and `exp`
-  claims the server requires, the `AIM_BASE_URL` setting that `aud` must equal, and the response as the server
-  returns it. A new section says how the token is verified: by AIM Server, on its `/api/v1/agents` routes, which
-  check the signature, the expiry, revocation and the agent's status on each request. It says to keep `JWT_SECRET`
-  on the server and not to hand the access token to another service as proof of the agent's identity.
-- The step's three `OIDC_*` environment variables are removed: the server reads none of them. The guide and the use
-  case index name the endpoint an OAuth 2.0 token endpoint.
-- A test compares the step with a token the handler issues, so a change to the signing method, the path or the
-  response fields fails until the guide is rewritten to match.
 
 ### Fixed — `POST /api/v1/public/agents/register` answers 401 without a user access token, and the API reference says it needs one
 
@@ -356,28 +227,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `VerificationException` instead of polling until the timeout.
 - Tests verify each signature the client sends against the message the platform rebuilds, written out in the test:
   a GET, a POST with a body, a POST with an empty body, and an approval poll made with upper-case IDs.
-
-### Security — a stored agent private key decrypts only in the agent row it was written for
-
-- Server-generated agent private keys were sealed with AES-256-GCM and no additional data, so a ciphertext copied
-  into another row of `agents.encrypted_private_key` decrypted as that agent's key on the credential and A2A signing
-  paths. Keys are now stored in format v2: a cleartext header (a version byte and a storage-key id), the nonce, and
-  the ciphertext sealed with the additional data `"aim/agent-private-key" 0x00 <header> 0x00 <agent id>`, where the
-  agent ID is the row's primary key in canonical lowercase. Each decrypt takes the ID from the row it loaded. A
-  ciphertext copied to another row, sealed for another purpose, or carrying an altered header is refused, and the
-  credential rotation helper keeps the binding.
-- The request path refuses the earlier v1 format. At startup, before the server accepts requests, a one-time
-  migration re-encrypts each v1 key to v2 bound to its own row with a compare-and-swap update and logs counts only
-  (`v1Read`, `v2Written`, `alreadyV2`, `failures`), never a key or an agent ID. It is recorded in `schema_migrations`
-  as `keyvault/agent-private-key-v2` once a run finishes with no failures; until then it runs again at the next
-  startup. A row that cannot be read stays refused until that agent's credentials are rotated. An earlier release
-  cannot read v2 keys, so rolling back after the migration leaves server-generated keys unreadable until rotated.
-- Registration assigns the agent ID before it encrypts the generated key, and the agent repository keeps an ID the
-  caller assigned instead of replacing it.
-- Tests pin the additional data byte for byte and fail when a ciphertext copied from one row decrypts under another,
-  when a ciphertext sealed for another purpose or a v1 ciphertext is accepted on the request path, when the migration
-  re-binds a v2 ciphertext copied from another row, when a completed migration reads agent keys again, or when a
-  planted key, its ciphertext or an agent ID appears in the migration log or a refusal error.
 
 ### Fixed — No tracked file carries a home directory path from the machine that built or wrote it
 
