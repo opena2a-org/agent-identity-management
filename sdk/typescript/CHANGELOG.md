@@ -16,7 +16,8 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   Unix seconds, and AIM accepts the request only within 30 seconds of its own clock, earlier or later. There is no
   nonce: anyone who obtains the request can send it to AIM again until AIM's clock is more than 30 seconds past
   `X-Timestamp`. The method must be GET, POST, PUT, PATCH or DELETE in upper case, and the URL absolute http or https
-  with no username or password. The private key must be standard base64 of 32 bytes (a seed) or 64 bytes (the seed,
+  with no username or password and no empty query (a `?` with nothing after it, which Node 20's fetch drops from the
+  request and Node 24's sends). The private key must be standard base64 of 32 bytes (a seed) or 64 bytes (the seed,
   then its public key, as AIM issues it), and its public key must equal the configured one. Anything else throws
   `ConfigurationError`, and nothing is signed. This change does not alter how `AIMClient`, `SecretsClient` and
   `A2AClient` send requests.

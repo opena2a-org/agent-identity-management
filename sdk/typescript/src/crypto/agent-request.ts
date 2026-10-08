@@ -55,6 +55,8 @@ const METHOD_FIX = 'Pass the method in upper case as one of GET, POST, PUT, PATC
 const URL_FIX =
   'Pass the absolute http or https URL the request is sent to, with no username or password in it.';
 
+const EMPTY_QUERY_FIX = 'Remove the ? that has nothing after it, or put the query string after it.';
+
 const BODY_FIX = 'Serialize the body once and pass that string or those bytes, exactly as they are sent.';
 
 function refusal(line: string, stem: string, fix: string): ConfigurationError {
@@ -119,8 +121,9 @@ export async function decodeAgentPrivateKey(
 
 /**
  * The request target fetch sends for `url`: the serialized URL from the end of
- * its origin up to, not including, the first `#`. An empty query keeps its `?`,
- * which `pathname + search` would drop.
+ * its origin up to, not including, the first `#`. A URL whose query is empty (a
+ * `?` with nothing after it) is refused: Node 20's fetch sends its target
+ * without the `?` and Node 24's with it, so no one signature verifies on both.
  */
 function requestTarget(url: unknown, stem: string): string {
   if (typeof url !== 'string') {
@@ -144,7 +147,13 @@ function requestTarget(url: unknown, stem: string): string {
   }
   const rest = href.slice(parsed.origin.length);
   const fragment = rest.indexOf('#');
-  return fragment === -1 ? rest : rest.slice(0, fragment);
+  const target = fragment === -1 ? rest : rest.slice(0, fragment);
+  // A serialized path never holds a literal '?', so one in the target opens the
+  // query, and an empty search means nothing follows it.
+  if (parsed.search === '' && target.includes('?')) {
+    throw refusal('the url has an empty query, a ? with nothing after it', stem, EMPTY_QUERY_FIX);
+  }
+  return target;
 }
 
 function bodyBytes(body: unknown, stem: string): Uint8Array {

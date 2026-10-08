@@ -209,11 +209,7 @@ describe('createAgentRequestHeaders: timestamp and result shape', () => {
 });
 
 describe('createAgentRequestHeaders: the signed target is the request target fetch sends', () => {
-  const cases: Array<[string, string]> = [
-    ['/p?', '/p?'],
-    ['/p?#frag', '/p?'],
-    ['/p#frag', '/p'],
-  ];
+  const cases: Array<[string, string]> = [['/p#frag', '/p']];
   for (const [suffix, target] of cases) {
     it(`${suffix} signs ${target}`, async () => {
       const r = await signAndSend('GET', suffix);
@@ -257,6 +253,13 @@ describe('createAgentRequestHeaders: refusals before signing', () => {
       const e = await refusalOf(sign({ method: 'GET', url }));
       expect(e.message).toMatch(/^the url carries a username or a password; nothing was signed\nFix: /);
       expect(e.message).not.toContain('pw');
+    }
+  });
+
+  it('refuses a URL whose query is empty, which Node 20 and Node 24 fetch with different targets', async () => {
+    for (const suffix of ['/p?', '/p?#frag']) {
+      const e = await refusalOf(sign({ method: 'GET', url: `${base}${suffix}` }));
+      expect(e.message).toMatch(/^the url has an empty query, a \? with nothing after it; nothing was signed\nFix: /);
     }
   });
 
