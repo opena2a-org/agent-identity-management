@@ -172,6 +172,15 @@ func TestBootstrapTokenRepository_OneOpenTokenPerUserIsEnforcedBySchema(t *testi
 	require.NoError(t, err)
 	_, err = db.Exec(insert, orgID, userID, strings.Repeat("b", 64), now.Add(time.Minute))
 	assert.Error(t, err, "a second open token for the same user must violate the partial unique index")
+	assert.True(t, isOpenBootstrapTokenConflict(err), "the violation names the one-open-token index: %v", err)
+
+	// A token hash collision is a different unique violation, not the one a
+	// concurrent mint causes.
+	_, err = db.Exec(`UPDATE bootstrap_tokens SET revoked_at = $3 WHERE organization_id = $1 AND created_by = $2`, orgID, userID, now)
+	require.NoError(t, err)
+	_, err = db.Exec(insert, orgID, userID, strings.Repeat("a", 64), now.Add(time.Minute))
+	assert.Error(t, err)
+	assert.False(t, isOpenBootstrapTokenConflict(err), "a token hash collision is not an open-token conflict: %v", err)
 }
 
 func TestBootstrapTokenRepository_GetByHashUnknown(t *testing.T) {

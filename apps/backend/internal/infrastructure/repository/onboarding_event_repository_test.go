@@ -90,3 +90,34 @@ func TestOnboardingRepository_RecordWritesNoIdentityColumns(t *testing.T) {
 	}))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestOnboardingRepository_RecordCappedReportsWhetherItInserted(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	repo := NewOnboardingEventRepository(db)
+	orgID := uuid.New()
+	at := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	since := at.Add(-24 * time.Hour)
+	e := &domain.OnboardingEvent{OrganizationID: orgID, Event: domain.OnboardingEventViewed, OccurredAt: at}
+
+	mock.ExpectExec(regexp.QuoteMeta(recordCappedQuery)).
+		WithArgs(orgID, "onboarding_viewed", (*string)(nil), at, since, 20).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(recordCappedQuery)).
+		WithArgs(orgID, "onboarding_viewed", (*string)(nil), at, since, 20).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	inserted, err := repo.RecordCapped(context.Background(), e, since, 20)
+	require.NoError(t, err)
+	assert.True(t, inserted)
+	inserted, err = repo.RecordCapped(context.Background(), e, since, 20)
+	require.NoError(t, err)
+	assert.False(t, inserted, "no row inserted: the organization is at the cap")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// The count and the insert are one statement, keyed on the same
+	// organization, event and tab as the row being inserted.
+	assert.Contains(t, recordCappedQuery, "tab IS NOT DISTINCT FROM $3::varchar")
+	assert.Contains(t, recordCappedQuery, ") < $6::int")
+}

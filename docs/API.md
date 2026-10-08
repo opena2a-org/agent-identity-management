@@ -449,9 +449,12 @@ Content-Type: application/json
   "displayName": "my-first-agent",
   "status": "pending",
   "publicKey": "base64-encoded-ed25519-public-key",
-  "aimUrl": "https://aim.example.com"
+  "aimUrl": "https://aim-api.example.com",
+  "dashboardUrl": "https://aim.example.com"
 }
 ```
+
+`dashboardUrl` is the dashboard address the server is configured with (`FRONTEND_URL`), so a client can link to the agent at `<dashboardUrl>/dashboard/agents/<agentId>` without deriving the dashboard address from the API address. It is omitted when `FRONTEND_URL` is empty.
 
 **Refusals:** `401` with `code` set to `bootstrap_token_invalid`, `bootstrap_token_expired`, `bootstrap_token_used` or `bootstrap_token_revoked`; `400` with `code` `bootstrap_token_in_url` for a token in the query string; `409` when the organization already has an agent with that name (the token stays usable, so retry with another `name`). To recover from any `401`, mint a new token from the onboarding screen.
 
@@ -465,11 +468,13 @@ AIM records onboarding steps per organization so operators can measure how long 
 | `token_minted`, `token_exchanged` | the server, when a bootstrap token is minted or exchanged |
 | `first_agent_registered` | the server, once per organization, stamped with the earliest agent's `created_at` |
 
-Server-side events are written after the request that caused them has been answered, and a failed write never fails that request. Migration 116 backfills `first_agent_registered` for every organization that already has an agent.
+Server-side events are written off the request path of the request that caused them, and a failed write never fails that request. Migration 116 backfills `first_agent_registered` for every organization that already has an agent.
 
 #### POST /api/v1/onboarding/events
 
 Record a dashboard onboarding event for the caller's organization. Any signed-in role may call it. The organization comes from the session; nothing in the body can choose it. `tab` is required for `tab_selected` (one of `python`, `typescript`, `java`, `go`, `cli`, `mcp`, `claude`, `cursor`) and refused on every other event. Server-side events are refused with `400`.
+
+An organization can record the same event (and, for `tab_selected`, the same tab) at most 20 times in 24 hours, whichever of its members reports it. A report past that cap is accepted and not stored: the response is `202` with `"recorded": false`.
 
 **Request:**
 ```json

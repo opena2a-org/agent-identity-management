@@ -137,11 +137,14 @@ func (s *BootstrapTokenService) Mint(ctx context.Context, orgID, userID uuid.UUI
 
 	// A concurrent mint by the same user can win the one-open-token index
 	// between this transaction's revoke and insert; one retry revokes the
-	// winner and inserts.
-	if err := s.repo.CreateReplacingOpen(ctx, token, now); err != nil {
-		if err := s.repo.CreateReplacingOpen(ctx, token, now); err != nil {
-			return nil, fmt.Errorf("mint bootstrap token: %w", err)
-		}
+	// winner and inserts. Any other error (the database unreachable, a
+	// constraint the retry cannot satisfy) is returned without a retry.
+	err = s.repo.CreateReplacingOpen(ctx, token, now)
+	if errors.Is(err, domain.ErrBootstrapTokenOpenConflict) {
+		err = s.repo.CreateReplacingOpen(ctx, token, now)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("mint bootstrap token: %w", err)
 	}
 
 	s.logAudit(ctx, orgID, userID, domain.AuditActionGenerate, "bootstrap_token", token.ID, meta, map[string]interface{}{

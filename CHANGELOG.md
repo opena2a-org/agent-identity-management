@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — onboarding events are capped per organization, and a token mint is not retried on every error
+
+- `POST /api/v1/onboarding/events` stores the same event (and, for `tab_selected`, the same tab) at most 20
+  times per organization in 24 hours. A report past the cap is answered `202` with `"recorded": false`, so a
+  signed-in member posting in a loop no longer grows the onboarding baseline's event totals without bound.
+- `POST /api/v1/onboarding/bootstrap-tokens` runs its transaction a second time only when a concurrent mint by
+  the same user took the one-open-token slot. Any other database error, such as the database being unreachable,
+  fails the mint after one attempt.
+- The bootstrap token exchange answer carries `dashboardUrl`, the configured `FRONTEND_URL`, so a client links
+  to the registered agent on the dashboard instead of deriving the dashboard address from the API address.
+- The dashboard reports `onboarding_viewed` once per sign-in in a browser tab. Signing out or in clears the
+  marker, so when another account signs in on the same tab its first-run view is recorded too.
+- The API reference says server-side onboarding events are written off the request path, not after the
+  response: the write can finish before or after the request is answered.
+
 ### Fixed — the Java SDK's `useMcpTool` reaches the usage report route
 
 - `AIMClient.useMcpTool` posted to `/api/v1/sdk-api/agents/{id}/mcp-usage`, a path the API does not

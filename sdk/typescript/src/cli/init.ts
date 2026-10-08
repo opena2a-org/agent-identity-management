@@ -14,7 +14,8 @@
  *      the X-AIM-Bootstrap-Token header and only the public key in the body;
  *   4. writes the credentials to ~/.aim/agents/<name>.json (0600, directory
  *      0700) in the layout the Python SDK reads, so either SDK can load them;
- *   5. prints the agent's dashboard URL.
+ *   5. prints the agent's dashboard URL, at the dashboard address the server
+ *      reports (older servers report none, and it is derived from --url).
  *
  * The token is never printed, never logged, never written to disk and never
  * put in a URL. Server text is scrubbed of anything token-shaped before it is
@@ -140,17 +141,61 @@ export function invalidServerUrlReason(url: string): string | null {
   return null;
 }
 
-/** The dashboard address for an API address (same mapping as the Python SDK). */
+/** Hosts of the local stack, which serves the API on port 8080 and the dashboard on 3000. */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+const HOSTED_DASHBOARDS: Record<string, string> = {
+  'api.aim.opena2a.org': 'https://aim.opena2a.org',
+  'api.community.opena2a.org': 'https://community.opena2a.org',
+};
+
+/**
+ * The dashboard address for an API address, for a server whose exchange
+ * answer reports none. A hosted API host maps to its dashboard; port 8080 maps
+ * to 3000 only on a loopback host, where the local stack runs; a trailing
+ * `/api` path segment is dropped. Any other address is taken to serve the
+ * dashboard as well.
+ */
 export function dashboardUrlFor(aimUrl: string): string {
-  if (aimUrl.includes('api.aim.opena2a.org')) return 'https://aim.opena2a.org';
-  if (aimUrl.includes('api.community.opena2a.org')) return 'https://community.opena2a.org';
-  if (aimUrl.includes(':8080')) return aimUrl.replace(':8080', ':3000').replace(/\/+$/, '');
-  return aimUrl.replace('/api', '').replace(/\/+$/, '');
+  let url: URL;
+  try {
+    url = new URL(aimUrl.trim());
+  } catch {
+    return aimUrl.trim().replace(/\/+$/, '');
+  }
+  const hosted = HOSTED_DASHBOARDS[url.hostname];
+  if (hosted) return hosted;
+  if (url.port === '8080' && LOOPBACK_HOSTS.has(url.hostname)) url.port = '3000';
+  const path = url.pathname.replace(/\/+$/, '').replace(/\/api$/, '');
+  return `${url.origin}${path}`;
 }
 
-/** File name for an agent's credentials (same sanitizing as the Python SDK). */
+/**
+ * The dashboard address a server reported in its exchange answer, or null
+ * when it reported none or one that cannot be used. A loopback address from a
+ * server reached at another host is the server's unset FRONTEND_URL default,
+ * not an address this machine can open.
+ */
+export function reportedDashboardUrl(value: unknown, aimUrl: string): string | null {
+  if (typeof value !== 'string' || invalidServerUrlReason(value) !== null) return null;
+  const url = new URL(value.trim());
+  let aimHost = '';
+  try {
+    aimHost = new URL(aimUrl).hostname;
+  } catch {
+    // aimUrl was validated before the request; keep the reported address.
+  }
+  if (LOOPBACK_HOSTS.has(url.hostname) && aimHost && !LOOPBACK_HOSTS.has(aimHost)) return null;
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+}
+
+/**
+ * File name for an agent's credentials, sanitized as the Python SDK does it
+ * (`c.isalnum() or c in "-_"`): letters and digits of any script, `-` and `_`
+ * are kept, and every other character becomes one `_`.
+ */
 export function agentCredentialsFileName(name: string): string {
-  return `${name.replace(/[^A-Za-z0-9_-]/g, '_')}.json`;
+  return `${name.replace(/[^\p{L}\p{N}_-]/gu, '_')}.json`;
 }
 
 interface ServerAnswer {
@@ -230,16 +275,18 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     err(`  ${BOOTSTRAP_TOKEN_ENV}=<token> npx @opena2a/aim-sdk init`);
     return 1;
   }
+  if (args.token !== undefined) {
+    // Said before the value is checked: a value that is not a bootstrap token,
+    // such as another credential pasted by mistake, is in the history too.
+    err(`Note: --token is visible in the process list and shell history; ${BOOTSTRAP_TOKEN_ENV} is not.`);
+  }
   if (!token.startsWith(BOOTSTRAP_TOKEN_PREFIX)) {
     err(`Error: that is not a bootstrap token (bootstrap tokens start with ${BOOTSTRAP_TOKEN_PREFIX}).`);
     err('Generate one from the onboarding screen in the dashboard.');
     return 1;
   }
   if (args.token !== undefined) {
-    err(
-      `Note: --token is visible in the process list and shell history; ${BOOTSTRAP_TOKEN_ENV} is not. ` +
-        'The token works once, so it is spent after this run.',
-    );
+    err('The bootstrap token works once, so it is spent after this run.');
   }
 
   const rawUrl = args.url ?? env.AIM_URL ?? DEFAULT_AIM_URL;
@@ -375,7 +422,7 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     return 1;
   }
 
-  const dashboard = dashboardUrlFor(aimUrl);
+  const dashboard = reportedDashboardUrl(agent.dashboardUrl, aimUrl) ?? dashboardUrlFor(aimUrl);
   out('');
   out(`Agent "${name}" is registered.`);
   out(`  Agent ID:     ${agentId}`);

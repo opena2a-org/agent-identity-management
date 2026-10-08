@@ -40,6 +40,28 @@ func (f *fakeOnboardingRepo) Record(_ context.Context, e *domain.OnboardingEvent
 	return nil
 }
 
+// RecordCapped applies the cap the SQL statement applies: same organization,
+// event and tab, at or after since.
+func (f *fakeOnboardingRepo) RecordCapped(_ context.Context, e *domain.OnboardingEvent, since time.Time, limit int) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.recordErr != nil {
+		return false, f.recordErr
+	}
+	n := 0
+	for _, got := range f.events {
+		sameTab := (got.Tab == nil && e.Tab == nil) || (got.Tab != nil && e.Tab != nil && *got.Tab == *e.Tab)
+		if got.OrganizationID == e.OrganizationID && got.Event == e.Event && sameTab && !got.OccurredAt.Before(since) {
+			n++
+		}
+	}
+	if n >= limit {
+		return false, nil
+	}
+	f.events = append(f.events, *e)
+	return true, nil
+}
+
 func (f *fakeOnboardingRepo) RecordFirstAgent(_ context.Context, orgID uuid.UUID) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -79,6 +101,34 @@ func TestOnboardingRecordClientEvent_StoresOrgEventAndTimeOnly(t *testing.T) {
 	assert.Equal(t, domain.OnboardingEvent{OrganizationID: orgID, Event: domain.OnboardingEventViewed, OccurredAt: onboardingTestNow}, repo.events[0])
 	require.NotNil(t, repo.events[1].Tab)
 	assert.Equal(t, "typescript", *repo.events[1].Tab)
+}
+
+func TestOnboardingRecordClientEvent_CapsRepeatsPerOrganizationEventAndTab(t *testing.T) {
+	svc, repo := newOnboardingTestService()
+	ctx := context.Background()
+	orgID, other := uuid.New(), uuid.New()
+
+	for i := 0; i < OnboardingClientEventCap; i++ {
+		require.NoError(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventViewed, ""))
+	}
+	// A loop of reports past the cap stores nothing more.
+	for i := 0; i < 50; i++ {
+		assert.ErrorIs(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventViewed, ""), ErrOnboardingEventCapped)
+	}
+	assert.Len(t, repo.events, OnboardingClientEventCap)
+
+	// The cap is per organization, per event and per tab.
+	require.NoError(t, svc.RecordClientEvent(ctx, other, domain.OnboardingEventViewed, ""))
+	require.NoError(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventSkipped, ""))
+	require.NoError(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventTabSelected, "python"))
+	require.NoError(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventTabSelected, "go"))
+
+	// The window includes its start; once it has passed, the organization can
+	// report again.
+	svc.SetClock(func() time.Time { return onboardingTestNow.Add(OnboardingClientEventCapWindow) })
+	assert.ErrorIs(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventViewed, ""), ErrOnboardingEventCapped)
+	svc.SetClock(func() time.Time { return onboardingTestNow.Add(OnboardingClientEventCapWindow + time.Second) })
+	require.NoError(t, svc.RecordClientEvent(ctx, orgID, domain.OnboardingEventViewed, ""))
 }
 
 func TestOnboardingRecordClientEvent_RefusesServerEventsAndBadInput(t *testing.T) {

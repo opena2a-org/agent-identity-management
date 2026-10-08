@@ -23,6 +23,7 @@ import {
   EXCHANGE_PATH,
   initHelpText,
   invalidServerUrlReason,
+  reportedDashboardUrl,
   runInit,
   scrubToken,
 } from './init';
@@ -189,6 +190,22 @@ describe('a token from AIM_BOOTSTRAP_TOKEN registers my-first-agent', () => {
     expect(text).not.toContain(JSON.parse(readFileSync(credentialsPath(), 'utf8')).private_key);
   });
 
+  it('links to the dashboard address the server reports, not one derived from the API address', async () => {
+    handler = (req, res) => {
+      const body = JSON.parse(req.body);
+      created(res, {
+        agentId: '550e8400-e29b-41d4-a716-446655440000',
+        name: body.name,
+        status: 'pending',
+        publicKey: body.publicKey,
+        aimUrl: baseUrl,
+        dashboardUrl: 'https://console.example.com/',
+      });
+    };
+    expect(await runInit(['--url', baseUrl], deps())).toBe(0);
+    expect(outLines).toContain('  Dashboard:    https://console.example.com/dashboard/agents/550e8400-e29b-41d4-a716-446655440000');
+  });
+
   it('uses AIM_URL when --url is absent', async () => {
     const code = await runInit([], deps({ AIM_BOOTSTRAP_TOKEN: TOKEN, AIM_URL: baseUrl }));
     expect(code, allOutput()).toBe(0);
@@ -253,6 +270,16 @@ describe('refusals before any request', () => {
     const notAToken = 'sk-FAKE-not-a-bootstrap-token';
     expect(await runInit(['--url', baseUrl], deps({ AIM_BOOTSTRAP_TOKEN: notAToken }))).toBe(1);
     expect(seen).toHaveLength(0);
+    expect(allOutput()).not.toContain(notAToken);
+    expect(allOutput()).not.toContain('shell history');
+  });
+
+  it('a --token value that is not a bootstrap token is refused with the shell history note', async () => {
+    const notAToken = 'not-a-token';
+    expect(await runInit(['--token', notAToken, '--url', baseUrl], deps({}))).toBe(1);
+    expect(seen).toHaveLength(0);
+    expect(errLines[0]).toBe('Note: --token is visible in the process list and shell history; AIM_BOOTSTRAP_TOKEN is not.');
+    expect(errLines[1]).toContain('that is not a bootstrap token');
     expect(allOutput()).not.toContain(notAToken);
   });
 
@@ -354,11 +381,44 @@ describe('transport', () => {
 });
 
 describe('helpers', () => {
-  it('dashboardUrlFor maps API addresses to dashboard addresses like the Python SDK', () => {
+  it('dashboardUrlFor maps API addresses to dashboard addresses', () => {
     expect(dashboardUrlFor('https://api.aim.opena2a.org')).toBe('https://aim.opena2a.org');
-    expect(dashboardUrlFor('https://api.community.opena2a.org')).toBe('https://community.opena2a.org');
+    expect(dashboardUrlFor('https://api.community.opena2a.org/')).toBe('https://community.opena2a.org');
     expect(dashboardUrlFor('http://localhost:8080')).toBe('http://localhost:3000');
+    expect(dashboardUrlFor('http://127.0.0.1:8080/')).toBe('http://127.0.0.1:3000');
+    expect(dashboardUrlFor('http://[::1]:8080')).toBe('http://[::1]:3000');
     expect(dashboardUrlFor('https://aim.example.com')).toBe('https://aim.example.com');
+    expect(dashboardUrlFor('https://example.com/aim/api/')).toBe('https://example.com/aim');
+  });
+
+  it('dashboardUrlFor keeps port 8080 off loopback and never cuts "/api" out of a host name', () => {
+    expect(dashboardUrlFor('https://aim.example.com:8080')).toBe('https://aim.example.com:8080');
+    expect(dashboardUrlFor('https://api.example.com')).toBe('https://api.example.com');
+    expect(dashboardUrlFor('https://aim-api.example.com')).toBe('https://aim-api.example.com');
+    expect(dashboardUrlFor('https://example.com:18080/apis')).toBe('https://example.com:18080/apis');
+    // A look-alike of a hosted API host is not the hosted dashboard.
+    expect(dashboardUrlFor('https://api.aim.opena2a.org.example.com')).toBe('https://api.aim.opena2a.org.example.com');
+  });
+
+  it('reportedDashboardUrl accepts an http(s) dashboard address and refuses anything else', () => {
+    expect(reportedDashboardUrl('https://aim.example.com/', 'https://aim-api.example.com')).toBe('https://aim.example.com');
+    expect(reportedDashboardUrl('http://localhost:3000', 'http://localhost:8080')).toBe('http://localhost:3000');
+    // The unset FRONTEND_URL default, reported by a server reached elsewhere.
+    expect(reportedDashboardUrl('http://localhost:3000', 'https://aim-api.example.com')).toBeNull();
+    expect(reportedDashboardUrl(undefined, 'https://aim-api.example.com')).toBeNull();
+    expect(reportedDashboardUrl('', 'https://aim-api.example.com')).toBeNull();
+    expect(reportedDashboardUrl('javascript:alert(1)', 'https://aim-api.example.com')).toBeNull();
+    expect(reportedDashboardUrl('https://aim.example.com/?next=x', 'https://aim-api.example.com')).toBeNull();
+  });
+
+  it('agentCredentialsFileName keeps letters and digits of any script, as the Python SDK does', () => {
+    // Python: "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+    expect(agentCredentialsFileName('café')).toBe('café.json');
+    expect(agentCredentialsFileName('エージェント 1')).toBe('エージェント_1.json');
+    expect(agentCredentialsFileName('ops agent/../x')).toBe('ops_agent____x.json');
+    // One character outside the BMP is one "_", not one per UTF-16 unit.
+    expect(agentCredentialsFileName('\u{1F916}bot')).toBe('_bot.json');
+    expect(agentCredentialsFileName('my-first_agent')).toBe('my-first_agent.json');
   });
 
   it('scrubToken redacts every token-shaped string', () => {

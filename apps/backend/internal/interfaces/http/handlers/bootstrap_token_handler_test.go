@@ -61,6 +61,10 @@ func (r *btRegistrar) inOrg(orgID uuid.UUID) []*domain.Agent {
 	return out
 }
 
+// btDashboardURL stands in for FRONTEND_URL, an address unrelated to the API
+// address the exchange is served from.
+const btDashboardURL = "https://console.example.com"
+
 type btRig struct {
 	app    *fiber.App
 	repo   *mocks.MemoryBootstrapTokenRepository
@@ -75,7 +79,7 @@ func newBTRig(t *testing.T) *btRig {
 	t.Helper()
 	rig := &btRig{repo: mocks.NewMemoryBootstrapTokenRepository(), agents: &btRegistrar{}}
 	rig.svc = application.NewBootstrapTokenService(rig.repo, rig.agents, nil)
-	h := NewBootstrapTokenHandler(rig.svc)
+	h := NewBootstrapTokenHandler(rig.svc, btDashboardURL+"/")
 
 	session := func(c fiber.Ctx) error {
 		if org, err := uuid.Parse(c.Get("X-Test-Org")); err == nil {
@@ -178,6 +182,26 @@ func TestBootstrapTokenHandler_ExchangeWithHeaderRegistersInTheTokensOrg(t *test
 	assert.NotEmpty(t, body["privateKey"], "server-generated key pair is returned once")
 	assert.Equal(t, "no-store", header.Get(fiber.HeaderCacheControl))
 	assert.Len(t, rig.agents.inOrg(orgID), 1)
+	// The dashboard address comes from the server's configuration, trailing
+	// slash trimmed, not from the API address.
+	assert.Equal(t, btDashboardURL, body["dashboardUrl"])
+}
+
+func TestBootstrapTokenHandler_ExchangeOmitsAnUnconfiguredDashboardURL(t *testing.T) {
+	repo := mocks.NewMemoryBootstrapTokenRepository()
+	svc := application.NewBootstrapTokenService(repo, &btRegistrar{}, nil)
+	minted, err := svc.Mint(context.Background(), uuid.New(), uuid.New(), application.BootstrapRequestMeta{})
+	require.NoError(t, err)
+	app := fiber.New()
+	app.Post("/api/v1/onboarding/bootstrap-tokens/exchange", NewBootstrapTokenHandler(svc, " ").Exchange)
+
+	resp, err := app.Test(exchangeRequest(t, minted.Plaintext, nil))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, fiber.StatusCreated, resp.StatusCode)
+	body := map[string]interface{}{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.NotContains(t, body, "dashboardUrl")
 }
 
 func TestBootstrapTokenHandler_ExchangeWithBodyToken(t *testing.T) {

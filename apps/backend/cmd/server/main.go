@@ -1250,6 +1250,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		BootstrapToken: handlers.NewBootstrapTokenHandler(
 			services.BootstrapToken,
+			cfg.Server.FrontendURL,
 		),
 		Onboarding: handlers.NewOnboardingTelemetryHandler(
 			services.Onboarding,

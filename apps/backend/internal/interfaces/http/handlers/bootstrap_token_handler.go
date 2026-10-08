@@ -36,12 +36,16 @@ type bootstrapTokenService interface {
 
 // BootstrapTokenHandler serves the onboarding bootstrap token endpoints.
 type BootstrapTokenHandler struct {
-	service bootstrapTokenService
+	service      bootstrapTokenService
+	dashboardURL string
 }
 
-// NewBootstrapTokenHandler creates a BootstrapTokenHandler.
-func NewBootstrapTokenHandler(service bootstrapTokenService) *BootstrapTokenHandler {
-	return &BootstrapTokenHandler{service: service}
+// NewBootstrapTokenHandler creates a BootstrapTokenHandler. dashboardURL is
+// the dashboard origin (FRONTEND_URL) an exchange reports, so a client that
+// registered an agent can link to it without guessing the dashboard address
+// from the API address; empty omits it.
+func NewBootstrapTokenHandler(service bootstrapTokenService, dashboardURL string) *BootstrapTokenHandler {
+	return &BootstrapTokenHandler{service: service, dashboardURL: strings.TrimRight(strings.TrimSpace(dashboardURL), "/")}
 }
 
 // MintBootstrapTokenResponse is returned once, by the mint call. Token is the
@@ -76,6 +80,9 @@ type ExchangeBootstrapTokenResponse struct {
 	PublicKey      string `json:"publicKey"`
 	PrivateKey     string `json:"privateKey,omitempty"`
 	AIMURL         string `json:"aimUrl"`
+	// DashboardURL is the dashboard origin; the agent's page is
+	// DashboardURL + "/dashboard/agents/" + AgentID.
+	DashboardURL string `json:"dashboardUrl,omitempty"`
 }
 
 func bootstrapRequestMeta(c fiber.Ctx) application.BootstrapRequestMeta {
@@ -209,6 +216,7 @@ func (h *BootstrapTokenHandler) Exchange(c fiber.Ctx) error {
 		PublicKey:      result.PublicKey,
 		PrivateKey:     result.PrivateKey,
 		AIMURL:         normalizeAIMURL(c.BaseURL()),
+		DashboardURL:   h.dashboardURL,
 	})
 }
 

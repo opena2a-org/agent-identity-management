@@ -37,7 +37,9 @@ type RecordOnboardingEventRequest struct {
 
 // RecordEvent records an onboarding step the dashboard reports for the
 // caller's organization. Only the organization and the time are stored with
-// it; the caller's identity is not.
+// it; the caller's identity is not. An event the organization has already
+// reported as often as the daily cap allows is accepted and not stored
+// ("recorded": false).
 // @Summary Record an onboarding event for the caller's organization
 // @Tags onboarding
 // @Accept json
@@ -56,6 +58,8 @@ func (h *OnboardingTelemetryHandler) RecordEvent(c fiber.Ctx) error {
 	switch {
 	case err == nil:
 		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"recorded": true})
+	case errors.Is(err, application.ErrOnboardingEventCapped):
+		return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"recorded": false})
 	case errors.Is(err, application.ErrOnboardingEventUnknown),
 		errors.Is(err, application.ErrOnboardingEventServerOnly),
 		errors.Is(err, application.ErrOnboardingTabInvalid):

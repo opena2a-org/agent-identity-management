@@ -31,6 +31,20 @@ func (f *onboardingFakeRepo) Record(_ context.Context, e *domain.OnboardingEvent
 	f.recorded = append(f.recorded, *e)
 	return nil
 }
+func (f *onboardingFakeRepo) RecordCapped(_ context.Context, e *domain.OnboardingEvent, since time.Time, limit int) (bool, error) {
+	n := 0
+	for _, got := range f.recorded {
+		sameTab := (got.Tab == nil) == (e.Tab == nil) && (got.Tab == nil || *got.Tab == *e.Tab)
+		if got.OrganizationID == e.OrganizationID && got.Event == e.Event && sameTab && !got.OccurredAt.Before(since) {
+			n++
+		}
+	}
+	if n >= limit {
+		return false, nil
+	}
+	f.recorded = append(f.recorded, *e)
+	return true, nil
+}
 func (f *onboardingFakeRepo) RecordFirstAgent(_ context.Context, _ uuid.UUID) error { return nil }
 func (f *onboardingFakeRepo) TimeToFirstAgentSamples(_ context.Context, _ *time.Time) ([]domain.TimeToFirstAgentSample, error) {
 	return []domain.TimeToFirstAgentSample{}, nil
@@ -155,6 +169,27 @@ func TestOnboardingRoutes_EventIsKeyedOnTheSessionOrganization(t *testing.T) {
 	assert.Equal(t, org, repo.recorded[0].OrganizationID)
 	assert.Equal(t, domain.OnboardingEventTabSelected, repo.recorded[0].Event)
 	assert.Equal(t, "python", *repo.recorded[0].Tab)
+}
+
+// A signed-in viewer posting the same event in a loop stops adding rows at
+// the per-organization cap; the extra reports are accepted and not stored.
+func TestOnboardingRoutes_EventLoopIsCappedPerOrganization(t *testing.T) {
+	app, repo := onboardingRouteApp(t)
+	org := uuid.New()
+
+	for i := 0; i < application.OnboardingClientEventCap+10; i++ {
+		status, body := onboardingRouteDo(t, app, onboardingRequest{
+			method: http.MethodPost, path: onboardingEventsPath, role: "viewer", email: "viewer@example.com", org: org.String(),
+			body: `{"event":"onboarding_viewed"}`,
+		})
+		require.Equal(t, fiber.StatusAccepted, status)
+		want := `{"recorded":true}`
+		if i >= application.OnboardingClientEventCap {
+			want = `{"recorded":false}`
+		}
+		assert.JSONEq(t, want, string(body), "report %d", i+1)
+	}
+	assert.Len(t, repo.recorded, application.OnboardingClientEventCap)
 }
 
 func TestOnboardingRoutes_EventRefusesServerEventsAndBadBodies(t *testing.T) {

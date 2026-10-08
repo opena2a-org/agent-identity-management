@@ -46,6 +46,11 @@ var (
 	ErrBootstrapTokenUsed      = errors.New("bootstrap token has already been used")
 	ErrBootstrapTokenRevoked   = errors.New("bootstrap token has been revoked")
 	ErrBootstrapTokenMalformed = errors.New("bootstrap token is malformed")
+
+	// ErrBootstrapTokenOpenConflict is returned by CreateReplacingOpen when a
+	// concurrent mint by the same user inserted its open token between this
+	// mint's revoke and insert, so the one-open-token rule refused the insert.
+	ErrBootstrapTokenOpenConflict = errors.New("another bootstrap token was minted for this user at the same time")
 )
 
 // BootstrapToken is the stored record of a minted token. It never holds the
@@ -117,7 +122,9 @@ func ValidateBootstrapTokenFormat(plaintext string) error {
 type BootstrapTokenRepository interface {
 	// CreateReplacingOpen revokes every unused, unrevoked token of
 	// (token.OrganizationID, token.CreatedBy) at now and inserts token, as one
-	// unit of work.
+	// unit of work. It returns an error wrapping ErrBootstrapTokenOpenConflict
+	// when a concurrent mint's open token made the insert break the
+	// one-open-token rule; any other error is returned as it is.
 	CreateReplacingOpen(ctx context.Context, token *BootstrapToken, now time.Time) error
 
 	// GetByHash returns the token stored under hash, or ErrBootstrapTokenNotFound.

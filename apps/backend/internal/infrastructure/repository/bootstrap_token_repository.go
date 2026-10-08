@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -57,10 +58,25 @@ func (r *BootstrapTokenRepository) CreateReplacingOpen(ctx context.Context, t *d
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, t.ID, t.OrganizationID, t.CreatedBy, t.TokenHash, t.DisplayPrefix,
 		t.Scope, t.CreatedAt, t.ExpiresAt); err != nil {
+		if isOpenBootstrapTokenConflict(err) {
+			return fmt.Errorf("insert bootstrap token: %w", domain.ErrBootstrapTokenOpenConflict)
+		}
 		return fmt.Errorf("insert bootstrap token: %w", err)
 	}
 
 	return tx.Commit()
+}
+
+// openBootstrapTokenIndex is the partial unique index that allows one unused,
+// unrevoked token per user and organization (migration 115).
+const openBootstrapTokenIndex = "idx_bootstrap_tokens_one_open_per_user"
+
+// isOpenBootstrapTokenConflict reports whether err is a unique violation of
+// openBootstrapTokenIndex, the one error a concurrent mint by the same user
+// causes.
+func isOpenBootstrapTokenConflict(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == openBootstrapTokenIndex
 }
 
 // GetByHash returns the token stored under hash.
