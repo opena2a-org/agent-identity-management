@@ -66,33 +66,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   private key from its public key. The guide now says so and links to the Post-Quantum
   Cryptography guide for ML-DSA signatures.
 
-### Security — a reused SDK-download token ends the chain that grew from it
-
-- Presenting an SDK-download refresh token (the 90-day token embedded in a downloaded SDK) that
-  was already rotated out now ends the chain that grew from it, as a reused login refresh token
-  ends its sign-in (RFC 9700 section 4.14.2). Every token issued from that download by rotation is
-  refused from then on: the family is revoked in the revocation store, and every `sdk_tokens` row
-  of the download is revoked with reason `token_family_revoked`, so the chain also ends where no
-  revocation store is configured. The event is recorded as a login reuse is
-  (`refresh_token_reuse`, then `refresh_session_revoked` for each later member refused), with
-  identifiers only. A rotated-out SDK token used to be refused on its own while the token that
-  replaced it stayed valid.
-- Two presentations of one SDK-download token in the same instant no longer both rotate. The
-  `sdk_tokens` retirement matches only an active row; the presentation whose retirement matches
-  nothing is refused as a reuse and receives no tokens. It used to receive a second live token.
-- `POST /api/v1/auth/sdk/recover` refuses a token whose chain a reuse ended, with the refresh
-  route's 401 answer; the SDK is downloaded again instead. A token its owner revoked is still
-  recovered.
-- SDK-download tokens carry the registered `sid` claim naming their download (the downloaded
-  token's own id, copied on every rotation), and the access tokens minted from them carry it too,
-  so the SDK download, device approval and SDK recovery routes refuse an access token from an
-  ended chain. A download's family never shares an id with the sign-in it was downloaded from.
-  `POST /api/v1/auth/logout` with an SDK-download token revokes that download's family as it does
-  a sign-in's. Each `sdk_tokens` row records its family as `familyId` in its metadata; the
-  `parent_token` and `rotated_from` lineage entries are unchanged, and there is no migration. A
-  token downloaded before this change is the root of its own family and carries it on its first
-  rotation. Tokens are opaque to clients; no SDK change is needed.
-
 ### Fixed — MCP server verification compares what the attesting agents report
 
 - An MCP server was marked verified once at least three agents created by at least two users had
@@ -136,48 +109,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   checksum as the license check, and fails if any library lacks a license file or a link, or an
   MPL-2.0 library lacks its source.
 
-### Changed (breaking) — `/metrics` moves off the API port to its own listener, loopback by default
-
-- What to check before upgrading: a Prometheus job that scrapes `/metrics` on port 8080 or through the
-  dashboard without a token stops receiving data. To scrape from the same host, target
-  `http://127.0.0.1:9464/metrics`. To scrape from another host, set `METRICS_AUTH_TOKEN`
-  (`openssl rand -hex 32`) and give Prometheus the token with `authorization` and `credentials_file`.
-- The backend serves `GET /metrics` on a dedicated listener at `METRICS_LISTEN_ADDR`, default
-  `127.0.0.1:9464`, which serves nothing else. On a loopback address it needs no token. Any other
-  address (`0.0.0.0:9464`, `:9464`, a hostname, `localhost` included) requires `METRICS_AUTH_TOKEN`;
-  without it the backend refuses to start and names both settings.
-- Without `METRICS_AUTH_TOKEN` the API port has no `/metrics` route and answers 404. With it, the API
-  port and the dedicated listener both serve `/metrics` behind `Authorization: Bearer <token>`, and
-  each request to the API port's `/metrics` is logged with its status and the connection's peer
-  address. No setting restores an open `/metrics` on the API port.
-- A `METRICS_AUTH_TOKEN` shorter than 32 characters is treated as unset and logged as an error. The
-  token is compared by SHA-256 digest, so response timing reveals neither its content nor its length.
-- If the dedicated listener cannot bind, the backend logs an error naming `METRICS_LISTEN_ADDR` and
-  keeps serving the API without metrics; it never falls back to the API port. At startup the backend
-  logs one line per metrics surface, with its address and whether it requires the token, and one
-  line describing this change.
-- The dashboard no longer proxies `/metrics` to the backend; the dashboard origin answers 404 there.
-- `docker-compose.yml` sets `METRICS_LISTEN_ADDR=0.0.0.0:9464` inside the backend container without
-  publishing the port, requires `METRICS_AUTH_TOKEN` in `.env` (`./scripts/gen-dev-secrets.sh` now
-  emits one), and hands it to Prometheus as a compose secret. `infrastructure/monitoring/prometheus.yml`
-  scrapes `backend:9464` with that token instead of `host.docker.internal:8080`.
-- The `aim_trust_score{agent_id,agent_name}` and `aim_mcp_attestations_total{agent_id,mcp_id,status}`
-  families are removed, so no metric carries an agent, MCP server, organization or user identifier.
-  `aim_trust_score_distribution` remains. A test fails when a label name outside the reviewed set,
-  or one that identifies an entity, is registered.
-
-### Security — `/metrics` was readable without authentication on the API port and the dashboard origin
-
-- Since 2025-11-21 (7d9e157d) the API port served `/metrics` to anyone who could reach it, and since
-  2026-04-13 (2c6ba110, #101) the dashboard origin proxied it as well. Both are in `platform-v1.0.0`,
-  which has no option to require a token. The response lists the API's endpoints with request counts,
-  statuses and latencies, and a request path a caller sent could appear in it as a label value.
-- Builds from 2026-08-04 (#349) accept `METRICS_AUTH_TOKEN` but leave `/metrics` open when it is
-  unset. Operators who cannot upgrade yet should set `METRICS_AUTH_TOKEN` on such a build, or on
-  `platform-v1.0.0` and earlier block `/metrics` at their proxy on both the API origin and the
-  dashboard origin. The API did not log requests to `/metrics` on those builds, so its own logs
-  cannot show whether a deployment's metrics were read.
-
 ### Fixed — the Java SDK documentation no longer states dependency versions its pom contradicts
 
 - `sdk/java/README.md`, which ships in the SDK download, listed Jackson 2.16 and BouncyCastle 1.79,
@@ -185,30 +116,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   2.18.11 and BouncyCastle 1.85.
 - Both documents now name each library and its purpose, and point at `sdk/java/pom.xml` for the
   version. A test in the Java SDK fails when either document states a version the pom contradicts.
-
-### Changed — the Java SDK's `reportCapabilities` follows the enforcement mode and raises when a registration fails
-
-- What to check before upgrading: in strict mode a reported capability stays pending until an
-  administrator approves it, and the result counts it under `pending`, not `granted`. A
-  registration that AIM refuses or fails now throws `AIMException` with the HTTP status, and the
-  capabilities after it are not sent. Failures used to be swallowed, and one whose message
-  contained "500" was counted as granted.
-- `reportCapabilities` sends one `POST /api/v1/sdk-api/agents/{id}/capabilities/register` per
-  distinct capability, one at a time in the order each first appears, with the body
-  `{"capabilityType": ...}`, and reads the outcome AIM answers with. It used to post to
-  `/api/v1/sdk-api/agents/{id}/capabilities`.
-- The result keeps `granted` and `total` and adds `pending` and `results`. `granted` counts
-  capabilities granted now or already held, `pending` counts those awaiting approval, `total`
-  counts distinct capabilities, and `results` has one entry per capability with its `status`
-  (`granted`, `already_exists` or `pending`) and, for a new pending request, its `requestId`.
-- `reportCapabilities(List)` is new. `reportCapabilities(List, Map)` is deprecated: its `scope` is
-  ignored, and passing one logs a warning. A null or empty entry throws `ConfigurationException`
-  before anything is sent.
-- `registerCapability(String, String)` sends `capabilityType`. It sent `capability`, which the
-  route does not read, so every call was refused with 400.
-- `registerCapability(String, String, String)` reads `status` from a 409 answer, which can be
-  `pending` as well as `already_exists`; it used to report every 409 as `already_exists`. A 404
-  now throws; it used to be reported as `success: true` with status `not_tracked`.
 
 ### Fixed — a password sign-in records the sign-in time and writes nothing else to the user
 
@@ -233,8 +140,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the `ENVIRONMENT` value it read. The error never contains a key.
 - To upgrade, set `KEYVAULT_MASTER_KEY` (`openssl rand -base64 32`) on every deployment that is not
   local development. The docker-compose files already require it.
-
-### Fixed — the Java SDK's `useMcpTool` reaches the usage report route
 
 ### Fixed: webhook, MCP server and agent card requests follow no redirect and connect only to the addresses registration admits
 
@@ -290,22 +195,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   member's, viewer's and role-less caller's response to each route contains none of them, and that an admin's
   response and `GET /api/v1/admin/audit-logs/:id` still contain them.
 
-### Fixed: the fleet governance guide's deployment step starts the server
-
-- Step 1 of `docs/use-cases/fleet-governance.md` gave the server `DATABASE_URL`, which it does not read, so the
-  server stopped at startup on the missing `POSTGRES_HOST`. Its sample `JWT_SECRET` was 29 characters, and the
-  server refuses one under 32. The dashboard was given `API_URL`, which it does not read, and the `/health` output
-  shown was not the one the server returns.
-- The step now writes `JWT_SECRET`, `KEYVAULT_MASTER_KEY` and `POSTGRES_PASSWORD` to `.env` with `openssl rand`, and
-  its compose file gives the server the `POSTGRES_*` settings it reads, a Redis service for token revocation, and a
-  database healthcheck it waits on, since the server connects once at start. The dashboard gets
-  `NEXT_PUBLIC_API_URL`. The fabricated `docker compose up` listing is removed, and the `/health` output is the
-  server's.
-- A test reads the step as docker compose would and loads the server's configuration from it. It checks that the
-  database and Redis hosts name services in the file, that the database credentials match, that each image is one
-  the release publishes, that the dashboard reads each variable it is given, and that the `/health` output has the
-  handler's fields.
-
 ### Fixed: the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
 
 - `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server: either `AIM_BASE_URL` or the origin
@@ -316,24 +205,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   are accepted on that server, and an `aud` naming the same host on another port or scheme is refused. An `aud`
   equal to `AIM_BASE_URL` is accepted as before, and so is the origin of a server on the scheme's default port.
 - Tests send the request to an address with a port and to one without, and check which audiences each accepts.
-
-### Fixed — the fleet governance guide describes the access token the server issues, and no longer points at a JWK Set
-
-- `docs/use-cases/fleet-governance.md` told readers to request a token at `/api/v1/token` with `agentId` and `scope`
-  in a JSON body, showed a response with `accessToken`, `tokenType`, `expiresIn` and `scope` whose token header read
-  EdDSA, and told other services to verify the token against `/.well-known/jwks.json`. The server mounts the endpoint
-  at `POST /api/v1/oauth/token`, accepts only the RFC 7523 JWT-bearer grant, returns `access_token`, `token_type` and
-  `expires_in`, signs the token with HS256 under `JWT_SECRET`, and publishes no JWK Set. The documented request named
-  a path the server does not mount, and no published key verified the token.
-- The step now documents the grant: the assertion the agent signs with its Ed25519 key, the `sub`, `aud` and `exp`
-  claims the server requires, the `AIM_BASE_URL` setting that `aud` must equal, and the response as the server
-  returns it. A new section says how the token is verified: by AIM Server, on its `/api/v1/agents` routes, which
-  check the signature, the expiry, revocation and the agent's status on each request. It says to keep `JWT_SECRET`
-  on the server and not to hand the access token to another service as proof of the agent's identity.
-- The step's three `OIDC_*` environment variables are removed: the server reads none of them. The guide and the use
-  case index name the endpoint an OAuth 2.0 token endpoint.
-- A test compares the step with a token the handler issues, so a change to the signing method, the path or the
-  response fields fails until the guide is rewritten to match.
 
 ### Fixed — `POST /api/v1/public/agents/register` answers 401 without a user access token, and the API reference says it needs one
 
@@ -365,28 +236,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `VerificationException` instead of polling until the timeout.
 - Tests verify each signature the client sends against the message the platform rebuilds, written out in the test:
   a GET, a POST with a body, a POST with an empty body, and an approval poll made with upper-case IDs.
-
-### Security — a stored agent private key decrypts only in the agent row it was written for
-
-- Server-generated agent private keys were sealed with AES-256-GCM and no additional data, so a ciphertext copied
-  into another row of `agents.encrypted_private_key` decrypted as that agent's key on the credential and A2A signing
-  paths. Keys are now stored in format v2: a cleartext header (a version byte and a storage-key id), the nonce, and
-  the ciphertext sealed with the additional data `"aim/agent-private-key" 0x00 <header> 0x00 <agent id>`, where the
-  agent ID is the row's primary key in canonical lowercase. Each decrypt takes the ID from the row it loaded. A
-  ciphertext copied to another row, sealed for another purpose, or carrying an altered header is refused, and the
-  credential rotation helper keeps the binding.
-- The request path refuses the earlier v1 format. At startup, before the server accepts requests, a one-time
-  migration re-encrypts each v1 key to v2 bound to its own row with a compare-and-swap update and logs counts only
-  (`v1Read`, `v2Written`, `alreadyV2`, `failures`), never a key or an agent ID. It is recorded in `schema_migrations`
-  as `keyvault/agent-private-key-v2` once a run finishes with no failures; until then it runs again at the next
-  startup. A row that cannot be read stays refused until that agent's credentials are rotated. An earlier release
-  cannot read v2 keys, so rolling back after the migration leaves server-generated keys unreadable until rotated.
-- Registration assigns the agent ID before it encrypts the generated key, and the agent repository keeps an ID the
-  caller assigned instead of replacing it.
-- Tests pin the additional data byte for byte and fail when a ciphertext copied from one row decrypts under another,
-  when a ciphertext sealed for another purpose or a v1 ciphertext is accepted on the request path, when the migration
-  re-binds a v2 ciphertext copied from another row, when a completed migration reads agent keys again, or when a
-  planted key, its ciphertext or an agent ID appears in the migration log or a refusal error.
 
 ### Fixed — No tracked file carries a home directory path from the machine that built or wrote it
 
@@ -495,23 +344,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   or empty `talks_to` list is approved, when a server listed by name is refused, or when an unlisted server is
   approved.
 
-### Security — a check fails on token-shaped literals in tracked files
-
-- `node scripts/lint-token-literals.mjs` reads every file `git ls-files` returns, binary files included, and fails on
-  a three-segment base64url token (the JWT shape), a private key block, an AIM API key, an AWS, GitHub, Slack, Stripe,
-  Google or `sk-` prefixed key, or a credential-named field assigned a high-entropy string. It prints the path, line,
-  rule and a fingerprint of each finding, never the matched text.
-- Each run also scans a synthetic file it plants in a temporary directory, carrying one sample per rule. If any sample
-  is missed, the run reports INCONCLUSIVE and exits 2 instead of passing. A tracked path it cannot read, or an empty
-  file list, also exits 2.
-- Literals reviewed as non-credentials are listed, each with a reason, in `scripts/token-literal-allowlist.txt`. An
-  entry covers one literal at one path, and an entry that no longer matches fails the run.
-- The SDK token tracking middleware test builds its JWT at run time instead of storing one, and the Python scripts
-  under `tests/scripts/` read the API key from `AIM_API_KEY` instead of carrying a key issued by a local backend.
-- `scripts/test-lint-token-literals.mjs` (`node --test scripts/test-lint-token-literals.mjs`) fails when a tracked
-  token is not reported or is printed, when a missed planted sample or an unreadable path does not make the run
-  inconclusive, or when this repository's tracked tree has a finding.
-
 ### Fixed — an SDK refresh no longer hands out a refresh token that has no row
 
 - `POST /api/v1/auth/refresh` with an SDK refresh token revoked the presented token's `sdk_tokens` row, then inserted
@@ -553,8 +385,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `jackson-modules-java8` includes 2.18.11 in its vulnerable range. The Java SDK is built from source: rebuild it, and
   the example, to pick up the new version.
 
-### Removed — the unread token lifetime defaults in the backend configuration
-
 ### Added — an admin or manager can turn off hybrid mode from the agent page
 
 - The agent page's Key Vault tab showed "Hybrid mode enabled" with no way to turn it off; the act existed only as a
@@ -573,43 +403,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   same value as its new key.
 - **Upgrading:** a deployment whose `KEYVAULT_MASTER_KEY` is 32 zero bytes no longer starts. Set it to the output of
   `openssl rand -base64 32`; agent private keys stored under the old value cannot be decrypted under the new one.
-
-### Fixed — a 4xx response states its reason instead of carrying an error's text
-
-- 51 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and three 200 fallbacks) put the text of a Go
-  error in the body. Most passed a library or service message through: a UUID or JSON decoding error, a wrapped repository
-  error behind a 400 (`failed to update password: ...` on a password change, the repository error on an API key
-  delete or a device-code approval), or every reason a secrets resolve was refused, agent and namespace names
-  included. Each now answers a line written for the caller.
-- A refusal the caller can fix names the request member and the rule it breaks: `newPassword must be at least 8
-  characters long`, `id must be a UUID`, `signupProfile.role must be one of the listed values`,
-  `sandbox is not a recognized sandbox type`, `encryptedBlob must decode to at most 1048576 bytes`. The services
-  return these refusals as declared errors (for example `ErrCurrentPasswordIncorrect`, `ErrAPIKeyNotDisabled`,
-  `ErrDeviceCodeNotPending`, `ErrCapabilityAlreadyGranted`), and the handlers match them with `errors.Is` or
-  `errors.As` instead of comparing text.
-- A failure behind one of these endpoints that is not the caller's to fix (a repository or hashing error during a
-  password change, password reset, API key delete, device-code approval or capability registration) now answers 500
-  with the fixed server line and goes to the server log.
-- `POST /api/v1/secrets/resolve` still refuses with 403. A malformed, stale or reused nonce and an `agentPublicKey`
-  that is not the registered key are named; every other refusal answers `Secret resolution refused`, and its reason
-  stays in the secrets audit entry and the server log.
-- The census test in the handlers package now covers every status: it fails on any response (`c.JSON`,
-  `c.Status(s).JSON`, `Send`, `SendString`, `fiber.NewError`) and any `fiber.Map` or `ErrorResponse` literal whose
-  body is built from an error value. A second test plants an error text in a server failure and checks that it is
-  in the log line and not in the response.
-
-### Fixed — a 5xx response carries a fixed line, never the server's error text
-
-- 131 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`.
-  A failed `DELETE /api/v1/agents/:id`, for example, answered with the foreign-key violation, naming the table and
-  constraint. Each now answers `{"error":"An internal error occurred. Please try again later."}`, a line declared once
-  in the handlers package, and writes the error to the server log with the status, method and path. Agent
-  registration and the MCP attestation endpoints still answer 400, 403, 404 and 409 with the reason they did before.
-- The dashboard shows the same line for every 5xx, whatever the body holds: an older server's error text or a proxy's
-  HTML page. A 503 refusal that names its reason (`reasonCode`, such as `noAdministrators`) keeps its own line.
-- A test in the handlers package reads every handler file and fails on a response at a 5xx status whose body is built
-  from an error value. A status counts as 5xx when it is a 5xx constant, a local variable set to one, or a call to a
-  package function that returns one.
 
 ### Removed — the source tree no longer carries prebuilt server binaries
 
@@ -660,44 +453,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `agentName` with each record that has a user or an agent, as the per-agent and per-resource audit routes already
   do. The CSV export is unchanged.
 
-### Fixed — secrets resolve encrypts the credential to the agent's registered key and answers a signed request once
-
-- `POST /api/v1/secrets/resolve` encrypts the credential to the agent's registered Ed25519 key, however the agent
-  authenticated (ATC or signed request). A request whose `agentPublicKey` is not that key is refused with 403 before
-  the credential is read and before its nonce is spent.
-- `nonce` must be `<RFC 3339 time>:<random part>`, the form both SDKs send, with a time no more than 30 seconds from
-  the server clock in either direction. Any other nonce is refused with 403.
-- Each signed request (namespace, operation and nonce) is answered once. It is admitted through the same single
-  statement and table, `agent_request_nonces`, as signed action-request statements, and the same purge deletes it. A
-  repeat is refused with 403. When the check cannot run, including before the first purge after start, the answer is
-  503 and nothing is resolved.
-
-### Added — action verification accepts a signed statement with a nonce and a 30-second window
-
-- `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications` accept a second body form: exactly
-  `signedBytes`, `signature` and `publicKey`, each unpadded base64url. `signedBytes` is the DSSE v1
-  pre-authentication encoding of the payload type `application/vnd.opena2a.action-request.v1+json` and a JSON
-  payload with `action_type`, `agent_id`, `resource` (a string or `null`), `timestamp` (RFC 3339 in UTC with `Z`)
-  and `nonce` (16 random bytes), and optionally `context`, `delegation_digests` and `risk_level`. The Ed25519
-  signature is checked over the bytes as received, and the action is decided and recorded from the signed payload.
-  Numbers in `context` are recorded with the digits they were signed with.
-- A statement is accepted only when its `timestamp` is within 30 seconds of the database clock, and an agent's nonce
-  is accepted once. The time check and the nonce insert are one database statement, shared by both routes and every
-  replica: a statement accepted on one route is refused on the other. The window is a code constant.
-- Refusals carry a `reasonCode`. The shape checks answer 400 `invalidRequest` or `nonceRequired`, or 422
-  `limitExceeded` for `signedBytes` over 65,536 bytes or a payload nested deeper than 32 levels. An unknown agent and
-  a key that is not the agent's registered key get the same 401 `agentKeyNotRecognized` body. The others are 401
-  `signatureInvalid`, `hybridSignatureRequired`, `timestampOutsideWindow`, `nonceReused` and `agentStatusDenied`,
-  and 503 `freshnessCheckUnavailable` when the database cannot run the check. A refused statement writes no
-  verification event, audit entry or alert.
-- A statement from a suspended or revoked agent whose key and signature check out still spends its nonce. To stop a
-  key someone else holds from writing nonces, rotate or remove the key, or delete the agent.
-- Accepted nonces are kept in a new table, `agent_request_nonces` (migration 116), until 31 seconds after their
-  window ends. A purge deletes them once at start and then every 60 seconds; until a purge has completed, and
-  whenever none has for two intervals, every statement is refused with 503 and nothing is stored.
-- A request in the original form is handled as before. One that also carries a top-level `nonce` or
-  `delegationDigests` is refused with 400: those members are checked only inside a signed statement.
-
 ### Fixed — sample output in the docs shows a placeholder account
 
 - The Azure CLI sample in `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` showed the signed-in account as a real
@@ -705,15 +460,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `scripts/lint-docs-sample-addresses.sh` fails if a Markdown page under `docs/` carries an email address outside
   the reserved example domains, the project's own domain and the generic placeholders the guides already use, and
   names each one with its file and line. `scripts/test-lint-docs-sample-addresses.sh` tests it.
-
-### Fixed — expired A2A request nonces are deleted on a schedule
-
-- An A2A request nonce, and the SHA-256 request hash stored with it, stayed in `a2a_request_nonces` after it expired
-  until an admin called `POST /api/v1/a2a/maintenance/cleanup-nonces`. The server now deletes them every 60 seconds,
-  logs the interval when the job starts, and logs only the count of rows each run deletes.
-- A nonce is kept while a request carrying it could still pass the timestamp check: for the five-minute signature
-  timestamp tolerance past its expiry, and for twice that past its first use.
-- The admin route stays and runs the same cleanup on demand, with the same bound.
 
 ### Removed — a prebuilt server binary is no longer part of the source tree
 
@@ -736,14 +482,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   which does not start without it, and adds the bootstrap step.
 - A test reads each root `docker-compose*.yml` and fails if any service other than a one-shot bootstrap run sets
   `DEFAULT_ADMIN_PASSWORD`.
-
-### Fixed — an expired password reset token is cleared from the account
-
-- A password reset token that was never used stayed on the user's row after it expired, until the user requested
-  another reset. A token stored without an expiry, which the reset lookup never accepts, stayed the same way.
-- The server's five-minute cleanup job now clears both and logs only how many rows it cleared. A reset link that has
-  not expired keeps working.
-- The `users` update trigger still sets `updated_at` on each row the job clears.
 
 ### Fixed — an approved device code is exchanged for one token pair
 
@@ -770,23 +508,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   request did not reach it, or it answered without one), the alert gives a neutral message that does not say the
   credentials were wrong. Client-side validation still shows its errors under the fields.
 
-### Changed — a third party can verify an agent card attestation from the served card and the JWK Set
-
-- A served card's attestation could not be checked by anyone but the server. The signed `issuedAt` was a different
-  instant from the stored one, timestamps were signed with sub-microsecond precision that PostgreSQL does not keep,
-  the served `issuer` was empty, and `cardHash` was not served. A refreshed attestation also signed the hash of the
-  card as stored in JSONB rather than the registered card's hash.
-- Attestations are now signed in the `opena2a-aim/card-attestation/v2` format: the label, a newline, and the JSON
-  payload (`cardHash`, `agentId`, `issuer`, `issuedAt`, `expiresAt`), with both timestamps in UTC and whole seconds.
-  The stored and served timestamps are the signed ones, in UTC. `aim.attestation` in a served card adds `format` and
-  `cardHash`, and `issuer` reads `aim-server`.
-- `docs/specs/card-attestation-v2.md` is the verification procedure. `docs/specs/card-attestation-v2-vector.json` is
-  a conformance vector with seven cases, and `docs/specs/verify-card-attestation.mjs` is a Node.js verifier with no
-  dependencies that checks a served card or the vector. The procedure also covers key rotation with
-  `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and the effect of rotating `KEYVAULT_MASTER_KEY` on derived keys.
-- Cards record the format as `attestationFormat` (migration 115). Attestations issued before the upgrade read no
-  format, are served without `format`, cannot be verified by a third party, and are re-signed in v2 when refreshed.
-
 ### Changed — `aim-bootstrap` prints the admin password only when it generated it
 
 - `aim-bootstrap` ended every run by printing the admin email and password, including a password the operator
@@ -811,8 +532,6 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   comment on the line above.
 - A test loads each environment template (`.env.example`, `.env.quickstart`, `apps/backend/.env.example`) as written
   and expects startup to refuse its `JWT_SECRET`.
-
-### Changed — each server signing purpose has its own key, and the public keys are published
 
 ### Fixed — on tablet-width screens the end of a dashboard page is no longer hidden beneath the bottom tab bar
 
