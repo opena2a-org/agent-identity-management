@@ -224,8 +224,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - `AIMClient` signed an `X-Signature` GET over `METHOD\npath\ntimestamp\n`, and a POST with an empty body the same
   way. The platform verifies over those three lines with no trailing newline and adds the body as a fourth line only
-  when the request has one, so it refused both with 401. The signed read of an agent's MCP servers, made when an MCP
-  server registration returns 409, was one of them. Both now sign the form the platform verifies.
+  when the request has one. Both now sign the form the platform verifies. The signed GET is the read of an agent's
+  MCP servers made when an MCP server registration returns 409. These requests also carry the client's bearer
+  token, and the platform does not check `X-Signature` on a request with an `Authorization` header, so the bearer
+  token is what authenticates them, before and after this change.
 - `waitForApproval` polled `GET /api/v1/sdk-api/verifications/{id}` with a bearer token. That endpoint authenticates
   only the `X-AIM-Agent-ID`, `X-AIM-Timestamp` and `X-AIM-Signature` headers, so every poll was refused and a pending
   action timed out even after an administrator approved it. Each poll now sends those headers, signed over
