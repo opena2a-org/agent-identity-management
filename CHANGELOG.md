@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the dashboard asks for the signed-in user once per page load
+
+- The dashboard shell, the sidebar, the header and the deactivation check each requested `/api/v1/auth/me` when a
+  page loaded, and that route shares the strict rate limit of the sign-in route. A long enough run of page loads
+  from one address was refused with 429, which left the sidebar without its account section and refused the next
+  sign-in from that address. The client now sends one profile request for the callers that ask while it is on the
+  wire; the next caller after it settles, or a caller with another session token, sends its own.
+
 ### Fixed — the quickstart stops when an earlier install's database is still on the machine
 
 - After the install directory was deleted, `scripts/quickstart.sh` started a first run over the earlier
