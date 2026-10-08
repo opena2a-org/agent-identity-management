@@ -1,4 +1,4 @@
--- Migration 112: put rules.minTrustScore on the canonical [0,1] trust scale for
+-- Migration 114: put rules.minTrustScore on the canonical [0,1] trust scale for
 -- the mcp_* security policies.
 --
 -- MCPPolicyEvaluator compares rules.minTrustScore against MCPServer.TrustScore,
@@ -23,6 +23,10 @@
 -- of them is read by the same comparison. Rows of other policy types are not
 -- touched. is_enabled is not touched either: migration 105 keeps the seeded
 -- policies disabled, and nothing in this migration enables a policy.
+--
+-- Numbering note: this tree's highest migration is 112 and aim-cloud's is 113;
+-- the runner tracks applied migrations by filename, so 114 is the first number
+-- free in both trees and the gap at 113 here is legal.
 --
 -- See https://github.com/opena2a-org/agent-identity-management/issues/355.
 

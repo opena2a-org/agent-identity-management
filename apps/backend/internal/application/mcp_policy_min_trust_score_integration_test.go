@@ -13,7 +13,7 @@ import (
 )
 
 // rescaleMigration puts rules.minTrustScore on the canonical [0,1] scale for mcp_* policies.
-const rescaleMigration = "112_rescale_mcp_policy_min_trust_score.sql"
+const rescaleMigration = "114_rescale_mcp_policy_min_trust_score.sql"
 
 // TestMCPPolicyMinTrustScoreOutOfScaleIsRescaled applies the rescaling migration against a real
 // database, inside a transaction that is always rolled back.

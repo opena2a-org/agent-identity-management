@@ -14,7 +14,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — MCP security policy rules mean what the admin page says
 
 - `rules.minTrustScore` on the `mcp_*` security policies is on the [0,1] scale of an MCP server's
-  trust score. Migration 112 divides every stored value above 1 by 100, including the seeded floors
+  trust score. Migration 114 divides every stored value above 1 by 100, including the seeded floors
   of 50 and 30, which sat above every possible trust score. The admin security-policies page still
   shows the floor as a percentage and now saves it as a fraction.
 - A bare `*` in `allowedDomains` or `blockedDomains` matches every server. It matched no host

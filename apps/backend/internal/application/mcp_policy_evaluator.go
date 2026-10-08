@@ -24,7 +24,7 @@ import (
 //
 // Migration 105 disables the seeded policies so the surface stops presenting enforcement that
 // does not happen. The two defects that would have made this reject every MCP server are fixed:
-// migration 112 rescales rules.minTrustScore to the canonical [0,1] scale of
+// migration 114 rescales rules.minTrustScore to the canonical [0,1] scale of
 // MCPServer.TrustScore (migration 104), and matchDomainPattern treats a bare "*" as every host.
 // A third defect was silent non-enforcement: AllowedCapabilities was read by nothing. It is now
 // checked as an allowlist, but only for a server that AllowedDomains or AllowedNames admit. An
