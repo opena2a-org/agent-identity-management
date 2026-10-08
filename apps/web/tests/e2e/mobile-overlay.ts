@@ -6,6 +6,12 @@ export const PHONE_VIEWPORTS = [
   { width: 375, height: 667 },
 ] as const;
 
+/**
+ * A phone viewport too short for the header account menu at its natural height: uncapped,
+ * the menu would reach under the bottom tab bar, so it has to cap its height and scroll.
+ */
+export const SHORT_PHONE_VIEWPORT = { width: 375, height: 240 } as const;
+
 /** Desktop viewport: the bottom tab bar is hidden and its height token is 0. */
 export const DESKTOP_VIEWPORT = { width: 1280, height: 800 } as const;
 
