@@ -1,9 +1,10 @@
 import { test, expect, ADMIN_EMAIL } from './fixtures/aim-test-stack';
-import { DESKTOP_VIEWPORT, PHONE_VIEWPORTS, expectBottomBarCovered, expectClearOfBottomBar } from './mobile-overlay';
+import { DESKTOP_VIEWPORT, PHONE_VIEWPORTS, SHORT_PHONE_VIEWPORT, expectBottomBarCovered, expectClearOfBottomBar } from './mobile-overlay';
 
 // The dashboard's menus open above the fixed bottom tab bar on phones: the navigation
 // drawer ends above the bar with its account section and Sign out in full, the header
-// account menu stays clear of it, and the drawer's backdrop paints over the bar.
+// account menu stays clear of it (on a viewport too short for it, by capping its height
+// and scrolling), and the drawer's backdrop paints over the bar.
 for (const viewport of PHONE_VIEWPORTS) {
   test.describe(`menus above the bottom tab bar at ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport, hasTouch: true, isMobile: true });
@@ -36,6 +37,36 @@ for (const viewport of PHONE_VIEWPORTS) {
     });
   });
 }
+
+test.describe(`header account menu at ${SHORT_PHONE_VIEWPORT.width}x${SHORT_PHONE_VIEWPORT.height}`, () => {
+  test.use({ viewport: SHORT_PHONE_VIEWPORT, hasTouch: true, isMobile: true });
+
+  test('the header account menu caps its height above the bottom tab bar and scrolls to Sign out', async ({ authedPage: page }) => {
+    await page.goto('/dashboard/developers');
+    await page.locator('header button[aria-haspopup="menu"]').click();
+
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    const barBox = await page.getByRole('navigation', { name: 'Primary' }).boundingBox();
+    if (!barBox) throw new Error('bottom tab bar has no box');
+    const size = await menu.evaluate((el) => ({
+      top: el.getBoundingClientRect().top,
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    // At its natural height the menu would reach under the bar, so this viewport exercises the cap.
+    expect(size.top + size.scrollHeight, `menu bottom at its natural height (bar top ${barBox.y})`).toBeGreaterThan(barBox.y);
+
+    await expectClearOfBottomBar(page, menu);
+    expect(size.scrollHeight, 'menu content height against its capped height').toBeGreaterThan(size.clientHeight);
+
+    // The last item scrolls into view inside the menu, clear of the bar.
+    const signOut = menu.getByRole('menuitem', { name: 'Sign out' });
+    await signOut.scrollIntoViewIfNeeded();
+    expect(await menu.evaluate((el) => el.scrollTop), 'menu scroll offset after reaching Sign out').toBeGreaterThan(0);
+    await expectClearOfBottomBar(page, signOut);
+  });
+});
 
 test.describe(`menus at ${DESKTOP_VIEWPORT.width}x${DESKTOP_VIEWPORT.height}`, () => {
   test.use({ viewport: DESKTOP_VIEWPORT });
