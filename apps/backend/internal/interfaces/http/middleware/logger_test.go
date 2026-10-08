@@ -1,10 +1,14 @@
 package middleware
 
 import (
+	"bytes"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -127,4 +131,65 @@ func TestLoggerMiddleware_LongPath(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+}
+
+// ===========================
+// Bootstrap token redaction
+// ===========================
+
+func TestRedactBootstrapTokens(t *testing.T) {
+	token, _, _, err := domain.GenerateBootstrapToken()
+	require.NoError(t, err)
+
+	assert.Equal(t, "/api/v1/agents", RedactBootstrapTokens("/api/v1/agents"))
+	redacted := RedactBootstrapTokens("/x/" + token + "/y/" + token)
+	assert.Equal(t, "/x/aim_ob_[REDACTED]/y/aim_ob_[REDACTED]", redacted)
+	assert.NotContains(t, redacted, token[len(domain.BootstrapTokenPrefix):])
+}
+
+// The request log line never carries a bootstrap token: not from the header,
+// not from the JSON body, not from a query string, and not from the path.
+func TestLoggerMiddleware_NeverLogsABootstrapToken(t *testing.T) {
+	token, _, _, err := domain.GenerateBootstrapToken()
+	require.NoError(t, err)
+	secret := token[len(domain.BootstrapTokenPrefix):]
+
+	var logged bytes.Buffer
+	app := fiber.New()
+	app.Use(newLoggerMiddleware(&logged))
+	app.Post("/api/v1/onboarding/bootstrap-tokens/exchange", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusCreated)
+	})
+	app.Get("/api/v1/onboarding/*", func(c fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNotFound)
+	})
+
+	requests := []*http.Request{}
+
+	inHeader := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/bootstrap-tokens/exchange", nil)
+	inHeader.Header.Set("X-AIM-Bootstrap-Token", token)
+	requests = append(requests, inHeader)
+
+	inBody := httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/bootstrap-tokens/exchange",
+		strings.NewReader(`{"bootstrapToken":"`+token+`"}`))
+	inBody.Header.Set("Content-Type", "application/json")
+	requests = append(requests, inBody)
+
+	requests = append(requests,
+		httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/bootstrap-tokens/exchange?token="+token, nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/bootstrap-tokens/"+token, nil),
+	)
+
+	for _, req := range requests {
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+	}
+
+	out := logged.String()
+	require.Equal(t, len(requests), strings.Count(out, "\n"), "one line per request:\n%s", out)
+	assert.Contains(t, out, "/api/v1/onboarding/bootstrap-tokens/exchange")
+	assert.Contains(t, out, "/api/v1/onboarding/bootstrap-tokens/aim_ob_[REDACTED]")
+	assert.NotContains(t, out, secret)
+	assert.NotContains(t, out, secret[:12])
 }

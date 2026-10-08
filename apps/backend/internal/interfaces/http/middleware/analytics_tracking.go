@@ -21,7 +21,7 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 		// after that: copy every string it keeps, or a later request that reuses
 		// the context rewrites the endpoint and user agent this row stores.
 		method := strings.Clone(c.Method())
-		endpoint := strings.Clone(c.Path())
+		endpoint := RedactBootstrapTokens(strings.Clone(c.Path()))
 		requestSize := len(c.Body())
 
 		// Process the request
