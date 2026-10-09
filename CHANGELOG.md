@@ -872,6 +872,28 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — each server signing purpose has its own key, and the public keys are published
+
+- The backend signs with two Ed25519 keys, one per purpose: `card-attestation` (A2A agent card attestations) and
+  `atc-issuer` (the key the ATC verifier trusts for `ATC_ISSUER_URI`). A signature made for one purpose does not
+  verify for another. Before this release one key, derived from `KEYVAULT_MASTER_KEY`, served both.
+- Each key is provisioned in `AIM_SIGNING_KEY_CARD_ATTESTATION` or `AIM_SIGNING_KEY_ATC_ISSUER` (a base64 32-byte
+  Ed25519 seed). When a variable is unset, that key is derived from `KEYVAULT_MASTER_KEY` with HKDF-SHA256, so
+  upgrading needs no new configuration. **Provisioning both keys is recommended in production**: a provisioned key does not change when the master key is rotated, and holding the
+  master key does not reveal it. See "Server Signing Keys" in `docs/DEPLOYMENT.md`.
+- `<VARIABLE>_RETIRED` lists earlier public keys that still verify, so a key can be rotated without refusing what it
+  already signed.
+- Startup stops with an error naming the variable when a value is malformed or when two purposes are given the same
+  key. Startup logs each key's purpose, key ID and source, never key material.
+- New route `GET /.well-known/jwks.json` (no authentication) serves a JSON Web Key Set of the card-attestation and
+  ATC-issuer public keys, each with `kid` (hex SHA-256 of the public key), `purpose`, `status` and `source`.
+- Agent cards record the key that signed their attestation as `attestationKeyId` and `attestationAlg` (migration
+  121), and the AIM extension of a served agent card carries them as `keyId` and `alg`. The signed payload is
+  unchanged. Attestations issued before the upgrade keep their signature with no key ID, expire within their validity
+  window (24 hours by default), and are re-signed under the new key when refreshed.
+- The previous shared key is not published. A deployment that pinned that public key elsewhere, for example as a
+  trusted ATC issuer key, must pin the `atc-issuer` key from `/.well-known/jwks.json` instead.
+
 ### Changed — refusals that carry a machine-readable reason also send it as `reasonCode`
 
 - `reasonCode` is the API's member for a refusal's machine-readable reason. The four refusals that already sent one

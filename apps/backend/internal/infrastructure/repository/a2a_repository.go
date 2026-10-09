@@ -36,8 +36,9 @@ func (r *A2AAgentCardRepository) Create(ctx context.Context, card *domain.A2AAge
 		INSERT INTO a2a_agent_cards (
 			id, agent_id, card_url, card_data, card_hash, protocol_version,
 			attestation_signature, attestation_issued_at, attestation_expires_at,
-			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at,
+			attestation_key_id, attestation_alg
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT (agent_id) DO UPDATE SET
 			card_url = EXCLUDED.card_url,
 			card_data = EXCLUDED.card_data,
@@ -46,6 +47,8 @@ func (r *A2AAgentCardRepository) Create(ctx context.Context, card *domain.A2AAge
 			attestation_signature = EXCLUDED.attestation_signature,
 			attestation_issued_at = EXCLUDED.attestation_issued_at,
 			attestation_expires_at = EXCLUDED.attestation_expires_at,
+			attestation_key_id = EXCLUDED.attestation_key_id,
+			attestation_alg = EXCLUDED.attestation_alg,
 			is_valid = EXCLUDED.is_valid,
 			validation_error = EXCLUDED.validation_error,
 			last_fetched_at = EXCLUDED.last_fetched_at,
@@ -75,6 +78,8 @@ func (r *A2AAgentCardRepository) Create(ctx context.Context, card *domain.A2AAge
 		card.FetchCount,
 		now,
 		now,
+		card.AttestationKeyID,
+		card.AttestationAlg,
 	).Scan(&card.ID, &card.CreatedAt, &card.UpdatedAt, &card.FetchCount)
 
 	if err != nil {
@@ -89,13 +94,14 @@ func (r *A2AAgentCardRepository) GetByAgentID(ctx context.Context, agentID uuid.
 		SELECT
 			id, agent_id, card_url, card_data, card_hash, protocol_version,
 			attestation_signature, attestation_issued_at, attestation_expires_at,
-			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at
+			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at,
+			attestation_key_id, attestation_alg
 		FROM a2a_agent_cards
 		WHERE agent_id = $1
 	`
 
 	card := &domain.A2AAgentCard{}
-	var attestSig, validationErr sql.NullString
+	var attestSig, validationErr, attestKeyID, attestAlg sql.NullString
 	var attestIssued, attestExpires, lastFetched sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, query, agentID).Scan(
@@ -114,6 +120,8 @@ func (r *A2AAgentCardRepository) GetByAgentID(ctx context.Context, agentID uuid.
 		&card.FetchCount,
 		&card.CreatedAt,
 		&card.UpdatedAt,
+		&attestKeyID,
+		&attestAlg,
 	)
 
 	if err == sql.ErrNoRows {
@@ -124,6 +132,8 @@ func (r *A2AAgentCardRepository) GetByAgentID(ctx context.Context, agentID uuid.
 	}
 
 	card.AttestationSignature = attestSig.String
+	card.AttestationKeyID = nullStringPtr(attestKeyID)
+	card.AttestationAlg = nullStringPtr(attestAlg)
 	card.ValidationError = validationErr.String
 	if attestIssued.Valid {
 		card.AttestationIssuedAt = &attestIssued.Time
@@ -148,12 +158,14 @@ func (r *A2AAgentCardRepository) Update(ctx context.Context, card *domain.A2AAge
 			attestation_signature = $5,
 			attestation_issued_at = $6,
 			attestation_expires_at = $7,
-			is_valid = $8,
-			validation_error = $9,
-			last_fetched_at = $10,
-			fetch_count = $11,
-			updated_at = $12
-		WHERE id = $13
+			attestation_key_id = $8,
+			attestation_alg = $9,
+			is_valid = $10,
+			validation_error = $11,
+			last_fetched_at = $12,
+			fetch_count = $13,
+			updated_at = $14
+		WHERE id = $15
 		RETURNING updated_at
 	`
 
@@ -165,6 +177,8 @@ func (r *A2AAgentCardRepository) Update(ctx context.Context, card *domain.A2AAge
 		nullString(card.AttestationSignature),
 		nullTime(card.AttestationIssuedAt),
 		nullTime(card.AttestationExpiresAt),
+		card.AttestationKeyID,
+		card.AttestationAlg,
 		card.IsValid,
 		nullString(card.ValidationError),
 		nullTime(card.LastFetchedAt),
@@ -223,7 +237,7 @@ func (r *A2AAgentCardRepository) GetValidCards(ctx context.Context, orgID uuid.U
 			c.id, c.agent_id, c.card_url, c.card_data, c.card_hash, c.protocol_version,
 			c.attestation_signature, c.attestation_issued_at, c.attestation_expires_at,
 			c.is_valid, c.validation_error, c.last_fetched_at, c.fetch_count,
-			c.created_at, c.updated_at
+			c.created_at, c.updated_at, c.attestation_key_id, c.attestation_alg
 		FROM a2a_agent_cards c
 		JOIN agents a ON a.id = c.agent_id
 		WHERE c.is_valid = TRUE
@@ -239,7 +253,8 @@ func (r *A2AAgentCardRepository) GetExpiredCards(ctx context.Context) ([]*domain
 		SELECT
 			id, agent_id, card_url, card_data, card_hash, protocol_version,
 			attestation_signature, attestation_issued_at, attestation_expires_at,
-			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at
+			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at,
+			attestation_key_id, attestation_alg
 		FROM a2a_agent_cards
 		WHERE attestation_expires_at < NOW() AND is_valid = TRUE
 		ORDER BY attestation_expires_at
@@ -265,7 +280,7 @@ func (r *A2AAgentCardRepository) scanCards(rows *sql.Rows) ([]*domain.A2AAgentCa
 	cards := make([]*domain.A2AAgentCard, 0)
 	for rows.Next() {
 		card := &domain.A2AAgentCard{}
-		var attestSig, validationErr sql.NullString
+		var attestSig, validationErr, attestKeyID, attestAlg sql.NullString
 		var attestIssued, attestExpires, lastFetched sql.NullTime
 
 		err := rows.Scan(
@@ -284,12 +299,16 @@ func (r *A2AAgentCardRepository) scanCards(rows *sql.Rows) ([]*domain.A2AAgentCa
 			&card.FetchCount,
 			&card.CreatedAt,
 			&card.UpdatedAt,
+			&attestKeyID,
+			&attestAlg,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan card: %w", err)
 		}
 
 		card.AttestationSignature = attestSig.String
+		card.AttestationKeyID = nullStringPtr(attestKeyID)
+		card.AttestationAlg = nullStringPtr(attestAlg)
 		card.ValidationError = validationErr.String
 		if attestIssued.Valid {
 			card.AttestationIssuedAt = &attestIssued.Time
@@ -1750,6 +1769,15 @@ func (r *A2ARequestNonceRepository) DeleteExpired(ctx context.Context) (int, err
 
 func nullString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// nullStringPtr reads a nullable column as a pointer: nil when the column is NULL.
+func nullStringPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	s := ns.String
+	return &s
 }
 
 func nullTime(t *time.Time) sql.NullTime {

@@ -130,7 +130,11 @@ func TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment(t *testing.T) {
 			require.NoError(t, err)
 			second, err := NewKeyVaultFromEnv()
 			require.NoError(t, err)
-			assert.NotEqual(t, first.GetServerSigningPublicKey(), second.GetServerSigningPublicKey(),
+			firstKey, err := DeriveSigningKey(first.masterKey, PurposeATCIssuer)
+			require.NoError(t, err)
+			secondKey, err := DeriveSigningKey(second.masterKey, PurposeATCIssuer)
+			require.NoError(t, err)
+			assert.NotEqual(t, firstKey.Public(), secondKey.Public(),
 				"a generated master key is ephemeral by design")
 		})
 	}

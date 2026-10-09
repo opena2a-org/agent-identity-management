@@ -290,7 +290,7 @@ ENABLE_ALERTS=true
 ENABLE_COMPLIANCE_REPORTS=true
 ```
 
-`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, and the server's Ed25519 signing key is derived from it. Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
+`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, and each of the server's Ed25519 signing keys that is not provisioned is derived from it (see [Server Signing Keys](#server-signing-keys)). Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
 
 ### Secrets Management
 
@@ -328,6 +328,40 @@ ENABLE_COMPLIANCE_REPORTS=true
     keyvault_master_key="$(openssl rand -base64 32)" \
     database_url=postgresql://...
   ```
+
+### Server Signing Keys
+
+The backend signs with two Ed25519 keys, one per purpose. A signature made for one purpose does not verify for another.
+
+| Purpose | Variable | Signs | Public key |
+|---------|----------|-------|------------|
+| `card-attestation` | `AIM_SIGNING_KEY_CARD_ATTESTATION` | A2A agent card attestations | Published at `/.well-known/jwks.json` |
+| `atc-issuer` | `AIM_SIGNING_KEY_ATC_ISSUER` | ATCs this server trusts under `ATC_ISSUER_URI` | Published at `/.well-known/jwks.json` |
+
+Each variable holds a base64-encoded 32-byte Ed25519 seed. When a variable is unset, that key is derived from `KEYVAULT_MASTER_KEY` with HKDF-SHA256, so an existing deployment upgrades without new configuration.
+
+**In production, provision both keys.** A derived key changes whenever `KEYVAULT_MASTER_KEY` is rotated, and anyone who holds the master key can recompute it. A provisioned key is independent of the master key and can be rotated on its own:
+
+```bash
+# Generate each seed where it will be stored (secret store, Kubernetes secret, Vault).
+# Use a different seed for each purpose: the server refuses to start if two purposes share a key.
+export AIM_SIGNING_KEY_CARD_ATTESTATION="$(openssl rand -base64 32)"
+export AIM_SIGNING_KEY_ATC_ISSUER="$(openssl rand -base64 32)"
+```
+
+At startup the backend logs one line per key with its purpose, key ID (`kid`, the hex SHA-256 of the public key) and source (`provisioned` or `derived`). It never logs key material. A malformed value stops startup with an error that names the variable. With `ENVIRONMENT=production`, a derived key also logs which variable to set.
+
+Verify what is published:
+
+```bash
+curl -s http://localhost:8080/.well-known/jwks.json
+```
+
+The response is a JSON Web Key Set with the active card-attestation and ATC-issuer keys. Each key carries `kid`, `purpose`, `status` (`active` or `retired`) and `source`. Card attestations record the `kid` of the key that signed them as `attestationKeyId`.
+
+**Rotating a key.** Set the variable to a new seed and list the old public key in `<VARIABLE>_RETIRED` (comma-separated). Retired keys still verify and stay in the key set with `status: "retired"` until you remove them. Copy the old key's `x` value from `/.well-known/jwks.json` before you restart.
+
+Remove a retired key once nothing it signed is still valid: card attestations expire after `A2A_ATTESTATION_VALIDITY_HOURS` (24 hours by default).
 
 ---
 

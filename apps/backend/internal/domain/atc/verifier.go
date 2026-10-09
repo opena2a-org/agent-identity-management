@@ -121,6 +121,8 @@ type TrustedIssuer struct {
 	PublicKey      []byte `json:"publicKey"`      // Ed25519
 	MLDSAPublicKey []byte `json:"mldsaPublicKey"` // optional
 	MLDSAAlgorithm string `json:"mldsaAlgorithm"` // e.g., "ML-DSA-65"
+	// RetiredPublicKeys are earlier Ed25519 keys of this issuer that still verify.
+	RetiredPublicKeys [][]byte `json:"retiredPublicKeys,omitempty"`
 }
 
 // CRLEntry represents a single revoked ATC in the CRL.
