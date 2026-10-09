@@ -64,6 +64,15 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 			}
 		}
 
+		// How the caller authenticated (nil for a user JWT), and, on a route
+		// that binds or holds an agent parameter, which route matched and how
+		// its parameter compared with the caller. Together with agent_id they
+		// let the request records count, per route, agent callers that named
+		// another agent's ID: the count that releases a held route.
+		authMethod := localString(c, "auth_method")
+		agentPathRoute := localString(c, agentPathRouteLocal)
+		agentPathOutcome := localString(c, agentPathOutcomeLocal)
+
 		// Get user agent and IP
 		userAgent := strings.Clone(c.Get("User-Agent"))
 		ipAddress := strings.Clone(c.IP())
@@ -91,10 +100,24 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 			UserAgent:         userAgent,
 			IPAddress:         ipAddress,
 			ErrorMessage:      errorMessage,
+			AuthMethod:        authMethod,
+			AgentPathRoute:    agentPathRoute,
+			AgentPathOutcome:  agentPathOutcome,
 		})
 
 		return err
 	}
+}
+
+// localString returns a copy of the string local key, or nil when it is unset,
+// empty or not a string.
+func localString(c fiber.Ctx, key string) *string {
+	value, ok := c.Locals(key).(string)
+	if !ok || value == "" {
+		return nil
+	}
+	value = strings.Clone(value)
+	return &value
 }
 
 // APICallLog represents an API call record
@@ -111,6 +134,9 @@ type APICallLog struct {
 	UserAgent         string
 	IPAddress         string
 	ErrorMessage      *string
+	AuthMethod        *string // "ed25519", "mldsa", "hybrid", "api_key", "atc", "service"; nil for a user JWT
+	AgentPathRoute    *string // "METHOD /path/:id" of a route that binds or holds its agent parameter
+	AgentPathOutcome  *string // middleware.AgentPathOutcome*
 }
 
 // recordAPICall is what the middleware's goroutine calls; tests replace it to
@@ -167,6 +193,9 @@ func logAPICall(db *sql.DB, log APICallLog) {
 		log.UserAgent,
 		log.IPAddress,
 		log.ErrorMessage,
+		log.AuthMethod,
+		log.AgentPathRoute,
+		log.AgentPathOutcome,
 	)
 	if class != "" {
 		// The request has already been answered; the loss is counted, never the row.
@@ -188,9 +217,12 @@ const apiCallInsertQuery = `
 			user_agent,
 			ip_address,
 			error_message,
+			auth_method,
+			agent_path_route,
+			agent_path_outcome,
 			called_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
 `
 
 // insertAPICall writes one api_calls row and returns the class of the failure, or ""

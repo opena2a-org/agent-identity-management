@@ -339,6 +339,51 @@ func TestAgentBoundRouterBindsAndNamesTheRoute(t *testing.T) {
 	}, "a route with no agent parameter has nothing to bind")
 }
 
+// TestHeldAgentRouteServesEveryCallerAndRecordsTheComparison covers
+// holdAgentRoutes: a held route refuses nothing, and leaves for the request
+// record the route and whether an agent caller named its own ID or another.
+func TestHeldAgentRouteServesEveryCallerAndRecordsTheComparison(t *testing.T) {
+	orgID, self, sibling, unknown := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	app := fiber.New()
+	group := app.Group("/api/v1/agents")
+	group.Use(bindingTestPrincipal(orgID))
+	echoRecord := func(c fiber.Ctx) error {
+		route, _ := c.Locals("agent_path_route").(string)
+		outcome, _ := c.Locals("agent_path_outcome").(string)
+		return c.Status(bindingSentinelStatus).SendString(route + "|" + outcome)
+	}
+	held := holdAgentRoutes(group)
+	held.Get("/:id", echoRecord)
+	held.Put("/:id", echoRecord)
+	held.Delete("/:id/tags/:tagId", echoRecord)
+
+	tag := uuid.New().String()
+	for _, tc := range []struct {
+		name, method, path string
+		agent              *uuid.UUID
+		want               string
+	}{
+		{"own id", http.MethodGet, "/api/v1/agents/" + self.String(), &self, "GET /api/v1/agents/:id|self"},
+		{"sibling id", http.MethodGet, "/api/v1/agents/" + sibling.String(), &self, "GET /api/v1/agents/:id|other"},
+		{"unknown id", http.MethodGet, "/api/v1/agents/" + unknown.String(), &self, "GET /api/v1/agents/:id|other"},
+		{"user caller", http.MethodGet, "/api/v1/agents/" + sibling.String(), nil, "GET /api/v1/agents/:id|no_principal"},
+		{"put", http.MethodPut, "/api/v1/agents/" + sibling.String(), &self, "PUT /api/v1/agents/:id|other"},
+		{"delete", http.MethodDelete, "/api/v1/agents/" + sibling.String() + "/tags/" + tag, &self,
+			"DELETE /api/v1/agents/:id/tags/:tagId|other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := callAs(t, app, tc.method, tc.path, tc.agent)
+			assert.Equal(t, bindingSentinelStatus, got.status, "a held route must serve every caller")
+			assert.Equal(t, tc.want, got.body)
+		})
+	}
+
+	assert.Panics(t, func() { holdAgentRoutes(fiber.New()) }, "the app is not a group: its routes could not be named")
+	assert.Panics(t, func() {
+		holdAgentRoutes(fiber.New().Group("/api/v1/agents")).Get("/", func(c fiber.Ctx) error { return nil })
+	}, "a route with no agent parameter has nothing to hold")
+}
+
 // agentBindingHoldUntil bounds the hold on the routes in agentBindingHeld. The
 // hold exists because the effect of binding them has not been measured: they
 // serve the dashboard and API-key automation as well as SDK agents. Each is
@@ -347,6 +392,10 @@ func TestAgentBoundRouterBindsAndNamesTheRoute(t *testing.T) {
 // non-zero makes it an admitted exception naming the call site, or binds it
 // with a dated migration. After this date a route still held fails the test —
 // the remedy is the measurement, never a later date.
+//
+// A held route is registered through holdAgentRoutes, which records that count
+// on each request's api_calls row (agent_path_route, agent_path_outcome,
+// auth_method); scripts/agent_path_binding_report.sql reads it per route.
 const agentBindingHoldUntil = "2026-11-05"
 
 const agentBindingHoldReason = "held: binding effect on dashboard, API-key and service-principal callers not yet measured"
@@ -447,6 +496,12 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 		switch {
 		case route.bound && (held[route.key] || excepted):
 			t.Errorf("%s (%s) is bound; delete its hold or exception", route.key, route.at)
+		case route.observed && !held[route.key]:
+			t.Errorf("%s (%s) is registered through holdAgentRoutes but is not in agentBindingHeld; "+
+				"bind it (bindAgentRoutes) or list the hold", route.key, route.at)
+		case held[route.key] && !route.observed:
+			t.Errorf("%s (%s) is held but not registered through holdAgentRoutes, so nothing records the count "+
+				"that ends the hold", route.key, route.at)
 		case route.bound:
 			bound++
 		case excepted && strings.TrimSpace(reason) == "":
@@ -476,8 +531,16 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 		}
 	}
 
-	t.Logf("census: %d agent-parameter routes under %d agent-authenticated groups; %d bound, %d held until %s, %d excepted",
-		len(census.routes), census.agentGroups, bound, len(agentBindingHeld), agentBindingHoldUntil, len(agentBindingExceptions))
+	var observed int
+	for _, route := range census.routes {
+		if route.observed {
+			observed++
+		}
+	}
+	t.Logf("census: %d agent-parameter routes under %d agent-authenticated groups; %d bound, %d held until %s "+
+		"(%d observed), %d excepted",
+		len(census.routes), census.agentGroups, bound, len(agentBindingHeld), agentBindingHoldUntil, observed,
+		len(agentBindingExceptions))
 	assert.Positive(t, bound, "no route registered through bindAgentRoutes was found")
 	for _, required := range []string{
 		"POST /api/v1/detection/agents/:id/report",
@@ -500,9 +563,10 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 }
 
 type censusRoute struct {
-	key   string // "METHOD /full/path"
-	at    string // file:line
-	bound bool
+	key      string // "METHOD /full/path"
+	at       string // file:line
+	bound    bool   // registered through bindAgentRoutes
+	observed bool   // registered through holdAgentRoutes
 }
 
 type agentRouteCensus struct {
@@ -571,8 +635,9 @@ func walkAgentRouteCensus(t *testing.T, backend string) agentRouteCensus {
 	// A group follows into the functions it is passed to (main passes the
 	// /api/v1 group to setupRoutes as a parameter), so each function is
 	// analysed with the prefix, and the agent authentication, its callers give
-	// its parameters, until nothing new is learned. bindAgentRoutes is the
-	// helper the walk reads natively and is not followed.
+	// its parameters, until nothing new is learned. bindAgentRoutes and
+	// holdAgentRoutes are the helpers the walk reads natively and are not
+	// followed.
 	type funcKey struct{ pkg, name string }
 	funcs := map[funcKey]*ast.FuncDecl{}
 	pkgOf := map[*ast.FuncDecl]string{}
@@ -597,10 +662,12 @@ func walkAgentRouteCensus(t *testing.T, backend string) agentRouteCensus {
 		prefixes    map[string]string // group variable -> full prefix
 		agentGroup  map[string]bool   // group variable -> mounts an authenticator
 		boundRouter map[string]string // bindAgentRoutes variable -> group variable
+		heldRouter  map[string]string // holdAgentRoutes variable -> group variable
 		unresolved  []string          // authenticator mounted on a group of unknown prefix
 	}
 	analyse := func(fn *ast.FuncDecl) scope {
-		sc := scope{prefixes: map[string]string{}, agentGroup: map[string]bool{}, boundRouter: map[string]string{}}
+		sc := scope{prefixes: map[string]string{}, agentGroup: map[string]bool{}, boundRouter: map[string]string{},
+			heldRouter: map[string]string{}}
 		for name, sd := range seeds[fn] {
 			if !sd.ambiguous {
 				sc.prefixes[name] = sd.prefix
@@ -641,9 +708,14 @@ func walkAgentRouteCensus(t *testing.T, backend string) agentRouteCensus {
 				if !ok {
 					return true
 				}
-				if fun, ok := call.Fun.(*ast.Ident); ok && fun.Name == "bindAgentRoutes" && len(call.Args) == 1 {
+				if fun, ok := call.Fun.(*ast.Ident); ok && len(call.Args) == 1 &&
+					(fun.Name == "bindAgentRoutes" || fun.Name == "holdAgentRoutes") {
 					if group, ok := call.Args[0].(*ast.Ident); ok {
-						sc.boundRouter[lhs.Name] = group.Name
+						if fun.Name == "bindAgentRoutes" {
+							sc.boundRouter[lhs.Name] = group.Name
+						} else {
+							sc.heldRouter[lhs.Name] = group.Name
+						}
 					}
 					return true
 				}
@@ -687,7 +759,7 @@ func walkAgentRouteCensus(t *testing.T, backend string) agentRouteCensus {
 					return true
 				}
 				callee, ok := funcs[funcKey{pkgOf[fn], fun.Name}]
-				if !ok || callee.Name.Name == "bindAgentRoutes" {
+				if !ok || callee.Name.Name == "bindAgentRoutes" || callee.Name.Name == "holdAgentRoutes" {
 					return true
 				}
 				var params []string
@@ -782,7 +854,12 @@ func walkAgentRouteCensus(t *testing.T, backend string) agentRouteCensus {
 					return true
 				}
 				group, bound := sc.boundRouter[recv.Name]
-				if !bound {
+				heldGroup, observed := sc.heldRouter[recv.Name]
+				switch {
+				case bound:
+				case observed:
+					group = heldGroup
+				default:
 					group = recv.Name
 				}
 				if !sc.agentGroup[group] {
@@ -797,7 +874,9 @@ func walkAgentRouteCensus(t *testing.T, backend string) agentRouteCensus {
 				if agentPathParam(full) == "" {
 					return true
 				}
-				census.routes = append(census.routes, censusRoute{key: method + " " + full, at: at(node.Pos()), bound: bound})
+				census.routes = append(census.routes, censusRoute{
+					key: method + " " + full, at: at(node.Pos()), bound: bound, observed: observed,
+				})
 			}
 			return true
 		})

@@ -47,8 +47,9 @@ const setMockResponse = (response: unknown) => {
 };
 
 // The A2A routes the server registers, read from the file that registers them:
-// `a2a.<Verb>("<path>", ...)` on the /api/v1/a2a group, `a2aBound.<Verb>(...)` on the
-// same group with its agent ID bound to the caller, and `v1.<Verb>("/a2a/...", ...)`.
+// `a2a.<Verb>("<path>", ...)` on the /api/v1/a2a group, `a2aBound.<Verb>(...)` and
+// `a2aHeld.<Verb>(...)` on the same group with its agent ID bound to the caller or held,
+// and `v1.<Verb>("/a2a/...", ...)`.
 const SERVER_MAIN = join(__dirname, '..', '..', '..', '..', 'apps', 'backend', 'cmd', 'server', 'main.go');
 
 const registeredA2ARoutes = (): Array<{ method: string; path: string; pattern: RegExp }> => {
@@ -66,7 +67,7 @@ const registeredA2ARoutes = (): Array<{ method: string; path: string; pattern: R
     ),
   });
   const routes = [
-    ...[...source.matchAll(/\ba2a(?:Bound)?\.(Get|Post|Put|Patch|Delete)\("([^"]+)"/g)].map((m) =>
+    ...[...source.matchAll(/\ba2a(?:Bound|Held)?\.(Get|Post|Put|Patch|Delete)\("([^"]+)"/g)].map((m) =>
       toRoute(m[1], `/api/v1/a2a${m[2]}`)
     ),
     ...[...source.matchAll(/\bv1\.(Get|Post|Put|Patch|Delete)\("(\/a2a\/[^"]+)"/g)].map((m) =>

@@ -1489,62 +1489,66 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Use(middleware.AuthMiddleware(jwtService))                                                // ✅ Fallback to JWT (for web UI)
 	agents.Use(middleware.AgentActivityTouchMiddleware(services.Agent))                              // Touches agents.last_active on agent-authed responses (#167)
 	agents.Use(middleware.RateLimitMiddleware())
+	// Routes under /:id are held, not bound: an agent credential naming another
+	// agent's ID is still served, and recorded on its api_calls row, until the
+	// per-route count decides whether each route is bound or an exception.
+	agentsHeld := holdAgentRoutes(agents)
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus)                          // Bulk agent status lookup
 	agents.Post("/", middleware.MemberOrAPIKeyMiddleware(), h.Agent.CreateAgent) // machine API keys (org-scoped) OR member+ JWT; other routes stay MemberMiddleware (JWT-only)
-	agents.Get("/:id", h.Agent.GetAgent)
+	agentsHeld.Get("/:id", h.Agent.GetAgent)
 	// Member+ JWT, OR a service principal acting on ITSELF. The TypeScript SDK's
 	// updateAgent() calls this with its OAuth token; before the service-token fix
 	// that worked only because MemberMiddleware admitted role="service". The
 	// self-scope check keeps the SDK working while making a sibling agent
 	// unreachable by construction. See middleware/service_principal.go.
-	agents.Put("/:id", middleware.MemberOrSelfServiceMiddleware(), h.Agent.UpdateAgent)
-	agents.Delete("/:id", middleware.ManagerMiddleware(), h.Agent.DeleteAgent)
-	agents.Post("/:id/verify", middleware.ManagerMiddleware(), h.Agent.VerifyAgent)
+	agentsHeld.Put("/:id", middleware.MemberOrSelfServiceMiddleware(), h.Agent.UpdateAgent)
+	agentsHeld.Delete("/:id", middleware.ManagerMiddleware(), h.Agent.DeleteAgent)
+	agentsHeld.Post("/:id/verify", middleware.ManagerMiddleware(), h.Agent.VerifyAgent)
 	// Agent lifecycle management endpoints
-	agents.Post("/:id/suspend", middleware.ManagerMiddleware(), h.Agent.SuspendAgent)
-	agents.Post("/:id/reactivate", middleware.ManagerMiddleware(), h.Agent.ReactivateAgent)
-	agents.Post("/:id/revoke", middleware.ManagerMiddleware(), h.Agent.RevokeAgent)
-	agents.Post("/:id/rotate-credentials", middleware.MemberMiddleware(), h.Agent.RotateCredentials)
-	agents.Put("/:id/keys", middleware.MemberMiddleware(), h.Agent.UpdateAgentKeys) // SDK key registration
+	agentsHeld.Post("/:id/suspend", middleware.ManagerMiddleware(), h.Agent.SuspendAgent)
+	agentsHeld.Post("/:id/reactivate", middleware.ManagerMiddleware(), h.Agent.ReactivateAgent)
+	agentsHeld.Post("/:id/revoke", middleware.ManagerMiddleware(), h.Agent.RevokeAgent)
+	agentsHeld.Post("/:id/rotate-credentials", middleware.MemberMiddleware(), h.Agent.RotateCredentials)
+	agentsHeld.Put("/:id/keys", middleware.MemberMiddleware(), h.Agent.UpdateAgentKeys) // SDK key registration
 	// Runtime verification endpoints - CORE functionality
-	agents.Post("/:id/verify-capability", h.Agent.VerifyCapability)
-	agents.Post("/:id/log-capability/:audit_id", h.Agent.LogCapabilityResult)
+	agentsHeld.Post("/:id/verify-capability", h.Agent.VerifyCapability)
+	agentsHeld.Post("/:id/log-capability/:audit_id", h.Agent.LogCapabilityResult)
 	// Fine-Grained Authorization (5-step decision flow with OTel span tree)
-	agents.Post("/:id/authorize", h.Authorize.Authorize)
+	agentsHeld.Post("/:id/authorize", h.Authorize.Authorize)
 	// Agent Trust Credential issuance - computes the behavioral score and delegates
 	// signing + transparency-log recording to the Registry (Certificate Authority)
-	agents.Post("/:id/atc", middleware.ManagerMiddleware(), h.ATCIssuance.IssueATC)
+	agentsHeld.Post("/:id/atc", middleware.ManagerMiddleware(), h.ATCIssuance.IssueATC)
 	// SDK download endpoint - Download Python/Node.js/Go SDK with embedded credentials.
 	// Returns agent private key material, so it is member+ (JWT) only — consistent with
 	// rotate-credentials / keys / pqc-key. MemberMiddleware rejects bare API keys (no role).
-	agents.Get("/:id/sdk", middleware.MemberMiddleware(), h.Agent.DownloadSDK)
+	agentsHeld.Get("/:id/sdk", middleware.MemberMiddleware(), h.Agent.DownloadSDK)
 	// Credentials endpoint - Get raw Ed25519 public/private keys for manual integration.
 	// Returns the decrypted private key, so it is member+ (JWT) only — same rationale as above.
-	agents.Get("/:id/credentials", middleware.MemberMiddleware(), h.Agent.GetCredentials)
+	agentsHeld.Get("/:id/credentials", middleware.MemberMiddleware(), h.Agent.GetCredentials)
 	// MCP Server relationship management - "talks_to" endpoints
-	agents.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                 // ✅ Dashboard: Get MCP servers from talks_to field
-	agents.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                // Add MCP servers (bulk)
-	agents.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent) // Remove single MCP
+	agentsHeld.Get("/:id/mcp-servers", h.Agent.GetAgentMCPServers)                                                 // ✅ Dashboard: Get MCP servers from talks_to field
+	agentsHeld.Put("/:id/mcp-servers", middleware.MemberMiddleware(), h.Agent.AddMCPServersToAgent)                // Add MCP servers (bulk)
+	agentsHeld.Delete("/:id/mcp-servers/:mcp_id", middleware.MemberMiddleware(), h.Agent.RemoveMCPServerFromAgent) // Remove single MCP
 	// Attestation revocation for supply chain security (when agent key is compromised)
-	agents.Post("/:id/attestations/revoke-all", middleware.ManagerMiddleware(), h.MCPAttestation.RevokeAllAttestationsByAgent) // 🔴 Revoke ALL attestations by this agent
-	agents.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)                      // Auto-detect MCPs from config
+	agentsHeld.Post("/:id/attestations/revoke-all", middleware.ManagerMiddleware(), h.MCPAttestation.RevokeAllAttestationsByAgent) // 🔴 Revoke ALL attestations by this agent
+	agentsHeld.Post("/:id/mcp-servers/detect", middleware.MemberMiddleware(), h.Agent.DetectAndMapMCPServers)                      // Auto-detect MCPs from config
 	// Trust Score management - RESTful endpoints under /agents/:id/trust-score/*
-	agents.Get("/:id/trust-score", h.Agent.GetAgentTrustScore)                                                      // Get current trust score
-	agents.Get("/:id/trust-score/history", h.Agent.GetAgentTrustScoreHistory)                                       // Get trust score history
-	agents.Put("/:id/trust-score", middleware.AdminMiddleware(), h.Agent.UpdateAgentTrustScore)                     // Manually update score (admin)
-	agents.Post("/:id/trust-score/recalculate", middleware.ManagerMiddleware(), h.Agent.RecalculateAgentTrustScore) // Recalculate score
+	agentsHeld.Get("/:id/trust-score", h.Agent.GetAgentTrustScore)                                                      // Get current trust score
+	agentsHeld.Get("/:id/trust-score/history", h.Agent.GetAgentTrustScoreHistory)                                       // Get trust score history
+	agentsHeld.Put("/:id/trust-score", middleware.AdminMiddleware(), h.Agent.UpdateAgentTrustScore)                     // Manually update score (admin)
+	agentsHeld.Post("/:id/trust-score/recalculate", middleware.ManagerMiddleware(), h.Agent.RecalculateAgentTrustScore) // Recalculate score
 	// Agent-specific alerts endpoint
-	agents.Get("/:id/alerts", h.Agent.GetAgentAlerts) // Get alerts for this agent (trust score drops, security events, etc.)
+	agentsHeld.Get("/:id/alerts", h.Agent.GetAgentAlerts) // Get alerts for this agent (trust score drops, security events, etc.)
 	// Agent security endpoints - Key vault and audit logs per agent
-	agents.Get("/:id/key-vault", h.Agent.GetAgentKeyVault)   // Get agent's key vault info (public key, expiration, rotation status)
-	agents.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs) // Get audit logs for specific agent (with pagination)
-	agents.Get("/:id/activity", h.Agent.GetAgentActivity)    // Get actions PERFORMED BY the agent (attestations, verifications)
+	agentsHeld.Get("/:id/key-vault", h.Agent.GetAgentKeyVault)   // Get agent's key vault info (public key, expiration, rotation status)
+	agentsHeld.Get("/:id/audit-logs", h.Agent.GetAgentAuditLogs) // Get audit logs for specific agent (with pagination)
+	agentsHeld.Get("/:id/activity", h.Agent.GetAgentActivity)    // Get actions PERFORMED BY the agent (attestations, verifications)
 	// Post-Quantum Cryptography (PQC) endpoints
-	agents.Get("/:id/pqc-key", h.Agent.GetPQCKeyVault)                                    // Get agent's PQC key vault info
-	agents.Post("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RegisterPQCKey)    // Register PQC public key
-	agents.Put("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RotatePQCKey)       // Rotate PQC key
-	agents.Post("/:id/hybrid-mode", middleware.MemberMiddleware(), h.Agent.SetHybridMode) // Enable/disable hybrid mode
+	agentsHeld.Get("/:id/pqc-key", h.Agent.GetPQCKeyVault)                                    // Get agent's PQC key vault info
+	agentsHeld.Post("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RegisterPQCKey)    // Register PQC public key
+	agentsHeld.Put("/:id/pqc-key", middleware.MemberMiddleware(), h.Agent.RotatePQCKey)       // Rotate PQC key
+	agentsHeld.Post("/:id/hybrid-mode", middleware.MemberMiddleware(), h.Agent.SetHybridMode) // Enable/disable hybrid mode
 
 	// Cryptographic algorithms info (public)
 	crypto := v1.Group("/crypto")
@@ -1801,19 +1805,19 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	tags.Delete("/:id", middleware.ManagerMiddleware(), h.Tag.DeleteTag)
 
 	// Agent tag routes (under /agents/:id/tags)
-	agents.Get("/:id/tags", h.Tag.GetAgentTags)
-	agents.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToAgent)
-	agents.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromAgent)
-	agents.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForAgent)
+	agentsHeld.Get("/:id/tags", h.Tag.GetAgentTags)
+	agentsHeld.Post("/:id/tags", middleware.MemberMiddleware(), h.Tag.AddTagsToAgent)
+	agentsHeld.Delete("/:id/tags/:tagId", middleware.MemberMiddleware(), h.Tag.RemoveTagFromAgent)
+	agentsHeld.Get("/:id/tags/suggestions", h.Tag.SuggestTagsForAgent)
 
 	// Agent capability routes (under /agents/:id/capabilities)
-	agents.Get("/:id/capabilities", h.Capability.GetAgentCapabilities)
-	agents.Post("/:id/capabilities", middleware.ManagerMiddleware(), h.Capability.GrantCapability)
-	agents.Delete("/:id/capabilities/:capabilityId", middleware.ManagerMiddleware(), h.Capability.RevokeCapability)
-	agents.Put("/:id/capabilities/:capabilityId/honeytoken", middleware.ManagerMiddleware(), h.Capability.MarkHoneytoken) // issue #293: operator marks/unmarks a granted capability as a honeytoken decoy
+	agentsHeld.Get("/:id/capabilities", h.Capability.GetAgentCapabilities)
+	agentsHeld.Post("/:id/capabilities", middleware.ManagerMiddleware(), h.Capability.GrantCapability)
+	agentsHeld.Delete("/:id/capabilities/:capabilityId", middleware.ManagerMiddleware(), h.Capability.RevokeCapability)
+	agentsHeld.Put("/:id/capabilities/:capabilityId/honeytoken", middleware.ManagerMiddleware(), h.Capability.MarkHoneytoken) // issue #293: operator marks/unmarks a granted capability as a honeytoken decoy
 
 	// Agent violation routes (under /agents/:id/violations)
-	agents.Get("/:id/violations", h.Capability.GetViolationsByAgent)
+	agentsHeld.Get("/:id/violations", h.Capability.GetViolationsByAgent)
 
 	// Capabilities routes (authentication required) - List all available capability types
 	capabilities := v1.Group("/capabilities")
@@ -1850,22 +1854,26 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// may not register, refresh, sign or compute for another agent. A user JWT
 	// caller is unaffected. The reads stay open to peers for discovery.
 	a2aBound := bindAgentRoutes(a2a)
+	// The reads are held: an agent credential naming another agent is served
+	// and recorded until the per-route count decides which are admitted
+	// exceptions for peer discovery and which are bound.
+	a2aHeld := holdAgentRoutes(a2a)
 
 	// Agent Card management
 	a2aBound.Post("/agents/:id/card", middleware.MemberMiddleware(), h.A2A.RegisterAgentCard)
-	a2a.Get("/agents/:id/card", h.A2A.GetAgentCard)
+	a2aHeld.Get("/agents/:id/card", h.A2A.GetAgentCard)
 	a2aBound.Post("/agents/:id/card/refresh", middleware.MemberMiddleware(), h.A2A.RefreshCardAttestation)
 
 	// Request signing (SDK/programmatic)
 	a2aBound.Post("/agents/:id/sign", h.A2A.SignRequest)
 
 	// A2A Trust Scores
-	a2a.Get("/agents/:id/trust-score", h.A2A.GetA2ATrustScore)
+	a2aHeld.Get("/agents/:id/trust-score", h.A2A.GetA2ATrustScore)
 	a2aBound.Post("/agents/:id/trust-score/compute", middleware.ManagerMiddleware(), h.A2A.ComputeA2ATrustScore)
-	a2a.Get("/agents/:id/peers/:peer_id/trust", h.A2A.GetPeerTrustScore)
+	a2aHeld.Get("/agents/:id/peers/:peer_id/trust", h.A2A.GetPeerTrustScore)
 
 	// A2A Skills
-	a2a.Get("/agents/:id/skills", h.A2A.GetAgentSkills)
+	a2aHeld.Get("/agents/:id/skills", h.A2A.GetAgentSkills)
 	a2a.Get("/skills/search", h.A2A.SearchSkills)
 
 	// A2A Intent-Based Discovery
@@ -1895,8 +1903,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// A2A Attestations
 	a2a.Post("/attestations", h.A2A.AttestSkill)
-	a2a.Get("/attestations/:agentId/:skillId", h.A2A.GetSkillAttestations)
-	a2a.Get("/consensus/:agentId/:skillId", h.A2A.GetConsensusStatus)
+	a2aHeld.Get("/attestations/:agentId/:skillId", h.A2A.GetSkillAttestations)
+	a2aHeld.Get("/consensus/:agentId/:skillId", h.A2A.GetConsensusStatus)
 
 	// A2A Security Policy Enforcement
 	a2a.Post("/security/check", h.A2A.CheckSecurity)
@@ -1910,17 +1918,17 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Put("/trust/:id", h.A2A.RefuseTrustScoreWrite)          // 405: the composite is measured, not asserted
 	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction) // SDK record interaction
 	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
-	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                        // Java SDK expects POST
-	a2a.Get("/cards", h.A2A.ListAgentCards)                                    // SDK list agent cards
-	a2a.Post("/cards", h.A2A.RegisterAgentCardAlt)                             // Java SDK expects POST /cards
-	a2a.Get("/cards/:id", h.A2A.GetAgentCard)                                  // SDK calls /cards/:id instead of /agents/:id/card
-	a2a.Put("/cards/:id", h.A2A.UpdateAgentCard)                               // SDK update agent card
-	a2a.Post("/cards/:id/attestation", h.A2A.RefreshCardAttestation)           // Java SDK expects /cards/:id/attestation
-	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                    // SDK list peer trusts
-	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                               // SDK delete skill
-	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)               // SDK get security violations
-	a2a.Get("/agents/:id/attestations", h.A2A.GetAgentAttestations)            // SDK path: /agents/:id/attestations
-	a2a.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
+	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                            // Java SDK expects POST
+	a2a.Get("/cards", h.A2A.ListAgentCards)                                        // SDK list agent cards
+	a2a.Post("/cards", h.A2A.RegisterAgentCardAlt)                                 // Java SDK expects POST /cards
+	a2a.Get("/cards/:id", h.A2A.GetAgentCard)                                      // SDK calls /cards/:id instead of /agents/:id/card
+	a2a.Put("/cards/:id", h.A2A.UpdateAgentCard)                                   // SDK update agent card
+	a2a.Post("/cards/:id/attestation", h.A2A.RefreshCardAttestation)               // Java SDK expects /cards/:id/attestation
+	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                        // SDK list peer trusts
+	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                                   // SDK delete skill
+	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)                   // SDK get security violations
+	a2aHeld.Get("/agents/:id/attestations", h.A2A.GetAgentAttestations)            // SDK path: /agents/:id/attestations
+	a2aHeld.Get("/agents/:id/skills/:skillId/consensus", h.A2A.GetConsensusStatus) // SDK path variation
 
 	// A2A Maintenance (admin only)
 	a2aAdmin := v1.Group("/a2a/maintenance")
