@@ -130,7 +130,7 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 	if len(payload.IssuerPublicKey) != ed25519.PublicKeySize {
 		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeSignatureInvalid, Message: "invalid issuer public key size"}
 	}
-	if !ed25519KeysEqual(payload.IssuerPublicKey, issuer.PublicKey) {
+	if !issuerKeyTrusted(issuer, payload.IssuerPublicKey) {
 		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeUntrustedIssuer, Message: "issuer public key does not match trusted key"}
 	}
 
@@ -287,6 +287,20 @@ func (v *RealATCVerifier) verifyDelegationChain(payload *atcdomain.ATCPayload) *
 	}
 
 	return nil
+}
+
+// issuerKeyTrusted reports whether publicKey is the issuer's current key or one of its
+// retired keys.
+func issuerKeyTrusted(issuer *atcdomain.TrustedIssuer, publicKey []byte) bool {
+	if ed25519KeysEqual(publicKey, issuer.PublicKey) {
+		return true
+	}
+	for _, retired := range issuer.RetiredPublicKeys {
+		if ed25519KeysEqual(publicKey, retired) {
+			return true
+		}
+	}
+	return false
 }
 
 // ed25519KeysEqual compares two Ed25519 public keys in constant time.

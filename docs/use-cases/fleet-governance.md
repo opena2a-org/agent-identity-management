@@ -230,7 +230,7 @@ Expected output:
 
 ### Verifying the token
 
-The access token is a JWT signed with HS256 under the server's `JWT_SECRET`. HS256 is symmetric: the key that verifies a token is the key that signs one. The server therefore publishes no JWK Set, and no public key verifies the token.
+The access token is a JWT signed with HS256 under the server's `JWT_SECRET`. HS256 is symmetric: the key that verifies a token is the key that signs one. The server therefore publishes no JWK Set for it, and no public key verifies the token. The public keys the server does publish are Ed25519 keys for agent card attestations and ATCs, and none of them verifies an access token.
 
 AIM Server is the verifier. The agent sends the token as `Authorization: Bearer <access_token>` on the server's `/api/v1/agents` routes, and on each request the server checks the signature, the expiry, whether the token has been revoked, and whether the agent is still allowed to authenticate. A token issued to an agent that is later suspended or revoked stops working at that point.
 

@@ -64,8 +64,10 @@ func textLacks(t *testing.T, text, needle, what string) {
 // whose token header read EdDSA, and told other services to verify the token
 // against a JWK Set at /.well-known/jwks.json. The server mounts the endpoint
 // at /api/v1/oauth/token, signs the token with HS256 under JWT_SECRET, and
-// publishes no JWK Set, so the documented request named a path the server does
-// not mount and no published key verified the token the guide described.
+// publishes no key for it, so the documented request named a path the server
+// does not mount and no published key verified the token the guide described.
+// The JWK Set the server serves holds its Ed25519 card-attestation and
+// ATC-issuer keys only.
 //
 // The guide is compared with a real response rather than with constants, so a
 // change to the signing method or to the response fields fails here until the
@@ -99,7 +101,12 @@ func TestFleetGovernanceGuideDescribesTheTokenTheServerIssues(t *testing.T) {
 	textHas(t, routes, `oauth := v1.Group("/oauth")`, "the token endpoint sits under /api/v1/oauth")
 	textHas(t, routes, `oauth.Post("/token", h.OAuthToken.HandleTokenRequest)`,
 		"the token endpoint is POST /api/v1/oauth/token")
-	textLacks(t, strings.ToLower(routes), "jwks", "the server mounts no JWK Set route")
+	// The JWK Set the server mounts publishes its Ed25519 signing keys, none of
+	// which verifies the HS256 access token.
+	for _, key := range newJWKSTestRing(t).JWKS().Keys {
+		assert.NotEqual(t, header.Alg, key.Alg, "the JWK Set publishes no key for the access token (%s)", key.Purpose)
+		assert.Equal(t, "OKP", key.Kty, "the JWK Set publishes no symmetric key (%s)", key.Purpose)
+	}
 	textHas(t, routes, `agents.Use(middleware.ServicePrincipalMiddleware(`,
 		"the /api/v1/agents routes are where the server accepts the token")
 
