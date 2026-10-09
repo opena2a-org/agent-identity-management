@@ -16,17 +16,21 @@ docker pull opena2a/aim-server
 docker pull opena2a/aim-dashboard
 ```
 
-In an empty directory, generate the server's secrets into a `.env` file. Docker Compose reads `.env` from the directory it runs in:
+In an empty directory, generate the server's secrets and its first administrator into a `.env` file. Docker Compose reads `.env` from the directory it runs in:
 
 ```bash
 cat > .env <<EOF
 JWT_SECRET=$(openssl rand -hex 32)
 KEYVAULT_MASTER_KEY=$(openssl rand -base64 32)
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=$(openssl rand -hex 12)-Aa1
 EOF
 ```
 
 `JWT_SECRET` signs the access tokens the server issues. The server refuses to start when it is shorter than 32 characters. `KEYVAULT_MASTER_KEY` encrypts the agent private keys the server stores in the database. Keep `.env` for as long as you keep the database volume: a server started with a different key cannot decrypt the keys stored under the old one.
+
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` are the account you sign in to the dashboard with in Step 5. The server creates no account by itself: when it starts on a database that has no administrator, it creates one from these two values. It accepts the password only when it has an upper-case and a lower-case letter, a digit and a special character. `openssl rand -hex` prints only lower-case letters and digits, so the line appends `-Aa1`. With a password that does not meet the rule, the server logs the refusal and creates no account. Once the administrator exists, the server never changes it from `.env`, so a password you change in the dashboard is kept across restarts.
 
 Create `docker-compose.yml` in the same directory:
 
@@ -44,6 +48,8 @@ services:
       - REDIS_HOST=redis
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:?Set KEYVAULT_MASTER_KEY in .env}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
     depends_on:
       db:
         condition: service_healthy
@@ -102,6 +108,18 @@ Expected output:
 ```
 
 `time` is the server's clock in UTC when it answered.
+
+Check that the server created the administrator:
+
+```bash
+docker compose logs aim-server | grep 'Seeded administrator'
+```
+
+The command prints one line, which ends with:
+
+```
+Seeded administrator admin@example.com from ADMIN_PASSWORD (change the password at first sign-in)
+```
 
 The dashboard is available at [http://localhost:3000](http://localhost:3000).
 
@@ -241,7 +259,13 @@ Two things follow:
 
 ## Step 5: Fleet Overview via Dashboard
 
-Open [http://localhost:3000](http://localhost:3000) in your browser. The dashboard shows:
+Open [http://localhost:3000](http://localhost:3000) in your browser and sign in with the administrator from Step 1. Print its `ADMIN_EMAIL` and `ADMIN_PASSWORD`:
+
+```bash
+grep '^ADMIN_' .env
+```
+
+At first sign-in the dashboard asks you to set a new password. The dashboard shows:
 
 - **Agent inventory** -- all registered agents with trust scores
 - **Audit timeline** -- real-time event stream across all agents

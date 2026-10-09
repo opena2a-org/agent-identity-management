@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the fleet governance guide's deployment step creates an account to sign in with
+
+- Step 1 of `docs/use-cases/fleet-governance.md` set neither `ADMIN_EMAIL` nor `ADMIN_PASSWORD`. The server creates
+  its first administrator only from `ADMIN_PASSWORD`, so the stack started with no user, and Step 5 sent the reader
+  to a dashboard they could not sign in to.
+- The step now writes `ADMIN_EMAIL` and a generated `ADMIN_PASSWORD` to `.env`, and the compose file passes both to
+  the server. The password carries the upper- and lower-case letter, digit and special character the server
+  requires. The step shows the log line that confirms the administrator was created, and Step 5 says to sign in
+  with it and that the dashboard asks for a new password at first sign-in.
+- A test evaluates the step's `.env` many times and checks that the server accepts each password, seeds the
+  administrator from the step's environment, and logs the line the step shows.
+
 ### Security — a stored agent private key decrypts only in the agent row it was written for
 
 - Server-generated agent private keys were sealed with AES-256-GCM and no additional data, so a ciphertext copied
