@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"os"
 	"regexp"
 	"sort"
@@ -13,12 +15,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 type deployStepCompose struct {
@@ -73,29 +77,40 @@ func guideSection(t *testing.T, guide, heading string) string {
 
 var (
 	fencedBlock        = regexp.MustCompile("(?s)```(\\w*)\n(.*?)```")
-	envFileLine        = regexp.MustCompile(`(?m)^([A-Z_][A-Z0-9_]*)=\$\(openssl rand -(hex|base64) (\d+)\)$`)
+	envFileBlock       = regexp.MustCompile("(?s)cat > \\.env <<EOF\n(.*?)\nEOF\n")
+	envFileLine        = regexp.MustCompile(`^([A-Z_][A-Z0-9_]*)=(?:\$\(openssl rand -(hex|base64) (\d+)\))?([^\s$()]*)$`)
+	seededAdminLogLine = regexp.MustCompile(`(?m)^Seeded administrator .*$`)
 	composeInterpolate = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?::?[-?][^}]*)?\}`)
 	configEnvRead      = regexp.MustCompile(`getEnv\w*\("([A-Z_][A-Z0-9_]*)"`)
 	healthHandlerSrc   = regexp.MustCompile(`(?s)app\.Get\("/health", func\(c fiber\.Ctx\) error \{\s*return c\.JSON\(fiber\.Map\{(.*?)\}\)\s*\}\)`)
 	healthHandlerField = regexp.MustCompile(`"(\w+)":\s*([^,\n]+),`)
 )
 
-// documentedEnvFile returns the variables the step writes to .env, each with a
-// value generated the way its openssl command generates one.
+// documentedEnvFile returns the variables the step writes to .env, each with
+// the value its line writes: one generated the way its openssl command
+// generates one, followed by any literal text after the command.
 func documentedEnvFile(t *testing.T, step string) map[string]string {
 	t.Helper()
+	block := envFileBlock.FindStringSubmatch(step)
+	require.NotNil(t, block, "Step 1 writes no .env with cat > .env <<EOF")
 	values := map[string]string{}
-	for _, m := range envFileLine.FindAllStringSubmatch(step, -1) {
-		n, err := strconv.Atoi(m[3])
-		require.NoError(t, err)
-		buf := make([]byte, n)
-		_, err = rand.Read(buf)
-		require.NoError(t, err)
-		if m[2] == "hex" {
-			values[m[1]] = hex.EncodeToString(buf)
-		} else {
-			values[m[1]] = base64.StdEncoding.EncodeToString(buf)
+	for _, line := range strings.Split(block[1], "\n") {
+		m := envFileLine.FindStringSubmatch(line)
+		require.NotNil(t, m, "Step 1's .env line %q is not one this test can evaluate", line)
+		generated := ""
+		if m[2] != "" {
+			n, err := strconv.Atoi(m[3])
+			require.NoError(t, err)
+			buf := make([]byte, n)
+			_, err = rand.Read(buf)
+			require.NoError(t, err)
+			if m[2] == "hex" {
+				generated = hex.EncodeToString(buf)
+			} else {
+				generated = base64.StdEncoding.EncodeToString(buf)
+			}
 		}
+		values[m[1]] = generated + m[4]
 	}
 	return values
 }
@@ -254,5 +269,81 @@ func TestFleetGovernanceDeployStepStartsTheServer(t *testing.T) {
 	if ts, ok := documented["time"].(string); assert.True(t, ok, "the documented time is a string") {
 		_, err := time.Parse(time.RFC3339Nano, ts)
 		assert.NoError(t, err, "the documented time is in the form a UTC time.Time takes in JSON")
+	}
+}
+
+// TestFleetGovernanceDeployStepSeedsAnAdministrator checks that the stack Step
+// 1 starts has the account Step 5 signs in to the dashboard with. The server
+// creates no user by itself: it seeds its first administrator from
+// ADMIN_EMAIL and ADMIN_PASSWORD, and only from a password with upper- and
+// lower-case letters, a digit and a special character. The step used to set
+// neither, so its stack had no account to sign in with.
+func TestFleetGovernanceDeployStepSeedsAnAdministrator(t *testing.T) {
+	guide := aim03ReadRepoFile(t, "docs/use-cases/fleet-governance.md")
+	step := guideSection(t, guide, "## Step 1")
+
+	var composeSrc string
+	for _, m := range fencedBlock.FindAllStringSubmatch(step, -1) {
+		if m[1] == "yaml" {
+			composeSrc = m[2]
+			break
+		}
+	}
+	require.NotEmpty(t, composeSrc, "Step 1 shows no docker-compose.yml")
+	var compose deployStepCompose
+	require.NoError(t, yaml.Unmarshal([]byte(composeSrc), &compose), "Step 1's docker-compose.yml must parse")
+	server, ok := compose.Services["aim-server"]
+	require.True(t, ok, "Step 1 defines no aim-server service")
+
+	// The password is random, so the rule is checked against many of the .env
+	// files the step's command can write, not one.
+	hasher := auth.NewPasswordHasher()
+	var serverEnv map[string]string
+	for i := 0; i < 200; i++ {
+		serverEnv = serviceEnv(t, "aim-server", server, documentedEnvFile(t, step))
+		require.NotEmpty(t, serverEnv["ADMIN_PASSWORD"], "Step 1 gives the server no ADMIN_PASSWORD, so it seeds no administrator")
+		require.NoError(t, hasher.ValidatePassword(serverEnv["ADMIN_PASSWORD"]),
+			"the server refuses the ADMIN_PASSWORD %q Step 1 wrote and seeds no administrator", serverEnv["ADMIN_PASSWORD"])
+	}
+	adminEmail := serverEnv["ADMIN_EMAIL"]
+	require.NotEmpty(t, adminEmail, "Step 1 gives the server no ADMIN_EMAIL, so the reader is not told which account to sign in with")
+
+	t.Setenv("ADMIN_EMAIL", adminEmail)
+	t.Setenv("ADMIN_PASSWORD", serverEnv["ADMIN_PASSWORD"])
+	t.Setenv("ADMIN_NAME", serverEnv["ADMIN_NAME"])
+	db, mock := newSeedMock(t)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM users WHERE role = 'admin' OR LOWER(email) = LOWER($1))`)).
+		WithArgs(adminEmail).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM organizations WHERE domain = $1`)).
+		WithArgs(adminSeedOrgDomain).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("11111111-1111-1111-1111-111111111111"))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).
+		WithArgs(
+			sqlmock.AnyArg(), // id
+			"11111111-1111-1111-1111-111111111111",
+			adminEmail,
+			sqlmock.AnyArg(), // name
+			sqlmock.AnyArg(), // provider_id
+			bcryptOf(serverEnv["ADMIN_PASSWORD"]),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	var logged bytes.Buffer
+	prev := log.Writer()
+	log.SetOutput(&logged)
+	err := seedAdminFromEnv(db)
+	log.SetOutput(prev)
+	require.NoError(t, err, "the server does not seed an administrator from Step 1's environment")
+
+	// The log line the step tells the reader to look for is the one the
+	// server writes.
+	documentedLog := seededAdminLogLine.FindString(step)
+	require.NotEmpty(t, documentedLog, "Step 1 does not show the log line that confirms the administrator was seeded")
+	assert.Contains(t, logged.String(), documentedLog, "the server logs a different line when it seeds the administrator")
+
+	signIn := guideSection(t, guide, "## Step 5")
+	for _, name := range []string{"ADMIN_EMAIL", "ADMIN_PASSWORD"} {
+		assert.Contains(t, signIn, name, "Step 5 opens the dashboard without saying to sign in with %s from Step 1", name)
 	}
 }
