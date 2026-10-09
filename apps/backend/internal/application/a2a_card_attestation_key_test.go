@@ -4,7 +4,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -15,6 +14,9 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// testCardHash is the hex SHA-256 of the card bytes {"name":"card"}.
+const testCardHash = "41b41e3d0b3f9eefaf393e1f09eee10e5e0199bf7074e127d82db1f55135b457"
 
 func newCardAttestationTestRing(t *testing.T) *crypto.SigningKeyRing {
 	t.Helper()
@@ -33,7 +35,7 @@ func TestCardAttestationRecordsTheCardAttestationKey(t *testing.T) {
 	key := ring.Key(crypto.PurposeCardAttestation)
 	s := &A2AService{cardAttestationKey: key}
 
-	attestation, err := s.createCardAttestation(&domain.Agent{ID: uuid.New()}, json.RawMessage(`{"name":"card"}`), time.Now().Add(time.Hour))
+	attestation, err := s.createCardAttestation(&domain.Agent{ID: uuid.New()}, testCardHash, time.Now(), time.Now().Add(time.Hour))
 	require.NoError(t, err)
 
 	assert.Equal(t, key.KeyID, attestation.keyID, "the attestation must name the card-attestation key")
@@ -47,7 +49,7 @@ func TestCardAttestationRecordsTheCardAttestationKey(t *testing.T) {
 
 func TestCardAttestationWithoutAKeyIsRefused(t *testing.T) {
 	s := &A2AService{}
-	attestation, err := s.createCardAttestation(&domain.Agent{ID: uuid.New()}, json.RawMessage(`{"name":"card"}`), time.Now().Add(time.Hour))
+	attestation, err := s.createCardAttestation(&domain.Agent{ID: uuid.New()}, testCardHash, time.Now(), time.Now().Add(time.Hour))
 	require.Error(t, err)
 	assert.Nil(t, attestation)
 }

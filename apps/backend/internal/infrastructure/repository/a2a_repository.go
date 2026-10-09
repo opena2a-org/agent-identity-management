@@ -37,8 +37,8 @@ func (r *A2AAgentCardRepository) Create(ctx context.Context, card *domain.A2AAge
 			id, agent_id, card_url, card_data, card_hash, protocol_version,
 			attestation_signature, attestation_issued_at, attestation_expires_at,
 			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at,
-			attestation_key_id, attestation_alg
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			attestation_key_id, attestation_alg, attestation_format
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		ON CONFLICT (agent_id) DO UPDATE SET
 			card_url = EXCLUDED.card_url,
 			card_data = EXCLUDED.card_data,
@@ -49,6 +49,7 @@ func (r *A2AAgentCardRepository) Create(ctx context.Context, card *domain.A2AAge
 			attestation_expires_at = EXCLUDED.attestation_expires_at,
 			attestation_key_id = EXCLUDED.attestation_key_id,
 			attestation_alg = EXCLUDED.attestation_alg,
+			attestation_format = EXCLUDED.attestation_format,
 			is_valid = EXCLUDED.is_valid,
 			validation_error = EXCLUDED.validation_error,
 			last_fetched_at = EXCLUDED.last_fetched_at,
@@ -80,6 +81,7 @@ func (r *A2AAgentCardRepository) Create(ctx context.Context, card *domain.A2AAge
 		now,
 		card.AttestationKeyID,
 		card.AttestationAlg,
+		card.AttestationFormat,
 	).Scan(&card.ID, &card.CreatedAt, &card.UpdatedAt, &card.FetchCount)
 
 	if err != nil {
@@ -95,13 +97,13 @@ func (r *A2AAgentCardRepository) GetByAgentID(ctx context.Context, agentID uuid.
 			id, agent_id, card_url, card_data, card_hash, protocol_version,
 			attestation_signature, attestation_issued_at, attestation_expires_at,
 			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at,
-			attestation_key_id, attestation_alg
+			attestation_key_id, attestation_alg, attestation_format
 		FROM a2a_agent_cards
 		WHERE agent_id = $1
 	`
 
 	card := &domain.A2AAgentCard{}
-	var attestSig, validationErr, attestKeyID, attestAlg sql.NullString
+	var attestSig, validationErr, attestKeyID, attestAlg, attestFormat sql.NullString
 	var attestIssued, attestExpires, lastFetched sql.NullTime
 
 	err := r.db.QueryRowContext(ctx, query, agentID).Scan(
@@ -122,6 +124,7 @@ func (r *A2AAgentCardRepository) GetByAgentID(ctx context.Context, agentID uuid.
 		&card.UpdatedAt,
 		&attestKeyID,
 		&attestAlg,
+		&attestFormat,
 	)
 
 	if err == sql.ErrNoRows {
@@ -134,6 +137,7 @@ func (r *A2AAgentCardRepository) GetByAgentID(ctx context.Context, agentID uuid.
 	card.AttestationSignature = attestSig.String
 	card.AttestationKeyID = nullStringPtr(attestKeyID)
 	card.AttestationAlg = nullStringPtr(attestAlg)
+	card.AttestationFormat = nullStringPtr(attestFormat)
 	card.ValidationError = validationErr.String
 	if attestIssued.Valid {
 		card.AttestationIssuedAt = &attestIssued.Time
@@ -160,12 +164,13 @@ func (r *A2AAgentCardRepository) Update(ctx context.Context, card *domain.A2AAge
 			attestation_expires_at = $7,
 			attestation_key_id = $8,
 			attestation_alg = $9,
-			is_valid = $10,
-			validation_error = $11,
-			last_fetched_at = $12,
-			fetch_count = $13,
-			updated_at = $14
-		WHERE id = $15
+			attestation_format = $10,
+			is_valid = $11,
+			validation_error = $12,
+			last_fetched_at = $13,
+			fetch_count = $14,
+			updated_at = $15
+		WHERE id = $16
 		RETURNING updated_at
 	`
 
@@ -179,6 +184,7 @@ func (r *A2AAgentCardRepository) Update(ctx context.Context, card *domain.A2AAge
 		nullTime(card.AttestationExpiresAt),
 		card.AttestationKeyID,
 		card.AttestationAlg,
+		card.AttestationFormat,
 		card.IsValid,
 		nullString(card.ValidationError),
 		nullTime(card.LastFetchedAt),
@@ -237,7 +243,8 @@ func (r *A2AAgentCardRepository) GetValidCards(ctx context.Context, orgID uuid.U
 			c.id, c.agent_id, c.card_url, c.card_data, c.card_hash, c.protocol_version,
 			c.attestation_signature, c.attestation_issued_at, c.attestation_expires_at,
 			c.is_valid, c.validation_error, c.last_fetched_at, c.fetch_count,
-			c.created_at, c.updated_at, c.attestation_key_id, c.attestation_alg
+			c.created_at, c.updated_at, c.attestation_key_id, c.attestation_alg,
+			c.attestation_format
 		FROM a2a_agent_cards c
 		JOIN agents a ON a.id = c.agent_id
 		WHERE c.is_valid = TRUE
@@ -254,7 +261,7 @@ func (r *A2AAgentCardRepository) GetExpiredCards(ctx context.Context) ([]*domain
 			id, agent_id, card_url, card_data, card_hash, protocol_version,
 			attestation_signature, attestation_issued_at, attestation_expires_at,
 			is_valid, validation_error, last_fetched_at, fetch_count, created_at, updated_at,
-			attestation_key_id, attestation_alg
+			attestation_key_id, attestation_alg, attestation_format
 		FROM a2a_agent_cards
 		WHERE attestation_expires_at < NOW() AND is_valid = TRUE
 		ORDER BY attestation_expires_at
@@ -280,7 +287,7 @@ func (r *A2AAgentCardRepository) scanCards(rows *sql.Rows) ([]*domain.A2AAgentCa
 	cards := make([]*domain.A2AAgentCard, 0)
 	for rows.Next() {
 		card := &domain.A2AAgentCard{}
-		var attestSig, validationErr, attestKeyID, attestAlg sql.NullString
+		var attestSig, validationErr, attestKeyID, attestAlg, attestFormat sql.NullString
 		var attestIssued, attestExpires, lastFetched sql.NullTime
 
 		err := rows.Scan(
@@ -301,6 +308,7 @@ func (r *A2AAgentCardRepository) scanCards(rows *sql.Rows) ([]*domain.A2AAgentCa
 			&card.UpdatedAt,
 			&attestKeyID,
 			&attestAlg,
+			&attestFormat,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan card: %w", err)
@@ -309,6 +317,7 @@ func (r *A2AAgentCardRepository) scanCards(rows *sql.Rows) ([]*domain.A2AAgentCa
 		card.AttestationSignature = attestSig.String
 		card.AttestationKeyID = nullStringPtr(attestKeyID)
 		card.AttestationAlg = nullStringPtr(attestAlg)
+		card.AttestationFormat = nullStringPtr(attestFormat)
 		card.ValidationError = validationErr.String
 		if attestIssued.Valid {
 			card.AttestationIssuedAt = &attestIssued.Time
