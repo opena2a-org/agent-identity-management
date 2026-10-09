@@ -3,6 +3,11 @@
 The star-import tests read the names a star import binds from these modules'
 namespaces, so the import runs as ordinary module code instead of from a
 string of source compiled at test time.
+
+pytest rewrites the asserts of every file named on its command line, and the
+rewrite binds ``@py_builtins`` and ``@pytest_ar`` into that module. Each
+probe's docstring carries PYTEST_DONT_REWRITE so its namespace holds only what
+the star import bound, however pytest is invoked.
 """
 
 import importlib
