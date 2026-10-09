@@ -27,7 +27,12 @@ const migrateCommandName = "migrate"
 // (provisionAppRole), with POSTGRES_APP_PASSWORD as its password. It returns
 // the process exit code: 0 done, 1 failed.
 func runMigrateCommand() int {
-	db, err := initDatabase(&config.Config{Database: config.LoadDatabase()})
+	database, err := config.LoadDatabase()
+	if err != nil {
+		log.Printf("❌ %v", err)
+		return 1
+	}
+	db, err := initDatabase(&config.Config{Database: database})
 	if err != nil {
 		log.Printf("❌ Failed to connect to database: %v", err)
 		return 1
@@ -43,6 +48,7 @@ func runMigrateCommand() int {
 			log.Printf("❌ Application role %s: %v", appUser, err)
 			return 1
 		}
+		log.Printf("✅ Application role %s provisioned; CREATE on schema public revoked from PUBLIC and from %s", appUser, appUser)
 	}
 
 	if err := runMigrations(db); err != nil {
@@ -67,6 +73,12 @@ func runMigrateCommand() int {
 // access to the tables and sequences the connected role creates there. Database
 // grants and row-level security bind such a role; they bind neither a
 // superuser, nor a BYPASSRLS role, nor a table's owner.
+//
+// CREATE on schema public is revoked from PUBLIC as well as from the role:
+// before PostgreSQL 15 PUBLIC holds it by default and every role inherits it,
+// so on those servers every role without its own grant loses it. The password
+// is sent as a literal in CREATE/ALTER ROLE, so a server with log_statement set
+// to ddl or all writes it to its log; docs/DEPLOYMENT.md says both.
 //
 // Run it as the role the migrations run as, before them, so the tables they
 // create are granted through the default privileges. Every existing table is

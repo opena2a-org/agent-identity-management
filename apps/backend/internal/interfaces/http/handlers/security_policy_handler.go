@@ -89,7 +89,10 @@ type CreatePolicyRequest struct {
 // CreatePolicy creates a new security policy (admin only)
 func (h *SecurityPolicyHandler) CreatePolicy(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	var req CreatePolicyRequest
 	if err := c.Bind().JSON(&req); err != nil {

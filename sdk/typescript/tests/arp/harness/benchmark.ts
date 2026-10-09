@@ -107,13 +107,13 @@ describe('Scan Latency Benchmark', () => {
     const startTime = process.hrtime.bigint();
     const targetMs = 1000;
     let count = 0;
+    let elapsed = 0;
 
-    while (true) {
+    do {
       scanText(payload, ALL_PATTERNS);
       count++;
-      const elapsed = Number(process.hrtime.bigint() - startTime) / 1_000_000;
-      if (elapsed >= targetMs) break;
-    }
+      elapsed = Number(process.hrtime.bigint() - startTime) / 1_000_000;
+    } while (elapsed < targetMs);
 
     console.log(`\n  Throughput: ${count.toLocaleString()} scans/sec (1 KB payload, all 20 patterns)\n`);
     // Should handle at least 10,000 scans/sec

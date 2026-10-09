@@ -14,11 +14,13 @@ from pathlib import Path
 
 import pytest
 
-# Skip entire module if openai is not installed
-openai_mod = pytest.importorskip("openai", reason="openai not installed")
-
 from aim_sdk import AIMClient, aim_verify
-from openai import AzureOpenAI
+
+# The module holds one integration test, deselected by default. openai is
+# imported inside it, so a run without openai deselects the test instead of
+# counting the whole module as skipped, and the default run reports the same
+# counts with and without openai installed.
+pytestmark = pytest.mark.integration
 
 # Azure OpenAI Configuration from environment
 AZURE_OPENAI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY", "")
@@ -41,6 +43,7 @@ def test_live_azure_openai_integration():
     3. Makes REAL API calls to Azure OpenAI
     4. Verifies AIM tracks and validates all calls
     """
+    openai = pytest.importorskip("openai", reason="openai not installed")
     if not AZURE_OPENAI_API_KEY:
         pytest.skip("AZURE_OPENAI_API_KEY not set in environment")
 
@@ -51,7 +54,7 @@ def test_live_azure_openai_integration():
     )
 
     # Step 2: Initialize Azure OpenAI client
-    azure_client = AzureOpenAI(
+    azure_client = openai.AzureOpenAI(
         api_key=AZURE_OPENAI_API_KEY,
         api_version=AZURE_OPENAI_API_VERSION,
         azure_endpoint=AZURE_OPENAI_ENDPOINT

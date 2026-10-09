@@ -396,7 +396,7 @@ func main() {
 	// Start background job that deletes A2A request nonces once they can no
 	// longer be replayed, so they do not wait for the admin maintenance route
 	stopNonceCleanup := startNonceCleanupJob(services.A2A, application.NonceCleanupInterval)
-	defer close(stopNonceCleanup)
+	defer stopNonceCleanup()
 
 	// Start the job that deletes the nonces of signed action-request
 	// statements. Its first run completes before the server listens: until a
@@ -2263,7 +2263,8 @@ func runExpirationCleanup(db *sql.DB) {
 // clearExpiredPasswordResetTokens removes reset tokens that can no longer be
 // redeemed: those past their expiry, and any token stored without an expiry,
 // which the reset lookup never accepts. Without this sweep an unused token
-// stays on the users row until the user requests another reset.
+// stays on the users row until the user requests another reset. A row that
+// holds no token is not matched, so the count is of tokens cleared.
 //
 // The statement does not set updated_at, but the BEFORE UPDATE trigger on
 // users still stamps it on each cleared row. Nothing is read back, so only
@@ -2273,8 +2274,8 @@ func clearExpiredPasswordResetTokens(db *sql.DB) (int64, error) {
 		UPDATE users
 		SET password_reset_token = NULL,
 		    password_reset_expires_at = NULL
-		WHERE password_reset_expires_at <= NOW()
-		   OR (password_reset_token IS NOT NULL AND password_reset_expires_at IS NULL)
+		WHERE password_reset_token IS NOT NULL
+		  AND (password_reset_expires_at <= NOW() OR password_reset_expires_at IS NULL)
 	`)
 	if err != nil {
 		return 0, fmt.Errorf("password reset token cleanup failed: %w", err)
@@ -2346,19 +2347,23 @@ type nonceCleaner interface {
 
 // startNonceCleanupJob starts a background goroutine that deletes expired A2A
 // request nonces every interval. The admin maintenance route stays a manual
-// trigger of the same cleanup. Returns a channel that should be closed to
-// stop the job.
-func startNonceCleanupJob(cleaner nonceCleaner, interval time.Duration) chan struct{} {
-	stopChan := make(chan struct{})
+// trigger of the same cleanup. The returned stop function cancels a cleanup
+// in flight, ends the job and returns once the goroutine has exited, so
+// nothing the job logs or runs outlives the call. Calling it again does
+// nothing.
+func startNonceCleanupJob(cleaner nonceCleaner, interval time.Duration) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	ticker := time.NewTicker(interval)
 	log.Printf("A2A nonce cleanup job started (runs every %s)", interval)
 
 	go func() {
+		defer close(done)
 		for {
 			select {
 			case <-ticker.C:
-				runNonceCleanup(cleaner)
-			case <-stopChan:
+				runNonceCleanup(ctx, cleaner)
+			case <-ctx.Done():
 				ticker.Stop()
 				log.Println("A2A nonce cleanup job stopped")
 				return
@@ -2366,14 +2371,20 @@ func startNonceCleanupJob(cleaner nonceCleaner, interval time.Duration) chan str
 		}
 	}()
 
-	return stopChan
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // runNonceCleanup is one tick of the nonce cleanup job. Only the count of
 // deleted rows reaches the log.
-func runNonceCleanup(cleaner nonceCleaner) {
-	deleted, err := cleaner.CleanupExpiredNonces(context.Background())
+func runNonceCleanup(ctx context.Context, cleaner nonceCleaner) {
+	deleted, err := cleaner.CleanupExpiredNonces(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return // the job is stopping and cancelled this run
+		}
 		log.Printf("A2A nonce cleanup error: %v", err)
 		return
 	}

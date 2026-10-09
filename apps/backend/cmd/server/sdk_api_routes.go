@@ -37,8 +37,9 @@ const (
 	sdkAPIIsolationAttestationPath = "/agents/:id/isolation-attestation"
 
 	// sdkAPIIsolationAliasPath is the path the backend served alone until this
-	// change. No shipped client emits it, but it is a published route and BD6
-	// forbids removal, so it stays mounted on the same handler.
+	// change. No shipped client emits it, but it is a published route, and
+	// removing it would break any client that still calls it, so it stays
+	// mounted on the same handler.
 	sdkAPIIsolationAliasPath = "/agents/:id/isolation"
 )
 
@@ -197,7 +198,7 @@ func sdkAPIRouteTable(h sdkAPIHandlers) []sdkAPIRoute {
 		{
 			Method: http.MethodPost, Path: sdkAPIIsolationAliasPath,
 			Handler: h.SubmitIsolationAttestation, Deprecated: true, AgentParam: "id",
-			Note: "deprecated alias for " + sdkAPIIsolationAttestationPath + "; kept because BD6 forbids removing a published path",
+			Note: "deprecated alias for " + sdkAPIIsolationAttestationPath + "; kept because removing a published path would break any client that still calls it",
 		},
 	}
 }

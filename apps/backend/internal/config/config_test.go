@@ -382,3 +382,35 @@ func TestLoad_RedisConfigured(t *testing.T) {
 		t.Fatalf("REDIS_HOST unset: got Configured=%v Host=%q, want false and %q", cfg.Redis.Configured, cfg.Redis.Host, "localhost")
 	}
 }
+
+// A missing database variable is an error naming each missing variable, not a
+// panic: `aim-server migrate` reads only these and prints the error as one line.
+func TestLoadDatabase_MissingVariablesAreAnErrorNamingEach(t *testing.T) {
+	t.Setenv("POSTGRES_HOST", "")
+	t.Setenv("POSTGRES_USER", "aim")
+	t.Setenv("POSTGRES_DB", "")
+
+	var err error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("LoadDatabase panicked: %v", r)
+			}
+		}()
+		_, err = LoadDatabase()
+	}()
+	want := "required environment variable(s) not set: POSTGRES_HOST, POSTGRES_DB"
+	if err == nil || err.Error() != want {
+		t.Fatalf("LoadDatabase error %v; want %q", err, want)
+	}
+
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_DB", "aimdb")
+	database, err := LoadDatabase()
+	if err != nil {
+		t.Fatalf("LoadDatabase with every variable set: %v", err)
+	}
+	if database.Host != "localhost" || database.User != "aim" || database.Database != "aimdb" {
+		t.Fatalf("LoadDatabase read %+v", database)
+	}
+}

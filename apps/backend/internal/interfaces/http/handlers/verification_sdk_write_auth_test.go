@@ -170,11 +170,11 @@ func postJSON(t *testing.T, app *fiber.App, path string, body map[string]interfa
 }
 
 // ---------------------------------------------------------------------------
-// R1: the test that matters
+// The owning agent cannot approve its own pending event
 // ---------------------------------------------------------------------------
 
-// TestSubmitVerificationResult_OwningAgentCannotApprovePendingEvent is CISO R1's
-// acceptance test. The caller here is not an attacker who stole anything: it has
+// TestSubmitVerificationResult_OwningAgentCannotApprovePendingEvent is the
+// acceptance test for the withdrawn result route. The caller here is not an attacker who stole anything: it has
 // passed the group's Ed25519 signature check, the ±30s window and the revocation
 // gate, and it is the agent the event actually belongs to. It must still be
 // unable to turn its own pending authorization request into an approval.
@@ -203,7 +203,7 @@ func TestSubmitVerificationResult_OwningAgentCannotApprovePendingEvent(t *testin
 	// The load-bearing assertion. A 403 with a completed write would pass a
 	// status-code-only test and still be the live bypass.
 	assert.Zero(t, spy.updateResultCalls,
-		"the authorization-decision write must not be reached at all; R1 is satisfied by construction, not by a guard")
+		"the authorization-decision write must not be reached at all; the refusal holds by construction, not by a guard")
 	assert.Nil(t, event.Result, "the pending event must remain pending")
 }
 

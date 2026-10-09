@@ -61,12 +61,11 @@ __version__ = _get_client_version()
 # Warn once per process that verify_capability's dict return goes away in 3.0.0.
 _WARNED_LEGACY_RETURN = False
 
-# CISO-SDK-R6-C2: a 429 is our OWN rate limiter declining to answer, not a
-# decision. The limiter short-circuits before the handler runs, so no
-# verification event exists and a retry cannot duplicate one -- which is why a
-# retry is safe here and is NOT safe on a 5xx, where the handler may have
-# partially executed. Retrying obtains the decision instead of enforcing on its
-# absence.
+# A 429 is our OWN rate limiter declining to answer, not a decision. The
+# limiter short-circuits before the handler runs, so no verification event
+# exists and a retry cannot duplicate one -- which is why a retry is safe here
+# and is NOT safe on a 5xx, where the handler may have partially executed.
+# Retrying obtains the decision instead of enforcing on its absence.
 #
 # Both numbers below are UNMEASURED DEFAULTS, stated as such. No production rate
 # of 429s on the verification routes has been measured. They bound the retry so a
@@ -1219,7 +1218,7 @@ class AIMClient:
                 return self._enforcement_deadline_expired()
             response = _send()
 
-            # CISO-SDK-R6-C2: a 429 is our own rate limiter declining to answer.
+            # A 429 is our own rate limiter declining to answer.
             # Retry it, bounded, honouring Retry-After, BEFORE classifying the
             # outcome -- obtaining the decision beats enforcing on its absence.
             # 429 only: the limiter returns without invoking the handler, so no

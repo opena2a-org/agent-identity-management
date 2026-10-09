@@ -70,7 +70,10 @@ func (h *TrustScoreHandler) getAuditService() AuditServicer {
 
 // CalculateTrustScore recalculates trust score for an agent
 func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -136,7 +139,10 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 
 // GetTrustScore returns current trust score for an agent
 func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -194,7 +200,10 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 
 // GetTrustScoreBreakdown returns detailed trust score breakdown with weights and contributions
 func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -303,7 +312,10 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 // the collection side of the user feedback trust factor: ratings persisted here
 // are what calculateUserFeedback reads on the next score computation.
 func (h *TrustScoreHandler) SubmitUserFeedback(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -482,7 +494,10 @@ func (h *TrustScoreHandler) SubmitIsolationAttestation(c fiber.Ctx) error {
 // GetTrustScoreHistory returns trust score audit trail for an agent
 // Returns complete audit trail with who changed it, when, and why
 func (h *TrustScoreHandler) GetTrustScoreHistory(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

@@ -11,6 +11,44 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a handler reached without an organization answers 401 instead of panicking, and other follow-ups (#617)
+
+- 59 handler lines in the A2A, admin, compliance, MCP, security, security policy, trust score and webhook handlers
+  read the caller's organization with `c.Locals("organization_id").(uuid.UUID)`, which panics when the
+  request carries no organization. They now read it through `RequireOrganizationID` and answer its 401. A test parses
+  every handler source file and fails on a single-value assertion of `c.Locals("organization_id")`, with a planted
+  control it must catch, and four of the handlers are called without an organization and must answer 401.
+- The automatic suspension for a critical trust score reads the agent status transition table itself instead of
+  relying on its caller's status check, and `MarkAsCompromised` leaves an agent that is already suspended or revoked
+  alone in its UPDATE. Neither path reaches a revoked agent today; a new caller of either can no longer move a revoked
+  agent to `suspended`, from where `POST /api/v1/agents/:id/reactivate` accepts it.
+- `GET /api/v1/analytics/agents/activity` answered a failed activity query with `"note": "Activity data unavailable: "`
+  followed by the database error's text in a 200 body. The error now goes to the server log and the note reads
+  `Activity data unavailable: the activity query failed`.
+- The expired password reset sweep matched rows whose `password_reset_token` was already NULL when a past
+  `password_reset_expires_at` was left on them, counted them as cleared tokens and re-stamped their `updated_at`. It
+  now matches only rows that hold a token.
+- `aim-server migrate` with `POSTGRES_HOST`, `POSTGRES_USER` or `POSTGRES_DB` unset ended in a Go panic trace. It now
+  exits 1 with one line that names each missing variable; the server reports the same error from `config.Load`.
+- The refusal of a shared signing key named the active variables when the shared key came from a `_RETIRED` list. It
+  now names the variable that contributed each copy, and a `_RETIRED` list that names one key twice is reported as
+  such.
+- `docker-compose.yml` passes `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED` to
+  the backend, so a rotation that lists the old key there publishes it in a compose deployment. A test fails when the
+  backend service does not pass a variable the signing key loader reads.
+- Stopping the A2A nonce cleanup job cancels a cleanup in flight and returns once the job's goroutine has exited, so
+  its stop line can no longer reach a later test's captured log.
+- The agents list took the deleted-agent notice out of `sessionStorage` on mount and then lost it when the list
+  failed to load. The error view now shows the notice.
+- `docs/DEPLOYMENT.md` documents `aim-server migrate`: CREATE on schema `public` is revoked from `PUBLIC` as well as
+  from the application role, the role's password reaches the server log when `log_statement` is `ddl` or `all`, and
+  every instance of an earlier release must be stopped before the first instance of a release with the v2 agent
+  private key format starts.
+- Tests added for refusals that had none: an audit record whose `sig_algs` is empty and a genesis at sequence 1, a
+  served card attestation with another issuer, algorithm, `issuedAt` or `expiresAt`, an expired card attestation in
+  the A2A verification result, and the observed verification event sources being exactly `service` and `system`. The
+  key vault tests stop on a missing error instead of panicking on `err.Error()`.
+
 ### Fixed: an issued trust credential is returned only when it carries both signature suites and the values AIM asked for
 
 - `POST /api/v1/agents/:id/atc` returned whatever credential the issuer signed. OpenA2A AIM (Agent Identity Management)
@@ -70,6 +108,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   as `keyvault/agent-private-key-v2` once a run finishes with no failures; until then it runs again at the next
   startup. A row that cannot be read stays refused until that agent's credentials are rotated. An earlier release
   cannot read v2 keys, so rolling back after the migration leaves server-generated keys unreadable until rotated.
+  Stop every instance of the earlier release before the first new instance starts: once the migration is recorded it
+  does not read the rows again, so a v1 key an earlier instance writes afterwards stays refused until rotated
+  (`docs/DEPLOYMENT.md`, "Upgrading across the agent private key format change").
 - Registration assigns the agent ID before it encrypts the generated key, and the agent repository keeps an ID the
   caller assigned instead of replacing it.
 - Tests pin the additional data byte for byte and fail when a ciphertext copied from one row decrypts under another,
@@ -988,7 +1029,11 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set it first provisions that role (login, not a superuser, no
   BYPASSRLS, no CREATE on schema `public`, read and write on the tables and sequences the migrations create), refuses
   a `POSTGRES_APP_USER` that names the role it connects as, and after the migrations logs the role's measured state:
-  `Application role aim_app: superuser=false bypassrls=false ownedRelations=0`. Existing tables are granted to the
+  `Application role aim_app: superuser=false bypassrls=false ownedRelations=0`. CREATE on schema `public` is revoked
+  from `PUBLIC` as well as from the role, because before PostgreSQL 15 every role inherits it through `PUBLIC`; on
+  those servers every role without its own grant loses it, and the command logs the revoke. The role's password is
+  sent as a literal in `CREATE ROLE`/`ALTER ROLE`, so a server with `log_statement` set to `ddl` or `all` writes it
+  to its log; `docs/DEPLOYMENT.md` "Database Migrations and the Application Role" describes both. Existing tables are granted to the
   role only when it is created; a later run leaves table grants alone, so a privilege revoked from the role stays
   revoked.
 - The server's startup migration step no longer runs `CREATE TABLE IF NOT EXISTS schema_migrations` when the table
@@ -1941,8 +1986,8 @@ reason: the score is measured, not asserted. No migration: the column was alread
   for every agent in every deployment. Per the recorded architecture decision of 2026-08-29 the
   SDK/spec path is canonical: it is now registered on the existing
   `SubmitIsolationAttestation` handler, and `POST /api/v1/sdk-api/agents/:id/isolation`
-  stays registered as a deprecated alias to the same handler (Binding Decision 6
-  forbids removing a published path). No SDK changed.
+  stays registered as a deprecated alias to the same handler (a published path is not
+  removed, because a client may still call it). No SDK changed.
 
   The suite could not see the outage because the integration tests registered the
   handler at a path they chose themselves, so they agreed with the server about a

@@ -291,7 +291,10 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 
 // UpdateUserRole updates a user's role (admin only)
 func (h *AdminHandler) UpdateUserRole(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	targetUserID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -368,7 +371,10 @@ func (h *AdminHandler) UpdateUserRole(c fiber.Ctx) error {
 
 // DeactivateUser deactivates a user account
 func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	targetUserID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -433,7 +439,10 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 
 // ActivateUser reactivates a deactivated user account
 func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	targetUserID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -478,7 +487,10 @@ func (h *AdminHandler) ActivateUser(c fiber.Ctx) error {
 
 // PermanentlyDeleteUser permanently deletes a user from the database (hard delete)
 func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	targetUserID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -996,7 +1008,10 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 
 // AcknowledgeAlert marks an alert as acknowledged
 func (h *AdminHandler) AcknowledgeAlert(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	alertID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1038,7 +1053,10 @@ func (h *AdminHandler) AcknowledgeAlert(c fiber.Ctx) error {
 
 // BulkAcknowledgeAlerts acknowledges multiple alerts at once
 func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
@@ -1102,7 +1120,10 @@ func (h *AdminHandler) BulkAcknowledgeAlerts(c fiber.Ctx) error {
 
 // ResolveAlert marks an alert as resolved
 func (h *AdminHandler) ResolveAlert(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	alertID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1153,7 +1174,10 @@ func (h *AdminHandler) ResolveAlert(c fiber.Ctx) error {
 
 // GetDashboardStats returns high-level statistics for admin dashboard
 func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// Get total agents
@@ -1296,7 +1320,10 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 
 // GetPendingUsers returns users awaiting approval
 func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	users, err := h.getAdminService().GetPendingUsers(c.Context(), orgID)
@@ -1329,7 +1356,10 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 
 // ApproveUser approves a pending user
 func (h *AdminHandler) ApproveUser(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	targetUserID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1374,7 +1404,10 @@ func (h *AdminHandler) ApproveUser(c fiber.Ctx) error {
 
 // RejectUser rejects a pending user
 func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	targetUserID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1426,7 +1459,10 @@ func (h *AdminHandler) RejectUser(c fiber.Ctx) error {
 // ListRegistrationRequests returns pending registration requests for the
 // admin registrations page (includes signup profile answers via metadata)
 func (h *AdminHandler) ListRegistrationRequests(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	limit := 50
 	if parsed, err := strconv.Atoi(c.Query("limit", "50")); err == nil && parsed > 0 && parsed <= 100 {
@@ -1454,7 +1490,10 @@ func (h *AdminHandler) ListRegistrationRequests(c fiber.Ctx) error {
 
 // ApproveRegistrationRequest approves a pending registration request from the users page
 func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	requestID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1511,7 +1550,10 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 
 // RejectRegistrationRequest rejects a pending registration request from the users page
 func (h *AdminHandler) RejectRegistrationRequest(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	adminID := c.Locals("user_id").(uuid.UUID)
 	requestID, err := uuid.Parse(c.Params("id"))
 	if err != nil {

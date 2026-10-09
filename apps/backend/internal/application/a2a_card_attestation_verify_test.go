@@ -203,6 +203,31 @@ func TestServedCardAttestationVerifiesFromTheCardAndTheJWKSetAlone(t *testing.T)
 	assert.Equal(t, "signature-invalid", verifyServedCard(t, []byte(tampered), jwksJSON(t, ring)))
 }
 
+// Each served member the procedure checks or signs changes the result: the
+// issuer and the algorithm are checked before the signature, and both
+// timestamps are inside the signed payload.
+func TestServedCardAttestationWithAChangedIssuerAlgOrTimestampDoesNotVerify(t *testing.T) {
+	ring := newCardAttestationTestRing(t)
+	served := string(servedCardJSON(t, roundTripThroughStorage(attestedCard(t, ring))))
+	jwks := jwksJSON(t, ring)
+	require.Equal(t, "verified", verifyServedCard(t, []byte(served), jwks), "served card: %s", served)
+
+	for _, tc := range []struct {
+		name, old, new, want string
+	}{
+		{"another issuer", `"issuer":"aim-server"`, `"issuer":"aim-server.example"`, "malformed"},
+		{"another algorithm", `"alg":"EdDSA"`, `"alg":"ES256"`, "unsupported-format"},
+		{"issuedAt one second later", `"issuedAt":"2026-10-05T12:00:00Z"`, `"issuedAt":"2026-10-05T12:00:01Z"`, "signature-invalid"},
+		{"expiresAt one day later", `"expiresAt":"2026-10-06T12:00:00Z"`, `"expiresAt":"2026-10-07T12:00:00Z"`, "signature-invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, 1, strings.Count(served, tc.old), "served card: %s", served)
+			changed := strings.Replace(served, tc.old, tc.new, 1)
+			assert.Equal(t, tc.want, verifyServedCard(t, []byte(changed), jwks))
+		})
+	}
+}
+
 func TestCardAttestationIsNotVerifiedWithAnotherPurposesKey(t *testing.T) {
 	ring := newCardAttestationTestRing(t)
 	card := attestedCard(t, ring)

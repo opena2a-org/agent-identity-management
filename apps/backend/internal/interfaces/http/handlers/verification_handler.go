@@ -1256,9 +1256,8 @@ func (h *VerificationHandler) writeVerificationResponse(c fiber.Ctx, event *doma
 // with the "Verification not found or update failed" body this handler used to
 // emit, which would make a refusal indistinguishable from the pre-fix behaviour
 // and hide the degradation. There is no existence oracle to protect because no
-// lookup happens. CISO argued for 410; the divergence and both positions are
-// recorded with the change. 403 is used because the follow-up restores a write
-// channel here, and 410 asserts a condition "likely to be permanent".
+// lookup happens. 410 was considered and not used: the follow-up restores a
+// write channel here, and 410 asserts a condition "likely to be permanent".
 //
 // @Summary Submit verification result (withdrawn)
 // @Description Withdrawn in Stage 1. Returns 403 for every caller; the execution-outcome channel moves to its own columns in Stage 2.

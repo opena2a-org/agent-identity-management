@@ -546,10 +546,7 @@ func (s *A2AService) VerifyA2ARequest(
 
 	// 6. Check agent card attestation
 	card, _ := s.cardRepo.GetByAgentID(ctx, req.AgentID)
-	attestationValid := card != nil &&
-		card.IsValid &&
-		card.AttestationExpiresAt != nil &&
-		card.AttestationExpiresAt.After(time.Now().UTC())
+	attestationValid := cardAttestationCurrent(card, time.Now().UTC())
 
 	// 7. Return success
 	result.Valid = true
@@ -560,6 +557,16 @@ func (s *A2AService) VerifyA2ARequest(
 	result.AttestationValid = attestationValid
 
 	return result, nil
+}
+
+// cardAttestationCurrent reports whether card is valid and carries an
+// attestation whose expiry is after now. An attestation without an expiry is
+// not current.
+func cardAttestationCurrent(card *domain.A2AAgentCard, now time.Time) bool {
+	return card != nil &&
+		card.IsValid &&
+		card.AttestationExpiresAt != nil &&
+		card.AttestationExpiresAt.After(now)
 }
 
 // ============================================================================

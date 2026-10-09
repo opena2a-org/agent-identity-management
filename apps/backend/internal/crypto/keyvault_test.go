@@ -33,14 +33,14 @@ func TestNewKeyVault_Valid(t *testing.T) {
 
 func TestNewKeyVault_EmptyKey(t *testing.T) {
 	kv, err := NewKeyVault("")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, kv)
 	assert.Contains(t, err.Error(), "master key is required")
 }
 
 func TestNewKeyVault_InvalidBase64(t *testing.T) {
 	kv, err := NewKeyVault("not-valid-base64!!!")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, kv)
 	assert.Contains(t, err.Error(), "failed to decode master key")
 }
@@ -49,14 +49,14 @@ func TestNewKeyVault_WrongKeySize(t *testing.T) {
 	// Create a 16-byte key (too short)
 	shortKey := base64.StdEncoding.EncodeToString(make([]byte, 16))
 	kv, err := NewKeyVault(shortKey)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, kv)
 	assert.Contains(t, err.Error(), "master key must be 32 bytes")
 
 	// Create a 64-byte key (too long)
 	longKey := base64.StdEncoding.EncodeToString(make([]byte, 64))
 	kv, err = NewKeyVault(longKey)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, kv)
 	assert.Contains(t, err.Error(), "master key must be 32 bytes")
 }
@@ -77,7 +77,7 @@ func TestNewKeyVaultFromEnv_ProductionRequiresKey(t *testing.T) {
 	defer os.Unsetenv("ENVIRONMENT")
 
 	kv, err := NewKeyVaultFromEnv()
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, kv)
 	assert.Contains(t, err.Error(), "SECURITY ERROR")
 }
@@ -215,7 +215,7 @@ func TestDecryptPrivateKey_InvalidBase64(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = kv.DecryptPrivateKey(testAgentID, "not-valid-base64!!!")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decode ciphertext")
 }
 
@@ -227,7 +227,7 @@ func TestDecryptPrivateKey_CiphertextTooShort(t *testing.T) {
 	// A v2 header followed by fewer bytes than a nonce and tag
 	shortCiphertext := base64.StdEncoding.EncodeToString([]byte{privateKeyFormatV2, currentStorageKeyID, 's', 'h', 'o', 'r', 't'})
 	_, err = kv.DecryptPrivateKey(testAgentID, shortCiphertext)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ciphertext too short")
 }
 
@@ -247,7 +247,7 @@ func TestDecryptPrivateKey_TamperedCiphertext(t *testing.T) {
 	tampered := base64.StdEncoding.EncodeToString(ciphertext)
 
 	_, err = kv.DecryptPrivateKey(testAgentID, tampered)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decrypt")
 }
 
@@ -316,7 +316,7 @@ func TestRotatePrivateKey_InvalidEncryptedKey(t *testing.T) {
 	newMasterKey := base64.StdEncoding.EncodeToString(newKeyBytes)
 
 	_, err = kv.RotatePrivateKey(testAgentID, "invalid-encrypted-data", newMasterKey)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decrypt with old key")
 }
 
@@ -331,7 +331,7 @@ func TestRotatePrivateKey_InvalidNewMasterKey(t *testing.T) {
 
 	// Try to rotate with invalid new master key
 	_, err = kv.RotatePrivateKey(testAgentID, encrypted, "invalid-key")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create new vault")
 }
 
@@ -447,7 +447,7 @@ func TestDecryptPrivateKey_CopiedToAnotherRowIsRefused(t *testing.T) {
 	require.NoError(t, err)
 
 	got, err := kv.DecryptPrivateKey(rowB, encryptedForA)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Empty(t, got)
 	assert.NotContains(t, err.Error(), "agent-a-private-key")
 
@@ -465,7 +465,7 @@ func TestDecryptPrivateKey_WrongPurposeIsRefused(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = kv.DecryptPrivateKey(agentID, other)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to decrypt")
 }
 
@@ -492,7 +492,7 @@ func TestDecryptPrivateKey_TamperedHeaderIsRefused(t *testing.T) {
 	unknownKeyID := append([]byte(nil), raw...)
 	unknownKeyID[1] = 0x7f
 	_, err = kv.DecryptPrivateKey(testAgentID, base64.StdEncoding.EncodeToString(unknownKeyID))
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown storage key id")
 
 	otherVersion := append([]byte(nil), raw...)

@@ -72,7 +72,10 @@ func (h *A2AHandler) loadOwnedAgent(c fiber.Ctx, agentID, orgID uuid.UUID) *doma
 // RegisterAgentCard registers an A2A agent card for an agent
 // POST /api/v1/a2a/agents/:id/card
 func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -175,7 +178,10 @@ func (h *A2AHandler) GetAgentCard(c fiber.Ctx) error {
 // RefreshCardAttestation refreshes the attestation for an agent's card
 // POST /api/v1/a2a/agents/:id/card/refresh
 func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -364,7 +370,10 @@ func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 // ComputeA2ATrustScore computes and updates the A2A trust score
 // POST /api/v1/a2a/agents/:id/trust-score/compute
 func (h *A2AHandler) ComputeA2ATrustScore(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -855,7 +864,10 @@ func (h *A2AHandler) CapableOf(c fiber.Ctx) error {
 // RecordConsent records user consent for cross-agent data sharing
 // POST /api/v1/a2a/consent
 func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req application.RecordConsentRequest

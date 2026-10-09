@@ -182,22 +182,36 @@ func LoadSigningKeyRing(kv *KeyVault, getenv func(string) string) (*SigningKeyRi
 		}
 	}
 
-	// Fail closed on a shared key: no public key may serve two purposes, and a retired
-	// key may not also be the active key it was retired from.
-	owner := make(map[string]SigningPurpose)
+	// Fail closed on a shared key: no public key may serve two purposes, a retired key
+	// may not also be the active key it was retired from, and a retired list may not
+	// name one key twice. Each key ID remembers the variable that contributed it, so
+	// the error names the two variables to change.
+	type keyEntry struct {
+		keyID   string
+		purpose SigningPurpose
+		envVar  string
+	}
+	owner := make(map[string]keyEntry)
 	for _, purpose := range signingPurposes {
-		keyIDs := []string{ring.active[purpose].KeyID}
+		activeVar := SigningKeyEnvVar(purpose)
+		entries := []keyEntry{{ring.active[purpose].KeyID, purpose, activeVar}}
 		for _, publicKey := range ring.retired[purpose] {
-			keyIDs = append(keyIDs, SigningKeyID(publicKey))
+			entries = append(entries, keyEntry{SigningKeyID(publicKey), purpose, activeVar + retiredKeysEnvSuffix})
 		}
-		for _, keyID := range keyIDs {
-			if other, seen := owner[keyID]; seen {
-				if other == purpose {
-					return nil, fmt.Errorf("%s lists a key that is already in use for %s", SigningKeyEnvVar(purpose)+retiredKeysEnvSuffix, purpose)
-				}
-				return nil, fmt.Errorf("the %s and %s signing keys are the same key; set %s and %s to different keys", other, purpose, SigningKeyEnvVar(other), SigningKeyEnvVar(purpose))
+		for _, entry := range entries {
+			other, seen := owner[entry.keyID]
+			if !seen {
+				owner[entry.keyID] = entry
+				continue
 			}
-			owner[keyID] = purpose
+			switch {
+			case other.envVar == entry.envVar:
+				return nil, fmt.Errorf("%s lists the same key twice", entry.envVar)
+			case other.purpose == entry.purpose:
+				return nil, fmt.Errorf("%s lists a key that is already in use for %s", entry.envVar, entry.purpose)
+			default:
+				return nil, fmt.Errorf("the %s and %s signing keys are the same key; set %s and %s to different keys", other.purpose, entry.purpose, other.envVar, entry.envVar)
+			}
 		}
 	}
 

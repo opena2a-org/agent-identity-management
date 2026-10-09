@@ -66,7 +66,10 @@ func (h *WebhookHandler) getAuditService() AuditServicer {
 // @Failure 400 {object} map[string]interface{}
 // @Router /api/v1/webhooks [post]
 func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req application.CreateWebhookRequest
@@ -108,7 +111,10 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/webhooks [get]
 func (h *WebhookHandler) ListWebhooks(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	webhooks, err := h.getWebhookService().ListWebhooks(c.Context(), orgID)
 	if err != nil {
@@ -138,7 +144,10 @@ func (h *WebhookHandler) ListWebhooks(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/webhooks/{id} [get]
 func (h *WebhookHandler) GetWebhook(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	webhookID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -172,7 +181,10 @@ func (h *WebhookHandler) GetWebhook(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/webhooks/{id} [delete]
 func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	webhookID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -226,7 +238,10 @@ func (h *WebhookHandler) DeleteWebhook(c fiber.Ctx) error {
 // @Failure 400 {object} map[string]interface{}
 // @Router /api/v1/webhooks/{id} [put]
 func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	webhookID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -290,7 +305,10 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/webhooks/{id}/test [post]
 func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	webhookID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
