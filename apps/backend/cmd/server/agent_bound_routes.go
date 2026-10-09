@@ -14,52 +14,86 @@ import (
 
 // agentBoundRouter registers routes on a group that mounts an agent
 // authenticator, with middleware.AgentPathBinding in front of each handler
-// chain. It is the one way a route outside the SDK-API table binds its agent
-// parameter to the authenticated agent: an agent principal may act only on its
-// own ID, and a user JWT caller passes to the handler unchanged.
+// chain (middleware.AgentPathObservation for a held route). It is the one way a
+// route outside the SDK-API table binds its agent parameter to the
+// authenticated agent: an agent principal may act only on its own ID, and a
+// user JWT caller passes to the handler unchanged.
 //
 // agent_binding_routes_test.go walks the source tree and requires every route
 // with an agent parameter under such a group to be registered through this
-// type, or to be listed there as an admitted exception or a dated hold.
+// type (bound, or held and observed), or to be listed there as an admitted
+// exception.
 type agentBoundRouter struct {
+	helper string
 	group  fiber.Router
 	prefix string
+	hold   bool
 }
 
 // bindAgentRoutes wraps group. It must be a group (not the app) so each bound
 // route can be named by its full path in the 500 a mis-mount produces.
 func bindAgentRoutes(group fiber.Router) agentBoundRouter {
-	g, ok := group.(*fiber.Group)
-	if !ok {
-		panic("bindAgentRoutes: needs a *fiber.Group")
-	}
-	return agentBoundRouter{group: group, prefix: g.Prefix}
+	return newAgentRouter("bindAgentRoutes", group, false)
 }
 
-// Get registers a GET route whose agent parameter is bound to the caller.
+// holdAgentRoutes wraps group for routes whose binding is held until its effect
+// on existing callers is measured. Each route gets
+// middleware.AgentPathObservation in place of the binding: it refuses nothing,
+// and records on the request's api_calls row whether an agent caller named its
+// own ID. Every route registered here must be listed in agentBindingHeld, and
+// every held route must be registered here, so a hold always has the
+// measurement that ends it.
+func holdAgentRoutes(group fiber.Router) agentBoundRouter {
+	return newAgentRouter("holdAgentRoutes", group, true)
+}
+
+func newAgentRouter(helper string, group fiber.Router, hold bool) agentBoundRouter {
+	g, ok := group.(*fiber.Group)
+	if !ok {
+		panic(helper + ": needs a *fiber.Group")
+	}
+	return agentBoundRouter{helper: helper, group: group, prefix: g.Prefix, hold: hold}
+}
+
+// Get registers a GET route with the router's binding (or, held, its observation).
 func (r agentBoundRouter) Get(path string, handlers ...fiber.Handler) {
 	r.add(http.MethodGet, path, handlers)
 }
 
-// Post registers a POST route whose agent parameter is bound to the caller.
+// Post registers a POST route with the router's binding (or, held, its observation).
 func (r agentBoundRouter) Post(path string, handlers ...fiber.Handler) {
 	r.add(http.MethodPost, path, handlers)
+}
+
+// Put registers a PUT route with the router's binding (or, held, its observation).
+func (r agentBoundRouter) Put(path string, handlers ...fiber.Handler) {
+	r.add(http.MethodPut, path, handlers)
+}
+
+// Delete registers a DELETE route with the router's binding (or, held, its observation).
+func (r agentBoundRouter) Delete(path string, handlers ...fiber.Handler) {
+	r.add(http.MethodDelete, path, handlers)
 }
 
 func (r agentBoundRouter) add(method, path string, handlers []fiber.Handler) {
 	fullPath := r.prefix + path
 	param := agentPathParam(fullPath)
 	if param == "" {
-		panic("bindAgentRoutes: " + method + " " + fullPath + " has no agent parameter to bind")
+		panic(r.helper + ": " + method + " " + fullPath + " has no agent parameter to bind")
 	}
 	if len(handlers) == 0 {
-		panic("bindAgentRoutes: " + method + " " + fullPath + " has no handler")
+		panic(r.helper + ": " + method + " " + fullPath + " has no handler")
 	}
 	chain := make([]any, 0, len(handlers))
 	for _, h := range handlers {
 		chain = append(chain, h)
 	}
-	r.group.Add([]string{method}, path, middleware.AgentPathBinding(method+" "+fullPath, param, nil), chain...)
+	route := method + " " + fullPath
+	gate := middleware.AgentPathBinding(route, param, nil)
+	if r.hold {
+		gate = middleware.AgentPathObservation(route, param)
+	}
+	r.group.Add([]string{method}, path, gate, chain...)
 }
 
 // agentGetter is the agent-service surface agentNameResolver needs.

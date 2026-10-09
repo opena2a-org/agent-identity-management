@@ -42,10 +42,10 @@ func TestSensitiveAgentRoutesAreMemberGated(t *testing.T) {
 
 	// route-registration substring -> must appear on the SAME line as the gate.
 	sensitive := []string{
-		`agents.Get("/:id/credentials"`,
-		`agents.Get("/:id/sdk"`,
-		`agents.Post("/:id/rotate-credentials"`,
-		`agents.Put("/:id/keys"`,
+		`agentsHeld.Get("/:id/credentials"`,
+		`agentsHeld.Get("/:id/sdk"`,
+		`agentsHeld.Post("/:id/rotate-credentials"`,
+		`agentsHeld.Put("/:id/keys"`,
 	}
 
 	for _, route := range sensitive {
