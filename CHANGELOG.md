@@ -77,7 +77,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database that applied it as 112 applies it again as 125, where both of its statements are `IF EXISTS` and change
   nothing.
 
-### Fixed: an issued trust credential is returned only when it carries both signature suites and the values AIM asked for
+### Fixed — an issued trust credential is returned only when it carries both signature suites and the values AIM asked for
 
 - `POST /api/v1/agents/:id/atc` returned whatever credential the issuer signed. OpenA2A AIM (Agent Identity Management)
   hands on the issuer's signed bytes verbatim, so a credential signed with Ed25519 alone, or one stating another score
@@ -95,7 +95,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   either suite missing, an unregistered suite, another agent, a changed score or a raised level, and checks the hybrid
   and Ed25519-only atx-conformance credentials vendored under `sdk/java/src/test/resources/atx-fixtures/`.
 
-### Fixed: an issued trust credential asks for no trust level above what one signing authority may assert
+### Fixed — an issued trust credential asks for no trust level above what one signing authority may assert
 
 - `POST /api/v1/agents/:id/atc` asked the credential issuer for trust level 3 when the agent's behavioral score was
   0.75 or higher, and for level 4 at 0.90 or higher. One authority signs each credential OpenA2A AIM (Agent Identity
@@ -109,7 +109,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/backend/internal/application/atc_issuance_service_test.go` fails when the issuance request asks for a level
   above 2.
 
-### Fixed: the fleet governance guide's deployment step creates an account to sign in with
+### Fixed — the fleet governance guide's deployment step creates an account to sign in with
 
 - Step 1 of `docs/use-cases/fleet-governance.md` set neither `ADMIN_EMAIL` nor `ADMIN_PASSWORD`. The server creates
   its first administrator only from `ADMIN_PASSWORD`, so the stack started with no user, and Step 5 sent the reader
@@ -198,7 +198,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   and there is no migration. A token downloaded before this change is the root of its own family
   and carries it on its first rotation. Tokens are opaque to clients; no SDK change is needed.
 
-### Changed (breaking) — `/metrics` moves off the API port to its own listener, loopback by default
+### Changed — breaking: `/metrics` moves off the API port to its own listener, loopback by default
 
 - What to check before upgrading: a Prometheus job that scrapes `/metrics` on port 8080 or through the
   dashboard without a token stops receiving data. To scrape from the same host, target
@@ -264,7 +264,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `pending` as well as `already_exists`; it used to report every 409 as `already_exists`. A 404
   now throws; it used to be reported as `success: true` with status `not_tracked`.
 
-### Fixed: the fleet governance guide's deployment step starts the server
+### Fixed — the fleet governance guide's deployment step starts the server
 
 - Step 1 of `docs/use-cases/fleet-governance.md` gave the server `DATABASE_URL`, which it does not read, so the
   server stopped at startup on the missing `POSTGRES_HOST`. Its sample `JWT_SECRET` was 29 characters, and the
@@ -350,7 +350,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   in `POST /api/v1/a2a/trust/:id/interaction` the ID names the peer the calling agent interacted with. An agent ID in
   a request body is outside the walk.
 
-### Added: request records show how the caller authenticated and whether it used its own agent ID
+### Added — request records show how the caller authenticated and whether it used its own agent ID
 
 - Each `api_calls` row now records `auth_method` (`ed25519`, `mldsa`, `hybrid`, `api_key`, `atc` or `service`; empty
   for a user session). On a route that checks its agent ID against the caller, the row also records
