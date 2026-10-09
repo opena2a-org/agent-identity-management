@@ -67,6 +67,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   (`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`) and a compact JWS: unpadded base64url segments, the
   Ed25519 signature taken over `header.payload` with the agent's key, and `sub`, `aud` and a five-minute `exp`.
   The README's OAuth line describes this grant instead of a client credentials flow.
+- `OAuthTokenManager` signs the assertion with the 32-byte seed of the configured private key, so the 64-byte form
+  AIM issues and `npx @opena2a/aim-sdk init` writes (the seed, then its public key) obtains a token. Signing with
+  those 64 bytes as given threw `Uint8Array expected` from the Ed25519 signer, and no request was sent; only a
+  32-byte seed worked. The key is decoded as `createAgentRequestHeaders` decodes it: standard base64 of 32 or 64
+  bytes, with the last 32 bytes of a 64-byte key equal to the seed's public key. Any other key throws
+  `ConfigurationError` before a request is sent.
 - The Express middleware and the Fastify plugin accept the agent identity in their options. `createAIMMiddleware`
   and `aimPlugin` take `credentials` (an `AgentCredentials` object) or a ready `client`; the README examples, which
   passed only `{ baseUrl, apiKey }`, answered 401 on every verified route without contacting AIM. Passing both

@@ -26,7 +26,17 @@ function fromBase64Url(segment: string): Uint8Array {
   return new Uint8Array(Buffer.from(segment, 'base64url'));
 }
 
-async function captureTokenRequest(): Promise<{
+/** The 64-byte form AIM issues and `aim-sdk init` writes: the seed, then its public key. */
+function issuedForm(keyPair: { privateKey: Uint8Array; publicKey: Uint8Array }): Uint8Array {
+  const bytes = new Uint8Array(64);
+  bytes.set(keyPair.privateKey, 0);
+  bytes.set(keyPair.publicKey, 32);
+  return bytes;
+}
+
+async function captureTokenRequest(
+  privateKeyForm: 'seed' | 'issued' = 'seed'
+): Promise<{
   url: string;
   body: URLSearchParams;
   publicKey: Uint8Array;
@@ -34,7 +44,7 @@ async function captureTokenRequest(): Promise<{
   const keyPair = await generateKeyPair();
   const credentials: AgentCredentials = {
     agentId: AGENT_ID,
-    privateKey: toBase64(keyPair.privateKey),
+    privateKey: toBase64(privateKeyForm === 'issued' ? issuedForm(keyPair) : keyPair.privateKey),
     publicKey: toBase64(keyPair.publicKey),
     organizationId: 'org-1',
     createdAt: new Date().toISOString(),
@@ -92,6 +102,15 @@ describe('the token request the server accepts', () => {
 
     const otherKey = await generateKeyPair();
     expect(await verify(fromBase64Url(signature), signingInput, otherKey.publicKey)).toBe(false);
+  });
+
+  it('signs with the seed of a 64-byte issued credential, the form the server and aim-sdk init write', async () => {
+    const { url, body, publicKey } = await captureTokenRequest('issued');
+    expect(url).toBe(`${BASE_URL}/api/v1/oauth/token`);
+    const [header, payload, signature] = (body.get('client_assertion') ?? '').split('.');
+
+    const signingInput = new TextEncoder().encode(`${header}.${payload}`);
+    expect(await verify(fromBase64Url(signature), signingInput, publicKey)).toBe(true);
   });
 
   it('carries the claims the server enforces: sub, aud and a short exp', async () => {
