@@ -1,7 +1,6 @@
 package org.opena2a.aim.examples;
 
 import org.opena2a.aim.client.AIMClient;
-import org.opena2a.aim.integrations.mcp.AttestationResult;
 import org.opena2a.aim.integrations.mcp.MCPIntegration;
 import org.opena2a.aim.integrations.mcp.MCPServerInfo;
 
@@ -15,7 +14,6 @@ import java.util.Map;
  * <p>This example shows how to:</p>
  * <ul>
  *   <li>Register MCP servers with AIM</li>
- *   <li>Attest to server capabilities</li>
  *   <li>Record tool usage for supply chain analytics</li>
  *   <li>List registered MCP servers</li>
  * </ul>
@@ -67,26 +65,8 @@ public class MCPIntegrationExample {
             System.out.println("   Status: " + server.getStatus());
             System.out.println("   Capabilities: " + server.getCapabilities());
 
-            // Step 3: Attest to the server's capabilities
-            System.out.println("\n3. Submitting attestation...");
-            AttestationResult attestation = MCPIntegration.attestServer(
-                    agent,
-                    server.getId(),
-                    "npx -y @modelcontextprotocol/server-filesystem /tmp",
-                    "filesystem-mcp",
-                    capabilities,
-                    true,   // connection successful
-                    true,   // health check passed
-                    45.0    // connection latency in ms
-            );
-
-            System.out.println("   Attestation submitted!");
-            System.out.println("   Attestation ID: " + attestation.getAttestationId());
-            System.out.println("   Confidence score: " + attestation.getConfidenceScore() + "%");
-            System.out.println("   Attestation count: " + attestation.getAttestationCount());
-
-            // Step 4: Record tool usage
-            System.out.println("\n4. Recording tool usage...");
+            // Step 3: Record tool usage
+            System.out.println("\n3. Recording tool usage...");
 
             // Simulate using the read_file tool
             Map<String, Object> usage1 = MCPIntegration.recordToolUsage(
@@ -114,8 +94,8 @@ public class MCPIntegrationExample {
             );
             System.out.println("   Recorded: write_file");
 
-            // Step 5: List all registered MCP servers
-            System.out.println("\n5. Listing registered MCP servers...");
+            // Step 4: List all registered MCP servers
+            System.out.println("\n4. Listing registered MCP servers...");
             List<MCPServerInfo> servers = MCPIntegration.listServers(agent);
 
             for (MCPServerInfo s : servers) {
@@ -123,8 +103,8 @@ public class MCPIntegrationExample {
                         " (trust: " + s.getTrustScore() + ", status: " + s.getStatus() + ")");
             }
 
-            // Step 6: Verify an MCP action
-            System.out.println("\n6. Verifying MCP action...");
+            // Step 5: Verify an MCP action
+            System.out.println("\n5. Verifying MCP action...");
             boolean verified = MCPIntegration.verifyAction(
                     agent,
                     server.getId(),
