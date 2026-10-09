@@ -161,22 +161,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The TypeScript SDK requests the JWT-bearer grant this endpoint accepts, at the path it is served on; see
   `sdk/typescript/CHANGELOG.md`.
 
-### Security — an agent credential acts only on its own agent ID on the SDK-API and detection routes
+### Security — an agent credential acts only on its own agent ID on the SDK-API, detection and A2A `/agents/:id` write routes
 
-- Every `/api/v1/sdk-api/agents/:id/...` route (heartbeat, capabilities, capability requests, MCP servers,
-  connections and usage, detection report, and isolation attestation with its `/isolation` alias) checked only that
-  the agent in the path belonged to the caller's organization, so one agent's key could report for any other agent
-  in it. When the caller authenticated as an agent, a path ID other than its own is now refused
-  `403 {"reasonCode":"agent_path_mismatch"}` before any lookup, and another agent's ID gets the same response as an
-  ID that names no agent. Requests made with a user token are unchanged.
+- The `/api/v1/sdk-api/agents/:id/...` routes for heartbeat, capabilities, capability requests, MCP servers,
+  connections and usage, and the detection report checked only that the agent in the path belonged to the caller's
+  organization, so one agent's key could report for any other agent in it. The isolation attestation route and its
+  `/isolation` alias compared the caller's agent ID with the path, but only after looking the agent up, so another
+  agent's ID was answered differently from an ID that names no agent. When the caller authenticates as an agent, a
+  path ID other than its own is now refused `403 {"reasonCode":"agent_path_mismatch"}` on each of these routes
+  before any lookup, and another agent's ID gets the same response as an ID that names no agent. Requests made with
+  a user token are unchanged.
 - `GET /api/v1/sdk-api/agents/:identifier` accepts, from an agent caller, only its own ID or its own name, and
   resolves the name from the caller's own record. The lookup by name the SDKs make with a user token during setup is
   unchanged.
 - The same check applies to the four `/api/v1/detection/agents/:id/` routes and to
-  `POST /api/v1/a2a/agents/:id/card`, `.../card/refresh`, `.../sign` and `.../trust-score/compute`.
+  `POST /api/v1/a2a/agents/:id/card`, `.../card/refresh`, `.../sign` and `.../trust-score/compute`. The A2A routes
+  that take the agent ID elsewhere are not covered: `POST /api/v1/a2a/cards/:id/attestation`, which refreshes the
+  same card attestation as `.../card/refresh`, and `GET` and `PUT /api/v1/a2a/cards/:id` check the organization
+  only, and `POST /api/v1/a2a/cards` takes `agentId` from the request body without checking it against the caller.
 - The server refuses to start with an SDK-API `/agents/:` route that declares neither the check nor a reason it is
-  exempt, and a test walks the backend source for every agent-ID route under a group that authenticates agents. The
-  remaining `/api/v1/agents/:id/...` and A2A read routes are enumerated there and are unchanged in this release.
+  exempt, and a test walks the backend source for every route under a group that authenticates agents whose path
+  has a parameter directly after an `agents` segment or one named `agentId` or `agent_id`, and requires each to be
+  bound, an exception with a reason, or a dated hold. The remaining `/api/v1/agents/:id/...` and A2A `/agents/:id`
+  read routes are enumerated there and are unchanged in this release. A route whose agent ID sits elsewhere in the
+  path (`/api/v1/a2a/cards/:id`, `/api/v1/a2a/trust/:id`) or in the request body is outside the walk.
 
 ### Added: request records show how the caller authenticated and whether it used its own agent ID
 
@@ -184,9 +192,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   for a user session). On a route that checks its agent ID against the caller, the row also records
   `agent_path_route` (the matched route) and `agent_path_outcome` (`self`, `other`, `no_principal` or `fault`).
   Migration 117 adds the three columns.
-- The `/api/v1/agents/:id/...` and A2A read routes that do not yet apply the check now record that comparison
-  without changing any response. This counts, per route, the agent callers that name another agent's ID, before
-  the check is applied there. `apps/backend/scripts/agent_path_binding_report.sql` reports the count per route over
+- The `/api/v1/agents/:id/...` and A2A `/agents/:id` read routes that do not yet apply the check now record that
+  comparison without changing any response. This counts, per route, the agent callers that name another agent's ID,
+  before the check is applied there. `apps/backend/scripts/agent_path_binding_report.sql` reports the count per route over
   the last 14 days, with the auth method and user agent of each such caller.
 
 ### Security — agent-signature authentication reads an agent's status only after the signature verifies
