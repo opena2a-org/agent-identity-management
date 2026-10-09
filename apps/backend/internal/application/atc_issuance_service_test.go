@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -314,18 +316,51 @@ type fakeRegistryClient struct {
 	gotReq registry.ATCIssuanceRequest
 	cred   *registry.AgentTrustCredential
 	err    error
+
+	// respond, when set, builds the issuer's answer from the request in place
+	// of cred.
+	respond func(registry.ATCIssuanceRequest) *registry.AgentTrustCredential
 }
 
 func (f *fakeRegistryClient) IssueATC(ctx context.Context, req registry.ATCIssuanceRequest) (*registry.AgentTrustCredential, error) {
 	f.gotReq = req
+	if f.respond != nil {
+		return f.respond(req), f.err
+	}
 	return f.cred, f.err
+}
+
+// conformingATC is what a conforming issuer returns for req: a credential for
+// the requested agent with the requested trustScore and trustLevel, signed with
+// one Ed25519 and one ML-DSA-65 signature (ATX core section 1.1).
+func conformingATC(req registry.ATCIssuanceRequest) *registry.AgentTrustCredential {
+	cred := &registry.AgentTrustCredential{
+		AgentID:     req.AgentID,
+		AgentDID:    req.AgentDID,
+		ContentHash: req.ContentHash,
+		Signatures: []registry.ATCSignature{
+			{KeyID: "did:opena2a:authority:registry.example#key-v1", Algorithm: "Ed25519", Value: "ed25519-signature"},
+			{KeyID: "did:opena2a:authority:registry.example#pqc-v1", Algorithm: "ML-DSA-65", Value: "ml-dsa-65-signature"},
+		},
+	}
+	if req.TrustScore != nil {
+		cred.TrustScore = *req.TrustScore
+	}
+	if req.TrustLevel != nil {
+		cred.TrustLevel = *req.TrustLevel
+	}
+	return cred
 }
 
 func TestIssueForAgent_HappyPath(t *testing.T) {
 	id := uuid.New()
 	agent := &domain.Agent{ID: id, OrganizationID: uuid.New(), Capabilities: []string{"x"}}
 	score := &domain.TrustScore{Score: 0.91, Confidence: 0.6}
-	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{TransparencyLogIndex: 5, TrustLevel: 2}}
+	client := &fakeRegistryClient{respond: func(req registry.ATCIssuanceRequest) *registry.AgentTrustCredential {
+		cred := conformingATC(req)
+		cred.TransparencyLogIndex = 5
+		return cred
+	}}
 
 	svc := NewATCIssuanceService(
 		&fakeAgentReader{agent: agent},
@@ -371,7 +406,7 @@ func TestIssueForAgent_PublisherFallbackToOrgID(t *testing.T) {
 	id := uuid.New()
 	orgID := uuid.New()
 	agent := &domain.Agent{ID: id, OrganizationID: orgID}
-	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{}}
+	client := &fakeRegistryClient{respond: conformingATC}
 
 	// nil org reader -> fall back to org UUID string.
 	svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil, &fakeScorer{score: &domain.TrustScore{Score: 0.3}}, client, testATCPublicOrigin)
@@ -416,6 +451,152 @@ func TestIssueForAgent_NoPublicOriginFailsClosed(t *testing.T) {
 	}
 	if client.gotReq.AgentID != "" {
 		t.Errorf("the Registry was called with %+v; want no call", client.gotReq)
+	}
+}
+
+// TestIssueForAgent_RefusesCredentialThatBreaksATXIssuance: AIM hands on the
+// issuer's credential verbatim, so it refuses one that a verifier following ATX
+// core would reject, or that states a different agent, score or level from the
+// one AIM asked the issuer to sign. Each case starts from what a conforming
+// issuer returns and changes one thing.
+func TestIssueForAgent_RefusesCredentialThatBreaksATXIssuance(t *testing.T) {
+	ed25519Only := []registry.ATCSignature{
+		{KeyID: "did:opena2a:authority:registry.example#key-v1", Algorithm: "Ed25519", Value: "ed25519-signature"},
+	}
+	mldsaOnly := []registry.ATCSignature{
+		{KeyID: "did:opena2a:authority:registry.example#pqc-v1", Algorithm: "ML-DSA-65", Value: "ml-dsa-65-signature"},
+	}
+
+	cases := []struct {
+		name    string
+		mutate  func(*registry.AgentTrustCredential)
+		nilCred bool
+	}{
+		{name: "Ed25519 signature only", mutate: func(c *registry.AgentTrustCredential) { c.Signatures = ed25519Only }},
+		{name: "ML-DSA-65 signature only", mutate: func(c *registry.AgentTrustCredential) { c.Signatures = mldsaOnly }},
+		{name: "no signatures", mutate: func(c *registry.AgentTrustCredential) { c.Signatures = nil }},
+		{name: "a third signature suite", mutate: func(c *registry.AgentTrustCredential) {
+			c.Signatures = append(c.Signatures, registry.ATCSignature{
+				KeyID: "did:opena2a:authority:registry.example#key-v2", Algorithm: "ECDSA-P256", Value: "ecdsa-signature",
+			})
+		}},
+		{name: "algorithm name in another case", mutate: func(c *registry.AgentTrustCredential) {
+			c.Signatures[1].Algorithm = "ml-dsa-65"
+		}},
+		{name: "trustScore on the 0-1 scale", mutate: func(c *registry.AgentTrustCredential) { c.TrustScore = 0.91 }},
+		{name: "trustScore replaced", mutate: func(c *registry.AgentTrustCredential) { c.TrustScore = 100 }},
+		{name: "trustLevel above the request", mutate: func(c *registry.AgentTrustCredential) { c.TrustLevel = 4 }},
+		{name: "another agent", mutate: func(c *registry.AgentTrustCredential) { c.AgentDID = "did:aip:aim_" + uuid.New().String() }},
+		{name: "no credential", nilCred: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id := uuid.New()
+			agent := &domain.Agent{ID: id, OrganizationID: uuid.New()}
+			client := &fakeRegistryClient{respond: func(req registry.ATCIssuanceRequest) *registry.AgentTrustCredential {
+				if tc.nilCred {
+					return nil
+				}
+				cred := conformingATC(req)
+				tc.mutate(cred)
+				return cred
+			}}
+			svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil,
+				&fakeScorer{score: &domain.TrustScore{Score: 0.91}}, client, testATCPublicOrigin)
+
+			res, err := svc.IssueForAgent(context.Background(), id)
+			if err == nil {
+				t.Fatalf("issued a credential that breaks ATX issuance: %+v", res.Credential)
+			}
+			if !errors.Is(err, ErrATCNotConforming) {
+				t.Fatalf("err = %v, want ErrATCNotConforming", err)
+			}
+			if res != nil {
+				t.Errorf("result = %+v, want nil on refusal", res)
+			}
+		})
+	}
+}
+
+// TestIssueForAgent_AcceptsConformingCredential: a lower trustLevel than the
+// request, and a trustScore that differs from the request only below the six
+// fractional digits the v1.1 signed form encodes, are the same or a narrower
+// claim and are not refused.
+func TestIssueForAgent_AcceptsConformingCredential(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*registry.AgentTrustCredential)
+	}{
+		{name: "as requested", mutate: func(*registry.AgentTrustCredential) {}},
+		{name: "trustLevel below the request", mutate: func(c *registry.AgentTrustCredential) { c.TrustLevel = 1 }},
+		{name: "trustScore equal in the signed form", mutate: func(c *registry.AgentTrustCredential) { c.TrustScore += 1e-7 }},
+		{name: "two Ed25519 signatures beside ML-DSA-65", mutate: func(c *registry.AgentTrustCredential) {
+			c.Signatures = append(c.Signatures, registry.ATCSignature{
+				KeyID: "did:opena2a:authority:registry.example#key-v2", Algorithm: "Ed25519", Value: "ed25519-signature-2",
+			})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id := uuid.New()
+			agent := &domain.Agent{ID: id, OrganizationID: uuid.New()}
+			client := &fakeRegistryClient{respond: func(req registry.ATCIssuanceRequest) *registry.AgentTrustCredential {
+				cred := conformingATC(req)
+				tc.mutate(cred)
+				return cred
+			}}
+			svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil,
+				&fakeScorer{score: &domain.TrustScore{Score: 0.91}}, client, testATCPublicOrigin)
+
+			res, err := svc.IssueForAgent(context.Background(), id)
+			if err != nil {
+				t.Fatalf("IssueForAgent: %v", err)
+			}
+			if res.Credential == nil || res.Credential.AgentDID != domain.BuildAgentDID(id) {
+				t.Fatalf("credential = %+v, want the issuer's credential for %s", res.Credential, id)
+			}
+		})
+	}
+}
+
+// TestCheckIssuedATC_ConformanceFixtures runs the check on credentials from the
+// atx-conformance suite, vendored for the Java SDK, with a request that matches
+// each one. The hybrid credential carries both suites and passes; the
+// Ed25519-only credential, which a verifier accepts, is refused because ATX
+// core section 1.1 has an issuer sign with both suites.
+func TestCheckIssuedATC_ConformanceFixtures(t *testing.T) {
+	cases := []struct {
+		file       string
+		conforming bool
+	}{
+		{"v1_1-baseline-valid-hybrid.json", true},
+		{"baseline-valid-hybrid.json", true},
+		{"v1_1-baseline-valid.json", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.file, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "sdk", "java", "src", "test", "resources", "atx-fixtures", tc.file))
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			var fixture struct {
+				ATX registry.AgentTrustCredential `json:"atx"`
+			}
+			if err := json.Unmarshal(raw, &fixture); err != nil {
+				t.Fatalf("decode fixture: %v", err)
+			}
+			cred := fixture.ATX
+			req := registry.ATCIssuanceRequest{AgentDID: cred.AgentDID, TrustScore: &cred.TrustScore, TrustLevel: &cred.TrustLevel}
+
+			err = checkIssuedATC(req, &cred)
+			if tc.conforming && err != nil {
+				t.Fatalf("checkIssuedATC refused %s: %v", tc.file, err)
+			}
+			if !tc.conforming && !errors.Is(err, ErrATCNotConforming) {
+				t.Fatalf("checkIssuedATC(%s) = %v, want ErrATCNotConforming", tc.file, err)
+			}
+		})
 	}
 }
 

@@ -43,6 +43,17 @@ const atcMaxSingleAuthorityTrustLevel = 2
 // an ATX credential, so issuance fails closed rather than send an empty value.
 var errATCPublicOriginNotConfigured = errors.New("atc issuance: public origin (FRONTEND_URL) is not configured")
 
+// ErrATCNotConforming is returned when the credential issuer answers with a
+// credential AIM does not hand on (see checkIssuedATC).
+var ErrATCNotConforming = errors.New("atc issuance: the issued credential does not conform to ATX")
+
+// The signature suites ATX registers (core section 14), as an ATX credential
+// names them in a signature's algorithm member.
+const (
+	atcSignatureEd25519 = "Ed25519"
+	atcSignatureMLDSA65 = "ML-DSA-65"
+)
+
 // atcAgentReader loads the agent being credentialed.
 type atcAgentReader interface {
 	GetByID(id uuid.UUID) (*domain.Agent, error)
@@ -119,7 +130,8 @@ func NewATCIssuanceService(
 
 // IssueForAgent computes the agent's behavioral score, builds the issuance
 // request, and calls the Registry. It returns the signed credential plus the
-// unsigned provenance context.
+// unsigned provenance context, or ErrATCNotConforming when the Registry's
+// credential fails checkIssuedATC.
 //
 // Side effect: CalculateTrustScore recomputes and persists the agent's current
 // trust score, so an issuance attempt updates stored trust state even if the
@@ -146,12 +158,73 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("atc issuance: registry issue: %w", err)
 	}
+	if err := checkIssuedATC(req, cred); err != nil {
+		return nil, err
+	}
 
 	return &ATCIssuanceResult{
 		Credential:            cred,
 		Confidence:            score.Confidence,
 		IsolationSelfReported: true,
 	}, nil
+}
+
+// checkIssuedATC refuses an issued credential that AIM must not hand on. AIM
+// returns the issuer's signed bytes verbatim, so this is the last point at which
+// a credential that breaks ATX issuance can be stopped. It checks what can be
+// checked without the issuer's keys; whether each signature verifies is the
+// relying party's verifier's work (ATX core section 1.3).
+//
+//   - Signature suites. Core section 1.1: "The signature block carries at
+//     minimum one Ed25519 signature and one ML-DSA-65 signature." Section 13
+//     (Cryptographic agility) has a verifier reject a credential that declares
+//     a suite the verifier does not implement, and Ed25519 and ML-DSA-65 are the
+//     only suites section 14 registers, so a signature in any other suite is
+//     refused as well.
+//   - Agent and trustScore. The credential names the agent AIM asked about and
+//     carries the trustScore AIM sent, compared in the form the v1.1 signature
+//     covers (printf %.6f, core section 1.3a.2). An issuer that read the score
+//     on another scale or replaced it would sign a score AIM did not compute.
+//   - trustLevel. The credential asserts no higher level than AIM asked for,
+//     which is at most the level one authority may assert (core section 12). A
+//     lower level is a narrower claim and is accepted.
+func checkIssuedATC(req registry.ATCIssuanceRequest, cred *registry.AgentTrustCredential) error {
+	if cred == nil {
+		return fmt.Errorf("%w: the issuer returned no credential", ErrATCNotConforming)
+	}
+
+	var ed25519Sigs, mldsa65Sigs int
+	for _, sig := range cred.Signatures {
+		switch sig.Algorithm {
+		case atcSignatureEd25519:
+			ed25519Sigs++
+		case atcSignatureMLDSA65:
+			mldsa65Sigs++
+		default:
+			return fmt.Errorf("%w: signature %q uses algorithm %q, not Ed25519 or ML-DSA-65",
+				ErrATCNotConforming, sig.KeyID, sig.Algorithm)
+		}
+	}
+	if ed25519Sigs == 0 {
+		return fmt.Errorf("%w: no Ed25519 signature", ErrATCNotConforming)
+	}
+	if mldsa65Sigs == 0 {
+		return fmt.Errorf("%w: no ML-DSA-65 signature", ErrATCNotConforming)
+	}
+
+	if cred.AgentDID != req.AgentDID {
+		return fmt.Errorf("%w: credential names agent %q, requested %q", ErrATCNotConforming, cred.AgentDID, req.AgentDID)
+	}
+	if req.TrustScore != nil {
+		got, want := fmt.Sprintf("%.6f", cred.TrustScore), fmt.Sprintf("%.6f", *req.TrustScore)
+		if got != want {
+			return fmt.Errorf("%w: trustScore %s, requested %s", ErrATCNotConforming, got, want)
+		}
+	}
+	if req.TrustLevel != nil && cred.TrustLevel > *req.TrustLevel {
+		return fmt.Errorf("%w: trustLevel %d, requested at most %d", ErrATCNotConforming, cred.TrustLevel, *req.TrustLevel)
+	}
+	return nil
 }
 
 // resolvePublisher returns the organization name as the credential publisher,
