@@ -205,6 +205,47 @@ func TestATCBehavioralChecksum_Deterministic(t *testing.T) {
 	}
 }
 
+// TestBuildATCIssuanceRequest_TrustLevelFitsOneSigningAuthority pins ATX core
+// section 12: a conforming issuer MUST NOT assert trustLevel 3 or higher on a
+// credential that does not carry signatures from at least two distinct
+// authorities, nor trustLevel 4 without the root cosignature of section 7. One
+// issuer signs every credential AIM requests, so the level AIM asks for stays at
+// 2 or below while the 0-100 trustScore still carries the full behavioral score.
+func TestBuildATCIssuanceRequest_TrustLevelFitsOneSigningAuthority(t *testing.T) {
+	now := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
+	agent := &domain.Agent{ID: uuid.New(), OrganizationID: uuid.New(), CreatedAt: now}
+
+	cases := []struct {
+		score     float64
+		wantLevel int
+		wantScore float64
+	}{
+		{1.0, 2, 100},
+		{0.95, 2, 95},
+		{0.90, 2, 90},
+		{0.82, 2, 82},
+		{0.75, 2, 75},
+		{0.74, 2, 74},
+		{0.50, 2, 50},
+		{0.49, 1, 49},
+		{0.25, 1, 25},
+		{0.24, 0, 24},
+		{0.0, 0, 0},
+	}
+	for _, c := range cases {
+		req := buildATCIssuanceRequest(agent, &domain.TrustScore{Score: c.score}, "Acme Org", testATCPublicOrigin, now)
+		if req.TrustLevel == nil {
+			t.Fatalf("score %v: request carries no trustLevel", c.score)
+		}
+		if *req.TrustLevel != c.wantLevel {
+			t.Errorf("score %v: trustLevel = %d, want %d (one signing authority allows at most 2)", c.score, *req.TrustLevel, c.wantLevel)
+		}
+		if req.TrustScore == nil || *req.TrustScore != c.wantScore {
+			t.Errorf("score %v: trustScore = %v, want %v", c.score, req.TrustScore, c.wantScore)
+		}
+	}
+}
+
 func TestBuildATCIssuanceRequest(t *testing.T) {
 	id := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	now := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
@@ -235,8 +276,9 @@ func TestBuildATCIssuanceRequest(t *testing.T) {
 	if req.TrustScore == nil || *req.TrustScore != 82 {
 		t.Errorf("trustScore = %+v, want 82 (0.82 on the 0-100 wire scale)", req.TrustScore)
 	}
-	if req.TrustLevel == nil || *req.TrustLevel != 3 {
-		t.Errorf("trustLevel = %+v, want 3", req.TrustLevel)
+	// 0.82 maps to behavioral level 3; one signing authority caps the request at 2.
+	if req.TrustLevel == nil || *req.TrustLevel != 2 {
+		t.Errorf("trustLevel = %+v, want 2", req.TrustLevel)
 	}
 	if req.BehavioralProfile == nil || req.BehavioralProfile.ObservationDays != 10 {
 		t.Errorf("observationDays = %+v, want 10", req.BehavioralProfile)
@@ -283,7 +325,7 @@ func TestIssueForAgent_HappyPath(t *testing.T) {
 	id := uuid.New()
 	agent := &domain.Agent{ID: id, OrganizationID: uuid.New(), Capabilities: []string{"x"}}
 	score := &domain.TrustScore{Score: 0.91, Confidence: 0.6}
-	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{TransparencyLogIndex: 5, TrustLevel: 4}}
+	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{TransparencyLogIndex: 5, TrustLevel: 2}}
 
 	svc := NewATCIssuanceService(
 		&fakeAgentReader{agent: agent},
@@ -300,8 +342,9 @@ func TestIssueForAgent_HappyPath(t *testing.T) {
 	if client.gotReq.Publisher != "Acme" {
 		t.Errorf("publisher resolved = %q, want Acme", client.gotReq.Publisher)
 	}
-	if client.gotReq.TrustLevel == nil || *client.gotReq.TrustLevel != 4 {
-		t.Errorf("level in request = %+v, want 4", client.gotReq.TrustLevel)
+	// 0.91 maps to behavioral level 4; one signing authority caps the request at 2.
+	if client.gotReq.TrustLevel == nil || *client.gotReq.TrustLevel != 2 {
+		t.Errorf("level in request = %+v, want 2", client.gotReq.TrustLevel)
 	}
 	if client.gotReq.TrustScore == nil || *client.gotReq.TrustScore != 91 {
 		t.Errorf("score in request = %+v, want 91", client.gotReq.TrustScore)

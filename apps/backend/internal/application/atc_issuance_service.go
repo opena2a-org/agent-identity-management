@@ -29,6 +29,15 @@ const defaultATCVersion = "agent-v1"
 // always matches the schema's DID pattern whatever the organization is called.
 const atcPublisherDIDPrefix = "did:opena2a:publisher:aim_"
 
+// atcMaxSingleAuthorityTrustLevel is the highest trustLevel a credential signed
+// by one authority may carry. ATX core section 12 (Conformance) forbids a
+// conforming issuer to assert trustLevel 3 or higher on a credential that does
+// not carry signatures from at least two distinct authorities, counted as
+// section 1.3 step 7 counts them, and to assert trustLevel 4 without the root
+// cosignature of section 7 rule 4. AIM asks one issuer to sign each credential
+// and obtains no cosignature, so it never asks for a level above this one.
+const atcMaxSingleAuthorityTrustLevel = 2
+
 // errATCPublicOriginNotConfigured is returned when the service has no public
 // origin to build the buildAttestation reference from. The field is mandatory in
 // an ATX credential, so issuance fails closed rather than send an empty value.
@@ -166,7 +175,7 @@ func buildATCIssuanceRequest(agent *domain.Agent, score *domain.TrustScore, publ
 		version = defaultATCVersion
 	}
 
-	level := atcTrustLevel(score.Score)
+	level := atcCredentialTrustLevel(score.Score)
 	scoreVal := atcWireTrustScore(score.Score)
 	agentDID := domain.BuildAgentDID(agent.ID)
 
@@ -233,6 +242,18 @@ func atcTrustLevel(score float64) int {
 	default:
 		return 0
 	}
+}
+
+// atcCredentialTrustLevel is the trustLevel the issuance request asks the issuer
+// to sign: the behavioral level from atcTrustLevel, capped at the level one
+// signing authority may assert. A score that maps to 3 or 4 is requested as 2;
+// the full behavioral score still travels in trustScore.
+func atcCredentialTrustLevel(score float64) int {
+	level := atcTrustLevel(score)
+	if level > atcMaxSingleAuthorityTrustLevel {
+		return atcMaxSingleAuthorityTrustLevel
+	}
+	return level
 }
 
 // atcContentHash binds the credential to the agent's public key. The key is the

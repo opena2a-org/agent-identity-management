@@ -59,6 +59,8 @@ type ATCBehavioralProfile struct {
 // value follows the ATX v1.1 credential schema (schemas/atx-credential-v1.1.schema.json
 // in atx-spec). PublisherDID and BuildAttestation are mandatory credential fields
 // with no omitempty, and TrustScore is on the 0-100 wire scale, not 0-1.
+// TrustLevel is at most 2: one authority signs the credential, and ATX core
+// section 12 reserves levels 3 and 4 for credentials more than one authority signs.
 type ATCIssuanceRequest struct {
 	AgentID           string                `json:"agentId"`
 	AgentDID          string                `json:"agentDid"`
