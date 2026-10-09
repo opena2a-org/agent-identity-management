@@ -3,6 +3,7 @@ import * as crypto from 'node:crypto';
 import { canonicalPayload, canonicalPayloadV11 } from '@opena2a/atx-verify';
 import type { Atx } from '@opena2a/atx-verify';
 import { LocalVerifier, CrlCache, type LocalVerificationConfig } from './LocalVerifier';
+import { generateMLDSAKeyPair, signMLDSA } from '../crypto/pqc';
 
 // --- test helpers: mint real Ed25519 keys and sign real ATX credentials so the
 // tests exercise the actual shared verifier, not a mock. ---
@@ -436,5 +437,120 @@ describe('LocalVerifier raw-text entry (strict parse)', () => {
     expect(result.valid).toBe(false);
     expect(result.rejectCategory).toBe('REVOKED');
     expect(result.reason).toMatch(/stale/i);
+  });
+});
+
+// Hybrid credentials: an Ed25519 signature and an ML-DSA-65 signature over the
+// same canonical payload, as an ATX issuer that signs with both suites emits them.
+describe('LocalVerifier with ML-DSA-65 signatures', () => {
+  async function signHybrid(atx: Atx, ed: crypto.KeyObject, pqSecretKey: Uint8Array): Promise<Atx> {
+    const payload = atx.atcVersion === '1.1' ? canonicalPayloadV11(atx) : canonicalPayload(atx);
+    const pq = Buffer.from(await signMLDSA('ML-DSA-65', pqSecretKey, payload)).toString('base64');
+    const classical = sign(atx, ed);
+    return {
+      ...classical,
+      signatures: [
+        ...classical.signatures,
+        { algorithm: 'ML-DSA-65', keyId: `${ISSUER_DID}#key-1-pqc`, value: pq },
+      ],
+    };
+  }
+
+  async function hybridSetup() {
+    const ed = genKey();
+    const pq = await generateMLDSAKeyPair('ML-DSA-65');
+    const pqHex = Buffer.from(pq.publicKey).toString('hex');
+    const config = anchors(ed.rawHex, {
+      publicKeys: [
+        { algorithm: 'Ed25519', publicKeyHex: ed.rawHex },
+        { algorithm: 'ML-DSA-65', publicKeyHex: pqHex, keyId: `${ISSUER_DID}#key-1-pqc` },
+      ],
+    });
+    return { ed, pq, pqHex, config };
+  }
+
+  it('verifies both signatures of a valid hybrid credential', async () => {
+    const { ed, pq, config } = await hybridSetup();
+    const atx = await signHybrid(baseAtx(), ed.privateKey, pq.privateKey);
+
+    const result = await new LocalVerifier(config).verifyCredential(atx);
+
+    expect(result.reason).toBeUndefined();
+    expect(result.valid).toBe(true);
+    expect(result.mldsaPresent).toBe(true);
+  });
+
+  it('rejects a forged ML-DSA-65 signature next to a valid Ed25519 one', async () => {
+    const { ed, pq, config } = await hybridSetup();
+    const other = await generateMLDSAKeyPair('ML-DSA-65');
+    const forged = await signHybrid(baseAtx(), ed.privateKey, other.privateKey);
+
+    const verifier = new LocalVerifier(config);
+    const fromObject = await verifier.verifyCredential(forged);
+    const fromText = await verifier.verifyCredential(JSON.stringify(forged));
+
+    expect(fromObject.valid).toBe(false);
+    expect(fromObject.rejectCategory).toBe('SIGNATURE_INVALID');
+    expect(fromObject.reason).toContain('ML-DSA-65 signature');
+    expect(fromObject.mldsaPresent).toBe(true);
+    expect(fromText).toEqual(fromObject);
+    // The genuine pair still verifies, so the rejection is the forged signature's.
+    const genuine = await signHybrid(baseAtx(), ed.privateKey, pq.privateKey);
+    expect((await verifier.verifyCredential(genuine)).valid).toBe(true);
+  });
+
+  it('authorize() denies an action on a credential whose ML-DSA-65 signature is forged', async () => {
+    const { ed, config } = await hybridSetup();
+    const other = await generateMLDSAKeyPair('ML-DSA-65');
+    const forged = await signHybrid(baseAtx(), ed.privateKey, other.privateKey);
+
+    const res = await new LocalVerifier(config).authorize(forged, { action: 'file:read' });
+
+    expect(res.verified).toBe(false);
+    expect(res.actionAllowed).toBe(false);
+    expect(res.rejectCategory).toBe('SIGNATURE_INVALID');
+  });
+
+  it('rejects an ML-DSA-65 signature when no ML-DSA-65 key is configured', async () => {
+    const { ed, pq } = await hybridSetup();
+    const atx = await signHybrid(baseAtx(), ed.privateKey, pq.privateKey);
+
+    const result = await new LocalVerifier(anchors(ed.rawHex)).verifyCredential(atx);
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('SIGNATURE_INVALID');
+    expect(result.reason).toContain('no eligible ML-DSA-65 trust anchor');
+  });
+
+  it('does not let an ML-DSA-65 key bound to another issuer verify', async () => {
+    const { ed, pq, pqHex } = await hybridSetup();
+    const atx = await signHybrid(baseAtx(), ed.privateKey, pq.privateKey);
+    const config = anchors(ed.rawHex, {
+      trustedIssuers: [ISSUER_DID, 'did:opena2a:issuer-B'],
+      publicKeys: [
+        { algorithm: 'Ed25519', publicKeyHex: ed.rawHex },
+        { algorithm: 'ML-DSA-65', publicKeyHex: pqHex, keyId: 'did:opena2a:issuer-B#key-1-pqc' },
+      ],
+    });
+
+    const result = await new LocalVerifier(config).verifyCredential(atx);
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('SIGNATURE_INVALID');
+  });
+
+  it('rejects a signature whose algorithm ATX does not define', async () => {
+    const { privateKey, rawHex } = genKey();
+    const signed = sign(baseAtx(), privateKey);
+    const atx = {
+      ...signed,
+      signatures: [...signed.signatures, { algorithm: 'ML-DSA-65 ', keyId: 'k2', value: 'AAAA' }],
+    };
+
+    const result = await new LocalVerifier(anchors(rawHex)).verifyCredential(atx);
+
+    expect(result.valid).toBe(false);
+    expect(result.rejectCategory).toBe('SIGNATURE_INVALID');
+    expect(result.reason).toContain('unsupported signature algorithm');
   });
 });

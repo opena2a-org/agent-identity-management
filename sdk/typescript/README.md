@@ -154,7 +154,12 @@ when no local credential is available.
 
 The verifier is the shared, conformance-locked `@opena2a/atx-verify` — byte-for-byte
 interoperable with the Go (`opena2a-registry/pkg/atcverify`) and Python reference
-verifiers.
+verifiers. The SDK adds the checks that package leaves out, as the Java SDK's
+verifier makes them: every ML-DSA-65 signature a credential declares must verify
+against an `ML-DSA-65` key in `publicKeys` (an issuer that signs with both suites
+needs both keys there), a signature algorithm other than `Ed25519` and `ML-DSA-65`
+rejects the credential, and a v1.1 `issuerChain` DID lends its keys only when it
+is also in `trustedIssuers`.
 
 ```typescript
 import { AIMClient } from '@opena2a/aim-sdk';
@@ -163,7 +168,10 @@ const client = new AIMClient({
   // Cached once from AIM/the Registry; refresh the CRL off the hot path.
   localVerification: {
     trustedIssuers: ['did:opena2a:issuer-1'],
-    publicKeys: [{ algorithm: 'Ed25519', publicKeyHex: '<issuer raw ed25519 pubkey hex>' }],
+    publicKeys: [
+      { algorithm: 'Ed25519', publicKeyHex: '<issuer raw ed25519 pubkey hex>' },
+      // { algorithm: 'ML-DSA-65', publicKeyHex: '<issuer raw ML-DSA-65 pubkey hex>' }, // issuer signs with both suites
+    ],
     // crl: { entries: [{ agentId, reason }] }, // optional cached revocation list
   },
 });

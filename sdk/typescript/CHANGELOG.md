@@ -59,6 +59,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `LocalVerifier` verifies every ML-DSA-65 signature a credential declares. `@opena2a/atx-verify` 0.3.0 checks
+  Ed25519 only and recorded an ML-DSA-65 entry without checking it, so a credential whose ML-DSA-65 signature was
+  forged verified as long as its Ed25519 signature was intact. Each declared ML-DSA-65 signature must now verify, over
+  the same canonical payload, against an `ML-DSA-65` key in `publicKeys` that may sign for the credential's issuer;
+  with no such key the credential rejects as `SIGNATURE_INVALID`. An issuer that signs with both suites therefore needs
+  both of its keys in `publicKeys`. A signature whose algorithm is not `Ed25519` or `ML-DSA-65` now rejects instead
+  of being passed over. A v1.1 `issuerChain` DID now lends its DID-URL-bound keys only when it is also in
+  `trustedIssuers`, as the Java SDK's verifier does, so a signer can no longer name itself in the chain and sign for
+  a trusted issuer. The SDK now returns the expected verdict on every vendored ATX conformance fixture, including
+  `v1_1-hybrid-mldsa-tampered.json` and `v1_1-untrusted-chain-authority.json`, which it accepted; the conformance test
+  now checks each fixture's verdict and rejection category, not only that raw and parsed input agree.
+
 - `OAuthTokenManager` now obtains a token the AIM server issues. It posted to `/oauth/token`, which the server does
   not serve (404), with `grant_type=client_credentials`, which the token endpoint answers with 400
   `unsupported_grant_type`; its client assertion was padded standard base64 and its signature covered a
