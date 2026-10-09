@@ -354,6 +354,9 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   the server's text. Before, the agent page closed its dialog and stated the failure beside its
   actions, and the agents list showed nothing. After a delete, the agents list states that the
   agent was deleted.
+- In a development build of the dashboard (`next dev`), the agents list no longer drops the
+  "was deleted" notice for a delete made from the agent page. React runs mount effects twice
+  there, and the second run cleared the notice the first run had read.
 
 ### Fixed — the SDK authentication guide no longer says quantum attacks cannot break Ed25519
 
