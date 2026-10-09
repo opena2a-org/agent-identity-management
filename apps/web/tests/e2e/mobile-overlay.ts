@@ -29,11 +29,20 @@ export const intersects = (a: Box, b: Box) =>
  * bar is shown (below lg), and the topmost element at its center and near each edge is the
  * item itself (nothing, the bar included, is painted over it). Any popover, menu, drawer
  * or dialog can pass its items.
+ *
+ * The check waits for the first item to render, so it can be called as soon as the page
+ * has loaded. It counts the items once: a caller whose items arrive at different times
+ * waits for the last of them first.
  */
 export async function expectClearOfBottomBar(page: Page, items: Locator) {
   const bar = page.getByRole('navigation', { name: 'Primary' });
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('page has no viewport');
+
+  // The dashboard shell renders after its route gate decides, which can be after the page
+  // has loaded. count() and isVisible() do not wait, so read them once an item is there:
+  // before that the count is 0 and the bar is not shown at any viewport.
+  await expect(items.first(), 'overlay items to check').toBeVisible();
   const barShown = await bar.isVisible();
 
   // The suite runs against `next dev`, whose dev-tools indicator sits in the bottom-left
