@@ -73,13 +73,21 @@ test.describe(`menus at ${DESKTOP_VIEWPORT.width}x${DESKTOP_VIEWPORT.height}`, (
 
   test('the bottom tab bar is hidden and the header account menu and sidebar account section show in full', async ({ authedPage: page }) => {
     await page.goto('/dashboard/developers');
-    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeHidden();
+    // The route gate renders the shell after it decides; until then there is no bar to be
+    // hidden and no sidebar. The sidebar's navigation replaces its loading skeleton once the
+    // signed-in user has loaded, which is also when its account section is complete.
+    const sidebar = page.locator('aside:not([aria-hidden])');
+    await expect(sidebar.getByRole('navigation', { name: 'Main' })).toBeVisible();
+
+    // The bar is in the document and hidden by its breakpoint, not merely absent.
+    const bar = page.getByRole('navigation', { name: 'Primary', includeHidden: true });
+    await expect(bar).toBeAttached();
+    await expect(bar).toBeHidden();
     const barHeight = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--mobile-tab-bar-height').trim(),
     );
     expect(barHeight, '--mobile-tab-bar-height at lg and up').toBe('0px');
 
-    const sidebar = page.locator('aside:not([aria-hidden])');
     await expectClearOfBottomBar(
       page,
       sidebar.getByText(ADMIN_EMAIL, { exact: true }).or(sidebar.getByRole('button', { name: 'Sign out' })),
