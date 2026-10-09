@@ -215,6 +215,11 @@ services:
       # which Prometheus presents from the metrics_auth_token secret.
       - METRICS_LISTEN_ADDR=0.0.0.0:9464
       - METRICS_AUTH_TOKEN=${METRICS_AUTH_TOKEN:?Set METRICS_AUTH_TOKEN in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one, or openssl rand -hex 32)}
+      # Server signing keys (optional): a base64 32-byte Ed25519 seed per purpose. Unset, each
+      # key is derived from KEYVAULT_MASTER_KEY. Provision both in production; see
+      # docs/DEPLOYMENT.md "Server Signing Keys".
+      - AIM_SIGNING_KEY_CARD_ATTESTATION=${AIM_SIGNING_KEY_CARD_ATTESTATION:-}
+      - AIM_SIGNING_KEY_ATC_ISSUER=${AIM_SIGNING_KEY_ATC_ISSUER:-}
       # Email Configuration (optional - platform works without email)
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@localhost}
       - SMTP_HOST=${SMTP_HOST:-}

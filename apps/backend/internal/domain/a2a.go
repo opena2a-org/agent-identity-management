@@ -58,8 +58,11 @@ type A2AAgentCard struct {
 	CardHash        string          `json:"cardHash"`
 	ProtocolVersion string          `json:"protocolVersion"`
 
-	// AIM attestation
+	// AIM attestation. AttestationKeyID is the kid of the card-attestation key in
+	// /.well-known/jwks.json; attestations issued before keys had IDs leave it nil.
 	AttestationSignature string     `json:"attestationSignature,omitempty"`
+	AttestationKeyID     *string    `json:"attestationKeyId,omitempty"`
+	AttestationAlg       *string    `json:"attestationAlg,omitempty"`
 	AttestationIssuedAt  *time.Time `json:"attestationIssuedAt,omitempty"`
 	AttestationExpiresAt *time.Time `json:"attestationExpiresAt,omitempty"`
 
@@ -119,6 +122,8 @@ type A2AAttestation struct {
 	IssuedAt  time.Time `json:"issuedAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	Signature string    `json:"signature"`
+	KeyID     string    `json:"keyId,omitempty"`
+	Alg       string    `json:"alg,omitempty"`
 }
 
 // A2ABehavior represents behavioral metrics in an Agent Card

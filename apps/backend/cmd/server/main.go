@@ -287,6 +287,10 @@ func main() {
 	// Standard A2A protocol requires /.well-known/agent.json at the root
 	app.Get("/.well-known/agent.json", h.A2A.GetPublicAgentCard)
 
+	// Signing keys endpoint (no auth required)
+	// JWK Set of the card-attestation and ATC-issuer public keys, served from memory
+	app.Get("/.well-known/jwks.json", h.JWKS.GetJWKS)
+
 	// AIP Discovery endpoint (no auth required)
 	// Returns provider capabilities, supported agent types, and endpoint directory
 	app.Get("/.well-known/aip", h.AIP.WellKnownAIP)
@@ -629,6 +633,7 @@ type Services struct {
 	Secrets           *application.SecretsService           // For identity-native secrets management
 	FGA               *application.FGAEngine                // Fine-Grained Authorization engine (5-step decision flow)
 	ATCIssuance       *application.ATCIssuanceService       // Issues Registry-signed ATCs carrying AIM's behavioral score
+	SigningKeys       *crypto.SigningKeyRing                // One server signing key per purpose; public keys served at /.well-known/jwks.json
 }
 
 func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -638,6 +643,23 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		log.Fatal("Failed to initialize KeyVault:", err)
 	}
 	log.Println("✅ KeyVault initialized for automatic key generation")
+
+	// Server signing keys: one per purpose (card attestation, ATC issuer), so
+	// a signature made for one purpose never verifies for another. Each key is either
+	// provisioned in AIM_SIGNING_KEY_<PURPOSE> or derived from KEYVAULT_MASTER_KEY.
+	signingKeys, err := crypto.LoadSigningKeyRing(keyVault, os.Getenv)
+	if err != nil {
+		log.Fatalf("Failed to load server signing keys: %v", err)
+	}
+	for _, key := range signingKeys.Keys() {
+		log.Printf("Signing key: purpose=%s kid=%s source=%s", key.Purpose, key.KeyID, key.Source)
+		for _, retired := range signingKeys.RetiredPublicKeys(key.Purpose) {
+			log.Printf("Signing key: purpose=%s kid=%s status=retired", key.Purpose, crypto.SigningKeyID(retired))
+		}
+		if key.Source == crypto.SigningKeySourceDerived && os.Getenv("ENVIRONMENT") == "production" {
+			log.Printf("Signing key for %s is derived from KEYVAULT_MASTER_KEY; production deployments should provision %s", key.Purpose, crypto.SigningKeyEnvVar(key.Purpose))
+		}
+	}
 
 	// ✅ Initialize Security Policy Service for policy-based enforcement
 	securityPolicyService := application.NewSecurityPolicyService(
@@ -896,6 +918,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		repos.A2ASecurityViolation,
 		repos.Agent,
 		keyVault,
+		signingKeys.Key(crypto.PurposeCardAttestation),
 	)
 
 	// Device Authorization Grant (RFC 8628) for CLI login. The verification URI
@@ -945,7 +968,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	if err != nil {
 		log.Fatalf("invalid CRL endpoint: %v", err)
 	}
-	atcVerifier, err := infraatc.NewServerATCVerifier(issuerURI, keyVault.GetServerSigningKey(), crlClient)
+	// The ATC issuer key is its own key: a card-attestation signature never
+	// verifies as an ATC from this issuer.
+	atcVerifier, err := infraatc.NewServerATCVerifier(issuerURI, signingKeys.Key(crypto.PurposeATCIssuer).PrivateKey(), crlClient, signingKeys.RetiredPublicKeys(crypto.PurposeATCIssuer)...)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -1088,6 +1113,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		Secrets:           secretsService,                                       // For identity-native secrets management
 		FGA:               fgaEngine,                                            // Fine-Grained Authorization engine
 		ATCIssuance:       atcIssuanceService,                                   // Registry-delegated ATC issuance
+		SigningKeys:       signingKeys,                                          // Per-purpose server signing keys
 	}, keyVault
 }
 
@@ -1127,6 +1153,7 @@ type Handlers struct {
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
 	RegistryBridge     *handlers.RegistryBridgeHandler     // For OpenA2A Registry attestation contribution
 	AIP                *handlers.AIPHandler                // For AIP discovery and DID resolution
+	JWKS               *handlers.JWKSHandler               // Serves the published server signing keys
 	Remediation        *handlers.RemediationHandler        // For remediation tracking (agentpwn + HMA)
 	Secrets            *handlers.SecretsHandler            // For identity-native secrets management
 	Authorize          *handlers.AuthorizeHandler          // POST /agents/:id/authorize -- FGA decision endpoint
@@ -1325,6 +1352,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		AIP: handlers.NewAIPHandler(
 			repos.Agent,
 		),
+		JWKS: handlers.NewJWKSHandler(services.SigningKeys),
 		Remediation: handlers.NewRemediationHandler(
 			services.Remediation,
 		),
