@@ -18,19 +18,7 @@ Before upgrading a running agent, check whether anything it does is currently be
 
 ## Quick start
 
-```python
-from aim_sdk import secure
-
-agent = secure("my-first-agent")
-
-@agent.perform_action(capability="db:read")
-def get_customer(customer_id):
-    return db.query("SELECT * FROM customers WHERE id = ?", customer_id)
-```
-
-`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization on the server, and records the outcome in the audit log.
-
-Install:
+Install the SDK and authenticate:
 
 ```bash
 pip install aim-sdk
@@ -39,6 +27,46 @@ aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
 Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
+
+Then register an agent, in a Python session, with the capability it holds:
+
+```python
+from aim_sdk import secure
+
+agent = secure("my-first-agent", capabilities=["db:read"])
+```
+
+`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
+
+The agent starts `pending`, and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard (measured 2026-09-22 on a self-hosted stack). Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+
+Once it is verified, protect a function with the capability the agent holds and call it:
+
+```python
+customers = {42: {"name": "Ada Lovelace", "plan": "team"}}
+
+@agent.perform_action(capability="db:read")
+def get_customer(customer_id):
+    return customers[customer_id]
+
+get_customer(42)
+```
+
+`@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization on the server, and records the outcome in the audit log.
+
+A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
+
+Now call something the agent was not granted. `my-first-agent` holds `db:read` only:
+
+```python
+@agent.perform_action(capability="db:write")
+def delete_customer(customer_id):
+    del customers[customer_id]
+
+delete_customer(42)
+```
+
+AIM refuses it before the function body runs, and the `ActionDeniedError` it raises says why. Measured with aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
 ## Framework auto-detection
 

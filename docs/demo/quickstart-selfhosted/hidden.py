@@ -23,22 +23,5 @@ def wait_for(name, timeout=300):
     print("cue" + "-" + name + "-seen")
 
 
-def prepare_db():
-    """The README's example calls `db.query` and `db.execute` on an object it
-    does not define; this stand-in makes the lines runnable. It is preparation
-    for the recording, and a gap in the README to fix (a fixed README makes
-    this function unnecessary)."""
-    global db
-
-    class _DB:
-        def query(self, sql, *args):
-            return {"id": args[0], "name": "Ada Lovelace", "plan": "team"}
-
-        def execute(self, sql, *args):
-            return 1
-
-    db = _DB()
-
-
 def clear_screen():
     print("\033[2J\033[H", end="", flush=True)

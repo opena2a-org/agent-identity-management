@@ -67,7 +67,7 @@ Sleep 1s
 Type "from aim_sdk import secure"
 Enter
 Sleep 2s
-Type 'agent = secure("my-first-agent")'
+Type 'agent = secure("my-first-agent", capabilities=["db:read"])'
 Enter
 Sleep 7s
 Hide
@@ -76,8 +76,6 @@ Enter
 Type "wait_for('verified')"
 Enter
 Wait+Line@300s /^>>>\s*$/
-Type "prepare_db()"
-Enter
 Type "cue('s11'); clear_screen()"
 Enter
 Sleep 500ms
@@ -85,11 +83,14 @@ Show
 
 # s11 · the allowed call
 Sleep 1s
+Type 'customers = {42: {"name": "Ada Lovelace", "plan": "team"}}'
+Enter
+Sleep 1s
 Type '@agent.perform_action(capability="db:read")'
 Enter
 Type "def get_customer(customer_id):"
 Enter
-Type '    return db.query("SELECT * FROM customers WHERE id = ?", customer_id)'
+Type '    return customers[customer_id]'
 Enter
 Enter
 Sleep 1s
@@ -108,7 +109,7 @@ Type '@agent.perform_action(capability="db:write")'
 Enter
 Type "def delete_customer(customer_id):"
 Enter
-Type '    return db.execute("DELETE FROM customers WHERE id = ?", customer_id)'
+Type '    del customers[customer_id]'
 Enter
 Enter
 Sleep 1s
