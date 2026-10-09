@@ -112,6 +112,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   administrator-only pages and are shown to administrators only.
 - `apps/web/app/dashboard/agents/[id]/page.refused-call.test.tsx` fails when the page renders a refused activity row
   without its reason or its grant path; `apps/web/lib/refused-call.test.ts` covers each kind of refusal.
+- The finding renders below the row's title and badge at the full width of the activity row. Inside the title
+  column, beside the badge, it had about 120px at a phone width of 375px, and its words were broken mid-word. The
+  page test fails when the finding is rendered inside the title row again.
 
 ### Removed — the unread `users.password_reset_expires` column and its index
 
