@@ -11,6 +11,12 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The logo SVG's embedded PNG is split into one more IDAT chunk
+
+- The PNG embedded in `apps/web/public/opena2a-logo.svg` carries one more IDAT chunk, split at the point where its
+  base64 text matched a tree-wide scan for internal path references by chance. The concatenated IDAT bytes and every
+  other chunk are byte-identical, so the decoded pixels are unchanged.
+
 ### Security — a reused SDK-download token ends the chain that grew from it
 
 - Presenting an SDK-download refresh token (the 90-day token embedded in a downloaded SDK) that
