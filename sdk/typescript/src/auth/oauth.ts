@@ -3,7 +3,8 @@
  */
 
 import type { TokenResponse, AgentCredentials } from '../types';
-import { sign, toBase64, fromBase64 } from '../crypto/ed25519';
+import { sign, toBase64 } from '../crypto/ed25519';
+import { decodeAgentPrivateKey } from '../crypto/agent-request';
 import { AuthenticationError, ConfigurationError, parseAPIError } from '../exceptions';
 
 /**
@@ -43,14 +44,15 @@ interface CachedToken {
 export class OAuthTokenManager {
   private readonly baseUrl: string;
   private readonly agentId: string;
-  private readonly privateKey: Uint8Array;
+  /** The configured key as given; decoded to its 32-byte seed when an assertion is signed. */
+  private readonly privateKey: string;
   private cachedToken: CachedToken | null = null;
   private refreshPromise: Promise<string> | null = null;
 
   constructor(baseUrl: string, credentials: AgentCredentials) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.agentId = credentials.agentId;
-    this.privateKey = fromBase64(credentials.privateKey);
+    this.privateKey = credentials.privateKey;
   }
 
   /**
@@ -170,8 +172,14 @@ export class OAuthTokenManager {
    * segments without padding, the Ed25519 signature taken over the ASCII bytes
    * of `header.payload`. Those are the bytes the server verifies; a signature
    * over anything else is refused.
+   *
+   * The signature is made with the key's 32-byte seed. The configured key may
+   * be that seed or the 64-byte form AIM issues (the seed, then its public key):
+   * Ed25519 signing takes the seed alone, and the signer refuses the 64 bytes as
+   * given. Any other key throws `ConfigurationError` before a request is sent.
    */
   private async createClientAssertion(timestamp: number): Promise<string> {
+    const { seed } = await decodeAgentPrivateKey(this.privateKey, 'no token was requested');
     const encoder = new TextEncoder();
     const iat = Math.floor(timestamp / 1000);
     const header = toBase64Url(encoder.encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT' })));
@@ -187,7 +195,7 @@ export class OAuthTokenManager {
       )
     );
     const signingInput = `${header}.${payload}`;
-    const signature = await sign(encoder.encode(signingInput), this.privateKey);
+    const signature = await sign(encoder.encode(signingInput), seed);
     return `${signingInput}.${toBase64Url(signature)}`;
   }
 
