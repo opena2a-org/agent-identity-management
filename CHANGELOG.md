@@ -998,7 +998,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 
 ### Fixed — a 5xx response carries a fixed line, never the server's error text
 
-- 129 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`,
+- 130 handler responses at a 5xx status put the text of a Go error in the body, as `error`, `details` or `message`,
   naming tables, constraints and query fragments. Each now answers
   `{"error":"An internal error occurred. Please try again later."}`, a line declared once in the handlers package,
   and writes the error to the server log with the status, method and path. A failed `DELETE /api/v1/agents/:id`
