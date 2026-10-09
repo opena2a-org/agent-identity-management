@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // A2AHandler handles A2A (Agent-to-Agent) protocol endpoints
@@ -1924,6 +1925,21 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 				"error": "Agent ID required",
 			})
 		}
+	}
+
+	// An agent credential registers only its own card: another agent's ID in
+	// the body is refused as POST /agents/:id/card refuses it in the path,
+	// before any lookup. Every caller may name only an agent in its own
+	// organization.
+	if !middleware.BindAgentID(c, "POST /api/v1/a2a/cards", agentID) {
+		return nil
+	}
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
 	}
 
 	// Create the agent card using the service

@@ -173,3 +173,50 @@ func TestAgentPathBinding_RequiresRouteAndParam(t *testing.T) {
 	assert.Panics(t, func() { AgentPathBinding("", "id", nil) })
 	assert.Panics(t, func() { AgentPathBinding(bindingTestRoute, "", nil) })
 }
+
+// BindAgentID applies the binding to an agent ID read from the request body:
+// it answers like AgentPathBinding and records the same route and outcome.
+func TestBindAgentID_ComparesAnIDOutsideThePathAndRecordsIt(t *testing.T) {
+	const route = "POST /cards"
+	self, sibling := uuid.New(), uuid.New()
+	for _, tc := range []struct {
+		name      string
+		principal any
+		bodyAgent uuid.UUID
+		status    int
+		outcome   string
+	}{
+		{"own id", self, self, http.StatusTeapot, AgentPathOutcomeSelf},
+		{"sibling id", self, sibling, http.StatusForbidden, AgentPathOutcomeOther},
+		{"user caller", nil, sibling, http.StatusTeapot, AgentPathOutcomeNoPrincipal},
+		{"unreadable principal", self.String(), self, http.StatusInternalServerError, AgentPathOutcomeFault},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var recordedRoute, outcome any
+			app := fiber.New()
+			app.Post("/cards", func(c fiber.Ctx) error {
+				if tc.principal != nil {
+					c.Locals("agent_id", tc.principal)
+				}
+				proceed := BindAgentID(c, route, tc.bodyAgent)
+				recordedRoute, outcome = c.Locals(agentPathRouteLocal), c.Locals(agentPathOutcomeLocal)
+				if !proceed {
+					return nil
+				}
+				return c.SendStatus(http.StatusTeapot)
+			})
+			resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/cards", nil))
+			require.NoError(t, err)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+
+			assert.Equal(t, tc.status, resp.StatusCode)
+			assert.Equal(t, route, recordedRoute)
+			assert.Equal(t, tc.outcome, outcome)
+			if tc.status == http.StatusForbidden {
+				assert.JSONEq(t, `{"error":"`+agentPathMismatchMessage+`","reasonCode":"`+AgentPathMismatchReasonCode+`"}`, string(body))
+			}
+		})
+	}
+}

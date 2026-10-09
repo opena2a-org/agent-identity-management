@@ -1898,9 +1898,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Use(middleware.AuthMiddleware(jwtService))
 	a2a.Use(middleware.RateLimitMiddleware())
 
-	// Writes under /agents/:id bind :id to the authenticated agent: an agent
-	// may not register, refresh, sign or compute for another agent. A user JWT
-	// caller is unaffected. The reads stay open to peers for discovery.
+	// Writes under /agents/:id, and the /cards/:id aliases of the card writes,
+	// bind :id to the authenticated agent: an agent may not register, refresh,
+	// sign or compute for another agent. A user JWT caller is unaffected. The
+	// reads stay open to peers for discovery.
 	a2aBound := bindAgentRoutes(a2a)
 	// The reads are held: an agent credential naming another agent is served
 	// and recorded until the per-route count decides which are admitted
@@ -1962,16 +1963,16 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// SDK Compatibility Routes (alternative paths that SDKs expect)
 	a2a.Post("/sign", h.A2A.SignRequestAlt)
 	a2a.Post("/verify", h.A2A.VerifyRequest) // SDK verify request endpoint
-	a2a.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
+	a2aHeld.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
 	a2a.Put("/trust/:id", h.A2A.RefuseTrustScoreWrite)          // 405: the composite is measured, not asserted
 	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction) // SDK record interaction
 	a2a.Post("/discovery/route", h.A2A.RouteByIntentPost)
 	a2a.Post("/discovery/capable", h.A2A.CapableOfPost)                            // Java SDK expects POST
 	a2a.Get("/cards", h.A2A.ListAgentCards)                                        // SDK list agent cards
 	a2a.Post("/cards", h.A2A.RegisterAgentCardAlt)                                 // Java SDK expects POST /cards
-	a2a.Get("/cards/:id", h.A2A.GetAgentCard)                                      // SDK calls /cards/:id instead of /agents/:id/card
-	a2a.Put("/cards/:id", h.A2A.UpdateAgentCard)                                   // SDK update agent card
-	a2a.Post("/cards/:id/attestation", h.A2A.RefreshCardAttestation)               // Java SDK expects /cards/:id/attestation
+	a2aHeld.Get("/cards/:id", h.A2A.GetAgentCard)                                  // SDK calls /cards/:id instead of /agents/:id/card
+	a2aBound.Put("/cards/:id", h.A2A.UpdateAgentCard)                              // SDK update agent card
+	a2aBound.Post("/cards/:id/attestation", h.A2A.RefreshCardAttestation)          // Java SDK expects /cards/:id/attestation
 	a2a.Get("/peers", h.A2A.ListPeerTrusts)                                        // SDK list peer trusts
 	a2a.Delete("/skills/:id", h.A2A.DeleteSkill)                                   // SDK delete skill
 	a2a.Get("/security/violations", h.A2A.GetSecurityViolations)                   // SDK get security violations

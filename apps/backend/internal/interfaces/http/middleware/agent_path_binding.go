@@ -109,6 +109,50 @@ func AgentPathObservation(route, param string) fiber.Handler {
 	}
 }
 
+// BindAgentID makes AgentPathBinding's comparison for an agent ID a handler
+// reads from somewhere other than its path, such as the request body, and
+// records the outcome under route the same way. It returns true when the
+// request may go on: the agent principal named its own ID, or there is no
+// agent principal (a user JWT caller, whose organization the handler still
+// checks). Otherwise it has written the response — for another agent's ID the
+// same 403 as AgentPathBinding, before any lookup — and the handler must
+// return without acting.
+func BindAgentID(c fiber.Ctx, route string, agentID uuid.UUID) bool {
+	principal, outcome, fault := agentPrincipal(c, route)
+	if outcome == "" {
+		outcome = AgentPathOutcomeOther
+		if agentID == principal {
+			outcome = AgentPathOutcomeSelf
+		}
+	}
+	recordAgentPath(c, route, outcome)
+	switch outcome {
+	case AgentPathOutcomeFault:
+		_ = c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fault})
+		return false
+	case AgentPathOutcomeOther:
+		_ = refuseAgentPathMismatch(c)
+		return false
+	default:
+		return true
+	}
+}
+
+// agentPrincipal reads the authenticated agent. outcome is empty when there is
+// one; otherwise it is AgentPathOutcomeNoPrincipal, or AgentPathOutcomeFault
+// with the 500 text in fault.
+func agentPrincipal(c fiber.Ctx, route string) (principal uuid.UUID, outcome, fault string) {
+	principalLocal := c.Locals("agent_id")
+	if principalLocal == nil {
+		return uuid.Nil, AgentPathOutcomeNoPrincipal, ""
+	}
+	principal, ok := principalLocal.(uuid.UUID)
+	if !ok || principal == uuid.Nil {
+		return uuid.Nil, AgentPathOutcomeFault, "route " + route + ": the authenticated agent could not be read"
+	}
+	return principal, "", ""
+}
+
 // compareAgentPath compares the route's agent parameter with the agent
 // principal. fault carries the 500 text when outcome is AgentPathOutcomeFault.
 func compareAgentPath(c fiber.Ctx, route, param string, resolveName AgentNameResolver) (outcome, fault string) {
@@ -118,13 +162,9 @@ func compareAgentPath(c fiber.Ctx, route, param string, resolveName AgentNameRes
 			"the binding must be registered on the route, not with Use()"
 	}
 
-	principalLocal := c.Locals("agent_id")
-	if principalLocal == nil {
-		return AgentPathOutcomeNoPrincipal, ""
-	}
-	principal, ok := principalLocal.(uuid.UUID)
-	if !ok || principal == uuid.Nil {
-		return AgentPathOutcomeFault, "route " + route + ": the authenticated agent could not be read"
+	principal, outcome, fault := agentPrincipal(c, route)
+	if outcome != "" {
+		return outcome, fault
 	}
 
 	if id, err := uuid.Parse(value); err == nil {
