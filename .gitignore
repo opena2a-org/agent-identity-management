@@ -50,6 +50,10 @@ yarn-error.log*
 # Guarded by apps/web/tracked-build-cache.test.ts.
 *.tsbuildinfo
 
+# Next.js type declarations, rewritten by `next dev`, `next build` and
+# `next typegen`. Guarded by apps/web/tracked-next-env.test.ts.
+next-env.d.ts
+
 # Go
 *.exe
 *.exe~
