@@ -55,6 +55,8 @@ import { AgentTagsTab } from "@/components/agent/tags-tab";
 import { FirstRunPanel } from "@/components/agent/first-run-panel";
 import { RefusedCallFinding } from "@/components/agent/refused-call-finding";
 import { refusedCallFinding, type RefusedCallFinding as RefusedCall } from "@/lib/refused-call";
+import { DeleteAgentDialog } from "@/components/agents/delete-agent-dialog";
+import { rememberAgentDeleted } from "@/lib/agent-delete";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -125,7 +127,6 @@ export default function AgentDetailsPage({
     "admin" | "manager" | "member" | "viewer"
   >("viewer");
   const [verifying, setVerifying] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [suspending, setSuspending] = useState(false);
   const [reactivating, setReactivating] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -320,21 +321,6 @@ export default function AgentDetailsPage({
       setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("verify this agent")));
     } finally {
       setVerifying(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!agentId) return;
-    setDeleting(true);
-    setLifecycleOutcome(null);
-    try {
-      await api.deleteAgent(agentId);
-      router.push("/dashboard/agents");
-    } catch (e) {
-      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("delete this agent")));
-    } finally {
-      setDeleting(false);
-      setShowDeleteConfirm(false);
     }
   };
 
@@ -645,18 +631,8 @@ export default function AgentDetailsPage({
               <Button
                 variant="destructive"
                 onClick={() => setShowDeleteConfirm(true)}
-                disabled={deleting}
               >
-                {deleting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />{" "}
-                    Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4 mr-1" /> Delete
-                  </>
-                )}
+                <Trash2 className="h-4 w-4 mr-1" /> Delete
               </Button>
             )}
           </div>
@@ -1357,27 +1333,16 @@ export default function AgentDetailsPage({
         initialData={agent as any}
       />
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete agent</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the
-              agent "{agent.name}" and remove associated data.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="rounded-pill bg-danger hover:brightness-95"
-            >
-              {deleting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteAgentDialog
+        agent={{ id: agent.id, name: agent.displayName || agent.name }}
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        onDeleted={(deleted) => {
+          setShowDeleteConfirm(false);
+          rememberAgentDeleted(deleted.name);
+          router.push("/dashboard/agents");
+        }}
+      />
 
       {/* Suspend Confirmation Dialog */}
       <AlertDialog open={showSuspendConfirm} onOpenChange={setShowSuspendConfirm}>
