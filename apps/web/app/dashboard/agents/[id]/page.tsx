@@ -1183,9 +1183,6 @@ export default function AgentDetailsPage({
                                       <div className="text-xs text-muted-foreground mt-1">
                                         {event.timestamp.toLocaleString()}
                                       </div>
-                                      {event.refusal && (
-                                        <RefusedCallFinding finding={event.refusal} showAdminLinks={userRole === "admin"} />
-                                      )}
                                     </div>
                                   </div>
                                   {event.badge && (
@@ -1194,6 +1191,11 @@ export default function AgentDetailsPage({
                                     </Badge>
                                   )}
                                 </div>
+                                {/* Below the title row, at the card's full width: beside the badge the
+                                    finding had a column about 120px wide on a phone, too narrow to read. */}
+                                {event.refusal && (
+                                  <RefusedCallFinding finding={event.refusal} showAdminLinks={userRole === "admin"} />
+                                )}
                               </div>
                             </div>
                           ))}

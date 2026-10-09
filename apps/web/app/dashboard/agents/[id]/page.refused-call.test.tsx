@@ -134,6 +134,28 @@ describe("agent page activity timeline", () => {
     );
   });
 
+  it("renders the finding below the title row at the card's width, not in the column beside the badge", async () => {
+    mockAgentPage([
+      activityRow({
+        actionType: "db:write",
+        resource: "orders",
+        riskLevel: "medium",
+        autoApproved: false,
+        denialReason: REASON,
+      }),
+    ]);
+    await renderPage();
+
+    const finding = await screen.findByLabelText("Refused call: db:write");
+    // The title row is the flex container that holds the icon, the title column and the badge. On a phone
+    // that column is about 120px wide beside the badge, so the finding must not be a descendant of the row.
+    const titleRow = screen.getByText("medium").parentElement as HTMLElement;
+    expect(within(titleRow).getByText(/Denied/)).toBeTruthy();
+    expect(titleRow.contains(finding)).toBe(false);
+    // It sits in the event card, as the title row's sibling, where it gets the card's full width.
+    expect(finding.parentElement).toBe(titleRow.parentElement);
+  });
+
   it("keeps the reason and the API grant for a member, without the administrator-only link", async () => {
     vi.mocked(decodeJwtPayload).mockReturnValue({ role: "member" });
     mockAgentPage([activityRow({ actionType: "db:write", autoApproved: false, denialReason: REASON })]);
