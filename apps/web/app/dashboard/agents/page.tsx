@@ -23,7 +23,8 @@ import { api, Agent } from "@/lib/api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { RegisterAgentModal } from "@/components/modals/register-agent-modal";
 import { AgentDetailModal } from "@/components/modals/agent-detail-modal";
-import { ConfirmDialog } from "@/components/modals/confirm-dialog";
+import { DeleteAgentDialog, DeleteAgentTarget } from "@/components/agents/delete-agent-dialog";
+import { agentDeletedNotice, takeAgentDeletedNotice } from "@/lib/agent-delete";
 import { AgentsPageSkeleton } from "@/components/ui/content-loaders";
 import { getAgentPermissions, UserRole } from "@/lib/permissions";
 import { getErrorMessage } from "@/lib/error-messages";
@@ -232,7 +233,12 @@ function AgentsPageContent() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  // States a completed delete, from this list or from the agent page.
+  const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDeletedNotice(takeAgentDeletedNotice());
+  }, []);
 
   // Extract user role from JWT token
   useEffect(() => {
@@ -390,22 +396,12 @@ function AgentsPageContent() {
     setShowDeleteConfirm(true);
   };
 
-  const confirmDelete = async () => {
-    if (!selectedAgent) return;
-
-    setDeleteLoading(true);
-    try {
-      await api.deleteAgent(selectedAgent.id);
-      setAgents(agents.filter((a) => a.id !== selectedAgent.id));
-    } catch (err) {
-      console.error("Failed to delete agent:", err);
-      setError(err instanceof Error ? err.message : "Failed to delete agent");
-    } finally {
-      setDeleteLoading(false);
-      setShowDeleteConfirm(false);
-      setShowDetailModal(false);
-      setSelectedAgent(null);
-    }
+  const handleAgentDeleted = (deleted: DeleteAgentTarget) => {
+    setAgents((current) => current.filter((a) => a.id !== deleted.id));
+    setShowDeleteConfirm(false);
+    setShowDetailModal(false);
+    setSelectedAgent(null);
+    setDeletedNotice(agentDeletedNotice(deleted.name));
   };
 
   if (loading) {
@@ -437,6 +433,27 @@ function AgentsPageContent() {
             <Plus className="h-4 w-4" />
             Create agent
           </button>
+        )}
+      </div>
+
+      {/* Kept in the page while empty so the notice is announced when it appears;
+          sr-only takes it out of the layout until then. */}
+      <div role="status" className={deletedNotice ? undefined : "sr-only"}>
+        {deletedNotice && (
+          <div className="flex items-center justify-between gap-3 rounded-inset border border-success-border bg-success-fill px-4 py-3 text-sm text-success-text">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {deletedNotice}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDeletedNotice(null)}
+              aria-label="Dismiss"
+              className="rounded p-1 hover:brightness-95"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -664,21 +681,21 @@ function AgentsPageContent() {
         onDelete={permissions.canDeleteAgent ? handleDeleteAgent : undefined}
       />
 
-      <ConfirmDialog
-        isOpen={showDeleteConfirm}
-        title="Delete agent"
-        message={`Are you sure you want to delete "${selectedAgent?.displayName}"? This action cannot be undone.`}
-        confirmText="Delete"
-        cancelText="Cancel"
-        variant="danger"
-        loading={deleteLoading}
-        onConfirm={confirmDelete}
-        onCancel={() => {
-          if (!deleteLoading) {
-            setShowDeleteConfirm(false);
-            setSelectedAgent(null);
-          }
+      <DeleteAgentDialog
+        agent={
+          selectedAgent
+            ? {
+                id: selectedAgent.id,
+                name: selectedAgent.displayName || selectedAgent.name,
+              }
+            : null
+        }
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open);
+          if (!open && !showDetailModal) setSelectedAgent(null);
         }}
+        onDeleted={handleAgentDeleted}
       />
     </div>
   );
