@@ -95,9 +95,9 @@ func TestSDKVerificationRoutesRequireJustifiedBareMount(t *testing.T) {
 	// outside the sdkAPI group acceptable.
 	justifiedBareMounts := map[string]string{
 		"POST /api/v1/sdk-api/verifications": "CreateVerification verifies an Ed25519 signature over the request " +
-			"(verifySignature) and gates on agent.Status before writing.",
+			"against the registered key (agentauth.KeySet), then gates on agent.Status before writing.",
 		"GET /api/v1/sdk-api/verifications/:id": "read path; the SDK-signature handler GetVerificationSDK verifies three " +
-			"X-AIM-* headers, an Ed25519 signature and event ownership (404, not 403, on mismatch). NOTE: cloud currently " +
+			"X-AIM-* headers and an Ed25519 signature, then agent.Status and event ownership (404, not 403, on mismatch). NOTE: cloud currently " +
 			"mounts GetVerification here, not GetVerificationSDK; that divergence is tracked separately and must not be " +
 			"shipped ahead of this change.",
 	}

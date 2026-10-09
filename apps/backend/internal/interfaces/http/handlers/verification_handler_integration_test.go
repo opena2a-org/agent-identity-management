@@ -334,7 +334,7 @@ func TestVerificationHandler_GetVerificationSDK_BadTimestamp_401(t *testing.T) {
 
 	mockAgent := &MockAgentServiceForVerificationImpl{}
 	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
-		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+		return &domain.Agent{ID: id, Status: domain.AgentStatusVerified, PublicKey: &pubB64}, nil
 	}
 	handler := NewVerificationHandlerWithInterfaces(
 		mockAgent,
@@ -368,7 +368,7 @@ func TestVerificationHandler_GetVerificationSDK_InvalidSignature_401(t *testing.
 
 	mockAgent := &MockAgentServiceForVerificationImpl{}
 	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
-		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+		return &domain.Agent{ID: id, Status: domain.AgentStatusVerified, PublicKey: &pubB64}, nil
 	}
 	handler := NewVerificationHandlerWithInterfaces(
 		mockAgent,
@@ -437,7 +437,7 @@ func TestVerificationHandler_GetVerificationSDK_CrossAgent_404(t *testing.T) {
 
 	mockAgent := &MockAgentServiceForVerificationImpl{}
 	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
-		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+		return &domain.Agent{ID: id, Status: domain.AgentStatusVerified, PublicKey: &pubB64}, nil
 	}
 	approved := domain.VerificationResultVerified
 	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{
@@ -492,7 +492,7 @@ func TestVerificationHandler_GetVerificationSDK_CrossVerificationReplay_401(t *t
 
 	mockAgent := &MockAgentServiceForVerificationImpl{}
 	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
-		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+		return &domain.Agent{ID: id, Status: domain.AgentStatusVerified, PublicKey: &pubB64}, nil
 	}
 	handler := NewVerificationHandlerWithInterfaces(
 		mockAgent,
@@ -574,7 +574,7 @@ func TestVerificationHandler_GetVerificationSDK_Valid_200(t *testing.T) {
 
 	mockAgent := &MockAgentServiceForVerificationImpl{}
 	mockAgent.GetAgentFunc = func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
-		return &domain.Agent{ID: id, PublicKey: &pubB64}, nil
+		return &domain.Agent{ID: id, Status: domain.AgentStatusVerified, PublicKey: &pubB64}, nil
 	}
 	approved := domain.VerificationResultVerified
 	mockVerifEventService := &MockVerificationEventServiceForVerificationImpl{

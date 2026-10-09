@@ -42,6 +42,10 @@ export const AGENT_REQUEST_FIX_ROWS: readonly AgentRequestFixRow[] = [
   {
     id: 'agentKey',
     exact: [
+      // The one refusal an AIM server sends for an unknown agent, a missing key, a
+      // registered key that does not decode and a different key. The strings after it
+      // are what servers sent for those causes before they were merged.
+      'the signing key is not the registered key of a known agent',
       'Invalid agent ID format',
       'Agent not found',
       'agent has no registered Ed25519 public key',
@@ -53,7 +57,7 @@ export const AGENT_REQUEST_FIX_ROWS: readonly AgentRequestFixRow[] = [
       'Invalid public key format',
     ],
     prefix: ['Invalid public key size: '],
-    reasonCodes: [],
+    reasonCodes: ['agentKeyNotRecognized'],
     fix:
       'Load credentials from one `registerAgent` result for the AIM server at `baseUrl`: ' +
       '`AIM_AGENT_ID`, `AIM_PUBLIC_KEY` and `AIM_PRIVATE_KEY` must belong to the same registered agent.',

@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/pqc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -453,9 +454,10 @@ func (f *s1Fixture) hybridRequest() map[string]string {
 const (
 	s1FnEd25519Middleware = "Ed25519AgentMiddleware"
 	s1FnPQCMiddleware     = "PQCAgentMiddleware"
-	s1FnVerifyEd25519     = "verifyEd25519Signature"
-	s1FnVerifyMLDSA       = "verifyMLDSASignature"
-	s1FnVerifyHybrid      = "verifyHybridSignature"
+	s1FnReadEd25519       = "readEd25519Signature"
+	s1FnReadMLDSA         = "readMLDSASignature"
+	s1FnReadHybrid        = "readHybridSignatures"
+	s1FnAgentKeyRefusal   = "agentKeyRefusal"
 )
 
 func s1FileOf(fn string) string {
@@ -469,21 +471,18 @@ type s1Case struct {
 	name   string
 	fn     string
 	reason metrics.S1RefusalReason
-	// The response the branch has always returned. Counting a refusal must not
-	// change what the caller is told.
+	// The response the branch returns. Counting a refusal does not change what the
+	// caller is told: every key the agentauth package does not recognise gets its one
+	// message, whichever reason it is counted under.
 	status  int // 401 when zero
 	message string
-	// prefix marks a message that ends with the verifier's own error text.
-	prefix bool
+	// request is the correctly signed request the case starts from, when the function
+	// alone does not decide it.
+	request func(f *s1Fixture) map[string]string
 	// change breaks the correctly signed request, the registered agent, or both.
 	change func(f *s1Fixture, h map[string]string, a *domain.Agent)
 	// noAgent makes the agent lookup fail.
 	noAgent bool
-	// direct calls a verify helper itself, with an algorithm name the middleware
-	// does not pass it. It is how the branch for an algorithm with no key size, and
-	// the hybrid branches behind that lookup, are driven without depending on which
-	// names the middleware passes.
-	direct func(c fiber.Ctx, a *domain.Agent, message []byte) *s1Refusal
 }
 
 func s1Cases() []s1Case {
@@ -508,29 +507,12 @@ func s1Cases() []s1Case {
 		{name: "ed25519: timestamp is in the future", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonSkewFuture,
 			message: "Request timestamp expired or invalid",
 			change:  func(f F, h H, a A) { h["X-Timestamp"] = future() }},
-		{name: "ed25519: agent lookup fails", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonAgentLookupFailed,
-			message: "Agent not found", noAgent: true},
-		{name: "ed25519: agent is revoked", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonAgentStatusDenied,
-			message: "Agent is not permitted to authenticate (status: revoked)",
-			change:  func(f F, h H, a A) { a.Status = domain.AgentStatusRevoked }},
-		{name: "ed25519: agent has no registered key", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonNoRegisteredKey,
-			message: "Agent has no registered public key. Register a key first using JWT authentication.",
-			change:  func(f F, h H, a A) { a.PublicKey = nil }},
-		{name: "ed25519: presented key is not the registered key", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonPublicKeyMismatch,
-			message: "Provided public key does not match registered key",
-			change:  func(f F, h H, a A) { h["X-Public-Key"] = f.edOtherKey }},
-		{name: "ed25519: registered key is not base64", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "Invalid public key format",
-			change:  func(f F, h H, a A) { a.PublicKey = str(s1NotBase64); h["X-Public-Key"] = s1NotBase64 }},
-		{name: "ed25519: registered key has the wrong size", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "Invalid public key size: expected 32 bytes, got 9",
-			change:  func(f F, h H, a A) { a.PublicKey = str(s1ShortKey); h["X-Public-Key"] = s1ShortKey }},
 		{name: "ed25519: signature is not base64", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonSignatureMalformed,
 			message: "Invalid signature format",
 			change:  func(f F, h H, a A) { h["X-Signature"] = s1NotBase64 }},
-		{name: "ed25519: signature is over different bytes", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonSignatureInvalidEd25519,
-			message: "Invalid signature",
-			change:  func(f F, h H, a A) { h["X-Signature"] = f.edWrongSig }},
+		{name: "ed25519: agent is revoked", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonAgentStatusDenied,
+			message: "Agent is not permitted to authenticate (status: revoked)",
+			change:  func(f F, h H, a A) { a.Status = domain.AgentStatusRevoked }},
 
 		// --- PQCAgentMiddleware -------------------------------------------
 		{name: "pqc: algorithm is not supported", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonUnsupportedAlgorithm,
@@ -548,127 +530,63 @@ func s1Cases() []s1Case {
 		{name: "pqc: timestamp is in the future", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonSkewFuture,
 			message: "Request timestamp expired or invalid",
 			change:  func(f F, h H, a A) { h["X-Timestamp"] = future() }},
-		{name: "pqc: agent lookup fails", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonAgentLookupFailed,
-			message: "Agent not found", noAgent: true},
 		{name: "pqc: agent is suspended", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonAgentStatusDenied,
 			message: "Agent is not permitted to authenticate (status: suspended)",
 			change:  func(f F, h H, a A) { a.Status = domain.AgentStatusSuspended }},
-		{name: "pqc: hybrid requested by an agent with no ML-DSA key", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonNoRegisteredKey,
-			message: "Agent does not have PQC key registered for hybrid mode",
-			change: func(f F, h H, a A) {
-				h["X-Algorithm"] = string(pqc.AlgorithmHybridEd25519MLDSA65)
-				a.HybridModeEnabled = false
-				a.PQCPublicKey = nil
-			}},
 
-		// --- verifyEd25519Signature (PQC middleware, Ed25519 algorithm) ----
-		{name: "pqc ed25519: signature header is absent", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonMissingSignatureHeaders,
+		// --- readEd25519Signature (PQC middleware, Ed25519 algorithm) ------
+		{name: "pqc ed25519: signature header is absent", fn: s1FnReadEd25519, reason: metrics.S1ReasonMissingSignatureHeaders,
 			message: "missing Ed25519 signature or public key",
 			change:  func(f F, h H, a A) { delete(h, "X-Signature") }},
-		{name: "pqc ed25519: agent has no registered key", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonNoRegisteredKey,
-			message: "agent has no registered Ed25519 public key",
-			change:  func(f F, h H, a A) { a.PublicKey = nil }},
-		{name: "pqc ed25519: presented key is not the registered key", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonPublicKeyMismatch,
-			message: "provided Ed25519 public key does not match registered key",
-			change:  func(f F, h H, a A) { h["X-Public-Key"] = f.edOtherKey }},
-		{name: "pqc ed25519: registered key is not base64", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid public key format",
-			change:  func(f F, h H, a A) { a.PublicKey = str(s1NotBase64); h["X-Public-Key"] = s1NotBase64 }},
-		{name: "pqc ed25519: registered key has the wrong size", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid Ed25519 public key size",
-			change:  func(f F, h H, a A) { a.PublicKey = str(s1ShortKey); h["X-Public-Key"] = s1ShortKey }},
-		{name: "pqc ed25519: signature is not base64", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonSignatureMalformed,
+		{name: "pqc ed25519: signature is not base64", fn: s1FnReadEd25519, reason: metrics.S1ReasonSignatureMalformed,
 			message: "invalid signature format",
 			change:  func(f F, h H, a A) { h["X-Signature"] = s1NotBase64 }},
-		{name: "pqc ed25519: signature is over different bytes", fn: s1FnVerifyEd25519, reason: metrics.S1ReasonSignatureInvalidEd25519,
-			message: "invalid Ed25519 signature",
-			change:  func(f F, h H, a A) { h["X-Signature"] = f.edWrongSig }},
 
-		// --- verifyMLDSASignature ------------------------------------------
-		{name: "ml-dsa: signature header is absent", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonMissingSignatureHeaders,
+		// --- readMLDSASignature --------------------------------------------
+		{name: "ml-dsa: signature header is absent", fn: s1FnReadMLDSA, reason: metrics.S1ReasonMissingSignatureHeaders,
 			message: "missing ML-DSA signature",
 			change:  func(f F, h H, a A) { delete(h, "X-Signature") }},
-		{name: "ml-dsa: agent has no registered key", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonNoRegisteredKey,
-			message: "agent has no registered ML-DSA public key",
-			change:  func(f F, h H, a A) { a.PQCPublicKey = nil }},
-		{name: "ml-dsa: presented key is not the registered key", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonPublicKeyMismatch,
-			message: "provided ML-DSA public key does not match registered key",
-			change:  func(f F, h H, a A) { h["X-PQC-Public-Key"] = f.mlOtherKey }},
-		{name: "ml-dsa: registered key is not base64", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid PQC public key format",
-			change:  func(f F, h H, a A) { a.PQCPublicKey = str(s1NotBase64); delete(h, "X-PQC-Public-Key") }},
-		{name: "ml-dsa: algorithm has no key size", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonUnsupportedAlgorithm,
-			message: "unsupported ML-DSA algorithm: ML-DSA-0",
-			direct: func(c fiber.Ctx, a *domain.Agent, message []byte) *s1Refusal {
-				return verifyMLDSASignature(c, a, pqc.Algorithm("ML-DSA-0"), message)
-			}},
-		{name: "ml-dsa: registered key has the wrong size", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid ML-DSA public key size: expected 1952, got 9",
-			change:  func(f F, h H, a A) { a.PQCPublicKey = str(s1ShortKey); delete(h, "X-PQC-Public-Key") }},
-		{name: "ml-dsa: signature is not base64", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonSignatureMalformed,
+		{name: "ml-dsa: signature is not base64", fn: s1FnReadMLDSA, reason: metrics.S1ReasonSignatureMalformed,
 			message: "invalid ML-DSA signature format",
 			change:  func(f F, h H, a A) { h["X-Signature"] = s1NotBase64 }},
-		{name: "ml-dsa: signature is over different bytes", fn: s1FnVerifyMLDSA, reason: metrics.S1ReasonSignatureInvalidMLDSA,
-			message: "invalid ML-DSA signature: ", prefix: true,
-			change: func(f F, h H, a A) { h["X-Signature"] = f.mlWrongSig }},
 
-		// --- verifyHybridSignature -----------------------------------------
-		{name: "hybrid: ed25519 signature header is absent", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonMissingSignatureHeaders,
+		// --- readHybridSignatures ------------------------------------------
+		{name: "hybrid: ed25519 signature header is absent", fn: s1FnReadHybrid, reason: metrics.S1ReasonMissingSignatureHeaders,
 			message: "missing Ed25519 signature for hybrid mode",
 			change:  func(f F, h H, a A) { delete(h, "X-Signature-Ed25519") }},
-		{name: "hybrid: ml-dsa signature header is absent", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonMissingSignatureHeaders,
+		{name: "hybrid: ml-dsa signature header is absent", fn: s1FnReadHybrid, reason: metrics.S1ReasonMissingSignatureHeaders,
 			message: "missing ML-DSA signature for hybrid mode",
 			change:  func(f F, h H, a A) { delete(h, "X-Signature-MLDSA") }},
-		{name: "hybrid: agent has no registered ed25519 key", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonNoRegisteredKey,
-			message: "agent has no registered Ed25519 public key for hybrid mode",
-			change:  func(f F, h H, a A) { a.PublicKey = nil }},
-		{name: "hybrid: agent has no registered ml-dsa key", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonNoRegisteredKey,
-			message: "agent has no registered ML-DSA public key for hybrid mode",
-			change:  func(f F, h H, a A) { a.PQCPublicKey = nil }},
-		{name: "hybrid: presented ed25519 key is not the registered key", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonPublicKeyMismatch,
-			message: "provided Ed25519 public key does not match registered key",
-			change:  func(f F, h H, a A) { h["X-Public-Key"] = f.edOtherKey }},
-		{name: "hybrid: presented ml-dsa key is not the registered key", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonPublicKeyMismatch,
-			message: "provided ML-DSA public key does not match registered key",
-			change:  func(f F, h H, a A) { h["X-PQC-Public-Key"] = f.mlOtherKey }},
-		{name: "hybrid: registered ed25519 key is not base64", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid Ed25519 public key format",
-			change:  func(f F, h H, a A) { a.PublicKey = str(s1NotBase64); h["X-Public-Key"] = s1NotBase64 }},
-		{name: "hybrid: registered ed25519 key has the wrong size", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid Ed25519 public key size",
-			change:  func(f F, h H, a A) { a.PublicKey = str(s1ShortKey); h["X-Public-Key"] = s1ShortKey }},
-		{name: "hybrid: ed25519 signature is not base64", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonSignatureMalformed,
+		{name: "hybrid: ed25519 signature is not base64", fn: s1FnReadHybrid, reason: metrics.S1ReasonSignatureMalformed,
 			message: "invalid Ed25519 signature format",
 			change:  func(f F, h H, a A) { h["X-Signature-Ed25519"] = s1NotBase64 }},
-		{name: "hybrid: ed25519 signature is over different bytes", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonSignatureInvalidEd25519,
-			message: "invalid Ed25519 signature in hybrid mode",
-			change:  func(f F, h H, a A) { h["X-Signature-Ed25519"] = f.edWrongSig }},
-		{name: "hybrid: registered ml-dsa key is not base64", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid ML-DSA public key format",
-			change:  func(f F, h H, a A) { a.PQCPublicKey = str(s1NotBase64); delete(h, "X-PQC-Public-Key") }},
-		{name: "hybrid: algorithm has no key size", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonUnsupportedAlgorithm,
-			message: "unsupported ML-DSA algorithm in hybrid mode: Ed25519+ML-DSA-0",
-			direct: func(c fiber.Ctx, a *domain.Agent, message []byte) *s1Refusal {
-				return verifyHybridSignature(c, a, pqc.Algorithm("Ed25519+ML-DSA-0"), message)
-			}},
-		{name: "hybrid: registered ml-dsa key has the wrong size", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonRegisteredKeyMalformed,
-			message: "invalid ML-DSA public key size: expected 1952, got 9",
-			change:  func(f F, h H, a A) { a.PQCPublicKey = str(s1ShortKey); delete(h, "X-PQC-Public-Key") },
-			direct: func(c fiber.Ctx, a *domain.Agent, message []byte) *s1Refusal {
-				return verifyHybridSignature(c, a, pqc.AlgorithmMLDSA65, message)
-			}},
-		{name: "hybrid: ml-dsa signature is not base64", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonSignatureMalformed,
+		{name: "hybrid: ml-dsa signature is not base64", fn: s1FnReadHybrid, reason: metrics.S1ReasonSignatureMalformed,
 			message: "invalid ML-DSA signature format",
-			change:  func(f F, h H, a A) { h["X-Signature-MLDSA"] = s1NotBase64 },
-			direct: func(c fiber.Ctx, a *domain.Agent, message []byte) *s1Refusal {
-				return verifyHybridSignature(c, a, pqc.AlgorithmMLDSA65, message)
-			}},
-		{name: "hybrid: ml-dsa signature is over different bytes", fn: s1FnVerifyHybrid, reason: metrics.S1ReasonSignatureInvalidMLDSA,
-			message: "invalid ML-DSA signature in hybrid mode: ", prefix: true,
-			change: func(f F, h H, a A) { h["X-Signature-MLDSA"] = f.mlWrongSig },
-			direct: func(c fiber.Ctx, a *domain.Agent, message []byte) *s1Refusal {
-				return verifyHybridSignature(c, a, pqc.AlgorithmMLDSA65, message)
-			}},
+			change:  func(f F, h H, a A) { h["X-Signature-MLDSA"] = s1NotBase64 }},
+
+		// --- agentKeyRefusal (both middlewares, after the key check) ---------
+		// The four key causes answer with one message and are counted apart.
+		{name: "key: agent lookup fails", fn: s1FnAgentKeyRefusal, reason: metrics.S1ReasonAgentLookupFailed,
+			message: agentauth.KeyNotRecognizedMessage, noAgent: true},
+		{name: "key: agent has no registered key", fn: s1FnAgentKeyRefusal, reason: metrics.S1ReasonNoRegisteredKey,
+			message: agentauth.KeyNotRecognizedMessage,
+			request: (*s1Fixture).hybridRequest,
+			change:  func(f F, h H, a A) { a.PQCPublicKey = nil }},
+		{name: "key: registered key does not decode", fn: s1FnAgentKeyRefusal, reason: metrics.S1ReasonRegisteredKeyMalformed,
+			message: agentauth.KeyNotRecognizedMessage,
+			request: (*s1Fixture).mldsaRequest,
+			change:  func(f F, h H, a A) { a.PQCPublicKey = str(s1ShortKey); delete(h, "X-PQC-Public-Key") }},
+		{name: "key: presented key is not the registered key", fn: s1FnAgentKeyRefusal, reason: metrics.S1ReasonPublicKeyMismatch,
+			message: agentauth.KeyNotRecognizedMessage,
+			change:  func(f F, h H, a A) { h["X-Public-Key"] = f.edOtherKey }},
+		{name: "key: ed25519 signature is over different bytes", fn: s1FnAgentKeyRefusal, reason: metrics.S1ReasonSignatureInvalidEd25519,
+			message: "invalid Ed25519 signature in hybrid mode",
+			request: (*s1Fixture).hybridRequest,
+			change:  func(f F, h H, a A) { h["X-Signature-Ed25519"] = f.edWrongSig }},
+		{name: "key: ml-dsa signature is over different bytes", fn: s1FnAgentKeyRefusal, reason: metrics.S1ReasonSignatureInvalidMLDSA,
+			message: "invalid ML-DSA signature",
+			request: (*s1Fixture).mldsaRequest,
+			change:  func(f F, h H, a A) { h["X-Signature"] = f.mlWrongSig }},
 	}
 }
 
@@ -738,10 +656,12 @@ func driveS1(t *testing.T, f *s1Fixture, tc s1Case, userAgent string) (status in
 	t.Helper()
 
 	var headers map[string]string
-	switch tc.fn {
-	case s1FnVerifyMLDSA:
+	switch {
+	case tc.request != nil:
+		headers = tc.request(f)
+	case tc.fn == s1FnReadMLDSA:
 		headers = f.mldsaRequest()
-	case s1FnVerifyHybrid:
+	case tc.fn == s1FnReadHybrid:
 		headers = f.hybridRequest()
 	default:
 		headers = f.ed25519Request()
@@ -769,18 +689,9 @@ func driveS1(t *testing.T, f *s1Fixture, tc s1Case, userAgent string) (status in
 	// The header buffer the server runs with; an ML-DSA key and signature do not
 	// fit in the default.
 	app := fiber.New(fiber.Config{ReadBufferSize: 16384})
-	switch {
-	case tc.direct != nil:
-		app.Get(s1Path, func(c fiber.Ctx) error {
-			message := []byte(c.Method() + "\n" + c.OriginalURL() + "\n" + c.Get("X-Timestamp"))
-			if refusal := tc.direct(c, agent, message); refusal != nil {
-				return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
-			}
-			return c.SendStatus(fiber.StatusOK)
-		})
-	case tc.fn == s1FnEd25519Middleware:
+	if tc.fn == s1FnEd25519Middleware {
 		app.Use(Ed25519AgentMiddleware(agents))
-	default:
+	} else {
 		app.Use(PQCAgentMiddleware(agents))
 	}
 	app.Get(s1Path, func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
@@ -833,11 +744,7 @@ func TestS1Refusal_EachBranchIsCountedOnceAndReachesTheNextLine(t *testing.T) {
 				wantStatus = fiber.StatusUnauthorized
 			}
 			require.Equal(t, wantStatus, status, "the request must be refused by the branch under test")
-			if tc.prefix {
-				require.True(t, strings.HasPrefix(message, tc.message), "error %q, want prefix %q", message, tc.message)
-			} else {
-				require.Equal(t, tc.message, message, "the request reached a different branch than the one under test")
-			}
+			require.Equal(t, tc.message, message, "the request reached a different branch than the one under test")
 
 			after, exposition := scrapeS1(t)
 			series := string(tc.reason) + "." + ua.sdk
@@ -906,8 +813,9 @@ func TestS1Refusal_AcceptedAndUnsignedRequestsAreNotCounted(t *testing.T) {
 		tc   s1Case
 	}{
 		{"ed25519 middleware, correctly signed", s1Case{fn: s1FnEd25519Middleware}},
-		{"pqc middleware, correctly signed with ed25519", s1Case{fn: s1FnVerifyEd25519}},
-		{"pqc middleware, correctly signed with ml-dsa", s1Case{fn: s1FnVerifyMLDSA}},
+		{"pqc middleware, correctly signed with ed25519", s1Case{fn: s1FnReadEd25519}},
+		{"pqc middleware, correctly signed with ml-dsa", s1Case{fn: s1FnReadMLDSA}},
+		{"pqc middleware, correctly signed with hybrid", s1Case{fn: s1FnReadHybrid}},
 		{"ed25519 middleware, no signature headers", s1Case{fn: s1FnEd25519Middleware,
 			change: func(f *s1Fixture, h map[string]string, a *domain.Agent) { delete(h, "X-Signature") }}},
 		{"pqc middleware, no agent id", s1Case{fn: s1FnPQCMiddleware,

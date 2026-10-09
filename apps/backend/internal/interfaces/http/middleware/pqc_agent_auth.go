@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,9 +11,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/pqc"
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
 
@@ -89,30 +89,6 @@ func PQCAgentMiddleware(agentService *application.AgentService) fiber.Handler {
 			return refuseS1(c, metrics.S1ReasonSkewFuture, fiber.StatusUnauthorized, "Request timestamp expired or invalid")
 		}
 
-		// Load agent from database
-		agent, err := agentService.GetAgent(c.Context(), agentID)
-		if err != nil {
-			return refuseS1(c, metrics.S1ReasonAgentLookupFailed, fiber.StatusUnauthorized, "Agent not found")
-		}
-
-		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
-		// that sets the status. RevokeAgent expresses denial purely
-		// as `agents.status`, so an agent that keeps its key material after being revoked
-		// or suspended authenticated successfully until this check existed. Checked before
-		// any signature work so a denied agent costs no ML-DSA verification.
-		if !agentStatusPermitsAuth(agent.Status) {
-			return refuseS1(c, metrics.S1ReasonAgentStatusDenied, fiber.StatusUnauthorized, agentStatusDeniedMessage(agent.Status))
-		}
-
-		// Check if hybrid mode is required but agent doesn't support it
-		if pqc.IsHybridAlgorithm(alg) && !agent.HybridModeEnabled {
-			// Check if agent has PQC key registered
-			if agent.PQCPublicKey == nil || *agent.PQCPublicKey == "" {
-				return refuseS1(c, metrics.S1ReasonNoRegisteredKey, fiber.StatusUnauthorized,
-					"Agent does not have PQC key registered for hybrid mode")
-			}
-		}
-
 		// Reconstruct the signed message
 		method := strings.ToUpper(c.Method())
 		path := c.OriginalURL()
@@ -122,29 +98,59 @@ func PQCAgentMiddleware(agentService *application.AgentService) fiber.Handler {
 		}
 		message := []byte(strings.Join(messageParts, "\n"))
 
-		// Verify based on algorithm type
+		// The signature headers are part of the request's shape: read and decoded before
+		// any agent is, so a malformed request gets the same answer whichever agent it names.
+		var signed pqcSignedRequest
+		var malformed *s1Refusal
+		switch {
+		case pqc.IsHybridAlgorithm(alg):
+			signed, malformed = readHybridSignatures(c)
+		case pqc.IsPQCAlgorithm(alg):
+			signed, malformed = readMLDSASignature(c)
+		default:
+			signed, malformed = readEd25519Signature(c)
+		}
+		if malformed != nil {
+			return refuseS1(c, malformed.reason, fiber.StatusUnauthorized, malformed.message)
+		}
+
+		// SECURITY: only the agent's registered keys are read before the signature
+		// verifies. An unknown agent, an agent with no registered key for the algorithm
+		// (no key may be supplied by the request itself: that would be trust on first
+		// use), a registered key that does not decode, and a presented key that is not
+		// the registered one all get the one refusal, so this answer tells a caller who
+		// holds only an agent id nothing about that agent.
+		keys := agentauth.KeySet(c.Context(), agentService, agentID)
+
+		var verified agentauth.VerifiedAgent
 		var authMethod string
 		switch {
 		case pqc.IsHybridAlgorithm(alg):
 			// Hybrid mode: verify BOTH Ed25519 and ML-DSA
 			authMethod = "hybrid"
-			if refusal := verifyHybridSignature(c, agent, alg, message); refusal != nil {
-				return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
-			}
-
+			verified, err = keys.VerifyHybrid(alg, signed.ed25519Key, signed.mldsaKey, message, signed.ed25519Sig, signed.mldsaSig)
 		case pqc.IsPQCAlgorithm(alg):
 			// Pure ML-DSA mode
 			authMethod = "mldsa"
-			if refusal := verifyMLDSASignature(c, agent, alg, message); refusal != nil {
-				return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
-			}
-
+			verified, err = keys.VerifyMLDSA(alg, signed.mldsaKey, message, signed.mldsaSig)
 		default:
 			// Pure Ed25519 mode (default)
 			authMethod = "ed25519"
-			if refusal := verifyEd25519Signature(c, agent, message); refusal != nil {
-				return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
-			}
+			verified, err = keys.VerifyEd25519(signed.ed25519Key, message, signed.ed25519Sig)
+		}
+		if err != nil {
+			refusal := agentKeyRefusal(err, pqcSignatureFailure(alg, err))
+			return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
+		}
+
+		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
+		// that sets the status. RevokeAgent expresses denial purely as `agents.status`, so
+		// an agent that keeps its key material after being revoked or suspended
+		// authenticated successfully until this check existed. It runs after the signature
+		// verifies, so the status it names reaches only a caller holding this agent's key.
+		agent := agentauth.LoadVerifiedAgent(verified)
+		if !agentStatusPermitsAuth(agent.Status) {
+			return refuseS1(c, metrics.S1ReasonAgentStatusDenied, fiber.StatusUnauthorized, agentStatusDeniedMessage(agent.Status))
 		}
 
 		// Signature(s) valid! Set agent context for handlers
@@ -158,183 +164,118 @@ func PQCAgentMiddleware(agentService *application.AgentService) fiber.Handler {
 	}
 }
 
-// verifyEd25519Signature verifies a pure Ed25519 signature
-func verifyEd25519Signature(c fiber.Ctx, agent *domain.Agent, message []byte) *s1Refusal {
-	signatureB64 := c.Get("X-Signature")
-	publicKeyB64 := c.Get("X-Public-Key")
-
-	if signatureB64 == "" || publicKeyB64 == "" {
-		return s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing Ed25519 signature or public key")
-	}
-
-	// SECURITY: Agent MUST have a registered Ed25519 public key
-	if agent.PublicKey == nil || *agent.PublicKey == "" {
-		return s1Refused(metrics.S1ReasonNoRegisteredKey, "agent has no registered Ed25519 public key")
-	}
-	verifyPublicKey := *agent.PublicKey
-
-	// Verify provided key matches registered key
-	if publicKeyB64 != verifyPublicKey {
-		return s1Refused(metrics.S1ReasonPublicKeyMismatch, "provided Ed25519 public key does not match registered key")
-	}
-
-	// Decode public key
-	publicKeyBytes, err := base64.StdEncoding.DecodeString(verifyPublicKey)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid public key format")
-	}
-
-	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid Ed25519 public key size")
-	}
-
-	// Decode signature
-	signatureBytes, err := base64.StdEncoding.DecodeString(signatureB64)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonSignatureMalformed, "invalid signature format")
-	}
-
-	// Verify
-	if !ed25519.Verify(ed25519.PublicKey(publicKeyBytes), message, signatureBytes) {
-		return s1Refused(metrics.S1ReasonSignatureInvalidEd25519, "invalid Ed25519 signature")
-	}
-
-	return nil
+// pqcSignedRequest is what a request carries for its algorithm: its signatures, decoded,
+// and the public keys it presents, base64 as sent ("" when the header is absent).
+type pqcSignedRequest struct {
+	ed25519Sig []byte
+	mldsaSig   []byte
+	ed25519Key string
+	mldsaKey   string
 }
 
-// verifyMLDSASignature verifies a pure ML-DSA signature
-func verifyMLDSASignature(c fiber.Ctx, agent *domain.Agent, alg pqc.Algorithm, message []byte) *s1Refusal {
+// readEd25519Signature reads the signature and public key headers of a pure Ed25519
+// request. It reads no agent.
+func readEd25519Signature(c fiber.Ctx) (pqcSignedRequest, *s1Refusal) {
+	var signed pqcSignedRequest
 	signatureB64 := c.Get("X-Signature")
-	pqcPublicKeyB64 := c.Get("X-PQC-Public-Key")
+	signed.ed25519Key = c.Get("X-Public-Key")
+	if signatureB64 == "" || signed.ed25519Key == "" {
+		return signed, s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing Ed25519 signature or public key")
+	}
+	var err error
+	if signed.ed25519Sig, err = base64.StdEncoding.DecodeString(signatureB64); err != nil {
+		return signed, s1Refused(metrics.S1ReasonSignatureMalformed, "invalid signature format")
+	}
+	return signed, nil
+}
 
+// readMLDSASignature reads the signature header, and the public key if the request
+// presents one, of a pure ML-DSA request. It reads no agent.
+func readMLDSASignature(c fiber.Ctx) (pqcSignedRequest, *s1Refusal) {
+	var signed pqcSignedRequest
+	signatureB64 := c.Get("X-Signature")
 	if signatureB64 == "" {
 		signatureB64 = c.Get("X-Signature-MLDSA")
 	}
 	if signatureB64 == "" {
-		return s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing ML-DSA signature")
+		return signed, s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing ML-DSA signature")
 	}
-
-	// SECURITY: Agent MUST have a registered PQC public key for ML-DSA auth
-	if agent.PQCPublicKey == nil || *agent.PQCPublicKey == "" {
-		return s1Refused(metrics.S1ReasonNoRegisteredKey, "agent has no registered ML-DSA public key")
+	var err error
+	if signed.mldsaSig, err = base64.StdEncoding.DecodeString(signatureB64); err != nil {
+		return signed, s1Refused(metrics.S1ReasonSignatureMalformed, "invalid ML-DSA signature format")
 	}
-	verifyPublicKey := *agent.PQCPublicKey
-
-	// Verify provided key matches registered key
-	if pqcPublicKeyB64 != "" && pqcPublicKeyB64 != verifyPublicKey {
-		return s1Refused(metrics.S1ReasonPublicKeyMismatch, "provided ML-DSA public key does not match registered key")
-	}
-
-	// Decode public key
-	publicKeyBytes, err := base64.StdEncoding.DecodeString(verifyPublicKey)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid PQC public key format")
-	}
-
-	// Validate key size
-	expectedSize, err := pqc.GetExpectedPublicKeySize(alg)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonUnsupportedAlgorithm, "unsupported ML-DSA algorithm: %s", alg)
-	}
-	if len(publicKeyBytes) != expectedSize {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid ML-DSA public key size: expected %d, got %d", expectedSize, len(publicKeyBytes))
-	}
-
-	// Decode signature
-	signatureBytes, err := base64.StdEncoding.DecodeString(signatureB64)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonSignatureMalformed, "invalid ML-DSA signature format")
-	}
-
-	// Verify ML-DSA signature
-	if err := pqc.VerifyMLDSA(alg, publicKeyBytes, message, signatureBytes); err != nil {
-		return s1Refused(metrics.S1ReasonSignatureInvalidMLDSA, "invalid ML-DSA signature: %v", err)
-	}
-
-	return nil
+	signed.mldsaKey = c.Get("X-PQC-Public-Key")
+	return signed, nil
 }
 
-// verifyHybridSignature verifies both Ed25519 and ML-DSA signatures
-// BOTH must be valid for the request to be authenticated
-func verifyHybridSignature(c fiber.Ctx, agent *domain.Agent, alg pqc.Algorithm, message []byte) *s1Refusal {
-	// Get both signatures
+// readHybridSignatures reads both signature headers of a hybrid request, and the public
+// keys it presents. BOTH signatures are required. It reads no agent.
+func readHybridSignatures(c fiber.Ctx) (pqcSignedRequest, *s1Refusal) {
+	var signed pqcSignedRequest
 	ed25519SigB64 := c.Get("X-Signature-Ed25519")
 	mldsaSigB64 := c.Get("X-Signature-MLDSA")
-
 	// Fallback: if using single X-Signature header with Ed25519
 	if ed25519SigB64 == "" {
 		ed25519SigB64 = c.Get("X-Signature")
 	}
-
 	if ed25519SigB64 == "" {
-		return s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing Ed25519 signature for hybrid mode")
+		return signed, s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing Ed25519 signature for hybrid mode")
 	}
 	if mldsaSigB64 == "" {
-		return s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing ML-DSA signature for hybrid mode")
+		return signed, s1Refused(metrics.S1ReasonMissingSignatureHeaders, "missing ML-DSA signature for hybrid mode")
 	}
+	var err error
+	if signed.ed25519Sig, err = base64.StdEncoding.DecodeString(ed25519SigB64); err != nil {
+		return signed, s1Refused(metrics.S1ReasonSignatureMalformed, "invalid Ed25519 signature format")
+	}
+	if signed.mldsaSig, err = base64.StdEncoding.DecodeString(mldsaSigB64); err != nil {
+		return signed, s1Refused(metrics.S1ReasonSignatureMalformed, "invalid ML-DSA signature format")
+	}
+	signed.ed25519Key = c.Get("X-Public-Key")
+	signed.mldsaKey = c.Get("X-PQC-Public-Key")
+	return signed, nil
+}
 
-	// SECURITY: Both keys MUST be registered for hybrid mode
-	if agent.PublicKey == nil || *agent.PublicKey == "" {
-		return s1Refused(metrics.S1ReasonNoRegisteredKey, "agent has no registered Ed25519 public key for hybrid mode")
+// agentKeyRefusal is the refusal for err from an agentauth Verify method, used by both
+// signed-request middlewares; signatureInvalid is the message for a signature that does
+// not verify under the registered key.
+//
+// The four causes behind agentauth.ErrKeyNotRecognized carry the one message, and
+// refuseS1 answers each with the one body, so the caller is not told which it was. Each
+// is still counted under its own reason: the counter is read by operators, not callers,
+// and keeps a corrupt stored key apart from an unknown agent or a client presenting the
+// wrong key.
+func agentKeyRefusal(err error, signatureInvalid string) *s1Refusal {
+	cause, keyNotRecognized := agentauth.KeyNotRecognizedCause(err)
+	switch {
+	case keyNotRecognized && cause == agentauth.KeyCauseAgentUnknown:
+		return s1Refused(metrics.S1ReasonAgentLookupFailed, agentauth.KeyNotRecognizedMessage)
+	case keyNotRecognized && cause == agentauth.KeyCauseNoRegisteredKey:
+		return s1Refused(metrics.S1ReasonNoRegisteredKey, agentauth.KeyNotRecognizedMessage)
+	case keyNotRecognized && cause == agentauth.KeyCauseRegisteredKeyMalformed:
+		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, agentauth.KeyNotRecognizedMessage)
+	case keyNotRecognized:
+		// The one cause left: the request presented a key that is not the registered one.
+		return s1Refused(metrics.S1ReasonPublicKeyMismatch, agentauth.KeyNotRecognizedMessage)
+	case errors.Is(err, agentauth.ErrMLDSASignatureInvalid):
+		return s1Refused(metrics.S1ReasonSignatureInvalidMLDSA, "%s", signatureInvalid)
+	default:
+		return s1Refused(metrics.S1ReasonSignatureInvalidEd25519, "%s", signatureInvalid)
 	}
-	if agent.PQCPublicKey == nil || *agent.PQCPublicKey == "" {
-		return s1Refused(metrics.S1ReasonNoRegisteredKey, "agent has no registered ML-DSA public key for hybrid mode")
-	}
+}
 
-	ed25519PubKeyB64 := *agent.PublicKey
-	pqcPubKeyB64 := *agent.PQCPublicKey
-
-	// Verify provided keys match registered keys
-	providedEd25519 := c.Get("X-Public-Key")
-	providedPQC := c.Get("X-PQC-Public-Key")
-	if providedEd25519 != "" && providedEd25519 != ed25519PubKeyB64 {
-		return s1Refused(metrics.S1ReasonPublicKeyMismatch, "provided Ed25519 public key does not match registered key")
+// pqcSignatureFailure is the refusal message for a signature that did not verify under
+// the registered key.
+func pqcSignatureFailure(alg pqc.Algorithm, err error) string {
+	hybrid := pqc.IsHybridAlgorithm(alg)
+	switch {
+	case errors.Is(err, agentauth.ErrMLDSASignatureInvalid) && hybrid:
+		return "invalid ML-DSA signature in hybrid mode"
+	case errors.Is(err, agentauth.ErrMLDSASignatureInvalid):
+		return "invalid ML-DSA signature"
+	case hybrid:
+		return "invalid Ed25519 signature in hybrid mode"
+	default:
+		return "invalid Ed25519 signature"
 	}
-	if providedPQC != "" && providedPQC != pqcPubKeyB64 {
-		return s1Refused(metrics.S1ReasonPublicKeyMismatch, "provided ML-DSA public key does not match registered key")
-	}
-
-	// 1. Verify Ed25519 first (faster)
-	ed25519PubKeyBytes, err := base64.StdEncoding.DecodeString(ed25519PubKeyB64)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid Ed25519 public key format")
-	}
-	if len(ed25519PubKeyBytes) != ed25519.PublicKeySize {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid Ed25519 public key size")
-	}
-
-	ed25519SigBytes, err := base64.StdEncoding.DecodeString(ed25519SigB64)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonSignatureMalformed, "invalid Ed25519 signature format")
-	}
-
-	if !ed25519.Verify(ed25519.PublicKey(ed25519PubKeyBytes), message, ed25519SigBytes) {
-		return s1Refused(metrics.S1ReasonSignatureInvalidEd25519, "invalid Ed25519 signature in hybrid mode")
-	}
-
-	// 2. Verify ML-DSA (slower but quantum-resistant)
-	pqcPubKeyBytes, err := base64.StdEncoding.DecodeString(pqcPubKeyB64)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid ML-DSA public key format")
-	}
-
-	expectedSize, err := pqc.GetExpectedPublicKeySize(alg)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonUnsupportedAlgorithm, "unsupported ML-DSA algorithm in hybrid mode: %s", alg)
-	}
-	if len(pqcPubKeyBytes) != expectedSize {
-		return s1Refused(metrics.S1ReasonRegisteredKeyMalformed, "invalid ML-DSA public key size: expected %d, got %d", expectedSize, len(pqcPubKeyBytes))
-	}
-
-	mldsaSigBytes, err := base64.StdEncoding.DecodeString(mldsaSigB64)
-	if err != nil {
-		return s1Refused(metrics.S1ReasonSignatureMalformed, "invalid ML-DSA signature format")
-	}
-
-	if err := pqc.VerifyMLDSA(alg, pqcPubKeyBytes, message, mldsaSigBytes); err != nil {
-		return s1Refused(metrics.S1ReasonSignatureInvalidMLDSA, "invalid ML-DSA signature in hybrid mode: %v", err)
-	}
-
-	// BOTH signatures are valid!
-	return nil
 }

@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"os"
@@ -144,7 +144,6 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		})
 	}
 
-	// SECURITY: Verify the JWT signature against the agent's registered public key.
 	// The client_id must be a registered agent UUID with an Ed25519 public key.
 	agentID, err := uuid.Parse(clientID)
 	if err != nil {
@@ -154,37 +153,8 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		})
 	}
 
-	agent, err := h.agentRepo.GetByID(agentID)
-	if err != nil || agent == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":             "invalid_client",
-			"error_description": "Agent not found",
-		})
-	}
-
-	// SECURITY: a revoked or suspended agent must not obtain a token.
-	//
-	// This endpoint had no status check at all, and AgentService.RevokeAgent does not
-	// clear agents.public_key — revocation is expressed purely as a write to
-	// agents.status. So a revoked agent that still held its private key could keep
-	// minting service tokens here indefinitely, while every signature and API-key path
-	// denied it. Issuance is the moment that has to enforce it; ServicePrincipalMiddleware
-	// enforces the same rule at use, for tokens minted before the revocation.
-	if !domain.AgentStatusPermitsAuth(agent.Status) {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":             "invalid_client",
-			"error_description": domain.AgentStatusDeniedMessage(agent.Status),
-		})
-	}
-
-	if agent.PublicKey == nil || *agent.PublicKey == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":             "invalid_client",
-			"error_description": "Agent has no registered public key",
-		})
-	}
-
-	// Verify Ed25519 signature: sign(header.payload) must match the signature part
+	// The signature's encoding is part of the assertion's shape: checked before any agent
+	// is read, so a malformed encoding gets the same answer whichever agent it names.
 	signedContent := parts[0] + "." + parts[1]
 	signatureBytes, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
@@ -194,25 +164,18 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		})
 	}
 
-	publicKeyBytes, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
+	// SECURITY: Verify the JWT signature against the agent's registered public key, and
+	// read nothing else about the agent until it verifies. An unknown agent, an agent with
+	// no registered key, a registered key that does not decode and a signature that does
+	// not verify all get one refusal, so this answer tells a caller who holds only an
+	// agent id nothing about that agent. A stored key that does not decode is logged once,
+	// without the key, by agentauth.
+	verified, err := agentauth.KeySet(c.Context(), agentauth.FromRepository(h.agentRepo), agentID).
+		VerifyEd25519("", []byte(signedContent), signatureBytes)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "server_error",
-			"error_description": "Failed to decode agent public key",
-		})
-	}
-
-	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":             "server_error",
-			"error_description": "Agent public key has invalid size",
-		})
-	}
-
-	if !ed25519.Verify(ed25519.PublicKey(publicKeyBytes), []byte(signedContent), signatureBytes) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":             "invalid_client",
-			"error_description": "JWT signature verification failed",
+			"error_description": agentauth.AssertionNotRecognizedDescription,
 		})
 	}
 
@@ -228,6 +191,24 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 	// SDK (sdk/typescript/src/auth/oauth.ts) signs `iss`, `sub`, `aud`, `iat` and `exp`.
 	if errResp := validateAssertionClaims(c, claims); errResp != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(errResp)
+	}
+
+	// SECURITY: a revoked or suspended agent must not obtain a token.
+	//
+	// This endpoint had no status check at all, and AgentService.RevokeAgent does not
+	// clear agents.public_key — revocation is expressed purely as a write to
+	// agents.status. So a revoked agent that still held its private key could keep
+	// minting service tokens here indefinitely, while every signature and API-key path
+	// denied it. Issuance is the moment that has to enforce it; ServicePrincipalMiddleware
+	// enforces the same rule at use, for tokens minted before the revocation. It runs
+	// after the signature verifies, so the status it names reaches only a caller holding
+	// this agent's key.
+	agent := agentauth.LoadVerifiedAgent(verified)
+	if !domain.AgentStatusPermitsAuth(agent.Status) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": domain.AgentStatusDeniedMessage(agent.Status),
+		})
 	}
 
 	// Generate a service token for the authenticated agent. This is a machine

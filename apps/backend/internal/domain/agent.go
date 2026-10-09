@@ -180,8 +180,11 @@ func AgentStatusPermitsAuth(status AgentStatus) bool {
 
 // AgentStatusDeniedMessage is the denial body for a status-denied request. It names the
 // status so an operator whose agent stopped working can see why without opening a support
-// ticket; the request is only reached by a caller already holding valid credentials for
-// that specific agent.
+// ticket. That is safe only because every caller sends it after the credential verified:
+// the API-key and service-token paths verify the credential before they read the status,
+// and the signature authenticators read the agent row only through agentauth, which hands
+// back the status only once the signature has verified. So it is only reached by a caller
+// already holding valid credentials for that specific agent.
 func AgentStatusDeniedMessage(status AgentStatus) string {
 	return "Agent is not permitted to authenticate (status: " + string(status) + ")"
 }

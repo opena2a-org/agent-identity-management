@@ -133,12 +133,14 @@ An agent request signed with Ed25519, ML-DSA or both is checked by the request-s
 | `agent_lookup_failed` | the agent does not exist, or loading it failed |
 | `agent_status_denied` | the agent is revoked, suspended or in an unrecognised status |
 | `missing_signature_headers` | a signature or public-key header the algorithm requires is absent |
-| `no_registered_key` | the agent has no registered key for the algorithm |
+| `no_registered_key` | the agent has no registered key for the algorithm, including an ML-DSA key of another level |
 | `public_key_mismatch` | the key the request presents is not the registered key |
-| `registered_key_malformed` | the registered key cannot be decoded or has the wrong size |
+| `registered_key_malformed` | the registered key does not decode to a key of its algorithm family |
 | `signature_malformed` | a signature header is not valid base64 |
 | `signature_invalid_ed25519` | the Ed25519 signature does not verify over the request |
 | `signature_invalid_mldsa` | the ML-DSA signature does not verify over the request |
+
+`agent_lookup_failed`, `no_registered_key`, `public_key_mismatch` and `registered_key_malformed` are counted apart, but the caller gets one 401 body for all four, `{"error":"the signing key is not the registered key of a known agent","reasonCode":"agentKeyNotRecognized"}`, so a caller holding only an agent id learns nothing about that agent. The agent's status is read only after the signature verifies, so `agent_status_denied` counts requests signed with the agent's own key.
 
 The set is closed. `unclassified` exists only as a guard: the middleware never produces it, and seeing it means a refusal was recorded without a reason from the table.
 

@@ -127,12 +127,12 @@ func sdkAPIRouteTable(h sdkAPIHandlers) []sdkAPIRoute {
 		{
 			Method: http.MethodPost, Path: "/verifications", Bare: true,
 			Handler: h.CreateVerification,
-			Note:    "verifies an Ed25519 signature over the request and gates on agent.Status inside the handler",
+			Note:    "verifies an Ed25519 signature over the request, then gates on agent.Status inside the handler",
 		},
 		{
 			Method: http.MethodGet, Path: "/verifications/:id", Bare: true,
 			Handler: h.GetVerificationSDK,
-			Note:    "read path; verifies three X-AIM-* headers, an Ed25519 signature and event ownership inside the handler (defect #160)",
+			Note:    "read path; verifies three X-AIM-* headers, an Ed25519 signature, then agent.Status and event ownership inside the handler (defect #160)",
 		},
 
 		// Grouped routes: authenticated by the group's middleware chain.

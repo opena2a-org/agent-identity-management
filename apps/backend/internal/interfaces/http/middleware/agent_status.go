@@ -40,8 +40,10 @@ func agentStatusPermitsAuth(status domain.AgentStatus) bool {
 // agentStatusDeniedMessage is the 401 body for a status-denied request. It names the
 // status so an operator whose agent stopped working can see why without opening a
 // support ticket; atc_auth.go already discloses revocation the same way ("ATC has been
-// revoked"), and the request is only reached by a caller holding valid key material for
-// that specific agent.
+// revoked"). The API-key middlewares send it after the key's hash lookup, which is the
+// verification, and the signature middlewares send it through refuseS1, with
+// agentauth's agentStatusDenied reasonCode, after the signature verifies; so the request
+// is only reached by a caller holding valid key material for that specific agent.
 func agentStatusDeniedMessage(status domain.AgentStatus) string {
 	return domain.AgentStatusDeniedMessage(status)
 }
