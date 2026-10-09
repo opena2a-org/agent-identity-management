@@ -504,3 +504,66 @@ func TestA2AHandler_LogTask_CrossOrgClientAgentReturns404(t *testing.T) {
 	assert.NotContains(t, string(bodyBytes), clientAgentID.String(), "response must not echo the supplied ClientAgentID")
 	assert.NotContains(t, string(bodyBytes), victimOrgID.String(), "response must not echo the victim's org UUID")
 }
+
+// POST /api/v1/a2a/cards takes the agent ID from the body. An agent credential
+// naming another agent there is refused with the agent_path_mismatch 403, before
+// any lookup, so a sibling's ID and an ID that names nothing read the same. A
+// caller naming an agent in another organization gets the not-found 404.
+// a2aService is nil: a request that reached the registration would panic
+// instead of answering what is asserted here.
+func TestA2AHandler_RegisterAgentCardAlt_BindsTheBodyAgentID(t *testing.T) {
+	callerOrgID, otherOrgID := uuid.New(), uuid.New()
+	self, sibling, unknown := uuid.New(), uuid.New(), uuid.New()
+
+	for _, tc := range []struct {
+		name      string
+		principal *uuid.UUID
+		bodyAgent uuid.UUID
+		agentOrg  uuid.UUID
+		status    int
+		body      string
+		lookedUp  bool
+	}{
+		{"agent names a sibling", &self, sibling, callerOrgID, fiber.StatusForbidden,
+			`{"error":"An agent may only act on its own agent ID on this route","reasonCode":"agent_path_mismatch"}`, false},
+		{"agent names an unknown id", &self, unknown, callerOrgID, fiber.StatusForbidden,
+			`{"error":"An agent may only act on its own agent ID on this route","reasonCode":"agent_path_mismatch"}`, false},
+		{"agent names itself in another organization", &self, self, otherOrgID, fiber.StatusNotFound,
+			`{"error":"not found"}`, true},
+		{"user names an agent in another organization", nil, sibling, otherOrgID, fiber.StatusNotFound,
+			`{"error":"not found"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var lookedUp bool
+			handler := &A2AHandler{agentService: &MockAgentServiceImpl{
+				GetAgentFunc: func(_ context.Context, id uuid.UUID) (*domain.Agent, error) {
+					lookedUp = true
+					return &domain.Agent{ID: id, OrganizationID: tc.agentOrg}, nil
+				},
+			}}
+
+			app := fiber.New()
+			app.Post("/api/v1/a2a/cards", func(c fiber.Ctx) error {
+				c.Locals("organization_id", callerOrgID)
+				if tc.principal != nil {
+					c.Locals("agent_id", *tc.principal)
+				} else {
+					c.Locals("user_id", uuid.New())
+				}
+				return handler.RegisterAgentCardAlt(c)
+			})
+
+			req := httptest.NewRequest("POST", "/api/v1/a2a/cards",
+				strings.NewReader(`{"agentId":"`+tc.bodyAgent.String()+`","cardUrl":"https://agent.example/card.json"}`))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, tc.status, resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			assert.JSONEq(t, tc.body, string(body))
+			assert.Equal(t, tc.lookedUp, lookedUp, "whether the body's agent is looked up")
+		})
+	}
+}

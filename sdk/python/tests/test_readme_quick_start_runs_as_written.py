@@ -15,6 +15,7 @@ and the recorded walkthrough's typed lines to the root README's Quick start.
 Everything here runs offline and reads only files in this repository.
 """
 
+import ast
 import json
 import re
 import subprocess
@@ -39,8 +40,8 @@ READMES = [
 def quick_start(path):
     """The text under `## Quick start` up to the next `## ` heading."""
     lines = path.read_text(encoding="utf-8").split("\n")
-    start = next(i for i, l in enumerate(lines) if re.match(r"^## quick start\s*$", l, re.I))
-    end = next((i for i, l in enumerate(lines) if i > start and l.startswith("## ")), len(lines))
+    start = next(i for i, line in enumerate(lines) if re.match(r"^## quick start\s*$", line, re.IGNORECASE))
+    end = next((i for i, line in enumerate(lines) if i > start and line.startswith("## ")), len(lines))
     return "\n".join(lines[start:end])
 
 
@@ -48,7 +49,7 @@ def fences(section):
     """(language, body) for every fenced block in the section, in order."""
     return [
         (m.group(1), m.group(2))
-        for m in re.finditer(r"^```(\w*)\n(.*?)^```\s*$", section, re.M | re.S)
+        for m in re.finditer(r"^```(\w*)\n(.*?)^```\s*$", section, re.MULTILINE | re.DOTALL)
     ]
 
 
@@ -140,7 +141,8 @@ def run_example(path, tmp_path):
 
     Returns the recorded agents and the script's module names. A script that
     ends in an error is accepted only when the error is the stand-in's
-    ActionDeniedError raised from the last fence: the example's refused call.
+    ActionDeniedError raised from the script's last statement: the example's
+    refused call.
     """
     blocks = [body for lang, body in fences(quick_start(path)) if lang == "python"]
     assert blocks, f"{path.name}: the Quick start has no Python fence"
@@ -168,6 +170,11 @@ def run_example(path, tmp_path):
         assert fence == len(blocks), (
             f"{path.name}: the refused call in Python fence {fence} ends the session, "
             f"so fences {fence + 1} to {len(blocks)} never run"
+        )
+        last = ast.parse(script.read_text(encoding="utf-8")).body[-1]
+        assert last.lineno <= raised_on <= last.end_lineno, (
+            f"{path.name}: the refused call ends the session, so the code after it "
+            f"in the last Python fence never runs"
         )
     result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
     return result["agents"], result["main"]
@@ -250,7 +257,7 @@ def compose_services():
 
 def test_minimal_dev_stack_command_names_services_the_compose_file_defines():
     commands = re.findall(
-        r"^docker compose up -d (\S.*)$", ROOT_README.read_text(encoding="utf-8"), re.M
+        r"^docker compose up -d (\S.*)$", ROOT_README.read_text(encoding="utf-8"), re.MULTILINE
     )
     named = [s for c in commands for s in c.split()]
     assert named, "the README must keep its minimal dev stack command"

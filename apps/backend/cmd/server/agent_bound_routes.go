@@ -117,11 +117,16 @@ func agentNameResolver(agents agentGetter) middleware.AgentNameResolver {
 	}
 }
 
+// agentIDSegments are the path segments whose next segment, when it is a
+// parameter, is an agent ID: "agents", and the A2A aliases that address an
+// agent's card (/a2a/cards/:id) and trust score (/a2a/trust/:id) by that ID.
+var agentIDSegments = map[string]bool{"agents": true, "cards": true, "trust": true}
+
 // agentPathParam returns the name of the agent parameter in path: the
-// parameter that directly follows an "agents" segment, or one named agentId
-// or agent_id. It returns "" for a path with none. A parameter elsewhere
-// names some other resource (a verification, an MCP server, a task) and is
-// bound to the caller, if at all, by its own handler.
+// parameter that directly follows a segment in agentIDSegments, or one named
+// agentId or agent_id. It returns "" for a path with none. A parameter
+// elsewhere names some other resource (a verification, an MCP server, a task)
+// and is bound to the caller, if at all, by its own handler.
 func agentPathParam(path string) string {
 	segments := strings.Split(path, "/")
 	for i, segment := range segments {
@@ -129,7 +134,7 @@ func agentPathParam(path string) string {
 			continue
 		}
 		name := strings.TrimSuffix(strings.TrimPrefix(segment, ":"), "?")
-		if name == "agentId" || name == "agent_id" || (i > 0 && segments[i-1] == "agents") {
+		if name == "agentId" || name == "agent_id" || (i > 0 && agentIDSegments[segments[i-1]]) {
 			return name
 		}
 	}

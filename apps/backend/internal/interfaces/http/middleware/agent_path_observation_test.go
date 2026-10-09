@@ -20,7 +20,6 @@ const observationTestRoute = "GET /agents/:id/trust-score"
 // observedRecord is what a held route leaves for the request record, read back
 // by the test handler.
 type observedRecord struct {
-	status  int
 	route   any
 	outcome any
 }

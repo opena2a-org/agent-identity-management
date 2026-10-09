@@ -455,11 +455,17 @@ var agentBindingHeld = []string{
 	"GET /api/v1/a2a/consensus/:agentId/:skillId",
 	"GET /api/v1/a2a/agents/:id/attestations",
 	"GET /api/v1/a2a/agents/:id/skills/:skillId/consensus",
+	"GET /api/v1/a2a/cards/:id",
+	"GET /api/v1/a2a/trust/:id",
 }
 
 // agentBindingExceptions maps a route to the reason it serves agent callers
-// other than the one its path names. Empty today.
-var agentBindingExceptions = map[string]string{}
+// other than the one its path names.
+var agentBindingExceptions = map[string]string{
+	"PUT /api/v1/a2a/trust/:id": "answers 405 to every caller and reads no agent: the A2A trust score has no write",
+	"POST /api/v1/a2a/trust/:id/interaction": ":id is the peer the calling agent interacted with, which is another agent " +
+		"by design; the caller is read from its credential, and the handler admits only a peer in the caller's organization",
+}
 
 // TestAgentParameterRoutesUnderAgentGroupsAreDispositioned walks every non-test
 // Go file of the backend, finds each group that mounts an agent authenticator
@@ -551,6 +557,8 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 		"POST /api/v1/a2a/agents/:id/card/refresh",
 		"POST /api/v1/a2a/agents/:id/sign",
 		"POST /api/v1/a2a/agents/:id/trust-score/compute",
+		"PUT /api/v1/a2a/cards/:id",
+		"POST /api/v1/a2a/cards/:id/attestation",
 	} {
 		var isBound bool
 		for _, route := range census.routes {
@@ -559,6 +567,27 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 			}
 		}
 		assert.True(t, isBound, "%s must be registered through bindAgentRoutes", required)
+	}
+}
+
+// TestAgentPathParamReadsTheA2ARoutesThatNameAnAgentOutsideAnAgentsSegment
+// covers the A2A aliases that take the agent ID after "cards" or "trust":
+// /cards/:id/attestation refreshes the same card attestation as
+// /agents/:id/card/refresh, so the census and the binding must both see it.
+func TestAgentPathParamReadsTheA2ARoutesThatNameAnAgentOutsideAnAgentsSegment(t *testing.T) {
+	for path, want := range map[string]string{
+		"/api/v1/agents/:id":                          "id",
+		"/api/v1/a2a/attestations/:agentId/:skillId":  "agentId",
+		"/api/v1/a2a/cards/:id":                       "id",
+		"/api/v1/a2a/cards/:id/attestation":           "id",
+		"/api/v1/a2a/trust/:id":                       "id",
+		"/api/v1/a2a/trust/:id/interaction":           "id",
+		"/api/v1/a2a/tasks/:id/state":                 "",
+		"/api/v1/a2a/consent/:id/revoke":              "",
+		"/api/v1/a2a/skills/:id":                      "",
+		"/api/v1/a2a/agents/:id/peers/:peer_id/trust": "id",
+	} {
+		assert.Equal(t, want, agentPathParam(path), path)
 	}
 }
 
