@@ -370,7 +370,9 @@ function writeExecutable(path: string, contents: string): void {
 function runNotices(opts: Sandbox = {}): Run {
   const pin = securityWorkflowPin();
   const libraries = opts.libraries ?? backendLikeLibraries();
-  const root = mkdtempSync(join(tmpdir(), 'aim-notices-'));
+  // Resolved, so the paths expected here match what the script's cwd reports
+  // where the temp dir sits behind a symlink (macOS /var -> /private/var).
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'aim-notices-')));
   try {
     const moduleRoot = join(root, 'mod');
     const stubDir = join(root, 'stub');
