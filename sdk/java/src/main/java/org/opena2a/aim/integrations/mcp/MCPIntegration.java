@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -22,9 +21,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * MCP (Model Context Protocol) Integration for AIM.
  *
- * <p>This class provides methods for registering, attesting, and managing
- * MCP servers with the AIM backend. MCP servers enable AI agents to interact
- * with external tools, resources, and prompts in a standardized way.</p>
+ * <p>This class provides methods for registering and managing MCP servers
+ * with the AIM backend. MCP servers enable AI agents to interact with
+ * external tools, resources, and prompts in a standardized way. Each request
+ * carries the AIM client's access token.</p>
  *
  * <p>Example usage:</p>
  * <pre>{@code
@@ -37,15 +37,6 @@ import java.util.concurrent.TimeUnit;
  *     "http://localhost:3000",
  *     publicKey,
  *     Arrays.asList("read_file", "write_file", "list_directory")
- * );
- *
- * // Attest to the MCP server's capabilities
- * AttestationResult result = MCPIntegration.attestServer(
- *     client,
- *     server.getId(),
- *     "http://localhost:3000",
- *     "filesystem-mcp",
- *     Arrays.asList("read_file", "write_file")
  * );
  *
  * // Record tool usage
@@ -65,6 +56,14 @@ public class MCPIntegration {
     }
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ObjectMapper objectMapper = SdkObjectMappers.create();
+
+    // The server accepts an attestation only with an Ed25519 signature made
+    // with the agent's private key. This class cannot reach that key, so
+    // attestServer() refuses before sending anything.
+    private static final String ATTESTATION_UNSIGNABLE =
+            "MCPIntegration.attestServer cannot sign an attestation: the signature "
+            + "must be made with the agent's Ed25519 private key, which this class "
+            + "cannot reach. No request was sent.";
 
     private static final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -187,14 +186,18 @@ public class MCPIntegration {
     }
 
     /**
-     * Submit cryptographically signed attestation for an MCP server.
+     * Not available: throws {@link AIMException} before any request is sent.
      *
-     * @param client           AIMClient instance for authentication and signing
+     * <p>The server accepts an attestation only with an Ed25519 signature made
+     * with the agent's private key, and this class cannot reach that key.</p>
+     *
+     * @param client           AIMClient instance
      * @param serverId         UUID of the MCP server to attest
      * @param mcpUrl           URL/command of the MCP server
      * @param mcpName          Name of the MCP server
      * @param capabilitiesFound List of capabilities detected on the MCP server
-     * @return AttestationResult with attestation details
+     * @return never returns normally
+     * @throws AIMException always, before any request is sent
      */
     public static AttestationResult attestServer(
             AIMClient client,
@@ -207,9 +210,12 @@ public class MCPIntegration {
     }
 
     /**
-     * Submit cryptographically signed attestation for an MCP server.
+     * Not available: throws {@link AIMException} before any request is sent.
      *
-     * @param client               AIMClient instance for authentication and signing
+     * <p>The server accepts an attestation only with an Ed25519 signature made
+     * with the agent's private key, and this class cannot reach that key.</p>
+     *
+     * @param client               AIMClient instance
      * @param serverId             UUID of the MCP server to attest
      * @param mcpUrl               URL/command of the MCP server
      * @param mcpName              Name of the MCP server
@@ -217,7 +223,8 @@ public class MCPIntegration {
      * @param connectionSuccessful Whether connection to MCP was successful
      * @param healthCheckPassed    Whether health check passed
      * @param connectionLatencyMs  Connection latency in milliseconds
-     * @return AttestationResult with attestation details
+     * @return never returns normally
+     * @throws AIMException always, before any request is sent
      */
     public static AttestationResult attestServer(
             AIMClient client,
@@ -229,68 +236,7 @@ public class MCPIntegration {
             boolean healthCheckPassed,
             double connectionLatencyMs
     ) {
-        if (serverId == null || serverId.isBlank()) {
-            throw new IllegalArgumentException("serverId cannot be empty");
-        }
-
-        if (capabilitiesFound == null || capabilitiesFound.isEmpty()) {
-            throw new IllegalArgumentException("capabilitiesFound is required");
-        }
-
-        try {
-            // Get challenge for proof of key possession
-            String challenge = null;
-            try {
-                String challengeResponse = get(client, "/api/v1/mcp-servers/" + serverId +
-                        "/challenge?agent_id=" + client.getAgentId());
-                JsonNode challengeJson = objectMapper.readTree(challengeResponse);
-                challenge = challengeJson.has("challenge") ? challengeJson.get("challenge").asText() : null;
-                logger.debug("Obtained attestation challenge");
-            } catch (Exception e) {
-                logger.warn("Could not get challenge, proceeding without: {}", e.getMessage());
-            }
-
-            // Build attestation data (alphabetically sorted for consistent signing)
-            Map<String, Object> attestationData = new TreeMap<>();
-            attestationData.put("agent_id", client.getAgentId());
-            attestationData.put("capabilities_found", capabilitiesFound);
-            if (challenge != null) {
-                attestationData.put("challenge", challenge);
-            }
-            attestationData.put("connection_latency_ms", connectionLatencyMs);
-            attestationData.put("connection_successful", connectionSuccessful);
-            attestationData.put("health_check_passed", healthCheckPassed);
-            attestationData.put("mcp_name", mcpName);
-            attestationData.put("mcp_url", mcpUrl);
-            attestationData.put("sdk_version", "1.0.0");
-            attestationData.put("timestamp", Instant.now().toString());
-
-            // Prepare and sign the payload
-            String canonicalJson = objectMapper.writeValueAsString(attestationData);
-            String signature = signData(client, canonicalJson);
-
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.set("attestation", objectMapper.valueToTree(attestationData));
-            payload.put("signature", signature);
-
-            String response = post(client, "/api/v1/mcp-servers/" + serverId + "/attest", payload.toString());
-            JsonNode json = objectMapper.readTree(response);
-
-            return AttestationResult.builder()
-                    .success(true)
-                    .attestationId(json.has("attestationId") ? json.get("attestationId").asText() :
-                            json.has("id") ? json.get("id").asText() : null)
-                    .mcpServerId(serverId)
-                    .confidenceScore(json.has("mcpConfidenceScore") ? json.get("mcpConfidenceScore").asDouble() :
-                            json.has("confidenceScore") ? json.get("confidenceScore").asDouble() : 0.0)
-                    .attestationCount(json.has("attestationCount") ? json.get("attestationCount").asInt() : 1)
-                    .capabilitiesAttested(capabilitiesFound)
-                    .attestedAt(Instant.now())
-                    .build();
-
-        } catch (IOException e) {
-            throw new AIMException("Failed to attest MCP server: " + e.getMessage(), e);
-        }
+        throw new AIMException(ATTESTATION_UNSIGNABLE);
     }
 
     /**
@@ -414,20 +360,6 @@ public class MCPIntegration {
                 .build();
     }
 
-    private static String signData(AIMClient client, String data) {
-        // This would need access to the private key from AIMClient
-        // For now, we'll use a placeholder - the actual implementation would
-        // require AIMClient to expose signing functionality
-        try {
-            // AIMClient should provide a sign() method
-            byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
-            // Placeholder - actual implementation would use client's private key
-            return Base64.getEncoder().encodeToString(dataBytes);
-        } catch (Exception e) {
-            throw new AIMException("Failed to sign data: " + e.getMessage(), e);
-        }
-    }
-
     private static String get(AIMClient client, String path) throws IOException {
         Request request = new Request.Builder()
                 .url(client.getAimUrl() + path)
@@ -463,8 +395,10 @@ public class MCPIntegration {
     }
 
     private static String getAccessToken(AIMClient client) {
-        // This would need to access the token from AIMClient
-        // The actual implementation would require AIMClient to expose this
-        return "";  // Placeholder
+        String token = client.getAccessToken();
+        if (token == null || token.isBlank()) {
+            throw new AIMException("The AIM client has no access token to send. No request was sent.");
+        }
+        return token;
     }
 }

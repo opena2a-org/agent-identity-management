@@ -185,7 +185,6 @@ public class SecurityConfig {
 ```java
 import org.opena2a.aim.integrations.mcp.MCPIntegration;
 import org.opena2a.aim.integrations.mcp.MCPServerInfo;
-import org.opena2a.aim.integrations.mcp.AttestationResult;
 
 // Register an MCP server
 MCPServerInfo server = MCPIntegration.registerServer(
@@ -194,13 +193,6 @@ MCPServerInfo server = MCPIntegration.registerServer(
     "http://localhost:3000",
     publicKeyBase64,
     Arrays.asList("read_file", "write_file", "list_directory")
-);
-
-// Attest server capabilities
-AttestationResult attestation = MCPIntegration.attestServer(
-    agent, server.getId(), "http://localhost:3000",
-    "filesystem-mcp",
-    Arrays.asList("read_file", "write_file")
 );
 
 // Record tool usage for supply-chain analytics
