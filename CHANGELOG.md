@@ -343,6 +343,17 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   `error` now reads "The agent was not deleted and nothing was removed. Try again, and if it fails
   again, contact your administrator." The cause is written to the server log with the agent and
   organization IDs. The status stays 500.
+- Delete agent in the dashboard opens the same dialog from the agents list and from the agent
+  page. It says what the delete removes (the agent and its records, including its API keys,
+  stored secrets, capabilities, trust and verification history, and the A2A tasks, messages and
+  consent records it took part in), what is kept (audit log entries, API call records, A2A
+  security violations and the MCP servers it registered), and that it cannot be undone. A failed
+  delete keeps the dialog open and states the reason and a next step inside it, where screen
+  readers announce it. As for the agent page's other actions, the reason comes from the response's
+  status (a role that may not delete, an agent that no longer exists, AIM out of reach), never from
+  the server's text. Before, the agent page closed its dialog and stated the failure beside its
+  actions, and the agents list showed nothing. After a delete, the agents list states that the
+  agent was deleted.
 
 ### Fixed — the SDK authentication guide no longer says quantum attacks cannot break Ed25519
 

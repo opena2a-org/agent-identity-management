@@ -106,7 +106,7 @@ describe("agent page lifecycle outcomes", () => {
     browserAlert.mockRestore();
   });
 
-  it("reports a failed delete beside the actions as a reason and a next step, without the server's text", async () => {
+  it("reports a failed delete inside the delete dialog as a reason and a next step, without the server's text", async () => {
     mockAgentPage([]);
     mocked.deleteAgent.mockRejectedValue(
       requestError('pq: update or delete on table "agents" violates foreign key constraint "x_agent_id_fkey"', 500)
