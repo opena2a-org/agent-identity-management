@@ -19,24 +19,37 @@ Install the SDK and authenticate:
 
 ```bash
 pip install aim-sdk
-aim-sdk login                    # OAuth to aim.opena2a.org
+aim-sdk login                              # OAuth to aim.opena2a.org
+aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Self-hosted: create the agent under Agents in your dashboard first and run the SDK with the credentials it issues; `aim-sdk login --url` and `secure(..., api_key=...)` do not yet complete against a self-hosted backend (measured 2026-09-22 on the published images; tracked for a fix).
+Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page.
 
-Then protect any function with a capability grant:
+Then register an agent, in a Python session, with the capability it holds:
 
 ```python
 from aim_sdk import secure
 
-agent = secure("my-first-agent")
+agent = secure("my-first-agent", capabilities=["db:read"])
+```
+
+`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
+
+The agent starts `pending`, and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard (measured 2026-09-22 on a self-hosted stack). Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+
+Once it is verified, protect a function with the capability the agent holds and call it:
+
+```python
+customers = {42: {"name": "Ada Lovelace", "plan": "team"}}
 
 @agent.perform_action(capability="db:read")
 def get_customer(customer_id):
-    return db.query("SELECT * FROM customers WHERE id = ?", customer_id)
+    return customers[customer_id]
+
+get_customer(42)
 ```
 
-`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. `@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
+`@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
 
 A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
 
@@ -45,7 +58,7 @@ Now call something the agent was not granted. `my-first-agent` holds `db:read` o
 ```python
 @agent.perform_action(capability="db:write")
 def delete_customer(customer_id):
-    return db.execute("DELETE FROM customers WHERE id = ?", customer_id)
+    del customers[customer_id]
 
 delete_customer(42)
 ```
@@ -58,7 +71,7 @@ Capability 'db:write' pending admin approval (strict mode)
 aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
 ```
 
-Output copied from aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'; the rest of the line is the same. Two things a new agent meets first, also measured on that stack: an agent starts `pending` and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard, and an `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+Output copied from aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'; the rest of the line is the same. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
 New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
 
@@ -261,7 +274,7 @@ cd agent-identity-management
 ./scripts/gen-dev-secrets.sh > .env
 
 # Minimal dev stack
-docker compose up -d aim-postgres aim-redis aim-backend aim-frontend
+docker compose up -d postgres redis backend frontend
 
 # Health check
 curl -fsS localhost:8080/health

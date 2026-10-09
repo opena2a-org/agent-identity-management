@@ -124,6 +124,13 @@ What changed:
   every module under `aim_sdk/` for a string-constant `__version__`, and every importable
   submodule that exposes `__version__` must equal the package version.
 
+- The README Quick start runs as written. It called `db.query` and `db.execute` on a `db` it
+  never defined, never made the allowed call, and showed the sign-in step after the code. It
+  now signs in first, registers the agent with `capabilities=["db:read"]`, says an
+  administrator verifies the agent before its first call, makes one allowed and one refused
+  call against a dictionary it defines, and places the strict-mode step the refusal needs
+  (a new organization starts in monitoring mode) between the two calls.
+
 ### Changed
 
 - `aim-sdk login` authenticates through the OAuth 2.0 device grant (RFC 8628): the CLI
