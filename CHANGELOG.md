@@ -1052,7 +1052,8 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - Startup stops with an error naming the variable when a value is malformed or when two purposes are given the same
   key. Startup logs each key's purpose, key ID and source, never key material.
 - New route `GET /.well-known/jwks.json` (no authentication) serves a JSON Web Key Set of the card-attestation and
-  ATC-issuer public keys, each with `kid` (hex SHA-256 of the public key), `purpose`, `status` and `source`.
+  ATC-issuer public keys, each with `kid` (hex SHA-256 of the public key), `purpose` and `status`; an active key
+  also carries `source`.
 - Agent cards record the key that signed their attestation as `attestationKeyId` and `attestationAlg` (migration
   121), and the AIM extension of a served agent card carries them as `keyId` and `alg`. Attestations issued before
   the upgrade keep their signature with no key ID, expire within their validity window (24 hours by default), and are

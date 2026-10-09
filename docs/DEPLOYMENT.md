@@ -357,7 +357,7 @@ Verify what is published:
 curl -s http://localhost:8080/.well-known/jwks.json
 ```
 
-The response is a JSON Web Key Set with the active card-attestation and ATC-issuer keys. Each key carries `kid`, `purpose`, `status` (`active` or `retired`) and `source`. Card attestations record the `kid` of the key that signed them as `attestationKeyId`. Third parties verify a served card's attestation with this key set alone; the procedure and a conformance vector are in [`docs/specs/card-attestation-v2.md`](specs/card-attestation-v2.md).
+The response is a JSON Web Key Set with the active card-attestation and ATC-issuer keys. Each key carries `kid`, `purpose` and `status` (`active` or `retired`); an active key also carries `source`. Card attestations record the `kid` of the key that signed them as `attestationKeyId`. Third parties verify a served card's attestation with this key set alone; the procedure and a conformance vector are in [`docs/specs/card-attestation-v2.md`](specs/card-attestation-v2.md).
 
 **Rotating a key.** Set the variable to a new seed and list the old public key in `<VARIABLE>_RETIRED` (comma-separated). Retired keys still verify and stay in the key set with `status: "retired"` until you remove them. Copy the old key's `x` value from `/.well-known/jwks.json` before you restart.
 
