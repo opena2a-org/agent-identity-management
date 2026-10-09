@@ -166,22 +166,47 @@ describe('agent-request 401 refusals: line rules', () => {
 describe('agent-request 401 refusals: server strings', () => {
   // Listed for the hosted deployment's server; this repository's server does not send it.
   const NOT_IN_THIS_SERVER = new Set(['Agent is in hybrid mode and the request is not hybrid-signed']);
+  // Sent by servers before an unknown agent, a missing key, a key that does not decode
+  // and a different key were merged into one refusal. Kept so an older server's refusal
+  // still gets its Fix; this repository's server no longer sends any of them.
+  const BEFORE_THE_MERGED_REFUSAL = new Set([
+    'agent has no registered Ed25519 public key',
+    'provided Ed25519 public key does not match registered key',
+    'invalid Ed25519 public key size',
+    'Agent has no registered public key. Register a key first using JWT authentication.',
+    'Provided public key does not match registered key',
+    'Invalid public key size: ',
+  ]);
 
-  it('each self-hosted key string appears verbatim in the server source', () => {
-    const goSources = filesUnder(BACKEND, (p) => p.endsWith('.go') && !p.endsWith('_test.go'))
+  const readGoSources = () =>
+    filesUnder(BACKEND, (p) => p.endsWith('.go') && !p.endsWith('_test.go'))
       .map((p) => readFileSync(p, 'utf8'))
       .join('\n');
+
+  it('each self-hosted key string appears verbatim in the server source', () => {
+    const goSources = readGoSources();
     // The revoked string is composed from the status prefix and the status
     // name, so it is checked as that composition below.
     const keys = AGENT_REQUEST_FIX_ROWS.flatMap((r) => [...r.exact, ...r.prefix]).filter(
-      (k) => !NOT_IN_THIS_SERVER.has(k) && k !== REVOKED
+      (k) => !NOT_IN_THIS_SERVER.has(k) && !BEFORE_THE_MERGED_REFUSAL.has(k) && k !== REVOKED
     );
-    expect(keys.length).toBe(20);
+    expect(keys.length).toBe(15);
     for (const key of keys) {
       expect([key, goSources.includes(key)]).toEqual([key, true]);
     }
     // The status refusal is built from this prefix and the status name.
     expect(goSources).toContain('"Agent is not permitted to authenticate (status: " + string(status) + ")"');
     expect(goSources).toMatch(/AgentStatusRevoked\s+AgentStatus = "revoked"/);
+  });
+
+  it('the merged key refusal selects the agentKey row, which keeps the strings servers sent before it', () => {
+    const goSources = readGoSources();
+    expect(agentRequestFixRow('the signing key is not the registered key of a known agent').id).toBe('agentKey');
+    expect(agentRequestFixRow(undefined, 'agentKeyNotRecognized').id).toBe('agentKey');
+    for (const before of BEFORE_THE_MERGED_REFUSAL) {
+      expect([before, goSources.includes(before)]).toEqual([before, false]);
+      const row = AGENT_REQUEST_FIX_ROWS.find((r) => r.exact.includes(before) || r.prefix.includes(before));
+      expect([before, row?.id]).toEqual([before, 'agentKey']);
+    }
   });
 });

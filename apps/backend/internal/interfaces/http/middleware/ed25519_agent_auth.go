@@ -1,10 +1,8 @@
 package middleware
 
 import (
-	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
@@ -126,50 +125,8 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 			return refuseS1(c, metrics.S1ReasonSkewFuture, fiber.StatusUnauthorized, "Request timestamp expired or invalid")
 		}
 
-		// Load agent from database
-		agent, err := agentService.GetAgent(c.Context(), agentID)
-		if err != nil {
-			return refuseS1(c, metrics.S1ReasonAgentLookupFailed, fiber.StatusUnauthorized, "Agent not found")
-		}
-
-		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
-		// that sets the status. RevokeAgent expresses denial purely
-		// as `agents.status`, so an agent that keeps its key material after being revoked
-		// or suspended authenticated successfully until this check existed.
-		if !agentStatusPermitsAuth(agent.Status) {
-			return refuseS1(c, metrics.S1ReasonAgentStatusDenied, fiber.StatusUnauthorized, agentStatusDeniedMessage(agent.Status))
-		}
-
-		// SECURITY: Agent MUST have a registered public key
-		// Reject requests from agents without registered keys to prevent TOFU bypass attacks
-		// where an attacker supplies their own key via X-Public-Key header.
-		// Key registration must happen through authenticated channels (JWT auth).
-		if agent.PublicKey == nil || *agent.PublicKey == "" {
-			return refuseS1(c, metrics.S1ReasonNoRegisteredKey, fiber.StatusUnauthorized,
-				"Agent has no registered public key. Register a key first using JWT authentication.")
-		}
-
-		verifyPublicKey := *agent.PublicKey
-
-		// Verify that the provided public key matches the registered one
-		if publicKeyB64 != verifyPublicKey {
-			return refuseS1(c, metrics.S1ReasonPublicKeyMismatch, fiber.StatusUnauthorized, "Provided public key does not match registered key")
-		}
-
-		// Decode public key
-		publicKeyBytes, err := base64.StdEncoding.DecodeString(verifyPublicKey)
-		if err != nil {
-			return refuseS1(c, metrics.S1ReasonRegisteredKeyMalformed, fiber.StatusUnauthorized, "Invalid public key format")
-		}
-
-		if len(publicKeyBytes) != ed25519.PublicKeySize {
-			return refuseS1(c, metrics.S1ReasonRegisteredKeyMalformed, fiber.StatusUnauthorized,
-				fmt.Sprintf("Invalid public key size: expected %d bytes, got %d", ed25519.PublicKeySize, len(publicKeyBytes)))
-		}
-
-		publicKey := ed25519.PublicKey(publicKeyBytes)
-
-		// Decode signature
+		// Decode signature. Part of the request's shape: checked before any agent is read,
+		// so a malformed signature gets the same answer whichever agent it names.
 		signatureBytes, err := base64.StdEncoding.DecodeString(signatureB64)
 		if err != nil {
 			return refuseS1(c, metrics.S1ReasonSignatureMalformed, fiber.StatusUnauthorized, "Invalid signature format")
@@ -194,9 +151,28 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 
 		message := strings.Join(messageParts, "\n")
 
-		// Verify Ed25519 signature
-		if !ed25519.Verify(publicKey, []byte(message), signatureBytes) {
-			return refuseS1(c, metrics.S1ReasonSignatureInvalidEd25519, fiber.StatusUnauthorized, "Invalid signature")
+		// SECURITY: only the agent's registered key is read before the signature verifies.
+		// The key MUST be registered: a key the request supplies itself in X-Public-Key is
+		// never trusted (trust on first use); key registration happens through
+		// authenticated channels (JWT auth). An unknown agent, an agent with no registered
+		// key, a registered key that does not decode, and a presented key that is not the
+		// registered one all get the one refusal, so this answer tells a caller who holds
+		// only an agent id nothing about that agent.
+		keys := agentauth.KeySet(c.Context(), agentService, agentID)
+		verified, err := keys.VerifyEd25519(publicKeyB64, []byte(message), signatureBytes)
+		if err != nil {
+			refusal := agentKeyRefusal(err, "Invalid signature")
+			return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
+		}
+
+		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
+		// that sets the status. RevokeAgent expresses denial purely as `agents.status`, so
+		// an agent that keeps its key material after being revoked or suspended
+		// authenticated successfully until this check existed. It runs after the signature
+		// verifies, so the status it names reaches only a caller holding this agent's key.
+		agent := agentauth.LoadVerifiedAgent(verified)
+		if !agentStatusPermitsAuth(agent.Status) {
+			return refuseS1(c, metrics.S1ReasonAgentStatusDenied, fiber.StatusUnauthorized, agentStatusDeniedMessage(agent.Status))
 		}
 
 		// Signature is valid! Set agent context for handlers

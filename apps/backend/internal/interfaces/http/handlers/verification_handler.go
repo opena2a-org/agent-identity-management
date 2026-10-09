@@ -3,9 +3,9 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -195,37 +196,57 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	detectedRiskLevel := domain.DetectRiskLevel(req.Capability, req.RiskLevel)
 	riskAutoDetected := req.RiskLevel == ""
 
-	// Get agent from database
-	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
+	// The signed message and the signature's encoding are the request's shape: built and
+	// decoded before any agent is read, so a malformed request gets the same answer
+	// whichever agent it names.
+	message, err := verificationSigningMessage(req)
 	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": fmt.Sprintf("Signature verification failed: %v", err),
+		})
+	}
+	signatureBytes, err := base64.StdEncoding.DecodeString(req.Signature)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": fmt.Sprintf("Signature verification failed: invalid signature encoding: %v", err),
+		})
+	}
+
+	// Only the agent's registered key is read before the signature verifies.
+	keys := agentauth.KeySet(c.Context(), h.getAgentService(), agentID)
+
+	// Residual, kept on purpose: this legacy route still answers an unknown agent 404,
+	// until it converges on the signed-request scheme. Every other cause below (no
+	// registered key, a registered key that does not decode, a different key) gets the
+	// one merged refusal, and nothing about the agent's status is read before the
+	// signature verifies.
+	if !keys.Known() {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Agent not found",
 		})
 	}
 
-	// Verify agent is active
-	if agent.Status != domain.AgentStatusVerified && agent.Status != domain.AgentStatusPending {
+	// Verify the presented public key is the registered one, then the signature.
+	verified, err := keys.VerifyEd25519(req.PublicKey, message, signatureBytes)
+	if err != nil {
+		if errors.Is(err, agentauth.ErrKeyNotRecognized) {
+			return c.Status(fiber.StatusUnauthorized).JSON(agentauth.KeyNotRecognizedBody())
+		}
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Signature verification failed: signature verification failed",
+		})
+	}
+	publicKeyMatched := true
+	signatureVerified := true
+
+	// Verify agent is active. The shared predicate, after the signature verified: the
+	// status this names reaches only a caller holding the agent's key.
+	agent := agentauth.LoadVerifiedAgent(verified)
+	if !domain.AgentStatusPermitsAuth(agent.Status) {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": fmt.Sprintf("Agent status is %s, cannot perform actions", agent.Status),
 		})
 	}
-
-	// Verify public key matches
-	publicKeyMatched := agent.PublicKey != nil && *agent.PublicKey == req.PublicKey
-	if !publicKeyMatched {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Public key mismatch",
-		})
-	}
-
-	// Verify signature
-	signatureVerified := false
-	if err := h.verifySignature(req); err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": fmt.Sprintf("Signature verification failed: %v", err),
-		})
-	}
-	signatureVerified = true
 
 	// Use agent's base trust score for display/storage (consistency across app)
 	// The risk-adjusted calculation is used internally for security decisions
@@ -628,8 +649,8 @@ func customJSONFormat(jsonStr string) string {
 	return result.String()
 }
 
-// verifySignature verifies the Ed25519 signature
-func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
+// verificationSigningMessage is the message the SDK signs for a verification request.
+func verificationSigningMessage(req VerificationRequest) ([]byte, error) {
 	// Recreate the signature message (same as SDK)
 	// MUST use same approach as Python SDK: json.dumps(sort_keys=True)
 
@@ -666,13 +687,13 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 
 	jsonBytes, err := json.Marshal(signaturePayload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal signature payload: %w", err)
+		return nil, fmt.Errorf("failed to marshal signature payload: %w", err)
 	}
 
 	// Parse back and re-encode with proper spacing
 	var parsed interface{}
 	if err := json.Unmarshal(jsonBytes, &parsed); err != nil {
-		return fmt.Errorf("failed to unmarshal for formatting: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal for formatting: %w", err)
 	}
 
 	// Use custom encoder to match Python's format exactly
@@ -682,7 +703,7 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 	encoder.SetIndent("", "")
 
 	if err := encoder.Encode(parsed); err != nil {
-		return fmt.Errorf("failed to encode with formatting: %w", err)
+		return nil, fmt.Errorf("failed to encode with formatting: %w", err)
 	}
 
 	// Remove trailing newline
@@ -693,29 +714,7 @@ func (h *VerificationHandler) verifySignature(req VerificationRequest) error {
 	messageStr := customJSONFormat(string(messageBytes))
 	messageBytes = []byte(messageStr)
 
-	// Decode public key
-	publicKeyBytes, err := base64.StdEncoding.DecodeString(req.PublicKey)
-	if err != nil {
-		return fmt.Errorf("invalid public key encoding: %w", err)
-	}
-
-	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid public key size: expected %d, got %d", ed25519.PublicKeySize, len(publicKeyBytes))
-	}
-
-	// Decode signature
-	signatureBytes, err := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil {
-		return fmt.Errorf("invalid signature encoding: %w", err)
-	}
-
-	// Verify signature
-	publicKey := ed25519.PublicKey(publicKeyBytes)
-	if !ed25519.Verify(publicKey, messageBytes, signatureBytes) {
-		return fmt.Errorf("signature verification failed")
-	}
-
-	return nil
+	return messageBytes, nil
 }
 
 // calculateCapabilityTrustScore calculates trust score for specific capability
@@ -1020,18 +1019,6 @@ func (h *VerificationHandler) GetVerificationSDK(c fiber.Ctx) error {
 		})
 	}
 
-	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
-	if err != nil || agent == nil || agent.PublicKey == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unknown agent or no registered public key",
-		})
-	}
-	pubKeyBytes, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
-	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "registered public key is malformed",
-		})
-	}
 	sigBytes, err := base64.StdEncoding.DecodeString(sigStr)
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -1041,10 +1028,28 @@ func (h *VerificationHandler) GetVerificationSDK(c fiber.Ctx) error {
 
 	canonical := fmt.Sprintf("GET\n/api/v1/sdk-api/verifications/%s\n%s\n%d",
 		vid.String(), agentID.String(), ts)
-	if !ed25519.Verify(ed25519.PublicKey(pubKeyBytes), []byte(canonical), sigBytes) {
+
+	// Only the agent's registered key is read before the signature verifies. An unknown
+	// agent, an agent with no registered key and a registered key that does not decode
+	// get the one refusal, so this answer tells a caller who holds only an agent id
+	// nothing about that agent.
+	verified, err := agentauth.KeySet(c.Context(), h.getAgentService(), agentID).
+		VerifyEd25519("", []byte(canonical), sigBytes)
+	if err != nil {
+		if errors.Is(err, agentauth.ErrKeyNotRecognized) {
+			return c.Status(fiber.StatusUnauthorized).JSON(agentauth.KeyNotRecognizedBody())
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "signature verification failed",
 		})
+	}
+
+	// Revocation: a revoked or suspended agent stops reading its own verification
+	// events, as it stops on every other signed route. After the signature verifies, so
+	// the status this names reaches only a caller holding the agent's key.
+	agent := agentauth.LoadVerifiedAgent(verified)
+	if !domain.AgentStatusPermitsAuth(agent.Status) {
+		return c.Status(fiber.StatusUnauthorized).JSON(agentauth.StatusDeniedBody(agent.Status))
 	}
 
 	event, err := h.getVerificationEventService().GetVerificationEvent(c.Context(), vid)
