@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: an issued trust credential asks for no trust level above what one signing authority may assert
+
+- `POST /api/v1/agents/:id/atc` asked the credential issuer for trust level 3 when the agent's behavioral score was
+  0.75 or higher, and for level 4 at 0.90 or higher. One authority signs each credential OpenA2A AIM (Agent Identity
+  Management) requests. ATX core section 12 says a conforming issuer must not assert level 3 or higher on a credential
+  that does not carry signatures from at least two distinct authorities, nor level 4 without the root cosignature, so
+  a credential issued from such a request broke that rule.
+- AIM now asks for at most level 2: a score that maps to level 3 or 4 is requested as level 2. Levels 0 to 2 and the
+  0-100 `trustScore` are unchanged, so the credential still carries the full behavioral score. A relying party or
+  policy that requires level 3 or higher is not met by a credential AIM requests. A credential issued before this
+  change keeps its level until it is reissued or expires.
+- `apps/backend/internal/application/atc_issuance_service_test.go` fails when the issuance request asks for a level
+  above 2.
+
 ### Fixed: the fleet governance guide's deployment step creates an account to sign in with
 
 - Step 1 of `docs/use-cases/fleet-governance.md` set neither `ADMIN_EMAIL` nor `ADMIN_PASSWORD`. The server creates
