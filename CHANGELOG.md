@@ -77,6 +77,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database that applied it as 112 applies it again as 125, where both of its statements are `IF EXISTS` and change
   nothing.
 
+### Fixed — a dashboard build no longer leaves a clean checkout modified
+
+- `apps/web/next-env.d.ts` is no longer tracked. Next.js rewrites it on every `next build`, `next dev` and
+  `next typegen`, and 16.3.6 adds an import of `.next/types/root-params.d.ts` to it on build, so a clean checkout
+  showed the file as modified after one build. `.gitignore` names it, as the Next.js TypeScript documentation
+  advises, and `npm run type-check` in `apps/web` runs `next typegen` first, so the typecheck still has the file on
+  a fresh checkout.
+
 ### Fixed — an issued trust credential is returned only when it carries both signature suites and the values AIM asked for
 
 - `POST /api/v1/agents/:id/atc` returned whatever credential the issuer signed. OpenA2A AIM (Agent Identity Management)
@@ -165,9 +173,12 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Fixed — The logo SVG's embedded PNG is split into one more IDAT chunk
 
-- The PNG embedded in `apps/web/public/opena2a-logo.svg` carries one more IDAT chunk, split at the point where its
-  base64 text matched a tree-wide scan for internal path references by chance. The concatenated IDAT bytes and every
-  other chunk are byte-identical, so the decoded pixels are unchanged.
+- The PNG embedded in `apps/web/public/opena2a-logo.svg` carries one more IDAT chunk, split inside the one run of its
+  base64 text that reads, ignoring case, as an internal directory name followed by `/`. The match came from a pattern
+  class for internal path references that is kept outside the repository, applied to the payload as plain text.
+  `scripts/lint-public-surface.mjs` blanks data-URI payloads before matching, so it does not report the run, and its
+  built-in `local-home-path` class does not match the unsplit file either. The concatenated IDAT bytes and every other
+  chunk are byte-identical, so the decoded pixels are unchanged.
 
 ### Security — a reused SDK-download token ends the chain that grew from it
 
