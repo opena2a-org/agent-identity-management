@@ -11,7 +11,8 @@ export default defineConfig({
   // the dashboard shell's route gate (apps/web/components/route-gate.tsx) they
   // redirect to /auth/login before any mocked route fires. Rehabilitating them is out of scope here;
   // a follow-up PR can refit them to the aim-test-stack fixture pattern.
-  testMatch: ['**/empty-state-*.spec.ts', '**/mobile-*.spec.ts'],
+  // delete-agent.spec.ts uses that fixture pattern against the same stack.
+  testMatch: ['**/empty-state-*.spec.ts', '**/mobile-*.spec.ts', '**/delete-agent.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

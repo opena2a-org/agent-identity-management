@@ -237,7 +237,10 @@ function AgentsPageContent() {
   const [deletedNotice, setDeletedNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    setDeletedNotice(takeAgentDeletedNotice());
+    // Taking the notice removes it, so a second run of this effect (React runs mount
+    // effects twice in development) finds none and must leave the first one in place.
+    const notice = takeAgentDeletedNotice();
+    if (notice) setDeletedNotice(notice);
   }, []);
 
   // Extract user role from JWT token

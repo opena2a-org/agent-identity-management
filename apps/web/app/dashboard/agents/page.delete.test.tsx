@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
@@ -120,6 +121,22 @@ describe("agents list: delete", () => {
     rememberAgentDeleted("Billing bot");
     vi.mocked(api.listAgents).mockResolvedValue({ agents: [] } as never);
     render(<AgentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(agentDeletedNotice("Billing bot"))
+    );
+  });
+
+  // React runs mount effects twice under StrictMode (the dashboard's development build).
+  // The second run finds the notice already taken and must not clear it.
+  it("states a delete made from the agent page when its effects run twice", async () => {
+    rememberAgentDeleted("Billing bot");
+    vi.mocked(api.listAgents).mockResolvedValue({ agents: [] } as never);
+    render(
+      <StrictMode>
+        <AgentsPage />
+      </StrictMode>
+    );
 
     await waitFor(() =>
       expect(screen.getByRole("status").textContent).toContain(agentDeletedNotice("Billing bot"))
