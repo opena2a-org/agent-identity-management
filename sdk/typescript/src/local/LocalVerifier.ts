@@ -8,10 +8,16 @@
  * Go/Python reference verifiers agree with byte-for-byte). It then evaluates a
  * minimal local broker policy over the credential's *signed* claims.
  *
- * No verifier is reimplemented here — duplicating it would reintroduce exactly the
- * drift the cross-language conformance gate exists to prevent. The package is
- * loaded via a cached dynamic `import()` so this works identically from both the
- * CJS and ESM builds of the SDK on every supported Node (the package is ESM-only).
+ * The shared verifier's parse, canonicalization and Ed25519 check are not
+ * reimplemented here: duplicating them would reintroduce exactly the drift the
+ * cross-language conformance gate exists to prevent. Two checks it leaves out are
+ * added after it accepts, over the same canonical payload, so the SDK returns the
+ * conformance suite's verdict on every vendored fixture as the Java SDK's
+ * verifier does: every declared ML-DSA-65 signature must verify and an unknown
+ * signature algorithm rejects, and a v1.1 issuerChain authority lends its bound
+ * keys only when it is itself a trusted issuer. The package is loaded via a
+ * cached dynamic `import()` so this works identically from both the CJS and ESM
+ * builds of the SDK on every supported Node (the package is ESM-only).
  *
  * Network is reserved for credential *resolution* (the AAP broker hands the agent
  * its ATX) and the periodic CRL refresh — never for a per-action decision.
@@ -42,6 +48,7 @@ export type {
 
 import { CrlCache } from './CrlCache';
 import { ConfigurationError } from '../exceptions';
+import { verifyMLDSA } from '../crypto/pqc';
 export { CrlCache } from './CrlCache';
 export type { CrlData, CrlStalePolicy, CrlCacheConfig, CrlCacheStatus } from './CrlCache';
 
@@ -75,9 +82,12 @@ export interface LocalVerificationConfig {
   /** Issuer DIDs the verifier trusts. */
   trustedIssuers: string[];
   /**
-   * Issuer public keys keyed by algorithm. Ed25519 is verified; ML-DSA-65
-   * presence is recorded. Set each key's `keyId` to a DID-URL to bind it to its
-   * controller (required to be safe with a multi-issuer anchor set).
+   * Issuer public keys keyed by algorithm: `Ed25519` (32-byte raw key, hex) and
+   * `ML-DSA-65` (1952-byte raw FIPS 204 key, hex). Every signature the credential
+   * declares must verify against an eligible key of its algorithm, so an issuer
+   * that signs with both needs both keys here. Set each key's `keyId` to a
+   * DID-URL to bind it to its controller (required to be safe with a
+   * multi-issuer anchor set).
    */
   publicKeys: AtxPublicKey[];
   /**
@@ -134,7 +144,10 @@ export interface LocalAuthorizationResult {
   rejectCategory?: RejectCategory;
   /** Present when `verified` is false or `actionAllowed` is false. */
   denialReason?: string;
-  /** Whether an ML-DSA-65 signature was present (delegated, not silently skipped). */
+  /**
+   * Whether the credential declared an ML-DSA-65 signature. On a verified
+   * credential, every ML-DSA-65 signature it declares verified.
+   */
   mldsaPresent?: boolean;
   /** Always `'local'` — distinguishes this from the remote PDP path. */
   source: 'local';
@@ -233,10 +246,75 @@ export class LocalVerifier {
       } as AtxVerificationResult;
     }
     const verifier = await this.getVerifier();
-    if (isRawCredential(credential)) {
-      return verifier.verifyCredential(credential);
+    const result = isRawCredential(credential)
+      ? verifier.verifyCredential(credential)
+      : verifier.verify(credential);
+    if (!result.valid) {
+      return result;
     }
-    return verifier.verify(credential);
+    // The shared verifier accepted: raw input passed the strict parse, so parsing
+    // it again here reads the same credential it read.
+    const atx = isRawCredential(credential) ? parseStrictlyParsed(credential) : credential;
+    const rejection = await this.checkSignaturesBeyondSharedVerifier(atx);
+    return rejection ? { ...rejection, mldsaPresent: result.mldsaPresent } : result;
+  }
+
+  /**
+   * The signature checks `@opena2a/atx-verify` leaves out, run on a credential it
+   * accepted. It verifies Ed25519 only, recording an ML-DSA-65 entry without
+   * checking it and passing over an algorithm it does not know; and for v1.1 it
+   * lets the keys bound to any issuerChain DID verify, trusted issuer or not, so
+   * a signer could name itself in the chain and sign for a trusted issuer
+   * (atx-spec core.md section 1.3 step 4). Returns the rejection, or null.
+   */
+  private async checkSignaturesBeyondSharedVerifier(atx: Atx): Promise<AtxVerificationResult | null> {
+    const atxVerify = await loadAtxVerify();
+    const isV11 = atx.atcVersion === atxVerify.SUPPORTED_ATX_VERSION_V11;
+    const authorities = new Set([atx.issuerDid]);
+    const chain = isV11 && Array.isArray(atx.issuerChain) ? atx.issuerChain : [];
+    for (const did of chain) {
+      if (this.anchors.trustedIssuers.includes(did)) {
+        authorities.add(did);
+      }
+    }
+    const eligibleKeys = this.anchors.publicKeys.filter((k) => keyEligible(k.keyId, authorities));
+
+    // Ed25519 again, without the keys of chain DIDs that are not trusted issuers.
+    // Only needed when the chain names such a DID; otherwise the eligible set is
+    // the one the shared verifier already used.
+    if (chain.some((did) => !authorities.has(did))) {
+      const strict = new atxVerify.LocalAtxVerifier({ ...this.anchors, publicKeys: eligibleKeys }).verify(atx);
+      if (!strict.valid) {
+        return strict;
+      }
+    }
+
+    const mldsaKeys = eligibleKeys
+      .filter((k) => k.algorithm === 'ML-DSA-65')
+      .map((k) => mldsa65KeyFromHex(k.publicKeyHex))
+      .filter((k): k is Uint8Array => k !== null);
+    let payload: Uint8Array | null = null;
+    for (const sig of Array.isArray(atx.signatures) ? atx.signatures : []) {
+      if (sig.algorithm === 'Ed25519') {
+        continue;
+      }
+      if (sig.algorithm !== 'ML-DSA-65') {
+        // ATX defines Ed25519 and ML-DSA-65 only. Rejecting, not skipping, keeps a
+        // misspelled or look-alike algorithm name from carrying an unchecked entry.
+        return signatureInvalid(`unsupported signature algorithm: ${String(sig.algorithm)}`);
+      }
+      if (mldsaKeys.length === 0) {
+        return signatureInvalid(
+          `no eligible ML-DSA-65 trust anchor for this credential (issuer ${atx.issuerDid})`,
+        );
+      }
+      payload ??= isV11 ? atxVerify.canonicalPayloadV11(atx) : atxVerify.canonicalPayload(atx);
+      const sigBytes = typeof sig.value === 'string' ? Buffer.from(sig.value, 'base64') : null;
+      if (!sigBytes || !(await anyMldsa65KeyVerifies(mldsaKeys, payload, sigBytes))) {
+        return signatureInvalid(`ML-DSA-65 signature ${sig.keyId ?? ''} did not verify`);
+      }
+    }
+    return null;
   }
 
   /**
@@ -301,6 +379,59 @@ export class LocalVerifier {
  */
 function isRawCredential(credential: Atx | string | Uint8Array): credential is string | Uint8Array {
   return typeof credential === 'string' || ArrayBuffer.isView(credential);
+}
+
+/**
+ * Parses raw input the shared verifier has accepted, decoding bytes as it does
+ * (fatal UTF-8, BOM kept), so the result is the credential it verified.
+ */
+function parseStrictlyParsed(credential: string | Uint8Array): Atx {
+  const text =
+    typeof credential === 'string'
+      ? credential
+      : new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(credential);
+  return JSON.parse(text) as Atx;
+}
+
+/**
+ * Whether a key may verify a signature for one of `authorities`, by the shared
+ * verifier's rule: a key whose keyId is a DID-URL (contains '#') is bound to the
+ * controller DID before the '#'; a key with no fragment is unbound and eligible.
+ */
+function keyEligible(keyId: string | undefined, authorities: Set<string>): boolean {
+  if (!keyId || !keyId.includes('#')) {
+    return true;
+  }
+  return authorities.has(keyId.slice(0, keyId.indexOf('#')));
+}
+
+/**
+ * A raw 1952-byte ML-DSA-65 public key from hex, or null when the hex is
+ * malformed or the wrong length. A null key is unusable and is left out, so a
+ * declared ML-DSA-65 signature with no usable key rejects instead of passing.
+ */
+function mldsa65KeyFromHex(hex: string): Uint8Array | null {
+  if (typeof hex !== 'string' || !/^[0-9a-fA-F]{3904}$/.test(hex)) {
+    return null;
+  }
+  return Uint8Array.from(Buffer.from(hex, 'hex'));
+}
+
+async function anyMldsa65KeyVerifies(
+  keys: Uint8Array[],
+  payload: Uint8Array,
+  signature: Uint8Array,
+): Promise<boolean> {
+  for (const key of keys) {
+    if (await verifyMLDSA('ML-DSA-65', key, payload, signature)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function signatureInvalid(reason: string): AtxVerificationResult {
+  return { valid: false, rejectCategory: 'SIGNATURE_INVALID' as RejectCategory, reason };
 }
 
 /**

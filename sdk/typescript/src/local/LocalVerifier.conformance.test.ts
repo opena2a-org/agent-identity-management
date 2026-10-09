@@ -147,3 +147,36 @@ describe('LocalVerifier raw-text entry against the vendored ATX conformance fixt
     expect(fromBytes).toEqual(fromObject);
   });
 });
+
+// The machine contract (verifyResult and rejectCategory), as the Java SDK's
+// conformance test asserts it; reasonContains is the reference verifiers' wording.
+describe('LocalVerifier against the vendored ATX conformance fixtures', () => {
+  it.each(others.filter((f) => f.expected.verifyResult === 'ACCEPT'))('$file: accepts', async (f) => {
+    const result = await verifierFor(f).verifyCredential(f.rawAtx);
+
+    expect(result.reason).toBeUndefined();
+    expect(result.valid).toBe(true);
+  });
+
+  it.each(others.filter((f) => f.expected.verifyResult === 'REJECT'))(
+    '$file: rejects with the expected category',
+    async (f) => {
+      const result = await verifierFor(f).verifyCredential(f.rawAtx);
+
+      expect(result.valid).toBe(false);
+      expect(result.rejectCategory).toBe(f.expected.rejectCategory);
+    },
+  );
+
+  // Every hybrid fixture's ML-DSA-65 signature is checked, not only recorded:
+  // the tampered one above rejects, and these accept with the flag set.
+  it.each(fixtures.filter((f) => f.file.includes('baseline-valid-hybrid')))(
+    '$file: reports the verified ML-DSA-65 signature',
+    async (f) => {
+      const result = await verifierFor(f).verifyCredential(f.rawAtx);
+
+      expect(result.valid).toBe(true);
+      expect(result.mldsaPresent).toBe(true);
+    },
+  );
+});
