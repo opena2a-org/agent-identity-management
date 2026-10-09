@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -96,7 +95,10 @@ func (h *SecurityHandler) getCapabilityService() CapabilityServicer {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/security/threats [get]
 func (h *SecurityHandler) GetThreats(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	// SECURITY: Validate pagination to prevent DoS
 	p := ParsePagination(c)
@@ -128,7 +130,10 @@ func (h *SecurityHandler) GetThreats(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/security/anomalies [get]
 func (h *SecurityHandler) GetAnomalies(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	// SECURITY: Validate pagination to prevent DoS
 	p := ParsePagination(c)
@@ -158,7 +163,10 @@ func (h *SecurityHandler) GetAnomalies(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/security/metrics [get]
 func (h *SecurityHandler) GetSecurityMetrics(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	secSvc := h.getSecurityService()
 	metrics, err := secSvc.GetSecurityMetrics(c.Context(), orgID)
@@ -180,7 +188,10 @@ func (h *SecurityHandler) GetSecurityMetrics(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/security/dashboard [get]
 func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	secSvc := h.getSecurityService()
 	alertSvc := h.getAlertService()
@@ -283,7 +294,10 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/security/alerts [get]
 func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	// SECURITY: Validate pagination to prevent DoS
 	p := ParsePaginationWithDefaults(c, 20, 100)
@@ -328,7 +342,10 @@ func (h *SecurityHandler) ListSecurityAlerts(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/security/violations [get]
 func (h *SecurityHandler) GetViolations(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	// SECURITY: Validate pagination to prevent DoS
 	p := ParsePagination(c)

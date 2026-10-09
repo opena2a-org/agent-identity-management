@@ -15,9 +15,13 @@
 // the planted control was caught, and nothing else was found" exits non-zero:
 //
 //   0  clean
-//   1  one or more findings (or an allowlist entry that matches nothing)
+//   1  one or more findings, an allowlist entry that matches nothing, or an
+//      allowlist that does not parse
 //   2  inconclusive: the tree could not be enumerated, a tracked path could
 //      not be read, or the planted control was not caught
+//
+// Scanning is line by line: a token whose characters are split across lines,
+// for example by string concatenation, is not seen.
 //
 // The planted control: before the verdict, the run writes a synthetic file
 // into a fresh temporary directory carrying one sample per rule, assembled at

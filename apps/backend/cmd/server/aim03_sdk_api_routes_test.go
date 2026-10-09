@@ -36,7 +36,7 @@ import (
 //
 // Per the recorded architecture decision of 2026-08-29 the SDK/spec path is canonical: the
 // backend gains it on the existing handler and keeps /agents/:id/isolation as a
-// deprecated alias (BD6 forbids removing a published path).
+// deprecated alias (a published path is not removed: a client may still call it).
 //
 // These tests take their paths from two places only: the route table the server
 // mounts (sdkAPIRouteTable, via registerSDKAPIRoutes) and the SDK sources
@@ -346,7 +346,7 @@ func TestAIM03_DeprecatedAliasStillServed(t *testing.T) {
 		resp := f.post(t, alias, aim03TSSDKPayload)
 
 		require.Equal(t, fiber.StatusCreated, resp.StatusCode,
-			"the alias must keep returning the handler's success status: BD6 forbids removing a published path")
+			"the alias must keep returning the handler's success status: a published path is not removed")
 		assert.Equal(t, 1, f.repo.creates, "the alias reaches the same ingest, so it lands the same row")
 		assert.NoError(t, f.mock.ExpectationsWereMet())
 	})
@@ -364,7 +364,7 @@ func TestAIM03_DeprecatedAliasStillServed(t *testing.T) {
 			}
 		}
 		require.NotNil(t, canonical, "the canonical isolation-attestation route is missing from the table")
-		require.NotNil(t, alias, "the deprecated alias was removed; BD6 forbids that")
+		require.NotNil(t, alias, "the deprecated alias was removed; a published path is not removed")
 
 		assert.True(t, alias.Deprecated, "the alias must be marked deprecated so nothing advertises it")
 		assert.False(t, canonical.Deprecated, "the canonical path is the contract, not a legacy shim")

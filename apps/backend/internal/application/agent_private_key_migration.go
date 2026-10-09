@@ -32,6 +32,11 @@ type AgentPrivateKeyMigrationResult struct {
 // It is marked complete only when every row converts. Until then it runs again
 // at the next startup and touches only the rows still in v1. A row that cannot
 // be read stays refused; rotating that agent's credentials replaces it.
+//
+// Once marked complete it never reads the rows again, so a v1 key that an
+// instance of the earlier release writes afterwards is never converted. Every
+// earlier instance must be stopped before the first new one starts
+// (docs/DEPLOYMENT.md, "Upgrading across the agent private key format change").
 func MigrateAgentPrivateKeysToV2(ctx context.Context, db *sql.DB, kv *crypto.KeyVault) (AgentPrivateKeyMigrationResult, error) {
 	var result AgentPrivateKeyMigrationResult
 

@@ -115,7 +115,7 @@ func TestNonceCleanup_DeletesOnlyNoncesPastTheReplayWindow(t *testing.T) {
 	const interval = 50 * time.Millisecond
 	staleForJob := plant("stale-job", 30*time.Minute, -25*time.Minute)
 	stop := startNonceCleanupJob(svc, interval)
-	defer close(stop)
+	defer stop()
 
 	deadline := time.Now().Add(interval + 2*time.Second)
 	for exists(staleForJob) {

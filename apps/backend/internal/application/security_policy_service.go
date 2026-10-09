@@ -524,13 +524,23 @@ func (s *SecurityPolicyService) createTrustScoreAlert(
 	return s.alertRepo.Create(alert)
 }
 
-// suspendAgentForLowTrustScore suspends an agent due to critical trust score
+// suspendAgentForLowTrustScore suspends an agent due to critical trust score.
+// It reads the agent status transition table itself rather than relying on its
+// caller's status check, so a revoked agent is refused and never moves to
+// suspended, from where reactivate would accept it.
 func (s *SecurityPolicyService) suspendAgentForLowTrustScore(ctx context.Context, agent *domain.Agent) error {
 	if s.agentRepo == nil {
 		return fmt.Errorf("agent repository not configured")
 	}
 
-	agent.Status = domain.AgentStatusSuspended
+	to, write, err := domain.AgentStatusTransition(domain.AgentStatusActSuspend, agent.Status)
+	if err != nil {
+		return err
+	}
+	if !write {
+		return nil
+	}
+	agent.Status = to
 	return s.agentRepo.Update(agent)
 }
 

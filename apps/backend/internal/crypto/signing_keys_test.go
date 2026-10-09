@@ -198,6 +198,31 @@ func TestSharedSigningKeyIsRefused(t *testing.T) {
 		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "same key")
+		assert.Contains(t, err.Error(), "set AIM_SIGNING_KEY_CARD_ATTESTATION and AIM_SIGNING_KEY_ATC_ISSUER_RETIRED to different keys")
+	})
+
+	t.Run("one retired list names a key twice", func(t *testing.T) {
+		_, retiredPrivate, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		retired := base64.StdEncoding.EncodeToString(retiredPrivate.Public().(ed25519.PublicKey))
+		_, err = LoadSigningKeyRing(kv, envFrom(map[string]string{
+			"AIM_SIGNING_KEY_ATC_ISSUER_RETIRED": retired + "," + retired,
+		}))
+		require.Error(t, err)
+		assert.Equal(t, "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED lists the same key twice", err.Error())
+	})
+
+	t.Run("one key in both retired lists", func(t *testing.T) {
+		_, retiredPrivate, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		retired := base64.StdEncoding.EncodeToString(retiredPrivate.Public().(ed25519.PublicKey))
+		_, err = LoadSigningKeyRing(kv, envFrom(map[string]string{
+			"AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED": retired,
+			"AIM_SIGNING_KEY_ATC_ISSUER_RETIRED":       retired,
+		}))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "same key")
+		assert.Contains(t, err.Error(), "set AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED and AIM_SIGNING_KEY_ATC_ISSUER_RETIRED to different keys")
 	})
 
 	t.Run("a retired key is its own purpose's active key", func(t *testing.T) {
@@ -208,7 +233,7 @@ func TestSharedSigningKeyIsRefused(t *testing.T) {
 			"AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED": cardPublic,
 		}))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED")
+		assert.Equal(t, "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED lists a key that is already in use for card-attestation", err.Error())
 	})
 }
 

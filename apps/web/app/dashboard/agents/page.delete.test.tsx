@@ -127,6 +127,17 @@ describe("agents list: delete", () => {
     );
   });
 
+  // The notice is taken out of sessionStorage on mount, so the error view must
+  // show it: a later reload would find nothing to show.
+  it("states a delete made from the agent page when the list fails to load", async () => {
+    rememberAgentDeleted("Billing bot");
+    vi.mocked(api.listAgents).mockRejectedValue(requestError("Failed to fetch", 503) as never);
+    render(<AgentsPage />);
+
+    expect(await screen.findByText("Failed to load agents")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain(agentDeletedNotice("Billing bot"));
+  });
+
   // React runs mount effects twice under StrictMode (the dashboard's development build).
   // The second run finds the notice already taken and must not clear it.
   it("states a delete made from the agent page when its effects run twice", async () => {

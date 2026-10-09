@@ -1124,10 +1124,13 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		rows, err = h.db.Query(query, orgID, p.Limit, p.Offset)
 	}
 	if h.db == nil || err != nil {
-		// Fallback: return empty activities if tables don't exist or no DB
-		errMsg := "No database connection"
+		// Fallback: return empty activities if tables don't exist or no DB.
+		// The error's text stays in the server log; the body carries a fixed
+		// sentence.
+		note := "Activity data unavailable: no database connection"
 		if err != nil {
-			errMsg = err.Error()
+			log.Printf("agent activity query failed for org %s: %v", orgID.String(), err)
+			note = "Activity data unavailable: the activity query failed"
 		}
 		return c.JSON(fiber.Map{
 			"activities": []map[string]interface{}{},
@@ -1140,7 +1143,7 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 			"total":  0,
 			"limit":  p.Limit,
 			"offset": p.Offset,
-			"note":   "Activity data unavailable: " + errMsg,
+			"note":   note,
 		})
 	}
 	defer rows.Close()

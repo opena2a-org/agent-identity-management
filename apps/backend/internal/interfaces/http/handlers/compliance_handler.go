@@ -57,7 +57,10 @@ func (h *ComplianceHandler) getAuditService() AuditServicer {
 
 // GetComplianceStatus returns current compliance status
 func (h *ComplianceHandler) GetComplianceStatus(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	compSvc := h.getComplianceService()
@@ -87,7 +90,10 @@ func (h *ComplianceHandler) GetComplianceStatus(c fiber.Ctx) error {
 
 // GetComplianceMetrics returns compliance metrics over time
 func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// Parse time range
@@ -169,7 +175,10 @@ func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
 
 // GetAccessReview returns list of user access for review
 func (h *ComplianceHandler) GetAccessReview(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	compSvc := h.getComplianceService()
@@ -199,7 +208,10 @@ func (h *ComplianceHandler) GetAccessReview(c fiber.Ctx) error {
 
 // RunComplianceCheck runs compliance checks
 func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
@@ -262,7 +274,10 @@ func (h *ComplianceHandler) RunComplianceCheck(c fiber.Ctx) error {
 // @Failure 400 {object} map[string]interface{}
 // @Router /api/v1/compliance/export [get]
 func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	format := c.Query("format", "csv")
@@ -361,7 +376,10 @@ func (h *ComplianceHandler) ExportComplianceReport(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Router /api/v1/compliance/trending [get]
 func (h *ComplianceHandler) GetComplianceTrending(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	framework := c.Query("framework", "aim")
@@ -433,7 +451,10 @@ func (h *ComplianceHandler) GetComplianceTrending(c fiber.Ctx) error {
 // @Success 200 {object} domain.ComplianceSnapshot
 // @Router /api/v1/compliance/snapshot [post]
 func (h *ComplianceHandler) RecordComplianceSnapshot(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
@@ -499,7 +520,10 @@ func (h *ComplianceHandler) RecordComplianceSnapshot(c fiber.Ctx) error {
 // @Success 200 {array} domain.ComplianceEvidence
 // @Router /api/v1/compliance/evidence [get]
 func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	framework := c.Query("framework", "")
@@ -555,7 +579,10 @@ func (h *ComplianceHandler) ListEvidence(c fiber.Ctx) error {
 // @Success 200 {object} domain.ComplianceEvidence
 // @Router /api/v1/compliance/evidence/collect [post]
 func (h *ComplianceHandler) CollectEvidence(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	var req struct {
@@ -622,7 +649,10 @@ func (h *ComplianceHandler) CollectEvidence(c fiber.Ctx) error {
 // @Success 200 {array} domain.ComplianceEvidence
 // @Router /api/v1/compliance/evidence/check/{checkName} [get]
 func (h *ComplianceHandler) GetEvidenceForCheck(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	checkName := c.Params("checkName")

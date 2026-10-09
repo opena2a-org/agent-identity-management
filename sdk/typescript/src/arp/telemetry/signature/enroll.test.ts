@@ -177,9 +177,8 @@ describe('readEnrollmentRecord', () => {
 });
 
 describe('a hostile registry cannot place terminal-driving bytes in the persisted id', () => {
-  // CISO pre-tag blocker B1 (2026-08-22): the assigned sensorId is persisted
-  // and later printed by `telemetry status`, so it is shape-validated where it
-  // enters — rejected, not repaired.
+  // The assigned sensorId is persisted and later printed by `telemetry status`,
+  // so it is shape-validated where it enters — rejected, not repaired.
   const HOSTILE_IDS = [
     '\x1b[2K\x1b[1Aowned',
     'abc\x9b31mdef',

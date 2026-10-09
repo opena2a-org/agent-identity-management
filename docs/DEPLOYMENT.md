@@ -365,6 +365,17 @@ Remove a retired key once nothing it signed is still valid: card attestations ex
 
 **Rotating `KEYVAULT_MASTER_KEY` moves every derived key.** Each key whose variable is unset gets a new key and a new `kid` at the next start, and what the old key signed stops verifying. Before rotating the master key, copy the `x` value of the active `card-attestation` and `atc-issuer` keys from `/.well-known/jwks.json` into `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED`. Provisioning both keys keeps them fixed when the master key rotates.
 
+### Database Migrations and the Application Role
+
+`aim-server migrate` applies the pending migrations and exits without starting the server. It reads only the `POSTGRES_*` variables and is meant to run as the role that owns the schema. A missing `POSTGRES_HOST`, `POSTGRES_USER` or `POSTGRES_DB` stops it with one line that names each missing variable.
+
+With `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set, it first creates or updates that role for the server to connect as: a login role that is not a superuser, has no BYPASSRLS and cannot create objects in schema `public`, with read and write access to the tables and sequences the migrations create. Two effects reach beyond that role:
+
+- **CREATE on schema `public` is revoked from `PUBLIC` as well as from the application role.** PostgreSQL before 15 grants CREATE on schema `public` to `PUBLIC`, and every role holds what `PUBLIC` holds, so a revoke from the application role alone would leave it able to create tables. On such a server every role that has no grant of its own loses CREATE on `public`; grant it back to a role that needs it (`GRANT CREATE ON SCHEMA public TO <role>`). PostgreSQL 15 and later does not grant it to `PUBLIC`, and the revoke changes nothing there. The command logs the revoke after provisioning.
+- **The password travels in the statement.** The role's password is set with `CREATE ROLE ... PASSWORD '<literal>'` or `ALTER ROLE ... PASSWORD '<literal>'`. With `log_statement` set to `ddl` or `all`, PostgreSQL writes that statement, password included, to its server log. Run the command while statement logging is below `ddl`, or set the password again afterwards from a client that sends a SCRAM verifier instead of the password, such as `\password <role>` in `psql`.
+
+**Upgrading across the agent private key format change.** A release that stores agent private keys in format v2 converts the stored v1 keys once at startup and records completion in `schema_migrations` as `keyvault/agent-private-key-v2`; later starts skip the conversion. An instance of the earlier release that is still running keeps writing v1 keys, and a key written after completion is never converted and is refused on the request path until that agent's credentials are rotated. Stop every instance of the earlier release before the first instance of the new release starts.
+
 ---
 
 ## 🔐 OAuth Setup

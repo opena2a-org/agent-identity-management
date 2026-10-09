@@ -211,7 +211,10 @@ func mcpServerResponse(server *domain.MCPServer, serverTags []*domain.Tag) fiber
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers [post]
 func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	// Support both JWT auth (user_id) and Ed25519 agent auth (agent_id)
 	var userID uuid.UUID
@@ -331,7 +334,10 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 // @Failure 500 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers [get]
 func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 
 	mcpSvc := h.getMCPService()
 	servers, err := mcpSvc.ListMCPServers(c.Context(), orgID)
@@ -396,7 +402,10 @@ func (h *MCPHandler) ListMCPServers(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id} [get]
 func (h *MCPHandler) GetMCPServer(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -424,7 +433,10 @@ func (h *MCPHandler) GetMCPServer(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/by-name [get]
 func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	name := c.Query("name")
 	if name == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -466,7 +478,10 @@ func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id} [put]
 func (h *MCPHandler) UpdateMCPServer(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -520,7 +535,10 @@ func (h *MCPHandler) UpdateMCPServer(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id} [delete]
 func (h *MCPHandler) DeleteMCPServer(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -565,7 +583,10 @@ func (h *MCPHandler) DeleteMCPServer(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/verify [post]
 func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -658,7 +679,10 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/keys [post]
 func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	userID := c.Locals("user_id").(uuid.UUID)
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -718,7 +742,10 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/verification-status [get]
 func (h *MCPHandler) GetVerificationStatus(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -753,7 +780,10 @@ func (h *MCPHandler) GetVerificationStatus(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/capabilities [get]
 func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -795,7 +825,10 @@ func (h *MCPHandler) GetMCPServerCapabilities(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/detect-capabilities [post]
 func (h *MCPHandler) DetectCapabilities(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -842,7 +875,10 @@ func (h *MCPHandler) DetectCapabilities(c fiber.Ctx) error {
 // @Router /api/v1/mcp-servers/{id}/agents [get]
 func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	log.Printf("⭐ GetMCPServerAgents: HANDLER CALLED")
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -927,7 +963,10 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/verification-events [get]
 func (h *MCPHandler) GetMCPVerificationEvents(c fiber.Ctx) error {
-	orgID := c.Locals("organization_id").(uuid.UUID)
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
 	serverID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

@@ -411,8 +411,37 @@ function AgentsPageContent() {
     return <AgentsPageSkeleton />;
   }
 
+  // Kept in the page while empty so the notice is announced when it appears;
+  // sr-only takes it out of the layout until then. The mount effect has already
+  // taken the notice out of sessionStorage, so the error view renders it too.
+  const deletedNoticeStatus = (
+    <div role="status" className={deletedNotice ? undefined : "sr-only"}>
+      {deletedNotice && (
+        <div className="flex items-center justify-between gap-3 rounded-inset border border-success-border bg-success-fill px-4 py-3 text-sm text-success-text">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {deletedNotice}
+          </span>
+          <button
+            type="button"
+            onClick={() => setDeletedNotice(null)}
+            aria-label="Dismiss"
+            className="rounded p-1 hover:brightness-95"
+          >
+            <XCircle className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   if (error && agents.length === 0) {
-    return <ErrorDisplay message={error} onRetry={fetchAgents} />;
+    return (
+      <div className="space-y-6">
+        {deletedNoticeStatus}
+        <ErrorDisplay message={error} onRetry={fetchAgents} />
+      </div>
+    );
   }
 
   return (
@@ -439,26 +468,7 @@ function AgentsPageContent() {
         )}
       </div>
 
-      {/* Kept in the page while empty so the notice is announced when it appears;
-          sr-only takes it out of the layout until then. */}
-      <div role="status" className={deletedNotice ? undefined : "sr-only"}>
-        {deletedNotice && (
-          <div className="flex items-center justify-between gap-3 rounded-inset border border-success-border bg-success-fill px-4 py-3 text-sm text-success-text">
-            <span className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {deletedNotice}
-            </span>
-            <button
-              type="button"
-              onClick={() => setDeletedNotice(null)}
-              aria-label="Dismiss"
-              className="rounded p-1 hover:brightness-95"
-            >
-              <XCircle className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-        )}
-      </div>
+      {deletedNoticeStatus}
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

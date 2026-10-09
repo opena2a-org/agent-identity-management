@@ -130,6 +130,10 @@ type OktaProvider struct {
 
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
+	database, err := LoadDatabase()
+	if err != nil {
+		return nil, err
+	}
 	config := &Config{
 		Server: ServerConfig{
 			Port:             getEnv("APP_PORT", "8080"),
@@ -138,7 +142,7 @@ func Load() (*Config, error) {
 			FrontendURL:      getEnv("FRONTEND_URL", "http://localhost:3000"),
 			MetricsAuthToken: getEnv("METRICS_AUTH_TOKEN", ""),
 		},
-		Database: LoadDatabase(),
+		Database: database,
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
@@ -184,18 +188,32 @@ func Load() (*Config, error) {
 
 // LoadDatabase reads the database connection settings, the same POSTGRES_*
 // variables Load reads. `aim-server migrate` reads only these, so the
-// migration step needs no other secret in its environment.
-func LoadDatabase() DatabaseConfig {
-	return DatabaseConfig{
-		Host:            getEnvRequired("POSTGRES_HOST"),
+// migration step needs no other secret in its environment. A missing
+// POSTGRES_HOST, POSTGRES_USER or POSTGRES_DB is an error that names every
+// missing variable.
+func LoadDatabase() (DatabaseConfig, error) {
+	var missing []string
+	required := func(key string) string {
+		value := os.Getenv(key)
+		if value == "" {
+			missing = append(missing, key)
+		}
+		return value
+	}
+	database := DatabaseConfig{
+		Host:            required("POSTGRES_HOST"),
 		Port:            getEnvAsInt("POSTGRES_PORT", 5432),
-		User:            getEnvRequired("POSTGRES_USER"),
+		User:            required("POSTGRES_USER"),
 		Password:        getEnv("POSTGRES_PASSWORD", ""), // Optional for local dev with no password
-		Database:        getEnvRequired("POSTGRES_DB"),
+		Database:        required("POSTGRES_DB"),
 		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
 		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
 		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
 	}
+	if len(missing) > 0 {
+		return DatabaseConfig{}, fmt.Errorf("required environment variable(s) not set: %s", strings.Join(missing, ", "))
+	}
+	return database, nil
 }
 
 // printSecurityWarnings logs warnings for potentially insecure configurations

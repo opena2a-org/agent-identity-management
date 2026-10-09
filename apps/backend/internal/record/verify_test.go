@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"strings"
 	"testing"
 )
 
@@ -221,6 +222,20 @@ func TestVerify_ReportsABadSignature(t *testing.T) {
 		other := newMemoryKeyProvider(t)
 		wantFailure(t, mustVerify(t, cloneRecords(records), other.key(t)), 0, FailureBadSignature)
 	})
+
+	t.Run("no algorithm listed", func(t *testing.T) {
+		tampered := cloneRecords(records)
+		last := len(tampered) - 1
+		payload := replaceInPayload(t, payloadBytes(t, tampered[last]), `"sig_algs":["Ed25519"]`, `"sig_algs":[]`)
+		resigned := signRaw(t, kp, ClassRecordV1, payload)
+		resigned.TenantPart, resigned.TenantSalt = tampered[last].TenantPart, tampered[last].TenantSalt
+		tampered[last] = resigned
+		res := mustVerify(t, tampered, key)
+		wantFailure(t, res, last, FailureBadSignature)
+		if !strings.Contains(res.Failure.Detail, "lists no algorithm") {
+			t.Fatalf("detail %q; want the empty sig_algs refusal", res.Failure.Detail)
+		}
+	})
 }
 
 func TestVerify_RefusesAnyOtherPayloadTypeBeforeParsing(t *testing.T) {
@@ -330,6 +345,20 @@ func TestVerify_HoldsTheGenesisRule(t *testing.T) {
 		forged := signRaw(t, kp, ClassRecordV1, payload)
 		forged.TenantPart, forged.TenantSalt = records[0].TenantPart, records[0].TenantSalt
 		wantFailure(t, mustVerify(t, []Record{forged}, key), 0, FailureGenesis)
+	})
+
+	t.Run("a genesis after the start of the chain", func(t *testing.T) {
+		// The record at sequence 1 keeps its place and its predecessor hash and
+		// only claims to be a genesis.
+		payload := replaceInPayload(t, payloadBytes(t, records[1]), `"type":"authorization_transition"`, `"type":"opena2a.chain_genesis"`)
+		forged := signRaw(t, kp, ClassRecordV1, payload)
+		forged.TenantPart, forged.TenantSalt = records[1].TenantPart, records[1].TenantSalt
+		forged.PersonalPart, forged.PersonalSalt = records[1].PersonalPart, records[1].PersonalSalt
+		res := mustVerify(t, []Record{records[0], forged}, key)
+		wantFailure(t, res, 1, FailureGenesis)
+		if !strings.Contains(res.Failure.Detail, "after the start of the chain") {
+			t.Fatalf("detail %q; want the misplaced genesis refusal", res.Failure.Detail)
+		}
 	})
 }
 

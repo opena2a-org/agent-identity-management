@@ -832,14 +832,17 @@ func (r *AgentRepository) UpdateTrustScore(id uuid.UUID, newScore float64) error
 	return err
 }
 
-// MarkAsCompromised marks an agent as potentially compromised by setting status to suspended
+// MarkAsCompromised marks an agent as potentially compromised by setting status to suspended.
+// Like SuspendAgentsWithExpiredKeys it leaves an agent that is already suspended or revoked
+// alone, in the statement itself: a revoked agent moved to suspended is one reactivate accepts.
 func (r *AgentRepository) MarkAsCompromised(id uuid.UUID) error {
 	query := `
 		UPDATE agents
 		SET status = $1, updated_at = $2
 		WHERE id = $3
+		  AND status NOT IN ($1, $4)
 	`
-	_, err := r.db.Exec(query, domain.AgentStatusSuspended, time.Now(), id)
+	_, err := r.db.Exec(query, string(domain.AgentStatusSuspended), time.Now(), id, string(domain.AgentStatusRevoked))
 	return err
 }
 

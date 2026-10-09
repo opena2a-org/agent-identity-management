@@ -10,14 +10,15 @@ import (
 )
 
 // The statement the cleanup job runs against users. It clears only the two
-// reset columns, does not set updated_at, and reads nothing back, so the job
-// can log a count and never a token or an address.
+// reset columns, matches only rows that hold a token, does not set
+// updated_at, and reads nothing back, so the job can log a count of tokens
+// and never a token or an address.
 const wantClearResetTokensSQL = `
 	UPDATE users
 	SET password_reset_token = NULL,
 	    password_reset_expires_at = NULL
-	WHERE password_reset_expires_at <= NOW()
-	   OR (password_reset_token IS NOT NULL AND password_reset_expires_at IS NULL)
+	WHERE password_reset_token IS NOT NULL
+	  AND (password_reset_expires_at <= NOW() OR password_reset_expires_at IS NULL)
 `
 
 func expectVerificationSweep(mock sqlmock.Sqlmock) *sqlmock.ExpectedQuery {
