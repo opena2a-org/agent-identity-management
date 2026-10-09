@@ -57,16 +57,15 @@ func MigrateAgentPrivateKeysToV2(ctx context.Context, db *sql.DB, kv *crypto.Key
 	if err != nil {
 		return result, fmt.Errorf("failed to list stored private keys: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var k storedKey
 		if err := rows.Scan(&k.id, &k.encrypted); err != nil {
-			rows.Close()
 			return result, fmt.Errorf("failed to read stored private key row: %w", err)
 		}
 		stored = append(stored, k)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
 		return result, fmt.Errorf("failed to list stored private keys: %w", err)
 	}
 	rows.Close()
