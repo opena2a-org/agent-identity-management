@@ -3,19 +3,22 @@ The Quick start in the root README and in this SDK's README is one Python
 session a reader types top to bottom: sign in, register, verify, one allowed
 call, the strict-mode step, one refused call.
 
-These tests run that example as written, fence by fence in one namespace, with
-`aim_sdk` replaced by a stand-in that enforces exactly the capabilities the
-example declares. A name the example uses without defining it raises
-NameError; a call the example never makes is counted as missing. They also
-hold the minimal dev stack command to the services docker-compose.yml defines,
+These tests run that example as written: the Python fences, in order, as one
+script in a fresh interpreter (`python -I`), with `aim_sdk` replaced by a
+stand-in module that enforces exactly the capabilities the example declares.
+A name the example uses without defining it raises NameError; a call the
+example never makes is counted as missing; the refused call ends the script
+as it would end a reader's, so it has to be the last line. They also hold
+the minimal dev stack command to the services docker-compose.yml defines,
 and the recorded walkthrough's typed lines to the root README's Quick start.
 
 Everything here runs offline and reads only files in this repository.
 """
 
+import json
 import re
+import subprocess
 import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -49,11 +52,27 @@ def fences(section):
     ]
 
 
-class StubDenied(PermissionError):
-    """Stands in for ActionDeniedError, which is a PermissionError."""
+# The stand-in `aim_sdk` the example imports. `secure` records each agent;
+# `perform_action` refuses a capability the agent does not hold with
+# ActionDeniedError, a PermissionError like the SDK's, and never runs the
+# function body for it. At interpreter exit, which also follows an uncaught
+# exception, it writes the agents, their calls (with the script line that made
+# each) and the script's JSON-serialisable module names to result.json next to
+# itself. JSON turns the example's integer dictionary keys into strings.
+STUB_AIM_SDK = '''\
+import atexit
+import json
+import sys
+from pathlib import Path
+
+_agents = []
 
 
-class StubAgent:
+class ActionDeniedError(PermissionError):
+    pass
+
+
+class _Agent:
     def __init__(self, name, capabilities):
         self.name = name
         self.capabilities = list(capabilities or [])
@@ -62,11 +81,12 @@ class StubAgent:
     def perform_action(self, capability, **_):
         def decorate(fn):
             def wrapper(*args, **kwargs):
+                line = sys._getframe(1).f_lineno
                 if capability not in self.capabilities:
-                    self.calls.append(("refused", capability, None))
-                    raise StubDenied(f"AIM denied {capability!r}")
+                    self.calls.append(["refused", capability, None, line])
+                    raise ActionDeniedError(f"AIM denied {capability!r}")
                 result = fn(*args, **kwargs)
-                self.calls.append(("allowed", capability, result))
+                self.calls.append(["allowed", capability, result, line])
                 return result
 
             return wrapper
@@ -74,53 +94,107 @@ class StubAgent:
         return decorate
 
 
-def run_example(path, monkeypatch):
-    """Execute the Quick start's Python fences in order in one namespace."""
-    agents = []
+def secure(name, capabilities=None, **_):
+    agent = _Agent(name, capabilities)
+    _agents.append(agent)
+    return agent
 
-    def secure(name, capabilities=None, **_):
-        agent = StubAgent(name, capabilities)
-        agents.append(agent)
-        return agent
 
-    stub = types.ModuleType("aim_sdk")
-    stub.secure = secure
-    monkeypatch.setitem(sys.modules, "aim_sdk", stub)
+def _record():
+    names = {}
+    for key, value in vars(sys.modules["__main__"]).items():
+        if key.startswith("_"):
+            continue
+        try:
+            names[key] = json.loads(json.dumps(value))
+        except (TypeError, ValueError):
+            pass
+    Path(__file__).with_name("result.json").write_text(
+        json.dumps({
+            "agents": [
+                {"name": a.name, "capabilities": a.capabilities, "calls": a.calls}
+                for a in _agents
+            ],
+            "main": names,
+        }),
+        encoding="utf-8",
+    )
 
-    namespace = {"__name__": "__quickstart__"}
+
+atexit.register(_record)
+'''
+
+# `python -I` puts neither the script's directory nor any environment path on
+# sys.path, so the script itself points at the stand-in before the example's
+# first line. The three names are deleted again: the example must define
+# every name it uses.
+PRELUDE = [
+    "import os as _os, sys as _sys",
+    "_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))",
+    "del _os, _sys",
+]
+
+
+def run_example(path, tmp_path):
+    """Run the Quick start's Python fences, in order, as one script in a fresh interpreter.
+
+    Returns the recorded agents and the script's module names. A script that
+    ends in an error is accepted only when the error is the stand-in's
+    ActionDeniedError raised from the last fence: the example's refused call.
+    """
     blocks = [body for lang, body in fences(quick_start(path)) if lang == "python"]
     assert blocks, f"{path.name}: the Quick start has no Python fence"
-    for index, body in enumerate(blocks):
-        code = compile(body, f"{path.name} Quick start fence {index + 1}", "exec")
-        try:
-            exec(code, namespace)
-        except StubDenied:
-            pass
-    return agents, namespace
+
+    (tmp_path / "aim_sdk.py").write_text(STUB_AIM_SDK, encoding="utf-8")
+    lines = list(PRELUDE)
+    first_line = []                      # 1-based script line each fence starts on
+    for body in blocks:
+        first_line.append(len(lines) + 1)
+        lines.extend(body.split("\n"))
+    script = tmp_path / "quickstart.py"
+    script.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    done = subprocess.run(
+        [sys.executable, "-I", "-B", str(script)],
+        cwd=tmp_path, capture_output=True, text=True, timeout=60, check=False,
+    )
+    if done.returncode != 0:
+        last = done.stderr.strip().split("\n")[-1]
+        assert last.startswith("aim_sdk.ActionDeniedError:"), (
+            f"{path.name}: the Quick start does not run as written:\n{done.stderr}"
+        )
+        raised_on = int(re.search(r'quickstart\.py", line (\d+)', done.stderr).group(1))
+        fence = sum(1 for start in first_line if start <= raised_on)
+        assert fence == len(blocks), (
+            f"{path.name}: the refused call in Python fence {fence} ends the session, "
+            f"so fences {fence + 1} to {len(blocks)} never run"
+        )
+    result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    return result["agents"], result["main"]
 
 
 @pytest.mark.parametrize("path", READMES)
-def test_example_runs_as_written_with_one_allowed_and_one_refused_call(path, monkeypatch):
-    agents, namespace = run_example(path, monkeypatch)
+def test_example_runs_as_written_with_one_allowed_and_one_refused_call(path, tmp_path):
+    agents, names = run_example(path, tmp_path)
 
     assert len(agents) == 1, f"{path.name}: the example must register exactly one agent"
     agent = agents[0]
-    assert agent.capabilities == ["db:read"], (
+    assert agent["capabilities"] == ["db:read"], (
         f"{path.name}: the code must show that the agent holds db:read, "
-        f"got capabilities={agent.capabilities!r}"
+        f"got capabilities={agent['capabilities']!r}"
     )
-    allowed = [c for c in agent.calls if c[0] == "allowed"]
-    refused = [c for c in agent.calls if c[0] == "refused"]
+    allowed = [c for c in agent["calls"] if c[0] == "allowed"]
+    refused = [c for c in agent["calls"] if c[0] == "refused"]
     assert [c[1] for c in allowed] == ["db:read"], (
-        f"{path.name}: the example must make exactly one allowed db:read call, got {agent.calls!r}"
+        f"{path.name}: the example must make exactly one allowed db:read call, got {agent['calls']!r}"
     )
     assert [c[1] for c in refused] == ["db:write"], (
-        f"{path.name}: the example must make exactly one refused db:write call, got {agent.calls!r}"
+        f"{path.name}: the example must make exactly one refused db:write call, got {agent['calls']!r}"
     )
-    assert allowed[0][2] == namespace["customers"][42], (
+    assert allowed[0][2] == names["customers"]["42"], (
         f"{path.name}: the allowed call must return the record it reads"
     )
-    assert 42 in namespace["customers"], (
+    assert "42" in names["customers"], (
         f"{path.name}: the refused call's body must not have run"
     )
 
