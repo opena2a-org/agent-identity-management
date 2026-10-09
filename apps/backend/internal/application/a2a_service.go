@@ -189,8 +189,8 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 	cardHashStr := hex.EncodeToString(cardHash[:])
 
 	// 5. Create attestation signature
-	attestationExpires := time.Now().UTC().Add(time.Duration(getAttestationValidityHours()) * time.Hour)
-	attestation, err := s.createCardAttestation(agent, cardData, attestationExpires)
+	now := time.Now().UTC()
+	attestation, err := s.createCardAttestation(agent, cardHashStr, now, now.Add(time.Duration(getAttestationValidityHours())*time.Hour))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create attestation: %w", err)
 	}
@@ -200,23 +200,18 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 	if cardURL == "" {
 		cardURL = fmt.Sprintf("inline://%s", req.AgentID.String())
 	}
-	now := time.Now().UTC()
 	card := &domain.A2AAgentCard{
-		ID:                   uuid.New(),
-		AgentID:              req.AgentID,
-		CardURL:              cardURL,
-		CardData:             cardData,
-		CardHash:             cardHashStr,
-		ProtocolVersion:      parsedCard.Version,
-		AttestationSignature: attestation.signature,
-		AttestationKeyID:     &attestation.keyID,
-		AttestationAlg:       &attestation.alg,
-		AttestationIssuedAt:  &now,
-		AttestationExpiresAt: &attestationExpires,
-		IsValid:              true,
-		LastFetchedAt:        &now,
-		FetchCount:           1,
+		ID:              uuid.New(),
+		AgentID:         req.AgentID,
+		CardURL:         cardURL,
+		CardData:        cardData,
+		CardHash:        cardHashStr,
+		ProtocolVersion: parsedCard.Version,
+		IsValid:         true,
+		LastFetchedAt:   &now,
+		FetchCount:      1,
 	}
+	attestation.applyTo(card)
 
 	if err := s.cardRepo.Create(ctx, card); err != nil {
 		return nil, fmt.Errorf("failed to save agent card: %w", err)
@@ -246,7 +241,7 @@ func (s *A2AService) RegisterAgentCard(ctx context.Context, req RegisterAgentCar
 		CardID:             card.ID,
 		AgentID:            card.AgentID,
 		CardURL:            card.CardURL,
-		AttestationExpires: attestationExpires,
+		AttestationExpires: attestation.expiresAt,
 		Skills:             skillIDs,
 	}, nil
 }
@@ -321,15 +316,7 @@ func (s *A2AService) GetEnhancedAgentCard(ctx context.Context, agentID uuid.UUID
 		Capabilities: agent.Capabilities,
 	}
 
-	if card != nil && card.AttestationSignature != "" {
-		parsed.AIM.Attestation = &domain.A2AAttestation{
-			Signature: card.AttestationSignature,
-			KeyID:     stringValue(card.AttestationKeyID),
-			Alg:       stringValue(card.AttestationAlg),
-			IssuedAt:  timeValue(card.AttestationIssuedAt),
-			ExpiresAt: timeValue(card.AttestationExpiresAt),
-		}
-	}
+	parsed.AIM.Attestation = servedCardAttestation(card)
 
 	if trustScore != nil {
 		parsed.AIM.Behavior = &domain.A2ABehavior{
@@ -360,20 +347,16 @@ func (s *A2AService) RefreshAttestation(ctx context.Context, agentID uuid.UUID) 
 		return nil, fmt.Errorf("agent not found")
 	}
 
-	// Create new attestation
-	attestationExpires := time.Now().UTC().Add(time.Duration(getAttestationValidityHours()) * time.Hour)
-	attestation, err := s.createCardAttestation(agent, card.CardData, attestationExpires)
+	// Create new attestation. card.CardHash is the hash of the registered card bytes;
+	// card.CardData has been through JSONB and no longer hashes to it.
+	now := time.Now().UTC()
+	attestation, err := s.createCardAttestation(agent, card.CardHash, now, now.Add(time.Duration(getAttestationValidityHours())*time.Hour))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create attestation: %w", err)
 	}
 
 	// Update card
-	now := time.Now().UTC()
-	card.AttestationSignature = attestation.signature
-	card.AttestationKeyID = &attestation.keyID
-	card.AttestationAlg = &attestation.alg
-	card.AttestationIssuedAt = &now
-	card.AttestationExpiresAt = &attestationExpires
+	attestation.applyTo(card)
 
 	if err := s.cardRepo.Update(ctx, card); err != nil {
 		return nil, fmt.Errorf("failed to update card: %w", err)
@@ -1553,14 +1536,79 @@ func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
 	return body, nil
 }
 
-// cardAttestation is a signed card attestation and the key that signed it.
+// CardAttestationFormatV2 is the v2 label of an agent card attestation. The signing
+// input is this label, a newline, and the JSON form of cardAttestationPayload; the
+// signature is Ed25519 over the SHA-256 digest of that input. Every value in the payload
+// is served with the card, so a third party verifies it with /.well-known/jwks.json alone.
+// docs/specs/card-attestation-v2.md is the published procedure.
+const CardAttestationFormatV2 = "opena2a-aim/card-attestation/v2"
+
+// cardAttestationIssuer is the issuer member of every card attestation payload.
+const cardAttestationIssuer = "aim-server"
+
+// cardAttestationPayload is the signed payload. Its JSON form, as encoding/json writes
+// it (members in this order, no whitespace, timestamps in RFC 3339), is part of the
+// format: changing a member, its order or its type needs a new label.
+type cardAttestationPayload struct {
+	CardHash  string    `json:"cardHash"`
+	AgentID   string    `json:"agentId"`
+	Issuer    string    `json:"issuer"`
+	IssuedAt  time.Time `json:"issuedAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// normalizeAttestationTime puts t in UTC with whole seconds, the precision that survives
+// storage and that a verifier rebuilds as YYYY-MM-DDTHH:MM:SSZ.
+func normalizeAttestationTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Second)
+}
+
+// cardAttestationSigningInput returns the v2 signing input for the given values. The
+// timestamps are normalized first, so the input matches what is stored and served.
+func cardAttestationSigningInput(cardHash string, agentID uuid.UUID, issuedAt, expiresAt time.Time) ([]byte, error) {
+	payload, err := json.Marshal(cardAttestationPayload{
+		CardHash:  cardHash,
+		AgentID:   agentID.String(),
+		Issuer:    cardAttestationIssuer,
+		IssuedAt:  normalizeAttestationTime(issuedAt),
+		ExpiresAt: normalizeAttestationTime(expiresAt),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode the card attestation payload: %w", err)
+	}
+	input := make([]byte, 0, len(CardAttestationFormatV2)+1+len(payload))
+	input = append(input, CardAttestationFormatV2...)
+	input = append(input, '\n')
+	return append(input, payload...), nil
+}
+
+// cardAttestation is a signed card attestation, the key that signed it, and the
+// timestamps it signed.
 type cardAttestation struct {
+	format    string
 	signature string
 	keyID     string
 	alg       string
+	issuedAt  time.Time
+	expiresAt time.Time
 }
 
-func (s *A2AService) createCardAttestation(agent *domain.Agent, cardData json.RawMessage, expiresAt time.Time) (*cardAttestation, error) {
+// applyTo records the attestation on card with exactly the timestamps that were signed.
+func (a *cardAttestation) applyTo(card *domain.A2AAgentCard) {
+	format, keyID, alg := a.format, a.keyID, a.alg
+	issuedAt, expiresAt := a.issuedAt, a.expiresAt
+	card.AttestationSignature = a.signature
+	card.AttestationFormat = &format
+	card.AttestationKeyID = &keyID
+	card.AttestationAlg = &alg
+	card.AttestationIssuedAt = &issuedAt
+	card.AttestationExpiresAt = &expiresAt
+}
+
+// createCardAttestation signs a v2 attestation that the agent card whose bytes hash to
+// cardHash (hex SHA-256) belongs to agent, valid from issuedAt until expiresAt. Both
+// timestamps are normalized to UTC whole seconds before signing.
+func (s *A2AService) createCardAttestation(agent *domain.Agent, cardHash string, issuedAt, expiresAt time.Time) (*cardAttestation, error) {
 	// SECURITY: Use the AIM server's card-attestation key, NOT the agent's own key.
 	// Self-attestation provides no trust guarantee — an attacker controlling an agent
 	// could sign any card data. Server-signed attestation proves the AIM platform
@@ -1570,30 +1618,43 @@ func (s *A2AService) createCardAttestation(agent *domain.Agent, cardData json.Ra
 		return nil, fmt.Errorf("card attestation key not configured — cannot issue attestation")
 	}
 
-	// Create attestation payload
-	attestPayload := struct {
-		CardHash  string    `json:"cardHash"`
-		AgentID   string    `json:"agentId"`
-		Issuer    string    `json:"issuer"`
-		IssuedAt  time.Time `json:"issuedAt"`
-		ExpiresAt time.Time `json:"expiresAt"`
-	}{
-		CardHash:  hex.EncodeToString(sha256Hash(cardData)),
-		AgentID:   agent.ID.String(),
-		Issuer:    "aim-server",
-		IssuedAt:  time.Now().UTC(),
-		ExpiresAt: expiresAt,
+	issuedAt = normalizeAttestationTime(issuedAt)
+	expiresAt = normalizeAttestationTime(expiresAt)
+	input, err := cardAttestationSigningInput(cardHash, agent.ID, issuedAt, expiresAt)
+	if err != nil {
+		return nil, err
 	}
+	digest := sha256.Sum256(input)
 
-	payloadJSON, _ := json.Marshal(attestPayload)
-	payloadHash := sha256.Sum256(payloadJSON)
-
-	signature := s.cardAttestationKey.Sign(payloadHash[:])
+	signature := s.cardAttestationKey.Sign(digest[:])
 	return &cardAttestation{
+		format:    CardAttestationFormatV2,
 		signature: base64.StdEncoding.EncodeToString(signature),
 		keyID:     s.cardAttestationKey.KeyID,
 		alg:       s.cardAttestationKey.Alg,
+		issuedAt:  issuedAt,
+		expiresAt: expiresAt,
 	}, nil
+}
+
+// servedCardAttestation is the attestation member of a served agent card, or nil when
+// the card has none. Timestamps are served in UTC. A card with the v2 format serves
+// every value its signed payload holds apart from the agent ID, which the card carries
+// as aim.agentId.
+func servedCardAttestation(card *domain.A2AAgentCard) *domain.A2AAttestation {
+	if card == nil || card.AttestationSignature == "" {
+		return nil
+	}
+	return &domain.A2AAttestation{
+		Format:    stringValue(card.AttestationFormat),
+		Issuer:    cardAttestationIssuer,
+		CardHash:  card.CardHash,
+		IssuedAt:  timeValue(card.AttestationIssuedAt).UTC(),
+		ExpiresAt: timeValue(card.AttestationExpiresAt).UTC(),
+		Signature: card.AttestationSignature,
+		KeyID:     stringValue(card.AttestationKeyID),
+		Alg:       stringValue(card.AttestationAlg),
+	}
 }
 
 func (s *A2AService) updatePeerTrust(ctx context.Context, task *domain.A2ATask, completed bool) {
@@ -1649,11 +1710,6 @@ func (s *A2AService) updatePeerTrust(ctx context.Context, task *domain.A2ATask, 
 	remoteToClient.TrustDataPoints++
 
 	_ = s.peerTrustRepo.Upsert(ctx, remoteToClient)
-}
-
-func sha256Hash(data []byte) []byte {
-	h := sha256.Sum256(data)
-	return h[:]
 }
 
 func stringValue(s *string) string {

@@ -1,0 +1,139 @@
+{
+  "format": "opena2a-aim/card-attestation/v2",
+  "description": "Conformance vector for verifying an AIM agent card attestation from the served card and the JWK Set. See card-attestation-v2.md.",
+  "testOnly": "The seed is public. It exists so the signature can be reproduced; never configure it as a signing key.",
+  "inputs": {
+    "seed": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "card": "{\"name\":\"Example Agent\",\"description\":\"Card attestation conformance vector\",\"url\":\"https://agent.example/a2a\",\"version\":\"1.0.0\"}",
+    "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+    "issuedAt": "2026-10-05T12:00:00Z",
+    "expiresAt": "2026-10-06T12:00:00Z"
+  },
+  "jwks": {
+    "keys": [
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+        "kid": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA",
+        "use": "sig",
+        "purpose": "card-attestation",
+        "status": "active",
+        "source": "provisioned"
+      }
+    ]
+  },
+  "intermediate": {
+    "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+    "payload": "{\"cardHash\":\"cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e\",\"agentId\":\"7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f\",\"issuer\":\"aim-server\",\"issuedAt\":\"2026-10-05T12:00:00Z\",\"expiresAt\":\"2026-10-06T12:00:00Z\"}",
+    "signingInput": "opena2a-aim/card-attestation/v2\n{\"cardHash\":\"cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e\",\"agentId\":\"7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f\",\"issuer\":\"aim-server\",\"issuedAt\":\"2026-10-05T12:00:00Z\",\"expiresAt\":\"2026-10-06T12:00:00Z\"}",
+    "digest": "f8e243103e6efd446f82f6969c0b2ec2005648d57e7cc4f0fa27dff01853c3e5"
+  },
+  "cases": [
+    {
+      "name": "the attestation as the server serves it",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+      "attestation": {
+        "format": "opena2a-aim/card-attestation/v2",
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+        "issuedAt": "2026-10-05T12:00:00Z",
+        "expiresAt": "2026-10-06T12:00:00Z",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA"
+      },
+      "result": "verified"
+    },
+    {
+      "name": "timestamps written with a UTC offset are normalised to Z before rebuilding the payload",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+      "attestation": {
+        "format": "opena2a-aim/card-attestation/v2",
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+        "issuedAt": "2026-10-05T06:00:00-06:00",
+        "expiresAt": "2026-10-06T06:00:00-06:00",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA"
+      },
+      "result": "verified"
+    },
+    {
+      "name": "a changed card hash does not verify",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+      "attestation": {
+        "format": "opena2a-aim/card-attestation/v2",
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453f",
+        "issuedAt": "2026-10-05T12:00:00Z",
+        "expiresAt": "2026-10-06T12:00:00Z",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA"
+      },
+      "result": "signature-invalid"
+    },
+    {
+      "name": "a different agent ID does not verify",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e50",
+      "attestation": {
+        "format": "opena2a-aim/card-attestation/v2",
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+        "issuedAt": "2026-10-05T12:00:00Z",
+        "expiresAt": "2026-10-06T12:00:00Z",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA"
+      },
+      "result": "signature-invalid"
+    },
+    {
+      "name": "a timestamp with a fractional second is malformed",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+      "attestation": {
+        "format": "opena2a-aim/card-attestation/v2",
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+        "issuedAt": "2026-10-05T12:00:00.5Z",
+        "expiresAt": "2026-10-06T12:00:00Z",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA"
+      },
+      "result": "malformed"
+    },
+    {
+      "name": "a key ID that is not in the JWK Set is an unknown key",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+      "attestation": {
+        "format": "opena2a-aim/card-attestation/v2",
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+        "issuedAt": "2026-10-05T12:00:00Z",
+        "expiresAt": "2026-10-06T12:00:00Z",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "0000000000000000000000000000000000000000000000000000000000000000",
+        "alg": "EdDSA"
+      },
+      "result": "unknown-key"
+    },
+    {
+      "name": "an attestation without the v2 format label cannot be verified by a third party",
+      "agentId": "7d3f2a9e-41c8-4b6d-9e0f-5a1b2c3d4e5f",
+      "attestation": {
+        "issuer": "aim-server",
+        "cardHash": "cd287966c0eea91e95d010f7da379df77f4504b34d7aca09ea6e77eb565a453e",
+        "issuedAt": "2026-10-05T12:00:00Z",
+        "expiresAt": "2026-10-06T12:00:00Z",
+        "signature": "fD6Vp2yJHRX05JUhCVCVu/KInSIIkDGh2A2uYTroF64z1GPBlCJWhQY1GabUkJl2pwzmTEVzJDhetOtKhzoWAQ==",
+        "keyId": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "alg": "EdDSA"
+      },
+      "result": "unsupported-format"
+    }
+  ]
+}
