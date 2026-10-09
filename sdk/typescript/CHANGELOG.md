@@ -73,6 +73,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   32-byte seed worked. The key is decoded as `createAgentRequestHeaders` decodes it: standard base64 of 32 or 64
   bytes, with the last 32 bytes of a 64-byte key equal to the seed's public key. Any other key throws
   `ConfigurationError` before a request is sent.
+- `AIMClient` signs the requests it sends with agent credentials (`X-AIM-Signature`) with the 32-byte seed of the
+  configured private key, so `verifyAction` completes with the 64-byte form AIM issues and
+  `npx @opena2a/aim-sdk init` writes. With that form the client obtained a token and then threw `Uint8Array expected`
+  from the Ed25519 signer, and the request was not sent. The key is decoded as `OAuthTokenManager` decodes it; any
+  other key throws `ConfigurationError` before a request is sent.
 - The Express middleware and the Fastify plugin accept the agent identity in their options. `createAIMMiddleware`
   and `aimPlugin` take `credentials` (an `AgentCredentials` object) or a ready `client`; the README examples, which
   passed only `{ baseUrl, apiKey }`, answered 401 on every verified route without contacting AIM. Passing both

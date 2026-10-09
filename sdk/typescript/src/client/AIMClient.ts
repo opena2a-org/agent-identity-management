@@ -13,7 +13,8 @@ import type {
 import { RiskLevel } from '../types';
 import { SDK_VERSION } from '../version';
 import { OAuthTokenManager, loadCredentialsFromEnv, missingAgentCredentialEnvVars } from '../auth/oauth';
-import { generateKeyPair, toBase64, createRequestSignature, fromBase64 } from '../crypto/ed25519';
+import { generateKeyPair, toBase64, createRequestSignature } from '../crypto/ed25519';
+import { decodeAgentPrivateKey } from '../crypto/agent-request';
 import {
   AIMError,
   AuthenticationError,
@@ -276,11 +277,16 @@ export class AIMClient {
       headers['X-API-Key'] = this.config.apiKey;
     }
 
-    // Add signature if we have credentials
+    // Add signature if we have credentials. The signer takes the key's 32-byte
+    // seed; the configured key may be that seed or the 64-byte form AIM issues
+    // (the seed, then its public key). Any other key throws ConfigurationError.
     if (this.credentials) {
-      const privateKey = fromBase64(this.credentials.privateKey);
+      const { seed } = await decodeAgentPrivateKey(
+        this.credentials.privateKey,
+        'no request was sent'
+      );
       const { signature, timestamp } = await createRequestSignature(
-        privateKey,
+        seed,
         method,
         path,
         body as string | object | undefined
