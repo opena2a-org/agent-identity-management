@@ -9,12 +9,14 @@
  * `client_credentials` (400 unsupported_grant_type), encoded the segments as
  * padded standard base64, and signed a request-signature string instead of
  * `header.payload`. These tests apply the server's own checks to the request
- * the SDK sends.
+ * the SDK sends, and check that each key form the manager refuses throws
+ * `ConfigurationError` before any request is made.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentCredentials } from '../types';
 import { generateKeyPair, toBase64, verify } from '../crypto/ed25519';
+import { ConfigurationError } from '../exceptions';
 import { OAuthTokenManager } from './oauth';
 
 const BASE_URL = 'https://aim.example.com';
@@ -126,5 +128,60 @@ describe('the token request the server accepts', () => {
     expect(claims.exp).toBeGreaterThan(before);
     // The server refuses an exp more than five minutes plus 60 seconds of skew ahead.
     expect(claims.exp - before).toBeLessThanOrEqual(5 * 60 + 60);
+  });
+});
+
+describe('the key forms the token manager refuses', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    globalThis.fetch = mockFetch;
+  });
+
+  async function refusalFor(privateKey: string): Promise<unknown> {
+    const keyPair = await generateKeyPair();
+    const credentials: AgentCredentials = {
+      agentId: AGENT_ID,
+      privateKey,
+      publicKey: toBase64(keyPair.publicKey),
+      organizationId: 'org-1',
+      createdAt: new Date().toISOString(),
+    };
+    return new OAuthTokenManager(BASE_URL, credentials).getAccessToken().then(
+      () => null,
+      (error: unknown) => error
+    );
+  }
+
+  it('refuses an empty key and requests no token', async () => {
+    const error = await refusalFor('');
+    expect(error).toBeInstanceOf(ConfigurationError);
+    expect((error as Error).message).toContain('no agent private key is configured');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a key that is not standard padded base64 and requests no token', async () => {
+    const { privateKey } = await generateKeyPair();
+    const error = await refusalFor(toBase64(privateKey).replace(/=+$/, ''));
+    expect(error).toBeInstanceOf(ConfigurationError);
+    expect((error as Error).message).toContain('not standard base64');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a key that is neither 32 nor 64 bytes long and requests no token', async () => {
+    const error = await refusalFor(toBase64(new Uint8Array(48).fill(7)));
+    expect(error).toBeInstanceOf(ConfigurationError);
+    expect((error as Error).message).toContain('48 bytes long, not 32 or 64');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses a 64-byte key whose last 32 bytes are not its public key and requests no token', async () => {
+    const keyPair = await generateKeyPair();
+    const other = await generateKeyPair();
+    const error = await refusalFor(
+      toBase64(issuedForm({ privateKey: keyPair.privateKey, publicKey: other.publicKey }))
+    );
+    expect(error).toBeInstanceOf(ConfigurationError);
+    expect((error as Error).message).toContain('last 32 bytes are not its public key');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
