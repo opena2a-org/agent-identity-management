@@ -43,3 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   access token in the `Authorization` header. They sent `Bearer ` with an empty token. Without an access token
   to send they now throw `AIMException` before any request is sent; `verifyAction` returns false, as it does on
   any error.
+- `AIMClient.listAgents` URL-encodes its query parameters. A `status` holding `&`, `#`, `=` or `+` was
+  appended as written, so it could add or override query parameters or cut the URL short; the server now
+  receives it as the value of the one `status` parameter.

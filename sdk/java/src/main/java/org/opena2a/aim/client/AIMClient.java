@@ -1913,8 +1913,16 @@ public class AIMClient implements AutoCloseable {
      * Auth header and retry are handled by interceptors automatically.
      */
     private String get(String path) throws IOException {
+        return get(HttpUrl.get(aimUrl + path));
+    }
+
+    /**
+     * Make a GET request to a URL whose query parameters were added through
+     * {@link HttpUrl.Builder}, which encodes each name and value.
+     */
+    private String get(HttpUrl url) throws IOException {
         Request request = new Request.Builder()
-                .url(aimUrl + path)
+                .url(url)
                 .get()
                 .build();
 
@@ -2298,18 +2306,17 @@ public class AIMClient implements AutoCloseable {
      */
     public Map<String, Object> listAgents(int limit, int offset, String status, AgentType agentType) {
         try {
-            StringBuilder queryParams = new StringBuilder();
-            queryParams.append("limit=").append(Math.min(limit, 100));
-            queryParams.append("&offset=").append(offset);
+            HttpUrl.Builder url = HttpUrl.get(aimUrl + "/api/v1/agents").newBuilder()
+                    .addQueryParameter("limit", String.valueOf(Math.min(limit, 100)))
+                    .addQueryParameter("offset", String.valueOf(offset));
             if (status != null && !status.isEmpty()) {
-                queryParams.append("&status=").append(status);
+                url.addQueryParameter("status", status);
             }
             if (agentType != null) {
-                queryParams.append("&agentType=").append(agentType.getValue());
+                url.addQueryParameter("agentType", agentType.getValue());
             }
 
-            String url = "/api/v1/agents?" + queryParams;
-            String response = get(url);
+            String response = get(url.build());
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to list agents: " + e.getMessage(), e);
