@@ -872,6 +872,23 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   kept listing the logged-out token as active. Logout now also marks that row revoked, with the reason `logout`. A row
   already revoked, by rotation or an earlier logout, keeps its reason. The answer's `revoked.refreshToken` is `true`
   only when the row is revoked too.
+### Changed — a third party can verify an agent card attestation from the served card and the JWK Set
+
+- A served card's attestation could not be checked by anyone but the server. The signed `issuedAt` was a different
+  instant from the stored one, timestamps were signed with sub-microsecond precision that PostgreSQL does not keep,
+  the served `issuer` was empty, and `cardHash` was not served. A refreshed attestation also signed the hash of the
+  card as stored in JSONB rather than the registered card's hash.
+- Attestations are now signed in the `opena2a-aim/card-attestation/v2` format: the label, a newline, and the JSON
+  payload (`cardHash`, `agentId`, `issuer`, `issuedAt`, `expiresAt`), with both timestamps in UTC and whole seconds.
+  The stored and served timestamps are the signed ones, in UTC. `aim.attestation` in a served card adds `format` and
+  `cardHash`, and `issuer` reads `aim-server`.
+- `docs/specs/card-attestation-v2.md` is the verification procedure. `docs/specs/card-attestation-v2-vector.json` is
+  a conformance vector with seven cases, and `docs/specs/verify-card-attestation.mjs` is a Node.js verifier with no
+  dependencies that checks a served card or the vector. The procedure also covers key rotation with
+  `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and the effect of rotating `KEYVAULT_MASTER_KEY` on derived keys.
+- Cards record the format as `attestationFormat` (migration 122). Attestations issued before the upgrade read no
+  format, are served without `format`, cannot be verified by a third party, and are re-signed in v2 when refreshed.
+
 ### Changed — each server signing purpose has its own key, and the public keys are published
 
 - The backend signs with two Ed25519 keys, one per purpose: `card-attestation` (A2A agent card attestations) and
@@ -888,9 +905,9 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - New route `GET /.well-known/jwks.json` (no authentication) serves a JSON Web Key Set of the card-attestation and
   ATC-issuer public keys, each with `kid` (hex SHA-256 of the public key), `purpose`, `status` and `source`.
 - Agent cards record the key that signed their attestation as `attestationKeyId` and `attestationAlg` (migration
-  121), and the AIM extension of a served agent card carries them as `keyId` and `alg`. The signed payload is
-  unchanged. Attestations issued before the upgrade keep their signature with no key ID, expire within their validity
-  window (24 hours by default), and are re-signed under the new key when refreshed.
+  121), and the AIM extension of a served agent card carries them as `keyId` and `alg`. Attestations issued before
+  the upgrade keep their signature with no key ID, expire within their validity window (24 hours by default), and are
+  re-signed under the new key when refreshed.
 - The previous shared key is not published. A deployment that pinned that public key elsewhere, for example as a
   trusted ATC issuer key, must pin the `atc-issuer` key from `/.well-known/jwks.json` instead.
 

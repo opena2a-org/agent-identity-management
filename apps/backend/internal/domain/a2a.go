@@ -60,7 +60,10 @@ type A2AAgentCard struct {
 
 	// AIM attestation. AttestationKeyID is the kid of the card-attestation key in
 	// /.well-known/jwks.json; attestations issued before keys had IDs leave it nil.
+	// AttestationFormat is the label of the signing format; attestations issued
+	// before the format was recorded leave it nil.
 	AttestationSignature string     `json:"attestationSignature,omitempty"`
+	AttestationFormat    *string    `json:"attestationFormat,omitempty"`
 	AttestationKeyID     *string    `json:"attestationKeyId,omitempty"`
 	AttestationAlg       *string    `json:"attestationAlg,omitempty"`
 	AttestationIssuedAt  *time.Time `json:"attestationIssuedAt,omitempty"`
@@ -116,9 +119,14 @@ type A2AAIMExtension struct {
 	Behavior    *A2ABehavior    `json:"behavior,omitempty"`
 }
 
-// A2AAttestation represents AIM attestation on an Agent Card
+// A2AAttestation represents AIM attestation on an Agent Card. With Format set to the
+// v2 label, its members and the card's aim.agentId rebuild the signed payload, so a
+// third party verifies it with /.well-known/jwks.json alone
+// (docs/specs/card-attestation-v2.md). Timestamps are served in UTC.
 type A2AAttestation struct {
+	Format    string    `json:"format,omitempty"`
 	Issuer    string    `json:"issuer"`
+	CardHash  string    `json:"cardHash,omitempty"`
 	IssuedAt  time.Time `json:"issuedAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	Signature string    `json:"signature"`

@@ -357,11 +357,13 @@ Verify what is published:
 curl -s http://localhost:8080/.well-known/jwks.json
 ```
 
-The response is a JSON Web Key Set with the active card-attestation and ATC-issuer keys. Each key carries `kid`, `purpose`, `status` (`active` or `retired`) and `source`. Card attestations record the `kid` of the key that signed them as `attestationKeyId`.
+The response is a JSON Web Key Set with the active card-attestation and ATC-issuer keys. Each key carries `kid`, `purpose`, `status` (`active` or `retired`) and `source`. Card attestations record the `kid` of the key that signed them as `attestationKeyId`. Third parties verify a served card's attestation with this key set alone; the procedure and a conformance vector are in [`docs/specs/card-attestation-v2.md`](specs/card-attestation-v2.md).
 
 **Rotating a key.** Set the variable to a new seed and list the old public key in `<VARIABLE>_RETIRED` (comma-separated). Retired keys still verify and stay in the key set with `status: "retired"` until you remove them. Copy the old key's `x` value from `/.well-known/jwks.json` before you restart.
 
 Remove a retired key once nothing it signed is still valid: card attestations expire after `A2A_ATTESTATION_VALIDITY_HOURS` (24 hours by default).
+
+**Rotating `KEYVAULT_MASTER_KEY` moves every derived key.** Each key whose variable is unset gets a new key and a new `kid` at the next start, and what the old key signed stops verifying. Before rotating the master key, copy the `x` value of the active `card-attestation` and `atc-issuer` keys from `/.well-known/jwks.json` into `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED`. Provisioning both keys keeps them fixed when the master key rotates.
 
 ---
 
