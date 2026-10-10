@@ -477,6 +477,7 @@ var debtColumnList = func() string {
 
 // The statements on record_debts. Each names one organization.
 var (
+	//nolint:gosec // G202: the column list and the placeholders come from the static debtColumns table; no value is concatenated
 	insertDebtQuery = `INSERT INTO record_debts (` + debtColumnList + `)
 VALUES (` + placeholders(len(debtColumns)) + `)`
 	// takeDebtQuery deletes one open debt of the organization and returns it,
