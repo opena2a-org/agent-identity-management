@@ -18,6 +18,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   until a repeat arrives). The column existed, but no response included it, so a coalesced repeat was invisible. The
   dashboard's alert list shows "Seen N times" with the last time, and the alert panel shows the occurrence count and
   the last-seen time, for an alert raised more than once.
+- On a narrow screen the alert list wraps the row that holds "Seen N times" inside the alert card. The row did not
+  wrap, so at a phone width of 375px the repeat count was drawn outside the card and widened the page.
 - Concurrent first occurrences of one dedupe key in one organization, with no open alert for that key, are stored as
   one alert that counts each of them. The lookup for an open alert and the insert ran as two separate statements, so
   each occurrence could find no alert and insert its own, and later repeats were counted on the newest of them only.

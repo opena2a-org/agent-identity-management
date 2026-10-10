@@ -681,7 +681,7 @@ function AlertsPageContent() {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                             alert.resourceType === 'mcp_server' || alert.resourceType === 'mcp'
                               ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
