@@ -315,17 +315,23 @@ public class SecurityConfig {
 
 ## MCP Server Integration
 
-### Register MCP Server
+### Add MCP Server to Agent
+
+Add an MCP server to the agent's list of servers it talks to. The method does not create an MCP server: the agent's list shows the server once one with that ID or name is registered in the organization. AIM accepts the call from a signed-in user with the member role or higher, so the client needs the SDK sign-in from the dashboard's SDK download.
 
 ```java
 Map<String, Object> result = agent.registerMcp(
-    "filesystem-mcp",     // server ID
-    "sdk_registration",   // detection method
-    0.85                  // confidence score
+    "filesystem-mcp",  // MCP server ID or name
+    "auto_sdk",        // detection method: manual, auto_sdk, auto_config or cli
+    85.0               // detection confidence, 0-100
 );
 
-System.out.println("Server ID: " + result.get("id"));
+System.out.println(result.get("message"));
+System.out.println("Added: " + result.get("added_servers"));
+System.out.println("Talks to " + result.get("total_count") + " servers: " + result.get("talksTo"));
 ```
+
+`agent.registerMcp("filesystem-mcp")` sends detection method `manual` and confidence 100.
 
 ### List MCP Servers
 
