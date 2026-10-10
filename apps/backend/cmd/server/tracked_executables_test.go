@@ -76,6 +76,30 @@ type treeBlob struct {
 // are not read.
 func trackedExecutables(t *testing.T, top, rev string) []string {
 	t.Helper()
+	blobs := treeBlobs(t, top, rev)
+
+	var found []string
+	read := 0
+	err := readBlobs(top, blobs, func(b treeBlob, content []byte) {
+		read++
+		if reason := classifyTrackedBlob(b.mode, content); reason != "" {
+			found = append(found, b.path+": "+reason)
+		}
+	})
+	if err != nil {
+		t.Fatalf("read blobs of %s: %v", rev, err)
+	}
+	if read != len(blobs) {
+		t.Fatalf("read %d of %d blobs listed at %s", read, len(blobs), rev)
+	}
+	sort.Strings(found)
+	return found
+}
+
+// treeBlobs lists every blob in the tree of commit rev, in the repository at
+// top. Submodule entries are commits, not blobs, and are not listed.
+func treeBlobs(t *testing.T, top, rev string) []treeBlob {
+	t.Helper()
 	out, err := gitIn(top, "ls-tree", "-r", "-z", "--full-tree", rev)
 	if err != nil {
 		t.Fatalf("git ls-tree %s: %v", rev, err)
@@ -98,23 +122,7 @@ func trackedExecutables(t *testing.T, top, rev string) []string {
 	if len(blobs) == 0 {
 		t.Fatalf("git ls-tree %s listed no blobs; a census that reads nothing proves nothing", rev)
 	}
-
-	var found []string
-	read := 0
-	err = readBlobs(top, blobs, func(b treeBlob, content []byte) {
-		read++
-		if reason := classifyTrackedBlob(b.mode, content); reason != "" {
-			found = append(found, b.path+": "+reason)
-		}
-	})
-	if err != nil {
-		t.Fatalf("read blobs of %s: %v", rev, err)
-	}
-	if read != len(blobs) {
-		t.Fatalf("read %d of %d blobs listed at %s", read, len(blobs), rev)
-	}
-	sort.Strings(found)
-	return found
+	return blobs
 }
 
 // readBlobs streams the blobs through one `git cat-file --batch` and hands

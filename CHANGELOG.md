@@ -223,6 +223,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   built-in `local-home-path` class does not match the unsplit file either. The concatenated IDAT bytes and every other
   chunk are byte-identical, so the decoded pixels are unchanged.
 
+### Security — the rate limits no longer loosen when ENVIRONMENT is development
+
+- The general rate limit (100 requests per minute per user, or per client IP when
+  unauthenticated) and the strict limit (10 per minute) now apply when `ENVIRONMENT=development`.
+  The strict limit covers `/api/v1/public/*` (login, registration, password change and reset,
+  access requests, agent registration), `/api/v1/auth/*`, `/api/v1/oauth/*` (token and the
+  device-code flow) and bootstrap-token mint and exchange. Under `development` both used
+  to be ten times higher (1000 and 100), and `docker-compose.yml` and
+  `docker-compose.quickstart.yml` give the backend `development` unless the shell sets
+  `ENVIRONMENT`, while `docs/demo/stack/compose.yml` always does.
+- Only `ENVIRONMENT=test` still raises both limits tenfold. The CI end-to-end job sets it; never
+  set it in a deployment. A local script that signs in more than ten times a minute against a
+  `development` server now receives 429; run it with `ENVIRONMENT=test`.
+- The server logs the limits in force in one line at start, in every environment, for example
+  `Rate limits in force: general 100/min, strict 10/min, per user or per client IP.` It used to
+  log only when the limits were raised.
+- The compose files are unchanged, and nothing else that reads `development` changes (the key
+  generated at start when `KEYVAULT_MASTER_KEY` is unset, the five-minute detection
+  deduplication window).
+
 ### Security — a reused SDK-download token ends the chain that grew from it
 
 - Presenting an SDK-download refresh token (the 90-day token embedded in a downloaded SDK) that

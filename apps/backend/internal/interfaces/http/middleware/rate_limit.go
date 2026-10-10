@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var rateLimitWarningOnce sync.Once
+var rateLimitLogOnce sync.Once
 
 // getClientIP extracts the real client IP, respecting trusted proxy headers
 // SECURITY: Only trust X-Forwarded-For and X-Real-IP headers when behind a trusted proxy
@@ -81,24 +81,45 @@ func ClientIP(c fiber.Ctx) string {
 	return getClientIP(c)
 }
 
-// rateLimitMax returns the max requests per minute based on environment.
-// Development mode uses higher limits to avoid interfering with integration tests.
+// rateLimitMax returns the max requests per minute a limiter enforces.
+//
+// SECURITY: only an explicit ENVIRONMENT=test raises it, for the CI end-to-end
+// suite that logs in more than ten times a minute. ENVIRONMENT=development is
+// the default the shipped compose files give the backend, and a security limit
+// never loosens on the default value of a setting.
 func rateLimitMax(defaultMax int) int {
-	if env := os.Getenv("ENVIRONMENT"); env == "development" || env == "test" {
-		rateLimitWarningOnce.Do(func() {
-			log.Printf("[WARN] Rate limits are 10x higher because ENVIRONMENT=%s. "+
-				"Ensure ENVIRONMENT is set to 'production' in production deployments.", env)
-		})
+	if os.Getenv("ENVIRONMENT") == "test" {
 		return defaultMax * 10
 	}
 	return defaultMax
 }
 
+// RateLimitsInForce returns the requests per minute that RateLimitMiddleware
+// and StrictRateLimitMiddleware enforce in this process.
+func RateLimitsInForce() (general, strict int) {
+	return rateLimitMax(100), rateLimitMax(10)
+}
+
+// logRateLimitsInForce prints both limits in one line. The limiters are built
+// while the routes are registered, so this runs once at start whatever the
+// environment, and the log answers which limits a deployment runs.
+func logRateLimitsInForce() {
+	general, strict := RateLimitsInForce()
+	if os.Getenv("ENVIRONMENT") == "test" {
+		log.Printf("[WARN] Rate limits in force: general %d/min, strict %d/min, 10x the production limits "+
+			"because ENVIRONMENT=test. Never set ENVIRONMENT=test in a deployment.", general, strict)
+		return
+	}
+	log.Printf("[INFO] Rate limits in force: general %d/min, strict %d/min, per user or per client IP.",
+		general, strict)
+}
+
 // RateLimitMiddleware implements rate limiting
 // SECURITY: Uses authenticated user ID when available, falls back to real client IP
 func RateLimitMiddleware() fiber.Handler {
+	rateLimitLogOnce.Do(logRateLimitsInForce)
 	return limiter.New(limiter.Config{
-		Max:        rateLimitMax(100), // 100 req/min (1000 in dev/test)
+		Max:        rateLimitMax(100), // 100 req/min (1000 under ENVIRONMENT=test)
 		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string {
 			// Rate limit by user if authenticated, otherwise by IP
@@ -121,8 +142,9 @@ func RateLimitMiddleware() fiber.Handler {
 // StrictRateLimitMiddleware implements stricter rate limiting for sensitive endpoints
 // SECURITY: Used for login, registration, password reset, and other sensitive operations
 func StrictRateLimitMiddleware() fiber.Handler {
+	rateLimitLogOnce.Do(logRateLimitsInForce)
 	return limiter.New(limiter.Config{
-		Max:        rateLimitMax(10), // 10 req/min (100 in dev/test)
+		Max:        rateLimitMax(10), // 10 req/min (100 under ENVIRONMENT=test)
 		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c fiber.Ctx) string {
 			if userID := c.Locals("user_id"); userID != nil {

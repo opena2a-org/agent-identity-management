@@ -25,7 +25,7 @@ import (
 // test can tell whether a route ran it.
 func bootstrapRouteApp(t *testing.T) *fiber.App {
 	t.Helper()
-	// rateLimitMax multiplies limits by 10 under development/test; pin the
+	// rateLimitMax multiplies limits by 10 under ENVIRONMENT=test; pin the
 	// production limit, which is the one under test.
 	t.Setenv("ENVIRONMENT", "production")
 
