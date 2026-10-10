@@ -13,6 +13,10 @@ import { join } from 'path';
  * https://opena2a.org/agent-identity-management, the page that describes the
  * platform (https://opena2a.org/aim declares it as its canonical URL).
  *
+ * The Java SDK had the same gap: the project URL in sdk/java/pom.xml, which
+ * Maven publishes as the artifact's home page, pointed at the repository,
+ * and the first link in sdk/java/README.md at the license file.
+ *
  * These cells run in the SDK suite because that job runs on every pull
  * request, so an edit that points a surface elsewhere fails before merge.
  *
@@ -21,10 +25,14 @@ import { join } from 'path';
  *   C2  sdk/python/setup.py `url` (the PyPI "Homepage" link) is the project
  *       page, and no `project_urls` entry named Homepage overrides it;
  *   C3  the first link in README.md (GitHub), sdk/python/README.md (the PyPI
- *       description) and sdk/typescript/README.md (the npm readme) is the
- *       project page;
+ *       description), sdk/typescript/README.md (the npm readme) and
+ *       sdk/java/README.md is the project page;
  *   C4  the pre-fix values and near misses, kept as literals, are refused,
- *       and the accepted forms pass, through the same predicates as C1-C3.
+ *       and the accepted forms pass, through the same predicates as C1-C3;
+ *   C5  sdk/java/pom.xml `<project><url>` (the Maven project URL) is the
+ *       project page, and `<scm><url>` still names the repository;
+ *   C6  for the Maven file, the pre-fix value and near misses are refused
+ *       and the accepted form passes, through the same reader as C5.
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -33,7 +41,14 @@ const read = (relative: string): string =>
 
 const PROJECT_PAGE = 'https://opena2a.org/agent-identity-management';
 
-const READMES = ['README.md', 'sdk/python/README.md', 'sdk/typescript/README.md'];
+const REPOSITORY = 'https://github.com/opena2a-org/agent-identity-management';
+
+const READMES = [
+  'README.md',
+  'sdk/python/README.md',
+  'sdk/typescript/README.md',
+  'sdk/java/README.md',
+];
 
 function isProjectPage(url: string | null | undefined): boolean {
   return url === PROJECT_PAGE;
@@ -74,7 +89,39 @@ function setupPyHomepageOverride(source: string): string | null {
   return match === null ? null : match[1];
 }
 
-describe('project page links on the README, npm and PyPI pages', () => {
+/**
+ * The text of the first element at an exact path from the root of a Maven
+ * file, for example ['project', 'url']. The license, developer, scm and
+ * repository blocks each carry a `<url>` of their own, so the element name
+ * alone does not say which one is the project's home page. Comments and
+ * processing instructions hold no elements.
+ */
+function pomText(xml: string, path: string[]): string | null {
+  const text = xml.replace(/<!--[\s\S]*?-->/g, '').replace(/<\?[\s\S]*?\?>/g, '');
+  const tag = /<(\/?)([A-Za-z_][\w.:-]*)[^>]*?(\/?)>/g;
+  const open: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = tag.exec(text)) !== null) {
+    const [, closing, name, selfClosing] = match;
+    if (selfClosing) continue;
+    if (closing) {
+      open.pop();
+      continue;
+    }
+    open.push(name);
+    if (open.length === path.length && open.every((element, depth) => element === path[depth])) {
+      const end = text.indexOf(`</${name}>`, tag.lastIndex);
+      return end === -1 ? null : text.slice(tag.lastIndex, end).trim();
+    }
+  }
+  return null;
+}
+
+function isRepositoryUrl(url: string | null | undefined): boolean {
+  return typeof url === 'string' && (url === REPOSITORY || url.startsWith(`${REPOSITORY}/`));
+}
+
+describe('project page links on the README, npm, PyPI and Maven pages', () => {
   it('C1: the npm homepage is the project page', () => {
     const pkg = JSON.parse(read('sdk/typescript/package.json')) as { homepage?: string };
     expect(pkg.homepage, 'sdk/typescript/package.json homepage').toBe(PROJECT_PAGE);
@@ -120,6 +167,8 @@ describe('project page links on the README, npm and PyPI pages', () => {
       '# AIM Python SDK\n\n[![PyPI version](https://img.shields.io/pypi/v/aim-sdk.svg)](https://pypi.org/project/aim-sdk/)\n',
       // npm readme before the fix: the hosted sign-up page.
       '# AIM SDK for TypeScript/Node.js\n\nManaged hosting at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started).\n',
+      // Java SDK README before the fix: a license badge links to the license file.
+      '# AIM Java SDK\n\n[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../../LICENSE)\n',
       // An image whose source is the page is not a link to it.
       `# AIM\n\n![logo](${PROJECT_PAGE})\n\n[repo](https://github.com/opena2a-org/agent-identity-management)\n`,
       // An HTML anchor ahead of the markdown link is the first link.
@@ -156,5 +205,51 @@ describe('project page links on the README, npm and PyPI pages', () => {
     const acceptedSetup = `setup(\n    url="${PROJECT_PAGE}",\n    project_urls={"Source": "https://github.com/opena2a-org/agent-identity-management"},\n)\n`;
     expect(setupPyHomepage(acceptedSetup)).toBe(PROJECT_PAGE);
     expect(setupPyHomepageOverride(acceptedSetup)).toBeNull();
+  });
+
+  it('C5: the Maven project URL is the project page', () => {
+    const pom = read('sdk/java/pom.xml');
+    expect(pomText(pom, ['project', 'url']), 'sdk/java/pom.xml <project><url>').toBe(PROJECT_PAGE);
+    const scm = pomText(pom, ['project', 'scm', 'url']);
+    expect(isRepositoryUrl(scm), `sdk/java/pom.xml <scm><url> is ${scm}`).toBe(true);
+  });
+
+  it('C6: the pre-fix Maven value and near misses are refused, the accepted form passes', () => {
+    const scm = `<scm><url>${REPOSITORY}/tree/main</url></scm>`;
+    const refusedPoms = [
+      // Before the fix: the project URL is the repository.
+      `<project>\n  <url>${REPOSITORY}</url>\n  ${scm}\n</project>\n`,
+      // No project URL: the page under <scm> is not the project's home page.
+      `<project>\n  <scm><url>${PROJECT_PAGE}</url></scm>\n</project>\n`,
+      // The page as a license URL, with the site root as the project URL.
+      `<project>\n  <licenses><license><url>${PROJECT_PAGE}</url></license></licenses>\n  <url>https://opena2a.org</url>\n</project>\n`,
+      // The page in a comment, the repository in the element.
+      `<project>\n  <!-- <url>${PROJECT_PAGE}</url> -->\n  <url>${REPOSITORY}</url>\n</project>\n`,
+      // The page as a distribution repository URL.
+      `<project>\n  <distributionManagement><repository><url>${PROJECT_PAGE}</url></repository></distributionManagement>\n</project>\n`,
+      // A property reference is not the page.
+      '<project>\n  <url>${project.organization.url}</url>\n</project>\n',
+    ];
+    for (const xml of refusedPoms) {
+      expect(isProjectPage(pomText(xml, ['project', 'url'])), JSON.stringify(xml)).toBe(false);
+    }
+
+    const acceptedPom =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<project xmlns="http://maven.apache.org/POM/4.0.0"\n' +
+      '         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">\n' +
+      '  <parent><relativePath/></parent>\n' +
+      '  <licenses><license><url>https://www.apache.org/licenses/LICENSE-2.0</url></license></licenses>\n' +
+      `  <!-- <url>${REPOSITORY}</url> -->\n` +
+      `  <url>${PROJECT_PAGE}</url>\n` +
+      `  ${scm}\n` +
+      '</project>\n';
+    expect(pomText(acceptedPom, ['project', 'url'])).toBe(PROJECT_PAGE);
+    expect(isRepositoryUrl(pomText(acceptedPom, ['project', 'scm', 'url']))).toBe(true);
+
+    // The repository check refuses a look-alike and a swap with the page.
+    for (const url of [`${REPOSITORY}-fork`, PROJECT_PAGE, null]) {
+      expect(isRepositoryUrl(url), String(url)).toBe(false);
+    }
   });
 });
