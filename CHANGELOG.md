@@ -145,6 +145,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   registration-time list; both now serve the active grants, so they read the same list as the credential. When the grant
   table cannot be read, the card request fails and the verification result reports `failed to load capability grants`
   with `valid: false`; the registration-time list is never served in its place.
+- The `agent` object in the responses of `POST /api/v1/agents/:id/suspend`, `POST /api/v1/agents/:id/reactivate` and
+  `POST /api/v1/agents/:id/revoke` was the stored agent row, so its `capabilities` was the registration-time list. It is
+  now the agent as `GET /api/v1/agents/:id` returns it, with `capabilities` read from the active grants. That object
+  does not carry `lastCapabilityCheckAt`, `lastHeartbeat`, `keyRotationGraceUntil` or `createdByApiKeyId`, so those
+  four fields are no longer in these three responses; `GET /api/v1/agents/:id` is unchanged.
 - The list the SDK reported at registration is still stored on the agent and is unchanged; it is a self-reported
   declaration, and no surface serves it under the name `capabilities` any longer.
 - `apps/backend/internal/application/atc_capabilities_test.go` fails when a credential issued after a revocation still
@@ -152,6 +157,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   honeytoken or revoked row appears, when a grant outside the grammar is rewritten or fails the issuance instead of
   being counted, when an agent with no grant is sent a null or absent `capabilities`, or when a failed grant read lets
   the issuance proceed.
+- `apps/backend/internal/interfaces/http/handlers/agent_act_response_capabilities_test.go` fails when the suspend,
+  reactivate or revoke response's `agent.capabilities` is anything other than the agent's active grants.
 
 ### Changed — a suspended agent's refused signed action-request statement is recorded in the audit log
 
