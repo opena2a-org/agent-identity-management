@@ -263,7 +263,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	if !domain.AgentStatusPermitsAuth(agent.Status) {
 		// The refusal is recorded, so the organisation sees a suspended agent that keeps
 		// trying. A failed write still refuses.
-		_ = h.getAuditService().Log(c.Context(), h.statusRefusalAuditEntry(c, agent, agentID, req.Capability, req.Resource))
+		_ = h.getAuditService().Log(c.Context(), h.statusRefusalAuditEntry(c, agent, agentID, req.Capability, req.Resource, fiber.StatusForbidden))
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": fmt.Sprintf("Agent status is %s, cannot perform actions", agent.Status),
 		})
@@ -295,10 +295,11 @@ type verificationInput struct {
 }
 
 // statusRefusalAuditEntry is the audit entry for a verification request refused
-// because the agent's status does not permit it to act. Called only after the
-// signature verified. It names the refusal and what was asked, never the
-// signature, the presented key, the signed message or the request context.
-func (h *VerificationHandler) statusRefusalAuditEntry(c fiber.Ctx, agent *domain.Agent, agentID uuid.UUID, capability, resource string) *domain.AuditLog {
+// because the agent's status does not permit it to act, answered with httpStatus.
+// Called only after the signature verified. It names the refusal and what was
+// asked, never the signature, the presented key, the signed message or the
+// request context.
+func (h *VerificationHandler) statusRefusalAuditEntry(c fiber.Ctx, agent *domain.Agent, agentID uuid.UUID, capability, resource string, httpStatus int) *domain.AuditLog {
 	// The mode is recorded, not consulted: the refusal is the same in both.
 	enforcementMode := "unknown"
 	if orgRepo := h.getOrgRepo(); orgRepo != nil {
@@ -323,7 +324,7 @@ func (h *VerificationHandler) statusRefusalAuditEntry(c fiber.Ctx, agent *domain
 			"enforcementMode": enforcementMode,
 			"capability":      capability,
 			"resource":        resource,
-			"httpStatus":      fiber.StatusForbidden,
+			"httpStatus":      httpStatus,
 		},
 		Timestamp: time.Now(),
 	}
