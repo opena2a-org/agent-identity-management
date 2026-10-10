@@ -59,6 +59,11 @@ func assertSignInRow(t *testing.T, rows []*domain.AuditLog, userID, orgID uuid.U
 	assert.Equal(t, family, row.Metadata["familyId"], "the row names the issued family")
 	assert.Equal(t, method, row.Metadata["method"])
 	assert.NotContains(t, marshalled(t, row.Metadata), "eyJ", "no token in the row")
+	// Metadata carries route facts only; the account is named by the row's
+	// own columns, so no copy of its email, name or role rides along.
+	for _, key := range []string{"email", "name", "role"} {
+		assert.NotContains(t, marshalled(t, row.Metadata), key, "no %s in the row's metadata", key)
+	}
 }
 
 func signInLoginBody() string {

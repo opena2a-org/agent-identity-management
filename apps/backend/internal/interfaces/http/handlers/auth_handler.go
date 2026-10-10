@@ -131,12 +131,9 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 		})
 	}
 
-	// Audit log successful login, naming the token family it issued
-	recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{
-		"email":  user.Email,
-		"role":   user.Role,
-		"method": "password",
-	})
+	// Audit log successful login, naming the token family it issued. Metadata
+	// is route facts only; the account is identified by the row's columns.
+	recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{"method": "password"})
 
 	return c.JSON(fiber.Map{
 		"accessToken":  accessToken,

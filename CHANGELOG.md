@@ -1083,6 +1083,15 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   relation, reads and writes the tables, cannot create one, passes the startup migration step, and keeps a revoked
   privilege on a second run.
 
+### Changed — a password sign-in's audit row no longer copies the account's email and role
+
+- The `login` audit row written by `POST /api/v1/auth/login/local` carried the account's email and role in its
+  metadata, beside the `user_id` column that already names the account. Its metadata now carries route facts only
+  (`method` and `familyId`), as the other sign-in routes' rows do; the account is identified by the row's own columns.
+  Rows written before this change are left as they are.
+- `apps/backend/internal/interfaces/http/handlers/sign_in_family_audit_test.go` fails when any sign-in route's login
+  row carries an `email`, `name` or `role` in its metadata.
+
 ### Changed — every sign-in records the token family it issued
 
 - Each route that issues a sign-in token pair now writes one `login` audit row in the user's organization whose
