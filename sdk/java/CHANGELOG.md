@@ -48,6 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   receives it as the value of the one `status` parameter.
 - After the server refuses a refresh, `AIMClient` sends the old refresh token to `/api/v1/auth/sdk/recover`
   under `oldRefreshToken`, the key the server reads. It sent `old_refresh_token`, a key the server does not
-  read, so no recovery request could succeed. The route also requires an access token for the refresh token's
-  owner, and the recovery request carries none. `AIMClientSdkRecoverRouteTest` reads the key from the backend's
+  read, so no recovery request could succeed. `AIMClientSdkRecoverRouteTest` reads the key from the backend's
   recovery handler and fails when the client sends another (#603).
+- The recovery request carries the access token `AIMClient` holds in its `Authorization` header. The route is
+  mounted behind the auth middleware and mints only for the owner of the revoked refresh token, so a request
+  without a bearer was answered 401 before its body was read, and recovery could not succeed with the key
+  corrected either. A client that holds no access token, because no earlier refresh succeeded, sends no
+  recovery request. `AIMClientSdkRecoverRouteTest` reads the route's registration from the backend and answers
+  a recovery request without the held bearer with 401 (#625).
+- `registerMcp` adds the given MCP server to the agent's list. It sends `PUT /api/v1/agents/{id}/mcp-servers`
+  with `mcpServerIds`, `detectedMethod` and `confidence`, the members the server reads, and returns what AIM
+  answers: `message`, `talksTo`, `added_servers` and `total_count`. It posted `mcp_server_ids` and
+  `detected_method` to `POST /api/v1/sdk-api/agents/{id}/mcp-servers`, the route that creates an MCP server and
+  reads neither key, so the given server was never added to the agent's list. AIM adds to an agent's list only
+  for a signed-in user with the member role or higher; a refusal raises `AIMException` with the status. The
+  method does not create an MCP server. `AIMClientRegisterMcpRouteTest` reads the members and the route's
+  member role gate from the backend source (#625).

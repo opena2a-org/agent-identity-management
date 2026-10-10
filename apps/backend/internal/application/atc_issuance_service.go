@@ -177,10 +177,10 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 //
 //   - Signature suites. Core section 1.1: "The signature block carries at
 //     minimum one Ed25519 signature and one ML-DSA-65 signature." The ATX
-//     credential schema (schemas/atx-credential-v1.1.schema.json) admits only
-//     Ed25519 and ML-DSA-65 as signatures[].algorithm, and they are the only
-//     suites section 14 registers, so a signature in any other suite is
-//     refused as well.
+//     credential schema (schemas/atx-credential-v1.1.schema.json in atx-spec)
+//     admits only Ed25519 and ML-DSA-65 as signatures[].algorithm, and they
+//     are the only suites section 14 registers, so a signature in any other
+//     suite is refused as well.
 //   - Agent and trustScore. The credential names the agent AIM asked about and
 //     carries the trustScore AIM sent, compared in the form the v1.1 signature
 //     covers (printf %.6f, core section 1.3a.2). An issuer that read the score

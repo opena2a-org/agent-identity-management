@@ -11,6 +11,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the Java SDK's token recovery carries the access token the route requires, and other follow-ups (#625)
+
+- After the server refuses a refresh, the Java SDK's `AIMClient` sends its request to
+  `POST /api/v1/auth/sdk/recover` with the access token it holds in the `Authorization` header. The route is mounted
+  behind the auth middleware and mints only for the bearer who owns the revoked refresh token, so a request without
+  one was answered 401 before its body was read, and the recovery could not succeed with the `oldRefreshToken` key
+  corrected either. A client that holds no access token, because no earlier refresh succeeded, sends no recovery
+  request. `AIMClientSdkRecoverRouteTest` reads the route's registration from the backend and answers a recovery
+  request without the held bearer with 401.
+- The Java SDK's `AIMClient.registerMcp` adds the given MCP server to the agent's list with
+  `PUT /api/v1/agents/{id}/mcp-servers`, sending `mcpServerIds`, `detectedMethod` and `confidence`, the members
+  `AddMCPServersRequest` declares. It posted `mcp_server_ids` and `detected_method` to
+  `POST /api/v1/sdk-api/agents/{id}/mcp-servers`, the route that creates an MCP server and reads neither key, so the
+  server was never added to the agent's list. `AIMClientRegisterMcpRouteTest` reads the request members and the
+  route's member role gate from the backend source.
+- Migration 126 deletes the `schema_migrations` row `112_drop_unread_password_reset_expires.sql`. A database migrated
+  before that migration was renumbered to 125 kept the row after applying 125 again, as a record of a file the
+  repository no longer ships. No other row is touched, and the row of
+  `112_trust_score_low_threshold_key_and_scale.sql` stays. A test runs the server's migration step over a database
+  holding the old row and fails while it remains.
+- `docs/guides/QUICK_START.md` says to start the backend under test with `ENVIRONMENT=test` before running the
+  integration suite. It set the variable on the `go test` process, which does not change the backend's limits, so a
+  backend started with the `development` that `docker-compose.yml` sets by default answered the suite's repeated
+  `/api/v1/public/login` and `/api/v1/public/register` calls with 429 after ten in a minute.
+- `sdk/typescript/vitest.config.ts` sets `minWorkers: 1`, so `npx vitest run --maxWorkers=N <file>` runs without a
+  matching `--minWorkers`. vitest 1.6 otherwise starts one worker per CPU but one, so on a machine with more than
+  N + 1 CPUs it stopped the run before any test with `options.minThreads and options.maxThreads must not conflict`.
+- The doc comment on the ATC issuance checks names `atx-spec` as the repository that holds
+  `schemas/atx-credential-v1.1.schema.json`, and the logo IDAT entry below no longer cites a pattern that is not in
+  this repository.
+
 ### Fixed — a handler reached without an organization answers 401 instead of panicking, and other follow-ups (#617)
 
 - 59 handler lines in the A2A, admin, compliance, MCP, security, security policy, trust score and webhook handlers
@@ -54,7 +85,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - After the server refuses a refresh, the Java SDK's `AIMClient` sends the old refresh token to
   `POST /api/v1/auth/sdk/recover` under `oldRefreshToken`, the key the handler reads. It sent
   `old_refresh_token`, so no recovery request could succeed. `AIMClientSdkRecoverRouteTest` reads the key from the
-  handler source and fails when the client sends another.
+  handler source and fails when the client sends another. The route also requires an access token for the refresh
+  token's owner, and the request carried none until the #625 entry above.
 
 ### Changed — verification event failures are written to the server log with a timestamp
 
@@ -217,8 +249,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — The logo SVG's embedded PNG is split into one more IDAT chunk
 
 - The PNG embedded in `apps/web/public/opena2a-logo.svg` carries one more IDAT chunk, split inside the one run of its
-  base64 text that reads, ignoring case, as an internal directory name followed by `/`. The match came from a pattern
-  class for internal path references that is kept outside the repository, applied to the payload as plain text.
+  base64 text that reads, ignoring case, as an internal directory name followed by `/`.
   `scripts/lint-public-surface.mjs` blanks data-URI payloads before matching, so it does not report the run, and its
   built-in `local-home-path` class does not match the unsplit file either. The concatenated IDAT bytes and every other
   chunk are byte-identical, so the decoded pixels are unchanged.

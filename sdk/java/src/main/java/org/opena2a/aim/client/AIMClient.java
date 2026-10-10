@@ -1038,8 +1038,18 @@ public class AIMClient implements AutoCloseable {
     /**
      * Attempt token recovery when refresh token is revoked.
      * Uses authClient to avoid infinite loops from 401 handling.
+     *
+     * The recovery route requires an access token for the refresh token's
+     * owner, so the request carries the access token this client holds. A
+     * client that holds none (no earlier refresh succeeded) sends nothing:
+     * the route would answer 401 before reading the body.
      */
     private boolean attemptTokenRecovery() {
+        String bearer = accessToken;
+        if (bearer == null || bearer.isEmpty()) {
+            logger.info("Token recovery needs an access token for the token's owner, and this client holds none");
+            return false;
+        }
         try {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("oldRefreshToken", refreshToken);
@@ -1048,6 +1058,7 @@ public class AIMClient implements AutoCloseable {
 
             Request request = new Request.Builder()
                     .url(aimUrl + "/api/v1/auth/sdk/recover")
+                    .header("Authorization", "Bearer " + bearer)
                     .post(body)
                     .build();
 
@@ -1552,24 +1563,32 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Register an MCP server to this agent's mcp_servers list.
+     * Add an MCP server to this agent's list of MCP servers.
      *
-     * @param mcpServerId     MCP server ID or name to register
+     * Sends {@code PUT /api/v1/agents/{id}/mcp-servers} with {@code mcpServerIds},
+     * {@code detectedMethod} and {@code confidence}, the members the server reads.
+     * AIM adds to an agent's list only for a signed-in user with the member role or
+     * higher, so the call succeeds when the client holds the SDK sign-in (a refresh
+     * token from the dashboard's SDK download). The method does not create an MCP
+     * server: the agent's list shows the server once one with that ID or name is
+     * registered in the organization.
+     *
+     * @param mcpServerId     MCP server ID or name to add
      * @param detectionMethod How the MCP was detected ("manual", "auto_sdk", "auto_config", "cli")
      * @param confidence      Detection confidence score (0-100, default: 100 for manual)
-     * @return Map containing registration result
+     * @return what AIM answers: {@code message}, {@code talksTo}, {@code added_servers} and {@code total_count}
      */
     public Map<String, Object> registerMcp(String mcpServerId, String detectionMethod, double confidence) {
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            var mcpArray = payload.putArray("mcp_server_ids");
+            var mcpArray = payload.putArray("mcpServerIds");
             mcpArray.add(mcpServerId);
-            payload.put("detected_method", detectionMethod != null ? detectionMethod : "manual");
+            payload.put("detectedMethod", detectionMethod != null ? detectionMethod : "manual");
             payload.put("confidence", confidence);
 
             String agentId = getAgentId();
-            String response = post("/api/v1/sdk-api/agents/" + agentId + "/mcp-servers", payload.toString());
-            logger.info("Registered MCP server: {}", mcpServerId);
+            String response = put("/api/v1/agents/" + agentId + "/mcp-servers", payload.toString());
+            logger.info("Added MCP server to agent: {}", mcpServerId);
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to register MCP server: " + e.getMessage(), e);
