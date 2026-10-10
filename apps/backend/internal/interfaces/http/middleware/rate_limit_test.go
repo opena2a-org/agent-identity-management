@@ -1,11 +1,15 @@
 package middleware
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
@@ -285,6 +289,104 @@ func TestRateLimitMiddleware_RateLimitExceeded(t *testing.T) {
 	}
 
 	assert.True(t, hitLimit, "Should hit rate limit after 100 requests")
+}
+
+// setEnvironment sets ENVIRONMENT for one test, or unsets it when value is
+// empty, and restores the previous state afterwards.
+func setEnvironment(t *testing.T, value string) {
+	t.Helper()
+	t.Setenv("ENVIRONMENT", value)
+	if value == "" {
+		require.NoError(t, os.Unsetenv("ENVIRONMENT"))
+	}
+}
+
+// admitted sends up to upTo requests from one client through h and returns how
+// many it admitted before the first 429.
+func admitted(t *testing.T, h fiber.Handler, upTo int) int {
+	t.Helper()
+	app := fiber.New()
+	app.Use(h)
+	app.Get("/", func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+	for i := 0; i < upTo; i++ {
+		resp, err := app.Test(httptest.NewRequest("GET", "/", nil))
+		require.NoError(t, err)
+		resp.Body.Close()
+		switch resp.StatusCode {
+		case fiber.StatusOK:
+		case fiber.StatusTooManyRequests:
+			return i
+		default:
+			t.Fatalf("request %d: status %d, want 200 or 429", i+1, resp.StatusCode)
+		}
+	}
+	return upTo
+}
+
+// A security limit never loosens on the default value of a setting. The shipped
+// compose files give the backend ENVIRONMENT=development, so development
+// enforces what production does. Only an explicit ENVIRONMENT=test raises both
+// limits, for the CI end-to-end suite that logs in more than ten times a minute.
+func TestRateLimitsLoosenOnlyOnAnExplicitTestEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		name, environment string
+		general, strict   int
+	}{
+		{"unset", "", 100, 10},
+		{"development", "development", 100, 10},
+		{"production", "production", 100, 10},
+		{"test", "test", 1000, 100},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnvironment(t, tc.environment)
+
+			assert.Equal(t, tc.general, admitted(t, RateLimitMiddleware(), tc.general+1),
+				"RateLimitMiddleware requests admitted per minute with ENVIRONMENT=%q", tc.environment)
+			assert.Equal(t, tc.strict, admitted(t, StrictRateLimitMiddleware(), tc.strict+1),
+				"StrictRateLimitMiddleware requests admitted per minute with ENVIRONMENT=%q", tc.environment)
+
+			general, strict := RateLimitsInForce()
+			assert.Equal(t, tc.general, general, "RateLimitsInForce general must match what the limiter enforces")
+			assert.Equal(t, tc.strict, strict, "RateLimitsInForce strict must match what the limiter enforces")
+		})
+	}
+}
+
+// Building the limiters logs both limits in force in one line, once, in every
+// environment, so a deployment's own start-up log says which limits it runs.
+func TestRateLimitsInForceAreLoggedOnceAtStart(t *testing.T) {
+	for _, tc := range []struct {
+		name, environment, want string
+	}{
+		{"unset", "", "Rate limits in force: general 100/min, strict 10/min"},
+		{"development", "development", "Rate limits in force: general 100/min, strict 10/min"},
+		{"production", "production", "Rate limits in force: general 100/min, strict 10/min"},
+		{"test", "test", "Rate limits in force: general 1000/min, strict 100/min"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnvironment(t, tc.environment)
+			var buf bytes.Buffer
+			prevOut, prevFlags := log.Writer(), log.Flags()
+			log.SetOutput(&buf)
+			log.SetFlags(0)
+			t.Cleanup(func() {
+				log.SetOutput(prevOut)
+				log.SetFlags(prevFlags)
+			})
+			rateLimitLogOnce = sync.Once{}
+
+			RateLimitMiddleware()
+			StrictRateLimitMiddleware()
+			RateLimitMiddleware()
+
+			lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+			require.Len(t, lines, 1, "want exactly one start-up line, got:\n%s", buf.String())
+			assert.Contains(t, lines[0], tc.want)
+			if tc.environment == "test" {
+				assert.Contains(t, lines[0], "ENVIRONMENT=test", "the loosened line must name the setting that loosened it")
+			}
+		})
+	}
 }
 
 func TestGetClientIP_SpecificTrustedProxy(t *testing.T) {
