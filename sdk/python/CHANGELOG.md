@@ -33,6 +33,16 @@ What changed:
 
 ### Fixed
 
+- `secure()` and `register_agent()` send only tag IDs when they sync `tags` to an agent that is already on
+  the server (OAuth mode). `POST /api/v1/agents/{id}/tags` reads tag IDs only and answers 204 when it adds
+  them. The SDK sent it every entry except the names of tags already on the agent, so a tag name that was
+  not on the agent yet made the route answer 400 `Invalid tag ID format` and no tag in the list was added,
+  tag IDs included; and it read the 204 as a failure, so tags that had been added were reported as
+  `Failed to sync tags`. It now sends the tag IDs that are not on the agent yet, in the lowercase
+  36-character form, and reports a 204 as `Applied N tag(s)`. A tag name that is not on the agent yet is
+  not sent: a warning names it and says that AIM applies a tag name only when the agent is first
+  registered. An entry counts as a tag ID when it is a UUID in its 36-character form or as 32 hexadecimal
+  digits, in either letter case. The `tags` entry of the `register_agent` docstring describes both cases.
 - `aim-sdk login` reports an unavailable AIM server as unavailable and exits 75. When the server answers
   HTTP 502, 503 or 504, or gives no HTTP answer (refused, reset, unresolvable, unanswered), to the pre-flight
   probe, the device-code request or a token poll, the login ends at that request: nothing is retried, slept
