@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -52,4 +54,49 @@ func TestEnforceKeyExpiryReportsARepositoryFailureInsteadOfZero(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "connection refused")
 	assert.Equal(t, 0, suspended)
+}
+
+// unmintableRun is a trace run that cannot mint the trace of one organization.
+type unmintableRun struct {
+	run *trace.Run
+	org uuid.UUID
+	err error
+}
+
+func (r unmintableRun) For(ctx context.Context, organizationID string) (context.Context, error) {
+	if organizationID == r.org.String() {
+		return nil, r.err
+	}
+	return r.run.For(ctx, organizationID)
+}
+
+// When the trace of an organization cannot be minted, the recorded key expiry sweep
+// still reports the agents that failed before it, and still suspends the agents after it.
+func TestKeyExpirySweepKeepsEarlierErrorsAndGoesOnWhenATraceCannotBeMinted(t *testing.T) {
+	orgA, orgB := uuid.New(), uuid.New()
+	failed := repository.AgentRef{ID: uuid.New(), OrganizationID: orgA}
+	unminted := repository.AgentRef{ID: uuid.New(), OrganizationID: orgB}
+	after := repository.AgentRef{ID: uuid.New(), OrganizationID: orgA}
+	errWrite := errors.New("the record could not be written")
+	errMint := errors.New("trace: mint: the random source failed")
+
+	var suspendedIDs []uuid.UUID
+	suspended, err := sweepExpiredKeys(context.Background(), []repository.AgentRef{failed, unminted, after},
+		unmintableRun{run: trace.NewRun(), org: orgB, err: errMint},
+		func(_ context.Context, ref repository.AgentRef, traceID string) error {
+			assert.True(t, trace.ValidID(traceID), "agent %s has no trace", ref.ID)
+			if ref.ID == failed.ID {
+				return errWrite
+			}
+			suspendedIDs = append(suspendedIDs, ref.ID)
+			return nil
+		})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errWrite, "the error of an agent before the mint failure was dropped")
+	assert.ErrorIs(t, err, errMint)
+	assert.ErrorContains(t, err, "agent "+failed.ID.String())
+	assert.ErrorContains(t, err, "agent "+unminted.ID.String())
+	assert.Equal(t, 1, suspended)
+	assert.Equal(t, []uuid.UUID{after.ID}, suspendedIDs, "the agents after the mint failure were skipped")
 }

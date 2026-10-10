@@ -836,6 +836,50 @@ Content-Type: application/json
 
 ---
 
+#### GET /api/v1/admin/audit-logs/chain/head
+
+Read the state of the caller's organization's audit record chain. Admins only. The route reads the caller's organization and no other, through the same chain-state read the record writer runs before it extends a chain. `aim-breakglass chain status --organization <id> --json` prints the same body.
+
+**Headers:**
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+**Response members:**
+- `chainState`: `notStarted`, `extendable` or `notExtendable`
+- `chainId`: the chain's id, `null` when no chain has started
+- `head`: the stored head, `seq` and `hash` (lowercase hex SHA-256 of the newest record), `null` when no chain has started. When the chain is not extendable, it is the stored head that cannot be linked to.
+- `latestCheckpoint`: `null` until chain checkpoints are written
+- `reason`: present only when `chainState` is `notExtendable`: `no_records`, `head_mismatch` or `record_modified`
+
+**Response (chain not started):**
+```json
+{
+  "chainState": "notStarted",
+  "chainId": null,
+  "head": null,
+  "latestCheckpoint": null
+}
+```
+
+**Response (chain cannot be extended):**
+```json
+{
+  "chainState": "notExtendable",
+  "chainId": "6f1c2a7e-3b9d-4e2f-8a10-5c4d3e2f1a0b",
+  "head": {
+    "seq": 41,
+    "hash": "9f2c4e6a8b0d1f3e5a7c9b1d3f5e7a9c2b4d6f8e0a1c3e5b7d9f1a3c5e7b9d0f"
+  },
+  "latestCheckpoint": null,
+  "reason": "head_mismatch"
+}
+```
+
+A failed read answers 500 with `{"error": "Failed to read the audit record chain"}`.
+
+---
+
 ### Alerts Endpoints
 
 #### GET /api/v1/alerts

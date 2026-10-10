@@ -2911,21 +2911,13 @@ func (s *AgentService) enforceKeyExpiryRecorded(ctx context.Context, now time.Ti
 	if err != nil {
 		return 0, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
 	}
-	run := trace.NewRun()
-	suspended := 0
-	errs := make([]error, 0)
-	for _, ref := range refs {
-		runCtx, err := run.For(ctx, ref.OrganizationID.String())
-		if err != nil {
-			return suspended, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
-		}
-		tc, _ := trace.From(runCtx)
-		_, err = s.transitions.Record(runCtx, transition.Change{
+	return sweepExpiredKeys(ctx, refs, trace.NewRun(), func(ctx context.Context, ref repository.AgentRef, traceID string) error {
+		_, err := s.transitions.Record(ctx, transition.Change{
 			OrganizationID: ref.OrganizationID,
 			AgentID:        ref.ID,
 			Trigger:        transition.TriggerKeyExpiredSuspension,
 			Actor:          transition.System(),
-			TraceID:        tc.TraceID,
+			TraceID:        traceID,
 			Apply: func(ctx context.Context, tx *sql.Tx) error {
 				done, err := repository.SuspendAgentWithExpiredKeyTx(ctx, tx, ref.ID, now)
 				if err == nil && !done {
@@ -2934,6 +2926,29 @@ func (s *AgentService) enforceKeyExpiryRecorded(ctx context.Context, now time.Ti
 				return err
 			},
 		})
+		return err
+	})
+}
+
+// traceRun gives each organization of a job run its trace. *trace.Run is one.
+type traceRun interface {
+	For(ctx context.Context, organizationID string) (context.Context, error)
+}
+
+// sweepExpiredKeys suspends each agent of refs through suspend, with the trace run gives
+// the agent's organization, and returns how many it suspended. An agent whose trace
+// cannot be minted fails as an agent whose suspension fails does: its error joins the
+// others and the sweep goes on to the next agent.
+func sweepExpiredKeys(ctx context.Context, refs []repository.AgentRef, run traceRun,
+	suspend func(ctx context.Context, ref repository.AgentRef, traceID string) error) (int, error) {
+	suspended := 0
+	errs := make([]error, 0)
+	for _, ref := range refs {
+		runCtx, err := run.For(ctx, ref.OrganizationID.String())
+		if err == nil {
+			tc, _ := trace.From(runCtx)
+			err = suspend(runCtx, ref, tc.TraceID)
+		}
 		switch {
 		case err == nil:
 			suspended++

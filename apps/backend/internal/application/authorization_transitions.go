@@ -80,10 +80,10 @@ func (s *A2AService) SetTransitionRecorder(r *transition.Recorder) {
 // recalculated, as the services did before a transition recorder existed.
 // With a recorder set it writes nothing: the trust_scores row the caller
 // inserts next sets agents.trust_score through the trigger of migration 093,
-// which writes no other column. agent was read before the change that led to
-// the recalculation, so saving its whole row would put back a status, a key
-// or a talks_to list that another request changed since, and no record would
-// show it.
+// which sets updated_at with it and writes no other column. agent was read
+// before the change that led to the recalculation, so saving its whole row
+// would put back a status, a key or a talks_to list that another request
+// changed since, and no record would show it.
 func saveRecalculatedAgent(agents domain.AgentRepository, recorded bool, agent *domain.Agent) error {
 	if recorded {
 		return nil
