@@ -115,7 +115,9 @@ What changed:
   refresh token the server refused is not presented again in the same process until the file holds a
   different one. If another process holds the lock for more than 60 seconds, the refresh is skipped with a
   warning instead of being sent without the lock. The file is written to a temporary file and moved into
-  place, so another process never reads a partly written file.
+  place, so another process never reads a partly written file. The exception is Windows when another process
+  has the file open: the move is refused there, and the file is rewritten in place, so a reader at that moment
+  can see it partly written.
 - The "SDK REFRESH TOKEN REJECTED" banner gives the fix that matches the stored credential. A credential
   written by `aim-sdk login` (it carries `accessToken` and `organizationId`, which a dashboard SDK download
   never does) is told to sign in again with `aim-sdk login --url <server> --force`, which replaces the file;

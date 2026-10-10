@@ -119,7 +119,7 @@ func main() {
 		),
 	)
 	traceID := span.SpanContext().TraceID()
-	for _, step := range []string{"capability_check","attribute_check","context_check","chain_check","intent_check_sync"} {
+	for _, step := range []string{"capability_check","attribute_check","context_check","chain_check","intent_check_async"} {
 		_, child := tracer.Start(parent, "fga."+step, apitrace.WithAttributes(
 			attribute.String("fga.step", step),
 			attribute.Bool("fga.allowed", true),

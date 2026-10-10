@@ -28,7 +28,7 @@
         "type": "custom",
         "multi": false,
         "includeAll": true,
-        "query": "ALLOW,DENY,DENY_INTENT,DENY_CONTEXT,DENY_CHAIN,DENY_ATTRIBUTE",
+        "query": "ALLOW,DENY,DENY_CONTEXT,DENY_CHAIN,DENY_ATTRIBUTE",
         "current": {"text": "All", "value": "$__all"}
       }
     ]

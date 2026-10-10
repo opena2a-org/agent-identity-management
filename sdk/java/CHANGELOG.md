@@ -46,3 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AIMClient.listAgents` URL-encodes its query parameters. A `status` holding `&`, `#`, `=` or `+` was
   appended as written, so it could add or override query parameters or cut the URL short; the server now
   receives it as the value of the one `status` parameter.
+- After the server refuses a refresh, `AIMClient` sends the old refresh token to `/api/v1/auth/sdk/recover`
+  under `oldRefreshToken`, the key the server reads. It sent `old_refresh_token`, a key the server does not
+  read, so no recovery request could succeed. The route also requires an access token for the refresh token's
+  owner, and the recovery request carries none. `AIMClientSdkRecoverRouteTest` reads the key from the backend's
+  recovery handler and fails when the client sends another (#603).

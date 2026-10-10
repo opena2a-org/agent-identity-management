@@ -73,8 +73,8 @@ These names match Slide 14 of the May 22 Observability Summit talk and the AIM S
 | `agent.trust_score` | double | resource attribute | 9-factor weighted trust score |
 | `agent.drift_score` | double | metric, resource attribute | 0-1 saturated drift signal |
 | `agent.scan_verdict` | string | resource attribute | Producer-emitted security scan verdict. Read from `agent_security_contexts.scan_verdict`. Producer is expected to write this from a real scanner; the HackMyAgent integration that performs that write is on the roadmap. Enum values: `clean`, `warnings`, `findings`, `critical`, `unknown`. |
-| `fga.step` | string | span attribute on child spans | One of: `capability_check`, `attribute_check`, `context_check`, `chain_check`, `intent_check_sync`, `intent_check_async` |
-| `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_INTENT`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE`, `ERROR` (transient infra failures: `loadPolicy` / `HasCapability` returned an error) |
+| `fga.step` | string | span attribute on child spans | One of: `capability_check`, `attribute_check`, `context_check`, `chain_check`, `intent_check_async` |
+| `fga.outcome` | string | span attribute, log attribute, metric label | `ALLOW`, `DENY`, `DENY_CONTEXT`, `DENY_CHAIN`, `DENY_ATTRIBUTE`, `ERROR` (transient infra failures: `loadPolicy` / `HasCapability` returned an error). `DENY_INTENT` is historical: Step 5 no longer denies, so the engine does not produce it, but `access_attestations` rows written before that change may still carry it (migration 080's CHECK allows it). |
 | `fga.denied_by` | string | span attribute, log attribute, metric label | Step that denied (set when `fga.outcome != ALLOW`) |
 
 ## What the backend emits
@@ -89,10 +89,11 @@ fga.authorize  (agent.id, agent.capability, fga.outcome, fga.latency_ms, fga.ste
 ├── fga.attribute_check   (fga.step, fga.allowed, [fga.denied_reason])
 ├── fga.context_check     (fga.step, fga.allowed, [fga.denied_reason])
 ├── fga.chain_check       (fga.step, fga.allowed, [fga.denied_reason])
-└── fga.intent_check_sync (fga.step, fga.allowed, fga.intent_class, fga.intent_confidence)
-    OR
-    fga.intent_check_async (fga.step, fga.dispatched=true)
+└── fga.intent_check_async (fga.step, fga.dispatched, [fga.async_dropped, fga.async_drop_reason])
 ```
+
+`fga.intent_check_async` marks the dispatch of the Step 5 check for HIGH and MEDIUM risk; the check itself runs
+detached in a worker under its own `fga.intent_check_async.worker` span and never changes the decision.
 
 Spans whose check denies set status `codes.Error` with the deny reason.
 
@@ -102,9 +103,9 @@ Spans whose check denies set status `codes.Error` with the deny reason.
 |---|---|---|---|---|
 | `fga.decisions` | counter | `fga.outcome`, `fga.denied_by` | `fga_decisions_total` | Incremented on every Authorize return. The `_total` suffix is added by Prometheus's OTLP receiver per OpenMetrics convention; do NOT include it in the OTel name (Prometheus rejects with "invalid temporality and type combination"). |
 | `fga.latency_ms` | histogram | none | `fga_latency_ms_bucket`, `_count`, `_sum` | Total Authorize latency in ms |
-| `fga.intent_checks` | counter | `fga.risk_tier`, `fga.intent_mode`, `fga.intent_status`, `fga.intent_blocked` | `fga_intent_checks_total` | Step 5 (NanoMind intent) evaluations that reached the daemon call. `intent_mode` is `sync` (HIGH) or `async` (MEDIUM); `intent_status` is `classified` (daemon returned a non-empty attack class), `abstain` (clean response, no class — the common case until NanoMind is fine-tuned on the FGA prompt), or `fail_open` (daemon unreachable, request build error, or undecodable body — the action proceeds without an intent verdict). `intent_blocked` is the Step 5 verdict; `blocked=true` on an `async` (allowed) request is a Step-5-vs-final disagreement. |
+| `fga.intent_checks` | counter | `fga.risk_tier`, `fga.intent_mode`, `fga.intent_status`, `fga.intent_blocked` | `fga_intent_checks_total` | Step 5 (NanoMind intent) evaluations that reached the daemon call. `intent_mode` is `async` for HIGH and MEDIUM alike (series recorded before Step 5 stopped denying may carry `sync` for HIGH); `intent_status` is `classified` (daemon returned a non-empty attack class), `abstain` (clean response, no class — the common case until NanoMind is fine-tuned on the FGA prompt), or `fail_open` (daemon unreachable, request build error, or undecodable body — the action proceeds without an intent verdict). `intent_blocked` is always `false` now: the classifier's verdict is recorded, never acted on. |
 | `fga.intent_skipped` | counter | `fga.risk_tier` | `fga_intent_skipped_total` | Authorizes where Step 5 was skipped (LOW risk, or any non-HIGH/MEDIUM level). Pair with `fga.intent_checks` to get the skip rate. |
-| `fga.async_intent_dropped` | counter | `fga.async_drop_reason` | `fga_async_intent_dropped_total` | MEDIUM-risk async intent dispatches dropped before running. `async_drop_reason` is `queue_full` (worker pool saturated) or `shutdown` (engine draining). A dropped dispatch never increments `fga.intent_checks`; sum both for total MEDIUM dispatch attempts. |
+| `fga.async_intent_dropped` | counter | `fga.async_drop_reason` | `fga_async_intent_dropped_total` | HIGH- and MEDIUM-risk async intent dispatches dropped before running. `async_drop_reason` is `queue_full` (worker pool saturated) or `shutdown` (engine draining). A dropped dispatch never increments `fga.intent_checks`; sum both for total HIGH and MEDIUM dispatch attempts. |
 | `agent.drift_score` | gauge | `agent.id` | `agent_drift_score` | Saturated 0-1 score from `tanh(drift_count / 2)`. Emitted on every DetectDrift call (including 0 when no drift) so dashboards distinguish "clean" from "silent". |
 
 Attributes are flattened to label names (`fga_outcome`, `agent_id`, etc.) per the OTLP-to-Prometheus convention.
@@ -179,10 +180,11 @@ Find slow authorizations (>500ms total):
 {name="fga.authorize" && .fga.latency_ms > 500}
 ```
 
-Find traces that hit the intent check:
+Find traces that dispatched the intent check, and the detached checks themselves:
 
 ```
-{name="fga.intent_check_sync"}
+{name="fga.intent_check_async"}
+{name="fga.intent_check_async.worker"}
 ```
 
 ### Prometheus (PromQL)
@@ -220,11 +222,10 @@ sum(rate(fga_intent_skipped_total[5m]))
   / (sum(rate(fga_intent_skipped_total[5m])) + sum(rate(fga_intent_checks_total[5m])))
 ```
 
-Step-5-vs-final disagreement (async classifier flagged a request that was allowed):
+Requests the classifier attached an attack class to, by risk tier (recorded only; none of them is denied on it):
 
 ```promql
-sum(rate(fga_intent_checks_total{fga_intent_mode="async", fga_intent_blocked="true"}[5m]))
-  / sum(rate(fga_intent_checks_total{fga_intent_mode="async", fga_intent_status="classified"}[5m]))
+sum by (fga_risk_tier) (rate(fga_intent_checks_total{fga_intent_status="classified"}[5m]))
 ```
 
 Agents in the alert band (drift > 0.7):

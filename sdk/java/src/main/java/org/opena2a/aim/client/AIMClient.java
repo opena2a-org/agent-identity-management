@@ -1042,7 +1042,7 @@ public class AIMClient implements AutoCloseable {
     private boolean attemptTokenRecovery() {
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("old_refresh_token", refreshToken);
+            payload.put("oldRefreshToken", refreshToken);
 
             RequestBody body = RequestBody.create(payload.toString(), JSON);
 
