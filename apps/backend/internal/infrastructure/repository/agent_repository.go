@@ -1256,7 +1256,7 @@ func (r *AgentRepository) UpdateHeartbeat(ctx context.Context, agentID uuid.UUID
 //
 // It writes last_capability_check_at and updated_at and nothing else, for the reason
 // UpdateHeartbeat gives: Update's statement has no last_capability_check_at column, and
-// it writes every other column from the struct, so a status or key change committed
+// every column it writes comes from the struct, so a status or key change committed
 // after the caller's read would be overwritten. Returns sql.ErrNoRows when no agent has
 // this id.
 func (r *AgentRepository) UpdateLastCapabilityCheck(ctx context.Context, agentID uuid.UUID) (time.Time, error) {

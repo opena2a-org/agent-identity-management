@@ -5,6 +5,7 @@ package application
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -296,7 +297,9 @@ func TestTransitionOpeningStateSweepWritesNothingBeforeTheChain(t *testing.T) {
 // state. It refuses an agent whose first record is another change, an
 // opening state that changes the agent's state, and an opening state after
 // the agent's first record. A record at an agent's opening event id that does
-// not open its history refuses the agent's next change.
+// not open its history refuses the agent's next change: a record of another
+// type, even one that names a registration trigger, and a transition whose
+// trigger does not open a history.
 func TestTransitionReplayStartsEachAgentAtTheRecordThatOpensItsHistory(t *testing.T) {
 	state := func(status string) map[string]any {
 		return map[string]any{
@@ -331,7 +334,11 @@ func TestTransitionReplayStartsEachAgentAtTheRecordThatOpensItsHistory(t *testin
 		ctx := context.Background()
 		_, err := f.capSvc.GrantCapability(ctx, f.agentID, "files:read", nil, &f.userID, "")
 		require.NoError(t, err)
-		appendRawTransition(t, f, uuid.NewString(), "opening_state", state("verified"), state("verified"))
+		// Both states are the agent's state after the grant, so the opening
+		// state continues the agent's history and only its trigger breaks it.
+		all := f.allTransitions(t)
+		after := stateMember(t, all[len(all)-1].New)
+		appendRawTransition(t, f, uuid.NewString(), "opening_state", after, after)
 		_, err = transition.Replay(ctx, f.db, f.orgID, f.keys.publicKey())
 		var broken *transition.ContinuityError
 		require.True(t, errors.As(err, &broken), "want *ContinuityError, got %v", err)
@@ -339,33 +346,78 @@ func TestTransitionReplayStartsEachAgentAtTheRecordThatOpensItsHistory(t *testin
 		assert.Equal(t, int64(2), broken.PreviousSeq)
 	})
 
+	// refused asserts that the agent's next change is refused, and changes
+	// nothing, because the record at its opening event id does not open its
+	// history.
+	refused := func(t *testing.T, f *transitionFixture) {
+		t.Helper()
+		ctx := context.Background()
+		_, err := f.capSvc.GrantCapability(ctx, f.agentID, "files:read", nil, &f.userID, "")
+		require.ErrorIs(t, err, transition.ErrRecordUnavailable)
+		assert.True(t, strings.Contains(err.Error(), "does not open its history"), err.Error())
+		current, err := transition.CurrentState(ctx, f.db, f.orgID, f.agentID)
+		require.NoError(t, err)
+		assert.Empty(t, current.GrantedScope, "the refused grant changed the agent")
+	}
+
 	t.Run("a foreign record at the opening event id", func(t *testing.T) {
 		f := newTransitionFixture(t)
-		ctx := context.Background()
-		w := rawWriter(t, f)
-		trace, err := transition.NewTraceID()
-		require.NoError(t, err)
-		_, err = w.Write(ctx, store.Write{Class: store.ClassObservation, OrganizationID: f.orgID.String(), Draft: record.Draft{
-			EventID: transition.OpeningEventID(f.agentID),
-			Type:    "opena2a.administrative",
-			Retained: map[string]any{"opena2a": map[string]any{
-				"admin_action": "tag_created", "resource_type": "tag", "trace_origin": "server",
-			}},
+		appendAdministrativeRecord(t, f, transition.OpeningEventID(f.agentID), "")
+		refused(t, f)
+	})
+
+	t.Run("a foreign record at the opening event id that names a registration", func(t *testing.T) {
+		f := newTransitionFixture(t)
+		appendAdministrativeRecord(t, f, transition.OpeningEventID(f.agentID), string(transition.TriggerRegistrationBaseline))
+		refused(t, f)
+	})
+
+	t.Run("a transition at the opening event id whose trigger does not open a history", func(t *testing.T) {
+		f := newTransitionFixture(t)
+		appendRawTransition(t, f, transition.OpeningEventID(f.agentID), "agent_suspended", state("verified"), state("suspended"))
+		refused(t, f)
+	})
+}
+
+// stateMember is a state as a record's previous_state or new_state member.
+func stateMember(t *testing.T, s transitionStateJSON) map[string]any {
+	t.Helper()
+	b, err := json.Marshal(s)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(b, &m))
+	return m
+}
+
+// appendAdministrativeRecord appends an opena2a.administrative record to the
+// fixture's chain at the given event id. When trigger is set, its retained
+// part also names that trigger type, as no administrative record does.
+func appendAdministrativeRecord(t *testing.T, f *transitionFixture, eventID, trigger string) {
+	t.Helper()
+	trace, err := transition.NewTraceID()
+	require.NoError(t, err)
+	retained := map[string]any{"opena2a": map[string]any{
+		"admin_action": "tag_created", "resource_type": "tag", "trace_origin": "server",
+	}}
+	if trigger != "" {
+		retained["trigger"] = map[string]any{"type": trigger}
+	}
+	_, err = rawWriter(t, f).Write(context.Background(), store.Write{
+		Class:          store.ClassObservation,
+		OrganizationID: f.orgID.String(),
+		Draft: record.Draft{
+			EventID:  eventID,
+			Type:     "opena2a.administrative",
+			Retained: retained,
 			Tenant: map[string]any{
 				"trace_id":  trace,
 				"parent_id": nil,
 				"opena2a":   map[string]any{"resource_id": uuid.NewString()},
 			},
 			Personal: map[string]any{"actor": "system"},
-		}})
-		require.NoError(t, err)
-		_, err = f.capSvc.GrantCapability(ctx, f.agentID, "files:read", nil, &f.userID, "")
-		require.ErrorIs(t, err, transition.ErrRecordUnavailable)
-		assert.True(t, strings.Contains(err.Error(), "does not open its history"), err.Error())
-		current, err := transition.CurrentState(ctx, f.db, f.orgID, f.agentID)
-		require.NoError(t, err)
-		assert.Empty(t, current.GrantedScope, "the refused grant changed the agent")
+		},
 	})
+	require.NoError(t, err)
 }
 
 // rawWriter is a record writer on the fixture's chain that writes whatever
