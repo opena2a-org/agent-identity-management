@@ -49,6 +49,34 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the A2A verification result, and the observed verification event sources being exactly `service` and `system`. The
   key vault tests stop on a missing error instead of panicking on `err.Error()`.
 
+### Fixed — the Java SDK's token recovery sends the key the server reads
+
+- After the server refuses a refresh, the Java SDK's `AIMClient` sends the old refresh token to
+  `POST /api/v1/auth/sdk/recover` under `oldRefreshToken`, the key the handler reads. It sent
+  `old_refresh_token`, so no recovery request could succeed. `AIMClientSdkRecoverRouteTest` reads the key from the
+  handler source and fails when the client sends another.
+
+### Changed — verification event failures are written to the server log with a timestamp
+
+- A verification event refused because its agent could not be read, and a failed drift detection while recording
+  one, are written through the standard logger like the rest of the server's log, so each line carries the time.
+  They were printed to standard output without one.
+
+### Changed — the FGA observability docs and demo dashboards describe Step 5 as it runs now
+
+- `apps/backend/docs/OBSERVABILITY.md` no longer lists `DENY_INTENT` among the outcomes the engine produces or a
+  `fga.intent_check_sync` span; it names `DENY_INTENT` as a historical value that `access_attestations` rows written
+  before Step 5 stopped denying may still carry. The span tree, the TraceQL and PromQL examples and the
+  `fga.intent_checks` notes describe the detached check for HIGH and MEDIUM risk. The demo Grafana dashboards no
+  longer offer `DENY_INTENT` as an outcome, and the demo signal generator emits `fga.intent_check_async`.
+
+### Changed — the migration that drops `users.password_reset_expires` is numbered 125
+
+- `112_drop_unread_password_reset_expires.sql` shared its prefix with `112_trust_score_low_threshold_key_and_scale.sql`
+  and is now `125_drop_unread_password_reset_expires.sql`. Both runners key a migration by its full file name, so a
+  database that applied it as 112 applies it again as 125, where both of its statements are `IF EXISTS` and change
+  nothing.
+
 ### Fixed: an issued trust credential is returned only when it carries both signature suites and the values AIM asked for
 
 - `POST /api/v1/agents/:id/atc` returned whatever credential the issuer signed. OpenA2A AIM (Agent Identity Management)
@@ -391,7 +419,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 
 - The `users` table carried two password reset expiry columns. The reset flow reads and writes
   `password_reset_expires_at`; `password_reset_expires`, added later with the partial index
-  `idx_users_password_reset_expires`, was never read or written and held only `NULL`s. Migration 112 drops the column
+  `idx_users_password_reset_expires`, was never read or written and held only `NULL`s. Migration 125 drops the column
   and the index. It is a no-op on a database that does not have them, and leaves `password_reset_expires_at`,
   `password_reset_token` and `idx_users_password_reset_token` unchanged.
 - `apps/backend/internal/infrastructure/repository/users_password_reset_columns_integration_test.go` fails when a
@@ -532,7 +560,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - To upgrade, set `KEYVAULT_MASTER_KEY` (`openssl rand -base64 32`) on every deployment that is not
   local development. The docker-compose files already require it.
 
-### Fixed: webhook, MCP server and agent card requests follow no redirect and connect only to the addresses registration admits
+### Fixed — webhook, MCP server and agent card requests follow no redirect and connect only to the addresses registration admits
 
 - A webhook URL, an MCP server's capability and verification URLs and an agent card URL are checked when they are
   accepted. The request itself was sent by a client that, for webhooks and MCP servers, followed up to 10 redirects,
@@ -563,7 +591,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   `X-Webhook-Event: agent.created` with an `agent.deleted` payload. The header now names the event in the payload's
   `event` field. The test send already named its own event, `webhook.test`.
 
-### Fixed: an agent's activity returns no network address, user agent or personal metadata to a non-admin
+### Fixed — an agent's activity returns no network address, user agent or personal metadata to a non-admin
 
 - `GET /api/v1/agents/:id/activity` is open to every principal in the organization and returns the audit records an
   agent wrote: its verification requests, capability violations and honeytoken hits. It returned each record's
@@ -578,7 +606,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   manager's, member's, viewer's and role-less caller's response contains none of them and keeps the decision members,
   and that an admin's response still contains them.
 
-### Fixed: the per-agent and per-MCP-server audit logs return no network address, user agent or metadata to a non-admin
+### Fixed — the per-agent and per-MCP-server audit logs return no network address, user agent or metadata to a non-admin
 
 - `GET /api/v1/agents/:id/audit-logs` and `GET /api/v1/mcp-servers/:id/audit-logs` are open to every principal in
   the organization, while `/api/v1/admin/audit-logs`, which returns the same records, admits only admins. Both
@@ -593,7 +621,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   member's, viewer's and role-less caller's response to each route contains none of them, and that an admin's
   response and `GET /api/v1/admin/audit-logs/:id` still contain them.
 
-### Fixed: the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
+### Fixed — the token endpoint accepts an assertion addressed to the server's address and port when `AIM_BASE_URL` is unset
 
 - `POST /api/v1/oauth/token` requires the assertion's `aud` to name the server. It accepted `AIM_BASE_URL` and also
   the origin the request arrived on, which it built from the host name in the `Host` header without its port. With
@@ -1321,7 +1349,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   Block' blocks an evaluable agent below 0.50 (it blocked below 0.30) and 'Low Trust Score Alert' alerts below 0.70.
   The suspension applied when a recalculated score drops below 0.50 stays a platform rule, separate from policy rows.
 
-### Fixed: an issued trust credential carries publisherDid, buildAttestation and a 0-100 trustScore
+### Fixed — an issued trust credential carries publisherDid, buildAttestation and a 0-100 trustScore
 
 - `POST /api/v1/agents/:id/atc` sent the issuer the agent's `trustScore` on the 0-1 scale of AIM's 9-factor score, and
   sent no `publisherDid` and no `buildAttestation`. The ATX v1.1 specification puts `trustScore` on the wire as a

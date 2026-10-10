@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -141,7 +142,7 @@ func (s *VerificationEventService) CreateVerificationEvent(
 	// agent and an agent of another organization return the same error.
 	agent, err := s.agentRepo.GetByID(req.AgentID)
 	if err != nil {
-		fmt.Printf("Verification event refused: agent %s could not be read: %v\n", req.AgentID, err)
+		log.Printf("Verification event refused: agent %s could not be read: %v", req.AgentID, err)
 		return nil, ErrVerificationEventAgentNotFound
 	}
 	if agent == nil || agent.OrganizationID != req.OrganizationID {
@@ -210,7 +211,7 @@ func (s *VerificationEventService) CreateVerificationEvent(
 
 		if err != nil {
 			// Log error but don't fail the verification event creation
-			fmt.Printf("Drift detection failed: %v\n", err)
+			log.Printf("Drift detection failed: %v", err)
 		} else if driftResult != nil {
 			// Store drift detection results in the event
 			event.DriftDetected = driftResult.DriftDetected

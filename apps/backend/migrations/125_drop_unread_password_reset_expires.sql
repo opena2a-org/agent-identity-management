@@ -1,4 +1,4 @@
--- Migration 112: drop users.password_reset_expires and its index.
+-- Migration 125: drop users.password_reset_expires and its index.
 --
 -- Migration 002 adds users.password_reset_expires_at, the expiry the password reset flow
 -- reads and writes (UserRepository: the reset token lookup filters on it, Update writes it).

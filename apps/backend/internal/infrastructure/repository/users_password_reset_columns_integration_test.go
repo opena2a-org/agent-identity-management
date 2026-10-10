@@ -17,7 +17,7 @@ import (
 // Migration 002 adds users.password_reset_expires_at, which UserRepository reads and writes.
 // Migration 011 later added a second column, users.password_reset_expires, with a partial
 // index on it. No code ever read or wrote that column, so on every migrated database it sat
-// empty next to the live one, and its index was maintained for nothing. Migration 112 drops
+// empty next to the live one, and its index was maintained for nothing. Migration 125 drops
 // both. These tests pin the migrated schema, so a reintroduced duplicate fails here rather
 // than surviving as a second expiry column that looks authoritative and is not.
 //
@@ -81,11 +81,11 @@ func TestUsersPasswordResetColumns(t *testing.T) {
 
 	t.Run("the unread duplicate column is gone", func(t *testing.T) {
 		assert.False(t, usersColumnExists(t, db, "password_reset_expires"),
-			"users.password_reset_expires is read and written by nothing; migration 112 drops it")
+			"users.password_reset_expires is read and written by nothing; migration 125 drops it")
 	})
 
 	t.Run("the index on the unread column is gone", func(t *testing.T) {
 		assert.False(t, usersIndexExists(t, db, "idx_users_password_reset_expires"),
-			"idx_users_password_reset_expires indexes a column nothing reads; migration 112 drops it")
+			"idx_users_password_reset_expires indexes a column nothing reads; migration 125 drops it")
 	})
 }

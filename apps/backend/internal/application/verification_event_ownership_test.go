@@ -32,15 +32,17 @@ func (r *ownershipEventRepo) Create(e *domain.VerificationEvent) error {
 
 type ownershipAgentRepo struct {
 	domain.AgentRepository
-	agents       map[uuid.UUID]*domain.Agent
-	readErr      error
-	lookups      int
-	scoreUpdates []float64
+	agents  map[uuid.UUID]*domain.Agent
+	readErr error
+	// readErrFromLookup is the first lookup readErr applies to; 0 fails every lookup.
+	readErrFromLookup int
+	lookups           int
+	scoreUpdates      []float64
 }
 
 func (r *ownershipAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	r.lookups++
-	if r.readErr != nil {
+	if r.readErr != nil && r.lookups >= r.readErrFromLookup {
 		return nil, r.readErr
 	}
 	if a, ok := r.agents[id]; ok {
@@ -273,5 +275,41 @@ func TestLogVerificationEvent_AgentOfAnotherOrganization(t *testing.T) {
 		require.NotNil(t, event)
 		assert.Len(t, f.events.created, 1)
 		assert.Equal(t, org, f.events.created[0].OrganizationID)
+	})
+}
+
+// The refusal of a failed agent read and a failed drift detection are written
+// through the standard logger, which stamps each line with the time, like the
+// rest of the server's log; a line printed to stdout carries no time.
+func TestCreateVerificationEvent_FailuresAreWrittenToTheServerLog(t *testing.T) {
+	t.Run("failed agent read", func(t *testing.T) {
+		org := uuid.New()
+		agent := registeredAgent(org, 0)
+		f := newOwnershipFixture(agent)
+		f.agents.readErr = errors.New("driver: bad connection")
+		logged := captureLog(t)
+
+		_, err := f.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(org, agent.ID, nil))
+
+		require.ErrorIs(t, err, ErrVerificationEventAgentNotFound)
+		assert.Contains(t, logged.String(), "Verification event refused: agent "+agent.ID.String())
+		assert.Contains(t, logged.String(), "driver: bad connection")
+	})
+
+	t.Run("failed drift detection", func(t *testing.T) {
+		org := uuid.New()
+		agent := registeredAgent(org, 0)
+		f := newOwnershipFixture(agent)
+		// The ownership check reads the agent; drift detection's own read fails.
+		f.agents.readErr = errors.New("driver: bad connection")
+		f.agents.readErrFromLookup = 2
+		logged := captureLog(t)
+
+		event, err := f.svc.CreateVerificationEvent(context.Background(), domain.VerificationEventSourceService, eventRequest(org, agent.ID, []string{"unregistered-server"}))
+
+		require.NoError(t, err)
+		require.NotNil(t, event)
+		assert.Contains(t, logged.String(), "Drift detection failed:")
+		assert.Contains(t, logged.String(), "driver: bad connection")
 	})
 }

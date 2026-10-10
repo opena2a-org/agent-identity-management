@@ -229,7 +229,8 @@ def _write_private_json(path: Path, data: Dict[str, Any]) -> None:
     """Replace ``path`` with ``data`` in one step, readable by the owner only.
 
     A reader in another process sees the old file or the new one, never a
-    truncated one.
+    truncated one, except on Windows when another process has the file open:
+    the replace is refused there and the file is rewritten in place.
     """
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
     try:
