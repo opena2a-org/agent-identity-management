@@ -5,6 +5,7 @@ package application
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -115,6 +116,35 @@ func TestTransitionTriggersOfEveryTalksToWriterReplayToTheTables(t *testing.T) {
 	var displayName string
 	require.NoError(t, f.db.QueryRow(`SELECT display_name FROM agents WHERE id = $1`, f.agentID).Scan(&displayName))
 	assert.Equal(t, "renamed agent", displayName, "the descriptive columns are stored with their own statement")
+}
+
+// An update answers an empty talks_to list as an empty list, never as null:
+// both when the list was empty and stays as it is, and when the update
+// empties a list that held entries.
+func TestTransitionTriggerOfAnUpdateAnswersAnEmptyTalksToListAsAnEmptyList(t *testing.T) {
+	f := newTransitionFixture(t)
+	userCtx := transition.WithActor(context.Background(), transition.User(f.userID))
+	answered := func(agent *domain.Agent) string {
+		t.Helper()
+		body, err := json.Marshal(agent)
+		require.NoError(t, err)
+		return string(body)
+	}
+
+	unchanged, err := f.agentSvc.UpdateAgent(userCtx, f.agentID, &CreateAgentRequest{TalksTo: []string{}}, f.userID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, unchanged.TalksTo)
+	assert.Contains(t, answered(unchanged), `"talksTo":[]`, "an empty list left as it is")
+	assert.Empty(t, f.transitions(t), "a list left as it is has no record")
+
+	_, err = f.agentSvc.UpdateAgent(userCtx, f.agentID, &CreateAgentRequest{TalksTo: []string{"memory"}}, f.userID)
+	require.NoError(t, err)
+	emptied, err := f.agentSvc.UpdateAgent(userCtx, f.agentID, &CreateAgentRequest{TalksTo: []string{}}, f.userID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{}, emptied.TalksTo)
+	assert.Contains(t, answered(emptied), `"talksTo":[]`, "a list the update emptied")
+	assert.Equal(t, []string{}, f.storedTalksTo(t))
+	assert.Len(t, f.transitions(t), 2, "one record per change of the list")
 }
 
 // A registration's record holds the talks_to list it stored, and a list

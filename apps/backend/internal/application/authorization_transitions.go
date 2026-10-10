@@ -161,7 +161,7 @@ func (s *A2AService) storeServerKey(ctx context.Context, agent *domain.Agent, pu
 // row lock, which is the list it stores. A change whose lists are equal as
 // sets stores nothing and writes no record. It returns the list the row held
 // and the list it holds afterwards; the two are the same when nothing
-// changed.
+// changed. Neither is nil, so an empty list is answered as [], not null.
 func recordTalksToChange(
 	ctx context.Context,
 	r *transition.Recorder,
@@ -170,12 +170,12 @@ func recordTalksToChange(
 	fallback transition.Actor,
 	edit func(current []string) []string,
 ) (before, after []string, err error) {
-	read := append([]string(nil), agent.TalksTo...)
+	read := append(make([]string, 0, len(agent.TalksTo)), agent.TalksTo...)
 	class, changed := transition.TalksToClass(read, edit(append([]string(nil), read...)))
 	if !changed {
 		return read, read, nil
 	}
-	var held, stored []string
+	held, stored := make([]string, 0), make([]string, 0)
 	err = recordChange(ctx, r, transition.Change{
 		OrganizationID: agent.OrganizationID,
 		AgentID:        agent.ID,
@@ -186,8 +186,8 @@ func recordTalksToChange(
 			if err != nil {
 				return err
 			}
-			held = current
-			stored = edit(append([]string(nil), current...))
+			held = append(held[:0], current...)
+			stored = append(stored[:0], edit(append([]string(nil), current...))...)
 			return repository.SetAgentTalksToTx(ctx, tx, agent.ID, stored)
 		},
 	}, fallback)

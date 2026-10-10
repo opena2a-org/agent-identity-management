@@ -78,7 +78,7 @@ func (s *DetectionService) ReportDetections(
 	significantCount := 0
 	// With a transition recorder, the significant detections' servers are
 	// added to talks_to after the loop, in one transition.
-	var reported []string
+	reported := make([]string, 0)
 
 	// 2. Process each detection
 	for _, detection := range req.Detections {
