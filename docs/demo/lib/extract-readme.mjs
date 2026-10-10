@@ -1,7 +1,9 @@
 // Extract the typed lines of the README's Quick start: every line of every
-// fenced code block under `## Quick start`, at the checked-out commit. The
-// tape may type only these lines outside Hide (lint.mjs enforces it), so the
-// video cannot drift from the documentation it records.
+// bash and python fence under `## Quick start`, at the checked-out commit. A
+// fence in any other language, or in none, holds captured output, which a
+// reader reads and never types. The tape may type only these lines outside
+// Hide (lint.mjs enforces it), so the video cannot drift from the
+// documentation it records.
 //
 //   node docs/demo/lib/extract-readme.mjs [path/to/README.md]   -> JSON lines on stdout
 import fs from "node:fs";
@@ -19,12 +21,15 @@ export function quickStartSection(md) {
   return lines.slice(start, end).join("\n");
 }
 
+const TYPED = new Set(["bash", "python"]);
+
 export function codeLines(section) {
   const out = [];
-  let inFence = false;
+  let fence = null; // the open fence's language ("" when it names none), null outside a fence
   for (const raw of section.split("\n")) {
-    if (/^```/.test(raw)) { inFence = !inFence; continue; }
-    if (!inFence) continue;
+    const marker = /^```(\w*)/.exec(raw);
+    if (marker) { fence = fence === null ? marker[1] : null; continue; }
+    if (!TYPED.has(fence)) continue;
     const line = raw.replace(/\s+#.*$/, "").trimEnd(); // a trailing shell comment is not typed
     if (line.trim() === "") continue;
     out.push(line);
