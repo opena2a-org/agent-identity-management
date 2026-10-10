@@ -10,7 +10,9 @@ A name the example uses without defining it raises NameError; a call the
 example never makes is counted as missing; the refused call ends the script
 as it would end a reader's, so it has to be the last line. They also hold
 the minimal dev stack command to the services docker-compose.yml defines,
-and the recorded walkthrough's typed lines to the root README's Quick start.
+the recorded walkthrough's typed lines to the root README's Quick start, and
+the root README's captured register output, in its first 30 lines, to what
+this SDK prints for that call.
 
 Everything here runs offline and reads only files in this repository.
 """
@@ -236,6 +238,99 @@ def test_both_readmes_sign_in_with_the_same_lines_including_self_hosted():
     )
     assert "aim-sdk login --url http://localhost:8080" in root_bash[0]
     assert "`/device`" in quick_start(ROOT_README)
+
+
+FIRST_SCREEN = 30  # README lines a visitor reads before scrolling
+
+
+def numbered_fences(path):
+    """(language, body, opening line, closing line) for every fenced block, lines 1-based."""
+    blocks = []
+    opened = None
+    for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
+        if opened is None:
+            m = re.match(r"^```(\w*)\s*$", line)
+            if m:
+                lang, body, opened = m.group(1), [], number
+        elif re.match(r"^```\s*$", line):
+            blocks.append((lang, "\n".join(body), opened, number))
+            opened = None
+        else:
+            body.append(line)
+    return blocks
+
+
+def register_and_output(path):
+    """The Python fence that calls secure(), the fence after it, and the prose before the second."""
+    blocks = numbered_fences(path)
+    i = next((i for i, b in enumerate(blocks) if b[0] == "python" and "secure(" in b[1]), None)
+    assert i is not None, f"{path.name}: no Python fence calls secure()"
+    assert i + 1 < len(blocks), f"{path.name}: nothing follows the register call"
+    lines = path.read_text(encoding="utf-8").split("\n")
+    prose_from = blocks[i - 1][3] if i > 0 else 0
+    prose = "\n".join(
+        line for number, line in enumerate(lines, 1)
+        if prose_from < number < blocks[i + 1][2] and not blocks[i][2] <= number <= blocks[i][3]
+    )
+    return blocks[i], blocks[i + 1], prose
+
+
+def test_root_readme_shows_the_register_call_and_its_dated_output_in_its_first_30_lines():
+    register, output, prose = register_and_output(ROOT_README)
+    assert register[2] <= FIRST_SCREEN, (
+        f"the register call opens on line {register[2]}; it must open within the first {FIRST_SCREEN}"
+    )
+    assert output[0] == "" and "Agent Registered" in output[1], (
+        "the fence after the register call must be its captured output"
+    )
+    assert output[2] < FIRST_SCREEN, (
+        f"the captured output opens on line {output[2]}; it must start within the first {FIRST_SCREEN}"
+    )
+    assert re.search(r"\b20\d\d-\d\d-\d\d\b", prose), (
+        "the text before the captured output must say when it was captured"
+    )
+
+
+def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monkeypatch, capsys):
+    from aim_sdk import console as console_module
+
+    register, output, _ = register_and_output(ROOT_README)
+    call = next(
+        node for node in ast.walk(ast.parse(register[1]))
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "secure"
+    )
+    name = call.args[0].value
+    capabilities = next(ast.literal_eval(k.value) for k in call.keywords if k.arg == "capabilities")
+
+    detection = re.fullmatch(r"  ○ Agent Type: using default '(\w+)'", output[1].split("\n", 1)[0])
+    assert output[0] == "" and detection, (
+        "the fence after the register call must be its captured output, "
+        "opening with the agent-type line secure() prints"
+    )
+    rows = dict(re.findall(r"^│  ([A-Za-z ]+):\s+(.*?)\s*│$", output[1], re.MULTILINE))
+    assert rows["Agent"] == name, "the captured output names a different agent than the call"
+    assert rows["Capabilities"] == ", ".join(capabilities), (
+        "the captured output lists different capabilities than the call grants"
+    )
+    assert rows["Status"] == "pending", "a newly registered agent is pending until verified"
+
+    # The plain-text panel is what `pip install aim-sdk` prints: rich is not a dependency.
+    monkeypatch.setattr(console_module, "RICH_AVAILABLE", False)
+    printer = console_module.AIMConsole()
+    printer.detection_none("Agent Type", fallback=detection.group(1))
+    printer.agent_registered(
+        name=name,
+        agent_id=rows["ID"].replace("...", "-00000000-"),  # shortened back to the captured ID
+        agent_type=rows["Type"],
+        version=rows["Version"],
+        trust_score=int(rows["Trust Score"].rstrip("%")),
+        status=rows["Status"],
+        capabilities=capabilities,
+    )
+    assert capsys.readouterr().out.rstrip("\n") == output[1].rstrip("\n"), (
+        "the README's captured register output no longer matches what this SDK prints; "
+        "capture it again"
+    )
 
 
 def test_root_readme_drops_the_stale_self_hosted_sentence():
