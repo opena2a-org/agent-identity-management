@@ -49,11 +49,16 @@ import static org.junit.jupiter.api.Assertions.fail;
  * The stand-in server answers both routes the way the backend does: the attach
  * route reads only the bound members and admits only a member's token, and the
  * create route creates a server from {@code name} and {@code url}.
+ *
+ * The {@code registerMcp} example in the SDK documentation runs against the same
+ * stand-in, and every member it prints has to be one the backend answers with.
  */
 class AIMClientRegisterMcpRouteTest {
 
     private static final String ROUTES = "apps/backend/cmd/server/main.go";
     private static final String REQUEST_TYPE = "apps/backend/internal/application/agent_service.go";
+    private static final String HANDLER = "apps/backend/internal/interfaces/http/handlers/agent_handler.go";
+    private static final String DOCUMENT = "docs/sdk/java.md";
 
     private static final String AGENT_ID = "550e8400-e29b-41d4-a716-446655440000";
     private static final String ATTACH_PATH = "/api/v1/agents/" + AGENT_ID + "/mcp-servers";
@@ -69,6 +74,16 @@ class AIMClientRegisterMcpRouteTest {
     private static final Pattern REQUEST_STRUCT =
             Pattern.compile("type AddMCPServersRequest struct \\{(.*?)\\n\\}", Pattern.DOTALL);
     private static final Pattern JSON_MEMBER = Pattern.compile("`json:\"([^\",`]+)");
+    private static final Pattern HANDLER_FUNC = Pattern.compile(
+            "func \\(h \\*AgentHandler\\) AddMCPServersToAgent\\(.*?\\n}\\n", Pattern.DOTALL);
+    private static final Pattern ANSWER_MAP =
+            Pattern.compile("return c\\.JSON\\(fiber\\.Map\\{(.*?)\\}\\)", Pattern.DOTALL);
+    private static final Pattern MAP_KEY = Pattern.compile("\"([^\"]+)\"\\s*:");
+    private static final Pattern DOCUMENTED_CALL = Pattern.compile(
+            "Map<String, Object> (\\w+) = agent\\.registerMcp\\((.*?)\\);", Pattern.DOTALL);
+    private static final Pattern LINE_COMMENT = Pattern.compile("//[^\\n]*");
+    private static final Pattern QUOTED = Pattern.compile("\"([^\"]+)\"");
+    private static final Pattern SCALE = Pattern.compile("\\((\\d+)-(\\d+)\\)");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final List<String> talksTo = new ArrayList<>();
@@ -174,6 +189,55 @@ class AIMClientRegisterMcpRouteTest {
                 "PUT /:id/mcp-servers is no longer registered for AddMCPServersToAgent behind MemberMiddleware in "
                         + ROUTES);
         assertTrue(boundMembers.contains("mcpServerIds"), "bound members: " + boundMembers);
+    }
+
+    @Test
+    @DisplayName("the documented registerMcp example sends what the route reads and prints what it answers")
+    void documentedExample_matchesTheRoute() throws Exception {
+        String document = new String(Files.readAllBytes(locate(DOCUMENT)), StandardCharsets.UTF_8);
+        Matcher call = DOCUMENTED_CALL.matcher(document);
+        assertTrue(call.find(), "no `Map<String, Object> result = agent.registerMcp(...)` example in " + DOCUMENT);
+        String resultName = call.group(1);
+        String[] arguments = LINE_COMMENT.matcher(call.group(2)).replaceAll("").split(",");
+        assertEquals(3, arguments.length, "documented call: " + call.group());
+        String serverId = unquote(arguments[0]);
+        String detectionMethod = unquote(arguments[1]);
+        double confidence = Double.parseDouble(arguments[2].trim());
+
+        List<String> methods = new ArrayList<>();
+        Matcher method = QUOTED.matcher(memberComment("detectedMethod"));
+        while (method.find()) {
+            methods.add(method.group(1));
+        }
+        assertTrue(methods.contains(detectionMethod), "the example's detection method \"" + detectionMethod
+                + "\" is not one AddMCPServersRequest in " + REQUEST_TYPE + " lists: " + methods);
+        Matcher scale = SCALE.matcher(memberComment("confidence"));
+        assertTrue(scale.find(), "no confidence scale on AddMCPServersRequest in " + REQUEST_TYPE);
+        assertTrue(confidence >= Double.parseDouble(scale.group(1)) && confidence <= Double.parseDouble(scale.group(2)),
+                "the example's confidence " + confidence + " is outside " + scale.group());
+
+        int blockEnd = document.indexOf("```", call.end());
+        String block = document.substring(call.start(), blockEnd < 0 ? document.length() : blockEnd);
+        Matcher read = Pattern.compile(Pattern.quote(resultName) + "\\.get(?:OrDefault)?\\(\"([^\"]+)\"")
+                .matcher(block);
+        TreeSet<String> reads = new TreeSet<>();
+        while (read.find()) {
+            reads.add(read.group(1));
+        }
+        assertTrue(!reads.isEmpty(), "the example prints nothing from " + resultName + ": " + block);
+        TreeSet<String> answered = handlerAnswerMembers();
+        assertTrue(answered.containsAll(reads), "the example prints members AddMCPServersToAgent in " + HANDLER
+                + " does not answer with: prints " + reads + ", answered " + answered);
+
+        signedInToken = MEMBER_TOKEN;
+        Map<String, Object> result;
+        try (AIMClient client = client()) {
+            result = client.registerMcp(serverId, detectionMethod, confidence);
+        }
+        for (String member : reads) {
+            assertNotNull(result.get(member),
+                    "the example prints " + resultName + ".get(\"" + member + "\"), which is null in " + result);
+        }
     }
 
     private AIMClient client() {
@@ -296,6 +360,38 @@ class AIMClientRegisterMcpRouteTest {
         assertNotNull(members);
         assertTrue(!members.isEmpty(), "AddMCPServersRequest has no JSON members in " + REQUEST_TYPE);
         return members;
+    }
+
+    /** The line comment on one JSON member of the request type the attach route binds. */
+    private static String memberComment(String member) throws IOException {
+        String source = new String(Files.readAllBytes(locate(REQUEST_TYPE)), StandardCharsets.UTF_8);
+        Matcher declared = REQUEST_STRUCT.matcher(source);
+        assertTrue(declared.find(), "AddMCPServersRequest is not declared in " + REQUEST_TYPE);
+        Matcher comment = Pattern.compile("`json:\"" + Pattern.quote(member) + "\"`[^\\n]*?//([^\\n]*)")
+                .matcher(declared.group(1));
+        assertTrue(comment.find(), "AddMCPServersRequest declares no commented " + member + " in " + REQUEST_TYPE);
+        return comment.group(1);
+    }
+
+    /** The members AddMCPServersToAgent answers with. */
+    private static TreeSet<String> handlerAnswerMembers() throws IOException {
+        String source = new String(Files.readAllBytes(locate(HANDLER)), StandardCharsets.UTF_8);
+        Matcher handler = HANDLER_FUNC.matcher(source);
+        assertTrue(handler.find(), "AddMCPServersToAgent is not declared in " + HANDLER);
+        Matcher answer = ANSWER_MAP.matcher(handler.group());
+        assertTrue(answer.find(), "AddMCPServersToAgent answers no fiber.Map in " + HANDLER);
+        TreeSet<String> members = new TreeSet<>();
+        Matcher key = MAP_KEY.matcher(answer.group(1));
+        while (key.find()) {
+            members.add(key.group(1));
+        }
+        return members;
+    }
+
+    private static String unquote(String argument) {
+        Matcher literal = QUOTED.matcher(argument.trim());
+        assertTrue(literal.matches(), "not a string literal: " + argument);
+        return literal.group(1);
     }
 
     private static Path locate(String relative) {
