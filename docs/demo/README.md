@@ -61,7 +61,7 @@ the published package, may type the lines listed in
 REHEARSAL watermark on every frame. It is for measuring the walkthrough and is
 never uploaded.
 
-A counted render types `pip install aim-sdk` against PyPI and refuses to run
+A counted render types `pip install "aim-sdk[rich]"` against PyPI and refuses to run
 (exit 2) unless the README shows the self-hosted login, PyPI carries a release
 whose login is the device grant, and the pinned images were built at or after
 the commit that added it. Exit 3 is a lint or census failure, exit 4 a

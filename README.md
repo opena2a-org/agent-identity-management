@@ -4,42 +4,32 @@
 
 > **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [AIM](https://github.com/opena2a-org/agent-identity-management) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
 
-Cryptographic identity, capability authorization, and audit trails for AI agents. Apache 2.0.
-
-[Website](https://opena2a.org) · [AIM Cloud](https://aim.opena2a.org/get-started)  · [Discord](https://discord.gg/uRZa3KXgEn)
+Cryptographic identity, capability authorization, and audit trails for AI agents. Apache 2.0. [Website](https://opena2a.org) · [AIM Cloud](https://aim.opena2a.org/get-started) · [Discord](https://discord.gg/uRZa3KXgEn)
 
 ## Quick start
-
 ```bash
-pip install aim-sdk
+pip install "aim-sdk[rich]"
 aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 from a self-hosted AIM, with the server and SDK built from commit 592bb95:
+Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 right after `aim-sdk login` to a self-hosted AIM, with the server and SDK built from commit 8c307fb:
 
 ```python
 from aim_sdk import secure
 agent = secure("my-first-agent", capabilities=["db:read"])
 ```
-
 ```
   ○ Agent Type: using default 'ai_agent'
+Token rotated successfully — old refresh token revoked (new id: 461d130d...)
 
-╭─────────────────────────────────────────────────╮
-│  [OK] Agent Registered                          │
-├─────────────────────────────────────────────────┤
-│  Agent:       my-first-agent                    │
-│  ID:          d3c28560...6e2e                   │
-│  Type:        ai_agent                          │
-│  Version:     1.0.0                             │
-│  Status:      pending                           │
-│  Trust Score: 59%                               │
-│  Capabilities: db:read                          │
-╰─────────────────────────────────────────────────╯
+[OK] Agent registered: my-first-agent
+  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0
+  Status: ○ pending  Trust: 59%
+  Capabilities: db:read
 ```
 
-`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. With `rich` installed, the same fields print on four lines instead of in a panel.
+`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. The `Token rotated` line comes from the first call after sign-in, which exchanges the refresh token `aim-sdk login` saved for a new one. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
 
 The agent starts `pending`, and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard (measured 2026-09-22 on a self-hosted stack). Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
 
