@@ -217,7 +217,8 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 		"an uppercase event id": func(c *Change) {
 			c.EventID = strings.ToUpper(uuid.NewString())
 		},
-		"no statement": func(c *Change) { c.Apply = nil },
+		"the agent's opening event id": func(c *Change) { c.EventID = OpeningEventID(c.AgentID) },
+		"no statement":                 func(c *Change) { c.Apply = nil },
 	} {
 		c := valid
 		edit(&c)

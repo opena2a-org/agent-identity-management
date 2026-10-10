@@ -92,7 +92,11 @@ type Change struct {
 	// EventID, when set, is the record's event_id; otherwise the recorder
 	// mints a random one. A pending capability request's record takes
 	// RequestEventID of the request. A registration takes none: its record
-	// takes OpeningEventID of the agent.
+	// takes OpeningEventID of the agent. A given event id must not be an
+	// opening event id: OpeningEventID of any agent is reserved for the
+	// record that opens that agent's history, and a record of another change
+	// there refuses that agent's next change. The recorder refuses the
+	// opening event id of the change's own agent.
 	EventID string
 	// Apply makes the change in tx, after the agent's row is locked and its
 	// previous state read. It runs statements only.
@@ -227,6 +231,8 @@ func (r *Recorder) check(c Change) (store.Class, error) {
 		return "", fmt.Errorf("%w: event_id is not a lowercase hyphenated UUID", ErrInvalidChange)
 	case c.EventID != "" && c.Trigger.opens():
 		return "", fmt.Errorf("%w: %s takes the agent's opening event id, not one given", ErrInvalidChange, c.Trigger)
+	case c.EventID != "" && c.EventID == OpeningEventID(c.AgentID):
+		return "", fmt.Errorf("%w: event_id is the agent's opening event id, which only the record that opens its history takes", ErrInvalidChange)
 	case c.Apply == nil:
 		return "", fmt.Errorf("%w: the change has no statement", ErrInvalidChange)
 	}
