@@ -9,7 +9,6 @@
  */
 
 import * as ed from '@noble/ed25519';
-import { fromBase64url } from '../src/crypto/delegation';
 
 /**
  * Reproduce Python's json.dumps(obj, sort_keys=True) output.

@@ -12,7 +12,6 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import * as http from 'http';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
 import { PromptInterceptor } from '../../../src/arp/interceptors/prompt';
 import { MCPProtocolInterceptor } from '../../../src/arp/interceptors/mcp-protocol';
