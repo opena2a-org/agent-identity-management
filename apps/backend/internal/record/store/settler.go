@@ -130,16 +130,17 @@ func (s *Settler) settleOrganization(ctx context.Context, organizationID string)
 	if err != nil {
 		return 0, fmt.Errorf("store: read open debts: %w", err)
 	}
+	// Next closes rows when it returns false, so their connection is back in
+	// the pool before the first debt is settled.
+	defer rows.Close()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
 			return 0, fmt.Errorf("store: read open debts: %w", err)
 		}
 		ids = append(ids, id)
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return 0, fmt.Errorf("store: read open debts: %w", err)
 	}
