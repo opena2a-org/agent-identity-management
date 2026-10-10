@@ -89,23 +89,33 @@ func (r *oneAgentRepo) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	return nil, errors.New("agent not found")
 }
 
-// Another organization's agent and an ID that matches no agent get the same
-// answer, the one GET /agents/:id gives for both, so the response does not
-// reveal which IDs exist in other organizations. Both return before the
-// issuance service is called.
-func TestATCIssuanceHandler_OtherOrganizationsAgentAnswersLikeAMissingOne(t *testing.T) {
-	other := &domain.Agent{ID: uuid.New(), OrganizationID: uuid.New(), Name: "other-org-agent"}
-	agentService := application.NewAgentService(&oneAgentRepo{agent: other}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	h := NewATCIssuanceHandler(nil, agentService, nil)
+// refusingIssuances is the agent reader of an issuance service that refuses
+// every credential it is asked for and counts the requests. A handler that
+// reaches the service answers 502.
+type refusingIssuances struct{ asked int }
+
+func (r *refusingIssuances) GetByID(uuid.UUID) (*domain.Agent, error) {
+	r.asked++
+	return nil, errors.New("issuance refused")
+}
+
+// atcIssuer answers POST /agents/:id/atc for a caller in callerOrg and returns
+// the status and body. The handler reads its agents from a repository holding
+// agent alone, and its issuance service is the stub issuances.
+func atcIssuer(t *testing.T, callerOrg uuid.UUID, agent *domain.Agent, issuances *refusingIssuances) func(uuid.UUID) (int, string) {
+	t.Helper()
+	agentService := application.NewAgentService(&oneAgentRepo{agent: agent}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	issuanceService := application.NewATCIssuanceService(issuances, nil, nil, nil, nil, "https://aim.example")
+	h := NewATCIssuanceHandler(issuanceService, agentService, nil)
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
-		c.Locals("organization_id", uuid.New())
+		c.Locals("organization_id", callerOrg)
 		c.Locals("user_id", uuid.New())
 		return c.Next()
 	})
 	app.Post("/agents/:id/atc", h.IssueATC)
 
-	issue := func(agentID uuid.UUID) (int, string) {
+	return func(agentID uuid.UUID) (int, string) {
 		t.Helper()
 		req := httptest.NewRequest("POST", "/agents/"+agentID.String()+"/atc", nil)
 		resp, err := app.Test(req)
@@ -119,6 +129,16 @@ func TestATCIssuanceHandler_OtherOrganizationsAgentAnswersLikeAMissingOne(t *tes
 		}
 		return resp.StatusCode, string(body)
 	}
+}
+
+// Another organization's agent and an ID that matches no agent get the same
+// answer, the one GET /agents/:id gives for both, so the response does not
+// reveal which IDs exist in other organizations. Neither request reaches the
+// issuance service.
+func TestATCIssuanceHandler_OtherOrganizationsAgentAnswersLikeAMissingOne(t *testing.T) {
+	other := &domain.Agent{ID: uuid.New(), OrganizationID: uuid.New(), Name: "other-org-agent"}
+	issuances := &refusingIssuances{}
+	issue := atcIssuer(t, uuid.New(), other, issuances)
 
 	crossStatus, crossBody := issue(other.ID)
 	missingStatus, missingBody := issue(uuid.New())
@@ -130,5 +150,26 @@ func TestATCIssuanceHandler_OtherOrganizationsAgentAnswersLikeAMissingOne(t *tes
 	}
 	if crossBody != missingBody {
 		t.Errorf("another organization's agent answers %s, a missing agent %s; want the same body", crossBody, missingBody)
+	}
+	if issuances.asked != 0 {
+		t.Errorf("the issuance service was asked for %d credential(s), want none", issuances.asked)
+	}
+}
+
+// The caller's own agent passes the organization check and reaches the issuance
+// service, whose refusal is answered 502. This is what a request for another
+// organization's agent would get if it passed the check, so the 404 and the
+// zero count asserted above can fail.
+func TestATCIssuanceHandler_OwnAgentReachesTheIssuanceService(t *testing.T) {
+	own := &domain.Agent{ID: uuid.New(), OrganizationID: uuid.New(), Name: "own-agent"}
+	issuances := &refusingIssuances{}
+	issue := atcIssuer(t, own.OrganizationID, own, issuances)
+
+	status, body := issue(own.ID)
+	if status != http.StatusBadGateway {
+		t.Errorf("status = %d, want 502 when the issuance service refuses; body %s", status, body)
+	}
+	if issuances.asked != 1 {
+		t.Errorf("the issuance service was asked for %d credential(s), want 1", issuances.asked)
 	}
 }

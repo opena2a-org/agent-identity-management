@@ -95,6 +95,26 @@ func TestAgentResponsesListNoGrantAsAnEmptyArray(t *testing.T) {
 	}
 }
 
+// A grant whose capability type is outside the namespace:operation token
+// grammar of the trust credential is not listed, as the credential does not
+// carry it. The other grants are listed as before.
+func TestGetAgentLeavesOutAGrantOutsideTheCredentialTokenGrammar(t *testing.T) {
+	agent := newLifecycleAgent(domain.AgentStatusVerified)
+	capabilities := &MockCapabilityServiceImpl{
+		GetAgentCapabilitiesFunc: func(context.Context, uuid.UUID, bool) ([]*domain.AgentCapability, error) {
+			return []*domain.AgentCapability{
+				{AgentID: agent.ID, CapabilityType: "write_database"},
+				{AgentID: agent.ID, CapabilityType: "db:read"},
+			}, nil
+		},
+	}
+
+	status, body := getAgentResponse(t, agent, capabilities)
+
+	require.Equal(t, fiber.StatusOK, status)
+	assert.Equal(t, []any{"db:read"}, body["capabilities"])
+}
+
 // GET /agents/:id serves the API key the agent was created with, which the
 // agent detail page links to.
 func TestGetAgentServesTheAPIKeyTheAgentWasCreatedWith(t *testing.T) {

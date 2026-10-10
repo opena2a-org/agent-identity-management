@@ -502,8 +502,9 @@ type VerifyA2ARequestRequest struct {
 
 // VerifyA2ARequest verifies an incoming A2A request signature. A result that is
 // not valid is a verdict on the request. A read that fails (the nonce table, the
-// agent's grants) is returned as an error instead: it says nothing about the
-// request, and the caller must not report it as an authentication failure.
+// agent's grants), or a nonce that cannot be recorded, is returned as an error
+// instead: it says nothing about the request, and the caller must not report it
+// as an authentication failure.
 func (s *A2AService) VerifyA2ARequest(
 	ctx context.Context,
 	req VerifyA2ARequestRequest,
@@ -584,7 +585,12 @@ func (s *A2AService) VerifyA2ARequest(
 		return nil, fmt.Errorf("failed to load capability grants: %w", err)
 	}
 
-	// 5. Record nonce to prevent replay
+	// 5. Record nonce to prevent replay. The request is valid only once its
+	// nonce is recorded: one whose nonce is not stored could be presented again.
+	// A nonce recorded since the check in step 2 was used by another request in
+	// the meantime, so this one is refused as step 2 refuses a used nonce. Any
+	// other failed write says nothing about the request and is returned as an
+	// error.
 	nonceRecord := &domain.A2ARequestNonce{
 		Nonce:       req.Nonce,
 		AgentID:     req.AgentID,
@@ -592,7 +598,13 @@ func (s *A2AService) VerifyA2ARequest(
 		ExpiresAt:   time.Now().UTC().Add(time.Duration(getNonceExpiryMinutes()) * time.Minute),
 		RequestHash: req.RequestHash,
 	}
-	_ = s.nonceRepo.Create(ctx, nonceRecord)
+	if err := s.nonceRepo.Create(ctx, nonceRecord); err != nil {
+		if errors.Is(err, repository.ErrA2ANonceExists) {
+			result.Error = "nonce already used (replay attack)"
+			return result, nil
+		}
+		return nil, fmt.Errorf("failed to record nonce: %w", err)
+	}
 
 	// 6. Check agent card attestation
 	card, _ := s.cardRepo.GetByAgentID(ctx, req.AgentID)

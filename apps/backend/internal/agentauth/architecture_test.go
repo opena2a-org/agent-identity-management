@@ -290,8 +290,8 @@ var admittedStatusReads = map[string]struct {
 		1, "the public DID resolver publishes deactivated for every agent that is not pending, by design"},
 	"application/a2a_service.go#*A2AService.VerifyA2ARequest": {
 		1, "after ed25519.Verify in the same function, before the grant read and the nonce write; " +
-			"the row read before the verify is the known residual (row R10), to be converted to " +
-			"Keys/LoadVerifiedAgent by a later unit"},
+			"the agent row, which holds the public key the signature is checked with, is read " +
+			"before the verify and not through Keys and LoadVerifiedAgent"},
 }
 
 func TestAgentStatusReadCensus(t *testing.T) {
