@@ -127,6 +127,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   advises, and `npm run type-check` in `apps/web` runs `next typegen` first, so the typecheck still has the file on
   a fresh checkout.
 
+### Changed — an agent's trust credential carries its active capability grants, not the list reported at registration
+
+- `POST /api/v1/agents/:id/atc` asked the Registry to sign the capability list the SDK reported when the agent was
+  registered. That list was never updated: a capability revoked later stayed in every credential issued after the
+  revocation, and a capability granted later was missing from all of them. The credential's `capabilities` are now the
+  agent's active grants at `issuedAt`, read from the same table the capability verification path authorizes against:
+  every grant not revoked and not a honeytoken, deduplicated and sorted, so two issuances of an unchanged grant set carry
+  identical bytes under the signature. A grant whose type is outside the credential schema's `namespace:operation`
+  grammar is left out and counted in the server log; it is never rewritten and never fails the issuance. An agent with
+  no active grant is credentialed with `"capabilities": []`, never with the field absent or null.
+- Contract: a credential's `capabilities` are the agent's active grants at `issuedAt` and are bounded by `expiresAt`; a
+  holder's copy is at most that long out of date. Each call to the route issues a fresh credential, so a consumer that
+  needs the current set re-fetches, and a consumer that needs the live answer calls AIM's capability verification, which
+  reads the grant table directly.
+- The agent card's AIM extension (`capabilities` under `aim`) and the A2A request verification result served the same
+  registration-time list; both now serve the active grants, so they read the same list as the credential. When the grant
+  table cannot be read, the card request fails and the verification result reports `failed to load capability grants`
+  with `valid: false`; the registration-time list is never served in its place.
+- The list the SDK reported at registration is still stored on the agent and is unchanged; it is a self-reported
+  declaration, and no surface serves it under the name `capabilities` any longer.
+- `apps/backend/internal/application/atc_capabilities_test.go` fails when a credential issued after a revocation still
+  names the revoked capability or lacks one granted since, when two issuances of the same grant set differ, when a
+  honeytoken or revoked row appears, when a grant outside the grammar is rewritten or fails the issuance instead of
+  being counted, when an agent with no grant is sent a null or absent `capabilities`, or when a failed grant read lets
+  the issuance proceed.
+
 ### Changed — a suspended agent's refused signed action-request statement is recorded in the audit log
 
 - A signed action-request statement (a body naming `signedBytes`) sent to `POST /api/v1/sdk-api/verifications` or

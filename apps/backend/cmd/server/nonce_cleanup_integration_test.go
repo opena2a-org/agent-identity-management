@@ -101,7 +101,7 @@ func TestNonceCleanup_DeletesOnlyNoncesPastTheReplayWindow(t *testing.T) {
 
 	svc := application.NewA2AService(nil, nil, nil, nil, nil, nil,
 		repository.NewA2ARequestNonceRepository(db),
-		nil, nil, nil, nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	deleted, err := svc.CleanupExpiredNonces(ctx)
 	require.NoError(t, err)

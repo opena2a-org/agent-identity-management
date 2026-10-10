@@ -95,7 +95,7 @@ func TestBuildATCIssuanceRequest_HashFieldsMatchATXSchema(t *testing.T) {
 		"public key":  {ID: id, PublicKey: &pk},
 		"id fallback": {ID: id},
 	} {
-		req := buildATCIssuanceRequest(agent, score, "Acme Org", testATCPublicOrigin, now)
+		req := buildATCIssuanceRequest(agent, nil, score, "Acme Org", testATCPublicOrigin, now)
 		if !contentHashPattern.MatchString(req.ContentHash) {
 			t.Errorf("%s: contentHash %q does not match the ATX schema pattern %s",
 				name, req.ContentHash, contentHashPattern)
@@ -124,9 +124,9 @@ func TestBuildATCIssuanceRequest_FieldsMatchATXSchema(t *testing.T) {
 	agent := &domain.Agent{
 		ID:             id,
 		OrganizationID: orgID,
-		Capabilities:   []string{"file:read", "api:call"},
 		CreatedAt:      now.Add(-48 * time.Hour),
 	}
+	capabilities := []string{"api:call", "file:read"}
 
 	for _, c := range []struct {
 		score float64
@@ -138,13 +138,13 @@ func TestBuildATCIssuanceRequest_FieldsMatchATXSchema(t *testing.T) {
 		{0.875, 87.5},
 		{1, 100},
 	} {
-		req := buildATCIssuanceRequest(agent, &domain.TrustScore{Score: c.score}, "Acme Org", testATCPublicOrigin, now)
+		req := buildATCIssuanceRequest(agent, capabilities, &domain.TrustScore{Score: c.score}, "Acme Org", testATCPublicOrigin, now)
 		if req.TrustScore == nil || *req.TrustScore != c.want {
 			t.Errorf("score %v: trustScore = %+v, want %v on the 0-100 wire scale", c.score, req.TrustScore, c.want)
 		}
 	}
 
-	req := buildATCIssuanceRequest(agent, &domain.TrustScore{Score: 0.62}, "Acme Org", testATCPublicOrigin, now)
+	req := buildATCIssuanceRequest(agent, capabilities, &domain.TrustScore{Score: 0.62}, "Acme Org", testATCPublicOrigin, now)
 
 	for field, did := range map[string]string{"agentDid": req.AgentDID, "publisherDid": req.PublisherDID} {
 		if !didPattern.MatchString(did) {
@@ -236,7 +236,7 @@ func TestBuildATCIssuanceRequest_TrustLevelFitsOneSigningAuthority(t *testing.T)
 		{0.0, 0, 0},
 	}
 	for _, c := range cases {
-		req := buildATCIssuanceRequest(agent, &domain.TrustScore{Score: c.score}, "Acme Org", testATCPublicOrigin, now)
+		req := buildATCIssuanceRequest(agent, nil, &domain.TrustScore{Score: c.score}, "Acme Org", testATCPublicOrigin, now)
 		if req.TrustLevel == nil {
 			t.Fatalf("score %v: request carries no trustLevel", c.score)
 		}
@@ -253,10 +253,9 @@ func TestBuildATCIssuanceRequest(t *testing.T) {
 	id := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	now := time.Date(2026, 6, 20, 0, 0, 0, 0, time.UTC)
 	agent := &domain.Agent{
-		ID:           id,
-		Version:      "", // exercise default
-		Capabilities: []string{"file:read", "api:call"},
-		CreatedAt:    now.Add(-240 * time.Hour), // 10 days
+		ID:        id,
+		Version:   "",                        // exercise default
+		CreatedAt: now.Add(-240 * time.Hour), // 10 days
 	}
 	score := &domain.TrustScore{
 		Score:          0.82,
@@ -265,7 +264,7 @@ func TestBuildATCIssuanceRequest(t *testing.T) {
 		Factors:        domain.TrustScoreFactors{VerificationStatus: 1},
 	}
 
-	req := buildATCIssuanceRequest(agent, score, "Acme Org", testATCPublicOrigin, now)
+	req := buildATCIssuanceRequest(agent, []string{"api:call", "file:read"}, score, "Acme Org", testATCPublicOrigin, now)
 
 	if req.AgentDID != "did:aip:aim_"+id.String() {
 		t.Errorf("agentDid = %q", req.AgentDID)
@@ -365,6 +364,7 @@ func TestIssueForAgent_HappyPath(t *testing.T) {
 
 	svc := NewATCIssuanceService(
 		&fakeAgentReader{agent: agent},
+		&fakeCapabilityReader{grants: []*domain.AgentCapability{grant("file:read")}},
 		&fakeOrgReader{org: &domain.Organization{Name: "Acme"}},
 		&fakeScorer{score: score},
 		client,
@@ -410,7 +410,7 @@ func TestIssueForAgent_PublisherFallbackToOrgID(t *testing.T) {
 	client := &fakeRegistryClient{respond: conformingATC}
 
 	// nil org reader -> fall back to org UUID string.
-	svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil, &fakeScorer{score: &domain.TrustScore{Score: 0.3}}, client, testATCPublicOrigin)
+	svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, &fakeCapabilityReader{}, nil, &fakeScorer{score: &domain.TrustScore{Score: 0.3}}, client, testATCPublicOrigin)
 	if _, err := svc.IssueForAgent(context.Background(), id); err != nil {
 		t.Fatalf("IssueForAgent: %v", err)
 	}
@@ -423,6 +423,7 @@ func TestIssueForAgent_ScoreErrorPropagates(t *testing.T) {
 	id := uuid.New()
 	svc := NewATCIssuanceService(
 		&fakeAgentReader{agent: &domain.Agent{ID: id}},
+		&fakeCapabilityReader{},
 		nil,
 		&fakeScorer{err: errors.New("boom")},
 		&fakeRegistryClient{cred: &registry.AgentTrustCredential{}},
@@ -441,6 +442,7 @@ func TestIssueForAgent_NoPublicOriginFailsClosed(t *testing.T) {
 	client := &fakeRegistryClient{cred: &registry.AgentTrustCredential{}}
 	svc := NewATCIssuanceService(
 		&fakeAgentReader{agent: &domain.Agent{ID: id, OrganizationID: uuid.New()}},
+		&fakeCapabilityReader{},
 		nil,
 		&fakeScorer{score: &domain.TrustScore{Score: 0.8}},
 		client,
@@ -503,7 +505,7 @@ func TestIssueForAgent_RefusesCredentialThatBreaksATXIssuance(t *testing.T) {
 				tc.mutate(cred)
 				return cred
 			}}
-			svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil,
+			svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, &fakeCapabilityReader{}, nil,
 				&fakeScorer{score: &domain.TrustScore{Score: 0.91}}, client, testATCPublicOrigin)
 
 			res, err := svc.IssueForAgent(context.Background(), id)
@@ -547,7 +549,7 @@ func TestIssueForAgent_AcceptsConformingCredential(t *testing.T) {
 				tc.mutate(cred)
 				return cred
 			}}
-			svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, nil,
+			svc := NewATCIssuanceService(&fakeAgentReader{agent: agent}, &fakeCapabilityReader{}, nil,
 				&fakeScorer{score: &domain.TrustScore{Score: 0.91}}, client, testATCPublicOrigin)
 
 			res, err := svc.IssueForAgent(context.Background(), id)
