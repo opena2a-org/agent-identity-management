@@ -389,3 +389,65 @@ func TestTransitionTriggerOfAVerificationMovesAPendingAgent(t *testing.T) {
 	assert.Equal(t, "pending", got[0].Previous.Opena2a.Status)
 	assert.Equal(t, "verified", got[0].New.Opena2a.Status)
 }
+
+// orgsExpiredKeys lists only the named organizations' agents to the key
+// expiry sweep.
+type orgsExpiredKeys struct {
+	*repository.AgentRepository
+	orgIDs map[uuid.UUID]bool
+}
+
+func (r orgsExpiredKeys) AgentsWithExpiredKeys(ctx context.Context, now time.Time) ([]repository.AgentRef, error) {
+	refs, err := r.AgentRepository.AgentsWithExpiredKeys(ctx, now)
+	out := []repository.AgentRef{}
+	for _, ref := range refs {
+		if r.orgIDs[ref.OrganizationID] {
+			out = append(out, ref)
+		}
+	}
+	return out, err
+}
+
+// One key expiry sweep over agents of two organizations gives each
+// organization its own trace: the two suspensions in one organization's
+// chain share a trace id, and the other organization's chain does not hold
+// it.
+func TestTransitionTriggerOfTheKeyExpirySweepGivesEachOrganizationItsOwnTrace(t *testing.T) {
+	f := newTransitionFixture(t)
+	ctx := context.Background()
+	f.insertAgent(t, uuid.New())
+
+	// A second organization whose chain names the fixture's key, so the
+	// fixture's recorder extends both chains.
+	g := &transitionFixture{db: f.db, agentID: uuid.New(), keys: f.keys}
+	g.orgID, g.userID = seedOrgAndUser(t, f.db, ctx, "transition-other")
+	t.Cleanup(func() {
+		_, _ = f.db.Exec(`DELETE FROM audit_records WHERE chain_id IN (SELECT id FROM record_chains WHERE organization_id = $1)`, g.orgID)
+		_, _ = f.db.Exec(`DELETE FROM record_chains WHERE organization_id = $1`, g.orgID)
+		_, _ = f.db.Exec(`DELETE FROM audit_logs WHERE organization_id = $1`, g.orgID)
+		_, _ = f.db.Exec(`DELETE FROM trust_scores WHERE agent_id IN (SELECT id FROM agents WHERE organization_id = $1)`, g.orgID)
+		_, _ = f.db.Exec(`DELETE FROM agents WHERE organization_id = $1`, g.orgID)
+	})
+	g.insertAgent(t, g.agentID)
+	g.chainID = startTestChain(t, f.db, g.orgID, f.keys)
+
+	_, err := f.db.Exec(`UPDATE agents SET key_expires_at = NOW() - INTERVAL '1 day' WHERE organization_id IN ($1, $2)`,
+		f.orgID, g.orgID)
+	require.NoError(t, err)
+	sweeper := NewAgentService(orgsExpiredKeys{repository.NewAgentRepository(f.db), map[uuid.UUID]bool{f.orgID: true, g.orgID: true}},
+		transitionTrust{}, repository.NewTrustScoreRepository(f.db), nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	sweeper.SetTransitionRecorder(f.rec)
+	suspended, err := sweeper.EnforceKeyExpiry(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 3, suspended)
+
+	first, second := f.transitions(t), g.transitions(t)
+	require.Len(t, first, 2)
+	require.Len(t, second, 1)
+	for _, r := range append(append([]transitionRecord{}, first...), second...) {
+		assert.Equal(t, "key_expired_suspension", r.Trigger)
+		assert.Len(t, r.Trace, 32)
+	}
+	assert.Equal(t, first[0].Trace, first[1].Trace, "one run is one trace within an organization")
+	assert.NotEqual(t, first[0].Trace, second[0].Trace, "one trace id is in two organizations' chains")
+}

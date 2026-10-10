@@ -16,6 +16,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 )
 
@@ -2877,7 +2878,9 @@ func (s *AgentService) CreateCapabilityViolation(
 // a separate decision. The agent auth middlewares already deny the `suspended` status.
 //
 // With a transition recorder, each agent is suspended in a transaction of its own with a
-// key_expired_suspension record, and every record of one run shares its trace id.
+// key_expired_suspension record. A run takes one trace per organization (trace.Run): the
+// records it writes into one organization's chain share that trace id, and no trace id is
+// in two organizations' chains.
 func (s *AgentService) EnforceKeyExpiry(ctx context.Context) (int, error) {
 	if s.transitions != nil {
 		return s.enforceKeyExpiryRecorded(ctx, time.Now())
@@ -2908,19 +2911,21 @@ func (s *AgentService) enforceKeyExpiryRecorded(ctx context.Context, now time.Ti
 	if err != nil {
 		return 0, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
 	}
-	trace, err := transition.NewTraceID()
-	if err != nil {
-		return 0, err
-	}
+	run := trace.NewRun()
 	suspended := 0
 	errs := make([]error, 0)
 	for _, ref := range refs {
-		_, err := s.transitions.Record(ctx, transition.Change{
+		runCtx, err := run.For(ctx, ref.OrganizationID.String())
+		if err != nil {
+			return suspended, fmt.Errorf("failed to suspend agents with expired keys: %w", err)
+		}
+		tc, _ := trace.From(runCtx)
+		_, err = s.transitions.Record(runCtx, transition.Change{
 			OrganizationID: ref.OrganizationID,
 			AgentID:        ref.ID,
 			Trigger:        transition.TriggerKeyExpiredSuspension,
 			Actor:          transition.System(),
-			TraceID:        trace,
+			TraceID:        tc.TraceID,
 			Apply: func(ctx context.Context, tx *sql.Tx) error {
 				done, err := repository.SuspendAgentWithExpiredKeyTx(ctx, tx, ref.ID, now)
 				if err == nil && !done {
