@@ -58,10 +58,10 @@ func seedAlertCoalesceOrg(t *testing.T, db *sql.DB) uuid.UUID {
 	return orgID
 }
 
-// Two denied verifications of the same capability arriving together on an
-// empty alerts table are one violation: one alert, counted twice. Without a
-// guard each request finds no open alert and each inserts one, and later
-// repeats coalesce onto the newest row only.
+// Alerts with one dedupe key arriving together in an organization with no open
+// alert for that key are stored as one alert that counts each of them. Without
+// a guard each CreateAlert call finds no open alert and each inserts one, and
+// later repeats coalesce onto the newest row only.
 func TestAlertCoalesce_ConcurrentFirstOccurrencesCreateOneAlert(t *testing.T) {
 	db := openAlertCoalesceTestDB(t)
 	db.SetMaxOpenConns(32)
@@ -99,7 +99,7 @@ func TestAlertCoalesce_ConcurrentFirstOccurrencesCreateOneAlert(t *testing.T) {
 	}
 }
 
-// GET /api/v1/alerts serializes the alerts GetAlerts returns. A repeat
+// GET /api/v1/security/alerts serializes the alerts GetAlerts returns. A repeat
 // coalesced onto an alert is visible there as occurrenceCount and lastSeenAt.
 func TestAlertCoalesce_RepeatCountIsInTheAlertsResponse(t *testing.T) {
 	db := openAlertCoalesceTestDB(t)

@@ -1170,6 +1170,24 @@ func (s *AgentService) detectHoneytoken(
 	}
 }
 
+// noGrantedCapabilitiesDenial begins the reason VerifyCapability gives when it
+// denies an action because the agent has no granted capabilities.
+const noGrantedCapabilitiesDenial = "Agent has no granted capabilities - action denied by "
+
+// NoGrantedCapabilitiesDenialReason is the reason VerifyCapability gives when it
+// denies an action because the agent has no granted capabilities.
+func NoGrantedCapabilitiesDenialReason(mode domain.EnforcementMode) string {
+	return fmt.Sprintf("%s%s mode (admin must grant capabilities first)", noGrantedCapabilitiesDenial, mode)
+}
+
+// IsNoGrantedCapabilitiesDenial reports whether reason is the one
+// VerifyCapability gives when it denies an action because the agent has no
+// granted capabilities. VerifyCapability raises no alert for that denial;
+// the capability-check handler does.
+func IsNoGrantedCapabilitiesDenial(reason string) bool {
+	return strings.HasPrefix(reason, noGrantedCapabilitiesDenial)
+}
+
 // VerifyCapability verifies if an agent can use a capability
 // ✅ CRITICAL SECURITY FUNCTION - EchoLeak Prevention
 // This is the core defense mechanism that prevented CVE-2025-32711 (EchoLeak) attack
@@ -1399,8 +1417,12 @@ func (s *AgentService) VerifyCapability(
 					SourceIP:       sourceIP,
 					IsAcknowledged: false,
 					CreatedAt:      time.Now(),
+					// An agent repeating one action repeats this alert at the
+					// request rate; repeats of the same agent, capability and
+					// resource are counted on one open alert.
+					DedupeKey: UnregisteredCapabilityDedupeKey(agentID, capability, resource),
 				}
-				if err := s.alertRepo.Create(alert); err != nil {
+				if _, err := coalesceAlert(s.alertRepo, alert, time.Now()); err != nil {
 					fmt.Printf("⚠️  Warning: failed to create monitoring alert: %v\n", err)
 				}
 			}
@@ -1445,10 +1467,9 @@ func (s *AgentService) VerifyCapability(
 		// on capability_violations (migration 091); no application-layer
 		// increment needed.
 
-		return false, fmt.Sprintf(
-			"Agent has no granted capabilities - action denied by %s mode (admin must grant capabilities first)",
-			enforcementMode,
-		), auditID, nil
+		// The handler raises the alert for this denial; it recognizes the
+		// denial by IsNoGrantedCapabilitiesDenial.
+		return false, NoGrantedCapabilitiesDenialReason(enforcementMode), auditID, nil
 	}
 
 	if !hasCapability {
@@ -1510,9 +1531,13 @@ func (s *AgentService) VerifyCapability(
 				SourceIP:       sourceIP,
 				IsAcknowledged: false,
 				CreatedAt:      time.Now(),
+				// An agent retrying one action repeats this violation at the
+				// request rate; repeats of the same agent, capability and
+				// resource are counted on one open alert.
+				DedupeKey: CapabilityViolationDedupeKey(agentID, capability, resource),
 			}
 
-			if err := s.alertRepo.Create(alert); err != nil {
+			if _, err := coalesceAlert(s.alertRepo, alert, time.Now()); err != nil {
 				fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
 			} else {
 				fmt.Printf("🚨 SECURITY ALERT: Capability violation for agent %s (policy: %s, action: %s)\n",

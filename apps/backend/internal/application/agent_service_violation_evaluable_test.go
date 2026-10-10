@@ -62,6 +62,8 @@ func TestAgentService_VerifyCapability_NeverAllowedAgent_BlockedViolation_Suspen
 	mockPolicyRepo.On("GetByType", agent.OrganizationID, domain.PolicyTypeCapabilityViolation).
 		Return([]*domain.SecurityPolicy{}, nil)
 	mockAlertRepo.On("Create", mock.AnythingOfType("*domain.Alert")).Return(nil)
+	mockAlertRepo.On("CreateCoalesced", mock.AnythingOfType("*domain.Alert"),
+		mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).Return(true, nil)
 	mockAlertRepo.On("GetByOrganization", agent.OrganizationID, 50, 0).Return([]*domain.Alert{}, nil)
 	mockCapabilityRepo.On("CreateViolation", mock.AnythingOfType("*domain.CapabilityViolation")).Return(nil)
 	mockAgentRepo.On("UpdateTrustScore", agent.ID, mock.AnythingOfType("float64")).Return(nil)

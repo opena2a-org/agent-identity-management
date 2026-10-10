@@ -14,10 +14,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A denied capability creates its alert with the capability-violation dedupe
-// key, so repeats of the same agent, capability and resource coalesce on one
-// open alert instead of creating an alert per request.
+// A capability denied because the agent has no granted capabilities creates
+// its alert with the no-granted-capabilities dedupe key, so repeats of the same
+// agent, capability and resource coalesce on one open alert instead of
+// creating an alert per request. The key is neither the one
+// AgentService.VerifyCapability gives a violation of granted capabilities nor
+// the one it gives a monitoring-mode action by an agent with no grants, so
+// neither of those alerts is counted on this one. The stubbed reason is the
+// one AgentService.VerifyCapability gives for that denial.
 func TestAgentHandler_VerifyCapability_ViolationAlertCarriesDedupeKey(t *testing.T) {
+	created := verifyCapabilityAlerts(t, application.NoGrantedCapabilitiesDenialReason(domain.EnforcementModeStrict))
+
+	require.Len(t, created, 2)
+	agentID := created[0].ResourceID
+	assert.Equal(t, application.NoGrantedCapabilitiesDedupeKey(agentID, "file:write", "/etc/passwd"), created[0].DedupeKey)
+	assert.Equal(t, application.NoGrantedCapabilitiesDedupeKey(agentID, "file:write", "/etc/shadow"), created[1].DedupeKey)
+	for _, alert := range created {
+		assert.True(t, application.IsNoGrantedCapabilitiesAlert(alert))
+	}
+	assert.NotEqual(t, application.CapabilityViolationDedupeKey(agentID, "file:write", "/etc/passwd"), created[0].DedupeKey)
+	assert.NotEqual(t, application.UnregisteredCapabilityDedupeKey(agentID, "file:write", "/etc/passwd"), created[0].DedupeKey)
+}
+
+// A capability violation that a security policy blocks already has its alert,
+// raised by AgentService.VerifyCapability; the handler raises no second one.
+func TestAgentHandler_VerifyCapability_PolicyBlockedViolationRaisesNoSecondAlert(t *testing.T) {
+	created := verifyCapabilityAlerts(t,
+		"Capability violation blocked by security policy 'default_policy': Agent does not have permission for capability 'file:write' (allowed: [db:read])")
+
+	assert.Empty(t, created)
+}
+
+// verifyCapabilityAlerts denies file:write on /etc/passwd and then on
+// /etc/shadow with the given reason, and returns the alerts the handler
+// created.
+func verifyCapabilityAlerts(t *testing.T, reason string) []*domain.Alert {
+	t.Helper()
 	orgID, userID, agentID := uuid.New(), uuid.New(), uuid.New()
 
 	var created []*domain.Alert
@@ -33,7 +65,7 @@ func TestAgentHandler_VerifyCapability_ViolationAlertCarriesDedupeKey(t *testing
 				}, nil
 			},
 			VerifyCapabilityFunc: func(ctx context.Context, agentID uuid.UUID, capability string, resource string, metadata map[string]interface{}, sourceIP string) (bool, string, uuid.UUID, error) {
-				return false, "capability_not_granted", uuid.New(), nil
+				return false, reason, uuid.New(), nil
 			},
 		},
 		&MockMCPServiceImpl{},
@@ -69,7 +101,5 @@ func TestAgentHandler_VerifyCapability_ViolationAlertCarriesDedupeKey(t *testing
 	deny(`{"capability":"file:write","resource":"/etc/passwd"}`)
 	deny(`{"capability":"file:write","resource":"/etc/shadow"}`)
 
-	require.Len(t, created, 2)
-	assert.Equal(t, application.CapabilityViolationDedupeKey(agentID, "file:write", "/etc/passwd"), created[0].DedupeKey)
-	assert.Equal(t, application.CapabilityViolationDedupeKey(agentID, "file:write", "/etc/shadow"), created[1].DedupeKey)
+	return created
 }

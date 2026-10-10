@@ -797,10 +797,10 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		},
 	)
 
-	// 3. CREATE SECURITY ALERT (only for capability violations)
-	if !decision && (reason == "capability_not_granted" ||
-		reason == "Agent has no granted capabilities - action denied (admin must grant capabilities first)" ||
-		reason == "Agent has no granted capabilities - action denied") {
+	// 3. CREATE SECURITY ALERT for a denial because the agent has no granted
+	// capabilities. VerifyCapability raises the alerts for its other
+	// capability violations itself.
+	if !decision && application.IsNoGrantedCapabilitiesDenial(reason) {
 
 		// Map detected risk level to alert severity
 		// Higher risk capabilities result in higher severity alerts when violated
@@ -829,7 +829,10 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 			// An agent retrying one denied action repeats this violation at
 			// the request rate; repeats of the same agent, capability and
 			// resource are counted on one open alert (AlertCoalesceWindow).
-			DedupeKey: application.CapabilityViolationDedupeKey(agentID, req.Capability, req.Resource),
+			// The key is not the one VerifyCapability gives a violation of
+			// granted capabilities, so once the agent is granted one, that
+			// violation raises its own alert.
+			DedupeKey: application.NoGrantedCapabilitiesDedupeKey(agentID, req.Capability, req.Resource),
 		}
 
 		// Create alert (non-blocking - don't fail the verification if alert creation fails)

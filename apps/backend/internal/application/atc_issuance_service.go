@@ -327,8 +327,8 @@ func atcBuildAttestation(publicOrigin, agentDID string) string {
 	return publicOrigin + "/api/v1/did/" + agentDID
 }
 
-// atcTrustLevel maps a 0-1 behavioral score to the 0-4 trust level. CDS-documented
-// mapping (calibration-subject), aligned with the five trust levels:
+// atcTrustLevel maps a 0-1 behavioral score to the 0-4 trust level. The cut-offs
+// are subject to calibration and align with the five trust levels:
 // >=0.90 -> 4, >=0.75 -> 3, >=0.50 -> 2, >=0.25 -> 1, otherwise 0.
 func atcTrustLevel(score float64) int {
 	switch {
