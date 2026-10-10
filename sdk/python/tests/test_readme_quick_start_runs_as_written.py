@@ -290,6 +290,19 @@ def test_root_readme_shows_the_register_call_and_its_dated_output_in_its_first_3
     )
 
 
+def test_root_readme_dates_its_captured_output_without_naming_a_commit():
+    """A commit hash in the capture sentence chases the branch it was captured on: the
+    hash exists only there until the branch lands, and lands under a different hash, so a
+    reader following it reaches a commit the repository does not have. The sentence names
+    the date and the repository, not a commit."""
+    _, _, prose = register_and_output(ROOT_README)
+    named = re.findall(r"\bcommit\s+[0-9a-f]{7,40}\b|\b[0-9a-f]{40}\b", prose)
+    assert not named, (
+        f"the text before the captured output names a commit {named!r}; say when it was "
+        "captured and that the server and SDK were built from this repository"
+    )
+
+
 def test_root_readme_installs_the_rich_extra_its_captured_output_shows():
     # Without rich the SDK prints the registration in an 11-line panel, which
     # does not fit in the first screen with the commands above it.
