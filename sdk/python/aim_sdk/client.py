@@ -4475,13 +4475,31 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
         console.warning(f"Failed to check capabilities: {_render_error(e, aim_url)}")
 
 
+# The two spellings of a tag ID: the 36-character form of a UUID, as the backend
+# returns it, or its 32 hexadecimal digits without the hyphens. The backend's
+# UUID parser reads both.
+_TAG_ID_FORM = re.compile(
+    r"[0-9a-fA-F]{8}(-?)[0-9a-fA-F]{4}\1[0-9a-fA-F]{4}\1[0-9a-fA-F]{4}\1[0-9a-fA-F]{12}"
+)
+
+
+def _as_tag_id(entry: Any) -> Optional[str]:
+    """Return a tag ID in the form the backend returns it, or None for a tag name."""
+    import uuid as _uuid
+    if isinstance(entry, str) and _TAG_ID_FORM.fullmatch(entry):
+        return str(_uuid.UUID(entry))
+    return None
+
+
 def _sync_agent_tags(aim_url: str, headers: Dict[str, str], agent_id: str, tags: List[str]):
     """
-    Sync tags for an existing agent.
+    Add tags to an agent that already exists.
 
-    This adds any tags that aren't already associated with the agent.
-    Tags can be either UUIDs or tag names/keys. If a name is provided,
-    the backend will find or create the tag automatically.
+    POST /api/v1/agents/{id}/tags reads tag IDs (UUIDs) only and refuses the
+    whole request when one entry is not a UUID, so only the tag IDs that are
+    not on the agent yet are sent. The backend resolves a tag name only when
+    the agent is first registered: a name that is not on the agent yet is not
+    sent, and a warning names it.
 
     Args:
         aim_url: AIM server URL
@@ -4494,33 +4512,53 @@ def _sync_agent_tags(aim_url: str, headers: Dict[str, str], agent_id: str, tags:
         get_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/tags"
         get_response = requests.get(get_url, headers=headers, timeout=30)
 
+        existing_tag_ids = set()
         existing_tag_keys = set()
         if get_response.status_code == 200:
             tags_data = get_response.json()
-            # Extract tag keys from response
+            # Extract tag IDs and keys from response
+            if isinstance(tags_data, dict):
+                tags_data = tags_data.get("tags")
             if isinstance(tags_data, list):
-                existing_tag_keys = {t.get("key") for t in tags_data if isinstance(t, dict)}
-            elif isinstance(tags_data, dict) and "tags" in tags_data:
-                existing_tag_keys = {t.get("key") for t in tags_data["tags"] if isinstance(t, dict)}
+                for t in tags_data:
+                    if isinstance(t, dict):
+                        existing_tag_ids.add(_as_tag_id(t.get("id")))
+                        existing_tag_keys.add(t.get("key"))
 
-        # Identify which tags need to be added
-        requested_tags = set(tags)
-        new_tags = requested_tags - existing_tag_keys
+        # Identify which tag IDs need to be added, and which names cannot be
+        new_tag_ids = []
+        unsent_names = []
+        for tag in tags:
+            tag_id = _as_tag_id(tag)
+            if tag_id is None:
+                if tag not in existing_tag_keys and tag not in unsent_names:
+                    unsent_names.append(tag)
+            elif tag_id not in existing_tag_ids and tag_id not in new_tag_ids:
+                new_tag_ids.append(tag_id)
 
-        if not new_tags:
-            return  # All tags already applied
+        if unsent_names:
+            console.warning(
+                f"Tag name(s) not sent: {', '.join(str(name) for name in unsent_names)}. "
+                "AIM applies a tag name only when the agent is first registered; for an agent "
+                "that already exists it adds tags by ID. Pass the ID of an existing tag "
+                "(GET /api/v1/tags lists them) to add it to this agent."
+            )
+
+        if not new_tag_ids:
+            return  # No tag ID left to add
 
         # Add new tags via POST /agents/{id}/tags
         add_url = f"{aim_url.rstrip('/')}/api/v1/agents/{agent_id}/tags"
         add_response = requests.post(
             add_url,
-            json={"tagIds": list(new_tags)},
+            json={"tagIds": new_tag_ids},
             headers=headers,
             timeout=30
         )
 
-        if add_response.status_code in [200, 201]:
-            console.success(f"Applied {len(new_tags)} tag(s): {', '.join(new_tags)}")
+        # The route answers 204 with no body when the tags are added
+        if add_response.status_code in [200, 201, 204]:
+            console.success(f"Applied {len(new_tag_ids)} tag(s): {', '.join(new_tag_ids)}")
         else:
             error_msg = add_response.json().get("error", "Unknown error")
             console.warning(f"Failed to apply tags: {error_msg}")
@@ -4763,7 +4801,11 @@ def register_agent(
         capabilities: Override auto-detected capabilities (manual specification).
             Note: On re-registration, new capabilities are REJECTED to prevent
             privilege escalation. Use agent.request_capability() for new capabilities.
-        tags: List of tags for categorization (e.g., ["production", "customer-facing"])
+        tags: Tag names or tag IDs for categorization (e.g., ["production", "customer-facing"]).
+            They are sent with the registration of a new agent, where AIM uses the tag with
+            each name or creates one. In OAuth mode, when the agent is already on the server
+            and the SDK syncs its tags, only tag IDs (UUIDs) are added: a name that is not on
+            the agent yet is not sent, and a warning names it.
         metadata: Custom metadata dict (e.g., {"model": "gpt-4", "department": "support"})
         auto_detect: Auto-detect capabilities and agent type (default: True)
         auto_detect_mcp: Auto-detect MCP servers from user's Claude config (default: False).
