@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The PyPI "Homepage" link and the first link in this README go to the project page,
+  https://opena2a.org/agent-identity-management. They pointed at the GitHub repository and at the
+  PyPI page itself. The repository stays listed under "Source".
+
 ### Changed — `report_capabilities` follows the enforcement mode and raises when a registration fails
 
 What to check before upgrading:

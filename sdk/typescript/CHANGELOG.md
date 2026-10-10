@@ -7,6 +7,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The npm "Homepage" link and the first link in this README go to the project page,
+  https://opena2a.org/agent-identity-management. They pointed at the repository README and at the hosted sign-up
+  page. The repository stays linked as the package's `repository`.
+
 ### Added
 
 - `createAgentRequestHeaders` signs a request as an agent with `agent-request-v1`, the Ed25519 request signature AIM

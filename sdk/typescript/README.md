@@ -1,4 +1,4 @@
-# AIM SDK for TypeScript/Node.js
+# [AIM SDK for TypeScript/Node.js](https://opena2a.org/agent-identity-management)
 
 Official TypeScript SDK for Agent Identity Management (AIM) - secure identity verification for AI agents.
 

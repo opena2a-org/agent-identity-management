@@ -73,7 +73,7 @@
   "bugs": {
     "url": "https://github.com/opena2a-org/agent-identity-management/issues"
   },
-  "homepage": "https://github.com/opena2a-org/agent-identity-management#readme",
+  "homepage": "https://opena2a.org/agent-identity-management",
   "engines": {
     "node": ">=18.0.0"
   },
