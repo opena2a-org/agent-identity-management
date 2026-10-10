@@ -24,6 +24,11 @@ const (
 	// sign-in approval, an SDK credential recovery) for a new credential and
 	// was refused.
 	AuditActionCredentialMintRefused AuditAction = "credential_mint_refused"
+	// AuditActionVerificationRefused: an agent signed a verification request
+	// with its registered key and was refused because its status does not
+	// permit it to act (suspended, revoked). Written only after the signature
+	// verifies.
+	AuditActionVerificationRefused AuditAction = "verification_refused"
 
 	// Agent actions
 	AuditActionCreate AuditAction = "create"

@@ -85,6 +85,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   advises, and `npm run type-check` in `apps/web` runs `next typegen` first, so the typecheck still has the file on
   a fresh checkout.
 
+### Changed — a suspended agent's refused verification request is recorded in the audit log
+
+- `POST /api/v1/sdk-api/verifications` (and `POST /api/v1/verifications`, the same handler) refuses an agent whose
+  status does not permit it to act, such as a suspended or revoked agent, with `403` and
+  `Agent status is <status>, cannot perform actions`, in strict and in monitoring mode alike. The refusal wrote
+  nothing, so an organisation that suspended an agent could not see that the agent kept trying. A request in the
+  `agentId`/`signature`/`publicKey` body form that is refused this way now writes one `audit_logs` row with the action
+  `verification_refused`, resource type `agent_action` and the agent's id, and metadata `refusal` (`agent_status`),
+  `agentStatus`, `enforcementMode` (`strict`, `monitoring`, or `unknown` when the organisation does not load),
+  `capability`, `resource` and `httpStatus` (`403`). The row never carries the signature, the presented public key,
+  the signed message or the request context.
+- The row is written only after the signature verifies against the agent's registered key, so a caller holding only
+  an agent id cannot create one; a different key or a bad signature is still answered `401` and writes nothing. The
+  answer is unchanged, and a failed audit write still refuses with `403`.
+- `apps/backend/internal/interfaces/http/handlers/verification_refusal_audit_test.go` fails when the refusal writes no
+  row or more than one in either mode, when the row carries another metadata key or a key-shaped value, when a request
+  that failed authentication writes a row, or when a failed audit write changes the answer.
+
 ### Changed — Terraform saved plans and local state are kept out of the repository
 
 - The repository-root `.gitignore` now ignores `tfplan`, `*.tfplan`, `*.tfstate` and `*.tfstate.*`. A saved
