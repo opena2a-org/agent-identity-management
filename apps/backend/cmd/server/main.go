@@ -885,6 +885,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		repos.A2ASecuritySettings,
 		repos.A2ASecurityViolation,
 		repos.Agent,
+		repos.Capability,
 		keyVault,
 		signingKeys.Key(crypto.PurposeCardAttestation),
 	)
@@ -923,6 +924,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// FRONTEND_URL is the public origin the credential's buildAttestation names.
 	atcIssuanceService := application.NewATCIssuanceService(
 		repos.Agent,
+		repos.Capability,
 		repos.Organization,
 		trustCalculator,
 		registry.NewATCClientFromEnv(),

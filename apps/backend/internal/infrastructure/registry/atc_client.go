@@ -61,6 +61,9 @@ type ATCBehavioralProfile struct {
 // with no omitempty, and TrustScore is on the 0-100 wire scale, not 0-1.
 // TrustLevel is at most 2: one authority signs the credential, and ATX core
 // section 12 reserves levels 3 and 4 for credentials more than one authority signs.
+// Capabilities is the agent's active capability grants at issuance, sorted, and
+// is never omitted: the credential schema requires the field as an array, and an
+// agent with no active grant is credentialed with an empty one.
 type ATCIssuanceRequest struct {
 	AgentID           string                `json:"agentId"`
 	AgentDID          string                `json:"agentDid"`
@@ -69,7 +72,7 @@ type ATCIssuanceRequest struct {
 	Version           string                `json:"version"`
 	ContentHash       string                `json:"contentHash"`
 	BuildAttestation  string                `json:"buildAttestation"`
-	Capabilities      []string              `json:"capabilities,omitempty"`
+	Capabilities      []string              `json:"capabilities"`
 	TrustScore        *float64              `json:"trustScore,omitempty"`
 	TrustLevel        *int                  `json:"trustLevel,omitempty"`
 	BehavioralProfile *ATCBehavioralProfile `json:"behavioralProfile,omitempty"`

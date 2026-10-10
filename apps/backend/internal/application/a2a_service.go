@@ -92,7 +92,12 @@ type A2AService struct {
 	securityRepo    *repository.A2ASecuritySettingsRepository
 	violationRepo   *repository.A2ASecurityViolationRepository
 	agentRepo       *repository.AgentRepository
-	keyVault        *crypto.KeyVault
+	// capabilityRepo is the agent_capabilities table. The capabilities the agent
+	// card's AIM extension and the request verification result serve are the
+	// agent's active grants, the same list an issued trust credential carries,
+	// never the list the SDK reported at registration.
+	capabilityRepo activeCapabilityReader
+	keyVault       *crypto.KeyVault
 	// cardAttestationKey signs agent card attestations and nothing else.
 	cardAttestationKey *crypto.SigningKey
 	httpClient         *http.Client
@@ -113,6 +118,7 @@ func NewA2AService(
 	securityRepo *repository.A2ASecuritySettingsRepository,
 	violationRepo *repository.A2ASecurityViolationRepository,
 	agentRepo *repository.AgentRepository,
+	capabilityRepo activeCapabilityReader,
 	keyVault *crypto.KeyVault,
 	cardAttestationKey *crypto.SigningKey,
 ) *A2AService {
@@ -130,6 +136,7 @@ func NewA2AService(
 		securityRepo:       securityRepo,
 		violationRepo:      violationRepo,
 		agentRepo:          agentRepo,
+		capabilityRepo:     capabilityRepo,
 		keyVault:           keyVault,
 		cardAttestationKey: cardAttestationKey,
 		// SECURITY: The agent card URL is agent-supplied. The egress client follows no
@@ -312,12 +319,20 @@ func (s *A2AService) GetEnhancedAgentCard(ctx context.Context, agentID uuid.UUID
 	// Get A2A trust score
 	trustScore, _ := s.trustScoreRepo.GetByAgentID(ctx, agentID)
 
+	// The card serves the agent's active capability grants, the list an issued
+	// trust credential carries. A failed read fails the card: the registration-time
+	// list on the agent row is a declaration and is never served as capabilities.
+	capabilities, _, err := activeCapabilityTokens(s.capabilityRepo, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load capability grants: %w", err)
+	}
+
 	// Add AIM extension
 	parsed.AIM = &domain.A2AAIMExtension{
 		AgentID:      agentID,
 		PublicKey:    stringValue(agent.PublicKey),
 		TrustScore:   agent.TrustScore,
-		Capabilities: agent.Capabilities,
+		Capabilities: capabilities,
 	}
 
 	parsed.AIM.Attestation = servedCardAttestation(card)
@@ -534,6 +549,16 @@ func (s *A2AService) VerifyA2ARequest(
 		return result, nil
 	}
 
+	// The result serves the agent's active capability grants, the list an issued
+	// trust credential carries. Read before the nonce is spent so a failed read
+	// does not burn the caller's nonce, and fail closed: the registration-time
+	// list on the agent row is never served as capabilities.
+	capabilities, _, err := activeCapabilityTokens(s.capabilityRepo, req.AgentID)
+	if err != nil {
+		result.Error = "failed to load capability grants"
+		return result, nil
+	}
+
 	// 5. Record nonce to prevent replay
 	nonceRecord := &domain.A2ARequestNonce{
 		Nonce:       req.Nonce,
@@ -553,7 +578,7 @@ func (s *A2AService) VerifyA2ARequest(
 	result.AgentID = agent.ID
 	result.AgentName = agent.Name
 	result.TrustScore = agent.TrustScore
-	result.Capabilities = agent.Capabilities
+	result.Capabilities = capabilities
 	result.AttestationValid = attestationValid
 
 	return result, nil

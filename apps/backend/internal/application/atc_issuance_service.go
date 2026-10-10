@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
@@ -100,6 +101,11 @@ type ATCIssuanceResult struct {
 // ATCs itself; the Registry is the Certificate Authority.
 type ATCIssuanceService struct {
 	agents atcAgentReader
+	// grants is the agent_capabilities table. The credential's capabilities are
+	// the agent's active grants at issuance (ATX core: capabilityJustification
+	// keys are a subset of the granted set), never the list the SDK reported at
+	// registration, which is stored on the agent row and is a declaration.
+	grants activeCapabilityReader
 	orgs   atcOrgReader
 	scorer atcTrustScorer
 	client atcRegistryClient
@@ -110,10 +116,12 @@ type ATCIssuanceService struct {
 	publicOrigin string
 }
 
-// NewATCIssuanceService wires the issuance trigger. publicOrigin is the
+// NewATCIssuanceService wires the issuance trigger. grants is the capability
+// repository the credential's capabilities are read from. publicOrigin is the
 // deployment's public origin (FRONTEND_URL).
 func NewATCIssuanceService(
 	agents atcAgentReader,
+	grants activeCapabilityReader,
 	orgs atcOrgReader,
 	scorer atcTrustScorer,
 	client atcRegistryClient,
@@ -121,6 +129,7 @@ func NewATCIssuanceService(
 ) *ATCIssuanceService {
 	return &ATCIssuanceService{
 		agents:       agents,
+		grants:       grants,
 		orgs:         orgs,
 		scorer:       scorer,
 		client:       client,
@@ -147,12 +156,24 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 		return nil, fmt.Errorf("atc issuance: load agent: %w", err)
 	}
 
+	// The credential asserts the agent's active grants as of this call. A grant
+	// revoked before now is absent; one granted since the last credential is
+	// present. A failed read stops the issuance: the registration-time list on the
+	// agent row is never signed in its place.
+	capabilities, dropped, err := activeCapabilityTokens(s.grants, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("atc issuance: load capability grants: %w", err)
+	}
+	if dropped > 0 {
+		log.Printf("atc issuance: agent %s: %d active capability grant(s) are outside the credential token grammar and were left out of the credential", agentID, dropped)
+	}
+
 	score, err := s.scorer.CalculateTrustScore(ctx, agentID)
 	if err != nil {
 		return nil, fmt.Errorf("atc issuance: calculate trust score: %w", err)
 	}
 
-	req := buildATCIssuanceRequest(agent, score, s.resolvePublisher(agent), s.publicOrigin, time.Now().UTC())
+	req := buildATCIssuanceRequest(agent, capabilities, score, s.resolvePublisher(agent), s.publicOrigin, time.Now().UTC())
 
 	cred, err := s.client.IssueATC(ctx, req)
 	if err != nil {
@@ -238,14 +259,21 @@ func (s *ATCIssuanceService) resolvePublisher(agent *domain.Agent) string {
 	return agent.OrganizationID.String()
 }
 
-// buildATCIssuanceRequest assembles the Registry issuance request from an agent
-// and its behavioral score. Pure (no I/O) so it is directly unit-testable. now
-// is injected for the same reason. publicOrigin is the deployment's public
-// origin with no trailing slash.
-func buildATCIssuanceRequest(agent *domain.Agent, score *domain.TrustScore, publisher, publicOrigin string, now time.Time) registry.ATCIssuanceRequest {
+// buildATCIssuanceRequest assembles the Registry issuance request from an agent,
+// its active capability grants as grantedCapabilityTokens lists them, and its
+// behavioral score. Pure (no I/O) so it is directly unit-testable. now is
+// injected for the same reason. publicOrigin is the deployment's public origin
+// with no trailing slash.
+//
+// capabilities is sent as given; a nil list is sent as the empty array because
+// the credential schema requires the field.
+func buildATCIssuanceRequest(agent *domain.Agent, capabilities []string, score *domain.TrustScore, publisher, publicOrigin string, now time.Time) registry.ATCIssuanceRequest {
 	version := agent.Version
 	if version == "" {
 		version = defaultATCVersion
+	}
+	if capabilities == nil {
+		capabilities = []string{}
 	}
 
 	level := atcCredentialTrustLevel(score.Score)
@@ -265,7 +293,7 @@ func buildATCIssuanceRequest(agent *domain.Agent, score *domain.TrustScore, publ
 		Version:          version,
 		ContentHash:      atcContentHash(agent),
 		BuildAttestation: atcBuildAttestation(publicOrigin, agentDID),
-		Capabilities:     agent.Capabilities,
+		Capabilities:     capabilities,
 		TrustScore:       &scoreVal,
 		TrustLevel:       &level,
 		BehavioralProfile: &registry.ATCBehavioralProfile{
