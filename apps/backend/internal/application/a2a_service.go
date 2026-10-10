@@ -500,7 +500,10 @@ type VerifyA2ARequestRequest struct {
 	RequestHash string    `json:"requestHash"`
 }
 
-// VerifyA2ARequest verifies an incoming A2A request signature
+// VerifyA2ARequest verifies an incoming A2A request signature. A result that is
+// not valid is a verdict on the request. A read that fails (the nonce table, the
+// agent's grants) is returned as an error instead: it says nothing about the
+// request, and the caller must not report it as an authentication failure.
 func (s *A2AService) VerifyA2ARequest(
 	ctx context.Context,
 	req VerifyA2ARequestRequest,
@@ -520,8 +523,7 @@ func (s *A2AService) VerifyA2ARequest(
 	// 2. Check nonce hasn't been used (replay protection)
 	nonceExists, err := s.nonceRepo.Exists(ctx, req.Nonce)
 	if err != nil {
-		result.Error = "failed to check nonce"
-		return result, nil
+		return nil, err
 	}
 	if nonceExists {
 		result.Error = "nonce already used (replay attack)"
@@ -564,14 +566,22 @@ func (s *A2AService) VerifyA2ARequest(
 		return result, nil
 	}
 
+	// A suspended or revoked agent is not permitted to authenticate, so a request
+	// it signed is not valid. The same allow-list the auth middlewares apply, so
+	// an unrecognised status is refused too. Checked once the signature has
+	// verified, so only a request signed with the agent's key learns its status.
+	if !domain.AgentStatusPermitsAuth(agent.Status) {
+		result.Error = domain.AgentStatusDeniedMessage(agent.Status)
+		return result, nil
+	}
+
 	// The result serves the agent's active capability grants, the list an issued
 	// trust credential carries. Read before the nonce is spent so a failed read
 	// does not burn the caller's nonce, and fail closed: the registration-time
 	// list on the agent row is never served as capabilities.
 	capabilities, _, err := activeCapabilityTokens(s.capabilityRepo, req.AgentID)
 	if err != nil {
-		result.Error = "failed to load capability grants"
-		return result, nil
+		return nil, fmt.Errorf("failed to load capability grants: %w", err)
 	}
 
 	// 5. Record nonce to prevent replay

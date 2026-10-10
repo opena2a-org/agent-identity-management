@@ -24,6 +24,7 @@ type SecurityPolicyService struct {
 	verificationEventRepo domain.VerificationEventRepository // For the not-evaluable branch (no allowed action)
 	exfiltrationConfig    domain.DataExfiltrationConfig      // Exfiltration detection thresholds
 	transitions           *transition.Recorder               // Optional: set by SetTransitionRecorder
+	capabilityReader      activeCapabilityReader             // The agent's active grants, for the config drift capability checks
 }
 
 // NewSecurityPolicyService creates a new security policy service
@@ -50,6 +51,14 @@ func (s *SecurityPolicyService) SetBehaviorAnalysis(behaviorService *BehaviorAna
 // This uses setter injection to break circular dependency between services
 func (s *SecurityPolicyService) SetAgentRepository(agentRepo domain.AgentRepository) {
 	s.agentRepo = agentRepo
+}
+
+// SetCapabilityRepository wires the grant table the config drift policy reads
+// an agent's capabilities from: the active grants, the list the agent's trust
+// credential carries. Without it, a config drift policy that checks
+// capabilities fails its evaluation instead of reading another list.
+func (s *SecurityPolicyService) SetCapabilityRepository(reader activeCapabilityReader) {
+	s.capabilityReader = reader
 }
 
 // SetDataTransferRepository sets the data transfer repository for exfiltration detection
@@ -885,6 +894,26 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 		return false, false, "", nil
 	}
 
+	// The capability checks read the agent's active grants, the list its trust
+	// credential carries. agent.Capabilities is the list the SDK reported at
+	// registration, which no grant or revocation updates, so it is not read here.
+	// The grants are read once, by the first check that needs them, and a failed
+	// read fails the evaluation. grantedRead records the read, so an agent with no
+	// grant is not read again by the next check.
+	granted := make([]string, 0)
+	grantedRead := false
+	grantedCapabilities := func() ([]string, error) {
+		if !grantedRead {
+			tokens, _, err := activeCapabilityTokens(s.capabilityReader, agent.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read capability grants: %w", err)
+			}
+			granted = tokens
+			grantedRead = true
+		}
+		return granted, nil
+	}
+
 	// Evaluate policies by priority (highest first)
 	for _, policy := range policies {
 		if !policy.IsEnabled {
@@ -910,8 +939,12 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 				}
 
 				// Check for added or removed capabilities
+				capabilities, err := grantedCapabilities()
+				if err != nil {
+					return false, false, "", err
+				}
 				currentCaps := make(map[string]bool)
-				for _, cap := range agent.Capabilities {
+				for _, cap := range capabilities {
 					currentCaps[cap] = true
 				}
 
@@ -999,8 +1032,12 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 			}
 
 			// Check if agent has any dangerous capabilities
+			capabilities, err := grantedCapabilities()
+			if err != nil {
+				return false, false, "", err
+			}
 			foundDangerousCaps := make([]string, 0)
-			for _, cap := range agent.Capabilities {
+			for _, cap := range capabilities {
 				for _, dangerousCap := range dangerousCapabilities {
 					if dangerousCapStr, ok := dangerousCap.(string); ok {
 						// Simple wildcard matching

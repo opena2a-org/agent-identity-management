@@ -644,6 +644,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		repos.AuditLog,
 	)
 	securityPolicyService.SetVerificationEventRepo(repos.VerificationEvent) // the not-evaluable branch reads the calculator's window
+	securityPolicyService.SetCapabilityRepository(repos.Capability)         // the config drift capability checks read the active grants
 
 	// Create services
 	authService := application.NewAuthService(

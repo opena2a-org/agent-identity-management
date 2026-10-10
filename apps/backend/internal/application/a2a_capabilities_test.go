@@ -36,12 +36,17 @@ var agentByIDColumns = []string{
 	"capability_violation_count", "is_compromised", "declared_purpose",
 }
 
-// expectAgentRow answers one AgentRepository.GetByID for the agent, with the
-// registration-time capability list on the row.
+// expectAgentRow answers one AgentRepository.GetByID for a verified agent, with
+// the registration-time capability list on the row.
 func expectAgentRow(mock sqlmock.Sqlmock, id, orgID uuid.UUID, publicKey string) {
+	expectAgentRowInStatus(mock, id, orgID, publicKey, domain.AgentStatusVerified)
+}
+
+// expectAgentRowInStatus is expectAgentRow for an agent in status.
+func expectAgentRowInStatus(mock sqlmock.Sqlmock, id, orgID uuid.UUID, publicKey string, status domain.AgentStatus) {
 	now := time.Now().UTC()
 	row := sqlmock.NewRows(agentByIDColumns).AddRow(
-		id.String(), orgID.String(), "billing-agent", "Billing Agent", nil, "ai_agent", "verified", nil,
+		id.String(), orgID.String(), "billing-agent", "Billing Agent", nil, "ai_agent", string(status), nil,
 		publicKey, nil, nil, nil, nil, nil,
 		0.8, nil, nil, []byte(registrationCapabilities), nil, now, now, uuid.New().String(), nil,
 		nil, nil, nil, nil, nil,
@@ -173,8 +178,9 @@ func TestA2AReaders_ServeTheSameCapabilitiesAsTheCredential(t *testing.T) {
 }
 
 // When the grant table cannot be read, neither reader falls back to the list on
-// the agent row: the card fails, and the verification fails without recording
-// the caller's nonce, so the same signed request can be retried.
+// the agent row: the card fails, and the verification returns an error, not an
+// invalid result, without recording the caller's nonce, so the same signed
+// request can be retried. A failed read says nothing about the request.
 func TestA2AReaders_FailClosedWhenGrantsCannotBeRead(t *testing.T) {
 	ctx := context.Background()
 	id, orgID := uuid.New(), uuid.New()
@@ -203,14 +209,11 @@ func TestA2AReaders_FailClosedWhenGrantsCannotBeRead(t *testing.T) {
 	nonceMock.ExpectExec(`INSERT INTO a2a_request_nonces`).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	result, err := svc.VerifyA2ARequest(ctx, req)
-	if err != nil {
-		t.Fatalf("VerifyA2ARequest: %v", err)
+	if err == nil {
+		t.Fatalf("VerifyA2ARequest answered %+v when the grants could not be read, want an error", result)
 	}
-	if result.Valid || result.Capabilities != nil {
-		t.Fatalf("verify result valid=%v capabilities=%v when the grants could not be read", result.Valid, result.Capabilities)
-	}
-	if result.Error != "failed to load capability grants" {
-		t.Errorf("verify result error = %q, want %q", result.Error, "failed to load capability grants")
+	if result != nil {
+		t.Errorf("VerifyA2ARequest answered %+v with its error, want no result", result)
 	}
 	if err := nonceMock.ExpectationsWereMet(); err == nil {
 		t.Error("the nonce was recorded although the verification failed before succeeding")

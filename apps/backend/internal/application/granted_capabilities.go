@@ -58,6 +58,15 @@ func grantedCapabilityTokens(grants []*domain.AgentCapability) (tokens []string,
 	return tokens, dropped
 }
 
+// GrantedCapabilityTokens lists grant rows as every AIM surface serves an
+// agent's capabilities: the list grantedCapabilityTokens builds, so the agent
+// API names the same capabilities as the agent's credential, card and A2A
+// verification result. The returned slice is never nil.
+func GrantedCapabilityTokens(grants []*domain.AgentCapability) []string {
+	tokens, _ := grantedCapabilityTokens(grants)
+	return tokens
+}
+
 // activeCapabilityTokens reads the agent's active grants and returns them as
 // grantedCapabilityTokens lists them. A nil reader or a failed read is an error:
 // the registration-time list on the agent row is a self-reported declaration and

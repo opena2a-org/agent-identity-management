@@ -11,6 +11,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the agent API lists an agent's capabilities as its credential does, and other follow-ups (#635)
+
+- `GET /api/v1/agents/:id`, `GET /api/v1/agents`, `POST /api/v1/agents`, `PUT /api/v1/agents/:id` and the `agent`
+  object of `POST /api/v1/agents/:id/suspend`, `/reactivate` and `/revoke` listed the capability type of every active
+  grant row under `capabilities`, honeytoken grants and duplicates included, in the order the rows were read. They now
+  list them as the trust credential, the agent card and the A2A verification result do: no honeytoken grant, each
+  capability once, sorted ascending.
+- When the grant table cannot be read, `GET /api/v1/agents/:id` answers 500 instead of 200 with `"capabilities": []`,
+  which said the agent held no grant. The create, update, suspend, reactivate and revoke responses still report the
+  change, which was already made, and carry the agent without a `capabilities` field. `GET /api/v1/agents` is
+  unchanged and still lists `[]` for every agent when the page's grants cannot be read.
+- `GET /api/v1/agents/:id` serves `createdByApiKeyId`, the API key the agent was created with, so the agent detail
+  page's link to that key renders. The create, update, suspend, reactivate and revoke responses carry it too.
+- `POST /api/v1/a2a/verify` answered `valid: true` for a correctly signed request from a suspended or revoked agent. A
+  request signed by an agent whose status does not permit authentication (the same allow-list the auth middlewares
+  apply: `verified` and `pending` pass) is now answered 401 with
+  `Agent is not permitted to authenticate (status: suspended)`. The status is named only once the signature has
+  verified, and the refusal spends no nonce.
+- `POST /api/v1/a2a/verify` answers 500 when the nonce table or the agent's grants cannot be read. It answered 401 with
+  `failed to check nonce` or `failed to load capability grants`, reporting a database failure as an authentication
+  failure. The nonce is still not spent, so the same signed request can be retried.
+- The config drift policy's capability-change and dangerous-capability checks read the agent's active grants. They read
+  the list the SDK reported at registration, so a capability granted or revoked after registration was not seen; an
+  agent registered with no capabilities and granted `admin:all` afterwards was reported as holding no dangerous
+  capability. A honeytoken grant is not a capability to these checks. When the grants cannot be read, the evaluation
+  fails and decides nothing, as it does when the policies cannot be read.
+- Tests: `agent_response_capabilities_test.go` and `a2a_verify_server_error_test.go` (HTTP handlers),
+  `a2a_verify_status_test.go` and `security_policy_config_drift_grants_test.go` (application) each fail on the
+  behaviour described above.
+
 ### Added — the server reports at start whether audit record chains can start
 
 - At start the server reads whether a foreign key can still remove `audit_logs` or
@@ -237,13 +267,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   reads the grant table directly.
 - The agent card's AIM extension (`capabilities` under `aim`) and the A2A request verification result served the same
   registration-time list; both now serve the active grants, so they read the same list as the credential. When the grant
-  table cannot be read, the card request fails and the verification result reports `failed to load capability grants`
-  with `valid: false`; the registration-time list is never served in its place.
+  table cannot be read, the card request and the verification fail; the registration-time list is never served in its
+  place.
 - The `agent` object in the responses of `POST /api/v1/agents/:id/suspend`, `POST /api/v1/agents/:id/reactivate` and
   `POST /api/v1/agents/:id/revoke` was the stored agent row, so its `capabilities` was the registration-time list. It is
   now the agent as `GET /api/v1/agents/:id` returns it, with `capabilities` read from the active grants. That object
-  does not carry `lastCapabilityCheckAt`, `lastHeartbeat`, `keyRotationGraceUntil` or `createdByApiKeyId`, so those
-  four fields are no longer in these three responses; `GET /api/v1/agents/:id` is unchanged.
+  does not carry `lastCapabilityCheckAt`, `lastHeartbeat` or `keyRotationGraceUntil`, so those three fields are no
+  longer in these three responses.
 - The list the SDK reported at registration is still stored on the agent and is unchanged; it is a self-reported
   declaration, and no surface serves it under the name `capabilities` any longer.
 - `apps/backend/internal/application/atc_capabilities_test.go` fails when a credential issued after a revocation still

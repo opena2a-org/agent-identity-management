@@ -90,34 +90,54 @@ func NewAgentHandlerWithInterfaces(
 	}
 }
 
-func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fiber.Map {
-	// Fetch capabilities from agent_capabilities table
-	capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
+// agentCapabilities reads the agent's active grants and lists them as its trust
+// credential, agent card and A2A verification result do.
+func (h *AgentHandler) agentCapabilities(c fiber.Ctx, agentID uuid.UUID) ([]string, error) {
+	grants, err := h.capabilityService.GetAgentCapabilities(c.Context(), agentID, true)
 	if err != nil {
-		// Log error but don't fail - return empty capabilities
-		capabilities = []*domain.AgentCapability{}
+		return nil, err
 	}
+	return application.GrantedCapabilityTokens(grants), nil
+}
 
-	// ✅ Fetch tags from agent_tags table
+func (h *AgentHandler) agentTags(c fiber.Ctx, agentID uuid.UUID) []*domain.Tag {
 	agentTags := make([]*domain.Tag, 0)
 	if h.tagService != nil {
 		// Log error but don't fail - return empty tags
-		if fetched, err := h.tagService.GetAgentTags(c.Context(), agent.ID); err == nil && fetched != nil {
+		if fetched, err := h.tagService.GetAgentTags(c.Context(), agentID); err == nil && fetched != nil {
 			agentTags = fetched
 		}
 	}
-
-	return agentResponse(agent, capabilities, agentTags)
+	return agentTags
 }
 
-// agentResponse renders an agent plus its prefetched capabilities and tags
-func agentResponse(agent *domain.Agent, capabilities []*domain.AgentCapability, agentTags []*domain.Tag) fiber.Map {
-	// Extract capability types as simple string array (frontend compatible)
-	capabilityTypes := make([]string, 0, len(capabilities))
-	for _, cap := range capabilities {
-		capabilityTypes = append(capabilityTypes, cap.CapabilityType)
+// readAgentResponse renders the agent as GET /agents/:id serves it. A failed
+// grant read is returned as an error: an empty capability list in its place
+// would say the agent holds no grant.
+func (h *AgentHandler) readAgentResponse(c fiber.Ctx, agent *domain.Agent) (fiber.Map, error) {
+	capabilities, err := h.agentCapabilities(c, agent.ID)
+	if err != nil {
+		return nil, err
 	}
+	return agentResponse(agent, capabilities, h.agentTags(c, agent.ID)), nil
+}
 
+// enrichAgentResponse renders an agent that a create, update or lifecycle act
+// has already changed. The change stands whatever the read-back finds, so a
+// failed grant read does not fail the request; the agent is served without a
+// capabilities field instead.
+func (h *AgentHandler) enrichAgentResponse(c fiber.Ctx, agent *domain.Agent) fiber.Map {
+	capabilities, err := h.agentCapabilities(c, agent.ID)
+	if err != nil {
+		log.Printf("agent %s: capability grants could not be read for the response: %v", agent.ID, err)
+	}
+	return agentResponse(agent, capabilities, h.agentTags(c, agent.ID))
+}
+
+// agentResponse renders an agent plus its capability list and tags. A nil
+// capabilities leaves the capabilities field out: the grants were not read,
+// which is not the same answer as an agent with no grant.
+func agentResponse(agent *domain.Agent, capabilities []string, agentTags []*domain.Tag) fiber.Map {
 	tags := make([]fiber.Map, 0, len(agentTags))
 	for _, tag := range agentTags {
 		tags = append(tags, fiber.Map{
@@ -131,7 +151,7 @@ func agentResponse(agent *domain.Agent, capabilities []*domain.AgentCapability, 
 	}
 
 	// Return flat response with all agent fields + capabilities + tags (camelCase for frontend)
-	return fiber.Map{
+	response := fiber.Map{
 		"id":                       agent.ID,
 		"organizationId":           agent.OrganizationID,
 		"name":                     agent.Name,
@@ -146,7 +166,6 @@ func agentResponse(agent *domain.Agent, capabilities []*domain.AgentCapability, 
 		"createdAt":                agent.CreatedAt,
 		"updatedAt":                agent.UpdatedAt,
 		"talksTo":                  agent.TalksTo,
-		"capabilities":             capabilityTypes,
 		"tags":                     tags,            // ✅ Include tags in response
 		"metadata":                 agent.Metadata,  // ✅ Include custom metadata (model, department, etc.)
 		"declaredPurpose":          agent.DeclaredPurpose,
@@ -160,6 +179,7 @@ func agentResponse(agent *domain.Agent, capabilities []*domain.AgentCapability, 
 		"createdByName":            agent.CreatedByName,       // ✅ Audit trail: who created this agent
 		"createdByEmail":           agent.CreatedByEmail,      // ✅ Audit trail: creator's email
 		"createdBySdkTokenId":      agent.CreatedBySDKTokenID, // ✅ SDK token tracking for revocation
+		"createdByApiKeyId":        agent.CreatedByAPIKeyID,   // The API key the agent was created with; the detail page links to it
 		"updatedBy":                agent.UpdatedBy,           // ✅ Audit trail: who last updated
 		"updatedByName":            agent.UpdatedByName,       // ✅ Audit trail: updater's name
 		"updatedByEmail":           agent.UpdatedByEmail,      // ✅ Audit trail: updater's email
@@ -173,6 +193,10 @@ func agentResponse(agent *domain.Agent, capabilities []*domain.AgentCapability, 
 		"pqcKeyCreatedAt":          agent.PQCKeyCreatedAt,
 		"pqcKeyExpiresAt":          agent.PQCKeyExpiresAt,
 	}
+	if capabilities != nil {
+		response["capabilities"] = capabilities
+	}
+	return response
 }
 
 // ListAgents returns agents for the organization. Optional limit/offset
@@ -223,7 +247,7 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 
 	enriched := make([]fiber.Map, 0, len(agents))
 	for _, agent := range agents {
-		enriched = append(enriched, agentResponse(agent, capsByAgent[agent.ID], tagsByAgent[agent.ID]))
+		enriched = append(enriched, agentResponse(agent, application.GrantedCapabilityTokens(capsByAgent[agent.ID]), tagsByAgent[agent.ID]))
 	}
 	response := fiber.Map{
 		"agents": enriched,
@@ -426,7 +450,11 @@ func (h *AgentHandler) GetAgent(c fiber.Ctx) error {
 		return nil
 	}
 
-	return c.JSON(h.enrichAgentResponse(c, agent))
+	response, err := h.readAgentResponse(c, agent)
+	if err != nil {
+		return respondServerError(c, fiber.StatusInternalServerError, err)
+	}
+	return c.JSON(response)
 }
 
 // UpdateAgent updates an agent
