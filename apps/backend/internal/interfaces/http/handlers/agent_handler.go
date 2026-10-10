@@ -1926,7 +1926,7 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 		"status":     agent.Status,
 		"changed":    agent.Status != before,
 		"trustScore": agent.TrustScore,
-		"agent":      agent,
+		"agent":      h.enrichAgentResponse(c, agent),
 	})
 }
 
@@ -1999,7 +1999,7 @@ func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 		"changed":    agent.Status != before,
 		"trustScore": agent.TrustScore,
 		"verifiedAt": agent.VerifiedAt,
-		"agent":      agent,
+		"agent":      h.enrichAgentResponse(c, agent),
 	})
 }
 
@@ -2071,7 +2071,7 @@ func (h *AgentHandler) RevokeAgent(c fiber.Ctx) error {
 		"retentionUntil": retentionUntil.Format(time.RFC3339),
 		"status":         agent.Status,
 		"trustScore":     agent.TrustScore,
-		"agent":          agent,
+		"agent":          h.enrichAgentResponse(c, agent),
 	})
 }
 
