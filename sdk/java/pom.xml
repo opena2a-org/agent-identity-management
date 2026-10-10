@@ -11,7 +11,7 @@
 
     <name>AIM Java SDK</name>
     <description>Agent Identity Management SDK for Java - Secure your AI agents with cryptographic identity verification</description>
-    <url>https://github.com/opena2a-org/agent-identity-management</url>
+    <url>https://opena2a.org/agent-identity-management</url>
 
     <licenses>
         <license>

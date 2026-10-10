@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MCPIntegration.attestServer` (both overloads) now throws `AIMException` before sending anything. It sent
   the Base64 of the attestation in the `signature` member, where the server verifies an Ed25519 signature
   made with the agent's private key, and `MCPIntegration` cannot reach that key.
+- The project URL in `pom.xml` and the first link in the README go to the project page,
+  https://opena2a.org/agent-identity-management. They pointed at the GitHub repository and at the license
+  file. The repository stays listed under `<scm>`.
 
 ### Deprecated
 

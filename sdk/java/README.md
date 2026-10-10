@@ -1,4 +1,4 @@
-# AIM Java SDK
+# [AIM Java SDK](https://opena2a.org/agent-identity-management)
 
 Cryptographic identity, capability authorization, and audit trails for Java AI agents. Apache 2.0.
 
