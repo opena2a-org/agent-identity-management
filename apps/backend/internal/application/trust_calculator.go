@@ -442,13 +442,23 @@ func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
 		alerts, err := c.alertRepo.GetUnacknowledgedByResourceID(agent.ID)
 		if err == nil && len(alerts) > 0 {
 			for _, alert := range alerts {
+				if !isScoredAlert(alert) {
+					continue
+				}
+				var deduction float64
 				switch alert.Severity {
 				case domain.AlertSeverityCritical:
-					score -= 0.25 // Critical alerts have major impact
+					deduction = 0.25 // Critical alerts have major impact
 				case domain.AlertSeverityHigh:
-					score -= 0.10
+					deduction = 0.10
 				case domain.AlertSeverityWarning:
-					score -= 0.05
+					deduction = 0.05
+				}
+				// An alert that counts n repeats (AlertCoalesceWindow)
+				// deducts what n alerts raised once each deduct, so counting
+				// repeats on one alert does not change the score.
+				for i := 0; i < alertOccurrences(alert); i++ {
+					score -= deduction
 				}
 			}
 		}
@@ -490,6 +500,23 @@ func (c *TrustCalculator) calculateSecurityAlerts(agent *domain.Agent) float64 {
 	}
 
 	return math.Max(0.0, score)
+}
+
+// isScoredAlert reports whether alert enters the security-alerts factor. The
+// alert raised for a denial because the agent has no granted capabilities does
+// not: the denial enters the factor through its violation record, as it did
+// before that alert was raised.
+func isScoredAlert(alert *domain.Alert) bool {
+	return !IsNoGrantedCapabilitiesAlert(alert)
+}
+
+// alertOccurrences is how many times alert was raised. An alert that carries
+// no count was raised once.
+func alertOccurrences(alert *domain.Alert) int {
+	if alert.OccurrenceCount < 1 {
+		return 1
+	}
+	return alert.OccurrenceCount
 }
 
 // Factor 5: Compliance Score (10% weight)
@@ -780,8 +807,11 @@ func (c *TrustCalculator) calculateConfidence(agent *domain.Agent, factors *doma
 		if err == nil {
 			// Having alert data (even if empty) increases confidence
 			dataPoints++
-			if len(alerts) > 0 {
-				dataPoints += 0.5 // More data = more confidence in the score
+			for _, alert := range alerts {
+				if isScoredAlert(alert) {
+					dataPoints += 0.5 // More data = more confidence in the score
+					break
+				}
 			}
 		}
 	}
@@ -918,7 +948,7 @@ func (c *TrustCalculator) RecordIsolationAttestation(ctx context.Context, agentI
 		Score:      domain.ScoreIsolation(sandbox, network, filesystem, process),
 		ReportedAt: now,
 		CreatedAt:  now,
-		Verified:   false, // no verified write path exists until Phase 2
+		Verified:   false, // no write path sets this true until an independent verifier exists
 		VerifiedBy: nil,
 		VerifiedAt: nil,
 	}

@@ -48,15 +48,15 @@ func (h *ATCIssuanceHandler) IssueATC(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid agent ID"})
 	}
 
-	// Authorize: the agent must belong to the caller's organization. This mirrors
-	// the trust-score endpoints' tenant check so a credential can only be issued
-	// for an agent the caller owns.
-	agent, err := h.agentService.GetAgent(c.Context(), agentID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Agent not found"})
-	}
-	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Access denied"})
+	// Authorize: the agent must belong to the caller's organization, so a
+	// credential can only be issued for an agent the caller owns. Another
+	// organization's agent answers 404 like a missing one, as GET
+	// /agents/:id does, so the response does not reveal that the ID exists.
+	agent := LoadOwned(c, func(id uuid.UUID) (*domain.Agent, error) {
+		return h.agentService.GetAgent(c.Context(), id)
+	}, agentID, orgID, agentOrgID)
+	if agent == nil {
+		return nil
 	}
 
 	result, err := h.service.IssueForAgent(c.Context(), agentID)

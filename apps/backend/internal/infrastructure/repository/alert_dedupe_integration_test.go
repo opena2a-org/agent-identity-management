@@ -188,3 +188,90 @@ func TestAlertDedupe_CreateCoalesced(t *testing.T) {
 		assert.Equal(t, before+1, rowsIn(orgID))
 	})
 }
+
+// A repeat finds an open alert, and an administrator acknowledges that alert
+// and commits before the repeat's increment runs. The repeat is a new alert,
+// and the acknowledged alert keeps the count it had when it was acknowledged.
+func TestAlertDedupe_RepeatRacingAnAcknowledgmentIsNotCountedOnIt(t *testing.T) {
+	db := openAlertDedupeTestDB(t)
+	ctx := context.Background()
+	repo := NewAlertRepository(db)
+
+	orgID := seedAlertDedupeOrg(t, db, ctx)
+	agentID := uuid.New()
+	key := "capability_violation:" + agentID.String() + ":digest"
+	t0 := time.Now().UTC().Truncate(time.Microsecond)
+	newAlert := func(createdAt time.Time) *domain.Alert {
+		return &domain.Alert{
+			OrganizationID: orgID,
+			AlertType:      domain.AlertSecurityBreach,
+			Severity:       domain.AlertSeverityHigh,
+			Title:          "Capability Violation",
+			Description:    "dedupe integration",
+			ResourceType:   "agent",
+			ResourceID:     agentID,
+			DedupeKey:      key,
+			CreatedAt:      createdAt,
+		}
+	}
+
+	open := newAlert(t0)
+	created, err := repo.CreateCoalesced(open, t0.Add(-time.Hour), t0)
+	require.NoError(t, err)
+	require.True(t, created)
+
+	// The acknowledgment holds the alert's row lock without committing, so the
+	// repeat's lookup still reads the alert as open and its increment waits.
+	ack, err := db.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = ack.Rollback() }()
+	_, err = ack.ExecContext(ctx,
+		`UPDATE alerts SET is_acknowledged = true, acknowledged_at = NOW() WHERE id = $1`, open.ID)
+	require.NoError(t, err)
+	var ackPID int
+	require.NoError(t, ack.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&ackPID))
+
+	type outcome struct {
+		created bool
+		err     error
+	}
+	done := make(chan outcome, 1)
+	repeat := newAlert(t0.Add(time.Minute))
+	go func() {
+		created, err := repo.CreateCoalesced(repeat, t0.Add(-time.Hour), t0.Add(time.Minute))
+		done <- outcome{created, err}
+	}()
+
+	require.Eventually(t, func() bool {
+		var waiting bool
+		err := db.QueryRowContext(ctx,
+			`SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid)))`, ackPID,
+		).Scan(&waiting)
+		return err == nil && waiting
+	}, 10*time.Second, 10*time.Millisecond, "the repeat never waited on the acknowledgment")
+
+	require.NoError(t, ack.Commit())
+
+	var got outcome
+	select {
+	case got = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the repeat did not finish after the acknowledgment committed")
+	}
+	require.NoError(t, got.err)
+	assert.True(t, got.created, "a repeat of an alert acknowledged under it is a new alert")
+
+	var count int
+	var acknowledged bool
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT occurrence_count, is_acknowledged FROM alerts WHERE id = $1`, open.ID,
+	).Scan(&count, &acknowledged))
+	assert.True(t, acknowledged)
+	assert.Equal(t, 1, count, "the acknowledged alert keeps the count it was acknowledged with")
+
+	var rows int
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM alerts WHERE organization_id = $1 AND dedupe_key = $2 AND is_acknowledged = false`, orgID, key,
+	).Scan(&rows))
+	assert.Equal(t, 1, rows, "the repeat is the one open alert for the key")
+}

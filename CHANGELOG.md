@@ -117,6 +117,34 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   remove audit rows by cascade, so every organization reads `notStarted` for now. `latestCheckpoint`
   is null until chain checkpoints are written.
 
+### Fixed — repeated capability-check alerts are counted on one alert, and other follow-ups (#637)
+
+- Repeated requests to `POST /api/v1/agents/:id/verify-capability` from one agent for the same capability and resource
+  are counted on one open alert instead of creating an alert per request. This covers the "Unregistered Capability Used
+  (Monitoring Mode)" alert, raised in monitoring mode for an agent with no granted capabilities, and the "Capability
+  Violation Detected" alert, raised when an agent attempts a capability outside its grants. Three such requests in a
+  monitoring-mode organization listed three alerts, each with an `occurrenceCount` of 1; they now list one alert with
+  an `occurrenceCount` of 3. The trust score for the same requests is unchanged: the security-alerts factor deducts
+  for each occurrence an unacknowledged alert counts, so one alert with an `occurrenceCount` of 3 deducts what three
+  alerts deducted.
+- A request that a strict-mode organization denies because the agent has no granted capabilities raises a "Capability
+  Violation" alert. The check that raises it compared the denial reason with text the server never returns, so no
+  alert was written. Repeats of the denial are counted on that alert, and it is kept apart from the "Capability
+  Violation Detected" alert: once the agent is granted a capability, a request outside its grants raises that High
+  alert, as it did before. The new alert does not change the trust score: the security-alerts factor already deducts
+  for the denial through its capability-violation record, and it does not deduct for this alert.
+- A repeat that arrives while an administrator acknowledges the alert it would be counted on is stored as a new alert.
+  The repeat could be counted on the alert after the acknowledgment, and no new alert was created.
+- `POST /api/v1/agents/:id/atc` answers 404 for another organization's agent, as it does for an ID that matches no
+  agent and as `GET /api/v1/agents/:id` does. It answered 403, which told the caller that the agent exists.
+- Migration 128 sets the comment on `isolation_attestations.verified` to the text migration 108 sets now. A database
+  that applied 108 before its comment was edited kept the old comment.
+- On a screen narrower than 640px the alerts page keeps each alert card inside the screen: the Acknowledge or Resolve
+  button sits under the alert's text instead of beside it, and a long word in a title wraps inside the card. At 375px
+  the button was drawn past the card's right edge and the page scrolled sideways.
+- The alert panel and its backdrop start at the top of the screen. They started 24px down, so the top of the page
+  stayed undimmed and the end of the panel fell below the screen.
+
 ### Fixed — an alert's repeat count is in the alerts API and dashboard, and concurrent repeats of one dedupe key share one alert (#633)
 
 - Alerts returned by `GET /api/v1/admin/alerts`, `GET /api/v1/security/alerts` and
@@ -129,8 +157,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Concurrent first occurrences of one dedupe key in one organization, with no open alert for that key, are stored as
   one alert that counts each of them. The lookup for an open alert and the insert ran as two separate statements, so
   each occurrence could find no alert and insert its own, and later repeats were counted on the newest of them only.
-  They now run in one transaction under a lock on the organization and key. The capability check does not set a
-  dedupe key on the alerts it creates yet, so its alerts are not coalesced (see the next entry).
+  They now run in one transaction under a lock on the organization and key.
 - The migration that adds alert coalescing is renumbered from 126 to 127, so it no longer shares a number with another
   migration, and it removes the `schema_migrations` row of its old name on a database that applied it before the
   rename. A test fails when a new migration reuses a number.
@@ -141,9 +168,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   key, when that alert was created less than 10 minutes earlier: that alert's `occurrence_count` goes up and
   `last_seen_at` records the latest repeat (migration 127 adds the `dedupe_key`, `occurrence_count` and `last_seen_at`
   columns). Acknowledging the alert ends this, and the next repeat creates a new alert. An alert without a dedupe key
-  is stored as a new alert, as before. The capability check behind `POST /api/v1/agents/:id/verify-capability` does
-  not set a dedupe key on the alerts it creates yet, so an agent retrying one action that the check raises an alert
-  for still writes one alert per request, up to the 100 a minute the route's rate limit allows.
+  is stored as a new alert, as before. The alerts the capability check behind
+  `POST /api/v1/agents/:id/verify-capability` raises for a capability the agent was not granted carry a dedupe key
+  (see the entry for #637).
 
 ### Fixed — the Java SDK's token recovery carries the access token the route requires, and other follow-ups (#625)
 
@@ -2207,10 +2234,9 @@ reason: the score is measured, not asserted. No migration: the column was alread
   can reach the column, so `0.65` is the effective maximum for every agent today.
   `verified` is bound to the row rather than the agent, so a re-attestation
   supersedes its predecessor and starts unverified — verification never carries
-  forward across a redeploy. Independent verification itself is a follow-up
-  (roadmap `aim-isolation-verification` Phase 2); when it lands, TEE attestation
-  and orchestrator/host metadata may set the column, an HMA static scan may not,
-  and the SDK never.
+  forward across a redeploy. No write path sets the column yet; once an
+  independent verification source exists, TEE attestation and orchestrator/host
+  metadata may set it, an HMA static scan may not, and the SDK never.
 
   Unchanged and still broken at the time of that change: both shipped SDKs POST
   `/api/v1/sdk-api/agents/<id>/isolation-attestation` while the backend registered

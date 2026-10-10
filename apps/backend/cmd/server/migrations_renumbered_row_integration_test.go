@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,14 +67,18 @@ func TestRunMigrations_RenumberedMigrationLeavesNoRowUnderItsOldName(t *testing.
 
 	owner, err := sql.Open("postgres", dsn)
 	require.NoError(t, err)
-	defer owner.Close()
+	// Cleanups run after the test function returns, last registered first, so
+	// the pool closes after the DROP below; a deferred Close would run first
+	// and leave the DROP to fail on a closed pool, and the schema behind.
+	t.Cleanup(func() { _ = owner.Close() })
 	require.NoError(t, owner.Ping())
 
 	schema := "migrations_renumbered_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:12]
 	_, err = owner.Exec(`CREATE SCHEMA ` + pq.QuoteIdentifier(schema))
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_, _ = owner.Exec(`DROP SCHEMA IF EXISTS ` + pq.QuoteIdentifier(schema) + ` CASCADE`)
+		_, err := owner.Exec(`DROP SCHEMA IF EXISTS ` + pq.QuoteIdentifier(schema) + ` CASCADE`)
+		assert.NoError(t, err, "the test schema %s was not dropped", schema)
 	})
 
 	u, err := url.Parse(dsn)

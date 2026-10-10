@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,8 +40,52 @@ const AlertCoalesceWindow = 10 * time.Minute
 // key as a fixed-length digest; the length prefix keeps ("a:b", "c") and
 // ("a", "b:c") distinct.
 func CapabilityViolationDedupeKey(agentID uuid.UUID, capability, resource string) string {
+	return capabilityAlertDedupeKey("capability_violation", agentID, capability, resource)
+}
+
+// UnregisteredCapabilityDedupeKey identifies repeats of one action that the
+// capability check allows in monitoring mode for an agent with no granted
+// capabilities: the same agent, capability and resource. It differs from
+// CapabilityViolationDedupeKey, so once the agent is granted a capability, a
+// violation is not counted on an alert that says it has none.
+func UnregisteredCapabilityDedupeKey(agentID uuid.UUID, capability, resource string) string {
+	return capabilityAlertDedupeKey("unregistered_capability", agentID, capability, resource)
+}
+
+// noGrantedCapabilitiesAlertKind begins the dedupe key of the alert raised for
+// a denial because the agent has no granted capabilities.
+const noGrantedCapabilitiesAlertKind = "no_granted_capabilities"
+
+// NoGrantedCapabilitiesDedupeKey identifies repeats of one action that the
+// capability check denies in strict mode because the agent has no granted
+// capabilities: the same agent, capability and resource. It differs from
+// CapabilityViolationDedupeKey, so once the agent is granted a capability, a
+// violation raises its own High alert instead of being counted on an alert
+// that says the agent has none.
+func NoGrantedCapabilitiesDedupeKey(agentID uuid.UUID, capability, resource string) string {
+	return capabilityAlertDedupeKey(noGrantedCapabilitiesAlertKind, agentID, capability, resource)
+}
+
+// IsNoGrantedCapabilitiesAlert reports whether alert is the one raised for a
+// denial because the agent has no granted capabilities.
+func IsNoGrantedCapabilitiesAlert(alert *domain.Alert) bool {
+	return strings.HasPrefix(alert.DedupeKey, noGrantedCapabilitiesAlertKind+":")
+}
+
+func capabilityAlertDedupeKey(kind string, agentID uuid.UUID, capability, resource string) string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s%s", len(capability), capability, resource)))
-	return "capability_violation:" + agentID.String() + ":" + hex.EncodeToString(sum[:])
+	return kind + ":" + agentID.String() + ":" + hex.EncodeToString(sum[:])
+}
+
+// coalesceAlert stores an alert that carries a dedupe key: it counts the alert
+// on the newest unacknowledged alert in its organization with the same key
+// created within AlertCoalesceWindow of now, or inserts it when there is none,
+// and reports whether it inserted.
+func coalesceAlert(repo domain.AlertRepository, alert *domain.Alert, now time.Time) (bool, error) {
+	if alert.CreatedAt.IsZero() {
+		alert.CreatedAt = now
+	}
+	return repo.CreateCoalesced(alert, now.Add(-AlertCoalesceWindow), now)
 }
 
 // alertEventDispatcher is the part of WebhookService that AlertService uses.
@@ -92,11 +137,7 @@ func (s *AlertService) SetWebhookService(webhookService *WebhookService) {
 // concurrent first occurrences of a key create one alert.
 func (s *AlertService) CreateAlert(ctx context.Context, alert *domain.Alert) error {
 	if alert.DedupeKey != "" {
-		now := s.now()
-		if alert.CreatedAt.IsZero() {
-			alert.CreatedAt = now
-		}
-		created, err := s.alertRepo.CreateCoalesced(alert, now.Add(-AlertCoalesceWindow), now)
+		created, err := coalesceAlert(s.alertRepo, alert, s.now())
 		if err != nil {
 			return err
 		}

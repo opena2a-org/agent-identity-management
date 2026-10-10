@@ -3,16 +3,15 @@
 -- The capability check can raise a capability violation alert on every request
 -- for a capability the agent was not granted, and the verification endpoint
 -- accepts 100 requests a minute per principal. An agent retrying one such
--- action can therefore write up to 100 identical alerts a minute, and each one
--- would be an alert.created webhook delivery.
+-- action can therefore write up to 100 identical alerts a minute.
 --
 -- A producer that sets dedupe_key opts into coalescing: while an alert with the
 -- same organization and dedupe_key is unacknowledged and was created inside the
 -- coalescing window, a repeat increments occurrence_count and moves
--- last_seen_at instead of inserting a row, and no webhook fires. Acknowledging
--- the alert ends the coalescing, so the next repeat is a new alert. The
--- capability check does not set dedupe_key on the alerts it creates yet, so its
--- alerts are not coalesced.
+-- last_seen_at instead of inserting a row. Acknowledging the alert ends the
+-- coalescing, so the next repeat is a new alert. The capability check sets
+-- dedupe_key on the alerts it raises for a capability the agent was not
+-- granted, so repeats of one agent, capability and resource are one alert.
 --
 -- Existing rows keep dedupe_key NULL and never coalesce. occurrence_count is 1
 -- for every row that was inserted, which is what each existing row recorded.

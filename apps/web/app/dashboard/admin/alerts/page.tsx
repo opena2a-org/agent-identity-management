@@ -663,21 +663,24 @@ function AlertsPageContent() {
                       : config.color
                   } ${selectedAlert?.id === alert.id ? "ring-2 ring-blue-500" : ""}`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <Icon className="h-5 w-5 mt-0.5" />
+                  {/* Below the sm breakpoint the actions sit under the content
+                      instead of beside it, and min-w-0 lets the content column
+                      narrow to the card, so a long title wraps inside it. */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <Icon className="h-5 w-5 mt-0.5 shrink-0" />
 
-                      <div className="flex-1 space-y-2">
+                      <div className="flex-1 min-w-0 space-y-2">
                         <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold">{alert.title}</h3>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-semibold min-w-0 break-words">{alert.title}</h3>
                               <Badge variant="outline" className="text-xs">
                                 <TypeIcon className="h-3 w-3 mr-1" />
                                 {alert.alertType.replace(/_/g, " ")}
                               </Badge>
                             </div>
-                            <p className="text-sm mt-1">{alert.description}</p>
+                            <p className="text-sm mt-1 break-words">{alert.description}</p>
                           </div>
                         </div>
 
@@ -718,30 +721,30 @@ function AlertsPageContent() {
                           </div>
                         )}
                       </div>
+                    </div>
 
-                      <div className="flex flex-wrap gap-2 justify-end sm:justify-start" onClick={(e) => e.stopPropagation()}>
-                        {!alert.isAcknowledged && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => acknowledgeAlert(alert.id, alert.title)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Acknowledge
-                          </Button>
-                        )}
-                        {alert.isAcknowledged && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => resolveAlert(alert.id)}
-                            className="border-green-500 text-green-600 hover:bg-green-50"
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Resolve
-                          </Button>
-                        )}
-                      </div>
+                    <div className="flex flex-wrap gap-2 justify-end sm:shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {!alert.isAcknowledged && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => acknowledgeAlert(alert.id, alert.title)}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Acknowledge
+                        </Button>
+                      )}
+                      {alert.isAcknowledged && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resolveAlert(alert.id)}
+                          className="border-green-500 text-green-600 hover:bg-green-50"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Resolve
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -762,8 +765,11 @@ function AlertsPageContent() {
           </div>
         </CardContent>
       </Card>
+    </div>
 
-      {/* Investigation Panel */}
+      {/* Investigation Panel. It stays outside the space-y-6 container: that
+          container gives each child after the first a top margin, which would
+          push the fixed backdrop and panel 24px down the viewport. */}
       <AlertDetailPanel
         alert={selectedAlert}
         isOpen={isPanelOpen}
@@ -771,7 +777,6 @@ function AlertsPageContent() {
         onAcknowledge={acknowledgeAlert}
         onResolve={resolveAlert}
       />
-    </div>
     </AuthGuard>
   );
 }
