@@ -261,6 +261,9 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	// status this names reaches only a caller holding the agent's key.
 	agent := agentauth.LoadVerifiedAgent(verified)
 	if !domain.AgentStatusPermitsAuth(agent.Status) {
+		// The refusal is recorded, so the organisation sees a suspended agent that keeps
+		// trying. A failed write still refuses.
+		_ = h.getAuditService().Log(c.Context(), h.statusRefusalAuditEntry(c, agent, agentID, req.Capability, req.Resource))
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": fmt.Sprintf("Agent status is %s, cannot perform actions", agent.Status),
 		})
@@ -289,6 +292,41 @@ type verificationInput struct {
 	publicKey  string
 	// metadata is added to the audit entry and the verification event.
 	metadata map[string]interface{}
+}
+
+// statusRefusalAuditEntry is the audit entry for a verification request refused
+// because the agent's status does not permit it to act. Called only after the
+// signature verified. It names the refusal and what was asked, never the
+// signature, the presented key, the signed message or the request context.
+func (h *VerificationHandler) statusRefusalAuditEntry(c fiber.Ctx, agent *domain.Agent, agentID uuid.UUID, capability, resource string) *domain.AuditLog {
+	// The mode is recorded, not consulted: the refusal is the same in both.
+	enforcementMode := "unknown"
+	if orgRepo := h.getOrgRepo(); orgRepo != nil {
+		org, err := orgRepo.GetByID(agent.OrganizationID)
+		if err == nil && org != nil && org.EnforcementMode != "" {
+			enforcementMode = string(org.EnforcementMode)
+		}
+	}
+	return &domain.AuditLog{
+		ID:             uuid.New(),
+		OrganizationID: agent.OrganizationID,
+		UserID:         &agent.CreatedBy,
+		AgentID:        &agentID,
+		Action:         domain.AuditActionVerificationRefused,
+		ResourceType:   "agent_action",
+		ResourceID:     agentID,
+		IPAddress:      c.IP(),
+		UserAgent:      c.Get("User-Agent"),
+		Metadata: map[string]interface{}{
+			"refusal":         "agent_status",
+			"agentStatus":     string(agent.Status),
+			"enforcementMode": enforcementMode,
+			"capability":      capability,
+			"resource":        resource,
+			"httpStatus":      fiber.StatusForbidden,
+		},
+		Timestamp: time.Now(),
+	}
 }
 
 // decideAndRecord makes the capability decision for an authenticated request
