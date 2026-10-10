@@ -878,7 +878,7 @@ func (s *AgentService) revokeOnReregistration(
 	declared map[string]bool,
 	requestedBy uuid.UUID,
 ) []string {
-	var dropped []string
+	dropped := make([]string, 0)
 	for capType := range current {
 		if !declared[capType] {
 			dropped = append(dropped, capType)
@@ -2913,7 +2913,7 @@ func (s *AgentService) enforceKeyExpiryRecorded(ctx context.Context, now time.Ti
 		return 0, err
 	}
 	suspended := 0
-	var errs []error
+	errs := make([]error, 0)
 	for _, ref := range refs {
 		_, err := s.transitions.Record(ctx, transition.Change{
 			OrganizationID: ref.OrganizationID,
