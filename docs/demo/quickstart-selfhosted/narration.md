@@ -52,4 +52,4 @@ Under Security, it is listed as a capability violation.
 ## s14 · card · 8 s · Run it yourself
 Run it yourself
 github.com/opena2a-org/agent-identity-management#quick-start
-pip install aim-sdk
+pip install "aim-sdk[rich]"

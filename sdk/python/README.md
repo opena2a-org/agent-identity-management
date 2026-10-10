@@ -18,10 +18,10 @@ Before upgrading a running agent, check whether anything it does is currently be
 
 ## Quick start
 
-Install the SDK and authenticate:
+Install the SDK, with the `rich` extra for its compact console output, and authenticate:
 
 ```bash
-pip install aim-sdk
+pip install "aim-sdk[rich]"
 aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```

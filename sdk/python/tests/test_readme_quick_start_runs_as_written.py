@@ -10,9 +10,9 @@ A name the example uses without defining it raises NameError; a call the
 example never makes is counted as missing; the refused call ends the script
 as it would end a reader's, so it has to be the last line. They also hold
 the minimal dev stack command to the services docker-compose.yml defines,
-the recorded walkthrough's typed lines to the root README's Quick start, and
-the root README's captured register output, in its first 30 lines, to what
-this SDK prints for that call.
+the recorded walkthrough's typed and install lines to the root README's Quick
+start, and the root README's captured register output, in its first 30
+lines, to what this SDK prints for that call.
 
 Everything here runs offline and reads only files in this repository.
 """
@@ -32,6 +32,7 @@ ROOT_README = REPO_ROOT / "README.md"
 SDK_README = SDK_DIR / "README.md"
 COMPOSE = REPO_ROOT / "docker-compose.yml"
 TAPE = REPO_ROOT / "docs" / "demo" / "quickstart-selfhosted" / "tape.tape"
+RENDER = REPO_ROOT / "docs" / "demo" / "render.sh"
 
 READMES = [
     pytest.param(ROOT_README, id="root-README"),
@@ -277,22 +278,52 @@ def register_and_output(path):
 
 def test_root_readme_shows_the_register_call_and_its_dated_output_in_its_first_30_lines():
     register, output, prose = register_and_output(ROOT_README)
-    assert register[2] <= FIRST_SCREEN, (
-        f"the register call opens on line {register[2]}; it must open within the first {FIRST_SCREEN}"
-    )
-    assert output[0] == "" and "Agent Registered" in output[1], (
+    assert output[0] == "" and "Agent registered:" in output[1], (
         "the fence after the register call must be its captured output"
     )
-    assert output[2] < FIRST_SCREEN, (
-        f"the captured output opens on line {output[2]}; it must start within the first {FIRST_SCREEN}"
+    assert output[3] <= FIRST_SCREEN, (
+        f"the captured output closes on line {output[3]}; the register call and all of its "
+        f"output must fit in the first {FIRST_SCREEN} lines"
     )
     assert re.search(r"\b20\d\d-\d\d-\d\d\b", prose), (
         "the text before the captured output must say when it was captured"
     )
 
 
+def test_root_readme_installs_the_rich_extra_its_captured_output_shows():
+    # Without rich the SDK prints the registration in an 11-line panel, which
+    # does not fit in the first screen with the commands above it.
+    installs = [
+        line for lang, body in fences(quick_start(ROOT_README)) if lang == "bash"
+        for line in body.split("\n") if line.startswith("pip install")
+    ]
+    assert installs == ['pip install "aim-sdk[rich]"'], (
+        f"the Quick start must install the rich extra its captured output shows, got {installs!r}"
+    )
+
+
+class MarkupStrippingConsole:
+    """Prints what rich prints for this SDK's console markup, without colour:
+    style tags such as [dim] and [/] dropped, an escaped \\[ printed as [. The
+    comparison below then holds whether or not rich is installed."""
+
+    def print(self, text=""):
+        print(re.sub(r"\\\[|\[/?[a-z0-9 #_]*\]", lambda m: "[" if m.group(0) == "\\[" else "", str(text)))
+
+
+def printed_line_pattern(module, marker):
+    """A regex for the f-string in `module` whose text contains `marker`."""
+    for node in ast.walk(ast.parse(Path(module.__file__).read_text(encoding="utf-8"))):
+        if isinstance(node, ast.JoinedStr):
+            parts = [v.value if isinstance(v, ast.Constant) else None for v in node.values]
+            if marker in "".join(p for p in parts if p is not None):
+                return "".join(".+?" if p is None else re.escape(p) for p in parts)
+    raise AssertionError(f"{module.__name__} has no f-string containing {marker!r}")
+
+
 def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monkeypatch, capsys):
     from aim_sdk import console as console_module
+    from aim_sdk import oauth as oauth_module
 
     register, output, _ = register_and_output(ROOT_README)
     call = next(
@@ -302,32 +333,46 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
     name = call.args[0].value
     capabilities = next(ast.literal_eval(k.value) for k in call.keywords if k.arg == "capabilities")
 
-    detection = re.fullmatch(r"  ○ Agent Type: using default '(\w+)'", output[1].split("\n", 1)[0])
+    lines = output[1].split("\n")
+    detection = re.fullmatch(r"  ○ Agent Type: using default '(\w+)'", lines[0])
     assert output[0] == "" and detection, (
         "the fence after the register call must be its captured output, "
         "opening with the agent-type line secure() prints"
     )
-    rows = dict(re.findall(r"^│  ([A-Za-z ]+):\s+(.*?)\s*│$", output[1], re.MULTILINE))
-    assert rows["Agent"] == name, "the captured output names a different agent than the call"
-    assert rows["Capabilities"] == ", ".join(capabilities), (
+    # The first call after `aim-sdk login` refreshes the sign-in, and the server
+    # rotates the refresh token; the SDK prints one line for that.
+    assert re.fullmatch(printed_line_pattern(oauth_module, "Token rotated successfully"), lines[1]), (
+        "the captured output's second line must be the token-rotation line this SDK prints"
+    )
+    shown = re.fullmatch(
+        r"\n\[OK\] Agent registered: (?P<name>.+)\n"
+        r"  ID: (?P<id>\S+)  Type: (?P<type>\S+)  Version: (?P<version>\S+)\n"
+        r"  Status: ○ (?P<status>\S+)  Trust: (?P<trust>\d+)%\n"
+        r"  Capabilities: (?P<capabilities>.+?)\n*",
+        "\n".join(lines[2:]),
+    )
+    assert shown, "the captured output must end with the registration lines the rich extra prints"
+    assert shown["name"] == name, "the captured output names a different agent than the call"
+    assert shown["capabilities"] == ", ".join(capabilities), (
         "the captured output lists different capabilities than the call grants"
     )
-    assert rows["Status"] == "pending", "a newly registered agent is pending until verified"
+    assert shown["status"] == "pending", "a newly registered agent is pending until verified"
 
-    # The plain-text panel is what `pip install aim-sdk` prints: rich is not a dependency.
-    monkeypatch.setattr(console_module, "RICH_AVAILABLE", False)
     printer = console_module.AIMConsole()
+    printer.console = MarkupStrippingConsole()
+    monkeypatch.setattr(console_module, "RICH_AVAILABLE", True)
     printer.detection_none("Agent Type", fallback=detection.group(1))
     printer.agent_registered(
         name=name,
-        agent_id=rows["ID"].replace("...", "-00000000-"),  # shortened back to the captured ID
-        agent_type=rows["Type"],
-        version=rows["Version"],
-        trust_score=int(rows["Trust Score"].rstrip("%")),
-        status=rows["Status"],
+        agent_id=shown["id"].replace("...", "-00000000-"),  # shortened back to the captured ID
+        agent_type=shown["type"],
+        version=shown["version"],
+        trust_score=int(shown["trust"]),
+        status=shown["status"],
         capabilities=capabilities,
     )
-    assert capsys.readouterr().out.rstrip("\n") == output[1].rstrip("\n"), (
+    printed = capsys.readouterr().out.split("\n", 1)
+    assert "\n".join([printed[0], lines[1], printed[1]]).rstrip("\n") == output[1].rstrip("\n"), (
         "the README's captured register output no longer matches what this SDK prints; "
         "capture it again"
     )
@@ -389,3 +434,12 @@ def test_walkthrough_types_only_root_readme_quick_start_lines():
         if m and not hidden and m.group(2) not in allowed:
             stray.append(f"tape.tape:{number}: {m.group(2)}")
     assert not stray, "typed lines that are not in the README Quick start:\n" + "\n".join(stray)
+
+
+def test_walkthrough_render_types_the_root_readme_install_line():
+    # render.sh puts the install step into the tape at render time, inside a
+    # shell-quoted string, so the tape test above never sees it.
+    typed = re.findall(r"""\\nType (?:'"'"'|")(pip install .*?)(?:'"'"'|")\\n""", RENDER.read_text(encoding="utf-8"))
+    assert typed, "render.sh no longer types an install line"
+    stray = sorted(set(typed) - readme_code_lines())
+    assert not stray, f"render.sh types install lines that are not in the README Quick start: {stray}"

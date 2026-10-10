@@ -98,10 +98,11 @@ fi
 if [ "$REHEARSAL" = 1 ]; then
   # A rehearsal installs the checkout's SDK, but through the README's own line:
   # the wheel is built from the (read-only) source mount under Hide and pip is
-  # pointed at it, so `pip install aim-sdk` on screen installs that wheel.
-  INSTALL='Hide\nType '"'"'w=$(mktemp -d) && cp -r /work/sdk "$w/src" && pip wheel -q -w "$w/dist" "$w/src" 2>&1 | tail -1; export PIP_NO_INDEX=1 PIP_FIND_LINKS="$w/dist"; clear'"'"'\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 300ms\nShow\nSleep 1s\nType "pip install aim-sdk"\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
+  # pointed at it, so `pip install "aim-sdk[rich]"` on screen installs that
+  # wheel and the rich extra's wheels built beside it.
+  INSTALL='Hide\nType '"'"'w=$(mktemp -d) && cp -r /work/sdk "$w/src" && pip wheel -q -w "$w/dist" "$w/src[rich]" 2>&1 | tail -1; export PIP_NO_INDEX=1 PIP_FIND_LINKS="$w/dist"; clear'"'"'\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 300ms\nShow\nSleep 1s\nType '"'"'pip install "aim-sdk[rich]"'"'"'\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
 else
-  INSTALL='Type "pip install aim-sdk"\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
+  INSTALL='Type '"'"'pip install "aim-sdk[rich]"'"'"'\nEnter\nWait+Line@600s /^\\$\\s*$/\nSleep 3s'
 fi
 python3 - "$SCENE/tape.tape" "$OUT/tape.rendered.tape" "$INSTALL" <<'PY'
 import sys
