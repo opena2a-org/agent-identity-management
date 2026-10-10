@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -285,6 +286,82 @@ func TestTrackedExecutableCensusFlagsAPlantedBinary(t *testing.T) {
 	if strings.Join(gotPaths, ",") != strings.Join(wantPaths, ",") {
 		t.Errorf("census flagged %v, want %v", found, wantPaths)
 	}
+}
+
+// terraformPlanOrState matches the file names Terraform writes for a saved plan
+// (`terraform plan -out tfplan`, or any *.tfplan) and for local state and its
+// backups (*.tfstate, *.tfstate.backup, *.tfstate.<serial>.backup). Both hold
+// resource attributes in clear text, including generated passwords and keys.
+var terraformPlanOrState = regexp.MustCompile(`(^|/)(tfplan|[^/]*\.tfplan|[^/]*\.tfstate(\.[^/]*)?)$`)
+
+// TestTheRepositoryTracksNoTerraformPlanOrState fails if a Terraform plan or
+// state file is tracked, or if the ignore rules that keep one out of a normal
+// `git add` are removed.
+func TestTheRepositoryTracksNoTerraformPlanOrState(t *testing.T) {
+	top := repositoryTop(t)
+
+	t.Run("matcher", func(t *testing.T) {
+		for path, want := range map[string]bool{
+			"tfplan":                                    true,
+			"infrastructure/terraform/tfplan":           true,
+			"infra/prod.tfplan":                         true,
+			"terraform.tfstate":                         true,
+			"infra/terraform.tfstate.backup":            true,
+			"infra/terraform.tfstate.1700000000.backup": true,
+			"infra/main.tf":                             false,
+			"infra/prod.tfvars":                         false,
+			"docs/tfplan.md":                            false,
+			"docs/tfstate.md":                           false,
+			"tfplan/README.md":                          false,
+			"scripts/tfplan.sh":                         false,
+		} {
+			if got := terraformPlanOrState.MatchString(path); got != want {
+				t.Errorf("terraformPlanOrState.MatchString(%q) = %v, want %v", path, got, want)
+			}
+		}
+	})
+
+	t.Run("census of the committed tree", func(t *testing.T) {
+		out, err := gitIn(top, "ls-tree", "-r", "-z", "--name-only", "--full-tree", "HEAD")
+		if err != nil {
+			t.Fatalf("git ls-tree HEAD: %v", err)
+		}
+		var paths, found []string
+		for _, p := range strings.Split(out, "\x00") {
+			if p == "" {
+				continue
+			}
+			paths = append(paths, p)
+			if terraformPlanOrState.MatchString(p) {
+				found = append(found, p)
+			}
+		}
+		if len(paths) == 0 {
+			t.Fatal("git ls-tree HEAD listed no files; a census that reads nothing proves nothing")
+		}
+		if len(found) > 0 {
+			t.Errorf("tracked Terraform plan or state files (remove with `git rm --cached`):\n  %s",
+				strings.Join(found, "\n  "))
+		}
+	})
+
+	t.Run("plan and state paths are ignored", func(t *testing.T) {
+		for _, p := range []string{
+			"tfplan",
+			"infrastructure/terraform/tfplan",
+			"infrastructure/terraform/prod.tfplan",
+			"terraform.tfstate",
+			"infrastructure/terraform/terraform.tfstate",
+			"infrastructure/terraform/terraform.tfstate.backup",
+			"infrastructure/terraform/terraform.tfstate.1700000000.backup",
+		} {
+			// A personal global excludes file must not make this pass on one machine only.
+			if _, err := gitIn(top, "-c", "core.excludesFile=/dev/null",
+				"check-ignore", "--no-index", "--quiet", "--", p); err != nil {
+				t.Errorf("no ignore rule in the repository covers %s", p)
+			}
+		}
+	})
 }
 
 // syntheticPEHeader returns the smallest byte string isPEImage accepts: an MZ

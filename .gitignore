@@ -77,6 +77,13 @@ target/
 *.db
 *.sqlite
 
+# Terraform saved plans and local state hold resource attributes in clear text.
+# Guarded by apps/backend/cmd/server/tracked_executables_test.go.
+tfplan
+*.tfplan
+*.tfstate
+*.tfstate.*
+
 # Logs
 logs/
 *.log

@@ -85,6 +85,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   advises, and `npm run type-check` in `apps/web` runs `next typegen` first, so the typecheck still has the file on
   a fresh checkout.
 
+### Changed — Terraform saved plans and local state are kept out of the repository
+
+- The repository-root `.gitignore` now ignores `tfplan`, `*.tfplan`, `*.tfstate` and `*.tfstate.*`. A saved
+  plan or a local state file holds resource attributes in clear text, including generated passwords and keys,
+  and a `terraform plan -out tfplan` run anywhere in the tree used to leave it ready for a normal `git add`.
+  None is tracked today. A test in `apps/backend/cmd/server` fails if one is committed or if a rule is
+  removed, and evaluates the rules with any personal global excludes file switched off.
+
 ### Fixed — an issued trust credential is returned only when it carries both signature suites and the values AIM asked for
 
 - `POST /api/v1/agents/:id/atc` returned whatever credential the issuer signed. OpenA2A AIM (Agent Identity Management)
