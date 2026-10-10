@@ -11,7 +11,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
-### Added: the server reports at start whether audit record chains can start
+### Added — the server reports at start whether audit record chains can start
 
 - At start the server reads whether a foreign key can still remove `audit_logs` or
   `verification_events` rows by cascade, and whether any organization's audit record chain has
@@ -26,7 +26,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - If a chain has started and such a foreign key exists, the line is a `SECURITY` line ending
   `finding=cascading_foreign_keys`: a cascade there would remove chained rows with no record.
 
-### Changed: the compliance report and an MCP server's audit timeline name who acted by the audit record's own rule
+### Changed — the compliance report and an MCP server's audit timeline name who acted by the audit record's own rule
 
 - The audit section of `GET /api/v1/compliance/export` names each record's actor the way the audit
   record's `actorType` does. Each of `recentActions` and `topUsers` carries `actorType`, and its
@@ -43,7 +43,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `actorName` from the same rule, so an agent's verified action reads as the agent's, not its
   owner's.
 
-### Changed: audit records say who acted, and leave out an address or user agent that was never recorded
+### Changed — audit records say who acted, and leave out an address or user agent that was never recorded
 
 - Every audit record returned by `GET /api/v1/admin/audit-logs`, `GET /api/v1/admin/audit-logs/{id}`,
   `GET /api/v1/admin/audit-logs/export?format=json`, `GET /api/v1/agents/{id}/audit-logs` and
@@ -58,7 +58,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   organization holding a record of an agent's or the system's act; such a record has an empty
   `UserID` cell.
 
-### Added: `aim-breakglass chain status`, the operator's read of an organization's audit record chain
+### Added — `aim-breakglass chain status`, the operator's read of an organization's audit record chain
 
 - `aim-breakglass chain status --organization <id>` reports one organization's chain through the
   same chain-state read as `GET /api/v1/admin/audit-logs/chain/head`: `chainState`, `chainId`,
@@ -75,7 +75,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The backend image ships the command as `/app/aim-breakglass`, next to `aim-migrate` and
   `aim-bootstrap`.
 
-### Added: admins can read the state of their organization's audit record chain
+### Added — admins can read the state of their organization's audit record chain
 
 - `GET /api/v1/admin/audit-logs/chain/head` answers with `chainState` (`notStarted`, `extendable` or
   `notExtendable`), `chainId`, `head` (`seq` and `hash`) and `latestCheckpoint`, and with `reason`
