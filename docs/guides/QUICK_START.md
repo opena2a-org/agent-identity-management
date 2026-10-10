@@ -144,12 +144,26 @@ go test ./... -short
 
 ### Integration Tests
 
-Integration tests require a running backend:
+Integration tests run against a running backend, and that backend must be started with `ENVIRONMENT=test`. The
+suite calls `/api/v1/public/login` and `/api/v1/public/register` more than ten times a minute; `ENVIRONMENT=test`
+raises the backend's rate limits tenfold, and under any other value, including the `development` that
+`docker-compose.yml` sets by default, those calls are answered 429 after ten in a minute. Setting `ENVIRONMENT` on
+the `go test` process changes nothing, because the limits are read by the backend.
 
 ```bash
+# Start the backend under test (Step 2) with the test rate limits
 cd apps/backend
-ENVIRONMENT=test go test ./tests/integration/... -v
+ENVIRONMENT=test ./aim-server
+
+# Or, for the backend in docker-compose.yml
+ENVIRONMENT=test docker compose up -d backend
+
+# Then, in another terminal, run the suite
+cd apps/backend
+go test ./tests/integration/... -v
 ```
+
+Never set `ENVIRONMENT=test` on a deployment: the backend logs a warning at start when it does.
 
 ---
 
