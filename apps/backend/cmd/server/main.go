@@ -308,70 +308,14 @@ func main() {
 
 	// DID Resolution endpoint (no auth required)
 	// Resolves did:aip:aim_<uuid> to a W3C DID Document
-	// NOTE: DID resolution (/api/v1/did/*) is registered inside setupRoutes() on the v1
-	// group with the shared rate limiter; see the v1.Get("/did/*", ...) line there.
+	// NOTE: DID resolution (/api/v1/did/*) is registered inside mountAPIRoutes() on the
+	// v1 group with the shared rate limiter; see the v1.Get("/did/*", ...) line there.
 
 	// NOTE: Revocation list route moved into setupRoutes() to avoid Fiber v3 beta
 	// route shadowing when the /api/v1 group is registered with middleware.
 
-	// ⭐ SDK API routes.
-	//
-	// The paths themselves live in sdk_api_routes.go — one table, mounted here
-	// and by the tests through the same registerSDKAPIRoutes call. Previously
-	// the registration was inline here and the integration tests re-registered
-	// each handler at a path of their own choosing, so the suite could not see
-	// a backend/SDK path mismatch: POST /agents/:id/isolation-attestation, the
-	// path all three shipped SDKs emit, 404'd in production with a green suite.
-	//
-	// SECURITY: two routes are registered on the bare app, above the group, and
-	// are therefore NOT reached by the group's Ed25519/JWT middleware — that is
-	// exactly how the verification write routes stayed unauthenticated from
-	// 2025-11-06 until they were moved onto the group. sdkAPIRoute.Bare marks
-	// them, and routes_gate_test.go requires each one to be enumerated there
-	// with the in-handler control that justifies it.
-	registerSDKAPIRoutes(app, sdkAPIDeps{
-		BareMiddleware: middleware.RateLimitMiddleware(),
-		GroupMiddleware: []fiber.Handler{
-			middleware.PQCAgentMiddleware(services.Agent),           // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
-			middleware.AuthMiddleware(jwtService),                   // Fallback to JWT if Ed25519 not present
-			middleware.AgentActivityTouchMiddleware(services.Agent), // Touches agents.last_active on agent-authed responses (#167)
-			middleware.RateLimitMiddleware(),
-		},
-		// Every /agents/ route in the table binds its agent parameter to the
-		// authenticated agent; GET /agents/:identifier also admits the agent's
-		// own name, read from the agent's own row.
-		AgentNameResolver: agentNameResolver(services.Agent),
-		Handlers: sdkAPIHandlers{
-			CreateVerification:          h.Verification.CreateVerification,
-			GetVerificationSDK:          h.Verification.GetVerificationSDK,
-			SubmitVerificationResult:    h.Verification.SubmitVerificationResult,
-			UpdateExecutionStatus:       h.Verification.UpdateExecutionStatus,
-			GetAgentByIdentifier:        h.Agent.GetAgentByIdentifier,
-			GrantCapability:             h.Capability.GrantCapability,
-			RegisterCapability:          h.Capability.RegisterCapability,
-			ListAgentCapabilityRequests: h.CapabilityRequest.ListAgentCapabilityRequests,
-			CreateCapabilityRequest:     h.CapabilityRequest.CreateCapabilityRequest,
-			CreateMCPServer:             h.MCP.CreateMCPServer,
-			ListMCPServers:              h.MCP.ListMCPServers,
-			GetMCPServerByName:          h.MCP.GetMCPServerByName,
-			RecordMCPConnection:         h.MCPAttestation.RecordMCPConnection,
-			RecordMCPUsageReport:        h.MCPAttestation.RecordMCPUsageReport,
-			ReportDetection:             h.Detection.ReportDetection,
-			Heartbeat:                   h.Lifecycle.Heartbeat,
-			SubmitIsolationAttestation:  h.TrustScore.SubmitIsolationAttestation,
-		},
-	})
-
-	// API v1 routes (JWT authenticated)
-	v1 := app.Group("/api/v1")
-
-	// Public DID resolver. Unauthenticated by design (AIP discovery), so it
-	// carries the shared rate limiter on its own registration line, and the
-	// handler resolves only verified agents: a pending registration answers
-	// exactly as an unknown DID does, so the endpoint is not an oracle for
-	// "registered but unverified".
-	v1.Get("/did/*", middleware.RateLimitMiddleware(), h.AIP.ResolveDID)
-	setupRoutes(v1, h, services, jwtService, repos.SDKToken, db)
+	// Every /api/v1 route: the SDK API table on the bare app, then the v1 group.
+	mountAPIRoutes(app, h, services, jwtService, repos.SDKToken, db)
 
 	// Start server
 	port := cfg.Server.Port
@@ -1418,6 +1362,71 @@ func initEmailService() (domain.EmailService, error) {
 	log.Printf("✅ Email service initialized (provider: %s, from: %s)", provider, fromAddress)
 
 	return service, nil
+}
+
+// mountAPIRoutes registers every route under /api/v1, in the order the server
+// matches them. main calls it, and so does the strict-limiter route census in
+// strict_rate_limit_routes_test.go, so the census runs the table that ships.
+func mountAPIRoutes(app *fiber.App, h *Handlers, services *Services, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
+	// ⭐ SDK API routes.
+	//
+	// The paths themselves live in sdk_api_routes.go: one table, mounted here
+	// and by the tests through the same registerSDKAPIRoutes call. Previously
+	// the registration was inline in main and the integration tests
+	// re-registered each handler at a path of their own choosing, so the suite
+	// could not see a backend/SDK path mismatch: POST
+	// /agents/:id/isolation-attestation, the path all three shipped SDKs emit,
+	// 404'd in production with a green suite.
+	//
+	// SECURITY: two routes are registered on the bare app, above the group, and
+	// are therefore NOT reached by the group's Ed25519/JWT middleware. That is
+	// exactly how the verification write routes stayed unauthenticated from
+	// 2025-11-06 until they were moved onto the group. sdkAPIRoute.Bare marks
+	// them, and routes_gate_test.go requires each one to be enumerated there
+	// with the in-handler control that justifies it.
+	registerSDKAPIRoutes(app, sdkAPIDeps{
+		BareMiddleware: middleware.RateLimitMiddleware(),
+		GroupMiddleware: []fiber.Handler{
+			middleware.PQCAgentMiddleware(services.Agent),           // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
+			middleware.AuthMiddleware(jwtService),                   // Fallback to JWT if Ed25519 not present
+			middleware.AgentActivityTouchMiddleware(services.Agent), // Touches agents.last_active on agent-authed responses (#167)
+			middleware.RateLimitMiddleware(),
+		},
+		// Every /agents/ route in the table binds its agent parameter to the
+		// authenticated agent; GET /agents/:identifier also admits the agent's
+		// own name, read from the agent's own row.
+		AgentNameResolver: agentNameResolver(services.Agent),
+		Handlers: sdkAPIHandlers{
+			CreateVerification:          h.Verification.CreateVerification,
+			GetVerificationSDK:          h.Verification.GetVerificationSDK,
+			SubmitVerificationResult:    h.Verification.SubmitVerificationResult,
+			UpdateExecutionStatus:       h.Verification.UpdateExecutionStatus,
+			GetAgentByIdentifier:        h.Agent.GetAgentByIdentifier,
+			GrantCapability:             h.Capability.GrantCapability,
+			RegisterCapability:          h.Capability.RegisterCapability,
+			ListAgentCapabilityRequests: h.CapabilityRequest.ListAgentCapabilityRequests,
+			CreateCapabilityRequest:     h.CapabilityRequest.CreateCapabilityRequest,
+			CreateMCPServer:             h.MCP.CreateMCPServer,
+			ListMCPServers:              h.MCP.ListMCPServers,
+			GetMCPServerByName:          h.MCP.GetMCPServerByName,
+			RecordMCPConnection:         h.MCPAttestation.RecordMCPConnection,
+			RecordMCPUsageReport:        h.MCPAttestation.RecordMCPUsageReport,
+			ReportDetection:             h.Detection.ReportDetection,
+			Heartbeat:                   h.Lifecycle.Heartbeat,
+			SubmitIsolationAttestation:  h.TrustScore.SubmitIsolationAttestation,
+		},
+	})
+
+	// API v1 routes (JWT authenticated)
+	v1 := app.Group("/api/v1")
+
+	// Public DID resolver. Unauthenticated by design (AIP discovery), so it
+	// carries the shared rate limiter on its own registration line, and the
+	// handler resolves only verified agents: a pending registration answers
+	// exactly as an unknown DID does, so the endpoint is not an oracle for
+	// "registered but unverified".
+	v1.Get("/did/*", middleware.RateLimitMiddleware(), h.AIP.ResolveDID)
+	setupRoutes(v1, h, services, jwtService, sdkTokenRepo, db)
 }
 
 func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
