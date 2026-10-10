@@ -1128,6 +1128,8 @@ class APIClient {
       acknowledgedBy?: string;
       acknowledgedAt?: string;
       createdAt: string;
+      occurrenceCount?: number;
+      lastSeenAt?: string | null;
       metadata?: Record<string, any>;
     }>;
     limit: number;

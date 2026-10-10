@@ -32,6 +32,8 @@ interface Alert {
   acknowledgedBy?: string;
   acknowledgedAt?: string;
   createdAt: string;
+  occurrenceCount?: number;
+  lastSeenAt?: string | null;
 }
 
 interface AuditLog {
@@ -476,6 +478,18 @@ export function AlertDetailPanel({
                 <span className="text-sm text-ink-secondary">Created</span>
                 <span className="text-sm text-ink">{formatDateTime(alert.createdAt)}</span>
               </div>
+              {(alert.occurrenceCount ?? 1) > 1 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-ink-secondary">Occurrences</span>
+                  <span className="text-sm text-ink">{alert.occurrenceCount}</span>
+                </div>
+              )}
+              {(alert.occurrenceCount ?? 1) > 1 && alert.lastSeenAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-ink-secondary">Last seen</span>
+                  <span className="text-sm text-ink">{formatDateTime(alert.lastSeenAt)}</span>
+                </div>
+              )}
               {alert.isAcknowledged && alert.acknowledgedAt && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-ink-secondary">Acknowledged</span>

@@ -660,11 +660,17 @@ GET /api/v1/admin/alerts
       "resourceType": "apiKey",
       "resourceId": "789e4567-e89b-12d3-a456-426614174000",
       "isAcknowledged": false,
-      "createdAt": "2025-01-05T00:00:00Z"
+      "createdAt": "2025-01-05T00:00:00Z",
+      "occurrenceCount": 1,
+      "lastSeenAt": null
     }
   ]
 }
 ```
+
+`occurrenceCount` is how many times the alert was raised. A repeated capability violation (same agent, capability
+and resource) is counted on the existing alert while that alert is unacknowledged and less than 10 minutes old,
+instead of creating a new one, and `lastSeenAt` records the latest repeat; it is `null` for an alert raised once.
 
 ---
 

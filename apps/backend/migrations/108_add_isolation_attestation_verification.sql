@@ -39,7 +39,7 @@ ALTER TABLE isolation_attestations
 COMMENT ON COLUMN isolation_attestations.verified IS
     'TRUE only when an INDEPENDENT source corroborated THIS row''s posture. Bound to the row, '
     'never to the agent: a newer attestation starts unverified and inherits nothing. No write '
-    'path sets this TRUE (roadmap aim-isolation-verification Phase 2); TEE attestation and '
+    'path sets this TRUE yet; once an independent source exists, TEE attestation and '
     'orchestrator/host metadata may, an HMA static scan may not, the SDK never.';
 
 COMMENT ON COLUMN isolation_attestations.verified_by IS

@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,7 +20,16 @@ func NewAlertRepository(db *sql.DB) *AlertRepository {
 	return &AlertRepository{db: db}
 }
 
+// alertExecer is what insertAlert needs: *sql.DB or *sql.Tx.
+type alertExecer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
 func (r *AlertRepository) Create(alert *domain.Alert) error {
+	return insertAlert(r.db, alert)
+}
+
+func insertAlert(exec alertExecer, alert *domain.Alert) error {
 	query := `
 		INSERT INTO alerts (id, organization_id, alert_type, severity, title, description, resource_type, resource_id, audit_id, agent_name, source_ip, metadata, is_acknowledged, created_at, dedupe_key)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
@@ -55,7 +66,7 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 		dedupeKey = &alert.DedupeKey
 	}
 
-	_, err = r.db.Exec(query,
+	_, err = exec.Exec(query,
 		alert.ID,
 		alert.OrganizationID,
 		alert.AlertType,
@@ -72,13 +83,19 @@ func (r *AlertRepository) Create(alert *domain.Alert) error {
 		alert.CreatedAt,
 		dedupeKey,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	// The row's occurrence_count starts at 1.
+	alert.OccurrenceCount = 1
+	return nil
 }
 
 func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 	query := `
 		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at,
+		       occurrence_count, last_seen_at
 		FROM alerts
 		WHERE id = $1
 	`
@@ -104,6 +121,8 @@ func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 		&alert.AcknowledgedBy,
 		&alert.AcknowledgedAt,
 		&alert.CreatedAt,
+		&alert.OccurrenceCount,
+		&alert.LastSeenAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -136,7 +155,8 @@ func (r *AlertRepository) GetByID(id uuid.UUID) (*domain.Alert, error) {
 func (r *AlertRepository) GetByOrganization(orgID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
 	query := `
 		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at,
+		       occurrence_count, last_seen_at
 		FROM alerts
 		WHERE organization_id = $1
 		ORDER BY created_at DESC
@@ -158,7 +178,8 @@ func (r *AlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status stri
 	var args []interface{}
 
 	baseSelect := `SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at,
+		       occurrence_count, last_seen_at
 		FROM alerts`
 
 	if status == "acknowledged" {
@@ -197,7 +218,8 @@ func (r *AlertRepository) GetByOrganizationFiltered(orgID uuid.UUID, status stri
 func (r *AlertRepository) GetUnacknowledged(orgID uuid.UUID) ([]*domain.Alert, error) {
 	query := `
 		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at,
+		       occurrence_count, last_seen_at
 		FROM alerts
 		WHERE organization_id = $1 AND is_acknowledged = false
 		ORDER BY created_at DESC
@@ -230,46 +252,63 @@ func (r *AlertRepository) Delete(id uuid.UUID) error {
 	return err
 }
 
-// FindOpenByDedupeKey returns the newest unacknowledged alert in orgID with
-// dedupeKey created at or after since, or nil when there is none.
-func (r *AlertRepository) FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*domain.Alert, error) {
-	query := `
-		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+// CreateCoalesced counts a repeat on the newest unacknowledged alert in the
+// alert's organization with the same dedupe key created at or after since, or
+// inserts the alert when there is none, and reports whether it inserted.
+//
+// The lookup and the insert run in one transaction that first takes a
+// transaction-scoped advisory lock on the organization and key. Without it,
+// two first occurrences arriving together each find no open alert and each
+// insert one. Under READ COMMITTED every statement reads what was committed
+// when it starts, so the lookup after the lock sees the alert the previous
+// holder inserted.
+func (r *AlertRepository) CreateCoalesced(alert *domain.Alert, since, seenAt time.Time) (bool, error) {
+	if alert.DedupeKey == "" {
+		return false, errors.New("CreateCoalesced: alert has no dedupe key")
+	}
+
+	tx, err := r.db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec(
+		`SELECT pg_advisory_xact_lock(hashtext('alert_dedupe'), hashtext($1))`,
+		alert.OrganizationID.String()+":"+alert.DedupeKey,
+	); err != nil {
+		return false, fmt.Errorf("failed to lock alert dedupe key: %w", err)
+	}
+
+	var openID uuid.UUID
+	err = tx.QueryRow(`
+		SELECT id
 		FROM alerts
 		WHERE organization_id = $1 AND dedupe_key = $2 AND is_acknowledged = false AND created_at >= $3
 		ORDER BY created_at DESC
 		LIMIT 1
-	`
-
-	rows, err := r.db.Query(query, orgID, dedupeKey, since)
-	if err != nil {
-		return nil, err
+	`, alert.OrganizationID, alert.DedupeKey, since).Scan(&openID)
+	switch {
+	case err == nil:
+		if _, err := tx.Exec(`
+			UPDATE alerts
+			SET occurrence_count = occurrence_count + 1, last_seen_at = $1
+			WHERE id = $2
+		`, seenAt, openID); err != nil {
+			return false, err
+		}
+		return false, tx.Commit()
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, err
 	}
-	defer rows.Close()
 
-	alerts, err := r.scanAlerts(rows)
-	if err != nil {
-		return nil, err
+	if err := insertAlert(tx, alert); err != nil {
+		return false, err
 	}
-	if len(alerts) == 0 {
-		return nil, nil
+	if err := tx.Commit(); err != nil {
+		return false, err
 	}
-	alerts[0].DedupeKey = dedupeKey
-	return alerts[0], nil
-}
-
-// IncrementOccurrence counts one more occurrence on an alert and records when
-// it was seen.
-func (r *AlertRepository) IncrementOccurrence(id uuid.UUID, seenAt time.Time) error {
-	query := `
-		UPDATE alerts
-		SET occurrence_count = occurrence_count + 1, last_seen_at = $1
-		WHERE id = $2
-	`
-
-	_, err := r.db.Exec(query, seenAt, id)
-	return err
+	return true, nil
 }
 
 // BulkAcknowledge updates all alerts for an org in one query
@@ -373,7 +412,8 @@ func (r *AlertRepository) CountBySeverity(orgID uuid.UUID, status string) (criti
 func (r *AlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset int) ([]*domain.Alert, error) {
 	query := `
 		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at,
+		       occurrence_count, last_seen_at
 		FROM alerts
 		WHERE resource_id = $1
 		ORDER BY created_at DESC
@@ -392,7 +432,8 @@ func (r *AlertRepository) GetByResourceID(resourceID uuid.UUID, limit, offset in
 func (r *AlertRepository) GetUnacknowledgedByResourceID(resourceID uuid.UUID) ([]*domain.Alert, error) {
 	query := `
 		SELECT id, organization_id, alert_type, severity, title, description, resource_type, resource_id,
-		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at
+		       audit_id, agent_name, source_ip, COALESCE(metadata, '{}'), is_acknowledged, acknowledged_by, acknowledged_at, created_at,
+		       occurrence_count, last_seen_at
 		FROM alerts
 		WHERE resource_id = $1 AND is_acknowledged = false
 		ORDER BY created_at DESC
@@ -432,6 +473,8 @@ func (r *AlertRepository) scanAlerts(rows *sql.Rows) ([]*domain.Alert, error) {
 			&alert.AcknowledgedBy,
 			&alert.AcknowledgedAt,
 			&alert.CreatedAt,
+			&alert.OccurrenceCount,
+			&alert.LastSeenAt,
 		)
 		if err != nil {
 			return nil, err

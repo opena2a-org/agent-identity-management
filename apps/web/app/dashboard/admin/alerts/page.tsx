@@ -53,6 +53,8 @@ interface Alert {
   acknowledgedBy?: string;
   acknowledgedAt?: string;
   createdAt: string;
+  occurrenceCount?: number;
+  lastSeenAt?: string | null;
 }
 
 const severityConfig = {
@@ -694,6 +696,15 @@ function AlertsPageContent() {
                           </span>
                           <span>•</span>
                           <span>{formatDateTime(alert.createdAt)}</span>
+                          {(alert.occurrenceCount ?? 1) > 1 && (
+                            <>
+                              <span>•</span>
+                              <span>
+                                Seen {alert.occurrenceCount} times
+                                {alert.lastSeenAt && `, last ${formatDateTime(alert.lastSeenAt)}`}
+                              </span>
+                            </>
+                          )}
                         </div>
 
                         {alert.isAcknowledged && (

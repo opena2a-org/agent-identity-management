@@ -95,17 +95,9 @@ func (m *MockAlertRepoForAlerts) GetUnacknowledgedByResourceID(resourceID uuid.U
 	return args.Get(0).([]*domain.Alert), args.Error(1)
 }
 
-func (m *MockAlertRepoForAlerts) FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*domain.Alert, error) {
-	args := m.Called(orgID, dedupeKey, since)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.Alert), args.Error(1)
-}
-
-func (m *MockAlertRepoForAlerts) IncrementOccurrence(id uuid.UUID, seenAt time.Time) error {
-	args := m.Called(id, seenAt)
-	return args.Error(0)
+func (m *MockAlertRepoForAlerts) CreateCoalesced(alert *domain.Alert, since, seenAt time.Time) (bool, error) {
+	args := m.Called(alert, since, seenAt)
+	return args.Bool(0), args.Error(1)
 }
 
 func (m *MockAlertRepoForAlerts) Delete(id uuid.UUID) error {

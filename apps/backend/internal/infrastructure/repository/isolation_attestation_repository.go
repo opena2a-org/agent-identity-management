@@ -24,9 +24,9 @@ func NewIsolationAttestationRepository(db *sql.DB) *IsolationAttestationReposito
 //
 // `verified` is written as the literal FALSE and is NOT taken from the struct
 // field. Every attestation reaching this method is a self-report, and there is
-// no independent verification source to write a TRUE from (roadmap
-// aim-isolation-verification Phase 2). Hard-coding it here means the invariant
-// "no ingest path can produce a verified row" holds structurally: a future
+// no independent verification source to write a TRUE from. Hard-coding it here
+// means the invariant "no ingest path can produce a verified row" holds
+// structurally: a future
 // caller that builds an IsolationAttestation with Verified set — by mistake or
 // by an attacker-influenced field — still writes an unverified row. When a
 // verifier does exist it gets its own method, so the honest write and the

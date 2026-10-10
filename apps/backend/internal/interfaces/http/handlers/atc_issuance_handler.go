@@ -105,8 +105,7 @@ func (h *ATCIssuanceHandler) IssueATC(c fiber.Ctx) error {
 	// the Registry is the CA. The parsed struct above is used only for the audit log.
 	//
 	// The unsigned provenance context (confidence, isolation caveat) keeps the badge
-	// honest about factor 9 until the verified isolation writer ships
-	// (aim-isolation-verification).
+	// honest about factor 9 until a verified isolation writer exists.
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"credential": cred.Raw,
 		"provenance": fiber.Map{

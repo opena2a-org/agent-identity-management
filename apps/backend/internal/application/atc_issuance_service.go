@@ -90,9 +90,9 @@ type ATCIssuanceResult struct {
 	Confidence float64 `json:"confidence"`
 
 	// IsolationSelfReported is true while factor 9 (execution isolation) is
-	// self-reported. AIM has no verified isolation writer until the
-	// aim-isolation-verification track ships; surfacing this keeps the badge
-	// honest about the one factor whose provenance is not yet attested.
+	// self-reported. AIM has no verified isolation writer until an independent
+	// verification source exists; surfacing this keeps the badge honest about
+	// the one factor whose provenance is not yet attested.
 	IsolationSelfReported bool `json:"isolationSelfReported"`
 }
 
