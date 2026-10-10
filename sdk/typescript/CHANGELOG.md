@@ -71,6 +71,11 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   `v1_1-hybrid-mldsa-tampered.json` and `v1_1-untrusted-chain-authority.json`, which it accepted; the conformance test
   now checks each fixture's verdict and rejection category, not only that raw and parsed input agree.
 
+- `new LocalVerifier` throws `ConfigurationError` when an `ML-DSA-65` entry in `publicKeys` is not 3904 hex
+  characters (a 1952-byte raw key). Such a key was dropped silently, so a mistyped key made every hybrid credential
+  reject with `no eligible ML-DSA-65 trust anchor`, a reason that pointed at the credential rather than the
+  configuration. The error names the key's `keyId` and the length it has (#621).
+
 - `OAuthTokenManager` now obtains a token the AIM server issues. It posted to `/oauth/token`, which the server does
   not serve (404), with `grant_type=client_credentials`, which the token endpoint answers with 400
   `unsupported_grant_type`; its client assertion was padded standard base64 and its signature covered a
