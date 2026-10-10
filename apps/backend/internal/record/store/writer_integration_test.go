@@ -204,6 +204,68 @@ func TestRecordChainStateCell(t *testing.T) {
 		require.Equal(t, NotExtendableNoRecords, status.Reason)
 		wantWriteError(t, write(org), ClassExpansion, ReasonChainHead)
 	})
+
+	t.Run("notExtendable/head_mismatch/head_seq", func(t *testing.T) {
+		org := seedOrg(t, plain)
+		_, err := h.w.start(ctx, org)
+		require.NoError(t, err)
+		_, err = plain.Exec(`UPDATE record_chains SET head_seq = head_seq + 1 WHERE organization_id = $1`, org)
+		require.NoError(t, err)
+		status, err := ReadChainState(ctx, plain, org)
+		require.NoError(t, err)
+		require.Equal(t, record.ChainNotExtendable, status.State)
+		require.Equal(t, NotExtendableHeadMismatch, status.Reason)
+		wantWriteError(t, write(org), ClassExpansion, ReasonChainHead)
+	})
+
+	// The CHECK constraints of audit_records keep a stored record's hash and
+	// payload type consistent, so each case drops the one in its way in a
+	// transaction that is rolled back, and reads the chain and runs the
+	// writer's append step in that transaction.
+	for name, c := range map[string]struct{ constraint, change string }{
+		"payload":      {"audit_records_hash_is_payload_digest", `payload = payload || '\x20'::bytea`},
+		"payload_type": {"audit_records_payload_type_check", `payload_type = 'application/json'`},
+	} {
+		t.Run("notExtendable/record_modified/"+name, func(t *testing.T) {
+			org := seedOrg(t, plain)
+			_, err := h.w.start(ctx, org)
+			require.NoError(t, err)
+			require.NoError(t, write(org))
+			tx, err := plain.BeginTx(ctx, nil)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback() }()
+			_, err = tx.ExecContext(ctx, `ALTER TABLE audit_records DROP CONSTRAINT `+c.constraint)
+			require.NoError(t, err)
+			res, err := tx.ExecContext(ctx, `UPDATE audit_records SET `+c.change+`
+				WHERE (chain_id, seq) = (SELECT id, head_seq FROM record_chains WHERE organization_id = $1)`, org)
+			require.NoError(t, err)
+			changed, err := res.RowsAffected()
+			require.NoError(t, err)
+			require.Equal(t, int64(1), changed, "the head record was not changed")
+			status, err := ReadChainState(ctx, tx, org)
+			require.NoError(t, err)
+			require.Equal(t, record.ChainNotExtendable, status.State)
+			require.Equal(t, NotExtendableRecordModified, status.Reason)
+			d := testDraft()
+			_, reason, err := h.w.appendLocked(ctx, tx, org, &d, nil, time.Now(), time.Now().Add(time.Second), false)
+			require.Error(t, err)
+			require.Equal(t, ReasonChainHead, reason)
+		})
+	}
+
+	t.Run("extendable/another_key", func(t *testing.T) {
+		org := seedOrg(t, plain)
+		_, err := h.w.start(ctx, org)
+		require.NoError(t, err)
+		other := newHarness(t, db, nil)
+		_, err = other.w.Write(ctx, Write{Class: ClassExpansion, OrganizationID: org, Draft: testDraft()})
+		wantWriteError(t, err, ClassExpansion, ReasonSigner)
+		status, err := ReadChainState(ctx, plain, org)
+		require.NoError(t, err)
+		require.Equal(t, record.ChainExtendable, status.State)
+		require.Equal(t, int64(0), status.Head.Seq, "a write under another key extended the chain")
+		require.NoError(t, write(org), "the chain's own key no longer extends it")
+	})
 }
 
 // Each class and reason is counted once per failed write, other series stay
