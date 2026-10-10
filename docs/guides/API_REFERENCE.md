@@ -668,9 +668,10 @@ GET /api/v1/admin/alerts
 }
 ```
 
-`occurrenceCount` is how many times the alert was raised. A repeated capability violation (same agent, capability
-and resource) is counted on the existing alert while that alert is unacknowledged and less than 10 minutes old,
-instead of creating a new one, and `lastSeenAt` records the latest repeat; it is `null` for an alert raised once.
+`occurrenceCount` is how many times the alert was raised, and `lastSeenAt` records the latest repeat; it is `null`
+for an alert raised once. The server can count a repeat on an existing alert, while that alert is unacknowledged and
+less than 10 minutes old, instead of creating a new one. No alert the server creates uses this yet, including the
+alerts `POST /api/v1/agents/:id/verify-capability` raises, so each alert has an `occurrenceCount` of 1.
 
 ---
 
