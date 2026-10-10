@@ -92,11 +92,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   or a higher trust level than AIM requested, reached the caller as AIM's credential. ATX core section 1.1 says the
   signature block carries at minimum one Ed25519 signature and one ML-DSA-65 signature.
 - AIM now refuses the issuer's credential, and the route answers 502 as it does for any failed issuance, when it has
-  no Ed25519 signature, no ML-DSA-65 signature, or a signature in any other suite (Ed25519 and ML-DSA-65 are the only
-  suites ATX registers, and a verifier rejects a suite it does not implement); when it names another agent; when its
-  `trustScore` differs from the 0-100 score AIM sent in the six-digit form the v1.1 signature covers; or when its
-  `trustLevel` is higher than the level AIM requested. A lower level is accepted. Signature validity is still checked
-  by the relying party's verifier, not here.
+  no Ed25519 signature, no ML-DSA-65 signature, or a signature in any other suite (the ATX credential schema admits
+  only Ed25519 and ML-DSA-65 as `signatures[].algorithm`, and they are the only suites ATX core section 14 registers);
+  when it names another agent; when its `trustScore` differs from the 0-100 score AIM sent in the six-digit form the
+  v1.1 signature covers; or when its `trustLevel` is higher than the level AIM requested. A lower level is accepted.
+  Signature validity is still checked by the relying party's verifier, not here.
 - Issuance through an issuer that signs with Ed25519 only, or reads `trustScore` on the 0-1 scale, now fails until the
   issuer signs with both suites and reads the 0-100 scale.
 - `apps/backend/internal/application/atc_issuance_service_test.go` fails when the service returns a credential with

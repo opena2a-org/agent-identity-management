@@ -176,10 +176,10 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 // relying party's verifier's work (ATX core section 1.3).
 //
 //   - Signature suites. Core section 1.1: "The signature block carries at
-//     minimum one Ed25519 signature and one ML-DSA-65 signature." Section 13
-//     (Cryptographic agility) has a verifier reject a credential that declares
-//     a suite the verifier does not implement, and Ed25519 and ML-DSA-65 are the
-//     only suites section 14 registers, so a signature in any other suite is
+//     minimum one Ed25519 signature and one ML-DSA-65 signature." The ATX
+//     credential schema (schemas/atx-credential-v1.1.schema.json) admits only
+//     Ed25519 and ML-DSA-65 as signatures[].algorithm, and they are the only
+//     suites section 14 registers, so a signature in any other suite is
 //     refused as well.
 //   - Agent and trustScore. The credential names the agent AIM asked about and
 //     carries the trustScore AIM sent, compared in the form the v1.1 signature

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -597,6 +598,45 @@ func TestCheckIssuedATC_ConformanceFixtures(t *testing.T) {
 				t.Fatalf("checkIssuedATC(%s) = %v, want ErrATCNotConforming", tc.file, err)
 			}
 		})
+	}
+}
+
+// TestCheckIssuedATC_DocCitesWhereATXRestrictsSuites checks the grounds the doc
+// comment of checkIssuedATC gives for refusing a signature in a third suite.
+// The ATX credential schema's signatures[].algorithm enum and the suite
+// registry of core section 14 admit only Ed25519 and ML-DSA-65. Core section
+// 13 as published in ATX v1.1.0 has verifiers verify the signatures present
+// for the suites they support, so it is no ground for the refusal.
+func TestCheckIssuedATC_DocCitesWhereATXRestrictsSuites(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join(repoRoot(t), "apps", "backend", "internal", "application", "atc_issuance_service.go"))
+	if err != nil {
+		t.Fatalf("read atc_issuance_service.go: %v", err)
+	}
+	lines := strings.Split(string(src), "\n")
+	fn := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, "func checkIssuedATC(") {
+			fn = i
+			break
+		}
+	}
+	if fn < 0 {
+		t.Fatal("func checkIssuedATC not found in atc_issuance_service.go")
+	}
+	// Join the doc comment into one line so a citation that wraps still matches.
+	var words []string
+	for i := fn - 1; i >= 0 && strings.HasPrefix(lines[i], "//"); i-- {
+		words = append(strings.Fields(strings.TrimPrefix(lines[i], "//")), words...)
+	}
+	doc := strings.Join(words, " ")
+
+	for _, want := range []string{"schemas/atx-credential-v1.1.schema.json", "section 14"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("doc comment of checkIssuedATC does not cite %q", want)
+		}
+	}
+	if regexp.MustCompile(`(?i)section 13`).MatchString(doc) {
+		t.Errorf("doc comment of checkIssuedATC cites section 13, which does not restrict the suites a credential may declare")
 	}
 }
 
