@@ -64,6 +64,8 @@ public class AIMClient implements AutoCloseable {
     private static final int MAX_RETRIES = 3;
     private static final int INITIAL_BACKOFF_MS = 1000;
     private static final int MAX_BACKOFF_MS = 10000;
+    /** Seconds before an access token's exp at which the client refreshes it. */
+    private static final long TOKEN_REFRESH_MARGIN_SECONDS = 60;
 
     private volatile String agentId;  // Can be updated after registration
     private final String agentName;
@@ -1024,7 +1026,7 @@ public class AIMClient implements AutoCloseable {
                 JsonNode claims = objectMapper.readTree(decoded);
                 if (claims.has("exp")) {
                     long exp = claims.get("exp").asLong();
-                    this.tokenExpiry = Instant.ofEpochSecond(exp).minusSeconds(60); // Refresh 60s early
+                    this.tokenExpiry = Instant.ofEpochSecond(exp).minusSeconds(TOKEN_REFRESH_MARGIN_SECONDS);
                     return;
                 }
             }
@@ -1042,13 +1044,25 @@ public class AIMClient implements AutoCloseable {
      * The recovery route requires an access token for the refresh token's
      * owner, so the request carries the access token this client holds. A
      * client that holds none (no earlier refresh succeeded) sends nothing:
-     * the route would answer 401 before reading the body.
+     * the route would answer 401 before reading the body. Neither does a
+     * client whose access token has expired (it was idle past the token's
+     * lifetime), since the auth middleware refuses an expired bearer the same
+     * way.
      */
     private boolean attemptTokenRecovery() {
         String bearer = accessToken;
         if (bearer == null || bearer.isEmpty()) {
             logger.info("Token recovery needs an access token for the token's owner, and this client holds none");
             return false;
+        }
+        Instant refreshAt = tokenExpiry;
+        if (refreshAt != null) {
+            Instant expiredAt = refreshAt.plusSeconds(TOKEN_REFRESH_MARGIN_SECONDS);
+            if (!Instant.now().isBefore(expiredAt)) {
+                logger.info("Token recovery needs an unexpired access token for the token's owner, "
+                        + "and the one this client holds expired at {}", expiredAt);
+                return false;
+            }
         }
         try {
             ObjectNode payload = objectMapper.createObjectNode();
@@ -1128,7 +1142,7 @@ public class AIMClient implements AutoCloseable {
 
                 this.accessToken = json.get("access_token").asText();
                 int expiresIn = json.has("expires_in") ? json.get("expires_in").asInt() : 3600;
-                this.tokenExpiry = Instant.now().plusSeconds(expiresIn - 60); // Refresh 60s early
+                this.tokenExpiry = Instant.now().plusSeconds(expiresIn - TOKEN_REFRESH_MARGIN_SECONDS);
             }
         } catch (IOException e) {
             throw new AuthenticationException("Failed to authenticate: " + e.getMessage(), e);

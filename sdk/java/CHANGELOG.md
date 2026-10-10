@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   corrected either. A client that holds no access token, because no earlier refresh succeeded, sends no
   recovery request. `AIMClientSdkRecoverRouteTest` reads the route's registration from the backend and answers
   a recovery request without the held bearer with 401 (#625).
+- A client idle past its access token's expiry sends no recovery request after the server refuses a refresh,
+  and logs that the access token it holds has expired and when. `ensureValidToken` refreshes 60 seconds before
+  the token's `exp`, so a client whose next call came later than `exp` sent the expired token as the recovery
+  bearer, which the auth middleware answers with 401. The call now fails as it does for a client that holds no
+  access token (#630).
 - `registerMcp` adds the given MCP server to the agent's list. It sends `PUT /api/v1/agents/{id}/mcp-servers`
   with `mcpServerIds`, `detectedMethod` and `confidence`, the members the server reads, and returns what AIM
   answers: `message`, `talksTo`, `added_servers` and `total_count`. It posted `mcp_server_ids` and

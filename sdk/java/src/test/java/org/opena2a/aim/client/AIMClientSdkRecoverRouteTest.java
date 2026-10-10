@@ -187,6 +187,47 @@ class AIMClientSdkRecoverRouteTest {
     }
 
     @Test
+    @DisplayName("a client idle past its access token's expiry sends no recovery request the auth middleware would refuse")
+    void refusedRefresh_afterTheHeldAccessTokenExpired_sendsNoRecoveryRequest() throws Exception {
+        // The first refresh hands out an access token that expires a second
+        // later. The client is idle past that expiry, so the next call
+        // refreshes, the refresh is refused, and the only bearer the client
+        // holds is one the auth middleware refuses.
+        heldAccessToken = jwtExpiringIn(1);
+        String agentId = UUID.randomUUID().toString();
+
+        AIMClient client = new AIMClient.Builder()
+                .agentName("recover-route-agent")
+                .aimUrl(baseUrl())
+                .agentId(agentId)
+                .refreshToken(REFUSED_REFRESH_TOKEN)
+                .build();
+
+        Map<String, Object> first;
+        Map<String, Object> result;
+        try {
+            first = client.useMcpTool(UUID.randomUUID().toString(), "read_file",
+                    "http://localhost:3001", "filesystem-mcp");
+            waitPast(expiryOf(heldAccessToken));
+            result = client.useMcpTool(UUID.randomUUID().toString(), "read_file",
+                    "http://localhost:3001", "filesystem-mcp");
+        } finally {
+            client.close();
+        }
+        assertEquals(Boolean.TRUE, first.get("success"), "the call before the idle period failed: " + first.get("error"));
+
+        List<RecordedRequest> requests = drainRequests();
+        assertEquals(2, count(requests, REFRESH_PATH),
+                "the client did not refresh after the idle period; requests: " + paths(requests));
+        assertNull(find(requests, RECOVER_PATH),
+                "the client sent a recovery request with an expired bearer; requests: " + paths(requests));
+        assertEquals(1, count(requests, "/api/v1/sdk-api/agents/" + agentId + "/mcp-usage-report"),
+                "the client sent the call after the idle period without a valid access token; requests: "
+                        + paths(requests));
+        assertEquals(Boolean.FALSE, result.get("success"));
+    }
+
+    @Test
     @DisplayName("the recovery key is read from the backend handler source")
     void recoveryKey_isReadFromBackendSource() {
         // Guards the reader itself: a pattern that stopped matching the handler
@@ -211,6 +252,10 @@ class AIMClientSdkRecoverRouteTest {
         String authorization = request.getHeader("Authorization");
         if (heldAccessToken == null || !("Bearer " + heldAccessToken).equals(authorization)) {
             return json(401, "{\"error\":\"No authentication token provided\"}");
+        }
+        // The auth middleware refuses an access token whose exp has passed.
+        if (!Instant.now().isBefore(expiryOf(heldAccessToken))) {
+            return json(401, "{\"error\":\"Invalid or expired token\"}");
         }
         JsonNode body;
         try {
@@ -243,6 +288,16 @@ class AIMClientSdkRecoverRouteTest {
         return null;
     }
 
+    private static int count(List<RecordedRequest> requests, String path) {
+        int n = 0;
+        for (RecordedRequest request : requests) {
+            if (path.equals(request.getRequestUrl().encodedPath())) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     private static RecordedRequest findLast(List<RecordedRequest> requests, String path) {
         RecordedRequest last = null;
         for (RecordedRequest request : requests) {
@@ -259,6 +314,24 @@ class AIMClientSdkRecoverRouteTest {
         String header = encoder.encodeToString("{\"alg\":\"none\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
         String claims = "{\"exp\":" + (Instant.now().getEpochSecond() + seconds) + "}";
         return header + "." + encoder.encodeToString(claims.getBytes(StandardCharsets.UTF_8)) + ".held";
+    }
+
+    /** The exp claim of a token made by {@link #jwtExpiringIn(long)}. */
+    private Instant expiryOf(String token) {
+        try {
+            byte[] claims = Base64.getUrlDecoder().decode(token.split("\\.")[1]);
+            return Instant.ofEpochSecond(objectMapper.readTree(claims).path("exp").asLong());
+        } catch (IOException e) {
+            throw new IllegalStateException("the held access token has no readable exp claim", e);
+        }
+    }
+
+    /** Sleeps until the given instant has passed. */
+    private static void waitPast(Instant instant) throws InterruptedException {
+        Instant until = instant.plusMillis(200);
+        while (Instant.now().isBefore(until)) {
+            Thread.sleep(Math.max(1, until.toEpochMilli() - Instant.now().toEpochMilli()));
+        }
     }
 
     private static List<String> paths(List<RecordedRequest> requests) {
