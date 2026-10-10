@@ -399,7 +399,7 @@ func TestIssueForAgent_HappyPath(t *testing.T) {
 		t.Errorf("confidence = %v, want 0.6", res.Confidence)
 	}
 	if !res.IsolationSelfReported {
-		t.Error("IsolationSelfReported should be true until aim-isolation-verification")
+		t.Error("IsolationSelfReported should be true while no verified isolation writer exists")
 	}
 }
 

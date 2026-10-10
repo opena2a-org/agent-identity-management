@@ -88,23 +88,22 @@ func (s *AlertService) SetWebhookService(webhookService *WebhookService) {
 // An alert with a DedupeKey is coalesced: when an unacknowledged alert in the
 // same organization with the same key was created within AlertCoalesceWindow,
 // the repeat is counted on that alert and no alert is created and no webhook
-// fires.
+// fires. The lookup and the insert are one step in the repository, so
+// concurrent first occurrences of a key create one alert.
 func (s *AlertService) CreateAlert(ctx context.Context, alert *domain.Alert) error {
 	if alert.DedupeKey != "" {
 		now := s.now()
-		existing, err := s.alertRepo.FindOpenByDedupeKey(alert.OrganizationID, alert.DedupeKey, now.Add(-AlertCoalesceWindow))
-		if err != nil {
-			return err
-		}
-		if existing != nil {
-			return s.alertRepo.IncrementOccurrence(existing.ID, now)
-		}
 		if alert.CreatedAt.IsZero() {
 			alert.CreatedAt = now
 		}
-	}
-
-	if err := s.alertRepo.Create(alert); err != nil {
+		created, err := s.alertRepo.CreateCoalesced(alert, now.Add(-AlertCoalesceWindow), now)
+		if err != nil {
+			return err
+		}
+		if !created {
+			return nil
+		}
+	} else if err := s.alertRepo.Create(alert); err != nil {
 		return err
 	}
 

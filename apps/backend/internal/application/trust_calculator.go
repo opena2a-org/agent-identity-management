@@ -678,8 +678,7 @@ func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) (float64, s
 //
 // Two integrity gates sit between the stored row and the factor score, both
 // read-side only — neither rewrites the attestation, which stays the honest
-// record of what was reported (roadmap aim-isolation-verification, CDS ruling
-// 2026-08-29):
+// record of what was reported:
 //
 //	expiry  — a posture older than domain.IsolationAttestationTTL counts for
 //	          nothing and falls back to the baseline, uniformly for verified and
@@ -692,8 +691,8 @@ func (c *TrustCalculator) calculateUserFeedback(agent *domain.Agent) (float64, s
 //	          report (all none, 0.0) passes through at its honest low value
 //	          rather than being lifted to the ceiling.
 //
-// Independent verification — the write side that would set Verified — is Phase 2
-// and deliberately does not exist yet. Until it does, every row is unverified and
+// Independent verification — the write side that would set Verified —
+// deliberately does not exist yet. Until it does, every row is unverified and
 // the ceiling is the effective maximum for the factor.
 func (c *TrustCalculator) calculateExecutionIsolation(agent *domain.Agent) (float64, string) {
 	if c.isolationRepo == nil {
@@ -886,8 +885,8 @@ func (c *TrustCalculator) RecordUserFeedback(ctx context.Context, agentID, orgID
 // The posture is self-asserted by the agent and is NOT independently verified;
 // the score is computed server-side via domain.ScoreIsolation so the agent
 // cannot inject an arbitrary score, and unrecognized posture values are rejected
-// before anything is written. Independent verification of the reported posture is
-// a separate follow-up (see roadmap aim-isolation-verification).
+// before anything is written. Independent verification of the reported posture
+// has no write path yet.
 //
 // Verified is hard-set false here and takes no input from the caller — the
 // signature carries posture only, so there is no argument through which an

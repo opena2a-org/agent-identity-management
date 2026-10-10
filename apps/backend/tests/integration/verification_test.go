@@ -54,12 +54,6 @@ func TestGetVerificationInvalidUUID(t *testing.T) {
 //
 // It now targets the sdk-api route, which is the one that mattered. The JWT
 // mount no longer exists at all.
-//
-// DURABILITY CAVEAT: apps/backend/tests/ is rsync --delete mirrored from the
-// public repo by scripts/sync-to-cloud.sh, so this correction is reverted by the
-// next sync. The durable fix belongs in the public tree, which is frozen pending
-// Abdel's disclosure decision. Recorded in the roadmap unit as not-done rather
-// than left to look done.
 func TestSubmitVerificationResultUnauthorized(t *testing.T) {
 	ensureAIMBackendRunning(t) // Skip if AIM backend not running
 	baseURL := getBaseURL()

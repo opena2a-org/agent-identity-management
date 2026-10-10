@@ -109,9 +109,8 @@ type IsolationAttestation struct {
 	// starts unverified and never carries a predecessor's verification forward.
 	//
 	// Nothing in the codebase sets this true today. There is no verified write
-	// path until an independent source exists (Phase 2, roadmap
-	// aim-isolation-verification); the ingest path hard-sets false and the
-	// repository INSERT writes the literal FALSE. The evidence classes that may
+	// path until an independent source exists; the ingest path hard-sets false
+	// and the repository INSERT writes the literal FALSE. The evidence classes that may
 	// ever set it are TEE attestation and orchestrator/host metadata; an HMA
 	// static scan may NOT (it reads the declared surface, not the running one),
 	// and the SDK may never (it is the self-report being checked).

@@ -140,6 +140,27 @@ describe("AlertDetailPanel on a user-resource alert", () => {
   });
 });
 
+describe("AlertDetailPanel on a repeated alert", () => {
+  it("shows how many times it was raised and when it was last seen", async () => {
+    await renderPanel({
+      ...accountLocked,
+      occurrenceCount: 7,
+      lastSeenAt: "2026-10-01T12:09:00Z",
+    });
+
+    expect(screen.getByText("Occurrences")).toBeTruthy();
+    expect(screen.getByText("7")).toBeTruthy();
+    expect(screen.getByText("Last seen")).toBeTruthy();
+  });
+
+  it("shows neither for an alert raised once", async () => {
+    await renderPanel({ ...accountLocked, occurrenceCount: 1, lastSeenAt: null });
+
+    expect(screen.queryByText("Occurrences")).toBeNull();
+    expect(screen.queryByText("Last seen")).toBeNull();
+  });
+});
+
 describe("AlertDetailPanel on an agent alert", () => {
   it("keeps the agent view, its fetches and its agent link", async () => {
     (api.getAgentVerificationHistory as Mock).mockResolvedValue([]);

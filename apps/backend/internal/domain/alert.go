@@ -67,6 +67,12 @@ type Alert struct {
 	AcknowledgedAt *time.Time             `json:"acknowledgedAt"`
 	CreatedAt      time.Time              `json:"createdAt"`
 
+	// OccurrenceCount is how many times the alert was raised: 1 when it was
+	// created, plus one for every repeat coalesced onto it.
+	OccurrenceCount int `json:"occurrenceCount"`
+	// LastSeenAt is when the latest coalesced repeat arrived, nil until one has.
+	LastSeenAt *time.Time `json:"lastSeenAt"`
+
 	// DedupeKey opts the alert into coalescing. While an unacknowledged alert
 	// with the same organization and key was created inside the coalescing
 	// window, AlertService.CreateAlert counts a repeat on that alert instead of
@@ -90,10 +96,11 @@ type AlertRepository interface {
 	BulkAcknowledge(orgID uuid.UUID, userID uuid.UUID) (int, error)
 	Delete(id uuid.UUID) error
 
-	// FindOpenByDedupeKey returns the newest unacknowledged alert in orgID with
-	// dedupeKey created at or after since, or nil when there is none.
-	FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*Alert, error)
-	// IncrementOccurrence counts one more occurrence on an alert and records
-	// when it was seen.
-	IncrementOccurrence(id uuid.UUID, seenAt time.Time) error
+	// CreateCoalesced stores an alert that carries a DedupeKey, as one atomic
+	// step per organization and key. When the newest unacknowledged alert in
+	// the alert's organization with the same key was created at or after
+	// since, it counts one more occurrence on that alert, records seenAt as
+	// its last-seen time and returns false; otherwise it inserts the alert and
+	// returns true.
+	CreateCoalesced(alert *Alert, since, seenAt time.Time) (created bool, err error)
 }

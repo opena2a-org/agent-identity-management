@@ -24,11 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// coalescingAlertRepo is an in-memory AlertRepository that applies the same
-// predicate as the SQL behind FindOpenByDedupeKey (same organization, same
-// key, unacknowledged, created at or after since), so the coalescing window is
-// tested against the service's clock. Methods CreateAlert does not use are
-// left to the embedded nil interface and panic if called.
+// coalescingAlertRepo is an in-memory AlertRepository whose CreateCoalesced
+// applies the same predicate as the SQL behind the repository's (same
+// organization, same key, unacknowledged, created at or after since), so the
+// coalescing window is tested against the service's clock. Methods CreateAlert
+// does not use are left to the embedded nil interface and panic if called.
 type coalescingAlertRepo struct {
 	domain.AlertRepository
 
@@ -48,6 +48,32 @@ func newCoalescingAlertRepo() *coalescingAlertRepo {
 func (r *coalescingAlertRepo) Create(alert *domain.Alert) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.insert(alert)
+	return nil
+}
+
+func (r *coalescingAlertRepo) CreateCoalesced(alert *domain.Alert, since, seenAt time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var newest *domain.Alert
+	for _, a := range r.alerts {
+		if a.OrganizationID != alert.OrganizationID || a.DedupeKey != alert.DedupeKey || a.IsAcknowledged || a.CreatedAt.Before(since) {
+			continue
+		}
+		if newest == nil || a.CreatedAt.After(newest.CreatedAt) {
+			newest = a
+		}
+	}
+	if newest != nil {
+		r.occurrences[newest.ID]++
+		r.lastSeen[newest.ID] = seenAt
+		return false, nil
+	}
+	r.insert(alert)
+	return true, nil
+}
+
+func (r *coalescingAlertRepo) insert(alert *domain.Alert) {
 	if alert.ID == uuid.Nil {
 		alert.ID = uuid.New()
 	}
@@ -56,30 +82,6 @@ func (r *coalescingAlertRepo) Create(alert *domain.Alert) error {
 	}
 	r.alerts = append(r.alerts, alert)
 	r.occurrences[alert.ID] = 1
-	return nil
-}
-
-func (r *coalescingAlertRepo) FindOpenByDedupeKey(orgID uuid.UUID, dedupeKey string, since time.Time) (*domain.Alert, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var newest *domain.Alert
-	for _, a := range r.alerts {
-		if a.OrganizationID != orgID || a.DedupeKey != dedupeKey || a.IsAcknowledged || a.CreatedAt.Before(since) {
-			continue
-		}
-		if newest == nil || a.CreatedAt.After(newest.CreatedAt) {
-			newest = a
-		}
-	}
-	return newest, nil
-}
-
-func (r *coalescingAlertRepo) IncrementOccurrence(id uuid.UUID, seenAt time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.occurrences[id]++
-	r.lastSeen[id] = seenAt
-	return nil
 }
 
 func (r *coalescingAlertRepo) count() int {

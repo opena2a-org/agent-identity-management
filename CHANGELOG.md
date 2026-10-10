@@ -11,13 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an alert's repeat count is in the alerts API and dashboard, and concurrent repeats share one alert (#633)
+
+- Alerts returned by `GET /api/v1/admin/alerts`, `GET /api/v1/security/alerts` and
+  `GET /api/v1/agents/:id/alerts` carry `occurrenceCount` (1 for an alert raised once) and `lastSeenAt` (`null`
+  until a repeat arrives). The column existed, but no response included it, so a coalesced repeat was invisible. The
+  dashboard's alert list shows "Seen N times" with the last time, and the alert panel shows the occurrence count and
+  the last-seen time, for an alert raised more than once.
+- Two denied verifications of the same agent, capability and resource that arrive together on an empty alerts table
+  create one alert counted twice. The lookup for an open alert and the insert ran as two separate statements, so each
+  request could find no alert and insert its own, and later repeats were counted on the newest of them only. They now
+  run in one transaction under a lock on the organization and key.
+- The migration that adds alert coalescing is renumbered from 126 to 127, so no two migrations share a number, and
+  it removes the `schema_migrations` row of its old name on a database that applied it before the rename. A test
+  fails when a new migration reuses a number.
+
 ### Changed — repeated capability violations are counted on one open alert
 
 - A denied `POST /api/v1/agents/:id/verify-capability` created a new security alert on every request, so an agent
   retrying one denied action wrote one alert per request, up to the 100 a minute the route's rate limit allows. A
   repeat of the same agent, capability and resource is now counted on the existing alert while that alert is
   unacknowledged and was created less than 10 minutes earlier: the alert's `occurrence_count` goes up and
-  `last_seen_at` records the latest repeat (migration 126 adds both columns). Acknowledging the alert ends this, and
+  `last_seen_at` records the latest repeat (migration 127 adds both columns). Acknowledging the alert ends this, and
   the next repeat creates a new alert. The audit log still records every verification, and other alert types are
   unchanged.
 

@@ -19,7 +19,7 @@ import (
 // the 0.3 no-attestation baseline, for the cost of four strings — and a claim made
 // once counted forever.
 //
-// Two read-side gates close that, per the CDS ruling of 2026-08-29:
+// Two read-side gates close that:
 //
 //	AC1 ceiling — an UNVERIFIED report is clipped to the commodity-container tier.
 //	AC2 expiry  — a report older than 90 days stops counting, verified or not.
