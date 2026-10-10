@@ -1,21 +1,14 @@
 # OpenA2A AIM (Agent Identity Management)
 
-[![Status: stable](https://img.shields.io/badge/status-stable-brightgreen)](./STATUS.md)
+[![Status: stable](https://img.shields.io/badge/status-stable-brightgreen)](./STATUS.md) [![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml) [![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml) [![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 > **[OpenA2A](https://github.com/opena2a-org/opena2a)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · [AIM](https://github.com/opena2a-org/agent-identity-management) · [Browser Guard](https://github.com/opena2a-org/AI-BrowserGuard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
 
 Cryptographic identity, capability authorization, and audit trails for AI agents. Apache 2.0.
 
-[![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
-[![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
-[![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-
 [Website](https://opena2a.org) · [AIM Cloud](https://aim.opena2a.org/get-started)  · [Discord](https://discord.gg/uRZa3KXgEn)
 
 ## Quick start
-
-Install the SDK and authenticate:
 
 ```bash
 pip install aim-sdk
@@ -23,17 +16,30 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page.
-
-Then register an agent, in a Python session, with the capability it holds:
+Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 from a self-hosted AIM, with the server and SDK built from commit 592bb95:
 
 ```python
 from aim_sdk import secure
-
 agent = secure("my-first-agent", capabilities=["db:read"])
 ```
 
-`secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
+```
+  ○ Agent Type: using default 'ai_agent'
+
+╭─────────────────────────────────────────────────╮
+│  [OK] Agent Registered                          │
+├─────────────────────────────────────────────────┤
+│  Agent:       my-first-agent                    │
+│  ID:          d3c28560...6e2e                   │
+│  Type:        ai_agent                          │
+│  Version:     1.0.0                             │
+│  Status:      pending                           │
+│  Trust Score: 59%                               │
+│  Capabilities: db:read                          │
+╰─────────────────────────────────────────────────╯
+```
+
+`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. With `rich` installed, the same fields print on four lines instead of in a panel.
 
 The agent starts `pending`, and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard (measured 2026-09-22 on a self-hosted stack). Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
 
@@ -384,12 +390,9 @@ Security issues: `info@opena2a.org`. Coordinated disclosure; see [SECURITY.md](S
 ## Links
 
 - [Documentation](https://opena2a.org/docs)
-- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart)
 - [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration)
 - [Deployment Guide](infrastructure/DEPLOYMENT.md)
 - [Research](https://research.opena2a.org)
-
-Part of the [OpenA2A](https://opena2a.org) security platform.
 
 ## License
 
