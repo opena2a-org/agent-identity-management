@@ -262,7 +262,10 @@ func TestAuthenticatorsReadStatusOnlyAfterTheSignatureVerifies(t *testing.T) {
 
 // admittedStatusReads is the census of every call to the status predicate outside its
 // own definitions, by file and function, with the number of calls and why each is
-// admitted. A new call fails this test until it is added here with its reason.
+// admitted. A new call fails this test until it is added here with its reason. The census
+// walks internal and cmd, so an application-layer verifier is admitted on the same terms as
+// an HTTP authenticator: the status read follows the credential's verification in the
+// function that performs it.
 var admittedStatusReads = map[string]struct {
 	calls  int
 	reason string
@@ -285,6 +288,10 @@ var admittedStatusReads = map[string]struct {
 		1, "verify-first: the API-key hash lookup is the verification, and the status arrives with the key row"},
 	"interfaces/http/handlers/aip_handler.go#*AIPHandler.ResolveDID": {
 		1, "the public DID resolver publishes deactivated for every agent that is not pending, by design"},
+	"application/a2a_service.go#*A2AService.VerifyA2ARequest": {
+		1, "after ed25519.Verify in the same function, before the grant read and the nonce write; " +
+			"the row read before the verify is the known residual (row R10), to be converted to " +
+			"Keys/LoadVerifiedAgent by a later unit"},
 }
 
 func TestAgentStatusReadCensus(t *testing.T) {
