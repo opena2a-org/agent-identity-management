@@ -1,4 +1,4 @@
-# AIM Python SDK
+# [AIM Python SDK](https://opena2a.org/agent-identity-management)
 
 Cryptographic identity, capability authorization, and audit trails for Python AI agents. Apache 2.0.
 

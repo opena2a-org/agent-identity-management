@@ -21,7 +21,7 @@ setup(
     description="Python SDK for AIM (Agent Identity Management) - Automatic identity verification for AI agents",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/opena2a-org/agent-identity-management",
+    url="https://opena2a.org/agent-identity-management",
     license="Apache-2.0",
     packages=find_packages(exclude=["tests", "tests.*"]),
     classifiers=[
