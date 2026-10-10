@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"strings"
 	"sync"
 	"testing"
@@ -264,6 +266,26 @@ func TestRecordChainStateCell(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, record.ChainExtendable, status.State)
 		require.Equal(t, int64(0), status.Head.Seq, "a write under another key extended the chain")
+		require.NoError(t, write(org), "the chain's own key no longer extends it")
+	})
+
+	// The writer is given the chain's public key, and its signer holds
+	// another key. Only the check that the signed record opens under the
+	// chain's key stands between that signer and the chain.
+	t.Run("extendable/signer_holds_another_key", func(t *testing.T) {
+		org := seedOrg(t, plain)
+		_, err := h.w.start(ctx, org)
+		require.NoError(t, err)
+		w, err := NewWriter(Config{DB: db, Keys: newTestKeys(t), Key: h.keys.publicKey(),
+			Logger: log.New(io.Discard, "", 0)})
+		require.NoError(t, err)
+		_, err = w.Write(ctx, Write{Class: ClassExpansion, OrganizationID: org, Draft: testDraft()})
+		wantWriteError(t, err, ClassExpansion, ReasonSigner)
+		require.ErrorIs(t, err, record.ErrUnknownKey, "the record was not refused for its signer's key")
+		status, err := ReadChainState(ctx, plain, org)
+		require.NoError(t, err)
+		require.Equal(t, record.ChainExtendable, status.State)
+		require.Equal(t, int64(0), status.Head.Seq, "a record signed under another key extended the chain")
 		require.NoError(t, write(org), "the chain's own key no longer extends it")
 	})
 }
