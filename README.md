@@ -87,7 +87,7 @@ Want to see the same boundary stop a real attack? The [Demos](#demos) below end 
 |---|---|---|
 | **AIM Cloud** | Managed, fastest path | Production-managed at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Python and Java SDKs work out of the box. |
 | **Self-hosted** | Team or fleet, your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor real-time trust, MCP attestation, PAM, SIEM adapters. |
-| **Local-only** | Solo developer, single machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score, cross-tool event bridges. Python and Java local mode is on the roadmap. |
+| **Local-only** | Solo developer, single machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score, cross-tool event bridges. Local mode is in the TypeScript SDK only. |
 
 All three share the same audit-event schema. Local agents can push history to a server via `AIMCore.enableReporting()`.
 
@@ -382,6 +382,7 @@ Security issues: `info@opena2a.org`. Coordinated disclosure; see [SECURITY.md](S
 - [Documentation](https://opena2a.org/docs)
 - [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration)
 - [Deployment Guide](infrastructure/DEPLOYMENT.md)
+- [Roadmap](ROADMAP.md)
 - [Research](https://research.opena2a.org)
 
 ## License

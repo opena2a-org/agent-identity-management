@@ -1,6 +1,6 @@
 # Hardening
 
-AIM 1.0 ships with every Roadmap-to-1.0 gate criterion met (see below). This page tracks the work that landed to get here, and continues to track the next horizon of hardening work after 1.0.
+AIM 1.0 ships with every Roadmap-to-1.0 gate criterion met (see below). This page records the hardening work behind 1.0; open feature work is listed in [ROADMAP.md](ROADMAP.md).
 
 **Last updated:** 2026-05-28. Every enforcement stream and gate criterion is now closed in code, including the CI-integrated Playwright empty-state suite (PR #247 + #248). AIM is open source under Apache-2.0, so community review of the codebase is welcome before and after 1.0 per [SECURITY.md](SECURITY.md); a paid third-party engagement is a worthwhile post-1.0 investment for regulated deployments but is not a binding 1.0 gate.
 

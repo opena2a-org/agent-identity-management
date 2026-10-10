@@ -278,7 +278,7 @@ agent = secure("my-agent")
 
 **Navigation**:
 14. `/docs/DOCUMENTATION_INDEX.md` - This file (master index)
-15. `/ROADMAP.md` - Updated roadmap
+15. `/ROADMAP.md` - What has shipped and what may come next
 
 **📝 Planned (12 files)**:
 1. Deployment guides (4 files)
