@@ -183,6 +183,17 @@ export class LocalVerifier {
         'localVerification.publicKeys must be an array of AtxPublicKey objects',
       );
     }
+    // A malformed ML-DSA-65 key is unusable. Dropped at verification, it made
+    // every hybrid credential reject with "no eligible ML-DSA-65 trust anchor".
+    for (const key of config.publicKeys) {
+      if (key.algorithm === 'ML-DSA-65' && mldsa65KeyFromHex(key.publicKeyHex) === null) {
+        const length = typeof key.publicKeyHex === 'string' ? `${key.publicKeyHex.length} characters` : 'not a string';
+        throw new ConfigurationError(
+          `localVerification.publicKeys: ML-DSA-65 key ${key.keyId ?? '(no keyId)'} must be 3904 hex characters ` +
+            `(a 1952-byte raw FIPS 204 key); got ${length}`,
+        );
+      }
+    }
     this.anchors = {
       trustedIssuers: config.trustedIssuers,
       publicKeys: config.publicKeys,
@@ -407,8 +418,9 @@ function keyEligible(keyId: string | undefined, authorities: Set<string>): boole
 
 /**
  * A raw 1952-byte ML-DSA-65 public key from hex, or null when the hex is
- * malformed or the wrong length. A null key is unusable and is left out, so a
- * declared ML-DSA-65 signature with no usable key rejects instead of passing.
+ * malformed or the wrong length. The constructor refuses such a key; at
+ * verification a null key is still left out, so a declared ML-DSA-65 signature
+ * with no usable key rejects instead of passing.
  */
 function mldsa65KeyFromHex(hex: string): Uint8Array | null {
   if (typeof hex !== 'string' || !/^[0-9a-fA-F]{3904}$/.test(hex)) {
