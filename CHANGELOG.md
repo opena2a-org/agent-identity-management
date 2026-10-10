@@ -85,6 +85,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   advises, and `npm run type-check` in `apps/web` runs `next typegen` first, so the typecheck still has the file on
   a fresh checkout.
 
+### Changed — a suspended agent's refused signed action-request statement is recorded in the audit log
+
+- A signed action-request statement (a body naming `signedBytes`) sent to `POST /api/v1/sdk-api/verifications` or
+  `POST /api/v1/verifications` by an agent whose status does not permit it to act, such as a suspended or revoked
+  agent, is refused with `401` and reason code `agentStatusDenied` in strict and in monitoring mode alike. The refusal
+  wrote nothing. It now writes the same `audit_logs` row as the plain body form's refusal: action
+  `verification_refused`, resource type `agent_action`, the agent's id, and metadata `refusal` (`agent_status`),
+  `agentStatus`, `enforcementMode`, `capability` (the statement's `action_type`), `resource` and `httpStatus` (`401`).
+  The row never carries the signature, the public key, the signed bytes, the nonce or the signed context.
+- The row is written only after the signature verifies against the agent's registered key and the nonce is admitted,
+  so a caller holding only an agent id cannot create one, and a replayed statement (refused as `nonceReused`) or one
+  outside the time window writes nothing. The answer is unchanged, and a failed audit write still refuses with `401`.
+- `apps/backend/internal/interfaces/http/handlers/verification_statement_refusal_audit_test.go` fails when the
+  refusal writes no row or more than one on either route in either mode, when the row carries another metadata key, a
+  key-shaped value or the signed context, when a statement that failed authentication, fell outside the window or was
+  replayed writes a row, or when a failed audit write changes the answer.
+
 ### Changed — a suspended agent's refused verification request is recorded in the audit log
 
 - `POST /api/v1/sdk-api/verifications` (and `POST /api/v1/verifications`, the same handler) refuses an agent whose

@@ -654,6 +654,10 @@ func (h *VerificationHandler) createVerificationFromStatement(c fiber.Ctx, membe
 	}
 
 	if !domain.AgentStatusPermitsAuth(agent.Status) {
+		// The refusal is recorded, as the plain body's is. After the signature verified
+		// and the nonce was admitted, so a replayed statement records nothing more. A
+		// failed write still refuses.
+		_ = h.getAuditService().Log(c.Context(), h.statusRefusalAuditEntry(c, agent, stmt.agentID, stmt.actionType, stmt.resource, fiber.StatusUnauthorized))
 		return (&actionRequestRefusal{
 			status:     fiber.StatusUnauthorized,
 			reasonCode: actionRequestStatusDeniedCode,

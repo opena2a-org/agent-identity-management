@@ -355,7 +355,8 @@ func TestActionRequest_HybridModeAgentIsRefusedWithoutSpendingTheNonce(t *testin
 }
 
 // A suspended or revoked agent's valid statement spends its nonce and writes
-// nothing else; re-sent after reactivation it is a reused nonce.
+// only the refusal's audit entry; re-sent after reactivation it is a reused
+// nonce and writes nothing.
 func TestActionRequest_StatusGateRunsAfterAdmission(t *testing.T) {
 	for _, status := range []domain.AgentStatus{domain.AgentStatusSuspended, domain.AgentStatusRevoked} {
 		t.Run(string(status), func(t *testing.T) {
@@ -368,12 +369,13 @@ func TestActionRequest_StatusGateRunsAfterAdmission(t *testing.T) {
 			assert.Equal(t, refusalBody("agentStatusDenied", domain.AgentStatusDeniedMessage(status)), string(out))
 			assert.Equal(t, 1, f.admitter.callCount(), "the nonce is spent")
 			assert.Len(t, f.admitter.rows, 1, "exactly one admission row")
-			assert.Equal(t, writeCounts{}, f.writes(), "no other write")
+			assert.Equal(t, writeCounts{audits: 1}, f.writes(), "the refusal's audit entry and no other write")
 
 			f.agent.Status = domain.AgentStatusVerified
 			code, out = f.post(t, sdkVerificationsPath, body)
 			assert.Equal(t, 401, code)
 			assert.Equal(t, refusalBody("nonceReused", "this nonce was already used by this agent"), string(out))
+			assert.Equal(t, writeCounts{audits: 1}, f.writes(), "the replay writes nothing")
 		})
 	}
 }
