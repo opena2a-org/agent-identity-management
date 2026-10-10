@@ -12,14 +12,17 @@ as it would end a reader's, so it has to be the last line. They also hold
 the minimal dev stack command to the services docker-compose.yml defines,
 the recorded walkthrough's typed and install lines to the root README's Quick
 start, and the root README's captured register output, in its first 30
-lines, to what this SDK prints for that call.
+lines, to what this SDK prints for that call and the SDK version it names.
 
-Everything here runs offline and reads only files in this repository.
+Everything here runs offline and reads only files in this repository; the
+check of the walkthrough's own extractor also runs it with node, when node
+is installed.
 """
 
 import ast
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +36,7 @@ SDK_README = SDK_DIR / "README.md"
 COMPOSE = REPO_ROOT / "docker-compose.yml"
 TAPE = REPO_ROOT / "docs" / "demo" / "quickstart-selfhosted" / "tape.tape"
 RENDER = REPO_ROOT / "docs" / "demo" / "render.sh"
+EXTRACTOR = REPO_ROOT / "docs" / "demo" / "lib" / "extract-readme.mjs"
 
 READMES = [
     pytest.param(ROOT_README, id="root-README"),
@@ -290,16 +294,56 @@ def test_root_readme_shows_the_register_call_and_its_dated_output_in_its_first_3
     )
 
 
+# "commit <hash>" in any case, with or without a backtick before the hash, or a
+# bare full-length hash.
+NAMED_COMMIT = re.compile(r"\bcommit\s+`?[0-9a-f]{7,40}\b|\b[0-9a-f]{40}\b", re.IGNORECASE)
+
+
 def test_root_readme_dates_its_captured_output_without_naming_a_commit():
     """A commit hash in the capture sentence chases the branch it was captured on: the
     hash exists only there until the branch lands, and lands under a different hash, so a
     reader following it reaches a commit the repository does not have. The sentence names
     the date and the repository, not a commit."""
     _, _, prose = register_and_output(ROOT_README)
-    named = re.findall(r"\bcommit\s+[0-9a-f]{7,40}\b|\b[0-9a-f]{40}\b", prose)
+    named = NAMED_COMMIT.findall(prose)
     assert not named, (
         f"the text before the captured output names a commit {named!r}; say when it was "
         "captured and that the server and SDK were built from this repository"
+    )
+
+
+@pytest.mark.parametrize("sentence", [
+    "captured at commit abcdef1 on a self-hosted AIM",
+    "Commit abcdef1 was the build",
+    "captured at commit `abcdef1` on a self-hosted AIM",
+    "captured at COMMIT `ABCDEF1`",
+    "built from 0123456789abcdef0123456789abcdef01234567",
+])
+def test_the_named_commit_guard_catches_each_phrasing_of_a_hash(sentence):
+    assert NAMED_COMMIT.search(sentence), f"the guard misses a commit named as {sentence!r}"
+
+
+@pytest.mark.parametrize("sentence", [
+    "captured on 2026-10-09 with the server and SDK built from this repository",
+    "the SDK reports version 2.0.3",
+    "committed abcdef1",
+    "the commit message",
+])
+def test_the_named_commit_guard_passes_a_sentence_that_names_no_commit(sentence):
+    assert not NAMED_COMMIT.search(sentence), f"the guard flags {sentence!r}, which names no commit"
+
+
+def test_root_readme_names_the_sdk_version_its_captured_output_came_from():
+    """`pip install` fetches the release on PyPI, which can print the registration
+    differently from the SDK in this repository: the aim-sdk 2.0.3 release prints a check
+    mark where this repository's SDK prints [OK], under the same version number. The
+    capture sentence names the version, so a reader can tell which SDK printed the lines
+    below it, and a version bump fails here until the sentence is checked again."""
+    _, _, prose = register_and_output(ROOT_README)
+    version = (SDK_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    assert re.search(rf"(?<![\w.]){re.escape(version)}(?!\.?\d)", prose), (
+        f"the text before the captured output must name the SDK version it was captured "
+        f"with, {version} (sdk/python/VERSION)"
     )
 
 
@@ -335,6 +379,11 @@ def printed_line_pattern(module, marker):
 
 
 def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monkeypatch, capsys):
+    """Holds the captured lines to the format this SDK prints, and to the call above them:
+    the agent name, its capabilities and the pending status. The values the server returns,
+    the ID, type, version and trust score, are read from the capture and printed back
+    through this SDK's console, so they are not checked: the trust score is computed by the
+    server, and changing "Trust: 59%" to "Trust: 95%" keeps this test green by design."""
     from aim_sdk import console as console_module
     from aim_sdk import oauth as oauth_module
 
@@ -422,15 +471,60 @@ def test_minimal_dev_stack_command_names_services_the_compose_file_defines():
     )
 
 
+TYPED_FENCES = ("bash", "python")  # any other fence, or one with no language, is captured output
+
+
 def readme_code_lines():
-    """The lines the walkthrough may type, extracted as docs/demo/lib/extract-readme.mjs does."""
+    """The lines the walkthrough may type, extracted as docs/demo/lib/extract-readme.mjs does:
+    the lines of the Quick start's bash and python fences, without a trailing comment."""
     out = set()
-    for _, body in fences(quick_start(ROOT_README)):
+    for lang, body in fences(quick_start(ROOT_README)):
+        if lang not in TYPED_FENCES:
+            continue
         for raw in body.split("\n"):
             line = re.sub(r"\s+#.*$", "", raw).rstrip()
             if line.strip():
                 out.add(line)
     return out
+
+
+def node_extractor_lines():
+    """The lines docs/demo/lib/extract-readme.mjs extracts from the root README."""
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    run = subprocess.run(
+        ["node", str(EXTRACTOR), str(ROOT_README)],
+        capture_output=True, text=True, timeout=60, check=True,
+    )
+    return set(json.loads(run.stdout)["lines"])
+
+
+def captured_output_lines():
+    """Lines of the Quick start's other fences that no bash or python fence also holds."""
+    captured = set()
+    for lang, body in fences(quick_start(ROOT_README)):
+        if lang not in TYPED_FENCES:
+            captured |= {line.rstrip() for line in body.split("\n") if line.strip()}
+    return captured - readme_code_lines()
+
+
+@pytest.mark.parametrize("extract", [
+    pytest.param(readme_code_lines, id="python-mirror"),
+    pytest.param(node_extractor_lines, id="extract-readme.mjs"),
+])
+def test_walkthrough_may_not_type_the_quick_start_captured_output(extract):
+    captured = captured_output_lines()
+    assert "[OK] Agent registered: my-first-agent" in captured, (
+        "the root README's register output is no longer an unlabelled fence in its Quick start"
+    )
+    typeable = sorted(captured & extract())
+    assert not typeable, f"captured output lines the walkthrough may type: {typeable}"
+
+
+def test_walkthrough_extractor_and_its_python_mirror_agree():
+    assert node_extractor_lines() == readme_code_lines(), (
+        "docs/demo/lib/extract-readme.mjs and readme_code_lines() extract different lines"
+    )
 
 
 def test_walkthrough_types_only_root_readme_quick_start_lines():

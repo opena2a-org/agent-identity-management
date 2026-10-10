@@ -13,7 +13,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 right after `aim-sdk login` to a self-hosted AIM, with the server and SDK built from this repository:
+Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 right after `aim-sdk login` to a self-hosted AIM, with the server and SDK built from this repository. That SDK reports version 2.0.3 and prints `[OK]` where the aim-sdk 2.0.3 release on PyPI prints `✓`:
 
 ```python
 from aim_sdk import secure
