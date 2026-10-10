@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -1731,6 +1733,12 @@ func NewA2ARequestNonceRepository(db *sql.DB) *A2ARequestNonceRepository {
 	return &A2ARequestNonceRepository{db: db}
 }
 
+// ErrA2ANonceExists is returned by Create for a nonce that is already recorded.
+var ErrA2ANonceExists = errors.New("nonce already recorded")
+
+// Create records nonce. The nonce is the table's primary key and its only
+// unique constraint, so a unique violation means the nonce is already recorded
+// and is returned as ErrA2ANonceExists.
 func (r *A2ARequestNonceRepository) Create(ctx context.Context, nonce *domain.A2ARequestNonce) error {
 	query := `
 		INSERT INTO a2a_request_nonces (nonce, agent_id, used_at, expires_at, request_hash)
@@ -1746,6 +1754,10 @@ func (r *A2ARequestNonceRepository) Create(ctx context.Context, nonce *domain.A2
 	)
 
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return ErrA2ANonceExists
+		}
 		return fmt.Errorf("failed to create nonce: %w", err)
 	}
 

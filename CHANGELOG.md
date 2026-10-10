@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an A2A request whose nonce cannot be recorded does not verify as valid, and other follow-ups (#643)
+
+- `POST /api/v1/a2a/verify` answered `valid: true` when the request's nonce could not be written to the nonce table:
+  the write error was discarded. The nonce was then not stored, so the same signed request verified again each time
+  it was presented while its timestamp was accepted. A request is now answered `valid: true` only once its nonce is
+  recorded. When the write fails, the answer is 500, as it is when the nonce table cannot be read. When another
+  request recorded the same nonce between the check and the write, the answer is 401 with
+  `nonce already used (replay attack)`, as it is when the check finds the nonce.
+- The entry for #635 states that the agent API leaves out a grant whose capability type is outside the credential's
+  token grammar. It listed the honeytoken, duplicate and order differences only. No behaviour changes.
+- Tests: `a2a_verify_status_test.go` (application) fails on the nonce behaviour described above.
+  `agent_response_capabilities_test.go` (HTTP handlers) pins the grant the agent API leaves out. In
+  `atc_issuance_handler_test.go` (HTTP handlers) the test that `POST /api/v1/agents/:id/atc` answers another
+  organization's agent like a missing one runs against an issuance service that refuses and counts, so a request
+  that got past the organization check would fail the test's assertions; it ran with no issuance service, where such
+  a request stopped the test run with a nil-pointer panic.
+
 ### Fixed — the agent API lists an agent's capabilities as its credential does, and other follow-ups (#635)
 
 - `GET /api/v1/agents/:id`, `GET /api/v1/agents`, `POST /api/v1/agents`, `PUT /api/v1/agents/:id` and the `agent`
@@ -18,6 +35,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   grant row under `capabilities`, honeytoken grants and duplicates included, in the order the rows were read. They now
   list them as the trust credential, the agent card and the A2A verification result do: no honeytoken grant, each
   capability once, sorted ascending.
+- A grant whose capability type is outside the credential's `namespace:operation` token grammar
+  (`^[a-z0-9_-]+:[A-Za-z0-9_.*-]+$`), such as `write_database`, is left out of `capabilities` in the same responses,
+  as it is left out of the credential. These responses listed it before. The grant stays active: the capability check
+  behind `POST /api/v1/agents/:id/verify-capability` still matches it, and `GET /api/v1/agents/:id/capabilities`
+  still lists it. Nothing in a response says that a grant was left out.
 - When the grant table cannot be read, `GET /api/v1/agents/:id` answers 500 instead of 200 with `"capabilities": []`,
   which said the agent held no grant. The create, update, suspend, reactivate and revoke responses still report the
   change, which was already made, and carry the agent without a `capabilities` field. `GET /api/v1/agents` is
