@@ -23,9 +23,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   each occurrence could find no alert and insert its own, and later repeats were counted on the newest of them only.
   They now run in one transaction under a lock on the organization and key. The capability check does not set a
   dedupe key on the alerts it creates yet, so its alerts are not coalesced (see the next entry).
-- The migration that adds alert coalescing is renumbered from 126 to 127, so no two migrations share a number, and
-  it removes the `schema_migrations` row of its old name on a database that applied it before the rename. A test
-  fails when a new migration reuses a number.
+- The migration that adds alert coalescing is renumbered from 126 to 127, so it no longer shares a number with another
+  migration, and it removes the `schema_migrations` row of its old name on a database that applied it before the
+  rename. A test fails when a new migration reuses a number.
 
 ### Changed — repeats of an alert that carries a dedupe key are counted on one open alert
 
