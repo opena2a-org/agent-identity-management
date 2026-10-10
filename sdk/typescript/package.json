@@ -47,7 +47,7 @@
     "test:harness": "vitest run --config vitest.harness.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit",
     "smoke:local": "npm run build && node tests/local-verify-consumer.cjs && node tests/local-verify-consumer.mjs",
     "prepublishOnly": "npm run build"

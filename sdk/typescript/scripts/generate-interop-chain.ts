@@ -8,13 +8,10 @@
  */
 
 import {
-  generateKeyPair,
   createDelegation,
   verifyDelegationChain,
   exportDelegationChain,
-  publicKeyToDidKey,
   delegationSignablePayload,
-  toBase64url,
 } from '../src/crypto/delegation';
 import { generateKeyPair as genKP } from '../src/crypto/ed25519';
 
