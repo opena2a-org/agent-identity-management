@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -17,7 +18,9 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -304,4 +307,118 @@ func TestTransitionTriggerOfADecisionWhoseRequestRecordIsNotItsOwn(t *testing.T)
 	assert.Empty(t, got[1].Parent)
 	assert.NotEqual(t, got[0].Trace, got[1].Trace)
 	assert.Equal(t, []string{"files:read"}, got[1].New.Opena2a.GrantedScope, "the refused approval granted its capability")
+}
+
+// newestRecord verifies the fixture's chain and reads the trigger, parent_id
+// and trace_id of its newest record. Unlike transitions, it reads a chain
+// that holds a record of another type or a record whose tenant part was
+// erased; Parent and Trace are empty for an erased tenant part.
+func (f *transitionFixture) newestRecord(t *testing.T) transitionRecord {
+	t.Helper()
+	records, err := store.ReadChain(context.Background(), f.db, f.chainID)
+	require.NoError(t, err)
+	res, err := record.Verify(records, f.keys.publicKey())
+	require.NoError(t, err)
+	require.True(t, res.OK(), "the chain does not verify: %v", res.Failure)
+
+	var payload, tenant []byte
+	require.NoError(t, f.db.QueryRow(`
+		SELECT payload, tenant_part FROM audit_records
+		 WHERE chain_id = $1 ORDER BY seq DESC LIMIT 1`, f.chainID).Scan(&payload, &tenant))
+	var retained struct {
+		EventID string `json:"event_id"`
+		Trigger struct {
+			Type string `json:"type"`
+		} `json:"trigger"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &retained))
+	out := transitionRecord{EventID: retained.EventID, Trigger: retained.Trigger.Type}
+	if tenant != nil {
+		var part struct {
+			TraceID  string  `json:"trace_id"`
+			ParentID *string `json:"parent_id"`
+		}
+		require.NoError(t, json.Unmarshal(tenant, &part))
+		out.Trace = part.TraceID
+		if part.ParentID != nil {
+			out.Parent = *part.ParentID
+		}
+	}
+	return out
+}
+
+// A record at a request's event id whose record type is not
+// authorization_transition is not the request's record, even when its
+// trigger names capability_requested and its tenant part names the agent and
+// a trace. An approval is refused and the request stays pending; a rejection
+// still commits and is recorded without the link.
+func TestTransitionTriggerOfADecisionWhoseRequestRecordIsOfAnotherType(t *testing.T) {
+	f := newTransitionFixture(t)
+	ctx := context.Background()
+	request := &domain.CapabilityRequest{
+		AgentID: f.agentID, CapabilityType: "db:write", Reason: "needed by the reporting job", RequestedBy: f.userID,
+	}
+	require.NoError(t, repository.NewCapabilityRequestRepository(sqlx.NewDb(f.db, "postgres")).Create(request))
+	traced, err := trace.Begin(ctx)
+	require.NoError(t, err)
+	other := record.Draft{
+		EventID: transition.RequestEventID(request.ID),
+		Type:    "opena2a.administrative",
+		Retained: map[string]any{
+			"trigger": map[string]any{"type": string(transition.TriggerCapabilityRequested)},
+			"opena2a": map[string]any{"source": "system"},
+		},
+		Tenant: map[string]any{"opena2a": map[string]any{
+			"organization_id":  f.orgID.String(),
+			"subject_agent_id": f.agentID.String(),
+		}},
+	}
+	require.NoError(t, trace.Stamp(traced, &other, nil))
+	_, err = f.w.Write(traced, store.Write{Class: store.ClassObservation, OrganizationID: f.orgID.String(), Draft: other})
+	require.NoError(t, err)
+	written := f.newestRecord(t)
+	require.Equal(t, transition.RequestEventID(request.ID), written.EventID)
+	require.Equal(t, string(transition.TriggerCapabilityRequested), written.Trigger)
+
+	_, _, err = f.rec.RequestParent(ctx, f.orgID, f.agentID, request.ID)
+	assert.Error(t, err, "a record of another type was read as the request's record")
+	err = f.reqSvc.ApproveRequest(ctx, request.ID, f.userID)
+	require.ErrorIs(t, err, transition.ErrRecordUnavailable)
+	assert.Equal(t, "pending", f.requestStatus(t, request.ID))
+	require.NoError(t, f.reqSvc.RejectRequest(ctx, request.ID, f.userID))
+	assert.Equal(t, "rejected", f.requestStatus(t, request.ID))
+
+	decided := f.newestRecord(t)
+	assert.Equal(t, "request_rejected", decided.Trigger)
+	assert.Empty(t, decided.Parent)
+	assert.NotEqual(t, written.Trace, decided.Trace)
+}
+
+// A request whose capability_requested record has had its tenant part erased
+// names no trace for its decision to join. Its approval commits and is
+// recorded without a link to the request's record, in a trace of its own.
+func TestTransitionTriggerOfADecisionWhoseRequestRecordWasErased(t *testing.T) {
+	f := newTransitionFixture(t)
+	ctx := context.Background()
+	agentCtx := transition.WithActor(ctx, transition.Agent(f.agentID))
+	f.setEnforcement(t, domain.EnforcementModeStrict)
+
+	request := f.request(t, agentCtx, "db:write")
+	filed := f.newestRecord(t)
+	require.Equal(t, transition.RequestEventID(request.ID), filed.EventID)
+	require.Equal(t, "capability_requested", filed.Trigger)
+	_, err := f.db.Exec(`UPDATE audit_records SET tenant_part = NULL, tenant_salt = NULL WHERE event_id = $1`,
+		filed.EventID)
+	require.NoError(t, err)
+
+	_, found, err := f.rec.RequestParent(ctx, f.orgID, f.agentID, request.ID)
+	require.NoError(t, err)
+	assert.False(t, found, "a request record with an erased tenant part was given as a parent")
+
+	require.NoError(t, f.reqSvc.ApproveRequest(ctx, request.ID, f.userID))
+	assert.Equal(t, "approved", f.requestStatus(t, request.ID))
+	decided := f.newestRecord(t)
+	assert.Equal(t, "request_approved", decided.Trigger)
+	assert.Empty(t, decided.Parent)
+	assert.NotEqual(t, filed.Trace, decided.Trace)
 }

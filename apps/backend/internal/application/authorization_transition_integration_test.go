@@ -112,6 +112,7 @@ type transitionFixture struct {
 	reg       *prometheus.Registry
 	logs      *transitionLogs
 	chainID   string
+	w         *store.Writer
 	rec       *transition.Recorder
 	capSvc    *CapabilityService
 	agentSvc  *AgentService
@@ -156,6 +157,7 @@ func newTransitionFixture(t *testing.T) *transitionFixture {
 	logger := log.New(f.logs, "", 0)
 	w, err := store.NewWriter(store.Config{DB: db, Keys: f.keys, Key: f.keys.publicKey(), Metrics: metrics, Logger: logger})
 	require.NoError(t, err)
+	f.w = w
 	rec, err := transition.NewRecorder(transition.Config{
 		Writer: w, DB: db, Issuer: "urn:uuid:" + uuid.NewString(), Logger: logger,
 	})

@@ -56,10 +56,10 @@ func TestTrustScoreMirrorTrigger_InsertSyncsAgentCache(t *testing.T) {
 		"trust-score-mirror-test-"+userID.String()[:8])
 	require.NoError(t, err)
 
-	// Agent starts with a stale cache value of 0.500.
+	// Agent starts with a stale cache value of 0.500, last updated a day ago.
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO agents (id, organization_id, name, display_name, agent_type, status, trust_score, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $3, 'ai_agent', 'verified', 0.500, $4, NOW(), NOW())`,
+		 VALUES ($1, $2, $3, $3, 'ai_agent', 'verified', 0.500, $4, NOW(), NOW() - INTERVAL '1 day')`,
 		agentID, orgID, "trust-score-mirror-test-agent-"+agentID.String()[:8], userID)
 	require.NoError(t, err)
 
@@ -85,6 +85,15 @@ func TestTrustScoreMirrorTrigger_InsertSyncsAgentCache(t *testing.T) {
 	// representable so the mirrored value compares exactly.
 	require.InDelta(t, 0.820, agentScore, 0.001,
 		"trigger must mirror trust_scores.score onto agents.trust_score on INSERT")
+
+	// The trigger sets updated_at with the score; a caller that leaves the
+	// agent's row to it (saveRecalculatedAgent with a recorder set) relies
+	// on that.
+	var updatedRecently bool
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT updated_at > NOW() - INTERVAL '1 hour' FROM agents WHERE id = $1`, agentID,
+	).Scan(&updatedRecently))
+	require.True(t, updatedRecently, "trigger must set agents.updated_at with the mirrored score")
 }
 
 // TestTrustScoreMirrorTrigger_UpdateSyncsLatestOnly asserts the
