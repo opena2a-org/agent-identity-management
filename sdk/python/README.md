@@ -201,15 +201,14 @@ agent = secure("my-agent", mcp_servers=["filesystem", "github"])
 # SDK queries each server, discovers actual capabilities, auto-attests.
 ```
 
-Manual registration:
+Add an MCP server that is registered in AIM to the agent's list, by its name or ID:
 
 ```python
-agent.register_mcp(
-    server_name="my-database-server",
-    server_url="http://localhost:3001",
-    capabilities=["db:read", "db:write", "data:delete"]
-)
+result = agent.register_mcp("my-database-server")
+print(result["added_servers"])  # ["my-database-server"], or [] when it was already on the list
 ```
+
+AIM accepts this only from a signed-in user with the member role or higher, so the call needs the sign-in saved by `aim-sdk login`. A client that holds only an API key or the agent's signing keys gets an `AuthenticationError`.
 
 Discover capabilities without attesting:
 

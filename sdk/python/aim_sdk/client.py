@@ -2680,7 +2680,14 @@ class AIMClient:
         Register an MCP server to this agent's mcp_servers list.
 
         This creates a relationship between the agent and an MCP server,
-        indicating that the agent communicates with this MCP server.
+        indicating that the agent communicates with this MCP server. It does
+        not create the MCP server: the agent's list shows a server once one
+        with this ID or name is registered in the organization.
+
+        AIM adds to an agent's list only for a signed-in user with the member
+        role or higher, so the call needs the SDK sign-in ('aim-sdk login'): a
+        client that secure() created after it sends the user's token. A client
+        that holds only an API key or the agent's signing keys is refused.
 
         Args:
             mcp_server_id: MCP server ID or name to register
@@ -2690,11 +2697,11 @@ class AIMClient:
 
         Returns:
             Dict with keys:
-                - success: bool
                 - message: str
-                - added: int - Number of MCP servers added
-                - agent_id: str
-                - mcp_server_ids: List[str]
+                - talksTo: List[str] - The agent's list after the call
+                - added_servers: List[str] - What this call added (empty when
+                  the server was already on the list)
+                - total_count: int - Length of the agent's list
 
         Example:
             # Register filesystem MCP server
@@ -2703,26 +2710,49 @@ class AIMClient:
                 detection_method="manual",
                 confidence=100.0
             )
-            print(f"Registered {result['added']} MCP server(s)")
+            print(f"Registered {len(result['added_servers'])} MCP server(s)")
 
         Raises:
-            AuthenticationError: If authentication fails
+            AuthenticationError: If AIM refuses the credentials sent
             VerificationError: If request fails
         """
+        # PUT /api/v1/agents/{id}/mcp-servers admits a signed-in user, not an
+        # API key or an agent signature, so the user's token goes with the
+        # request when this client holds one.
+        user_token = None
+        if self.oauth_token_manager:
+            try:
+                user_token = self.oauth_token_manager.get_access_token()
+            except Exception:
+                user_token = None
+
         try:
             result = self._make_request(
-                method="POST",
-                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/mcp-servers",
+                method="PUT",
+                endpoint=f"/api/v1/agents/{self.agent_id}/mcp-servers",
                 data={
-                    "mcp_server_ids": [mcp_server_id],
-                    "detected_method": detection_method,
+                    "mcpServerIds": [mcp_server_id],
+                    "detectedMethod": detection_method,
                     "confidence": confidence,
                     "metadata": metadata or {}
-                }
+                },
+                custom_headers={"Authorization": f"Bearer {user_token}"} if user_token else None
             )
             return result
 
-        except (AuthenticationError, VerificationError):
+        except AuthenticationError as e:
+            reason = (
+                f"{e}. AIM adds an MCP server to an agent's list only for a "
+                "signed-in user with the member role or higher."
+            )
+            if not user_token:
+                reason += (
+                    " This client sent no user token: it holds an API key or the "
+                    "agent's signing keys only. Run 'aim-sdk login' and create the "
+                    "client with secure()."
+                )
+            raise AuthenticationError(reason)
+        except VerificationError:
             raise
         except Exception as e:
             raise VerificationError(f"MCP registration failed: {e}")

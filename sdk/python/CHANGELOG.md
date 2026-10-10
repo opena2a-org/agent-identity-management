@@ -33,6 +33,18 @@ What changed:
 
 ### Fixed
 
+- `register_mcp()` adds the given MCP server to the agent's list. It sends
+  `PUT /api/v1/agents/{id}/mcp-servers` with `mcpServerIds`, `detectedMethod`, `confidence` and `metadata`,
+  and returns what AIM answers: `message`, `talksTo`, `added_servers` and `total_count`. It used to post
+  those members, spelled in snake case, to `POST /api/v1/sdk-api/agents/{id}/mcp-servers`, the route that
+  creates an MCP server and reads none of them. With the agent's signing keys that call created an MCP
+  server with an empty name and URL, or was answered 409 once one existed, and the given server was never
+  added to the agent's list. AIM adds to an agent's list only for a signed-in user with the member role or
+  higher, so the call sends the user's token when the client holds the SDK sign-in (`aim-sdk login`, then
+  `secure()`). A client that holds only an API key or the agent's signing keys is refused by AIM, and the
+  `AuthenticationError` says what the route admits. The method does not create an MCP server: the agent's
+  list shows the server once one with that ID or name is registered in the organization. The docstring's
+  return members and the README example are corrected.
 - `secure()` and `register_agent()` send only tag IDs when they sync `tags` to an agent that is already on
   the server (OAuth mode). `POST /api/v1/agents/{id}/tags` reads tag IDs only and answers 204 when it adds
   them. The SDK sent it every entry except the names of tags already on the agent, so a tag name that was
