@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — every dashboard page is served with a Content-Security-Policy
+
+- The dashboard sends a `Content-Security-Policy` header on every response. The policy is built in
+  `apps/web/lib/content-security-policy.ts` and set from `headers()` in `apps/web/next.config.ts`. Script loads only
+  from the dashboard origin. The page connects only to the dashboard origin and to the origin of
+  `NEXT_PUBLIC_API_URL`. `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`
+  rule out plugins, a `<base>` rewrite, a form post to another origin, and framing by any site.
+- When the dashboard's hostname contains `-frontend`, the client calls the backend at the same hostname with
+  `-backend` in its place. For such a host, `connect-src` also lists that backend host, taken from the request's
+  `Host` header.
+- `script-src` and `style-src` keep `'unsafe-inline'`. Next.js writes its bootstrap data as inline scripts and the
+  theme is set by one, and a header set in `next.config` cannot carry a per-request nonce for statically rendered
+  pages. `img-src` allows `https:` so a registration request shows the profile picture its identity provider
+  returned. Under `next dev` the policy adds `'unsafe-eval'`, which React's development build needs.
+- For deployers: `NEXT_PUBLIC_API_URL` is read when the dashboard is built, for both the client bundle and this
+  header. The browser refuses an API request to any origin other than the dashboard's own, the `NEXT_PUBLIC_API_URL`
+  origin and the derived `-backend` host, so build with `NEXT_PUBLIC_API_URL` set to the origin the browser uses.
+  `frame-ancestors 'none'` stops every site, the dashboard's own origin included, from showing it inside a frame.
+
 ### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path is answered 405 (#652)
 
 - `POST /api/v1/a2a/verify` was mounted twice: once without authentication, and again inside the authenticated

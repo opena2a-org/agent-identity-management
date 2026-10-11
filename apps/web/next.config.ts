@@ -1,5 +1,9 @@
 import type { NextConfig } from 'next';
 import { dashboardRedirects } from './lib/redirects';
+import { dashboardSecurityHeaders } from './lib/content-security-policy';
+
+// The API URL baked into the client bundle; the policy's connect-src allows its origin.
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -17,8 +21,16 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
+    NEXT_PUBLIC_API_URL: apiUrl,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Agent Identity Management',
+  },
+  // Content-Security-Policy on every dashboard page. The policy lives in
+  // lib/content-security-policy.ts.
+  async headers() {
+    return dashboardSecurityHeaders({
+      apiUrl,
+      development: process.env.NODE_ENV === 'development',
+    });
   },
   // Moved dashboard pages. The table lives in lib/redirects.ts; add rows there, not here.
   async redirects() {
