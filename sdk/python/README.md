@@ -52,7 +52,7 @@ def get_customer(customer_id):
 get_customer(42)
 ```
 
-`@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization on the server, and records the outcome in the audit log.
+`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log. The server's 5-step Fine-Grained Authorization engine does not decide these calls; it runs on `POST /api/v1/agents/:id/authorize`, which the SDK does not call.
 
 A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
 
@@ -116,7 +116,7 @@ set_quiet(False)   # restore
 
 ## Capability decorators
 
-`@agent.perform_action` signs each invocation, runs it through FGA on the server, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`aim_sdk/risk_detector.py`](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/aim_sdk/risk_detector.py):
+`@agent.perform_action` signs each invocation, has the server check it against the agent's granted capabilities and the organization's security policies, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`aim_sdk/risk_detector.py`](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/aim_sdk/risk_detector.py):
 
 - **Namespace prefix** maps `payment:`, `admin:`, `system:`, `billing:`, `finance:` to critical; `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` to high; `db:`, `database:`, `file:`, `storage:`, `cache:` to medium; `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` to low.
 - **Action suffix** maps `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` to low; `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` to medium; `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` to high; `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` to critical.

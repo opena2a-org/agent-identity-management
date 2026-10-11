@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — `aim-sdk login` and the README say what the server checks on an `@perform_action` call (#656)
+
+- The closing text of `aim-sdk login` says the server checks each `@perform_action` call against the agent's
+  granted capabilities and the organization's security policies. It says that in strict enforcement mode a call
+  outside the granted capabilities is denied unless a security policy allows it, and that in monitoring mode, the
+  default, it runs and is recorded. It said each call was authorized by the server's 5-step Fine-Grained
+  Authorization and that calls outside the granted capabilities were denied.
+- The README says the same of the decorator, and that the 5-step engine runs on `POST /api/v1/agents/:id/authorize`,
+  which the SDK does not call.
+
 ### Changed
 
 - The PyPI "Homepage" link and the first link in this README go to the project page,
