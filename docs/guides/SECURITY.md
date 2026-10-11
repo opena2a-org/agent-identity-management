@@ -391,7 +391,7 @@ chmod 600 ~/.aim/credentials.json
 
 **Step 2: Download Fresh SDK**
 ```bash
-1. Login again via OAuth
+1. Sign in to the dashboard again
 2. Download new SDK
 3. Update all agents with new credentials
 ```

@@ -18,9 +18,9 @@ This guide provides in-depth troubleshooting for authentication issues in the AI
 
 AIM uses a **dual authentication model**:
 
-### 1. OAuth 2.0 (User Authentication)
+### 1. Email and Password (User Authentication)
 - **Purpose**: Authenticate users accessing the platform
-- **Flow**: Microsoft/Google OAuth → JWT access/refresh tokens
+- **Flow**: Email and password (the dashboard posts to `POST /api/v1/public/login`) → JWT access/refresh tokens
 - **Used For**: Dashboard access, SDK downloads
 
 ### 2. Ed25519 Cryptographic Signing (Agent Authentication)
@@ -31,7 +31,7 @@ AIM uses a **dual authentication model**:
 ### Combined Model
 
 ```
-User (OAuth) → Downloads SDK → Agent (Ed25519 + OAuth)
+User (email and password) → Downloads SDK → Agent (Ed25519 + OAuth)
 ```
 
 An agent needs BOTH:
@@ -45,7 +45,7 @@ An agent needs BOTH:
 ### Phase 1: Initial Authentication
 
 ```
-1. User logs in via OAuth (Google/Microsoft)
+1. User logs in with an email and password
    → Backend issues access_token (1 hour TTL)
    → Backend issues refresh_token (90 days TTL)
    → Tokens kept in the dashboard's site storage and sent as `Authorization: Bearer` (not cookies)

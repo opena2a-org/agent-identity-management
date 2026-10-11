@@ -46,19 +46,6 @@ nano .env  # or use your preferred editor
 Required environment variables:
 
 ```bash
-# OAuth Providers (at least one required)
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_secret
-
-# OR Microsoft
-MICROSOFT_CLIENT_ID=your_microsoft_client_id
-MICROSOFT_CLIENT_SECRET=your_microsoft_secret
-
-# OR Okta
-OKTA_CLIENT_ID=your_okta_client_id
-OKTA_CLIENT_SECRET=your_okta_secret
-OKTA_DOMAIN=your-domain.okta.com
-
 # JWT Secret (generate with: openssl rand -hex 32)
 JWT_SECRET=your-super-secret-jwt-key-min-32-chars
 
@@ -131,37 +118,6 @@ Open your browser:
 - **Frontend**: http://localhost:3000
 - **API Docs**: http://localhost:8080/docs
 - **Health Check**: http://localhost:8080/health
-
-## OAuth Provider Setup
-
-### Google OAuth
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create new project or select existing
-3. Enable Google+ API
-4. Create OAuth 2.0 credentials:
-   - Application type: Web application
-   - Authorized redirect URIs: `http://localhost:8080/api/v1/auth/callback/google`
-5. Copy Client ID and Client Secret to `.env`
-
-### Microsoft OAuth
-
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to Azure Active Directory → App registrations
-3. Create new registration:
-   - Name: Agent Identity Management
-   - Redirect URI: `http://localhost:8080/api/v1/auth/callback/microsoft`
-4. Copy Application (client) ID
-5. Create client secret in Certificates & secrets
-6. Copy values to `.env`
-
-### Okta OAuth
-
-1. Go to [Okta Developer Console](https://developer.okta.com)
-2. Create new app integration
-3. Select OIDC - Web Application
-4. Add redirect URI: `http://localhost:8080/api/v1/auth/callback/okta`
-5. Copy Client ID, Client Secret, and Okta domain to `.env`
 
 ## Development Setup
 
@@ -455,22 +411,6 @@ lsof -i :8080
 kill -9 $(lsof -t -i:8080)
 ```
 
-### OAuth Redirect Issues
-
-1. Verify redirect URI matches exactly in provider console
-2. Check frontend URL in environment:
-   ```bash
-   FRONTEND_URL=http://localhost:3000
-   ```
-3. Ensure callback URL is correct:
-   ```bash
-   # For local development
-   http://localhost:8080/api/v1/auth/callback/google
-
-   # For production
-   https://your-domain.com/api/v1/auth/callback/google
-   ```
-
 ### Migration Failures
 
 ```bash
@@ -561,7 +501,7 @@ sudo systemctl restart fail2ban
 
 After installation:
 
-1. **Create Admin User**: Sign in with OAuth provider
+1. **Create Admin User**: Create the first administrator as [BOOTSTRAP_GUIDE.md](./BOOTSTRAP_GUIDE.md) describes, then sign in with its email and password
 2. **Register First Agent**: Use the UI or API
 3. **Generate API Keys**: Create keys for agent authentication
 4. **Configure Alerts**: Set up email notifications

@@ -43,10 +43,6 @@ cd apps/backend
 cat .env
 ```
 
-**Important**: Update OAuth credentials:
-- Get Google OAuth credentials from [Google Cloud Console](https://console.cloud.google.com/)
-- Update `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env`
-
 ### 4. Run Database Migrations
 
 ```bash
@@ -87,10 +83,6 @@ Located at `apps/backend/.env`:
 # Required - Change in production!
 JWT_SECRET=dev-secret-key-for-local-development-change-in-production-32chars-min
 
-# OAuth - At least one provider required
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-
 # Database (matches Docker Compose)
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -116,40 +108,12 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 The migrations will create the following tables:
 
 - `organizations` - Multi-tenant organizations
-- `users` - Platform users with OAuth integration
+- `users` - Platform users
 - `agents` - Registered AI agents and MCP servers
 - `api_keys` - API keys for agent authentication
 - `trust_scores` - Historical trust score calculations
 - `audit_logs` - Comprehensive audit trail (TimescaleDB hypertable)
 - `alerts` - System alerts and notifications
-
-## OAuth Configuration
-
-### Google OAuth Setup
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable Google+ API
-4. Go to Credentials → Create OAuth 2.0 Client ID
-5. Set authorized redirect URI: `http://localhost:8080/api/v1/auth/callback/google`
-6. Copy Client ID and Client Secret to `.env`
-
-### Microsoft OAuth Setup (Optional)
-
-1. Go to [Azure Portal](https://portal.azure.com/)
-2. Navigate to Azure Active Directory → App registrations
-3. Create new registration
-4. Set redirect URI: `http://localhost:8080/api/v1/auth/callback/microsoft`
-5. Generate client secret
-6. Update `.env` with credentials
-
-### Okta OAuth Setup (Optional)
-
-1. Go to [Okta Developer Console](https://developer.okta.com/)
-2. Create new application
-3. Select Web application type
-4. Set redirect URI: `http://localhost:8080/api/v1/auth/callback/okta`
-5. Update `.env` with credentials and domain
 
 ## Testing the Installation
 
@@ -187,7 +151,7 @@ Expected response: `PONG`
 
 Open browser to `http://localhost:3000`
 
-You should see the landing page with "Sign in with Google" button.
+You should see the sign-in page, which asks for an email and password.
 
 ## Common Issues
 
@@ -208,12 +172,6 @@ lsof -i :5432
 lsof -i :6379
 # Kill the process or change REDIS_PORT
 ```
-
-### OAuth Callback Errors
-
-Make sure your OAuth redirect URLs match exactly:
-- Development: `http://localhost:8080/api/v1/auth/callback/google`
-- Production: `https://yourdomain.com/api/v1/auth/callback/google`
 
 ### Database Connection Errors
 
@@ -287,7 +245,7 @@ Once the backend is running, API endpoints are available at:
 
 - **Base URL**: `http://localhost:8080/api/v1`
 - **Health**: `GET /health`
-- **Auth**: `GET /auth/login/:provider` (google, microsoft, okta)
+- **Auth**: `POST /auth/login/local` (email and password)
 - **Agents**: `GET/POST/PUT/DELETE /agents`
 - **API Keys**: `GET/POST /api-keys`
 - **Trust Scores**: `POST /trust-scores/:agentId/calculate`
@@ -296,7 +254,7 @@ Once the backend is running, API endpoints are available at:
 
 ## Next Steps
 
-1. **Configure OAuth** - Set up at least one OAuth provider
+1. **Create an Administrator** - Create the first administrator as [BOOTSTRAP_GUIDE.md](./BOOTSTRAP_GUIDE.md) describes, then sign in with its email and password
 2. **Create Test Data** - Register some agents through the UI
 3. **Explore Features** - Try trust score calculation, audit logs, compliance reports
 4. **Read Documentation** - Check PROJECT_STATUS.md and PROGRESS_SUMMARY.md
@@ -308,15 +266,14 @@ For production deployment:
 
 1. Generate strong JWT secret (32+ characters)
 2. Set `KEYVAULT_MASTER_KEY` to a key from `openssl rand -base64 32` and keep the same value across restarts. Agent private keys are encrypted under it, and the server refuses to start in production without it. Setting `ENVIRONMENT=development` does not fix a missing key.
-3. Use production OAuth credentials with HTTPS redirect URLs
-4. Enable PostgreSQL SSL mode
-5. Set strong database passwords
-6. Configure Redis password
-7. Set `ENVIRONMENT=production`
-8. Use proper secrets management (AWS Secrets Manager, Vault, etc.)
-9. Enable rate limiting
-10. Configure monitoring and logging
-11. Set up backups for PostgreSQL
+3. Enable PostgreSQL SSL mode
+4. Set strong database passwords
+5. Configure Redis password
+6. Set `ENVIRONMENT=production`
+7. Use proper secrets management (AWS Secrets Manager, Vault, etc.)
+8. Enable rate limiting
+9. Configure monitoring and logging
+10. Set up backups for PostgreSQL
 
 ## Support
 

@@ -13,7 +13,7 @@
 - [x] Backend API (62+ endpoints)
 - [x] Frontend UI (Next.js 16 + React 19)
 - [x] Database (PostgreSQL, 16 tables)
-- [x] Authentication (Google OAuth + JWT)
+- [x] Authentication (email and password + JWT)
 - [x] Authorization (RBAC - 4 roles)
 - [x] Dashboard with analytics
 - [x] Agent management
@@ -29,8 +29,6 @@
 
 - [ ] API Keys UI page (2 hours)
 - [ ] Settings UI page (2 hours)
-- [ ] Microsoft OAuth (optional)
-- [ ] Okta OAuth (optional)
 
 ---
 
@@ -40,37 +38,9 @@
 |----------|--------|
 | **Backend API** | ✅ 62/62 endpoints working |
 | **Frontend Pages** | ✅ 3/5 pages working |
-| **OAuth Providers** | ✅ 1/3 configured (Google) |
 | **Performance** | ✅ <100ms API responses |
 | **Security** | ✅ All checks passed |
 | **Responsive** | ✅ Desktop + Mobile |
-
----
-
-## 🔐 OAuth Status
-
-### ✅ Google (CONFIGURED)
-```env
-GOOGLE_CLIENT_ID=635947637403-***
-GOOGLE_CLIENT_SECRET=GOCSPX-***
-GOOGLE_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback/google
-```
-**Test**: ✅ Generates valid OAuth redirect URLs
-
-### ⚠️ Microsoft (NOT CONFIGURED)
-```bash
-# Azure CLI: Available ✅
-# Logged in as: admin@example.com
-# To configure:
-az ad app create --display-name "AIM"
-```
-
-### ⚠️ Okta (NOT CONFIGURED)
-```bash
-# Okta CLI: Available ✅
-# To configure:
-okta apps create
-```
 
 ---
 
@@ -122,9 +92,11 @@ curl http://localhost:8080/health
 curl http://localhost:8080/health/ready
 ```
 
-### Test OAuth
+### Test Login
 ```bash
-curl http://localhost:8080/api/v1/auth/login/google
+curl -X POST http://localhost:8080/api/v1/auth/login/local \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "<password>"}'
 ```
 
 ---
@@ -144,7 +116,7 @@ curl http://localhost:8080/api/v1/auth/login/google
 
 ### Day 2: Testing & Security (5 hours)
 - [ ] Add E2E tests (Playwright/Cypress)
-  - OAuth login flow
+  - Email and password login flow
   - Dashboard navigation
   - Agent CRUD
 - [ ] Security review
@@ -164,7 +136,7 @@ curl http://localhost:8080/api/v1/auth/login/google
 
 ## 🔒 Security Checklist
 
-- [x] OAuth2 + JWT authentication
+- [x] Email and password + JWT authentication
 - [x] RBAC authorization (4 roles)
 - [x] Rate limiting on all routes
 - [x] SQL injection prevention (parameterized queries)
@@ -241,13 +213,6 @@ curl http://localhost:8080/api/v1/auth/login/google
    - Workaround: Not critical for MVP
    - Effort: 2 hours
 
-### Low Priority
-
-1. **Additional OAuth Providers**
-   - Microsoft/Azure (optional)
-   - Okta (optional)
-   - Effort: 1 hour each
-
 ---
 
 ## 📞 Troubleshooting
@@ -310,8 +275,10 @@ go run cmd/migrate/main.go
 curl -X GET http://localhost:8080/api/v1/agents \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-# Get JWT token (after OAuth login)
-# Check browser localStorage: aim_token
+# Get a JWT: the accessToken field of the login response
+curl -X POST http://localhost:8080/api/v1/auth/login/local \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "<password>"}'
 ```
 
 ### For Production

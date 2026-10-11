@@ -130,44 +130,24 @@ cat ~/.aim/credentials.json | grep -E "(refresh_token|private_key)"
 
 ---
 
-### ❌ OAuth Login Fails
+### ❌ Dashboard Sign-in Fails
 
 **Symptoms**:
-- Redirect loop during Microsoft/Google login
-- "Invalid state parameter" error
-- Blank page after OAuth callback
+- The sign-in page refuses an email and password you expect to work
 
 **Troubleshooting Steps**:
 
-#### 1. Check Environment Variables
+#### 1. Try the Credentials Against the API
+
+The sign-in page posts the email and password to `POST /api/v1/public/login`. A wrong email or password is answered `401` with `"error": "Invalid email or password"`, and an account still awaiting an administrator's approval is answered `200` with `"isApproved": false`:
 
 ```bash
-# Backend .env file
-cat apps/backend/.env
-
-# Required:
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-MICROSOFT_CLIENT_ID=...
-MICROSOFT_CLIENT_SECRET=...
-OAUTH_REDIRECT_URL=http://localhost:3000/auth/callback
+curl -X POST http://localhost:8080/api/v1/public/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "<password>"}'
 ```
 
-#### 2. Verify OAuth App Configuration
-
-**Google OAuth**:
-- Go to: Google Cloud Console → APIs & Credentials
-- Check authorized redirect URIs include:
-  ```
-  http://localhost:3000/auth/callback
-  https://yourdomain.com/auth/callback
-  ```
-
-**Microsoft OAuth**:
-- Go to: Azure Portal → App Registrations
-- Check redirect URIs match your configuration
-
-#### 3. Clear the Stored Sign-in
+#### 2. Clear the Stored Sign-in
 
 The dashboard keeps its sign-in in the browser's site storage, not in cookies. Sign out, or clear the site data for the dashboard's address (for example localhost:3000):
 
@@ -176,14 +156,11 @@ The dashboard keeps its sign-in in the browser's site storage, not in cookies. S
 # Choose "Cookies and other site data" for localhost:3000
 ```
 
-#### 4. Check Backend Logs
+#### 3. Check Backend Logs
 
 ```bash
 # Docker
-docker logs identity-backend | grep -i oauth
-
-# Local development
-tail -f apps/backend/logs/oauth.log
+docker logs identity-backend --tail 100
 ```
 
 ---

@@ -55,13 +55,6 @@ curl -H "X-API-Key: YOUR_API_KEY" \
   http://localhost:8080/api/v1/agents
 ```
 
-### OAuth (SSO)
-
-Supported providers:
-- Google (`/auth/google`)
-- Microsoft (`/auth/microsoft`)
-- Okta (`/auth/okta`)
-
 ---
 
 ## API Endpoints
@@ -139,27 +132,6 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "expiresAt": "2025-10-09T00:00:00Z"
 }
 ```
-
----
-
-#### GET /auth/google
-
-Initiate Google OAuth flow.
-
-**Redirect:**
-Redirects to Google OAuth consent screen.
-
----
-
-#### GET /auth/google/callback
-
-Handle Google OAuth callback.
-
-**Query Parameters:**
-- `code`: OAuth authorization code
-
-**Response:**
-Redirects to frontend with JWT token.
 
 ---
 

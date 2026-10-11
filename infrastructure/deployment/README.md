@@ -516,7 +516,6 @@ aws elasticache delete-cache-cluster --cache-cluster-id $AIM_REDIS
 Before going to production on any cloud:
 
 - [ ] Enable HTTPS/TLS with managed certificates
-- [ ] Configure OAuth providers (Google, Microsoft, Okta)
 - [ ] Enable database encryption at rest
 - [ ] Set up VPC/Private networking
 - [ ] Configure firewall rules (allow only necessary ports)

@@ -21,41 +21,44 @@ Complete API reference for Agent Identity Management platform.
 
 ## Authentication
 
-### Initiate OAuth Login
+### Log In with Email and Password
 
 ```http
-GET /api/v1/auth/login/:provider
+POST /api/v1/auth/login/local
 ```
 
-**Parameters:**
-- `provider` (path) - OAuth provider: `google`, `microsoft`, or `okta`
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "<password>"
+}
+```
 
 **Response:**
 ```json
 {
-  "redirectUrl": "https://accounts.google.com/o/oauth2/v2/auth?..."
+  "accessToken": "eyJhbGc...",
+  "refreshToken": "eyJhbGc...",
+  "user": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "role": "admin",
+    "organizationId": "789e4567-e89b-12d3-a456-426614174000",
+    "forcePasswordChange": false
+  }
 }
 ```
 
+A missing email or password is answered `400`; a wrong email or password is answered `401` with `{"error": "Invalid email or password"}`.
+
 **Example:**
 ```bash
-curl http://localhost:8080/api/v1/auth/login/google
+curl -X POST http://localhost:8080/api/v1/auth/login/local \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "<password>"}'
 ```
-
----
-
-### OAuth Callback
-
-```http
-GET /api/v1/auth/callback/:provider
-```
-
-**Parameters:**
-- `provider` (path) - OAuth provider
-- `code` (query) - Authorization code from provider
-- `state` (query) - CSRF token
-
-**Response:** Redirects to frontend with tokens
 
 ---
 
@@ -78,8 +81,10 @@ Authorization: Bearer <access_token>
   "name": "John Doe",
   "role": "admin",
   "organizationId": "789e4567-e89b-12d3-a456-426614174000",
-  "provider": "google",
-  "createdAt": "2025-01-01T00:00:00Z"
+  "organizationName": "Example Org",
+  "lastLoginAt": "2025-01-02T00:00:00Z",
+  "createdAt": "2025-01-01T00:00:00Z",
+  "status": "active"
 }
 ```
 
@@ -553,7 +558,7 @@ GET /api/v1/admin/users
       "email": "user@example.com",
       "name": "John Doe",
       "role": "admin",
-      "provider": "google",
+      "provider": "local",
       "organizationId": "789e4567-e89b-12d3-a456-426614174000",
       "createdAt": "2025-01-01T00:00:00Z",
       "lastLoginAt": "2025-01-05T12:00:00Z"

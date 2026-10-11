@@ -12,11 +12,10 @@ Complete guide for deploying AIM (Agent Identity Management) in development, sta
 2. [Quick Start](#-quick-start)
 3. [Deployment Modes](#-deployment-modes)
 4. [Environment Configuration](#-environment-configuration)
-5. [OAuth Setup](#-oauth-setup)
-6. [Production Deployment](#-production-deployment)
-7. [Kubernetes Deployment](#-kubernetes-deployment)
-8. [Monitoring & Observability](#-monitoring--observability)
-9. [Troubleshooting](#-troubleshooting)
+5. [Production Deployment](#-production-deployment)
+6. [Kubernetes Deployment](#-kubernetes-deployment)
+7. [Monitoring & Observability](#-monitoring--observability)
+8. [Troubleshooting](#-troubleshooting)
 
 ---
 
@@ -233,27 +232,6 @@ MINIO_BUCKET=aim-storage
 NATS_URL=nats://nats:4222
 
 ################################################################################
-# OAuth Providers
-################################################################################
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URL=https://yourdomain.com/auth/google/callback
-
-# Microsoft OAuth
-MICROSOFT_CLIENT_ID=your-microsoft-client-id
-MICROSOFT_CLIENT_SECRET=your-microsoft-client-secret
-MICROSOFT_REDIRECT_URL=https://yourdomain.com/auth/microsoft/callback
-MICROSOFT_TENANT_ID=common  # or your-tenant-id
-
-# Okta OAuth
-OKTA_CLIENT_ID=your-okta-client-id
-OKTA_CLIENT_SECRET=your-okta-client-secret
-OKTA_REDIRECT_URL=https://yourdomain.com/auth/okta/callback
-OKTA_DOMAIN=your-domain.okta.com
-
-################################################################################
 # Monitoring & Observability
 ################################################################################
 
@@ -420,217 +398,6 @@ With `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set, it first creates or up
 - **The password travels in the statement.** The role's password is set with `CREATE ROLE ... PASSWORD '<literal>'` or `ALTER ROLE ... PASSWORD '<literal>'`. With `log_statement` set to `ddl` or `all`, PostgreSQL writes that statement, password included, to its server log. Run the command while statement logging is below `ddl`, or set the password again afterwards from a client that sends a SCRAM verifier instead of the password, such as `\password <role>` in `psql`.
 
 **Upgrading across the agent private key format change.** A release that stores agent private keys in format v2 converts the stored v1 keys once at startup and records completion in `schema_migrations` as `keyvault/agent-private-key-v2`; later starts skip the conversion. An instance of the earlier release that is still running keeps writing v1 keys, and a key written after completion is never converted and is refused on the request path until that agent's credentials are rotated. Stop every instance of the earlier release before the first instance of the new release starts.
-
----
-
-## 🔐 OAuth Setup
-
-Complete setup guides for Google, Microsoft, and Okta SSO integration.
-
-### Google OAuth Setup
-
-#### 1. Create Google Cloud Project
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Click **Create Project**
-3. Enter project name: `aim-production`
-4. Click **Create**
-
-#### 2. Enable APIs
-
-1. Navigate to **APIs & Services > Library**
-2. Search for **Google+ API**
-3. Click **Enable**
-
-#### 3. Configure OAuth Consent Screen
-
-1. Navigate to **APIs & Services > OAuth consent screen**
-2. Select **External** (for public access) or **Internal** (for workspace)
-3. Fill in application details:
-   - **App name**: `AIM - Agent Identity Management`
-   - **User support email**: `support@yourdomain.com`
-   - **Developer contact email**: `dev@yourdomain.com`
-4. Add scopes:
-   - `email`
-   - `profile`
-   - `openid`
-5. Click **Save and Continue**
-
-#### 4. Create OAuth Credentials
-
-1. Navigate to **APIs & Services > Credentials**
-2. Click **Create Credentials > OAuth client ID**
-3. Select **Application type**: Web application
-4. Enter **Name**: `AIM Production`
-5. Add **Authorized redirect URIs**:
-   - Development: `http://localhost:8080/auth/google/callback`
-   - Production: `https://yourdomain.com/auth/google/callback`
-6. Click **Create**
-7. Copy **Client ID** and **Client Secret**
-
-#### 5. Update .env File
-
-```bash
-GOOGLE_CLIENT_ID=123456789-abcdefghijklmnop.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-abcdefghijklmnopqrstuvwx
-GOOGLE_REDIRECT_URL=https://yourdomain.com/auth/google/callback
-```
-
-#### 6. Test Integration
-
-```bash
-# Visit your AIM instance
-open https://yourdomain.com
-
-# Click "Sign in with Google"
-# Should redirect to Google OAuth consent screen
-# After approval, redirects back to AIM
-```
-
----
-
-### Microsoft OAuth Setup
-
-#### 1. Register Application in Azure AD
-
-1. Go to [Azure Portal](https://portal.azure.com/)
-2. Navigate to **Azure Active Directory**
-3. Click **App registrations > New registration**
-4. Fill in details:
-   - **Name**: `AIM - Agent Identity Management`
-   - **Supported account types**:
-     - **Single tenant** (your org only)
-     - **Multitenant** (any Azure AD org)
-     - **Multitenant + personal** (anyone with Microsoft account)
-   - **Redirect URI**:
-     - Platform: **Web**
-     - URI: `https://yourdomain.com/auth/microsoft/callback`
-5. Click **Register**
-
-#### 2. Create Client Secret
-
-1. In your app, navigate to **Certificates & secrets**
-2. Click **New client secret**
-3. Enter **Description**: `AIM Production Secret`
-4. Select **Expires**: 24 months (or custom)
-5. Click **Add**
-6. **Copy the secret value immediately** (shown only once!)
-
-#### 3. Configure API Permissions
-
-1. Navigate to **API permissions**
-2. Click **Add a permission > Microsoft Graph**
-3. Select **Delegated permissions**
-4. Add permissions:
-   - `User.Read`
-   - `email`
-   - `openid`
-   - `profile`
-5. Click **Add permissions**
-6. Click **Grant admin consent** (if you're admin)
-
-#### 4. Get Tenant ID
-
-1. Navigate to **Overview**
-2. Copy **Directory (tenant) ID**
-
-#### 5. Update .env File
-
-```bash
-MICROSOFT_CLIENT_ID=12345678-1234-1234-1234-123456789abc
-MICROSOFT_CLIENT_SECRET=abcdefghijklmnopqrstuvwxyz123456
-MICROSOFT_REDIRECT_URL=https://yourdomain.com/auth/microsoft/callback
-MICROSOFT_TENANT_ID=87654321-4321-4321-4321-cba987654321
-# Or use "common" for multi-tenant
-```
-
-#### 6. Test Integration
-
-```bash
-# Visit your AIM instance
-open https://yourdomain.com
-
-# Click "Sign in with Microsoft"
-# Should redirect to Microsoft login
-# After approval, redirects back to AIM
-```
-
----
-
-### Okta OAuth Setup
-
-#### 1. Create Okta Account
-
-1. Go to [Okta Developer](https://developer.okta.com/)
-2. Click **Sign Up** (free developer account)
-3. Verify your email
-4. Access your Okta domain: `https://dev-123456.okta.com`
-
-#### 2. Create Application Integration
-
-1. Log in to Okta Admin Console
-2. Navigate to **Applications > Applications**
-3. Click **Create App Integration**
-4. Select **OIDC - OpenID Connect**
-5. Select **Web Application**
-6. Click **Next**
-
-#### 3. Configure Application
-
-1. Fill in details:
-   - **App integration name**: `AIM - Agent Identity Management`
-   - **Logo** (optional): Upload your logo
-   - **Grant type**: Authorization Code
-   - **Sign-in redirect URIs**:
-     - Development: `http://localhost:8080/auth/okta/callback`
-     - Production: `https://yourdomain.com/auth/okta/callback`
-   - **Sign-out redirect URIs**:
-     - Development: `http://localhost:3000`
-     - Production: `https://yourdomain.com`
-2. **Assignments**:
-   - Select **Allow everyone in your organization to access**
-   - Or **Limit access to selected groups**
-3. Click **Save**
-
-#### 4. Get Client Credentials
-
-1. In your app, go to **General** tab
-2. Copy **Client ID**
-3. Copy **Client Secret**
-
-#### 5. Get Okta Domain
-
-1. Look at your Okta admin URL
-2. Your domain is the subdomain: `dev-123456.okta.com`
-
-#### 6. Update .env File
-
-```bash
-OKTA_CLIENT_ID=0oa1234567890abcdef
-OKTA_CLIENT_SECRET=abcdefghijklmnopqrstuvwxyz1234567890ABCD
-OKTA_REDIRECT_URL=https://yourdomain.com/auth/okta/callback
-OKTA_DOMAIN=dev-123456.okta.com
-```
-
-#### 7. Configure Authorization Server (Optional)
-
-For custom scopes and claims:
-
-1. Navigate to **Security > API**
-2. Select **default** authorization server
-3. Click **Scopes** tab
-4. Add custom scopes if needed
-
-#### 8. Test Integration
-
-```bash
-# Visit your AIM instance
-open https://yourdomain.com
-
-# Click "Sign in with Okta"
-# Should redirect to Okta login
-# After approval, redirects back to AIM
-```
 
 ---
 
@@ -938,18 +705,6 @@ docker compose exec postgres psql -U postgres -d identity -c "SELECT 1"
 # Check DATABASE_URL format
 # Correct: postgresql://user:pass@host:port/dbname?sslmode=disable
 # Wrong: postgres://... (use postgresql://)
-```
-
-#### OAuth redirect errors
-
-```bash
-# Verify redirect URLs match EXACTLY
-# Google Console: http://localhost:8080/auth/google/callback
-# .env file: GOOGLE_REDIRECT_URL=http://localhost:8080/auth/google/callback
-
-# Check OAuth credentials
-echo $GOOGLE_CLIENT_ID
-echo $GOOGLE_CLIENT_SECRET
 ```
 
 ### Health Checks

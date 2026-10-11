@@ -515,7 +515,7 @@ Fixes #456
 
 docs(api): update authentication examples
 
-Add examples for all three OAuth providers
+Add a curl example for the email and password login
 ```
 
 ## Issue Guidelines

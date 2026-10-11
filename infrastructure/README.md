@@ -21,7 +21,6 @@ infrastructure/
 │   └── promtail.yml     # Log shipping
 └── scripts/             # Operational utilities
     ├── deploy-azure-production.sh   # Production Azure deployment
-    ├── setup-oauth.sh               # OAuth provider configuration
     └── verify-migrations.sh         # Database migration verification
 ```
 
@@ -112,14 +111,6 @@ Deploy a complete production environment to Azure:
 - Generates secure credentials
 - Runs database migrations
 - Creates admin user
-
-### OAuth Configuration
-
-Set up OAuth providers (Google, Microsoft, Okta):
-
-```bash
-./infrastructure/scripts/setup-oauth.sh
-```
 
 ### Migration Verification
 
