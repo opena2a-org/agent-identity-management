@@ -45,7 +45,7 @@ def get_customer(customer_id):
 get_customer(42)
 ```
 
-`@perform_action` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
+`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log. The 5-step Fine-Grained Authorization engine does not decide these calls; see [where it runs](#5-step-fine-grained-authorization).
 
 A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
 
@@ -105,7 +105,7 @@ Working examples for all three live in [`examples/`](examples/).
 
 `secure()` auto-detects your framework from imports (`langchain`, `crewai`, `llama_index`, `anthropic`, `openai`). When both a framework and an LLM provider are present, the framework wins.
 
-`@agent.perform_action` signs each invocation, runs it through 5-step FGA on the server, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`sdk/python/aim_sdk/risk_detector.py`](sdk/python/aim_sdk/risk_detector.py):
+`@agent.perform_action` signs each invocation, has the server check it against the agent's granted capabilities and the organization's security policies, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`sdk/python/aim_sdk/risk_detector.py`](sdk/python/aim_sdk/risk_detector.py):
 
 - **Namespace prefix.** `payment:`, `admin:`, `system:`, `billing:`, `finance:` map to critical. `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` map to high. `db:`, `database:`, `file:`, `storage:`, `cache:` map to medium. `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` map to low.
 - **Action suffix.** `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` map to low. `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` map to medium. `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` map to high. `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` map to critical.
@@ -153,7 +153,7 @@ The client for an AIM server is a separate package, `@opena2a/aim-sdk`, document
 
 ### 5-step Fine-Grained Authorization
 
-Every privileged action runs through five checks before execution.
+`POST /api/v1/agents/:id/authorize` runs an agent's request for a capability through the checks below, in order, and stops at the first one that denies. When the agent has no FGA policy for that capability, it runs step 1 only.
 
 | Step | Check | Latency budget |
 |---|---|---|
@@ -161,9 +161,11 @@ Every privileged action runs through five checks before execution.
 | 2 | Attribute | <10ms |
 | 3 | Context | <10ms |
 | 4 | Chain | <10ms |
-| 5 | Intent (NanoMind) | up to 800ms on HIGH-risk operations |
+| 5 | Intent (NanoMind) | not on the decision path |
 
-Step 5 uses the [NanoMind security classifier](https://huggingface.co/opena2a/nanomind-security-classifier), a 3M-parameter local Mamba model. No external calls.
+Step 5 runs only when the policy's risk level is HIGH or MEDIUM; it is skipped for LOW. It hands the request to a NanoMind daemon (`FGA_DAEMON_URL`, default `http://127.0.0.1:47200`) without holding the decision, records the daemon's classification, and never denies. Neither compose file in this repository starts that daemon.
+
+The SDKs do not call this route. `@perform_action` (Python) and `performAction()` (Java) post each call to `/api/v1/sdk-api/verifications`, where the server decides with the capabilities granted to the agent, the organization's enforcement mode and its security policies. That route records an `fga.authorize` span for its decision with one child, `fga.capability_check`. Routing SDK verifications through this engine is tracked for a fix.
 
 ### Trust-gated capabilities
 
@@ -348,7 +350,7 @@ docker compose up -d
 ./smoke-backend.sh
 ```
 
-Every `fga.authorize` decision lands as a parent span with 5 child spans (one per FGA step). 9 SemConv attributes ride the parent: `agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`. The attribute set is proposed to the OpenTelemetry Semantic Conventions WG. Full design notes: [`apps/backend/docs/OBSERVABILITY.md`](apps/backend/docs/OBSERVABILITY.md).
+Every `fga.authorize` decision lands as a parent span with one child span per FGA step it ran: up to five on `POST /api/v1/agents/:id/authorize` (up to four when the policy's risk level is LOW), and one, `fga.capability_check`, when the agent has no FGA policy for the capability or the decision is an SDK verification's. 9 SemConv attributes ride the parent: `agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`. The attribute set is proposed to the OpenTelemetry Semantic Conventions WG. Full design notes: [`apps/backend/docs/OBSERVABILITY.md`](apps/backend/docs/OBSERVABILITY.md).
 
 ## Demos
 

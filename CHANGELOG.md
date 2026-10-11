@@ -45,6 +45,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   slash, or through `Add`, is now counted.
 - Tests: `a2a_verify_route_test.go` (server routes).
 
+### Changed — the READMEs say what decides an SDK verification, and where the 5-step engine runs (#656)
+
+- The README, `sdk/python/README.md` and `sdk/java/README.md` say that `@perform_action` and `performAction()` have
+  the server check each call against the capabilities granted to the agent and the organization's security
+  policies; they said each call ran through Fine-Grained Authorization (FGA). The SDKs post each call to
+  `/api/v1/sdk-api/verifications`, which decides with those. The 5-step engine runs on
+  `POST /api/v1/agents/:id/authorize`, which no SDK in this repository calls.
+- The README's Fine-Grained Authorization section names that route and says it runs step 1 only when the agent has
+  no FGA policy for the capability. It says step 5 runs for HIGH- and MEDIUM-risk policies without holding the
+  decision, never denies, and needs a NanoMind daemon (`FGA_DAEMON_URL`) that neither compose file starts. The
+  observability section says a decision carries one child span per step it ran, where it said five.
+- Routing SDK verifications through the 5-step engine is still open.
+- Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
+
 ### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path that reaches the routes is answered 405 (#652)
 
 - `POST /api/v1/a2a/verify` was mounted twice: once without authentication, and again inside the authenticated

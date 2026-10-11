@@ -18,7 +18,7 @@ User user = agent.performAction("db:read", "users_table", () ->
 );
 ```
 
-`secure()` generates an Ed25519 keypair, registers the agent, and stores credentials at `~/.aim/`. `performAction()` signs every invocation, runs it through 5-step Fine-Grained Authorization, and records the outcome in the audit log.
+`secure()` generates an Ed25519 keypair, registers the agent, and stores credentials at `~/.aim/`. `performAction()` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log. The server's 5-step Fine-Grained Authorization engine does not decide these calls; it runs on `POST /api/v1/agents/:id/authorize`, which the SDK does not call.
 
 For declarative security, use `@SecureAction` with AspectJ:
 
