@@ -399,15 +399,9 @@ except PermissionError as e:
     # Handle denial (e.g., notify admin, log incident)
 ```
 
-### "404 - POST /api/v1/verifications/{id}/result"
+### Where verification results are logged
 
-**Cause**: Backend endpoint not implemented yet
-
-**Status**: Known issue - `log_action_result` endpoint is pending
-
-**Impact**: Verification works, but result logging fails silently
-
-**Workaround**: None needed - verification still functions correctly
+`log_capability_result()` (and the deprecated `log_action_result()`, which calls it) posts the result to `POST /api/v1/sdk-api/verifications/{id}/result`. Code that posts results without the SDK uses the same path.
 
 ---
 

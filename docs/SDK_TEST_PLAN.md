@@ -113,8 +113,8 @@ Both SDKs achieve 100% pass rate on all core functionality tests.
 
 | Endpoint | SDK | Auth | Status |
 |----------|-----|------|--------|
-| `/api/v1/sdk-api/register` | Both | Ed25519 | PASS |
-| `/api/v1/sdk-api/verify` | Both | Ed25519 | PASS |
+| `/api/v1/agents` | Both | Ed25519 | PASS |
+| `/api/v1/sdk-api/verifications` | Both | Ed25519 | PASS |
 | `/api/v1/sdk-api/agents/{id}` | Both | Ed25519 | PASS |
 | `/api/v1/sdk-api/agents/{id}/capabilities/register` | Both | Ed25519 | PASS |
 | `/api/v1/sdk-api/agents/{id}/mcp-servers` | Both | Ed25519 | PASS |

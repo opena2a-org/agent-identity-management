@@ -257,23 +257,23 @@ const result = await verifyDelegationChain(chain, { rootTrustScore: 0.95 });
 
 AIM provides comprehensive visibility into your agent ecosystem:
 
-### ABOM (Agent Bill of Materials)
+### Supply Chain Data
 
-View all agents, their connections, and dependencies:
+View your organization's agent-to-MCP-server connections and attestations:
 
 ```bash
-# Export ABOM via API
-curl -X GET https://aim.example.com/api/v1/supply-chain/abom \
+# Supply chain analytics via API
+curl -X GET "https://aim.example.com/api/v1/supply-chain/analytics?days=30" \
   -H "Authorization: Bearer $TOKEN" \
-  -o abom.json
+  -o supply-chain.json
 ```
 
-The ABOM includes:
-- All registered agents
-- MCP server connections
-- Capability mappings
-- Trust scores
-- Attestation history
+The answer has three members:
+- `stats`: supply chain totals
+- `attestationTrend`: attestations over the period
+- `connections`: agent-to-MCP-server connections, with details
+
+`GET /api/v1/supply-chain/drift-alerts` lists MCP capabilities that were added, removed or not verified recently. The server serves no agent bill of materials (ABOM) export.
 
 ### Dependency Graph
 
@@ -379,13 +379,13 @@ audit_logs = client.get_audit_logs(
 
 ### Compliance Reports
 
-Generate compliance reports for A2A patterns:
+Download your organization's compliance report (an administrator's session; `format` is `csv` or `json`):
 
 ```bash
 # Export compliance report
-curl -X GET "https://aim.example.com/api/v1/compliance/report?format=pdf" \
+curl -X GET "https://aim.example.com/api/v1/compliance/export?format=json" \
   -H "Authorization: Bearer $TOKEN" \
-  -o compliance-report.pdf
+  -o compliance-report.json
 ```
 
 ## Framework Integration
@@ -491,4 +491,3 @@ for factor in trust_details["factors"]:
 - [MCP Server Registration Tutorial](../tutorials/mcp-registration.md)
 - [Trust Scoring Algorithm](../sdk/trust-scoring.md)
 - [Supply Chain Dashboard Guide](../guides/SECURITY.md)
-- [ABOM Export Format](../api/API_REFERENCE.md#abom)

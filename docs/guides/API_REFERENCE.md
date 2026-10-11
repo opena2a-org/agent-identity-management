@@ -21,6 +21,8 @@ Complete API reference for Agent Identity Management platform.
 
 ## Authentication
 
+Users sign in with email and password through [Public Login](#public-login) below. The server registers no single sign-on (OAuth provider) login routes.
+
 ### Log In with Email and Password
 
 ```http
@@ -195,10 +197,10 @@ Authorization: Bearer <access_token>
 ```
 
 **Query Parameters:**
-- `status` (optional) - Filter by status: `pending`, `verified`, `suspended`, `revoked`
-- `type` (optional) - Filter by type: `ai_agent`, `mcp_server`
-- `limit` (optional) - Number of results (default: 50, max: 100)
-- `offset` (optional) - Pagination offset (default: 0)
+- `limit` (optional) - Page size. When omitted, every agent is returned.
+- `offset` (optional) - Number of agents to skip (default: 0). Applied only when `limit` is set.
+
+`total` is the organization's agent count. `limit` and `offset` are echoed back only when `limit` was sent.
 
 **Response:**
 ```json
@@ -232,7 +234,7 @@ Authorization: Bearer <access_token>
 **Example:**
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://localhost:8080/api/v1/agents?status=verified&limit=10"
+  "http://localhost:8080/api/v1/agents?limit=50"
 ```
 
 ---
@@ -688,78 +690,13 @@ capability and resource add to one alert's `occurrenceCount`. Every other alert 
 POST /api/v1/admin/alerts/:id/acknowledge
 ```
 
-**Response:**
-```json
-{
-  "id": "888e4567-e89b-12d3-a456-426614174000",
-  "isAcknowledged": true,
-  "acknowledgedBy": "123e4567-e89b-12d3-a456-426614174000",
-  "acknowledgedAt": "2025-01-05T13:00:00Z"
-}
-```
+**Response:** 204 No Content. An alert outside your organization answers 404.
 
 ---
 
 ## Compliance
 
-### Generate Compliance Report
-
-```http
-POST /api/v1/compliance/generate
-```
-
-**Body:**
-```json
-{
-  "periodDays": 30
-}
-```
-
-**Response:**
-```json
-{
-  "organizationId": "789e4567-e89b-12d3-a456-426614174000",
-  "generatedAt": "2025-01-05T00:00:00Z",
-  "period": "Last 30 days",
-  "summary": {
-    "totalAgents": 25,
-    "verifiedAgents": 20,
-    "pendingAgents": 3,
-    "averageTrustScore": 0.78,
-    "activeApiKeys": 15,
-    "totalAuditLogs": 5432,
-    "unacknowledgedAlerts": 2
-  },
-  "agents": [
-    {
-      "id": "456e4567-e89b-12d3-a456-426614174000",
-      "name": "Code Reviewer",
-      "agentType": "ai_agent",
-      "status": "verified",
-      "trustScore": 0.85,
-      "hasCertificate": true,
-      "lastVerified": "2025-01-02"
-    }
-  ],
-  "auditActivity": {
-    "totalActions": 5432,
-    "uniqueUsers": 12,
-    "topActions": {
-      "create": 234,
-      "update": 156,
-      "verify": 45
-    },
-    "recentActions24h": 87
-  },
-  "recommendations": [
-    "Verify 3 pending agent(s) to improve security posture",
-    "2 verified agent(s) lack certificate URLs. Add certificates to improve trust scores.",
-    "Address 2 unacknowledged alert(s) to maintain security compliance"
-  ]
-}
-```
-
----
+The compliance routes need an administrator's session. `GET /api/v1/compliance/status`, `/metrics`, `/trending` and `/evidence` return the organization's current status, metrics, score history and collected evidence; `POST /api/v1/compliance/check` runs the compliance checks.
 
 ### Export Compliance Report
 
@@ -768,15 +705,16 @@ GET /api/v1/compliance/export
 ```
 
 **Query Parameters:**
-- `format` (required) - `json`, `csv`, or `pdf`
-- `periodDays` (optional) - Default: 30
+- `format` (optional) - `csv` (default) or `json`
+- `framework` (optional) - `aim`, the only framework supported
+- `start_date`, `end_date` (optional) - RFC 3339 timestamps (default: the last 30 days)
 
-**Response:** File download
+**Response:** the file itself, `compliance-report.csv` or `compliance-report.json`, sent as an attachment.
 
 **Example:**
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  "http://localhost:8080/api/v1/compliance/export?format=json&periodDays=30" \
+  "http://localhost:8080/api/v1/compliance/export?format=json" \
   -o compliance_report.json
 ```
 
@@ -784,64 +722,44 @@ curl -H "Authorization: Bearer <token>" \
 
 ## Error Handling
 
-All errors follow this format:
+An error answers with an HTTP status and a JSON body whose `error` member is a message:
 
 ```json
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid input data",
-    "details": {
-      "field": "email",
-      "reason": "Invalid email format"
-    }
-  }
+  "error": "Invalid agent ID"
 }
 ```
 
-**Common Error Codes:**
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| VALIDATION_ERROR | 400 | Invalid request data |
-| UNAUTHORIZED | 401 | Missing or invalid authentication |
-| FORBIDDEN | 403 | Insufficient permissions |
-| NOT_FOUND | 404 | Resource not found |
-| CONFLICT | 409 | Resource already exists |
-| RATE_LIMIT_EXCEEDED | 429 | Too many requests |
-| INTERNAL_ERROR | 500 | Server error |
+| HTTP Status | Meaning |
+|-------------|---------|
+| 400 | The request is malformed or fails validation |
+| 401 | No credentials, or credentials the server does not accept |
+| 403 | The credentials are valid but the role is not allowed |
+| 404 | The resource does not exist in your organization |
+| 409 | The resource already exists |
+| 429 | Rate limit exceeded |
+| 500 | Server error |
 
 ---
 
 ## Rate Limits
 
-**IP-based:**
-- 60 requests per minute
-- Applies to unauthenticated requests
+Requests are counted per signed-in user when the server knows the user before the limiter runs, and per client IP address otherwise, over a one-minute window:
 
-**User-based:**
-- 300 requests per minute
-- Applies to authenticated requests
+- **Most routes:** 100 requests per minute.
+- **Credential routes:** 10 requests per minute. These are sign-in, sign-out, token refresh, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
 
-**API Key-based:**
-- 1000 requests per hour
-- Applies to API key authentication
-
-**Response Headers:**
+**Response Headers:** `X-RateLimit-Reset` is the number of seconds until the window resets.
 ```
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 45
-X-RateLimit-Reset: 1640995200
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 42
 ```
 
-**Rate Limit Exceeded:**
+**Rate Limit Exceeded:** 429, with a `Retry-After` header (seconds) and this body:
 ```json
 {
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Too many requests, please try again later",
-    "retryAfter": 30
-  }
+  "error": "Rate limit exceeded. Please try again later."
 }
 ```
 
@@ -849,22 +767,14 @@ X-RateLimit-Reset: 1640995200
 
 ## Pagination
 
-All list endpoints support pagination:
+There is no common list envelope. Each list answers with an array named for what it lists and a `total`, and the routes that page take `limit` and `offset`:
 
-**Query Parameters:**
-- `limit` - Number of items per page (max 100)
-- `offset` - Number of items to skip
-
-**Response Format:**
-```json
-{
-  "data": [...],
-  "total": 250,
-  "limit": 50,
-  "offset": 0,
-  "hasMore": true
-}
-```
+| Route | Response | Paging |
+|-------|----------|--------|
+| `GET /api/v1/agents` | `{"agents": [...], "total": 45}`, plus `limit` and `offset` when `limit` was sent | `limit` (no default: every agent), `offset` |
+| `GET /api/v1/admin/audit-logs` | `{"logs": [...], "total": 1234, "limit": 100, "offset": 0}` | `limit` (default 100), `offset` |
+| `GET /api/v1/admin/alerts` | `{"alerts": [...], "total": 3, ...}` with per-state counts | `limit` (default 100), `offset` |
+| `GET /api/v1/api-keys` | `{"apiKeys": [...], "total": 2}` | none |
 
 ---
 

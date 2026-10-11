@@ -29,26 +29,27 @@ export AIM_API_KEY="aim_your_key_here"
 ## Step 2: Register an Agent (30 seconds)
 
 ```bash
-curl -X POST "http://localhost:8080/api/v1/agents/register" \
+curl -X POST "http://localhost:8080/api/v1/agents" \
   -H "Authorization: Bearer $AIM_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "api-demo-agent",
-    "agent_type": "AI Agent",
+    "display_name": "API Demo Agent",
+    "agent_type": "ai_agent",
     "description": "Agent registered via API",
     "capabilities": ["read_data", "send_notifications"]
   }'
 ```
 
-**Response:**
+**Response** (201, abridged):
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "api-demo-agent",
   "status": "pending",
-  "trust_score": 0.5,
-  "public_key": "ed25519:...",
-  "created_at": "2025-01-15T10:30:00Z"
+  "trustScore": 0.5,
+  "publicKey": "...",
+  "createdAt": "2025-01-15T10:30:00Z"
 }
 ```
 
@@ -140,9 +141,13 @@ export MCP_ID="mcp_server_id_from_response"
 
 ## Step 6: Link Agent to MCP Server (15 seconds)
 
+This step takes a signed-in member's access token (the `accessToken` from `POST /api/v1/public/login`); an API key is not accepted here. `mcpServerIds` holds MCP server IDs or names.
+
 ```bash
-curl -X POST "http://localhost:8080/api/v1/agents/$AGENT_ID/mcp-servers/$MCP_ID" \
-  -H "Authorization: Bearer $AIM_API_KEY"
+curl -X PUT "http://localhost:8080/api/v1/agents/$AGENT_ID/mcp-servers" \
+  -H "Authorization: Bearer $AIM_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"mcpServerIds\": [\"$MCP_ID\"]}"
 ```
 
 Now AIM will monitor this connection and alert on drift!
@@ -153,16 +158,17 @@ Now AIM will monitor this connection and alert on drift!
 
 | Action | Method | Endpoint |
 |--------|--------|----------|
-| Register agent | POST | `/api/v1/agents/register` |
+| Register agent | POST | `/api/v1/agents` |
 | Get agent | GET | `/api/v1/agents/:id` |
 | List agents | GET | `/api/v1/agents` |
 | Verify capability | POST | `/api/v1/agents/:id/verify-capability` |
 | Log capability result | POST | `/api/v1/agents/:id/log-capability/:audit_id` |
 | Get trust score | GET | `/api/v1/agents/:id/trust-score` |
 | Register MCP | POST | `/api/v1/mcp-servers` |
-| Link agent to MCP | POST | `/api/v1/agents/:id/mcp-servers/:mcp_id` |
+| Link agent to MCP | PUT | `/api/v1/agents/:id/mcp-servers` |
+| Unlink agent from MCP | DELETE | `/api/v1/agents/:id/mcp-servers/:mcp_id` |
 | Get security alerts | GET | `/api/v1/security/alerts` |
-| Acknowledge alert | POST | `/api/v1/security/alerts/:id/acknowledge` |
+| Acknowledge alert | POST | `/api/v1/admin/alerts/:id/acknowledge` |
 | Get audit logs | GET | `/api/v1/admin/audit-logs` |
 
 ---
@@ -182,12 +188,13 @@ echo "=== AIM API Demo ==="
 
 # 1. Register agent
 echo "Registering agent..."
-AGENT_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/agents/register" \
+AGENT_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/agents" \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "demo-agent-'$(date +%s)'",
-    "agent_type": "AI Agent",
+    "display_name": "Demo Agent",
+    "agent_type": "ai_agent",
     "description": "Demo agent"
   }')
 AGENT_ID=$(echo $AGENT_RESPONSE | jq -r '.id')

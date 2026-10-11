@@ -111,11 +111,11 @@ puts "⚠️  Save your private key securely - it will NOT be retrievable!"
 
 ## Step 2: Register Your Agent
 
-Use the `/api/agents/register` endpoint to register your agent with AIM.
+Use `POST /api/v1/agents` to register your agent with AIM. The server reads the body's keys in camelCase or snake_case.
 
 ### API Endpoint
 ```
-POST /api/agents/register
+POST /api/v1/agents
 Content-Type: application/json
 Authorization: Bearer YOUR_API_KEY
 ```
@@ -124,6 +124,7 @@ Authorization: Bearer YOUR_API_KEY
 ```json
 {
   "name": "my-go-agent",
+  "display_name": "My Go Agent",
   "agent_type": "ai_agent",
   "public_key": "YOUR_BASE64_PUBLIC_KEY",
   "description": "My agent written in Go",
@@ -148,6 +149,7 @@ import (
 
 type RegisterAgentRequest struct {
     Name             string   `json:"name"`
+    DisplayName      string   `json:"display_name"`
     AgentType        string   `json:"agent_type"`
     PublicKey        string   `json:"public_key"`
     Description      string   `json:"description"`
@@ -158,16 +160,16 @@ type RegisterAgentRequest struct {
 }
 
 type RegisterAgentResponse struct {
-    AgentID    string  `json:"agent_id"`
+    AgentID    string  `json:"id"`
     Name       string  `json:"name"`
     Status     string  `json:"status"`
-    TrustScore float64 `json:"trust_score"`
-    Message    string  `json:"message"`
+    TrustScore float64 `json:"trustScore"`
 }
 
 func registerAgent(apiKey, publicKey string) (*RegisterAgentResponse, error) {
     reqBody := RegisterAgentRequest{
         Name:         "my-go-agent",
+        DisplayName:  "My Go Agent",
         AgentType:    "ai_agent",
         PublicKey:    publicKey,
         Description:  "My agent written in Go",
@@ -180,7 +182,7 @@ func registerAgent(apiKey, publicKey string) (*RegisterAgentResponse, error) {
         return nil, err
     }
 
-    req, err := http.NewRequest("POST", "http://localhost:8080/api/agents/register", bytes.NewBuffer(jsonBody))
+    req, err := http.NewRequest("POST", "http://localhost:8080/api/v1/agents", bytes.NewBuffer(jsonBody))
     if err != nil {
         return nil, err
     }
@@ -229,8 +231,9 @@ func main() {
 const axios = require('axios');
 
 async function registerAgent(apiKey, publicKey) {
-    const response = await axios.post('http://localhost:8080/api/agents/register', {
+    const response = await axios.post('http://localhost:8080/api/v1/agents', {
         name: 'my-node-agent',
+        display_name: 'My Node Agent',
         agent_type: 'ai_agent',
         public_key: publicKey,
         description: 'My agent written in Node.js',
@@ -252,8 +255,8 @@ const publicKey = 'your-base64-public-key';
 registerAgent(apiKey, publicKey)
     .then(data => {
         console.log('✅ Agent registered successfully!');
-        console.log('   Agent ID:', data.agent_id);
-        console.log('   Trust Score:', data.trust_score);
+        console.log('   Agent ID:', data.id);
+        console.log('   Trust Score:', data.trustScore);
         console.log('   Status:', data.status);
     })
     .catch(error => {
@@ -263,11 +266,12 @@ registerAgent(apiKey, publicKey)
 
 ### cURL Example
 ```bash
-curl -X POST http://localhost:8080/api/agents/register \
+curl -X POST http://localhost:8080/api/v1/agents \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "name": "my-curl-agent",
+    "display_name": "My cURL Agent",
     "agent_type": "ai_agent",
     "public_key": "YOUR_BASE64_PUBLIC_KEY",
     "description": "My agent registered via cURL",
@@ -277,17 +281,18 @@ curl -X POST http://localhost:8080/api/agents/register \
 ```
 
 ### Response
+
+201 Created, with the agent record (camelCase keys). A new agent starts as `pending`. An abridged example:
 ```json
 {
-  "agent_id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "my-go-agent",
-  "status": "verified",
-  "trust_score": 0.907,
-  "message": "Agent registered successfully"
+  "status": "pending",
+  "trustScore": 0.5
 }
 ```
 
-**Save the `agent_id`** - you'll need it for all subsequent operations!
+**Save the `id`** - it is the agent ID you need for all subsequent operations.
 
 ---
 
@@ -568,6 +573,7 @@ func NewAIMAgent(apiKey, baseURL string) (*AIMAgent, error) {
 func (a *AIMAgent) Register(name string, capabilities []string) error {
     reqBody := map[string]interface{}{
         "name":         name,
+        "display_name": name,
         "agent_type":   "ai_agent",
         "public_key":   a.PublicKey,
         "capabilities": capabilities,
@@ -575,7 +581,7 @@ func (a *AIMAgent) Register(name string, capabilities []string) error {
     }
 
     jsonBody, _ := json.Marshal(reqBody)
-    req, _ := http.NewRequest("POST", a.BaseURL+"/api/agents/register", bytes.NewBuffer(jsonBody))
+    req, _ := http.NewRequest("POST", a.BaseURL+"/api/v1/agents", bytes.NewBuffer(jsonBody))
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("Authorization", "Bearer "+a.APIKey)
 
@@ -588,7 +594,7 @@ func (a *AIMAgent) Register(name string, capabilities []string) error {
 
     var result map[string]interface{}
     json.NewDecoder(resp.Body).Decode(&result)
-    a.AgentID = result["agent_id"].(string)
+    a.AgentID = result["id"].(string)
 
     fmt.Printf("✅ Agent registered: %s\n", a.AgentID)
     return nil
@@ -660,15 +666,15 @@ func main() {
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/agents/register` | POST | Register a new agent |
-| `/api/agents/{id}` | GET | Get agent details |
+| `/api/v1/agents` | POST | Register a new agent |
+| `/api/v1/agents/{id}` | GET | Get agent details |
 | `/api/v1/agents/{id}/verify-capability` | POST | Verify a capability before execution |
 | `/api/v1/agents/{id}/log-capability/{audit_id}` | POST | Log capability result |
-| `/api/agents/{id}/trust-score` | GET | Get current trust score |
-| `/api/agents/{id}/audit-trail` | GET | Get complete audit trail |
-| `/api/auth/token/refresh` | POST | Refresh OAuth token (for SDK mode) |
+| `/api/v1/agents/{id}/trust-score` | GET | Get current trust score |
+| `/api/v1/agents/{id}/audit-logs` | GET | Get the agent's audit log |
+| `/api/v1/auth/refresh` | POST | Exchange a refresh token for a new access token |
 
-For complete API documentation, see the [API Reference](./api-reference.md).
+For complete API documentation, see the [API Reference](../guides/API_REFERENCE.md).
 
 ---
 
@@ -734,7 +740,7 @@ jsonBody, _ := json.Marshal(payload)  // Same object!
 ```bash
 # Verify your agent exists
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-  http://localhost:8080/api/agents/YOUR_AGENT_ID
+  http://localhost:8080/api/v1/agents/YOUR_AGENT_ID
 ```
 
 ### Issue: "Unauthorized"
@@ -761,7 +767,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 
 **For non-Python users:**
 1. Generate Ed25519 keypair
-2. Register agent with `/api/agents/register`
+2. Register agent with `POST /api/v1/agents`
 3. Sign requests with private key
 4. Verify capabilities with `/api/v1/agents/{id}/verify-capability`
 5. Log results with `/api/v1/agents/{id}/log-capability/{audit_id}`

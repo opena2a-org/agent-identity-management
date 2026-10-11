@@ -33,7 +33,7 @@ Development: http://localhost:8080
 Production:  https://api.yourdomain.com
 ```
 
-All API endpoints are prefixed with `/api/v1` unless otherwise noted.
+Every path below is written in full. The server registers its API under `/api/v1`; `/health`, `/health/ready` and the `/.well-known/` discovery documents sit at the root.
 
 ---
 
@@ -55,15 +55,17 @@ curl -H "X-API-Key: YOUR_API_KEY" \
   http://localhost:8080/api/v1/agents
 ```
 
+The server registers no single sign-on (OAuth provider) login routes. Users sign in with email and password, below.
+
 ---
 
 ## API Endpoints
 
 ### Authentication Endpoints
 
-#### POST /auth/register
+#### POST /api/v1/public/register
 
-Register a new user account.
+Request a user account. The request waits for an administrator's approval; it does not sign the user in. `password` needs at least 8 characters, and `signupProfile` (`role`, `primaryUseCase`, `referralSource`) is optional.
 
 **Request:**
 ```json
@@ -75,22 +77,13 @@ Register a new user account.
 }
 ```
 
-**Response:**
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "email": "user@example.com",
-  "firstName": "John",
-  "lastName": "Doe",
-  "createdAt": "2025-10-08T00:00:00Z"
-}
-```
+**Response** (201): `success`, `message`, `requestId` and the stored `registrationRequest`. `GET /api/v1/public/register/{requestId}/status` reports where the request stands.
 
 ---
 
-#### POST /auth/login
+#### POST /api/v1/public/login
 
-Login with email and password.
+Sign in with email and password.
 
 **Request:**
 ```json
@@ -100,38 +93,47 @@ Login with email and password.
 }
 ```
 
-**Response:**
+**Response** (200):
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expiresAt": "2025-10-09T00:00:00Z",
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "email": "user@example.com",
-    "firstName": "John",
-    "lastName": "Doe"
-  }
+  "success": true,
+  "message": "Login successful",
+  "user": { "id": "550e8400-e29b-41d4-a716-446655440000", "email": "user@example.com" },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "isApproved": true
 }
 ```
+
+An account an administrator has not approved yet answers with `isApproved: false` and no tokens. An account that must change its password answers with `requiresPasswordChange: true`.
+
+`POST /api/v1/auth/login/local` takes the same request and answers with `accessToken`, `refreshToken` and `user` (`id`, `email`, `name`, `role`, `organizationId`, `forcePasswordChange`).
 
 ---
 
-#### POST /auth/refresh
+#### POST /api/v1/auth/refresh
 
-Refresh JWT token.
+Exchange a refresh token for a new access token. The refresh token travels in the body, not in an `Authorization` header.
 
-**Headers:**
-```
-Authorization: Bearer YOUR_JWT_TOKEN
+**Request:**
+```json
+{
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
 ```
 
 **Response:**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expiresAt": "2025-10-09T00:00:00Z"
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 7200,
+  "rotated": true
 }
 ```
+
+`expiresIn` is the access token's lifetime in seconds (`JWT_ACCESS_TTL`, 2 hours by default). `rotated` is `true` when the presented refresh token was retired and a new one issued; `false` means `refreshToken` is the token presented, unchanged.
 
 ---
 
@@ -260,45 +262,19 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 #### POST /api/v1/agents/{id}/verify
 
-Verify agent using challenge-response authentication.
-
-**Step 1: Request Challenge**
-
-```bash
-POST /api/v1/agents/{id}/verify/challenge
-```
-
-**Response:**
-```json
-{
-  "challenge": "base64-encoded-random-challenge",
-  "expiresAt": "2025-10-08T00:05:00Z"
-}
-```
-
-**Step 2: Submit Signed Response**
-
-```bash
-POST /api/v1/agents/{id}/verify/response
-```
-
-**Request:**
-```json
-{
-  "challenge": "base64-encoded-challenge",
-  "signature": "base64-encoded-ed25519-signature"
-}
-```
+Mark an agent in your organization as verified. A manager or administrator signs this request; it takes no body.
 
 **Response:**
 ```json
 {
   "verified": true,
-  "verificationId": "770e8400-e29b-41d4-a716-446655440000",
+  "changed": true,
   "trustScore": 0.755,
   "verifiedAt": "2025-10-08T00:00:00Z"
 }
 ```
+
+`changed` reports whether the request changed the agent's status.
 
 ---
 
@@ -336,20 +312,14 @@ Content-Type: application/json
 
 #### DELETE /api/v1/agents/{id}
 
-Delete (revoke) an agent.
+Delete an agent. A manager or administrator signs this request. `POST /api/v1/agents/{id}/revoke` revokes an agent without deleting it.
 
 **Headers:**
 ```
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-**Response:**
-```json
-{
-  "message": "Agent revoked successfully",
-  "revokedAt": "2025-10-08T00:00:00Z"
-}
-```
+**Response:** 204 No Content.
 
 ---
 
@@ -577,9 +547,9 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ### API Keys Endpoints
 
-#### POST /api/v1/keys
+#### POST /api/v1/api-keys
 
-Generate a new API key.
+Generate a new API key for one agent. `agentId` and `name` are required. The key expires 90 days after it is created.
 
 **Headers:**
 ```
@@ -590,80 +560,66 @@ Content-Type: application/json
 **Request:**
 ```json
 {
-  "name": "Production API Key",
-  "expiresAt": "2026-10-08T00:00:00Z",
-  "permissions": ["agents:read", "agents:write"]
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Production API Key"
 }
 ```
 
-**Response:**
+**Response** (201):
 ```json
 {
   "id": "990e8400-e29b-41d4-a716-446655440000",
+  "apiKey": "aim_sk_1234567890abcdefghijklmnopqrstuvwxyz",
   "name": "Production API Key",
-  "key": "aim_sk_1234567890abcdefghijklmnopqrstuvwxyz",
-  "keyPrefix": "aim_sk_1234",
-  "expiresAt": "2026-10-08T00:00:00Z",
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "expiresAt": "2026-01-06T00:00:00Z",
   "createdAt": "2025-10-08T00:00:00Z"
 }
 ```
 
-**⚠️ Note:** The full API key is only shown once during creation!
+**Note:** `apiKey` is returned only in this response. Store it before you close it.
 
 ---
 
-#### GET /api/v1/keys
+#### GET /api/v1/api-keys
 
-List all API keys.
+List your organization's API keys. `agent_id` (optional) keeps only one agent's keys.
 
 **Headers:**
 ```
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-**Response:**
-```json
-{
-  "apiKeys": [
-    {
-      "id": "990e8400-e29b-41d4-a716-446655440000",
-      "name": "Production API Key",
-      "keyPrefix": "aim_sk_1234",
-      "status": "active",
-      "lastUsedAt": "2025-10-08T00:00:00Z",
-      "expiresAt": "2026-10-08T00:00:00Z",
-      "createdAt": "2025-10-07T00:00:00Z"
-    }
-  ]
-}
-```
+**Response:** `{"apiKeys": [...], "total": <count>}`. Each listed key carries its `prefix`, `keyHash`, `isActive`, `lastUsedAt` and `expiresAt`, never the key itself.
 
 ---
 
-#### DELETE /api/v1/keys/{id}
+#### PATCH /api/v1/api-keys/{id}/disable
 
-Revoke an API key.
+Disable an API key. It stops authenticating at once.
+
+**Response:** `{"message": "API key disabled successfully"}`
+
+---
+
+#### DELETE /api/v1/api-keys/{id}
+
+Delete an API key. Disable it first: deleting a key that is still enabled answers 400.
 
 **Headers:**
 ```
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-**Response:**
-```json
-{
-  "message": "API key revoked successfully",
-  "revokedAt": "2025-10-08T00:00:00Z"
-}
-```
+**Response:** 204 No Content.
 
 ---
 
 ### Trust Scores Endpoints
 
-#### GET /api/v1/trust-scores/{agentId}
+#### GET /api/v1/trust-score/agents/{id}
 
-Get current trust score for an agent.
+Get current trust score for an agent. `GET /api/v1/trust-score/agents/{id}/breakdown` returns each factor's weight and contribution.
 
 **Headers:**
 ```
@@ -695,9 +651,9 @@ values here are not measurements):
 
 ---
 
-#### GET /api/v1/trust-scores/{agentId}/history
+#### GET /api/v1/trust-score/agents/{id}/history
 
-Get trust score history.
+Get trust score history, newest first.
 
 **Headers:**
 ```
@@ -705,24 +661,22 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Query Parameters:**
-- `startDate` (optional): ISO 8601 date
-- `endDate` (optional): ISO 8601 date
-- `interval` (optional): `hour`, `day`, `week`, `month`
+- `limit` (optional): number of entries (default: 30)
 
 **Response:**
 ```json
 {
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "agentName": "my-agent",
   "history": [
     {
       "trustScore": 0.755,
+      "previousScore": 0.742,
+      "reason": "why the score changed",
       "timestamp": "2025-10-08T00:00:00Z"
-    },
-    {
-      "trustScore": 0.742,
-      "timestamp": "2025-10-07T00:00:00Z"
     }
-  ]
+  ],
+  "total": 1
 }
 ```
 
@@ -730,7 +684,9 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ### Audit Logs Endpoints
 
-#### GET /api/v1/audit-logs
+The organization-wide audit log routes need an administrator's session. `GET /api/v1/agents/{id}/audit-logs` and `GET /api/v1/mcp-servers/{id}/audit-logs` list one agent's or one MCP server's entries.
+
+#### GET /api/v1/admin/audit-logs
 
 List audit logs.
 
@@ -740,12 +696,13 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Query Parameters:**
-- `page` (optional): Page number
-- `limit` (optional): Items per page
-- `agentId` (optional): Filter by agent ID
-- `actionType` (optional): Filter by action type
-- `startDate` (optional): Filter from date
-- `endDate` (optional): Filter to date
+- `limit` (optional): Items per page (default: 100)
+- `offset` (optional): Number of entries to skip
+- `action` (optional): Filter by action
+- `entity_type` (optional): Filter by resource type (`agent`, `api_key`, `user`, ...)
+- `entity_id` (optional): Filter by resource ID
+- `user_id` (optional): Filter by the user who acted
+- `start_date`, `end_date` (optional): RFC 3339 timestamps
 
 **Response:**
 ```json
@@ -753,58 +710,40 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "logs": [
     {
       "id": "aa0e8400-e29b-41d4-a716-446655440000",
-      "agentId": "550e8400-e29b-41d4-a716-446655440000",
-      "agentName": "my-agent",
-      "actionType": "read_database",
-      "resource": "users_table",
-      "status": "success",
+      "organizationId": "660e8400-e29b-41d4-a716-446655440000",
+      "userId": "770e8400-e29b-41d4-a716-446655440000",
+      "action": "verify",
+      "resourceType": "agent",
+      "resourceId": "550e8400-e29b-41d4-a716-446655440000",
       "metadata": {
-        "recordsRead": 100,
-        "duration": "150ms"
+        "agentName": "my-agent",
+        "trustScore": 0.755
       },
       "timestamp": "2025-10-08T00:00:00Z"
     }
   ],
-  "pagination": {
-    "page": 1,
-    "limit": 50,
-    "total": 1234,
-    "totalPages": 25
-  }
+  "total": 1234,
+  "limit": 100,
+  "offset": 0
 }
 ```
 
 ---
 
-#### POST /api/v1/audit-logs/export
+#### GET /api/v1/admin/audit-logs/export
 
-Export audit logs to CSV/JSON.
+Download audit logs as a file. Up to 10,000 entries.
 
 **Headers:**
 ```
 Authorization: Bearer YOUR_JWT_TOKEN
-Content-Type: application/json
 ```
 
-**Request:**
-```json
-{
-  "format": "csv",
-  "filters": {
-    "startDate": "2025-10-01T00:00:00Z",
-    "endDate": "2025-10-08T00:00:00Z",
-    "agentId": "550e8400-e29b-41d4-a716-446655440000"
-  }
-}
-```
+**Query Parameters:**
+- `format` (optional): `csv` (default) or `json`
+- `start_date`, `end_date` (optional): RFC 3339 timestamps
 
-**Response:**
-```json
-{
-  "downloadUrl": "https://aim.example.com/exports/audit-logs-2025-10-08.csv",
-  "expiresAt": "2025-10-09T00:00:00Z"
-}
-```
+**Response:** the file itself, `audit-logs.csv` (`text/csv`) or `audit-logs.json` (`application/json`), sent as an attachment.
 
 ---
 
@@ -854,7 +793,9 @@ A failed read answers 500 with `{"error": "Failed to read the audit record chain
 
 ### Alerts Endpoints
 
-#### GET /api/v1/alerts
+The organization-wide alert routes need an administrator's session. `GET /api/v1/agents/{id}/alerts` lists one agent's alerts.
+
+#### GET /api/v1/admin/alerts
 
 List security alerts.
 
@@ -864,9 +805,9 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Query Parameters:**
-- `severity` (optional): `low`, `medium`, `high`, `critical`
-- `status` (optional): `active`, `acknowledged`, `resolved`
-- `agentId` (optional): Filter by agent
+- `status` (optional): `acknowledged` or `unacknowledged`
+- `limit` (optional): Items per page (default: 100)
+- `offset` (optional): Number of alerts to skip
 
 **Response:**
 ```json
@@ -874,46 +815,51 @@ Authorization: Bearer YOUR_JWT_TOKEN
   "alerts": [
     {
       "id": "bb0e8400-e29b-41d4-a716-446655440000",
+      "organizationId": "660e8400-e29b-41d4-a716-446655440000",
+      "alertType": "trust_score_drop",
       "severity": "high",
-      "type": "certificate_expiry",
-      "title": "Certificate expiring soon",
-      "description": "Agent certificate expires in 7 days",
-      "agentId": "550e8400-e29b-41d4-a716-446655440000",
-      "status": "active",
+      "title": "Trust score dropped",
+      "description": "Agent trust score fell below the threshold",
+      "resourceType": "agent",
+      "resourceId": "550e8400-e29b-41d4-a716-446655440000",
+      "isAcknowledged": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
       "createdAt": "2025-10-08T00:00:00Z"
     }
-  ]
+  ],
+  "total": 1,
+  "allCount": 1,
+  "acknowledgedCount": 0,
+  "unacknowledgedCount": 1,
+  "criticalCount": 0
 }
 ```
 
+`severity` is one of `info`, `warning`, `high` or `critical`.
+
 ---
 
-#### POST /api/v1/alerts/{id}/acknowledge
+#### POST /api/v1/admin/alerts/{id}/acknowledge
 
-Acknowledge an alert.
+Acknowledge an alert. `POST /api/v1/admin/alerts/{id}/resolve` resolves one, and `POST /api/v1/admin/alerts/bulk-acknowledge` acknowledges several.
 
 **Headers:**
 ```
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-**Response:**
-```json
-{
-  "id": "bb0e8400-e29b-41d4-a716-446655440000",
-  "status": "acknowledged",
-  "acknowledgedBy": "user@example.com",
-  "acknowledgedAt": "2025-10-08T00:00:00Z"
-}
-```
+**Response:** 204 No Content. An alert outside your organization answers 404.
 
 ---
 
 ### Compliance Endpoints
 
-#### GET /api/v1/compliance/reports
+The compliance routes need an administrator's session. `GET /api/v1/compliance/status` returns the organization's current compliance status, and `GET /api/v1/compliance/metrics`, `/trending` and `/evidence` return its metrics, score history and collected evidence.
 
-Get compliance reports.
+#### GET /api/v1/compliance/export
+
+Download a compliance report as a file.
 
 **Headers:**
 ```
@@ -921,89 +867,56 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Query Parameters:**
-- `type` (optional): `soc2`, `hipaa`, `gdpr`
-- `period` (optional): `month`, `quarter`, `year`
+- `format` (optional): `csv` (default) or `json`
+- `framework` (optional): `aim`, the only framework supported
+- `start_date`, `end_date` (optional): RFC 3339 timestamps (default: the last 30 days)
 
-**Response:**
-```json
-{
-  "reports": [
-    {
-      "id": "cc0e8400-e29b-41d4-a716-446655440000",
-      "type": "soc2",
-      "period": "2025-Q4",
-      "status": "passed",
-      "score": 95.5,
-      "findings": [
-        {
-          "control": "AC-2.1",
-          "status": "compliant",
-          "evidence": "All agents verified within 24 hours"
-        }
-      ],
-      "generatedAt": "2025-10-08T00:00:00Z"
-    }
-  ]
-}
-```
+**Response:** the file itself, `compliance-report.csv` or `compliance-report.json`, sent as an attachment.
 
 ---
 
 ## Error Handling
 
-All errors follow a consistent format:
+An error answers with an HTTP status and a JSON body whose `error` member is a message:
 
 ```json
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid agent name",
-    "details": {
-      "field": "name",
-      "constraint": "must be alphanumeric and 3-50 characters"
-    }
-  }
+  "error": "Invalid agent ID"
 }
 ```
 
-### Error Codes
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `VALIDATION_ERROR` | 400 | Request validation failed |
-| `UNAUTHORIZED` | 401 | Authentication required |
-| `FORBIDDEN` | 403 | Insufficient permissions |
-| `NOT_FOUND` | 404 | Resource not found |
-| `CONFLICT` | 409 | Resource already exists |
-| `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
-| `INTERNAL_ERROR` | 500 | Server error |
+| HTTP Status | Meaning |
+|-------------|---------|
+| 400 | The request is malformed or fails validation |
+| 401 | No credentials, or credentials the server does not accept |
+| 403 | The credentials are valid but the role is not allowed |
+| 404 | The resource does not exist in your organization |
+| 409 | The resource already exists |
+| 429 | Rate limit exceeded |
+| 500 | Server error |
 
 ---
 
 ## Rate Limiting
 
-Default rate limits:
+Requests are counted per signed-in user when the server knows the user before the limiter runs, and per client IP address otherwise, over a one-minute window:
 
-- **Authenticated requests**: 100 requests/minute
-- **Unauthenticated requests**: 10 requests/minute
+- **Most routes**: 100 requests per minute.
+- **Credential routes**: 10 requests per minute. These are sign-in, sign-out, token refresh, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
 
-Rate limit headers:
+Responses carry the limiter's headers. `X-RateLimit-Reset` is the number of seconds until the window resets:
 
 ```
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1696780800
+X-RateLimit-Reset: 42
 ```
 
-When rate limited:
+A refused request answers 429 with a `Retry-After` header (seconds) and this body:
 
 ```json
 {
-  "error": {
-    "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Too many requests",
-    "retryAfter": 60
-  }
+  "error": "Rate limit exceeded. Please try again later."
 }
 ```
 
