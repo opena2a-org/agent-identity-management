@@ -34,7 +34,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   origin and the derived `-backend` host, so build with `NEXT_PUBLIC_API_URL` set to the origin the browser uses.
   `frame-ancestors 'none'` stops every site, the dashboard's own origin included, from showing it inside a frame.
 
-### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path is answered 405 (#652)
+### Fixed — `POST /api/v1/a2a/verify` carries the shared rate limiter (#654)
+
+- `POST /api/v1/a2a/verify` takes no credentials. It now carries the shared rate limiter on its own registration
+  line, as `GET /api/v1/did/*` and `GET /api/v1/revocations` do: under the production limits, a client that has
+  sent 100 such requests within a minute is answered 429 on the next. Another method on the path that reaches the
+  routes is answered 405 as before.
+- The test that requires `/api/v1/a2a/verify` to be mounted once now reads the routes from the router the server
+  builds, as that router matches them, rather than the source text. A second mount on the path with a trailing
+  slash, or through `Add`, is now counted.
+- Tests: `a2a_verify_route_test.go` (server routes).
+
+### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path that reaches the routes is answered 405 (#652)
 
 - `POST /api/v1/a2a/verify` was mounted twice: once without authentication, and again inside the authenticated
   `/a2a` group. The first answers every POST that reaches the routes, so the second was never reached; it is
