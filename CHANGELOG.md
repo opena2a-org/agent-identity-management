@@ -14,9 +14,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path is answered 405 (#652)
 
 - `POST /api/v1/a2a/verify` was mounted twice: once without authentication, and again inside the authenticated
-  `/a2a` group. The first answers every POST, so the second was never reached; it is removed. A GET, PUT, PATCH or
-  DELETE on the path passed to the group and was answered 401 `No authentication token provided`. It is now answered
-  405 with `Allow: POST`. A POST is answered as before.
+  `/a2a` group. The first answers every POST that reaches the routes, so the second was never reached; it is
+  removed. A GET, PUT, PATCH or DELETE on the path that reaches the routes passed to the group: without credentials
+  it was answered 401 `No authentication token provided`, and with a valid access token it was already answered
+  405. It is now answered 405 with `Allow: POST` before the group's authentication runs. A POST is answered as
+  before.
 - The transition recorder's tests now refuse a change whose event id is the event id of the nil request and which
   names no request, and tell the refusal of a change given its own agent's opening event id by its own message.
 - Tests: `a2a_verify_route_test.go` (server routes) and `transition_test.go` (transition recorder).
