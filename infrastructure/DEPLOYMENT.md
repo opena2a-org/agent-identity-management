@@ -72,9 +72,8 @@ az login
 export AIM_RESOURCE_GROUP="aim-production"
 export AIM_LOCATION="eastus"
 
-# Run deployment
-cd infrastructure/azure
-./deploy.sh
+# Run deployment from the repository root
+./infrastructure/deployment/azure/deploy.sh
 ```
 
 ### What Gets Deployed
@@ -187,9 +186,8 @@ gcloud config set project YOUR_PROJECT_ID
 export GCP_PROJECT_ID="your-project-id"
 export GCP_REGION="us-central1"
 
-# Run deployment
-cd infrastructure/gcp
-./deploy.sh
+# Run deployment from the repository root
+./infrastructure/deployment/gcp/deploy.sh
 ```
 
 ### What Gets Deployed
@@ -315,9 +313,8 @@ sudo apt-get install jq
 # Set environment variables (optional)
 export AWS_REGION="us-east-1"
 
-# Run deployment
-cd infrastructure/aws
-./deploy.sh
+# Run deployment from the repository root
+./infrastructure/deployment/aws/deploy.sh
 ```
 
 ### What Gets Deployed

@@ -104,7 +104,6 @@ Claude will:
 
 ### ✅ Production-Ready
 - Docker Compose for local dev
-- Kubernetes manifests for production
 - CI/CD pipeline (GitHub Actions)
 - Monitoring setup (Prometheus + Grafana)
 - 80%+ test coverage
@@ -275,7 +274,6 @@ After 30 hours, you should be able to:
 
 ### Production-Ready
 - ✅ Docker Compose works in 1 command
-- ✅ Kubernetes manifests ready
 - ✅ CI/CD pipeline configured
 - ✅ Monitoring set up
 
@@ -283,7 +281,6 @@ After 30 hours, you should be able to:
 - ✅ README compelling
 - ✅ LICENSE file present
 - ✅ Contributing guide written
-- ✅ Issue templates created
 - ✅ Marketing materials ready
 
 ---

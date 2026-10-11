@@ -159,8 +159,11 @@ The dashboard keeps its sign-in in the browser's site storage, not in cookies. S
 #### 3. Check Backend Logs
 
 ```bash
-# Docker
-docker logs identity-backend --tail 100
+# Docker Compose
+docker compose logs backend --tail 100
+
+# Local development: the backend writes its log to standard output, in the
+# terminal that runs it
 ```
 
 ---
@@ -547,13 +550,9 @@ docker exec -it identity-postgres psql -U postgres -d identity
 
 **Cause**: Frontend running on different origin than backend expects
 
-**Fix**:
-```go
-// apps/backend/internal/api/middleware/cors.go
-AllowOrigins: []string{
-    "http://localhost:3000",  // Add your frontend URL
-    "https://yourdomain.com",
-}
+**Fix**: List the frontend's origin in `ALLOWED_ORIGINS` (comma-separated) in `.env`, then restart the backend. When the variable is set, it replaces the default `http://localhost:3000`, so list that origin too if you still use it:
+```bash
+ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
 ```
 
 ---
@@ -569,18 +568,6 @@ cat apps/backend/.env | grep JWT_SECRET
 
 # Generate new secret if needed
 openssl rand -base64 32
-```
-
----
-
-### "database is locked"
-
-**Cause**: SQLite in production (not supported)
-
-**Fix**: Use PostgreSQL for production:
-```bash
-# Migration script
-./scripts/migrate-to-postgres.sh
 ```
 
 ---
@@ -728,10 +715,10 @@ echo "Please attach debug-output/ when reporting issues"
 ## Additional Resources
 
 - [Token Rotation Guide](../security/token-rotation.md)
-- [API Documentation](../api/README.md)
-- [SDK Documentation](../sdk/README.md)
-- [Deployment Guide](../deployment/README.md)
-- [Security Best Practices](../security/best-practices.md)
+- [API Documentation](../API.md)
+- [SDK Documentation](../sdk/python.md)
+- [Deployment Guide](../DEPLOYMENT.md)
+- [Security Best Practices](../guides/SECURITY.md)
 
 ---
 

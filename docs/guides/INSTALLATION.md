@@ -29,8 +29,8 @@ Complete installation guide for Agent Identity Management platform.
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/opena2a/identity.git
-cd identity
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
 ```
 
 ### 2. Configure Environment
@@ -185,17 +185,20 @@ without connecting to the database.
 ### Docker (Recommended)
 
 ```bash
-# Build images
-docker compose -f docker-compose.prod.yml build
+# Build the backend and dashboard images from this checkout
+docker compose build
 
-# Start services
-docker compose -f docker-compose.prod.yml up -d
+# Start the services in docker-compose.yml (.env holds the secrets it requires,
+# KEYVAULT_MASTER_KEY among them; set ENVIRONMENT=production there)
+docker compose up -d
 
 # View logs
-docker compose -f docker-compose.prod.yml logs -f
+docker compose logs -f
 ```
 
 ### Kubernetes
+
+This repository ships no Kubernetes manifests. The commands below apply manifests you write yourself, kept in a directory shown here as `<manifests>`.
 
 ```bash
 # Apply namespace
@@ -207,16 +210,16 @@ kubectl create secret generic identity-secrets \
   -n identity
 
 # Deploy PostgreSQL
-kubectl apply -f infrastructure/k8s/postgres.yaml
+kubectl apply -f <manifests>/postgres.yaml
 
 # Deploy Redis
-kubectl apply -f infrastructure/k8s/redis.yaml
+kubectl apply -f <manifests>/redis.yaml
 
 # Deploy backend
-kubectl apply -f infrastructure/k8s/backend.yaml
+kubectl apply -f <manifests>/backend.yaml
 
 # Deploy frontend
-kubectl apply -f infrastructure/k8s/frontend.yaml
+kubectl apply -f <manifests>/frontend.yaml
 
 # Check status
 kubectl get pods -n identity
@@ -374,7 +377,7 @@ docker run -d -p 3001:3000 \
   -e "GF_SECURITY_ADMIN_PASSWORD=admin" \
   grafana/grafana
 
-# Import dashboards from infrastructure/grafana/
+# Import dashboards from infrastructure/monitoring/grafana/dashboards/
 ```
 
 ## Troubleshooting

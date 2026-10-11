@@ -11,6 +11,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The deployment, installation and troubleshooting pages name only files the repository carries (#674)
+
+- `docs/DEPLOYMENT.md`, `docs/guides/DEPLOYMENT_CHECKLIST.md`, `docs/guides/INSTALLATION.md`, `docs/quick-start.md`,
+  `docs/troubleshooting/README.md`, `infrastructure/README.md`, `infrastructure/DEPLOYMENT.md` and
+  `infrastructure/deployment/README.md` told readers to run `./deploy.sh`, `./scripts/deploy-azure-production.sh` and
+  `./scripts/migrate-to-postgres.sh`, to start `docker-compose.prod.yml` and `docker-compose.monitoring.yml`, to mount
+  `infrastructure/nginx/nginx.conf`, to apply `infrastructure/k8s/*.yaml`, to build from `apps/backend/Dockerfile` and
+  `apps/web/Dockerfile`, and to `cd` into `infrastructure/azure`, `infrastructure/gcp`, `infrastructure/aws` and
+  `identity`. The repository carries none of them.
+- Each step now uses what the repository carries: `./scripts/gen-dev-secrets.sh > .env` and `docker compose` on
+  `docker-compose.yml` (`up -d --build` to build from the checkout, `up -d postgres redis` or
+  `up -d prometheus grafana loki promtail` to start a subset, `down -v` to reset), `docker compose run --rm bootstrap`
+  for the first administrator, `./infrastructure/scripts/deploy-azure-production.sh`,
+  `./infrastructure/deployment/{azure,gcp,aws}/deploy.sh` run from the repository root, and
+  `infrastructure/docker/Dockerfile.backend` and `Dockerfile.frontend`. The Kubernetes sections say the repository
+  ships no manifests and apply the reader's own; the HTTPS step says it ships no reverse-proxy configuration. Grafana's
+  port reads 3003 and its dashboards `infrastructure/monitoring/grafana/dashboards/`, as `docker-compose.yml` and the
+  tree have them.
+- The troubleshooting page sets `ALLOWED_ORIGINS`, which the server reads, for a CORS error, in place of editing
+  `apps/backend/internal/api/middleware/cors.go`, which does not exist; reads backend logs with
+  `docker compose logs backend` in place of `apps/backend/logs/oauth.log`, which the server does not write; and no
+  longer has a "database is locked" entry, which described an SQLite mode the server does not have.
+- The quick deployment reference no longer lists `AIM_DEPLOYMENT_TEST_REPORT.md` and `DEPLOYMENT_SUCCESS_SUMMARY.md`,
+  and the start-here page no longer lists Kubernetes manifests and issue templates; the repository carries none of
+  them. Links to `docs/deployment/`, `docs/security/best-practices.md`, `docs/index.md`, `docs/api/README.md`,
+  `docs/sdk/README.md`, `infrastructure/deployment/{aws,azure,gcp}/README.md` and `k8s/`, none of which exists, point
+  to the page that covers the topic or are removed.
+- A backend test (`apps/backend/cmd/server/deployment_docs_files_contract_test.go`) reads these pages and fails on a
+  script, compose file, manifest, directory, link target or repository path they name that the repository does not
+  carry.
+
 ### Fixed — The API reference pages, tutorials and guides name only routes the server registers (#671)
 
 - `docs/API.md`, `docs/guides/API_REFERENCE.md`, `docs/guides/API_ENDPOINT_SUMMARY.md`, `docs/api/direct-api-usage.md`,

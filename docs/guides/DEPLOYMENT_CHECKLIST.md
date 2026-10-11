@@ -189,10 +189,10 @@ curl http://localhost:8080/api/v1/agents
 ### Step 1: Build Production Images
 ```bash
 # Build backend image
-docker build -f apps/backend/Dockerfile -t aim-backend:latest .
+docker build -f infrastructure/docker/Dockerfile.backend -t aim-backend:latest .
 
 # Build frontend image
-docker build -f apps/web/Dockerfile -t aim-frontend:latest .
+docker build -f infrastructure/docker/Dockerfile.frontend -t aim-frontend:latest .
 ```
 
 **Checklist:**
@@ -203,8 +203,8 @@ docker build -f apps/web/Dockerfile -t aim-frontend:latest .
 
 ### Step 2: Configure Production Environment
 ```bash
-# Create production .env file
-cp apps/backend/.env.example apps/backend/.env.production
+# Create .env with the secrets docker compose requires
+./scripts/gen-dev-secrets.sh > .env
 
 # Update with production values:
 # - Strong database password
@@ -223,8 +223,8 @@ cp apps/backend/.env.example apps/backend/.env.production
 
 ### Step 3: Start Production Stack
 ```bash
-# Start all services
-docker compose -f docker-compose.prod.yml up -d
+# Build the images from this checkout and start all services in docker-compose.yml
+docker compose up -d --build
 
 # Wait for services
 sleep 30
@@ -272,11 +272,13 @@ curl -I https://your-domain.com
 
 ## Kubernetes Deployment
 
+This repository ships no Kubernetes manifests. The steps below apply manifests you write yourself, kept in a directory shown here as `<manifests>`.
+
 ### Prerequisites
 - [ ] Kubernetes cluster available (EKS, GKE, AKS, or local)
 - [ ] `kubectl` configured
 - [ ] Docker images pushed to registry
-- [ ] Kubernetes manifests created
+- [ ] Kubernetes manifests created in `<manifests>`
 - [ ] Secrets configured
 
 ### Step 1: Create Namespace
@@ -306,10 +308,10 @@ kubectl create secret generic jwt-secret \
 ### Step 3: Deploy Infrastructure
 ```bash
 # Deploy PostgreSQL StatefulSet
-kubectl apply -f infrastructure/k8s/postgres.yaml
+kubectl apply -f <manifests>/postgres.yaml
 
 # Deploy Redis Deployment
-kubectl apply -f infrastructure/k8s/redis.yaml
+kubectl apply -f <manifests>/redis.yaml
 
 # Wait for pods to be ready
 kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s
@@ -325,7 +327,7 @@ kubectl wait --for=condition=ready pod -l app=redis --timeout=300s
 ### Step 4: Run Migrations
 ```bash
 # Create migration job
-kubectl apply -f infrastructure/k8s/migration-job.yaml
+kubectl apply -f <manifests>/migration-job.yaml
 
 # Wait for completion
 kubectl wait --for=condition=complete job/migration --timeout=300s
@@ -342,7 +344,7 @@ kubectl logs job/migration
 ### Step 5: Deploy Backend
 ```bash
 # Deploy backend
-kubectl apply -f infrastructure/k8s/backend-deployment.yaml
+kubectl apply -f <manifests>/backend-deployment.yaml
 
 # Wait for rollout
 kubectl rollout status deployment/backend
@@ -360,7 +362,7 @@ kubectl get pods -l app=backend
 ### Step 6: Deploy Frontend
 ```bash
 # Deploy frontend
-kubectl apply -f infrastructure/k8s/frontend-deployment.yaml
+kubectl apply -f <manifests>/frontend-deployment.yaml
 
 # Wait for rollout
 kubectl rollout status deployment/frontend
@@ -378,7 +380,7 @@ kubectl get pods -l app=frontend
 ### Step 7: Deploy Ingress
 ```bash
 # Deploy ingress
-kubectl apply -f infrastructure/k8s/ingress.yaml
+kubectl apply -f <manifests>/ingress.yaml
 
 # Wait for external IP
 kubectl get ingress -w

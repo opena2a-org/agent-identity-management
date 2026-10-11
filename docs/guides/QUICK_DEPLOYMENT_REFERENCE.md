@@ -63,9 +63,7 @@
 ### Created/Enhanced
 ✅ `/apps/web/lib/api.ts` - Added getDashboardStats()
 ✅ `/apps/web/app/dashboard/page.tsx` - Real API integration
-✅ `/AIM_DEPLOYMENT_TEST_REPORT.md` - 958 lines, comprehensive
-✅ `/DEPLOYMENT_SUCCESS_SUMMARY.md` - Executive summary
-✅ `/QUICK_DEPLOYMENT_REFERENCE.md` - This file
+✅ `/docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` - This file
 
 ### Backend
 ✅ No changes needed - all 62+ endpoints working
@@ -258,8 +256,8 @@ psql -h 127.0.0.1 -p 5432 -U postgres -d identity
 
 ### For Development
 ```bash
-# Watch logs in real-time
-tail -f apps/backend/server.log
+# Watch backend logs in real-time
+docker compose logs -f backend
 
 # Hot reload frontend
 npm run dev # Already enabled
@@ -308,8 +306,6 @@ ENVIRONMENT=production ./server
 - ✅ API_REFERENCE.md
 - ✅ SETUP_GUIDE.md
 - ✅ DEPLOYMENT_CHECKLIST.md
-- ✅ AIM_DEPLOYMENT_TEST_REPORT.md (958 lines)
-- ✅ DEPLOYMENT_SUCCESS_SUMMARY.md
 - ✅ This quick reference
 
 ---

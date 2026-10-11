@@ -59,20 +59,23 @@ Complete guide for deploying AIM (Agent Identity Management) in development, sta
 git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
-# 2. Deploy infrastructure only
-./deploy.sh development
+# 2. Generate local secrets into .env (compose does not start without them)
+./scripts/gen-dev-secrets.sh > .env
 
-# 3. Start backend (in new terminal)
+# 3. Start PostgreSQL and Redis
+docker compose up -d postgres redis
+
+# 4. Start backend (in new terminal)
 cd apps/backend
 export $(grep -v '^#' ../../.env | xargs)
 go run cmd/server/main.go
 
-# 4. Start frontend (in new terminal)
+# 5. Start frontend (in new terminal)
 cd apps/web
 npm install
 npm run dev
 
-# 5. Open browser
+# 6. Open browser
 open http://localhost:3000
 ```
 
@@ -83,10 +86,19 @@ open http://localhost:3000
 git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
-# 2. Deploy everything (infrastructure + backend + frontend)
-./deploy.sh production
+# 2. Generate secrets into .env, then set ENVIRONMENT=production and your
+#    production values in it (see Environment Configuration). The generated
+#    KEYVAULT_MASTER_KEY must keep the same value across restarts.
+./scripts/gen-dev-secrets.sh > .env
 
-# 3. Access application
+# 3. Build the backend and dashboard images from this checkout and start
+#    every service in docker-compose.yml
+docker compose up -d --build
+
+# 4. Create the first administrator once the backend is healthy
+docker compose run --rm bootstrap
+
+# 5. Access application
 open http://localhost:3000
 ```
 
@@ -99,24 +111,22 @@ open http://localhost:3000
 **Use Case**: Local development, testing, debugging
 
 ```bash
-./deploy.sh development
+./scripts/gen-dev-secrets.sh > .env
+docker compose up -d postgres redis
 ```
 
 **What it does:**
-- ✅ Starts infrastructure services (PostgreSQL, Redis, Elasticsearch, etc.)
-- ✅ Creates `.env` file with development settings
-- ✅ Runs database migrations
+- ✅ Writes the secrets docker compose requires to `.env`
+- ✅ Starts PostgreSQL and Redis
 - ❌ Does NOT start backend/frontend containers (run manually)
+
+The backend applies the database migrations when it starts.
 
 **Services Started:**
 - PostgreSQL (port 5432)
 - Redis (port 6379)
-- Elasticsearch (port 9200)
-- MinIO (ports 9000, 9001)
-- NATS (port 4222)
-- Prometheus (port 9090)
-- Grafana (port 3003)
-- Loki (port 3100)
+
+`docker-compose.yml` also defines Elasticsearch, MinIO, NATS, Prometheus, Grafana, Loki and Promtail. Start any of them by name, for example `docker compose up -d grafana`.
 
 **Backend & Frontend:**
 ```bash
@@ -136,7 +146,10 @@ npm run dev
 **Use Case**: Production deployment with Docker Compose
 
 ```bash
-./deploy.sh production
+# .env holds the secrets compose requires, KEYVAULT_MASTER_KEY among them
+# (./scripts/gen-dev-secrets.sh > .env writes them); set ENVIRONMENT=production
+# in it before you start
+docker compose up -d --build
 ```
 
 **What it does:**
@@ -144,10 +157,9 @@ npm run dev
 - ✅ Builds backend Docker image
 - ✅ Builds frontend Docker image
 - ✅ Starts backend container (port 8080)
-- ✅ Starts frontend container (port 3000)
-- ✅ Creates `.env` file with production settings
-- ✅ Runs database migrations
-- ✅ Performs health checks
+- ✅ Starts frontend container (port 3000) once the backend's health check passes
+
+The backend applies the database migrations when it starts. Create the first administrator with `docker compose run --rm bootstrap` once the backend is healthy.
 
 **All Services Running:**
 - Frontend (port 3000)
@@ -159,13 +171,13 @@ npm run dev
 **Use Case**: Reset deployment, remove all containers and volumes
 
 ```bash
-./deploy.sh clean
+docker compose down -v
 ```
 
 **What it does:**
 - ❌ Stops all Docker containers
 - ❌ Removes all containers
-- ❌ Removes all volumes (⚠️ **DATA LOSS!**)
+- ❌ Removes the volumes declared in `docker-compose.yml` (⚠️ **DATA LOSS!**)
 
 ---
 
@@ -173,7 +185,7 @@ npm run dev
 
 ### .env File Structure
 
-The deployment script automatically creates a `.env` file. Here's a complete reference:
+`./scripts/gen-dev-secrets.sh > .env` writes the secrets docker compose requires. Here's a complete reference:
 
 ```bash
 ################################################################################
@@ -430,16 +442,19 @@ sudo chmod +x /usr/local/bin/docker-compose
 git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
-# Create production .env
-cp .env.example .env
+# Create .env with the secrets docker compose requires
+./scripts/gen-dev-secrets.sh > .env
 nano .env  # Edit with production values
 ```
 
 #### 3. Deploy
 
 ```bash
-# Deploy in production mode
-./deploy.sh production
+# Build the images from this checkout and start every service
+docker compose up -d --build
+
+# Create the first administrator once the backend is healthy
+docker compose run --rm bootstrap
 
 # Check status
 docker compose ps
@@ -456,31 +471,9 @@ sudo apt install certbot
 
 # Get certificate
 sudo certbot certonly --standalone -d yourdomain.com
-
-# Configure Nginx (create docker-compose.override.yml)
-cat > docker-compose.override.yml << EOF
-version: '3.9'
-
-services:
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - aim-network
-EOF
-
-# Restart
-docker compose down
-docker compose up -d
 ```
+
+The repository ships no reverse-proxy configuration. Run a TLS-terminating reverse proxy (nginx, Caddy, Traefik or a cloud load balancer) in front of the dashboard on port 3000 and the API on port 8080, using the certificate from the previous command.
 
 ---
 
@@ -493,6 +486,8 @@ docker compose up -d
 - **Helm** 3+ (optional)
 
 ### Deploy with kubectl
+
+This repository ships no Kubernetes manifests. The steps below apply manifests you write yourself, kept in a directory shown here as `<manifests>`: a Deployment and a Service for each of the `ghcr.io/opena2a-org/aim-server` and `ghcr.io/opena2a-org/aim-dashboard` images, and an Ingress.
 
 #### 1. Create Namespace
 
@@ -530,19 +525,18 @@ helm install redis bitnami/redis \
   --namespace aim-production \
   --set auth.enabled=false
 
-# Or deploy from manifests
-kubectl apply -f infrastructure/k8s/postgres.yaml
-kubectl apply -f infrastructure/k8s/redis.yaml
-kubectl apply -f infrastructure/k8s/elasticsearch.yaml
+# Or deploy from your own manifests
+kubectl apply -f <manifests>/postgres.yaml
+kubectl apply -f <manifests>/redis.yaml
 ```
 
 #### 4. Deploy AIM
 
 ```bash
-# Apply Kubernetes manifests
-kubectl apply -f infrastructure/k8s/backend-deployment.yaml
-kubectl apply -f infrastructure/k8s/frontend-deployment.yaml
-kubectl apply -f infrastructure/k8s/ingress.yaml
+# Apply your Kubernetes manifests
+kubectl apply -f <manifests>/backend-deployment.yaml
+kubectl apply -f <manifests>/frontend-deployment.yaml
+kubectl apply -f <manifests>/ingress.yaml
 
 # Check status
 kubectl get pods -n aim-production
@@ -553,7 +547,7 @@ kubectl get ingress -n aim-production
 #### 5. Configure Ingress
 
 ```yaml
-# infrastructure/k8s/ingress.yaml
+# <manifests>/ingress.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -591,7 +585,7 @@ spec:
 ### Horizontal Pod Autoscaling
 
 ```yaml
-# infrastructure/k8s/hpa.yaml
+# <manifests>/hpa.yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -726,10 +720,11 @@ curl http://localhost:9200/_cluster/health
 ### Reset Deployment
 
 ```bash
-# Clean everything and start fresh
-./deploy.sh clean
+# Clean everything and start fresh (removes the volumes: all data is lost)
+docker compose down -v
 rm .env
-./deploy.sh development
+./scripts/gen-dev-secrets.sh > .env
+docker compose up -d postgres redis
 ```
 
 ---
