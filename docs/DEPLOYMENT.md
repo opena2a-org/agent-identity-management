@@ -27,8 +27,8 @@ Complete guide for deploying AIM (Agent Identity Management) in development, sta
 #### Development Mode
 - **Docker** 20.10+ ([Install](https://docs.docker.com/get-docker/))
 - **Docker Compose** 2.0+ (included with Docker Desktop)
-- **Go** 1.23+ ([Install](https://golang.org/dl/))
-- **Node.js** 22+ ([Install](https://nodejs.org/))
+- **Go** 1.25+ ([Install](https://golang.org/dl/))
+- **Node.js** 20.19+ or 22.13+ ([Install](https://nodejs.org/))
 - **Python** 3.8+ ([Install](https://python.org/))
 
 #### Production Mode

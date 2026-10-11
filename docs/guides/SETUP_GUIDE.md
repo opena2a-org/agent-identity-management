@@ -4,8 +4,8 @@ This guide will help you get the Agent Identity Management platform running loca
 
 ## Prerequisites
 
-- **Go 1.23.1+** - [Install Go](https://go.dev/doc/install)
-- **Node.js 20+** - [Install Node.js](https://nodejs.org/)
+- **Go 1.25+** - [Install Go](https://go.dev/doc/install)
+- **Node.js 20.19+ or 22.13+** - [Install Node.js](https://nodejs.org/)
 - **Docker & Docker Compose** - [Install Docker](https://docs.docker.com/get-docker/)
 - **Git** - For cloning the repository
 

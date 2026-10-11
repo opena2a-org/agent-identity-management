@@ -14,8 +14,8 @@ Thank you for your interest in contributing to the Agent Identity Management (AI
 
 ### Prerequisites
 
-- **Go**: 1.23 or higher
-- **Node.js**: 18 or higher
+- **Go**: 1.25 or higher
+- **Node.js**: 20.19+ or 22.13+
 - **PostgreSQL**: 16 or higher
 - **Docker**: (optional) for containerized development
 - **Git**: for version control

@@ -38,11 +38,11 @@ We pledge to make participation in our project a harassment-free experience for 
 
 ### Prerequisites
 
-- Go 1.21+
-- Node.js 18+
+- Go 1.25+
+- Node.js 20.19+ or 22.13+
 - Docker & Docker Compose
 - Git
-- pnpm 8+
+- npm 10+
 
 ### Fork and Clone
 
@@ -65,7 +65,7 @@ docker compose up -d
 
 # Install dependencies
 cd apps/backend && go mod download
-cd ../web && pnpm install
+cd ../web && npm install
 
 # Run database migrations
 cd apps/backend
@@ -76,7 +76,7 @@ go run cmd/server/main.go
 
 # Start frontend (new terminal)
 cd apps/web
-pnpm dev
+npm run dev
 ```
 
 ## Development Workflow
@@ -119,14 +119,14 @@ go test ./...
 
 # Frontend tests
 cd apps/web
-pnpm test
+npm test
 
 # E2E tests
-pnpm test:e2e
+npm run test:e2e
 
 # Lint
 cd apps/backend && golangci-lint run
-cd apps/web && pnpm lint
+cd apps/web && npm run lint
 ```
 
 ### 4. Commit Changes
@@ -411,7 +411,7 @@ Aim for:
 ```bash
 # Check coverage
 go test -cover ./...
-pnpm test -- --coverage
+npm test -- --coverage
 ```
 
 ## Pull Request Process
@@ -427,13 +427,13 @@ pnpm test -- --coverage
 2. **Run all tests:**
    ```bash
    go test ./...
-   pnpm test
+   npm test
    ```
 
 3. **Run linters:**
    ```bash
    golangci-lint run
-   pnpm lint
+   npm run lint
    ```
 
 4. **Update documentation** if needed
@@ -579,7 +579,7 @@ air
 **Frontend:**
 ```bash
 # Already built-in
-pnpm dev
+npm run dev
 ```
 
 ### Debugging
