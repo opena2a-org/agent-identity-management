@@ -13,6 +13,8 @@ the minimal dev stack command to the services docker-compose.yml defines,
 the recorded walkthrough's typed and install lines to the root README's Quick
 start, and the root README's captured register output, in its first 30
 lines, to what this SDK prints for that call and the SDK version it names.
+The root README's refused call, and the token-rotation line it describes,
+are run through this SDK against a server on 127.0.0.1.
 
 Everything here runs offline and reads only files in this repository; the
 check of the walkthrough's own extractor also runs it with node, when node
@@ -383,7 +385,9 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
     the agent name, its capabilities and the pending status. The values the server returns,
     the ID, type, version and trust score, are read from the capture and printed back
     through this SDK's console, so they are not checked: the trust score is computed by the
-    server, and changing "Trust: 59%" to "Trust: 95%" keeps this test green by design."""
+    server, and changing "Trust: 59%" to "Trust: 95%" keeps this test green by design.
+    The token-rotation line is not part of the capture: it prints only when the server
+    rotates the refresh token (see the test after this one)."""
     from aim_sdk import console as console_module
     from aim_sdk import oauth as oauth_module
 
@@ -401,17 +405,21 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
         "the fence after the register call must be its captured output, "
         "opening with the agent-type line secure() prints"
     )
-    # The first call after `aim-sdk login` refreshes the sign-in, and the server
-    # rotates the refresh token; the SDK prints one line for that.
-    assert re.fullmatch(printed_line_pattern(oauth_module, "Token rotated successfully"), lines[1]), (
-        "the captured output's second line must be the token-rotation line this SDK prints"
+    # The first call after `aim-sdk login` refreshes the sign-in. The SDK prints a
+    # line for that only when the server answers with a new refresh token, which a
+    # server without Redis never does, so a capture that shows it is not what every
+    # reader sees.
+    rotation = printed_line_pattern(oauth_module, "Token rotated successfully")
+    assert not [line for line in lines if re.fullmatch(rotation, line)], (
+        "the captured output shows the token-rotation line, which prints only when the "
+        "server rotates the refresh token; describe it below the output instead"
     )
     shown = re.fullmatch(
         r"\n\[OK\] Agent registered: (?P<name>.+)\n"
         r"  ID: (?P<id>\S+)  Type: (?P<type>\S+)  Version: (?P<version>\S+)\n"
         r"  Status: ○ (?P<status>\S+)  Trust: (?P<trust>\d+)%\n"
         r"  Capabilities: (?P<capabilities>.+?)\n*",
-        "\n".join(lines[2:]),
+        "\n".join(lines[1:]),
     )
     assert shown, "the captured output must end with the registration lines the rich extra prints"
     assert shown["name"] == name, "the captured output names a different agent than the call"
@@ -433,10 +441,248 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
         status=shown["status"],
         capabilities=capabilities,
     )
-    printed = capsys.readouterr().out.split("\n", 1)
-    assert "\n".join([printed[0], lines[1], printed[1]]).rstrip("\n") == output[1].rstrip("\n"), (
+    printed = capsys.readouterr().out
+    assert printed.rstrip("\n") == output[1].rstrip("\n"), (
         "the README's captured register output no longer matches what this SDK prints; "
         "capture it again"
+    )
+
+
+def paragraph_after(path, block):
+    """The first paragraph after a fenced block, as one line per source line."""
+    lines = path.read_text(encoding="utf-8").split("\n")[block[3]:]
+    start = next(i for i, line in enumerate(lines) if line.strip())
+    end = next((i for i, line in enumerate(lines) if i > start and not line.strip()), len(lines))
+    return "\n".join(lines[start:end])
+
+
+def test_root_readme_says_when_the_sdk_prints_the_token_rotation_line():
+    """The line is described under the capture, in the format this SDK prints, with the
+    condition it depends on: the server rotates a refresh token only when it has Redis to
+    record the old one as revoked. Without Redis the server logs that at startup and
+    answers with the token it was given."""
+    from aim_sdk import oauth as oauth_module
+
+    _, output, _ = register_and_output(ROOT_README)
+    prose = paragraph_after(ROOT_README, output)
+    quoted = re.findall(r"`([^`]+)`", prose)
+    rotation = printed_line_pattern(oauth_module, "Token rotated successfully")
+    assert [q for q in quoted if re.fullmatch(rotation, q)], (
+        "the paragraph after the captured output must quote the token-rotation line "
+        "in the format this SDK prints"
+    )
+    assert "Redis" in prose, (
+        "the paragraph after the captured output must say the line depends on the "
+        "server having Redis"
+    )
+    server_main = (REPO_ROOT / "apps" / "backend" / "cmd" / "server" / "main.go").read_text(encoding="utf-8")
+    logs = [q for q in quoted if q.startswith("Token revocation disabled")]
+    assert logs and all(q in server_main for q in logs), (
+        "the paragraph after the captured output must quote the startup line a server "
+        "without Redis logs, as the server source writes it"
+    )
+
+
+ROTATION_KEY = "readme-rotation-test-signing-key-0123456789"
+
+
+def _jwt(typ, ttl):
+    import time
+    import uuid
+
+    import jwt
+
+    return jwt.encode(
+        {"user_id": "u-1", "typ": typ, "iss": "agent-identity-management",
+         "jti": str(uuid.uuid4()), "exp": int(time.time()) + ttl},
+        ROTATION_KEY, algorithm="HS256",
+    )
+
+
+class LoopbackServer:
+    """Answers every request on 127.0.0.1 through `answer(method, path, body)`,
+    which returns (status, JSON-serialisable payload)."""
+
+    def __init__(self, answer):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            def _respond(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(length) if length else b""
+                try:
+                    body = json.loads(raw or b"{}")
+                except ValueError:
+                    body = {}
+                status, payload = answer(self.command, self.path, body)
+                data = json.dumps(payload).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _respond
+
+            def log_message(self, *args):
+                pass
+
+        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self._httpd.server_address[1]}"
+        threading.Thread(target=self._httpd.serve_forever, daemon=True).start()
+
+    def close(self):
+        self._httpd.shutdown()
+        self._httpd.server_close()
+
+
+@pytest.fixture
+def loopback():
+    servers = []
+
+    def start(answer):
+        server = LoopbackServer(answer)
+        servers.append(server)
+        return server
+
+    yield start
+    for server in servers:
+        server.close()
+
+
+@pytest.mark.parametrize("rotates", [True, False], ids=["server-with-redis", "server-without-redis"])
+def test_first_refresh_after_login_prints_the_rotation_line_only_when_the_server_rotates(
+    monkeypatch, tmp_path, capsys, loopback, rotates
+):
+    """What the paragraph after the capture says, run through this SDK: the first token
+    request after `aim-sdk login` presents the saved refresh token. A server with Redis
+    answers with a new refresh token (TestRefreshToken_RotationChainsAndEachOldTokenDies
+    in the backend); one without Redis answers with the token it was given
+    (TestRefreshToken_NoRevokerDoesNotRotate). Only the first prints the line."""
+    import os
+
+    import aim_sdk.credentials as credentials_module
+    import aim_sdk.oauth as oauth_module
+
+    aim_dir = tmp_path / ".aim"
+    creds_file = aim_dir / "sdk_credentials.json"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setattr(credentials_module, "AIM_DIR", aim_dir)
+    monkeypatch.setattr(credentials_module, "SDK_CREDENTIALS_FILE", creds_file)
+    monkeypatch.setattr(credentials_module, "AGENTS_DIR", aim_dir / "agents")
+    monkeypatch.setattr(credentials_module, "LEGACY_CREDENTIALS_FILE", aim_dir / "credentials.json")
+    monkeypatch.setattr(oauth_module, "get_sdk_credentials_path", lambda: creds_file)
+
+    saved = _jwt("refresh", 86400)
+    presented = []
+
+    def answer(method, path, body):
+        if method != "POST" or path != "/api/v1/auth/refresh":
+            return 404, {"error": "not found"}
+        presented.append(body.get("refreshToken"))
+        refresh = _jwt("refresh", 86400) if rotates else body.get("refreshToken")
+        return 200, {"accessToken": _jwt("access", 900), "refreshToken": refresh, "rotated": rotates}
+
+    server = loopback(answer)
+    # The shape `aim-sdk login` saves.
+    aim_dir.mkdir(parents=True)
+    creds_file.write_text(json.dumps({
+        "aimUrl": server.url, "refreshToken": saved, "accessToken": _jwt("access", 900),
+        "userId": "u-1", "userEmail": "user@example.test", "organizationId": "o-1",
+        "type": "sdk_oauth", "schemaVersion": "1.0",
+    }))
+    os.chmod(creds_file, 0o600)
+
+    assert oauth_module.OAuthTokenManager().get_access_token()
+    assert presented == [saved], "the first token request after login presents the saved refresh token"
+
+    rotation = printed_line_pattern(oauth_module, "Token rotated successfully")
+    printed = [line for line in capsys.readouterr().out.split("\n") if re.fullmatch(rotation, line)]
+    if rotates:
+        assert len(printed) == 1, "a rotated refresh token prints the rotation line once"
+    else:
+        assert printed == [], (
+            "a server that answers with the refresh token it was given rotated nothing, "
+            "and the SDK prints no rotation line"
+        )
+
+
+def refused_call_and_output(path):
+    """The Python fence that makes the refused call, and the fence after it."""
+    blocks = numbered_fences(path)
+    i = next(
+        (i for i, b in enumerate(blocks) if b[0] == "python" and "perform_action" in b[1] and "db:write" in b[1]),
+        None,
+    )
+    assert i is not None and i + 1 < len(blocks), f"{path.name}: no fence follows the refused call"
+    return blocks[i], blocks[i + 1]
+
+
+def test_root_readme_strict_mode_refusal_is_what_this_sdk_prints(monkeypatch, capsys, loopback):
+    """Runs the refused call through this SDK's @perform_action against a server that
+    answers as a strict-mode organization does: the capability request is left pending
+    (202, status pending, the backend's RegisterCapability) and the verification is
+    denied. The denial reason the server writes is read from the README's own exception
+    line and sent back, so it is not checked; every other line, and the rest of the
+    exception line, is what this SDK prints."""
+    import uuid
+
+    from aim_sdk import console as console_module
+    from aim_sdk.client import AIMClient
+    from aim_sdk.decision import get_mode_cache
+    from aim_sdk.exceptions import ActionDeniedError
+
+    refused, output = refused_call_and_output(ROOT_README)
+    capability = next(
+        k.value.value
+        for node in ast.walk(ast.parse(refused[1]))
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "perform_action"
+        for k in node.keywords if k.arg == "capability"
+    )
+    lines = output[1].rstrip("\n").split("\n")
+    raised = re.fullmatch(
+        rf"(?P<type>[\w.]+): AIM denied '{re.escape(capability)}': (?P<reason>.+?)\. "
+        r"The action was blocked and not executed\. .+",
+        lines[-1],
+    )
+    assert raised, "the output of the refused call must end with the ActionDeniedError it raises"
+
+    def answer(method, path, body):
+        if path.endswith("/capabilities/register"):
+            return 202, {
+                "success": True, "capabilityType": body.get("capabilityType"), "status": "pending",
+                "message": "Capability request created - awaiting admin approval (strict mode)",
+                "requestId": str(uuid.uuid4()),
+            }
+        if path.endswith("/sdk-api/verifications"):
+            return 200, {"id": str(uuid.uuid4()), "status": "denied",
+                         "denialReason": raised["reason"], "enforcementMode": "strict"}
+        return 200, {}
+
+    server = loopback(answer)
+    get_mode_cache().clear()
+    monkeypatch.setattr(console_module, "RICH_AVAILABLE", True)
+    monkeypatch.setattr(console_module.console, "console", MarkupStrippingConsole(), raising=False)
+    agent = AIMClient(agent_id=str(uuid.uuid4()), api_key="test-api-key", aim_url=server.url, auto_retry=False)
+    capsys.readouterr()
+
+    @agent.perform_action(capability=capability)
+    def refused_call():
+        raise AssertionError("the function body ran for a refused call")
+
+    try:
+        with pytest.raises(ActionDeniedError) as denied:
+            refused_call()
+    finally:
+        get_mode_cache().clear()
+    printed = capsys.readouterr()
+    error = denied.value
+    shown = printed.out.rstrip("\n").split("\n") + [f"{type(error).__module__}.{type(error).__name__}: {error}"]
+    assert printed.err == "", f"the refused call also wrote to stderr: {printed.err!r}"
+    assert shown == lines, (
+        "the README's output for the refused call no longer matches what this SDK prints"
     )
 
 

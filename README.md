@@ -13,7 +13,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 right after `aim-sdk login` to a self-hosted AIM, with the server and SDK built from this repository. That SDK reports version 2.0.3 and prints `[OK]` where the aim-sdk 2.0.3 release on PyPI prints `✓`:
+Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 right after `aim-sdk login` to a self-hosted AIM, with the server and SDK built from this repository; one line that run printed depends on the server and is described below the output instead. That SDK reports version 2.0.3 and prints `[OK]` where the aim-sdk 2.0.3 release on PyPI prints `✓`:
 
 ```python
 from aim_sdk import secure
@@ -21,7 +21,6 @@ agent = secure("my-first-agent", capabilities=["db:read"])
 ```
 ```
   ○ Agent Type: using default 'ai_agent'
-Token rotated successfully — old refresh token revoked (new id: 461d130d...)
 
 [OK] Agent registered: my-first-agent
   ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0
@@ -29,7 +28,7 @@ Token rotated successfully — old refresh token revoked (new id: 461d130d...)
   Capabilities: db:read
 ```
 
-`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. The `Token rotated` line comes from the first call after sign-in, which exchanges the refresh token `aim-sdk login` saved for a new one. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
+`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. Its first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records that token as revoked there and answers with a new one, and the SDK then prints one more line after the first: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. The 2026-10-09 run printed it, and the quickstart stack below starts Redis. A server without Redis, or one whose Redis refused the write, answers with the token it was given, and the SDK prints no such line; a server without Redis logs `Token revocation disabled (no Redis configured)` at startup. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
 
 The agent starts `pending` until an administrator verifies it under Agents in the dashboard. On a new organization, which starts in monitoring mode (described below), a pending agent's call runs and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until the agent is verified. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
 
@@ -63,11 +62,10 @@ AIM refuses it before the function body runs, and says why:
 
 ```
 Capability 'db:write' pending admin approval (strict mode)
-  ✓ Registered db:write (medium)
 aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
 ```
 
-Output copied from aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'; the rest of the line is the same. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
+Captured against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. That run used the aim-sdk 2.0.3 release on PyPI, which also prints `✓ Registered db:write (medium)` after the first line. The SDK built from this repository prints no `Registered` line for a capability request the server leaves pending, so the output above omits it. A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'; the rest of the line is the same. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
 New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
 
