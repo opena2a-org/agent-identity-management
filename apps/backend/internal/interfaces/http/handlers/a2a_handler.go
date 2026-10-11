@@ -292,10 +292,15 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 
 // VerifyRequest verifies an incoming A2A request signature
 // POST /api/v1/a2a/verify
+//
+// Every answer that refuses the request, the 400s and the 401, carries
+// valid: false. A 500 carries no valid member: it says nothing about the
+// request.
 func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	var req application.VerifyA2ARequestRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"valid": false,
 			"error": "Invalid request body",
 		})
 	}
@@ -303,6 +308,7 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	result, err := h.a2aService.VerifyA2ARequest(c.Context(), req)
 	if errors.Is(err, application.ErrInvalidA2ANonce) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"valid": false,
 			"error": err.Error(),
 		})
 	}
