@@ -38,7 +38,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — the tutorials, the deployment reference, the backend README and the SDK test plan give no count the repository does not bear out (#676)
 
 - `docs/tutorials/README.md` and `docs/tutorials/api-quickstart.md` linked `docs/API.md` as "All 160 endpoints".
-  That file documents 32 endpoints. Both lines now say what it holds, REST endpoints with request and response
+  That file documents 29 endpoints. Both lines now say what it holds, REST endpoints with request and response
   examples, and give no total.
 - `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` gave the database 16 tables, in two places. The 127 migrations create
   96 tables and the migration runner creates `schema_migrations`, 97 in all. The guide no longer gives a total.
