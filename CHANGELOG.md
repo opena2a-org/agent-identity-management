@@ -11,6 +11,61 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a database password with a single quote or a backslash reaches PostgreSQL as configured (#697)
+
+- The backend writes every string setting of its PostgreSQL connection string (host, user, password, database name and
+  SSL mode) as a quoted value, with a backslash in front of each backslash and each single quote inside it. That is
+  the escape lib/pq 1.10.9 reads. A doubled single quote ends a quoted value there.
+- Measured before this change, with a test server that records the login it receives. For the passwords `it's`,
+  `'quoted'`, `a''b` and `a\'b` the connection failed in the driver with `missing "=" after`, and for `ends-with\` with
+  `unterminated quoted string literal in connection string`. `a'=b` reached the server as `a`, `back\slash` as
+  `backslash` and `a\\b` as `a\b`. With the user `aim owner` and the database name `identity records` the connection
+  failed in the driver with `missing "=" after`. The user `corp\aim` and the database name `corp\identity` reached the
+  server without the backslash.
+- Tests: `TestInitDatabase_PasswordReachesPostgresUnchanged`,
+  `TestInitDatabase_UserAndDatabaseNameReachPostgresUnchanged` and
+  `TestDatabaseConnString_QuotesAndEscapesEveryStringSetting` in
+  `apps/backend/cmd/server/database_conn_string_test.go`.
+
+### Fixed — the startup summary names the Redis address that could not be reached (#697)
+
+- With no Redis connection, the Redis line of the backend's startup summary reads
+  `Redis: disabled (running without caching)` only when `REDIS_HOST` is set to the empty string. When the startup
+  Redis ping failed, whether `REDIS_HOST` names a host or is unset, the line reads
+  `Redis: <host>:<port> (unavailable, running without caching)`, with the address that was tried.
+- Tests: `TestRedisStartupSummary_EmptyRedisHostIsDisabled`, `TestRedisStartupSummary_FailedRedisPingIsUnavailable`
+  and `TestRedisStartupSummary_ConnectionIsConnected` in `apps/backend/cmd/server/redis_startup_test.go`.
+
+### Fixed — the token rotation guide quotes the line the Python SDK prints after a rotation, and says when it prints (#697)
+
+- `docs/security/token-rotation.md` answers "How do I know if my token has been rotated?" with the line
+  `sdk/python/aim_sdk/oauth.py` prints, `Token rotated successfully — old refresh token revoked (new id: ...)`. The SDK
+  prints it only when the server answers a refresh with a new refresh token, and the guide says which server does: a
+  sign-in from `aim-sdk login` is rotated only by a server with Redis, and a server without Redis, or one whose Redis
+  refused the write, answers with the refresh token it was given and `"rotated": false`. A token from an SDK download
+  is rotated in the database and does not need Redis.
+- Test: `TestTokenRotationGuideQuotesTheRotationLineTheSDKPrints` in
+  `apps/backend/internal/interfaces/http/handlers/security_guides_token_docs_test.go` reads the line from `oauth.py`,
+  refreshes a login token against the refresh handler with a revocation store, without one and with one that refuses
+  the write, and refreshes an SDK download token without one.
+
+### Changed — the SDK route census reads the server's own route table and every module of the Python SDK (#697)
+
+- `TestSDKLoginRoutesContract` in `apps/backend/cmd/server/sdk_login_routes_contract_test.go` takes its routes from the
+  table the server mounts, so a route registered through `registerSDKAPIRoutes`, `registerBootstrapTokenRoutes` or
+  `registerOnboardingTelemetryRoutes` counts like any other. It reads its paths from every Python file under
+  `sdk/python/aim_sdk`: an f-string that opens with the server URL, and an endpoint literal that opens with `/api/`.
+- The census found six paths in the SDK that this server does not register, and lists them by module so that a seventh
+  fails it: `/api/v1/a2a/tasks/{id}`, `/api/v1/a2a/security/settings/{id}` and `/api/v1/a2a/security/violations/{id}`
+  in `a2a.py`, where the server registers `/api/v1/a2a/tasks`, `/api/v1/a2a/security/settings` and
+  `/api/v1/a2a/security/violations`; `/api/v1/agents/{id}/policies` in `auto_hooks.py`; the dashboard link
+  `/dashboard/admin/verifications` in `client.py`; and the Registry path `/api/v1/telemetry/runtime` in
+  `telemetry/relay.py`.
+- The cells in `sdk/typescript/tests/docker-publish-release-only.test.ts`, `dockerfile-frontend-base-pins.test.ts`,
+  `license-compliance-workflow.test.ts` and `no-cloud-push-workflow.test.ts` are named after their file
+  (`DOCKER-PUBLISH-RELEASE-ONLY.AC<n>`, `DOCKERFILE-FRONTEND-BASE-PINS.AC<n>`, `LICENSE-COMPLIANCE-WORKFLOW.AC<n>` and
+  `NO-CLOUD-PUSH-WORKFLOW.AC<n>`), in place of a tracker identifier that resolves to nothing in this repository.
+
 ### Fixed — the A2A, supply chain and agent detail pages are readable in both themes and fit a phone screen
 
 - On a 375px screen the A2A page scrolled sideways by 25px and the supply chain page by 27px: the header's buttons

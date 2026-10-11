@@ -323,11 +323,7 @@ func main() {
 	port := cfg.Server.Port
 	log.Printf("🚀 Agent Identity Management API starting on port %s", port)
 	log.Printf("📊 Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port)
-	if redisClient != nil {
-		log.Printf("💾 Redis: %s:%d (connected)", cfg.Redis.Host, cfg.Redis.Port)
-	} else {
-		log.Printf("💾 Redis: disabled (running without caching)")
-	}
+	log.Print(redisStartupSummary(cfg, redisClient))
 
 	// Start background job for automatic JIT access expiration
 	// This ensures expired verifications are marked as such even if not queried
@@ -395,22 +391,34 @@ func main() {
 	log.Println("Server exited")
 }
 
-func initDatabase(cfg *config.Config) (*sql.DB, error) {
-	// Build connection string using key=value format to avoid URL encoding issues
-	// This format works better with passwords containing special characters
-	// SECURITY: Escape single quotes in password for libpq connection string format
-	// PostgreSQL libpq requires single quotes to be doubled (''), not backslash-escaped
-	escapedPassword := strings.ReplaceAll(cfg.Database.Password, "'", "''")
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password='%s' dbname=%s sslmode=%s",
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.User,
-		escapedPassword,
-		cfg.Database.Database,
-		cfg.Database.SSLMode,
-	)
+// connStringEscaper escapes what ends or alters a quoted connection string
+// value. Inside the quotes the driver, like libpq, reads a backslash as an
+// escape for the character after it and ends the value at the first single
+// quote with no backslash in front. A doubled single quote, the SQL form, is
+// not an escape here: the first of the two ends the value.
+var connStringEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
 
-	db, err := sql.Open("postgres", connStr)
+// connStringValue writes one setting as a quoted connection string value.
+func connStringValue(v string) string {
+	return "'" + connStringEscaper.Replace(v) + "'"
+}
+
+// databaseConnString builds the key=value connection string, which needs no
+// URL encoding. Every string setting is quoted, so a space, a single quote or
+// a backslash in one reaches PostgreSQL as it is configured.
+func databaseConnString(database config.DatabaseConfig) string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		connStringValue(database.Host),
+		database.Port,
+		connStringValue(database.User),
+		connStringValue(database.Password),
+		connStringValue(database.Database),
+		connStringValue(database.SSLMode),
+	)
+}
+
+func initDatabase(cfg *config.Config) (*sql.DB, error) {
+	db, err := sql.Open("postgres", databaseConnString(cfg.Database))
 	if err != nil {
 		return nil, err
 	}
@@ -459,6 +467,20 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 
 	log.Println("✅ Redis connected")
 	return client, nil
+}
+
+// redisStartupSummary is the Redis line of the startup summary. With no
+// connection it gives the same reason as the cache line: Redis turned off by
+// an empty REDIS_HOST, or the address that was tried and could not be reached.
+func redisStartupSummary(cfg *config.Config, redisClient *redis.Client) string {
+	switch {
+	case redisClient != nil:
+		return fmt.Sprintf("💾 Redis: %s:%d (connected)", cfg.Redis.Host, cfg.Redis.Port)
+	case cfg.Redis.Disabled:
+		return "💾 Redis: disabled (running without caching)"
+	default:
+		return fmt.Sprintf("💾 Redis: %s:%d (unavailable, running without caching)", cfg.Redis.Host, cfg.Redis.Port)
+	}
 }
 
 // initCache builds the cache service when startup has a Redis connection.

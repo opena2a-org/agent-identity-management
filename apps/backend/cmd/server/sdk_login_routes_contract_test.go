@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -12,75 +15,150 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// routeGroupPrefixes maps each Fiber group variable in main.go to its full
-// path, following x := parent.Group("...") chains from app.
-func routeGroupPrefixes(src string) map[string]string {
-	groupRe := regexp.MustCompile(`(?m)^\s*(\w+)\s*:?=\s*(\w+)\.Group\("([^"]*)"`)
-	prefix := map[string]string{"app": ""}
-	for _, m := range groupRe.FindAllStringSubmatch(src, -1) {
-		parent, ok := prefix[m[2]]
-		if !ok {
-			continue
-		}
-		prefix[m[1]] = parent + m[3]
-	}
-	return prefix
+// sdkPackageDir is the Python SDK package, relative to the repository root.
+const sdkPackageDir = "sdk/python/aim_sdk"
+
+// sdkServerPathStart matches the start of a Python string literal that holds a
+// path on the server. Either the literal is an f-string that opens with the
+// server URL (aim_url, self.aim_url, client.aim_url, each with or without
+// .rstrip('/')), or it opens with /api/, the form the SDK passes as an endpoint
+// and joins to the server URL when it sends the request.
+var sdkServerPathStart = regexp.MustCompile(`(["'])(?:\{(?:\w+\.)*aim_url(?:\.rstrip\('/'\))?\}(/)|(/api/))`)
+
+// sdkServerPath is one path a Python SDK module builds on the server URL.
+type sdkServerPath struct {
+	file string
+	line int
+	path string
 }
 
-// routeCensus composes "METHOD /full/path" for every route main.go registers on
-// a Fiber group rooted at app, following x := parent.Group("...") chains.
-func routeCensus(src string) map[string]bool {
-	routeRe := regexp.MustCompile(`(?m)^\s*(\w+)\.(Get|Post|Put|Patch|Delete|All)\("([^"]*)"`)
-	prefix := routeGroupPrefixes(src)
-	routes := map[string]bool{}
-	for _, m := range routeRe.FindAllStringSubmatch(src, -1) {
-		p, ok := prefix[m[1]]
-		if !ok {
-			continue
+// sdkPathAt reads the path of the string literal that src[start:] is in, up to
+// the closing quote, a query string or white space. An interpolated expression
+// is written as {}, whatever it holds, so a quote or a bracket inside it ends
+// nothing.
+func sdkPathAt(src string, start int, quote byte) string {
+	var path strings.Builder
+	depth := 0
+	for i := start; i < len(src); i++ {
+		c := src[i]
+		switch {
+		case c == '{':
+			if depth == 0 {
+				path.WriteString("{}")
+			}
+			depth++
+		case c == '}':
+			if depth > 0 {
+				depth--
+			}
+		case depth > 0:
+		case c == quote || c == '?' || c == ' ' || c == '\n':
+			return path.String()
+		default:
+			path.WriteByte(c)
 		}
-		routes[strings.ToUpper(m[2])+" "+p+m[3]] = true
 	}
-	return routes
+	return path.String()
 }
 
-// addBootstrapTokenRoutes adds the routes main.go mounts through
-// registerBootstrapTokenRoutes. Their paths are constants, which the literal
-// census cannot read, so the helper is mounted on a real Fiber app under the
-// group main.go passes it, with stand-in handlers, and the app's own route
-// table is read back.
-func addBootstrapTokenRoutes(t *testing.T, src string, routes map[string]bool) {
+// sdkServerPaths returns every path src builds on the server URL, with the
+// line it is on.
+func sdkServerPaths(file, src string) []sdkServerPath {
+	var paths []sdkServerPath
+	for _, m := range sdkServerPathStart.FindAllStringSubmatchIndex(src, -1) {
+		quote := src[m[2]]
+		// The path starts at the slash after the server URL, or at /api/.
+		start := m[4]
+		if start < 0 {
+			start = m[6]
+		}
+		paths = append(paths, sdkServerPath{
+			file: file,
+			line: 1 + strings.Count(src[:m[0]], "\n"),
+			path: sdkPathAt(src, start, quote),
+		})
+	}
+	return paths
+}
+
+// sdkModules returns every Python file of the SDK package, relative to the
+// repository root.
+func sdkModules(t *testing.T) []string {
 	t.Helper()
-	call := regexp.MustCompile(`(?m)^\s*registerBootstrapTokenRoutes\((\w+),`).FindStringSubmatch(src)
-	require.Len(t, call, 2, "main.go must call registerBootstrapTokenRoutes")
-	group, ok := routeGroupPrefixes(src)[call[1]]
-	require.True(t, ok, "registerBootstrapTokenRoutes must be passed a group rooted at app, got %s", call[1])
-
-	var stub fiber.Handler = func(fiber.Ctx) error { return nil }
-	app := fiber.New()
-	registerBootstrapTokenRoutes(app.Group(group), bootstrapTokenRouteDeps{
-		Authenticate:  stub,
-		RequireMember: stub,
-		MintLimit:     stub,
-		RevokeLimit:   stub,
-		ExchangeLimit: stub,
-		Mint:          stub,
-		Revoke:        stub,
-		Exchange:      stub,
+	root := aim03RepoRoot(t)
+	var modules []string
+	err := filepath.WalkDir(filepath.Join(root, filepath.FromSlash(sdkPackageDir)), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(path) != ".py" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		modules = append(modules, filepath.ToSlash(rel))
+		return nil
 	})
-	mounted := app.GetRoutes(true)
-	require.NotEmpty(t, mounted, "registerBootstrapTokenRoutes must mount at least one route")
-	for _, r := range mounted {
-		routes[r.Method+" "+r.Path] = true
-	}
+	require.NoError(t, err)
+	sort.Strings(modules)
+	return modules
 }
 
-func routeServed(routes map[string]bool, path string) bool {
-	for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "ALL"} {
-		if routes[m+" "+path] {
-			return true
-		}
+// sdkPathsOffTheRouteTable lists every path the census finds in the SDK that
+// the server does not register, with what it is. None of them is a route a
+// request to this server reaches. The census holds the list exact: a path that
+// is not here fails it, and so does an entry the SDK no longer builds or the
+// server has come to register.
+var sdkPathsOffTheRouteTable = []struct{ module, path, what string }{
+	{"a2a.py", "/api/v1/a2a/tasks/{}",
+		"get_task_history names the agent in the path; the server registers GET /api/v1/a2a/tasks and PUT /api/v1/a2a/tasks/:id/state"},
+	{"a2a.py", "/api/v1/a2a/security/settings/{}",
+		"get_security_settings and update_security_settings name the organization in the path; the server registers /api/v1/a2a/security/settings"},
+	{"a2a.py", "/api/v1/a2a/security/violations/{}",
+		"get_security_violations names the organization in the path; the server registers /api/v1/a2a/security/violations"},
+	{"auto_hooks.py", "/api/v1/agents/{}/policies",
+		"PolicyCache fetches a per-agent policy route; the module's own comment says no released server registers it"},
+	{"client.py", "/dashboard/admin/verifications",
+		"a dashboard link built on the server URL; the server registers no /dashboard route"},
+	{"telemetry/relay.py", "/api/v1/telemetry/runtime",
+		"a path on the Registry, joined to the Registry URL and not to the server URL"},
+}
+
+// The path reader on the forms the SDK writes: a path after the server URL in
+// an f-string, with or without .rstrip('/') and on self or client, and an
+// endpoint literal that opens with /api/. A URL on another address is not a
+// path on the server.
+func TestSDKServerPaths_ReadsEveryFormTheSDKWrites(t *testing.T) {
+	src := strings.Join([]string{
+		`url = f"{aim_url}/api/v1/oauth/device/code"`,
+		`url = f"{aim_url.rstrip('/')}/api/v1/agents/{existing_agent['id']}/keys"`,
+		`url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}/result"`,
+		`url = f"{client.aim_url}/api/v1/mcp-servers/{mcp_server_id}/challenge?agent_id={self.agent_id}"`,
+		`self._make_request(method="GET", endpoint=f"/api/v1/agents?{query_string}")`,
+		`self._make_request("POST", '/api/v1/a2a/tasks', data=data)`,
+		`ROUTE = "/api/v1/agents/{agent_id}/policies"`,
+		`link = f"{self.aim_url}/dashboard/admin/verifications"`,
+		`card_url = f"{agent_url}/.well-known/agent.json"`,
+		`page = f"{ctx.dashboard_url}/dashboard/mcp"`,
+		`url = f"{self.aim_url}{endpoint}"`,
+	}, "\n")
+
+	var got []string
+	for _, p := range sdkServerPaths("example.py", src) {
+		got = append(got, fmt.Sprintf("%d %s", p.line, p.path))
 	}
-	return false
+	assert.Equal(t, []string{
+		"1 /api/v1/oauth/device/code",
+		"2 /api/v1/agents/{}/keys",
+		"3 /api/v1/sdk-api/verifications/{}/result",
+		"4 /api/v1/mcp-servers/{}/challenge",
+		"5 /api/v1/agents",
+		"6 /api/v1/a2a/tasks",
+		"7 /api/v1/agents/{}/policies",
+		"8 /dashboard/admin/verifications",
+	}, got)
 }
 
 // TestSDKLoginRoutesContract pins the pair that lets `aim-sdk login --url`
@@ -91,12 +169,20 @@ func routeServed(routes map[string]bool, path string) bool {
 // /auth/login with PKCE parameters; no backend in this repository registers
 // the first, and the dashboard ignores the second, so no self-hosted stack
 // completed the login.
+//
+// The routes are read from the table the server mounts, not from the text of
+// main.go, so a route registered through a helper (registerSDKAPIRoutes,
+// registerBootstrapTokenRoutes, registerOnboardingTelemetryRoutes) counts like
+// any other. The paths are read from every module of the SDK package.
 func TestSDKLoginRoutesContract(t *testing.T) {
-	mainSrc := aim03ReadRepoFile(t, "apps/backend/cmd/server/main.go")
-	routes := routeCensus(mainSrc)
-	addBootstrapTokenRoutes(t, mainSrc, routes)
-	require.True(t, routes["POST /api/v1/auth/login/local"], "census sanity: the local login route must be found")
-	require.True(t, routes["POST /api/v1/auth/refresh"], "census sanity: the refresh route must be found")
+	table := serverRouteTable(t)
+	registered := func(route string) bool {
+		method, path, _ := strings.Cut(route, " ")
+		return answers(table, method, path)
+	}
+	require.True(t, registered("POST /api/v1/auth/login/local"), "census sanity: the local login route must be found")
+	require.True(t, registered("POST /api/v1/auth/refresh"), "census sanity: the refresh route must be found")
+	require.False(t, registered("POST /api/v1/auth/token"), "census sanity: a route no backend registers must not be found")
 
 	t.Run("backend serves the device grant", func(t *testing.T) {
 		for _, r := range []string{
@@ -105,22 +191,68 @@ func TestSDKLoginRoutesContract(t *testing.T) {
 			"POST /api/v1/oauth/device/approve",
 			"GET /api/v1/oauth/device/verify",
 		} {
-			assert.True(t, routes[r], "%s must be registered", r)
+			assert.True(t, registered(r), "%s must be registered", r)
 		}
 	})
 
-	cli := aim03ReadRepoFile(t, "sdk/python/aim_sdk/cli.py")
-	oauth := aim03ReadRepoFile(t, "sdk/python/aim_sdk/oauth.py")
-	t.Run("every aim_url-rooted URL the SDK builds is a registered route", func(t *testing.T) {
-		urlRe := regexp.MustCompile(`f"\{aim_url(?:\.rstrip\('/'\))?\}(/[^"?{]*)`)
-		for name, src := range map[string]string{"cli.py": cli, "oauth.py": oauth} {
-			found := urlRe.FindAllStringSubmatch(src, -1)
-			require.NotEmpty(t, found, "%s must build at least one URL on aim_url", name)
-			for _, m := range found {
-				assert.True(t, routeServed(routes, m[1]),
-					"%s builds %s on aim_url but main.go registers no such route", name, m[1])
+	t.Run("the census reads the routes main.go mounts through a helper", func(t *testing.T) {
+		mainSrc := aim03ReadRepoFile(t, "apps/backend/cmd/server/main.go")
+		for _, helper := range []string{"registerSDKAPIRoutes(", "registerBootstrapTokenRoutes(", "registerOnboardingTelemetryRoutes("} {
+			require.True(t, strings.Contains(mainSrc, "\t"+helper), "main.go must call %s)", helper)
+		}
+
+		helperRoutes := []string{
+			"POST /api/v1" + bootstrapTokenMintPath,
+			"POST /api/v1" + bootstrapTokenRevokePath,
+			"POST /api/v1" + bootstrapTokenExchangePath,
+			"POST /api/v1" + onboardingEventsPath,
+			"GET /api/v1" + onboardingMetricsPath,
+		}
+		sdkAPI := sdkAPIRouteTable(sdkAPITestHandlers(func(fiber.Ctx) error { return nil }))
+		require.NotEmpty(t, sdkAPI, "the SDK-API route table must not be empty")
+		for _, route := range sdkAPI {
+			helperRoutes = append(helperRoutes, route.Method+" "+route.FullPath())
+		}
+		for _, r := range helperRoutes {
+			assert.True(t, registered(r), "%s is mounted through a helper and must be in the census", r)
+		}
+	})
+
+	cli := aim03ReadRepoFile(t, sdkPackageDir+"/cli.py")
+	oauth := aim03ReadRepoFile(t, sdkPackageDir+"/oauth.py")
+	t.Run("every path the SDK builds on the server URL is a registered route", func(t *testing.T) {
+		known := map[string]bool{}
+		for _, off := range sdkPathsOffTheRouteTable {
+			known[off.module+" "+off.path] = true
+		}
+
+		found := map[string]int{}
+		unregistered := map[string]bool{}
+		total := 0
+		for _, file := range sdkModules(t) {
+			module := strings.TrimPrefix(file, sdkPackageDir+"/")
+			for _, p := range sdkServerPaths(file, aim03ReadRepoFile(t, file)) {
+				found[module]++
+				total++
+				if answers(table, "", p.path) {
+					continue
+				}
+				unregistered[module+" "+p.path] = true
+				if !known[module+" "+p.path] {
+					t.Errorf("%s:%d builds %s on the server URL, which the server does not register", p.file, p.line, p.path)
+				}
 			}
 		}
+		for _, off := range sdkPathsOffTheRouteTable {
+			assert.True(t, unregistered[off.module+" "+off.path],
+				"%s no longer builds %s, or the server registers it now: remove it from sdkPathsOffTheRouteTable (%s)",
+				off.module, off.path, off.what)
+		}
+		for _, module := range []string{"cli.py", "oauth.py", "client.py", "a2a.py", "demo.py"} {
+			assert.NotZero(t, found[module], "%s must build at least one path on the server URL", module)
+		}
+		require.Greater(t, total, 50, "the SDK builds far more paths than the scan found; the scan is broken, not the SDK")
+		t.Logf("checked %d paths in %d modules", total, len(found))
 	})
 	t.Run("the login is the device grant by name", func(t *testing.T) {
 		assert.True(t, strings.Contains(cli, "/api/v1/oauth/device/code"), "login must request a device code")
