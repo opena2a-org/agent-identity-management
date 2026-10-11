@@ -203,6 +203,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `data:export`, which is medium-risk.
 - Test: `agent_service_capability_trust_threshold_test.go`.
 
+### Fixed — the guides say a call for a capability the agent was not granted is refused only in strict mode (#681)
+
+- `docs/quick-start.md`, `docs/use-cases/enforce-capabilities.md` and `docs/DEMO_SCRIPT_ECHOLEAK.md` say that a new
+  organization starts in monitoring mode, where the decorator registers the capability, AIM grants it and the call
+  runs, and that AIM refuses such a call only in strict mode. Each names where an administrator turns strict mode on:
+  Global Enforcement Mode on `/dashboard/admin/security-policies`, or `PUT /api/v1/admin/enforcement-settings` with
+  `{"enforcementMode": "strict"}`. The quick-start said the decorated function runs only if verification passes, the
+  use case said actions outside the capabilities list are denied automatically, and the demo script said AIM prevents
+  EchoLeak-style attacks, each with no mode named.
+- The pages also say that strict mode refuses every action of an agent that is not verified and does not verify an
+  agent when it registers. The use case has `my-agent` verified before its example runs, and the demo script gains a
+  setup step that sets strict mode and a step that verifies the agent before its legitimate request.
+- `ROADMAP.md` keeps the Python SDK line's statement that an action AIM denies raises an error and does not run, and
+  adds that AIM denies a capability the agent was not granted only in strict mode. It said "in every enforcement mode"
+  and named neither mode.
+- `aim-sdk login` keeps its closing text on the two modes and adds where an administrator turns strict mode on:
+  Global Enforcement Mode on `/dashboard/admin/security-policies`.
+- `apps/backend/internal/application/enforcement_mode_docs_test.go` runs the capability check in monitoring and strict
+  mode, reads the migration and organization repository default, the dashboard's security policies page and the
+  enforcement settings routes, and fails when one of these pages says the call is refused without naming strict mode
+  or does not name where strict mode is set. `sdk/python/tests/test_cli_device_login.py` checks the `aim-sdk login`
+  closing text.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the
