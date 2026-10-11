@@ -88,17 +88,12 @@ func coalesceAlert(repo domain.AlertRepository, alert *domain.Alert, now time.Ti
 	return repo.CreateCoalesced(alert, now.Add(-AlertCoalesceWindow), now)
 }
 
-// alertEventDispatcher is the part of WebhookService that AlertService uses.
-type alertEventDispatcher interface {
-	TriggerEvent(ctx context.Context, orgID uuid.UUID, event domain.WebhookEvent, data map[string]interface{}) error
-}
-
 // AlertService handles alert management
 type AlertService struct {
 	alertRepo      domain.AlertRepository
 	agentRepo      domain.AgentRepository
 	db             *sql.DB // For anomaly detection queries
-	webhookService alertEventDispatcher
+	webhookService webhookEventDispatcher
 	now            func() time.Time
 }
 
@@ -119,13 +114,7 @@ func NewAlertService(
 
 // SetWebhookService sets the webhook service for triggering webhooks
 func (s *AlertService) SetWebhookService(webhookService *WebhookService) {
-	// A nil *WebhookService stored in the interface field would compare
-	// non-nil, and CreateAlert would call through it.
-	if webhookService == nil {
-		s.webhookService = nil
-		return
-	}
-	s.webhookService = webhookService
+	s.webhookService = asWebhookEventDispatcher(webhookService)
 }
 
 // CreateAlert creates a new alert and triggers webhooks.

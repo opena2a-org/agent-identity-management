@@ -410,6 +410,7 @@ const (
 type TrustScoreEnforcementResult struct {
 	ShouldAlert   bool
 	ShouldSuspend bool
+	Suspended     bool // The evaluation moved the agent to suspended and stored it
 	AlertSeverity domain.AlertSeverity
 	PolicyName    string
 	Message       string
@@ -462,9 +463,11 @@ func (s *SecurityPolicyService) EvaluateTrustScoreOnUpdate(
 		}
 
 		// Suspend the agent
+		statusBefore := agent.Status
 		if err := s.suspendAgentForLowTrustScore(ctx, agent); err != nil {
 			fmt.Printf("⚠️  Failed to suspend agent %s: %v\n", agent.Name, err)
 		} else {
+			result.Suspended = statusBefore != domain.AgentStatusSuspended && agent.Status == domain.AgentStatusSuspended
 			fmt.Printf("🛑 Agent '%s' suspended due to critical trust score (%.1f%%)\n",
 				agent.Name, currentScore*100)
 		}

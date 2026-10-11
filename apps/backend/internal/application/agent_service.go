@@ -52,6 +52,53 @@ type AgentService struct {
 	auditRepo                domain.AuditLogRepository     // Optional (issue #293): records the audit event on a honeytoken verification hit; injected via SetHoneytokenAuditing
 	onboardingEvents         FirstAgentEventSink           // Optional: records first_agent_registered; injected via SetOnboardingEvents
 	transitions              *transition.Recorder          // Optional: set by SetTransitionRecorder
+	webhooks                 webhookEventDispatcher        // Optional: sends agent.* and trust_score.* events; set by SetWebhookService
+}
+
+// SetWebhookService wires the webhook service that the agent.* and
+// trust_score.* events are sent to. When unset, no event is sent.
+func (s *AgentService) SetWebhookService(webhookService *WebhookService) {
+	s.webhooks = asWebhookEventDispatcher(webhookService)
+}
+
+// sendAgentEvent sends event with the agent as it stands now.
+func (s *AgentService) sendAgentEvent(agent *domain.Agent, event domain.WebhookEvent) {
+	if s.webhooks == nil {
+		return
+	}
+	sendWebhookEvent(s.webhooks, agent.OrganizationID, event, agentEventData(agent))
+}
+
+// sendTrustScoreChanged sends trust_score.changed when a stored trust score
+// moved from previousScore to trustScore.
+func (s *AgentService) sendTrustScoreChanged(agent *domain.Agent, previousScore, trustScore float64) {
+	if s.webhooks == nil || trustScore == previousScore {
+		return
+	}
+	sendWebhookEvent(s.webhooks, agent.OrganizationID, domain.WebhookEventTrustScoreChanged,
+		trustScoreEventData(agent, previousScore, trustScore))
+}
+
+// evaluateTrustScoreChange runs the trust score policy on agent's change from
+// previousScore to trustScore. When the policy alerts on the drop it sends
+// trust_score.low, and when it suspends the agent, agent.suspended.
+func (s *AgentService) evaluateTrustScoreChange(ctx context.Context, agent *domain.Agent, previousScore, trustScore float64) {
+	result, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, trustScore)
+	if err != nil {
+		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
+		return
+	}
+	if s.webhooks == nil {
+		return
+	}
+	if result.ShouldAlert {
+		data := trustScoreEventData(agent, previousScore, trustScore)
+		data["severity"] = string(result.AlertSeverity)
+		sendWebhookEvent(s.webhooks, agent.OrganizationID, domain.WebhookEventTrustScoreLow, data)
+	}
+	if result.Suspended {
+		s.sendAgentEvent(agent, domain.WebhookEventAgentSuspended)
+	}
 }
 
 // FirstAgentEventSink is told after every agent registration so it can record
@@ -337,6 +384,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			s.onboardingEvents.FirstAgentRegistered(orgID)
 		}
 		s.applyRegistrationTags(ctx, agent, req.TagIds, orgID, userID)
+		s.sendRegistrationEvents(agent, agent.Status == domain.AgentStatusVerified)
 		return agent, nil
 	}
 
@@ -366,6 +414,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	// AUTO-VERIFICATION: Only in monitoring mode. In strict mode, agents must be manually verified.
 	// This ensures strict environments require explicit approval before agents can operate.
 	shouldAutoVerify := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
+	autoVerified := false
 	if shouldAutoVerify {
 		now := time.Now()
 		agent.Status = domain.AgentStatusVerified
@@ -374,6 +423,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		if err := s.agentRepo.Update(agent); err != nil {
 			fmt.Printf("Warning: failed to auto-verify agent: %v\n", err)
 		} else {
+			autoVerified = true
 			fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
 		}
 
@@ -419,8 +469,18 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	s.applyRegistrationTags(ctx, agent, req.TagIds, orgID, userID)
+	s.sendRegistrationEvents(agent, autoVerified)
 
 	return agent, nil
+}
+
+// sendRegistrationEvents sends agent.created for a new agent, and
+// agent.verified as well when its verification at registration was stored.
+func (s *AgentService) sendRegistrationEvents(agent *domain.Agent, verified bool) {
+	s.sendAgentEvent(agent, domain.WebhookEventAgentCreated)
+	if verified {
+		s.sendAgentEvent(agent, domain.WebhookEventAgentVerified)
+	}
 }
 
 // agentCreateError maps the error of storing a new agent to a safe,
@@ -857,6 +917,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 		}
 	}
 
+	s.sendAgentEvent(agent, domain.WebhookEventAgentUpdated)
 	return agent, nil
 }
 
@@ -911,18 +972,37 @@ func (s *AgentService) revokeOnReregistration(
 // row and the rows that cascade from it are deleted in one transaction with
 // an agent_deleted record, whose new_state is null; when the record cannot be
 // written, the deletion is refused and nothing is deleted.
+//
+// A deletion sends agent.deleted with the agent as it stood before it. Without
+// a recorder the agent is read before the deletion only when a webhook service
+// is set, to name its organization and the agent in the event.
 func (s *AgentService) DeleteAgent(ctx context.Context, id uuid.UUID) error {
 	if s.transitions == nil {
-		return s.agentRepo.Delete(id)
+		var agent *domain.Agent
+		if s.webhooks != nil {
+			agent, _ = s.agentRepo.GetByID(id)
+		}
+		if err := s.agentRepo.Delete(id); err != nil {
+			return err
+		}
+		if agent != nil {
+			s.sendAgentEvent(agent, domain.WebhookEventAgentDeleted)
+		}
+		return nil
 	}
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {
 		return fmt.Errorf("agent not found: %w", err)
 	}
-	return recordAgentChange(ctx, s.transitions, agent, transition.TriggerAgentDeleted, transition.System(),
+	err = recordAgentChange(ctx, s.transitions, agent, transition.TriggerAgentDeleted, transition.System(),
 		func(ctx context.Context, tx *sql.Tx) error {
 			return repository.DeleteAgentTx(ctx, tx, agent.ID)
 		})
+	if err != nil {
+		return err
+	}
+	s.sendAgentEvent(agent, domain.WebhookEventAgentDeleted)
+	return nil
 }
 
 // VerifyAgent moves a pending agent to verified. A verified agent is left as it is; any
@@ -954,6 +1034,7 @@ func (s *AgentService) VerifyAgent(ctx context.Context, id uuid.UUID) error {
 		s.trustScoreRepo.Create(trustScore)
 	}
 
+	s.sendAgentEvent(agent, domain.WebhookEventAgentVerified)
 	return nil
 }
 
@@ -982,10 +1063,10 @@ func (s *AgentService) RecalculateTrustScore(ctx context.Context, id uuid.UUID) 
 		return nil, fmt.Errorf("failed to save trust score: %w", err)
 	}
 
+	s.sendTrustScoreChanged(agent, previousScore, trustScore.Score)
+
 	// Evaluate trust score policy enforcement (alerts and suspension)
-	if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, trustScore.Score); err != nil {
-		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
-	}
+	s.evaluateTrustScoreChange(ctx, agent, previousScore, trustScore.Score)
 
 	return trustScore, nil
 }
@@ -1012,14 +1093,13 @@ func (s *AgentService) UpdateTrustScore(ctx context.Context, agentID uuid.UUID, 
 
 	// Update agent object for policy evaluation
 	agent.TrustScore = newScore
+	s.sendTrustScoreChanged(agent, previousScore, newScore)
 
 	// Check for significant trust score drop and create alert if needed
 	s.checkAndCreateTrustScoreDropAlert(ctx, agent, previousScore, newScore)
 
 	// Evaluate trust score policy enforcement (alerts and suspension)
-	if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, newScore); err != nil {
-		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
-	}
+	s.evaluateTrustScoreChange(ctx, agent, previousScore, newScore)
 
 	return nil
 }
@@ -1588,9 +1668,11 @@ func (s *AgentService) VerifyCapability(
 		}
 
 		// Update agent's trust score in database
+		scoreStored := false
 		if err := s.agentRepo.UpdateTrustScore(agentID, newScore); err != nil {
 			fmt.Printf("⚠️  Warning: failed to update agent trust score: %v\n", err)
 		} else {
+			scoreStored = true
 			fmt.Printf("✅ Trust score updated after violation: %.2f%% → %.2f%% (impact: %d%%) for agent %s\n",
 				agent.TrustScore*100, newScore*100, violation.TrustScoreImpact, agent.Name)
 		}
@@ -1612,9 +1694,10 @@ func (s *AgentService) VerifyCapability(
 		// Evaluate trust score policy enforcement (alerts and suspension)
 		previousScore := agent.TrustScore // Store before updating
 		agent.TrustScore = newScore       // Update agent object for policy evaluation
-		if _, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, newScore); err != nil {
-			fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
+		if scoreStored {
+			s.sendTrustScoreChanged(agent, previousScore, newScore)
 		}
+		s.evaluateTrustScoreChange(ctx, agent, previousScore, newScore)
 
 		// Return enforcement decision from policy
 		if shouldBlock {
@@ -2442,6 +2525,7 @@ func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 		s.trustScoreRepo.Create(trustScore)
 	}
 
+	s.sendAgentEvent(agent, domain.WebhookEventAgentSuspended)
 	return nil
 }
 
