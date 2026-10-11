@@ -221,7 +221,7 @@ Open http://localhost:3000 → Agents → weather-agent
 ```
 Agent: weather-agent
 Status: ✅ ACTIVE
-Trust Score: 0.95 (Excellent)
+Trust Score: 0.835 (Good)
 Last Verified: 15 seconds ago
 Total Actions: 8
 ```
@@ -242,13 +242,19 @@ Total Actions: 8
 ✅ Uptime & Availability:   100%  (1.00)  [Weight: 15%]
 ✅ Action Success Rate:     100%  (1.00)  [Weight: 15%]
 ✅ Security Alerts:           0   (1.00)  [Weight: 15%]
-✅ Compliance Score:        100%  (1.00)  [Weight: 10%]
-⚠️  Age & History:          New   (0.50)  [Weight: 10%]
-✅ Drift Detection:         None  (1.00)  [Weight:  5%]
-✅ User Feedback:           None  (1.00)  [Weight:  5%]
+➖ Compliance Score:    No snapshot (excluded)  [Weight: 10%]
+⚠️  Age & History:          New   (0.30)  [Weight:  5%]
+✅ Drift Detection:         None  (1.00)  [Weight:  3%]
+➖ User Feedback:          None  (excluded)  [Weight:  2%]
+⚠️  Execution Isolation:  Not attested (0.30)  [Weight: 10%]
 
-Overall Trust Score: 0.95 / 1.00
+Overall Trust Score: 0.835 / 1.00
 ```
+
+The breakdown is for an agent verified today whose verifications so far all succeeded, with no
+compliance snapshot for its organization, no user feedback and no isolation attestation. The two
+factors with no data are left out of the mean, and the published score is capped at the sum with each
+of them counted at 0.50 (0.835). A new agent that is still pending starts at 0.5925.
 
 ### Security Alerts
 
@@ -306,16 +312,17 @@ AIM automatically:
 
 ### Trust Score Calculation
 
-Your agent's trust score (0.95) is calculated from 8 factors:
+Your agent's trust score (0.835) is calculated from 9 factors:
 
 1. **Verification Status** (25%): 100% of actions verified successfully
 2. **Uptime** (15%): Agent always responsive
 3. **Success Rate** (15%): 100% of actions succeeded
 4. **Security Alerts** (15%): Zero alerts triggered
-5. **Compliance** (10%): Following all security policies
-6. **Age** (10%): New agent (score improves over time)
-7. **Drift Detection** (5%): No behavioral anomalies
-8. **User Feedback** (5%): No negative feedback
+5. **Compliance** (10%): Your organization's latest AIM compliance snapshot (none yet, so excluded)
+6. **Age** (5%): New agent (score improves over time)
+7. **Drift Detection** (3%): No drift alerts
+8. **User Feedback** (2%): No feedback yet, so excluded
+9. **Execution Isolation** (10%): No isolation attestation yet (0.30)
 
 ---
 
@@ -538,7 +545,7 @@ docker compose restart aim-backend
 - [ ] OpenWeatherMap API key obtained
 - [ ] Code runs without errors
 - [ ] Dashboard shows agent status
-- [ ] Trust score visible (should be ~0.95)
+- [ ] Trust score visible (0.835 in the state the Trust Score Breakdown describes; 0.5925 while the agent is pending)
 - [ ] Recent actions logged in audit trail
 - [ ] No security alerts
 

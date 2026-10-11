@@ -565,10 +565,10 @@ for factor, score in breakdown['factors'].items():
 
 **Output**:
 ```
-Overall Trust Score: 0.95
+Overall Trust Score: 0.94
 
 Factor Breakdown:
-  verification_status: 1.00
+  verification_status: 0.98
   uptime: 1.00
   success_rate: 0.98
   security_alerts: 1.00
@@ -576,7 +576,12 @@ Factor Breakdown:
   age: 0.75
   drift_detection: 1.00
   user_feedback: 1.00
+  execution_isolation: 0.65
 ```
+
+The output is for a verified agent 30 to 90 days old, 98% of whose verifications in the last 30
+days succeeded, the latest within a day, with an AIM compliance snapshot of 100 for its
+organization, more than ten positive ratings and an unverified isolation attestation (held to 0.65).
 
 ---
 
@@ -856,9 +861,10 @@ def comprehensive_trust_check():
             'success_rate': 0.15,
             'security_alerts': 0.15,
             'compliance': 0.10,
-            'age': 0.10,
-            'drift_detection': 0.05,
-            'user_feedback': 0.05
+            'age': 0.05,
+            'drift_detection': 0.03,
+            'user_feedback': 0.02,
+            'execution_isolation': 0.10
         }[factor]
 
         contribution = score * weight

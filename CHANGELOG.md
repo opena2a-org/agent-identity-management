@@ -11,6 +11,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the guides describe the 9-factor trust score and quote the scores the trust calculator gives (#675)
+
+- `docs/quick-start.md`, `docs/examples/weather-agent.md`, `docs/sdk/python.md`, `docs/sdk/trust-scoring.md` and
+  `docs/DEMO_SCRIPT_ECHOLEAK.md` list nine factors with the weights the trust calculator uses: verification status
+  25%, uptime 15%, action success rate 15%, security alerts 15%, compliance 10%, age 5%, drift detection 3%, user
+  feedback 2% and execution isolation 10%. Their factor lists and example breakdowns had eight factors, and where they
+  gave weights, age was 10% and drift detection and user feedback 5% each.
+- The EchoLeak demo script says a new pending agent starts at 59% (0.5925), where it said 68%, and shows how the
+  figure is made up: a new agent has no compliance data and no user feedback, so those two factors are left out of the
+  mean, and the published score is capped at the sum with each of them counted at 0.50. It gives 82% for a new
+  verified agent with no verifications recorded, where it said 90%, and its attack walkthrough starts from 59%.
+- The quick-start and the weather agent example show the breakdown of an agent verified that day whose verifications
+  all succeeded, with no compliance snapshot, user feedback or isolation attestation: 0.835, with compliance and user
+  feedback marked as excluded. The Python SDK guide and the trust scoring guide show a breakdown with all nine factors
+  measured (0.93 and 0.94), and the trust scoring guide's report example weighs each of the nine factors.
+- `docs/DOCUMENTATION_INDEX.md` and the Trust Scoring Guide links in the SDK guides say 9-factor.
+- `apps/backend/internal/application/trust_score_docs_test.go` computes each score these pages quote with the trust
+  calculator, in the state the page describes, and fails when a page quotes another figure, lists another weight or
+  describes an 8-factor score.
+
 ### Added — the agent and API key services send agent, trust score and API key webhook events (#672)
 
 - The agent service sends `agent.created` for an agent it registers, and `agent.verified` as well when the

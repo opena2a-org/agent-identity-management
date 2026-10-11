@@ -261,25 +261,31 @@ agent.get_trust_score(
 ```python
 # Simple trust score
 score = agent.get_trust_score()
-print(f"Trust Score: {score}")  # 0.95
+print(f"Trust Score: {score}")  # 0.93
 
 # Detailed breakdown
 breakdown = agent.get_trust_score(detailed=True)
 print(breakdown)
 # {
-#   "overall": 0.95,
+#   "overall": 0.93,
 #   "factors": {
-#     "verification_status": 1.00,
+#     "verification_status": 0.98,
 #     "uptime": 1.00,
 #     "success_rate": 0.98,
 #     "security_alerts": 1.00,
 #     "compliance": 1.00,
 #     "age": 0.50,
 #     "drift_detection": 1.00,
-#     "user_feedback": 1.00
+#     "user_feedback": 1.00,
+#     "execution_isolation": 0.65
 #   }
 # }
 ```
+
+The values are for a verified agent 7 to 30 days old, 98% of whose verifications in the last 30
+days succeeded, the latest within a day, with an AIM compliance snapshot of 100 for its
+organization, more than ten positive ratings and an unverified isolation attestation (held to
+0.65). The nine factors and their weights are in the [Trust Scoring Guide](./trust-scoring.md).
 
 #### Get Audit Logs
 
@@ -970,7 +976,7 @@ for factor, score in breakdown["factors"].items():
 
 - **[Authentication Guide →](./authentication.md)** - Ed25519 cryptography deep dive
 - **[Auto-Detection Guide →](./auto-detection.md)** - MCP server discovery
-- **[Trust Scoring Guide →](./trust-scoring.md)** - 8-factor trust algorithm
+- **[Trust Scoring Guide →](./trust-scoring.md)** - 9-factor trust algorithm
 
 ---
 

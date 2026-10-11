@@ -808,7 +808,7 @@ public class AIService {
 
 - **[Python SDK Guide →](./python.md)** - Python SDK reference
 - **[Authentication Guide →](./authentication.md)** - Ed25519 cryptography
-- **[Trust Scoring Guide →](./trust-scoring.md)** - 8-factor trust algorithm
+- **[Trust Scoring Guide →](./trust-scoring.md)** - 9-factor trust algorithm
 
 ---
 
