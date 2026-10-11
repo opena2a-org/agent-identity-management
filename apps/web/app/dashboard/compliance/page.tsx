@@ -1252,7 +1252,7 @@ export default function CompliancePage() {
               {alerts.length > 8 && (
                 <button
                   onClick={() => router.push("/dashboard/admin/alerts")}
-                  className="mt-3 text-sm text-brand-text hover:underline text-center"
+                  className="mt-3 min-h-6 text-sm text-brand-text hover:underline text-center"
                 >
                   View all {alerts.length} alerts →
                 </button>
@@ -1416,7 +1416,7 @@ export default function CompliancePage() {
                   {(auditLogFilter.search || auditLogFilter.eventType !== "all") && auditTrailPage > 1 && (
                     <button
                       onClick={() => setAuditTrailPage(1)}
-                      className="text-xs text-brand-text hover:underline"
+                      className="min-h-6 text-xs text-brand-text hover:underline"
                     >
                       Reset page
                     </button>

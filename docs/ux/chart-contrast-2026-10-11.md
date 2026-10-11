@@ -287,10 +287,70 @@ dark), and the "Viewing as" label in the phone drawer (4.59 dark).
   over the inset tile on the glass card: tertiary 3.94 dark and 4.81 light, secondary 5.55
   dark and 5.60 light.
 
-Not changed: the sweep's ungated counts of text under 12px and targets under 24px still
+Not changed: the sweep's ungated counts of text under 14px and targets under 44x44 still
 list all five entries, as in every earlier run.
 
 `apps/web/tests/text-contrast.test.ts` holds the three pairings to 4.5:1 from the tokens
 in both themes, and `apps/web/tests/page-standard.test.ts` now also fails on a hex value or
 colour function on these screens. Before this commit they reported the missing tokens and
 the five hex lines.
+
+## Fifth run: target size on the five entries
+
+Until the commit that adds this section, the sweep counted targets under 44x44 and text
+under 14px and failed on neither. (The fourth run above first named them as text under
+12px and targets under 24px; the sweep's thresholds were 14px and 44x44 then as now, and
+that line is corrected.) The commit changes the instrument in two ways:
+
+- **Targets under 24x24 fail the gate.** 24x24 CSS px is the minimum target of WCAG
+  2.5.8. A link inside running text is exempt, as in 2.5.8. The spacing exception of
+  2.5.8 is not applied, so an undersized target counts wherever it sits and the gate is
+  stricter than 2.5.8.
+- **A chart's "view as table" control under 44x44 fails the gate**, the floor the chart
+  standard sets for chart controls. Every chart found in both runs below has a control of
+  at least 44x44.
+
+Targets under 44x44 and text under 14px stay counted and ungated.
+
+- Command: the same as the second run, over the same five entries with the populated
+  fixture, on the dashboard served by `next dev`.
+- Before: the changed instrument over the page sources of the previous commit. Started
+  2026-10-11T18:56:30Z, finished 2026-10-11T18:57:16Z, 20 loads, exit code 1.
+- After: started 2026-10-11T18:57:26Z, finished 2026-10-11T18:58:11Z, 20 loads, exit code 0
+  (`GATE: PASS`). Neither result file lists a request the mock did not recognise, and
+  neither recorded a console error.
+
+| Criterion | Entries failing, before | Entries failing, after |
+|---|---|---|
+| Target under 24x24 | 4 of 5 | 0 of 5 |
+| Chart table control under 44x44 | 0 of 5 | 0 of 5 |
+| Every other gated criterion | 0 of 5 | 0 of 5 |
+| Targets under 44x44 (counted, not gated) | 5 of 5 | 5 of 5 |
+| Text under 14px (counted, not gated) | 5 of 5 | 5 of 5 |
+
+Targets under 24x24 before the change, the same in both themes. Summed over the 20
+variants: 30 before, 0 after.
+
+| Entry | Target | 375x812 | 1280x800 |
+|---|---|---|---|
+| /dashboard (developer lens) | "See all" in the agents card | 39x16 | 39x16 |
+| /dashboard (developer lens) | SDK language tabs (Python, TypeScript, Java) | 21.6 tall | 21.6 tall |
+| /dashboard (security lens) | "Open Security" | 301x16 | 318x16 |
+| /dashboard (executive lens) | "Open compliance" | 309x16 | 201x16 |
+| /dashboard/security | "View all" | 69.3x20, one link | 69.3x20, two links |
+
+Each of these controls now has a minimum height of 24px. The links that were inline also
+became inline-flex, since an inline box ignores a minimum height. Nothing else on the
+entries moved: every other per-entry figure in the two result files (body, large and
+chart text minimums, series mark minimum, overflow, the number of charts, marks and
+interactive targets) is identical.
+
+`apps/web/tests/page-standard.test.ts` now reads the height of every link and button on
+these screens from its classes (`tests/target-size.ts`) and fails on one under 24px.
+Before the change it reported 11 controls in the source: the six behind the table above
+(the two "View all" links are two controls), and five the populated fixture does not draw,
+which get the same change: the security page's "Review agent" and "Investigate"
+links and the "View all" beside blocked actions (shown past ten), and the compliance
+page's "View all alerts" (shown past eight alerts) and "Reset page" buttons.
+`apps/web/tests/ux-sweep.test.ts` holds the new criteria: a target page in the browser
+with targets on both sides of each floor, and the gate.

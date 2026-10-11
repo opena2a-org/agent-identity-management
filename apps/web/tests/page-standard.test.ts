@@ -3,8 +3,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { unshrinkableFlexItems } from "./flex-shrink";
 import { paletteClasses, rawColours } from "./raw-colours";
+import { minHeightPx, undersizedControls } from "./target-size";
 
-// Two rules for the screens that hold the charts, read from the source.
+// Three rules for the screens that hold the charts, read from the source.
 //
 // A chart screen takes its colours from the theme tokens. The tokens are what
 // tests/chart-contrast.test.ts, tests/text-contrast.test.ts and the browser
@@ -15,6 +16,10 @@ import { paletteClasses, rawColours } from "./raw-colours";
 // A growing flex item around truncated text can shrink, so a long line is cut
 // with an ellipsis instead of pushing the page wider than a phone (the
 // compliance page's audit trail overflowed 375px by 104px).
+//
+// A link or button is at least 24px tall, the minimum target of WCAG 2.5.8
+// (the overview's "See all" and "Open Security" links measured 16px, its SDK
+// language tabs 21.6px, the security page's "View all" links 20px).
 
 const root = join(__dirname, "..");
 
@@ -52,6 +57,60 @@ describe("chart screens", () => {
       ),
     );
     expect(offenders).toEqual([]);
+  });
+
+  it("draw no link or button under 24px tall", () => {
+    const offenders = CHART_SCREENS.flatMap((rel) =>
+      undersizedControls(rel, readFileSync(join(root, rel), "utf8")).map(
+        (control) => `${control.file}:${control.line} (${control.heightPx}px): ${control.classes}`,
+      ),
+    );
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe("control heights", () => {
+  it("are the larger of a set height and one line of text with its padding", () => {
+    expect(minHeightPx(["text-xs", "font-semibold"])).toBe(16);
+    expect(minHeightPx(["rounded-pill", "px-3", "py-1", "text-2xs"])).toBeCloseTo(21.65, 2);
+    expect(minHeightPx(["inline-flex", "min-h-6", "items-center", "text-xs"])).toBe(24);
+    expect(minHeightPx(["h-11", "px-2", "text-sm"])).toBe(44);
+    expect(minHeightPx(["px-4", "py-2", "text-sm"])).toBe(36);
+    expect(minHeightPx(["pt-1", "pb-3", "py-0.5", "text-sm"])).toBe(36);
+    expect(minHeightPx(["text-sm", "leading-none"])).toBe(14);
+  });
+
+  it("take the smaller arm of a conditional and ignore variants", () => {
+    expect(minHeightPx(["text-xs", "py-3", "py-0.5"])).toBe(20);
+    expect(minHeightPx(["text-xs", "sm:py-4", "hover:min-h-11"])).toBe(16);
+  });
+
+  it("are not read when the classes set neither a height nor a text size", () => {
+    expect(minHeightPx(["p-1", "rounded"])).toBeNull();
+    expect(minHeightPx(["size-6"])).toBe(24);
+  });
+
+  it("exempt a link inside running text and follow cn() and both arms", () => {
+    const text = [
+      "function Card() {",
+      "  return (",
+      "    <div>",
+      '      <p>Read the <a href="/g" className="text-xs underline">guide</a> first.</p>',
+      '      <Link href="/a" className="text-xs font-semibold">See all</Link>',
+      '      <button className={cn("rounded-pill px-3 py-1 text-2xs", on ? "bg-brand" : "")}>Python</button>',
+      '      <Link href="/b" className="inline-flex min-h-6 items-center text-xs">Open</Link>',
+      '      <Link href="/c" className="mt-1 min-h-6 text-xs">Investigate</Link>',
+      '      <button className="min-h-6 text-xs">Reset page</button>',
+      "    </div>",
+      "  );",
+      "}",
+    ].join("\n");
+    // A link with no display class is inline and ignores min-h-6; a button does not.
+    expect(undersizedControls("card.tsx", text).map((c) => [c.line, c.heightPx])).toEqual([
+      [5, 16],
+      [6, 21.65],
+      [8, 16],
+    ]);
   });
 });
 

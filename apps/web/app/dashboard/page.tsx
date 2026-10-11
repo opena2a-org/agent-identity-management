@@ -185,7 +185,7 @@ function SdkQuickstart({
               setLang(t.key);
             }}
             className={cn(
-              "rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
+              "min-h-6 rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
               lang === t.key
                 ? "bg-brand text-white shadow-glow"
                 : dark
@@ -262,7 +262,7 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
     <div className="glass flex flex-col p-5">
       <div className="flex items-center justify-between">
         <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Agents</h3>
-        <Link href="/dashboard/agents" className="text-xs font-semibold text-brand-text hover:underline">
+        <Link href="/dashboard/agents" className="inline-flex min-h-6 items-center text-xs font-semibold text-brand-text hover:underline">
           See all {total > agents.length ? `(${total})` : ""}
         </Link>
       </div>

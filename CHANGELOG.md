@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — every link and button on the chart screens is at least 24px tall
+
+- On the overview, the security page and the compliance page, eleven links and buttons were under 24px tall (16px to
+  21.6px where the browser measured them), under the 24x24 minimum target of WCAG 2.5.8: the "See all" link and the SDK language tabs in the developer view,
+  "Open Security" and "Open compliance" in the security and executive views, the security page's "View all",
+  "Review agent" and "Investigate" links, and the compliance page's "View all alerts" and "Reset page" buttons. Each
+  now has a minimum height of 24px.
+- The readability sweep (`apps/web/scripts/ux-sweep.mjs`) now fails its gate on any target under 24x24 (a link inside
+  running text is exempt) and on a chart whose "view as table" control is under 44x44. Targets under 44x44 and text
+  under 14px stay counted, not gated. Measured over the overview's three views, the security page and the compliance
+  page, both themes and both viewports: targets under 24x24 went from 30 to 0 over the 20 variants, and the gate
+  passes. The run is recorded in `docs/ux/chart-contrast-2026-10-11.md`.
+- `tests/page-standard.test.ts` reads the height of every link and button on these screens from its classes and fails
+  on one under 24px.
+
 ### Fixed — the active navigation link, the overview's agent initials and the security tiles' units are readable in both themes
 
 - The active link in the navigation read at 4.38:1 in the dark theme in the phone drawer, and its colour held under

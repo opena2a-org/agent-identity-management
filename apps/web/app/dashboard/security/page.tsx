@@ -208,7 +208,7 @@ function BlockedActionCard({ action }: { action: any }) {
             </div>
             <Link
               href={`/dashboard/agents?id=${action.agentId}`}
-              className="text-xs text-brand-text hover:underline flex items-center gap-1"
+              className="text-xs text-brand-text hover:underline flex min-h-6 items-center gap-1"
             >
               Review agent <ChevronRight className="h-3 w-3" />
             </Link>
@@ -604,7 +604,7 @@ export default function SecurityPage() {
               {(metrics?.actionsBlocked || 0) > 10 && (
                 <Link
                   href="/dashboard/security/violations"
-                  className="text-sm text-brand-text hover:underline flex items-center gap-1"
+                  className="text-sm text-brand-text hover:underline flex min-h-6 items-center gap-1"
                 >
                   View all <ChevronRight className="h-4 w-4" />
                 </Link>
@@ -651,7 +651,7 @@ export default function SecurityPage() {
                 </div>
                 <Link
                   href="/dashboard/admin/alerts"
-                  className="text-sm text-brand-text hover:underline flex items-center gap-1"
+                  className="text-sm text-brand-text hover:underline flex min-h-6 items-center gap-1"
                 >
                   View all <ChevronRight className="h-4 w-4" />
                 </Link>
@@ -709,7 +709,7 @@ export default function SecurityPage() {
                       </p>
                       <Link
                         href={`/dashboard/admin/alerts?selected=${alert.id}`}
-                        className="mt-1 text-xs text-brand-text hover:underline"
+                        className="mt-1 inline-flex min-h-6 items-center text-xs text-brand-text hover:underline"
                       >
                         Investigate →
                       </Link>
@@ -744,7 +744,7 @@ export default function SecurityPage() {
                 </div>
                 <Link
                   href="/dashboard/admin/alerts"
-                  className="text-sm text-brand-text hover:underline flex items-center gap-1"
+                  className="text-sm text-brand-text hover:underline flex min-h-6 items-center gap-1"
                 >
                   View all <ChevronRight className="h-4 w-4" />
                 </Link>
