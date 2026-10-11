@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the backend test that reads the guides reads the tracked file list (#686)
+
+- The test in `apps/backend/cmd/server/provider_sign_in_docs_test.go` that fails if a guide, README or `.env.example`
+  gives a provider route, a provider variable, or sign-in with Google, Microsoft, Okta or SSO takes its file list from
+  `git ls-files`, so an untracked or ignored file is not read whatever its name or directory. It names no directory or
+  file to skip other than the changelogs, and it needs git on PATH and a git checkout. A second test builds a
+  scratch repository and fails if an untracked, ignored or non-Markdown file is read.
+
 ### Fixed — the backend image's license manifest takes the URL for `gopkg.in/yaml.v3` from the repository (#687)
 
 - The license-notices step of the backend image build (`apps/backend/scripts/third-party-notices.sh`) now writes
