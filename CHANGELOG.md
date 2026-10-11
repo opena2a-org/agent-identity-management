@@ -11,7 +11,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
-### Fixed — every refusal from `POST /api/v1/a2a/verify` carries `valid: false` (#649)
+### Fixed — both 400 answers of the `POST /api/v1/a2a/verify` handler carry `valid: false` (#649)
 
 - `POST /api/v1/a2a/verify` answered 400 with `error` only, both for a nonce it refuses and for a body it cannot read
   (`Invalid request body`), while its 401 carried `valid: false`. A client that branches on `valid` found it absent

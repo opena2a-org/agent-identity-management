@@ -293,9 +293,8 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 // VerifyRequest verifies an incoming A2A request signature
 // POST /api/v1/a2a/verify
 //
-// Every answer that refuses the request, the 400s and the 401, carries
-// valid: false. A 500 carries no valid member: it says nothing about the
-// request.
+// The handler's two 400 answers and its 401 carry valid: false. A 500
+// carries no valid member: it says nothing about the request.
 func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	var req application.VerifyA2ARequestRequest
 	if err := c.Bind().JSON(&req); err != nil {
