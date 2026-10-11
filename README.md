@@ -86,7 +86,7 @@ Want to see the same boundary stop a real attack? The [Demos](#demos) below end 
 | Mode | When | Includes |
 |---|---|---|
 | **AIM Cloud** | Managed, fastest path | Production-managed at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Python and Java SDKs work out of the box. |
-| **Self-hosted** | Team or fleet, your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor real-time trust, MCP attestation, PAM, SIEM adapters. |
+| **Self-hosted** | Team or fleet, your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor trust score, MCP attestation, PAM, SIEM adapters. |
 | **Local-only** | Solo developer, single machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score, cross-tool event bridges. Local mode is in the TypeScript SDK only. |
 
 All three share the same audit-event schema. Local agents can push history to a server via `AIMCore.enableReporting()`.
@@ -167,7 +167,11 @@ Step 5 uses the [NanoMind security classifier](https://huggingface.co/opena2a/na
 
 ### Trust-gated capabilities
 
-9-factor real-time trust scoring runs on every action. Per-capability thresholds gate access.
+The 9-factor trust score is calculated when an agent registers. It is recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes one of its capabilities, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
+
+A verification request (`POST /api/v1/verifications`) does not recalculate the score. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
+
+On a strict-mode organization, a score below the threshold of an enabled `trust_score_low` security policy can block a verification request for a granted capability; the policy's enforcement action decides whether it blocks or only raises an alert.
 
 ### MCP attestation
 
@@ -318,7 +322,7 @@ The local and server trust scores measure different things.
 | Network controlled | 10% | Egress policy detected |
 | Heartbeat monitored | 10% | ARP runtime heartbeat present |
 
-**Server (9 factors)** answers "is the agent behaving in a way that should still be trusted right now?" Updates on every action. Source: [`apps/backend/internal/domain/trust_score.go`](apps/backend/internal/domain/trust_score.go).
+**Server (9 factors)** answers "is the agent behaving in a way that should still be trusted right now?" Recalculated on the events listed under [Trust-gated capabilities](#trust-gated-capabilities), not on each verification request. Source: [`apps/backend/internal/domain/trust_score.go`](apps/backend/internal/domain/trust_score.go).
 
 | Factor | Weight | Source |
 |---|---|---|
