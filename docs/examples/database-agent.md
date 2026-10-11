@@ -30,7 +30,7 @@ An AI agent that:
 
 ```bash
 # Install AIM SDK dependencies and PostgreSQL driver
-pip install keyring PyNaCl requests cryptography psycopg2-binary
+pip install keyring PyNaCl requests cryptography PyJWT psycopg2-binary
 ```
 
 ---

@@ -45,6 +45,12 @@ What changed:
 
 ### Fixed
 
+- `requirements.txt`, which ships in the SDK download, lists `PyJWT`, which the SDK uses to read its
+  sign-in tokens ([#664](https://github.com/opena2a-org/agent-identity-management/issues/664)). So do the
+  dependency install commands in `docs/sdk/python.md`, `sdk/python/docs/ENV_CONFIG.md` and the integration
+  and example guides under `docs/`. They listed `keyring`, `PyNaCl`, `requests` and `cryptography` only, and with only those four
+  installed, `aim-sdk login` and `from aim_sdk import secure` stopped with
+  `ModuleNotFoundError: No module named 'jwt'`. `setup.py` already listed `PyJWT`.
 - `register_mcp()` adds the given MCP server to the agent's list. It sends
   `PUT /api/v1/agents/{id}/mcp-servers` with `mcpServerIds`, `detectedMethod`, `confidence` and `metadata`,
   and returns what AIM answers: `message`, `talksTo`, `added_servers` and `total_count`. It used to post

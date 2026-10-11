@@ -23,7 +23,7 @@ A multi-agent CrewAI team that:
 2. ✅ CrewAI installed (`pip install crewai crewai-tools`)
 3. ✅ AIM SDK downloaded from dashboard ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds))
    - **NO pip install available** - must download from dashboard
-   - Dependencies: `pip install keyring PyNaCl requests cryptography`
+   - Dependencies: `pip install keyring PyNaCl requests cryptography PyJWT`
 4. ✅ OpenAI API key (for LLM)
 
 ---
@@ -674,7 +674,7 @@ response = secured_crew.kickoff(inputs={"ticket_id": "T-12345"})
 - [ ] Private key saved securely
 - [ ] CrewAI installed (`pip install crewai`)
 - [ ] AIM SDK downloaded from dashboard
-- [ ] SDK dependencies installed (`pip install keyring PyNaCl requests cryptography`)
+- [ ] SDK dependencies installed (`pip install keyring PyNaCl requests cryptography PyJWT`)
 - [ ] Code uses `AIMCrewWrapper`
 - [ ] Crew runs without errors
 - [ ] Dashboard shows crew status

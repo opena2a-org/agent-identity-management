@@ -38,7 +38,7 @@ An MCP integration that:
 
 1. ✅ AIM platform running ([Quick Start Guide](../quick-start.md))
 2. ✅ AIM SDK downloaded from dashboard
-3. ✅ Python 3.8+ with dependencies: `pip install keyring PyNaCl requests cryptography`
+3. ✅ Python 3.8+ with dependencies: `pip install keyring PyNaCl requests cryptography PyJWT`
 
 ---
 

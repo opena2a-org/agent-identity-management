@@ -29,13 +29,13 @@ After downloading the SDK, install the required dependencies:
 
 ```bash
 # Install dependencies
-pip install keyring PyNaCl requests cryptography
+pip install keyring PyNaCl requests cryptography PyJWT
 
 # Or with Poetry
-poetry add keyring PyNaCl requests cryptography
+poetry add keyring PyNaCl requests cryptography PyJWT
 
 # Or with pipenv
-pipenv install keyring PyNaCl requests cryptography
+pipenv install keyring PyNaCl requests cryptography PyJWT
 ```
 
 **Requirements**:
@@ -44,6 +44,7 @@ pipenv install keyring PyNaCl requests cryptography
 - `PyNaCl` (Ed25519 cryptography)
 - `requests` (HTTP client)
 - `cryptography` (additional crypto support)
+- `PyJWT` (reads the sign-in tokens; `aim-sdk login` and `from aim_sdk import secure` fail without it)
 
 ### Verify Installation
 

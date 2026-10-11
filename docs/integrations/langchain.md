@@ -27,7 +27,7 @@ Secure LangChain agents with AIM in **2 lines of code**.
 **Install Dependencies**:
 ```bash
 # Install AIM SDK dependencies and LangChain
-pip install keyring PyNaCl requests cryptography langchain langchain-openai
+pip install keyring PyNaCl requests cryptography PyJWT langchain langchain-openai
 ```
 
 ### Step 2: Register Agent

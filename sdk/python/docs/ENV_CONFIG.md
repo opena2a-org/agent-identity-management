@@ -152,7 +152,7 @@ FROM python:3.11-slim
 COPY aim_sdk /app/aim_sdk
 
 # Install SDK dependencies
-RUN pip install keyring PyNaCl requests cryptography
+RUN pip install keyring PyNaCl requests cryptography PyJWT
 
 # Set AIM configuration
 ENV AIM_AGENT_NAME=container-agent
@@ -248,7 +248,7 @@ jobs:
           echo "Using SDK from repository"
 
       - name: Install dependencies
-        run: pip install keyring PyNaCl requests cryptography
+        run: pip install keyring PyNaCl requests cryptography PyJWT
 
       - name: Configure AIM
         env:
