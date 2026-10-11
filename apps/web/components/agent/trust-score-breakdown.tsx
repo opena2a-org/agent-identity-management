@@ -312,7 +312,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-base text-ink">{metadata.label}</span>
                           <Tooltip>
-                            <TooltipTrigger>
+                            <TooltipTrigger aria-label={`About ${metadata.label.toLowerCase()}`} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-pill">
                               <Info className="h-3.5 w-3.5 text-ink-tertiary hover:text-brand-text transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-xs">
@@ -434,16 +434,16 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                     <table className="w-full">
                       <thead className="bg-glass-inset-gray sticky top-0">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                             Date & time
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                             Trust score
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                             Reason
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-tertiary uppercase tracking-wider">
+                          <th className="px-4 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">
                             Changed by
                           </th>
                         </tr>

@@ -38,9 +38,9 @@
  *     [--only /dashboard,/dashboard/security] [--fixture empty|populated]
  *
  * `--only` limits the sweep to the named routes. `--fixture populated` answers the
- * endpoints the overview, security and compliance charts read with sample series,
- * so those charts draw marks instead of their empty states; the default `empty`
- * answers every collection empty.
+ * endpoints the overview, security, compliance, A2A, supply chain and agent detail
+ * charts read with sample series, so those charts draw marks instead of their
+ * empty states; the default `empty` answers every collection empty.
  *
  * Exit code 1 when any route has body-text contrast under 4.5:1, large-text
  * contrast under 3:1, a chart series mark under 3:1, chart text under its floor,
@@ -287,8 +287,9 @@ function sampleMonths(count) {
 
 // Sample series for the populated fixture: enough agents to fill every trust and
 // risk bucket (one agent carries no score), and several points per trend, so each
-// overview, security and compliance chart draws its marks. The values are
-// fixture values for measuring how a chart is drawn, not a measurement of anything.
+// overview, security, compliance, A2A, supply chain and agent detail chart draws
+// its marks. The values are fixture values for measuring how a chart is drawn,
+// not a measurement of anything.
 const SAMPLE_AGENTS = [
   [0.92, "verified"],
   [0.85, "verified"],
@@ -305,9 +306,60 @@ const SAMPLE_AGENTS = [
   trustScore,
 }));
 const SAMPLE_MCP_SERVERS = [
-  MCP_SERVER,
-  { ...MCP_SERVER, id: "00000000-0000-4000-8000-000000000201", name: "sample-mcp-2", status: "pending", isVerified: false },
+  { ...MCP_SERVER, confidenceScore: 96 },
+  { ...MCP_SERVER, id: "00000000-0000-4000-8000-000000000201", name: "sample-mcp-2", status: "pending", isVerified: false, confidenceScore: 58 },
 ];
+// A2A: one task state per slice of the task donut, and one agent per trust range
+// of the A2A trust bar chart.
+const SAMPLE_A2A_CARDS = SAMPLE_AGENTS.slice(0, 3).map((agent, i) => ({
+  id: `00000000-0000-4000-8000-00000000030${i}`,
+  agentId: agent.id,
+  cardUrl: `https://agents.example.com/${agent.name}/card`,
+  protocolVersion: "0.3.0",
+  isValid: i < 2,
+  attestationSignature: i === 0 ? "fixture-attestation" : null,
+  cardData: { name: agent.displayName, description: "Fixture agent card", skills: [{ id: "search", name: "Search" }, { id: "summarize", name: "Summarize" }].slice(0, i + 1) },
+  createdAt: NOW,
+  updatedAt: NOW,
+}));
+const SAMPLE_A2A_TASKS = ["COMPLETED", "COMPLETED", "COMPLETED", "WORKING", "WORKING", "FAILED", "SUBMITTED", "CANCELLED"].map((state, i) => ({
+  id: `00000000-0000-4000-8000-00000000040${i}`,
+  externalTaskId: `task-${i + 1}`,
+  clientAgentId: SAMPLE_AGENTS[i % 2].id,
+  clientAgentName: SAMPLE_AGENTS[i % 2].displayName,
+  remoteAgentId: SAMPLE_AGENTS[2].id,
+  remoteAgentName: SAMPLE_AGENTS[2].displayName,
+  state,
+  messageCount: i + 2,
+  createdAt: NOW,
+}));
+const SAMPLE_A2A_TRUST = [0.94, 0.78, 0.55, 0.32].map((a2aTrustScore, i) => ({
+  agentId: SAMPLE_AGENTS[i].id,
+  a2aTrustScore,
+  totalTasksAsClient: [4, 3, 1, 0][i],
+  totalTasksAsRemote: [1, 2, 4, 1][i],
+  tasksCompleted: [4, 3, 2, 0][i],
+  tasksFailed: [0, 0, 1, 1][i],
+  uniquePeersCount: [2, 2, 3, 1][i],
+  computedAt: NOW,
+}));
+// Supply chain: a week of attestations and the connections behind them.
+const SAMPLE_CONNECTIONS = [
+  [0, 0, 14, true],
+  [1, 0, 9, true],
+  [2, 1, 3, false],
+].map(([agent, server, attestationCount, isActive], i) => ({
+  id: `00000000-0000-4000-8000-00000000050${i}`,
+  agentId: SAMPLE_AGENTS[agent].id,
+  agentName: SAMPLE_AGENTS[agent].displayName,
+  mcpServerId: SAMPLE_MCP_SERVERS[server].id,
+  mcpServerName: SAMPLE_MCP_SERVERS[server].name,
+  connectionType: "attested",
+  attestationCount,
+  firstConnectedAt: NOW,
+  lastAttestedAt: isActive ? NOW : null,
+  isActive,
+}));
 const POPULATED_MOCKS = [
   ["GET", /^\/api\/v1\/agents$/, { agents: SAMPLE_AGENTS }],
   ["GET", /^\/api\/v1\/mcp-servers$/, { mcpServers: SAMPLE_MCP_SERVERS, total: SAMPLE_MCP_SERVERS.length }],
@@ -336,6 +388,20 @@ const POPULATED_MOCKS = [
       complianceScoreTrend: [],
     },
   }],
+  ["GET", /^\/api\/v1\/agents\/[^/]+\/trust-score\/history$/, {
+    agentId: SAMPLE_UUID,
+    history: sampleDates(6, 5).map((date, i) => ({ timestamp: `${date}T12:00:00Z`, trustScore: [0.62, 0.66, 0.7, 0.74, 0.79, 0.82][i], reason: ["Registered", "Key rotated", "Verification passed", "Uptime recovered", "Verification passed", "Recalculated"][i], changedBy: "system" })),
+  }],
+  ["GET", /^\/api\/v1\/supply-chain\/analytics/, {
+    stats: { totalConnections: SAMPLE_CONNECTIONS.length, activeConnections: 2, totalAttestations: 26, attestationsLast24h: 4, uniqueAgents: 3, uniqueMCPServers: 2 },
+    attestationTrend: sampleDates(7, 1).map((date, i) => ({ date, attestationCount: [3, 5, 2, 6, 4, 2, 4][i], newConnections: [1, 0, 1, 0, 0, 1, 0][i] })),
+    connections: SAMPLE_CONNECTIONS,
+    topMCPServers: [],
+    topAgents: [],
+  }],
+  ["GET", /^\/api\/v1\/a2a\/cards/, { cards: SAMPLE_A2A_CARDS, limit: 100, offset: 0, total: SAMPLE_A2A_CARDS.length }],
+  ["GET", /^\/api\/v1\/a2a\/tasks/, { tasks: SAMPLE_A2A_TASKS, total: SAMPLE_A2A_TASKS.length }],
+  ["GET", /^\/api\/v1\/a2a\/trust-scores/, { scores: SAMPLE_A2A_TRUST, total: SAMPLE_A2A_TRUST.length }],
 ];
 
 /** The mock table for a fixture: the populated entries are tried before the empty ones. */

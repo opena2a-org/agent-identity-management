@@ -49,6 +49,7 @@ import {
 import { DonutChart, TrendChart, chartSeries, type DonutSlice } from "@/components/charts";
 import { api } from "@/lib/api";
 import { escapeHtml } from "@/lib/html-escape";
+import { ABOM_PRINT_STYLE } from "@/lib/abom-print-style";
 import { formatDateTime } from "@/lib/date-utils";
 import { AuthGuard } from "@/components/auth-guard";
 
@@ -687,26 +688,7 @@ function SupplyChainPage() {
       <html>
       <head>
         <title>Agent Bill of Materials (ABOM)</title>
-        <style>
-          body { font-family: system-ui, sans-serif; padding: 40px; max-width: 1000px; margin: 0 auto; }
-          h1 { color: #1e40af; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
-          h2 { color: #1e3a8a; margin-top: 30px; }
-          h3 { color: #1e40af; margin-top: 20px; }
-          .meta { color: #6b7280; font-size: 14px; margin-bottom: 30px; }
-          .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin: 20px 0; }
-          .summary-card { background: #f3f4f6; padding: 15px; border-radius: 8px; }
-          .summary-card h4 { margin: 0 0 5px 0; color: #374151; font-size: 14px; }
-          .summary-card p { margin: 0; font-size: 24px; font-weight: 600; color: #1e40af; }
-          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-          th { background: #e5e7eb; text-align: left; padding: 10px; font-size: 12px; text-transform: uppercase; }
-          td { padding: 10px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
-          .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin: 2px; }
-          .badge-green { background: #dcfce7; color: #166534; }
-          .badge-blue { background: #dbeafe; color: #1e40af; }
-          .badge-yellow { background: #fef3c7; color: #92400e; }
-          .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px; }
-          @media print { body { padding: 20px; } }
-        </style>
+        <style>${ABOM_PRINT_STYLE}</style>
       </head>
       <body>
         <h1>Agent Bill of Materials (ABOM)</h1>
@@ -745,7 +727,7 @@ function SupplyChainPage() {
           ${data.mcpServers.map((s) => `
             <tr>
               <td>${esc(s.name)}</td>
-              <td style="font-size:12px;color:#6b7280;">${esc(s.url)}</td>
+              <td class="url">${esc(s.url)}</td>
               <td><span class="badge badge-${s.status === "verified" ? "green" : "yellow"}">${esc(s.status)}</span></td>
               <td>${s.toolCount || 0}</td>
               <td>${s.attestationCount || 0}</td>
@@ -793,7 +775,7 @@ function SupplyChainPage() {
     <div className="min-h-screen p-6">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-ink flex items-center gap-3">
               <GitBranch className="h-8 w-8 text-brand-text" />
@@ -803,7 +785,7 @@ function SupplyChainPage() {
               Monitor MCP server dependencies, attestation health, and your Agent Bill of Materials.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={() => fetchData(true)}
               disabled={refreshing}
@@ -903,7 +885,7 @@ function SupplyChainPage() {
             >
               <Package className="h-4 w-4" />
               ABOM
-              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-brand-soft text-brand-text rounded-pill">
+              <span className="ml-1 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
                 Bill of Materials
               </span>
             </button>
@@ -944,8 +926,8 @@ function SupplyChainPage() {
           value={stats?.activeConnections || 0}
           suffix={`/ ${stats?.totalConnections || 0}`}
           iconBg="bg-brand-soft"
-          iconColor="text-brand-sky"
-          valueColor="text-brand-sky"
+          iconColor="text-brand-text"
+          valueColor="text-brand-text"
         />
         <StatCard
           icon={AlertCircle}
@@ -1170,7 +1152,8 @@ function SupplyChainPage() {
                         onClick={() =>
                           router.push(`/dashboard/mcp/${server.id}`)
                         }
-                        className="text-brand-text hover:text-brand"
+                        aria-label={`View ${server.name}`}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-pill text-brand-text hover:bg-glass-inset-gray hover:text-brand"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -1626,10 +1609,10 @@ function SupplyChainPage() {
             <div className="glass p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-brand-soft rounded-lg">
-                  <Link2 className="h-5 w-5 text-brand-sky" />
+                  <Link2 className="h-5 w-5 text-brand-text" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-brand-sky">{abomData.summary.totalConnections}</p>
+                  <p className="text-2xl font-bold text-brand-text">{abomData.summary.totalConnections}</p>
                   <p className="text-xs text-ink-secondary">Connections</p>
                 </div>
               </div>
@@ -1945,7 +1928,7 @@ function SupplyChainPage() {
                     key={conn.id}
                     className="flex items-center gap-3 p-4 rounded-inset bg-glass-inset-gray"
                   >
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Bot className="h-4 w-4 text-ink-secondary" />
                         <span className="text-sm font-medium text-ink truncate">
@@ -1954,7 +1937,7 @@ function SupplyChainPage() {
                       </div>
                     </div>
                     <ArrowRight className="h-4 w-4 text-ink-tertiary flex-shrink-0" />
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Server className="h-4 w-4 text-ink-secondary" />
                         <span className="text-sm font-medium text-ink truncate">

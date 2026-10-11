@@ -11,6 +11,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the A2A, supply chain and agent detail pages are readable in both themes and fit a phone screen
+
+- On a 375px screen the A2A page scrolled sideways by 25px and the supply chain page by 27px: the header's buttons
+  stayed beside the title. Below 640px they now sit under the title and wrap.
+- On the supply chain page the "Active connections" figure read 2.05:1 in the light theme and now uses the brand ink;
+  the "Bill of Materials" tab label read 4.21:1 and now uses the neutral badge of the tab beside it; the eye button in
+  each MCP server row was 16x16 with no accessible name and is now 32x32 and named for its server.
+- On the agent detail page the trust score badges in the activity timeline sat on tinted event cards and read 3.58:1 in
+  the dark theme and 4.21:1 in the light theme; the event cards are now outlined rather than filled. The trust score
+  history table headers read 4.20:1 in the dark theme and now use the secondary ink. The "About drift score" button
+  (16x16) and the info button beside each of the nine trust factors (14x14, with no accessible name) are now 24x24, and
+  each factor's is named for its factor. The drift score card takes every colour from the theme tokens.
+- The readability sweep's populated fixture (`apps/web/scripts/ux-sweep.mjs --fixture populated`) now fills the A2A,
+  supply chain and agent trust score history charts; before, the A2A charts drew 0 marks, the supply chain charts 9 and
+  the agent detail page no chart. Measured over these three
+  pages, both themes and both viewports: the gate went from exit code 1 to 0 and targets under 24x24 from 48 to 0 over
+  the 12 variants; all eight chart entries pass together. The run is recorded in
+  `docs/ux/chart-contrast-2026-10-11.md`.
+- `tests/page-standard.test.ts` holds these pages to the same source rules as the overview, security and compliance
+  pages. The printable supply chain report's stylesheet moves to `apps/web/lib/abom-print-style.ts`.
+
 ### Fixed — every link and button on the chart screens is at least 24px tall
 
 - On the overview, the security page and the compliance page, eleven links and buttons were under 24px tall (16px to

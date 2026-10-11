@@ -6,7 +6,9 @@
  * wide as the whole line before truncation: the ellipsis never shows, and on a
  * 375px screen the row pushes the page sideways. Every growing box between the
  * truncated text and the nearest ancestor that clips its overflow needs
- * `min-w-0` (or a clipping overflow of its own) to shrink.
+ * `min-w-0` (or a clipping overflow of its own) to shrink. A set width of zero
+ * (`w-0`) does as well: the automatic minimum is never wider than the width an
+ * item sets.
  *
  * The walk goes up the JSX of one component and through the callbacks inside it
  * (a `.map()` that renders rows). Text truncated inside a component rendered
@@ -18,6 +20,7 @@ import ts from "typescript";
 import { baseClass, classNameOf } from "./chart-surface";
 
 const GROWS = new Set(["flex-1", "flex-auto", "grow", "flex-grow"]);
+const SHRINKS = new Set(["min-w-0", "w-0"]);
 const CLIPS = /^overflow-(?:[xy]-)?(?:hidden|clip|auto|scroll)$/;
 
 export interface UnshrinkableItem {
@@ -49,7 +52,7 @@ export function unshrinkableFlexItems(file: string, text: string): UnshrinkableI
       const classes = classNameOf(at.openingElement);
       const bases = classes.map(baseClass);
       const clips = bases.some((b) => CLIPS.test(b));
-      if (bases.some((b) => GROWS.has(b)) && !clips && !bases.includes("min-w-0")) {
+      if (bases.some((b) => GROWS.has(b)) && !clips && !bases.some((b) => SHRINKS.has(b))) {
         const line = lineOf(source, at.openingElement);
         if (!found.has(line)) found.set(line, { file, line, truncatedAt, classes: classes.join(" ") });
       }
