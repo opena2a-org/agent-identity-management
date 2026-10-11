@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -52,9 +52,12 @@ func TestA2AVerifyAnswersOtherMethods405(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
-// setupRoutes mounts POST /a2a/verify once, through mountA2AVerifyRoute. A
-// second mount inside the /a2a group is never reached: the first answers every
-// POST that reaches the routes.
+// setupRoutes mounts /a2a/verify once, through mountA2AVerifyRoute. A second
+// mount that the router serves on the same path is never reached: the first
+// answers every request to the path that reaches the routes. The routes are
+// read from the router mountAPIRoutes builds, not from the source, so a mount
+// with a trailing slash, through Add, or through a group helper is counted
+// as the router would match it.
 func TestA2AVerifyIsMountedOnce(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "runtime.Caller failed; cannot locate main.go")
@@ -66,6 +69,46 @@ func TestA2AVerifyIsMountedOnce(t *testing.T) {
 		"the verify handler is mounted more than once, or not at all")
 	assert.Equal(t, 1, strings.Count(code, "mountA2AVerifyRoute(v1, h.A2A.VerifyRequest)"),
 		"setupRoutes does not mount the verify handler through mountA2AVerifyRoute")
-	assert.Empty(t, regexp.MustCompile(`\ba2a(Bound|Held)?\.\w+\("/verify"`).FindAllString(code, -1),
-		"the /a2a group mounts /verify, which the unauthenticated mount ahead of it answers")
+
+	const path = "/api/v1/a2a/verify"
+	server, _ := strictCensusApp(t)
+	alone := fiber.New()
+	mountA2AVerifyRoute(alone.Group("/api/v1"), func(c fiber.Ctx) error { return nil })
+	assert.Equal(t, routesServing(alone, path), routesServing(server, path),
+		"a route other than mountA2AVerifyRoute's is mounted on %s, where mountA2AVerifyRoute answers first", path)
+}
+
+// routesServing lists, as "METHOD /registered/path", every route of app that
+// the router matches for path. Middleware registered with Use is left out.
+func routesServing(app *fiber.App, path string) []string {
+	var served []string
+	for _, route := range app.GetRoutes(true) {
+		if fiber.RoutePatternMatch(path, route.Path, app.Config()) {
+			served = append(served, route.Method+" "+route.Path)
+		}
+	}
+	sort.Strings(served)
+	return served
+}
+
+// POST /api/v1/a2a/verify takes no credentials, so it carries the shared rate
+// limiter on its own registration line, as GET /api/v1/did/* and GET
+// /api/v1/revocations do: one client is answered 429 once it has sent the
+// general limit in a minute.
+func TestA2AVerifyIsRateLimited(t *testing.T) {
+	server, _ := strictCensusApp(t)
+	general, _ := middleware.RateLimitsInForce()
+
+	admitted := 0
+	for ; admitted <= general; admitted++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/a2a/verify", strings.NewReader(`{}`))
+		req.Header.Set("X-Real-IP", "198.51.100.7")
+		resp, err := server.Test(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		if resp.StatusCode == fiber.StatusTooManyRequests {
+			break
+		}
+	}
+	assert.Equal(t, general, admitted, "POST /api/v1/a2a/verify did not refuse one client past the general limit")
 }
