@@ -252,7 +252,7 @@ Common errors and solutions:
 ## What's Next?
 
 - **[Dashboard Walkthrough](./dashboard-walkthrough.md)** - Navigate the AIM UI
-- **[Full API Reference](../API.md)** - All 160 endpoints documented
+- **[API Reference](../API.md)** - REST endpoints with request and response examples
 - **[Python SDK](./sdk-quickstart.md)** - Easier integration for Python apps
 
 ---

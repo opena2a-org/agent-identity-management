@@ -81,5 +81,5 @@ After completing the tutorials:
 
 1. **[Full Quick Start Guide](../quick-start.md)** - Comprehensive 10-minute guide
 2. **[Python SDK Reference](../sdk/python.md)** - Complete SDK documentation
-3. **[API Reference](../API.md)** - All 160 endpoints
+3. **[API Reference](../API.md)** - REST endpoints with request and response examples
 4. **[Security Best Practices](../guides/SECURITY.md)** - Production hardening

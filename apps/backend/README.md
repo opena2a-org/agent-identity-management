@@ -4,18 +4,12 @@ Agent Identity Management (AIM) backend service - a Go-based API server for mana
 
 ## Test Coverage
 
-| Package | Coverage |
-|---------|----------|
-| `internal/domain` | 97.5% |
-| `internal/infrastructure/cache` | 98.2% |
-| `internal/infrastructure/crypto` | 92.3% |
-| `internal/crypto` | 90.0% |
-| `internal/infrastructure/database` | 88.9% |
-| `internal/interfaces/http/middleware` | 75.3% |
-| `internal/infrastructure/auth` | 70.8% |
-| `internal/infrastructure/email` | 70.0% |
-| `internal/interfaces/http/handlers` | 57.8% |
-| `internal/application` | 33.5% |
+This file records no coverage figures: a figure holds for the commit it was measured on and no longer.
+`go test -cover` prints the current one for each package it runs, at the end of that package's line:
+
+```
+coverage: <n>% of statements
+```
 
 ### Running Tests
 
