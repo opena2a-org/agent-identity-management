@@ -75,13 +75,13 @@ docker run -p 3000:3000 \
 ### Starting Monitoring Services
 
 ```bash
-# From project root
-docker compose -f docker-compose.monitoring.yml up -d
+# From project root: the monitoring services are part of docker-compose.yml
+docker compose up -d prometheus grafana loki promtail
 ```
 
 **Services**:
 - **Prometheus**: http://localhost:9090 (Metrics)
-- **Grafana**: http://localhost:3001 (Dashboards)
+- **Grafana**: http://localhost:3003 (Dashboards)
 - **Loki**: http://localhost:3100 (Logs)
 
 ### Grafana Dashboards
@@ -137,10 +137,10 @@ docker compose up -d
 
 ### Production
 
-See cloud-specific guides:
-- [AWS Production](./deployment/aws/README.md)
-- [Azure Production](./deployment/azure/README.md)
-- [GCP Production](./deployment/gcp/README.md)
+See the cloud-specific sections of the deployment guide:
+- [AWS Production](./deployment/README.md#-aws-deployment)
+- [Azure Production](./deployment/README.md#-azure-deployment)
+- [GCP Production](./deployment/README.md#-google-cloud-deployment)
 
 ## 🔐 Security Best Practices
 
@@ -240,7 +240,6 @@ When adding new infrastructure:
 - [Main README](../README.md) - Project overview
 - [Deployment Guide](./deployment/README.md) - Comprehensive deployment instructions
 - [Docker Compose](../docker-compose.yml) - Local development setup
-- [Kubernetes](../k8s/) - Kubernetes manifests
 
 ---
 

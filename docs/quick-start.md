@@ -53,7 +53,7 @@ git clone https://github.com/opena2a/agent-identity-management.git
 cd agent-identity-management
 
 # Deploy to Azure (creates all infrastructure)
-./scripts/deploy-azure-production.sh
+./infrastructure/scripts/deploy-azure-production.sh
 
 # Wait ~10 minutes for deployment
 ```
@@ -302,9 +302,9 @@ This is **the difference between a rogue agent and a trusted agent**.
 
 ### 4. Deploy to Production
 
-- [Azure Deployment](./deployment/azure.md) - Production-ready Azure setup
-- [Kubernetes](./deployment/kubernetes.md) - Large scale
-- [Security Best Practices](./security/best-practices.md) - Harden your deployment
+- [Cloud Deployment](../infrastructure/deployment/README.md) - Azure, Google Cloud and AWS
+- [Kubernetes](./DEPLOYMENT.md#-kubernetes-deployment) - Steps for manifests you write (the repository ships none)
+- [Security Best Practices](./guides/SECURITY.md) - Harden your deployment
 
 ---
 
@@ -593,6 +593,6 @@ agent = secure("Weather Agent")  # ❌ Wrong (spaces, capitals)
 
 **Next**: [Weather Agent Example →](./examples/weather-agent.md)
 
-[🏠 Back to Home](../README.md) • [📚 All Guides](./index.md) • [💬 Get Help](https://discord.gg/opena2a)
+[🏠 Back to Home](../README.md) • [📚 All Guides](./DOCUMENTATION_INDEX.md) • [💬 Get Help](https://discord.gg/opena2a)
 
 </div>
