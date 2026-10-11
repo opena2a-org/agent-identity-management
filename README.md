@@ -189,7 +189,7 @@ CCP for vaulted credential retrieval. PSM for privileged session recording.
 
 ### SIEM adapters
 
-Splunk HEC and Microsoft Sentinel Data Collector. Buffered batch delivery, retry, severity filtering.
+Splunk HEC. Set `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` and every audit log entry the server writes is forwarded: buffered batch delivery, retry, severity filtering. See [SIEM Forwarding](docs/DEPLOYMENT.md#siem-forwarding). The Microsoft Sentinel adapter is not loaded: the Data Collector API it targets was retired on 14 September 2026.
 
 ### Web dashboard
 

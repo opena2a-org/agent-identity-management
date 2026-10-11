@@ -137,6 +137,12 @@ func main() {
 	// Wire up alert repository to MCPCapability repository for drift alerts
 	repos.MCPCapability.SetAlertRepository(repos.Alert)
 
+	// Forward every audit log entry to the SIEM the SIEM_* variables configure.
+	siemForwarder, err := startSIEMForwarding(repos.AuditLog, os.Getenv)
+	if err != nil {
+		log.Fatal("SIEM forwarding: ", err)
+	}
+
 	// Initialize cache (optional - skip if Redis is unavailable)
 	var cacheService *cache.RedisCache
 	if redisClient != nil {
@@ -383,6 +389,10 @@ func main() {
 		fga = services.FGA
 	}
 	shutdownGracefully(app, apiShutdownTimeout, fga, fgaDrainTimeout)
+	// Deliver the audit log entries still queued for the SIEM.
+	if siemForwarder != nil {
+		flushSIEMForwarding(siemForwarder)
+	}
 	// Write the failed-insert counts of the unfinished period before the process exits.
 	middleware.FlushAPICallInsertFailures()
 
