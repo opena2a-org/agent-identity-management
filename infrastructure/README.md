@@ -208,8 +208,9 @@ docker exec aim-backend pg_isready -h db-host
 # Verify migrations
 ./infrastructure/scripts/verify-migrations.sh
 
-# Check migration status
-docker exec aim-backend go run cmd/migrate/main.go status
+# Check the result of the migrations the server applied at startup
+# (the image has no Go toolchain; the server logs each migration run)
+docker logs aim-backend 2>&1 | grep -i migration
 ```
 
 ### Network connectivity issues

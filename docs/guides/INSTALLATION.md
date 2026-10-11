@@ -59,22 +59,31 @@ POSTGRES_PASSWORD=postgres  # Change for production!
 ### 3. Start Services
 
 ```bash
-# Start all infrastructure services
+# Start all services
 docker compose up -d
 
 # Verify all services are running
-docker compose ps
+docker compose ps --format 'table {{.Name}}\t{{.Service}}\t{{.Status}}'
 ```
 
-Expected output:
+Expected output once each healthcheck passes (the times vary):
 ```
-NAME                    STATUS              PORTS
-identity-postgres       Up 30 seconds       0.0.0.0:5432->5432/tcp
-identity-redis          Up 30 seconds       0.0.0.0:6379->6379/tcp
-identity-elasticsearch  Up 30 seconds       0.0.0.0:9200->9200/tcp
-identity-minio          Up 30 seconds       0.0.0.0:9000->9000/tcp
-identity-nats           Up 30 seconds       0.0.0.0:4222->4222/tcp
+NAME                SERVICE         STATUS
+aim-backend         backend         Up 2 minutes (healthy)
+aim-elasticsearch   elasticsearch   Up 2 minutes (healthy)
+aim-frontend        frontend        Up 2 minutes (healthy)
+aim-grafana         grafana         Up 2 minutes (healthy)
+aim-loki            loki            Up 2 minutes (healthy)
+aim-minio           minio           Up 2 minutes (healthy)
+aim-nats            nats            Up 2 minutes (healthy)
+aim-postgres        postgres        Up 2 minutes (healthy)
+aim-prometheus      prometheus      Up 2 minutes (healthy)
+aim-promtail        promtail        Up 2 minutes
+aim-redis           redis           Up 2 minutes (healthy)
 ```
+
+`NAME` is the container name, which `docker` commands take (`docker logs aim-backend`).
+`SERVICE` is the name `docker compose` commands take (`docker compose logs backend`).
 
 ### 4. Run Database Migrations
 
@@ -294,7 +303,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 
 # Backup PostgreSQL
-docker exec identity-postgres pg_dump -U postgres identity > \
+docker exec aim-postgres pg_dump -U postgres identity > \
   $BACKUP_DIR/identity_$TIMESTAMP.sql
 
 # Compress
@@ -314,10 +323,10 @@ chmod +x backup.sh
 
 ```bash
 # Backup
-docker exec identity-postgres pg_dump -U postgres identity > backup.sql
+docker exec aim-postgres pg_dump -U postgres identity > backup.sql
 
 # Restore
-cat backup.sql | docker exec -i identity-postgres psql -U postgres identity
+cat backup.sql | docker exec -i aim-postgres psql -U postgres identity
 ```
 
 ## Monitoring Setup

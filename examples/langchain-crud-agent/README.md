@@ -12,7 +12,7 @@ A LangChain agent that performs CRUD operations on a todo list, with each operat
 
 ## Prerequisites
 
-- AIM backend running locally (`docker compose up -d aim-postgres aim-redis aim-backend` from the repo root)
+- AIM backend running locally (`docker compose up -d postgres redis backend` from the repo root)
 - Python 3.11+
 - A Google API key for Gemini (`GOOGLE_API_KEY`) and an AIM API key (`AIM_API_KEY`)
 

@@ -168,16 +168,14 @@ go run cmd/bootstrap/main.go \
 
 ### Docker Deployment
 
-```bash
-# 1. Run bootstrap inside Docker container
-docker compose exec backend go run cmd/bootstrap/main.go \
-  --admin-email=admin@company.com \
-  --admin-password="SecurePassword123!" \
-  --org-name="My Company" \
-  --yes
+The backend image has no Go toolchain; it ships the bootstrap as the binary
+`/app/aim-bootstrap`, which the one-shot `bootstrap` service runs against the
+stack's database. Arguments after the service name replace its default
+`--default`. Run it once the backend is healthy, since the backend applies the
+migrations at startup:
 
-# 2. Alternative: Run before starting services
-docker compose run --rm backend go run cmd/bootstrap/main.go \
+```bash
+docker compose run --rm bootstrap \
   --admin-email=admin@company.com \
   --admin-password="SecurePassword123!" \
   --org-name="My Company" \

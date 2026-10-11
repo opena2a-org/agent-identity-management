@@ -491,7 +491,7 @@ ORDER BY depth;
 
 ```bash
 # Watch backend logs for token refresh
-docker logs -f identity-backend | grep "refresh"
+docker logs -f aim-backend | grep "refresh"
 
 # Look for:
 # ✅ "Token refresh successful"

@@ -243,8 +243,8 @@ docker compose ps
 
 ### Step 4: Run Production Migrations
 ```bash
-# Run migrations in production
-docker compose exec backend /app/migrate up
+# Run migrations in production (the server also applies them at startup)
+docker compose exec backend /app/aim-server migrate
 ```
 
 **Checklist:**
