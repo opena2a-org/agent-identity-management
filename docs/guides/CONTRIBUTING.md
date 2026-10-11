@@ -601,12 +601,14 @@ console.log('Debug:', data)
 ### Database Changes
 
 ```bash
-# Create migration
+# Create migration (writes migrations/<next number>_add_column_to_agents.sql)
 go run cmd/migrate/main.go create add_column_to_agents
 
-# Edit migration files in migrations/
-# Then run:
+# Write the SQL in the new file, then run:
 go run cmd/migrate/main.go up
+
+# List applied and pending migrations
+go run cmd/migrate/main.go status
 ```
 
 ## Getting Help

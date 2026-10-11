@@ -165,18 +165,20 @@ npm start
 ```bash
 cd apps/backend
 
-# Create new migration
+# Create new migration (writes migrations/<next number>_migration_name.sql)
 go run cmd/migrate/main.go create migration_name
 
 # Run migrations
 go run cmd/migrate/main.go up
 
-# Rollback last migration
-go run cmd/migrate/main.go down 1
-
-# Check migration status
+# Check migration status (lists applied and pending migrations, changes nothing)
 go run cmd/migrate/main.go status
 ```
+
+Migrations have no down scripts, so the tool has no `down` command. To reverse a
+change, create a migration that undoes it and run `up`. The tool refuses a
+command it does not offer, such as `down`, `force` or `drop`, with exit code 2 and
+without connecting to the database.
 
 ## Production Deployment
 
@@ -414,16 +416,22 @@ kill -9 $(lsof -t -i:8080)
 ### Migration Failures
 
 ```bash
-# Check current migration version
+# List applied and pending migrations
 go run cmd/migrate/main.go status
 
-# Force to specific version
-go run cmd/migrate/main.go force 001
+# Fix the failing migration file, then apply what is still pending
+go run cmd/migrate/main.go up
 
-# Rebuild schema (caution: deletes all data)
-go run cmd/migrate/main.go drop
+# Rebuild the Docker Compose development database (caution: deletes all data;
+# stop the backend first so nothing holds a connection)
+docker compose exec postgres dropdb -U postgres identity
+docker compose exec postgres createdb -U postgres identity
 go run cmd/migrate/main.go up
 ```
+
+Each migration runs in its own transaction and is recorded in
+`schema_migrations` only when it commits, so a migration that fails leaves no
+row behind and `up` runs it again.
 
 ## Performance Tuning
 

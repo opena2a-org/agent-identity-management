@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `migrate status` lists migrations without changing the database, and `migrate down`, `force` and `drop` are refused (#668)
+
+- `cmd/migrate` read no arguments. On an empty PostgreSQL 18 database, `status`, `create add_column_to_agents`,
+  `down 1`, `force 001`, `drop` and an unknown word (`frobnicate`) each applied all 127 migrations and exited 0. On a
+  database with every migration applied, each left `schema_migrations` and the table count unchanged and exited 0.
+  `create` wrote no file. The tool now reads its command before it connects to the database.
+- `status` prints how many migrations are applied, the last one applied, each pending migration, and any
+  `schema_migrations` row with no matching file. It only reads: on a database without `schema_migrations` it reports
+  every migration pending and does not create the table.
+- `create <name>` writes `migrations/<next number>_<name>.sql` with a comment header, and needs neither a database nor
+  `DATABASE_URL`. The name is lowercase letters and digits joined by underscores.
+- `down`, `force` and `drop` are refused with exit code 2 and the reason, without connecting: the migrations have no
+  down scripts, applied migrations are recorded by file name rather than as one version number, and the tool does not
+  delete data. Any other command, and an argument after `up` or `status`, is refused the same way. No arguments, and
+  `up`, apply the pending migrations as before.
+- The installation, contributing and bootstrap guides list only the commands the tool offers, and the bootstrap
+  guide's expected output is the output the tool prints.
+- Tests: `commands_test.go` (migrate command).
+
 ### Security — every dashboard page is served with a Content-Security-Policy
 
 - The dashboard sends a `Content-Security-Policy` header with the pages, static files and not-found answers it
