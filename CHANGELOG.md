@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — SECURITY.md describes the CSRF, SDK credential, configuration and personal-data controls the code has (#677)
+
+- `SECURITY.md` said CSRF was prevented with tokens, that SDK credentials were encrypted with Fernet and a system
+  keyring key, that several required secrets fell back to weak defaults when unset, and that all personal data was
+  encrypted at rest. The server issues and checks no CSRF token, `aim-sdk login` writes
+  `~/.aim/sdk_credentials.json` as plain JSON with file mode 0600, the server refuses to start without `JWT_SECRET`,
+  and the `users` table keeps `email` and `name` in plain `VARCHAR(255)` columns.
+- The page now says that the server reads no credential from a cookie and authenticates a request only by a token,
+  API key or signature sent in a request header; that the Python SDK stores its login tokens and agent keys
+  unencrypted, as plain JSON with file mode 0600; which missing, short or development-value secrets stop the server
+  from starting, and that `POSTGRES_SSL_MODE` still defaults to `disable`; and that the application does not encrypt
+  personal data at rest, with encryption in transit coming from the HTTPS endpoint in front of the server and from
+  `POSTGRES_SSL_MODE`.
+- A backend test (`apps/backend/cmd/server/security_policy_controls_contract_test.go`) fails if the page names a
+  token-based CSRF control, Fernet or keyring encryption, secrets that fall back to weak defaults, or encrypted
+  personal data, and checks each replacement statement against the code: no backend Go file reads a cookie or
+  installs a CSRF middleware, the SDK's credential writer stores JSON with mode 0600, the configuration validator and
+  key vault refuse the secrets the page names, and no migration changes the `users` email or name column.
+
 ### Fixed — The deployment, installation and troubleshooting pages name only files the repository carries (#674)
 
 - `docs/DEPLOYMENT.md`, `docs/guides/DEPLOYMENT_CHECKLIST.md`, `docs/guides/INSTALLATION.md`, `docs/quick-start.md`,
