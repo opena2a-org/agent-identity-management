@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http/httptest"
@@ -129,49 +130,88 @@ func TestProviderSignInDocFindings(t *testing.T) {
 	}, providerSignInDocFindings("sample.md", sample))
 }
 
-// providerSignInDocSkipDirs are directories that hold no documentation of this
-// repository: dependencies, build output and local tool state.
-var providerSignInDocSkipDirs = map[string]bool{
-	".git": true, "node_modules": true, ".next": true, "dist": true, "build": true,
-	"coverage": true, ".turbo": true, "vendor": true, ".venv": true, "venv": true,
-	".claude": true,
+// providerSignInDocFiles returns, relative to root and in git's order, every
+// tracked Markdown file and environment template: the files a reader of the
+// repository is given. The list is read from the index, so dependencies, build
+// output and any other untracked or ignored file are left out without being
+// named. A changelog records what changed and is not read as a guide.
+func providerSignInDocFiles(t *testing.T, root string) []string {
+	t.Helper()
+	requireGit(t)
+	out, err := gitIn(root, "ls-files", "-z")
+	require.NoError(t, err, "git ls-files in %s: this check reads the tracked file list and cannot run on an export", root)
+
+	var files []string
+	for _, rel := range strings.Split(out, "\x00") {
+		if rel == "" {
+			continue
+		}
+		name := rel[strings.LastIndex(rel, "/")+1:]
+		if name == "CHANGELOG.md" {
+			continue
+		}
+		if strings.HasSuffix(name, ".md") || name == ".env.example" {
+			files = append(files, rel)
+		}
+	}
+	return files
+}
+
+// The doc files are the tracked guides and templates: a file that is untracked
+// or ignored is not read, whatever its name or directory, and a tracked file
+// that is neither Markdown nor an environment template is not read either.
+func TestProviderSignInDocFilesAreTheTrackedGuides(t *testing.T) {
+	requireGit(t)
+	top := t.TempDir()
+	noHooks := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		base := []string{"-c", "core.hooksPath=" + noHooks}
+		if _, err := gitIn(top, append(base, args...)...); err != nil {
+			t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+		}
+	}
+	git("init", "--quiet")
+
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(top, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	}
+	tracked := []string{".env.example", ".gitignore", "CHANGELOG.md", "README.md", "docs/guide.md", "notes.txt"}
+	write(".gitignore", "build/\n")
+	for _, rel := range tracked {
+		if rel != ".gitignore" {
+			write(rel, "tracked "+rel+"\n")
+		}
+	}
+	git(append([]string{"add", "--"}, tracked...)...)
+
+	// Untracked, in a dotted directory, and ignored: none is a guide.
+	write("LOCAL.md", "untracked\n")
+	write(".tool/NOTES.md", "untracked\n")
+	write("build/out.md", "ignored\n")
+	write("build/.env.example", "ignored\n")
+
+	assert.Equal(t, []string{".env.example", "README.md", "docs/guide.md"}, providerSignInDocFiles(t, top))
 }
 
 // No guide, README or environment template tells a reader to configure or use
-// provider sign-in. A changelog records what changed and is not read as a guide.
+// provider sign-in.
 func TestDocsDescribeNoProviderSignIn(t *testing.T) {
 	root := aim03RepoRoot(t)
 
 	var findings []string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	for _, rel := range providerSignInDocFiles(t, root) {
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if errors.Is(err, fs.ErrNotExist) {
+			// Tracked but deleted from the working tree: there is no text to read.
+			continue
 		}
-		if d.IsDir() {
-			if path != root && providerSignInDocSkipDirs[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		name := d.Name()
-		if name == "CHANGELOG.md" || name == "CLAUDE.md" {
-			return nil
-		}
-		if !strings.HasSuffix(name, ".md") && name != ".env.example" {
-			return nil
-		}
-		body, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		findings = append(findings, providerSignInDocFindings(filepath.ToSlash(rel), string(body))...)
-		return nil
-	})
-	require.NoError(t, err)
+		require.NoError(t, err, rel)
+		findings = append(findings, providerSignInDocFindings(rel, string(body))...)
+	}
 	assert.Empty(t, findings,
 		"no route serves provider sign-in; describe POST /api/v1/auth/login/local instead:\n%s",
 		strings.Join(findings, "\n"))
