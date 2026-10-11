@@ -65,9 +65,13 @@ export function contentSecurityPolicy({
   return directives.map(([name, sources]) => `${name} ${sources.join(" ")}`).join("; ");
 }
 
-// The header rules for next.config.ts. Every path gets the policy; a Host that the
-// client would turn into a backend host gets the same policy with that host added to
-// connect-src. Next.js applies matching rules in order, so the second one wins there.
+// The header rules for next.config.ts. The first rule matches every path; a Host that
+// the client would turn into a backend host gets the same policy with that host added
+// to connect-src. Next.js applies matching rules in order, so the second one wins
+// there. Next.js sets a rule's headers on what it serves itself: a page, a static
+// file, a not-found answer. It does not set them on a path next.config.ts rewrites to
+// the backend, nor on a redirect from redirects() or for a trailing slash, so those
+// responses do not carry this policy.
 // The source is "/(.*)", not "/:path*": with Next's strict matching the latter does
 // not match "/".
 export function dashboardSecurityHeaders({
