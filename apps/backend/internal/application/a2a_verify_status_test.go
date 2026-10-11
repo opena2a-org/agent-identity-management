@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -180,6 +181,176 @@ func TestVerifyA2ARequestReturnsAnErrorWhenTheNonceCannotBeRecorded(t *testing.T
 	}
 	if err := agentMock.ExpectationsWereMet(); err != nil {
 		t.Errorf("agent reads: %v", err)
+	}
+}
+
+// A nonce the nonce table cannot record is a malformed request: an empty one,
+// one longer than the column, and one Postgres refuses as text. It is refused
+// with ErrInvalidA2ANonce before the nonce table or the agent is read, not
+// recorded and answered valid, and not left to fail the write.
+func TestVerifyA2ARequestRefusesANonceThatCannotBeRecorded(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	for name, nonce := range map[string]string{
+		"empty":                  "",
+		"65 characters":          strings.Repeat("a", MaxA2ANonceLength+1),
+		"65 two-byte characters": strings.Repeat("é", MaxA2ANonceLength+1),
+		"a NUL character":        "nonce\x00",
+		"not UTF-8":              "nonce\xff",
+	} {
+		t.Run(name, func(t *testing.T) {
+			grants := &fakeCapabilityReader{}
+			agentDB, agentMock := newSQLMock(t)
+			nonceDB, nonceMock := newSQLMock(t)
+			svc := a2aServiceForGrants(t, agentDB, nonceDB, grants)
+
+			req := signedA2ARequest(t, uuid.New(), priv)
+			req.Nonce = nonce
+			result, err := svc.VerifyA2ARequest(context.Background(), req)
+			if !errors.Is(err, ErrInvalidA2ANonce) {
+				t.Fatalf("VerifyA2ARequest answered %+v, %v for nonce %q, want ErrInvalidA2ANonce", result, err, nonce)
+			}
+			if result != nil {
+				t.Errorf("VerifyA2ARequest answered %+v with its error, want no result", result)
+			}
+			if grants.calls != 0 {
+				t.Errorf("the grant table was read %d times for a malformed nonce", grants.calls)
+			}
+			if err := nonceMock.ExpectationsWereMet(); err != nil {
+				t.Errorf("nonce reads: %v", err)
+			}
+			if err := agentMock.ExpectationsWereMet(); err != nil {
+				t.Errorf("agent reads: %v", err)
+			}
+		})
+	}
+}
+
+// The limit counts characters, as the VARCHAR(64) column does: a nonce of 64
+// two-byte characters is recorded and the request verifies.
+func TestVerifyA2ARequestAcceptsANonceOfSixtyFourCharacters(t *testing.T) {
+	id, orgID := uuid.New(), uuid.New()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	agentDB, agentMock := newSQLMock(t)
+	nonceDB, nonceMock := newSQLMock(t)
+	svc := a2aServiceForGrants(t, agentDB, nonceDB, &fakeCapabilityReader{grants: []*domain.AgentCapability{grant("api:call")}})
+
+	req := signedA2ARequest(t, id, priv)
+	req.Nonce = strings.Repeat("é", MaxA2ANonceLength)
+	expectAgentRow(agentMock, id, orgID, base64.StdEncoding.EncodeToString(pub))
+	nonceMock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM a2a_request_nonces WHERE nonce = \$1\)`).
+		WithArgs(req.Nonce).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	nonceMock.ExpectExec(`INSERT INTO a2a_request_nonces`).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	result, err := svc.VerifyA2ARequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("VerifyA2ARequest: %v", err)
+	}
+	if !result.Valid {
+		t.Fatalf("a request with a 64-character nonce did not verify: %q", result.Error)
+	}
+	if err := nonceMock.ExpectationsWereMet(); err != nil {
+		t.Errorf("nonce reads and writes: %v", err)
+	}
+}
+
+// A nonce the nonce table already holds is a replay: the request is not valid,
+// and neither the agent nor its grants are read and no nonce is recorded.
+func TestVerifyA2ARequestRefusesANonceFoundUsed(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	grants := &fakeCapabilityReader{grants: []*domain.AgentCapability{grant("api:call")}}
+	agentDB, agentMock := newSQLMock(t)
+	nonceDB, nonceMock := newSQLMock(t)
+	svc := a2aServiceForGrants(t, agentDB, nonceDB, grants)
+
+	req := signedA2ARequest(t, uuid.New(), priv)
+	nonceMock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM a2a_request_nonces WHERE nonce = \$1\)`).
+		WithArgs(req.Nonce).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	// Registered so a nonce write would match it; it must stay unmatched.
+	nonceMock.ExpectExec(`INSERT INTO a2a_request_nonces`).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	result, err := svc.VerifyA2ARequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("VerifyA2ARequest: %v", err)
+	}
+	if result.Valid {
+		t.Fatalf("a request whose nonce was found used verified as valid with capabilities %v", result.Capabilities)
+	}
+	if want := "nonce already used (replay attack)"; result.Error != want {
+		t.Errorf("verify result error = %q, want %q", result.Error, want)
+	}
+	if result.Capabilities != nil {
+		t.Errorf("the refused result carries capabilities %v", result.Capabilities)
+	}
+	if grants.calls != 0 {
+		t.Errorf("the grant table was read %d times for a replayed nonce", grants.calls)
+	}
+	if err := nonceMock.ExpectationsWereMet(); err == nil {
+		t.Error("the nonce was recorded again for a replayed request")
+	}
+	if err := agentMock.ExpectationsWereMet(); err != nil {
+		t.Errorf("agent reads: %v", err)
+	}
+}
+
+// An agent row that cannot be read says nothing about the request, so the
+// verification returns an error instead of the verdict "agent not found",
+// and spends no nonce. An agent that is not stored is still that verdict.
+func TestVerifyA2ARequestReturnsAnErrorWhenTheAgentCannotBeRead(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		answer    func(*sqlmock.ExpectedQuery)
+		wantError bool
+	}{
+		"a failed read": {
+			answer:    func(q *sqlmock.ExpectedQuery) { q.WillReturnError(errors.New("agents: connection reset")) },
+			wantError: true,
+		},
+		"no agent": {
+			answer: func(q *sqlmock.ExpectedQuery) { q.WillReturnRows(sqlmock.NewRows(agentByIDColumns)) },
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			agentDB, agentMock := newSQLMock(t)
+			nonceDB, nonceMock := newSQLMock(t)
+			svc := a2aServiceForGrants(t, agentDB, nonceDB, &fakeCapabilityReader{})
+
+			req := signedA2ARequest(t, uuid.New(), priv)
+			nonceMock.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM a2a_request_nonces WHERE nonce = \$1\)`).
+				WithArgs(req.Nonce).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+			// Registered so a nonce write would match it; it must stay unmatched.
+			nonceMock.ExpectExec(`INSERT INTO a2a_request_nonces`).WillReturnResult(sqlmock.NewResult(0, 1))
+			tc.answer(agentMock.ExpectQuery(`FROM agents\s+WHERE id = \$1`).WithArgs(req.AgentID))
+
+			result, err := svc.VerifyA2ARequest(context.Background(), req)
+			switch {
+			case tc.wantError && err == nil:
+				t.Fatalf("VerifyA2ARequest answered %+v when the agent could not be read, want an error", result)
+			case tc.wantError && result != nil:
+				t.Errorf("VerifyA2ARequest answered %+v with its error, want no result", result)
+			case !tc.wantError && err != nil:
+				t.Fatalf("VerifyA2ARequest: %v", err)
+			case !tc.wantError && (result.Valid || result.Error != "agent not found"):
+				t.Errorf("verify result = %+v, want not valid with the error %q", result, "agent not found")
+			}
+			if err := nonceMock.ExpectationsWereMet(); err == nil {
+				t.Error("the nonce was recorded for a request whose agent was not read")
+			}
+			if err := agentMock.ExpectationsWereMet(); err != nil {
+				t.Errorf("agent reads: %v", err)
+			}
+		})
 	}
 }
 

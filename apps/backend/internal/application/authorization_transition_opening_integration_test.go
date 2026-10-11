@@ -10,8 +10,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
@@ -377,6 +380,45 @@ func TestTransitionReplayStartsEachAgentAtTheRecordThatOpensItsHistory(t *testin
 		appendRawTransition(t, f, transition.OpeningEventID(f.agentID), "agent_suspended", state("verified"), state("suspended"))
 		refused(t, f)
 	})
+}
+
+// A change given the opening event id of another agent in the organization is
+// refused and leaves neither a change nor a record, so that agent's next
+// change, which writes its opening state there, is not refused.
+func TestTransitionChangeGivenAnotherAgentsOpeningEventIDIsRefused(t *testing.T) {
+	f := newTransitionFixture(t)
+	ctx := context.Background()
+	other := uuid.New()
+	f.insertAgent(t, other)
+	trace, err := transition.NewTraceID()
+	require.NoError(t, err)
+
+	_, err = f.rec.Record(ctx, transition.Change{
+		OrganizationID: f.orgID,
+		AgentID:        f.agentID,
+		Trigger:        transition.TriggerDirectGrant,
+		Actor:          transition.User(f.userID),
+		TraceID:        trace,
+		EventID:        transition.OpeningEventID(other),
+		Apply: func(ctx context.Context, tx *sql.Tx) error {
+			return repository.CreateCapabilityTx(ctx, tx, &domain.AgentCapability{
+				AgentID: f.agentID, CapabilityType: "files:read", GrantedBy: &f.userID, GrantedAt: time.Now(),
+			})
+		},
+	})
+	require.ErrorIs(t, err, transition.ErrInvalidChange)
+	current, err := transition.CurrentState(ctx, f.db, f.orgID, f.agentID)
+	require.NoError(t, err)
+	assert.Empty(t, current.GrantedScope, "the refused grant changed the agent")
+	assert.Empty(t, f.allTransitions(t), "the refused grant left a record")
+
+	_, err = f.capSvc.GrantCapability(ctx, other, "files:read", nil, &f.userID, "")
+	require.NoError(t, err, "the other agent's next change")
+	all := f.allTransitions(t)
+	require.Len(t, all, 2)
+	assert.Equal(t, transition.OpeningEventID(other), all[0].EventID)
+	assert.Equal(t, string(transition.TriggerOpeningState), all[0].Trigger)
+	assert.Equal(t, string(transition.TriggerDirectGrant), all[1].Trigger)
 }
 
 // stateMember is a state as a record's previous_state or new_state member.

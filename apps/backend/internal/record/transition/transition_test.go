@@ -9,11 +9,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
@@ -226,6 +228,52 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidChange, name)
 	}
 	assert.False(t, ran, "a refused change ran its statement")
+}
+
+// A change given the opening event id of another agent in its organization is
+// refused in its transaction, before the agent is read or its statement runs:
+// a record there would refuse that agent's next change. An event id that is no
+// agent's opening event id goes on to read the agent.
+func TestChangeRefusesAnotherAgentsOpeningEventID(t *testing.T) {
+	org, agent, other := uuid.New(), uuid.New(), uuid.New()
+	for name, tc := range map[string]struct {
+		eventID string
+		refused bool
+	}{
+		"another agent's opening event id": {OpeningEventID(other), true},
+		"a request's event id":             {RequestEventID(uuid.New()), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+			mock.ExpectBegin()
+			mock.ExpectQuery(`SELECT id FROM agents WHERE organization_id = \$1`).WithArgs(org).
+				WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(agent.String()).AddRow(other.String()))
+			read := errors.New("the agent's state was read")
+			if !tc.refused {
+				mock.ExpectQuery(`FROM agents\s+WHERE id = \$1 AND organization_id = \$2`).WillReturnError(read)
+			}
+			tx, err := db.Begin()
+			require.NoError(t, err)
+
+			ran := false
+			_, _, err = change(context.Background(), tx, Change{
+				OrganizationID: org,
+				AgentID:        agent,
+				Trigger:        TriggerDirectGrant,
+				EventID:        tc.eventID,
+				Apply:          func(context.Context, *sql.Tx) error { ran = true; return nil },
+			})
+			if tc.refused {
+				require.ErrorIs(t, err, ErrInvalidChange)
+			} else {
+				require.ErrorIs(t, err, read)
+			}
+			assert.False(t, ran, "the statement ran")
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 // A rejected request's record says it was rejected; no other trigger's record

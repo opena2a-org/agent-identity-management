@@ -14,7 +14,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
@@ -30,6 +32,16 @@ import (
 // answer whether an arbitrary agent id exists, for agents the caller cannot
 // otherwise see.
 var ErrConsentGrantorNotOwned = errors.New("grantor agent not found in this organization")
+
+// MaxA2ANonceLength is the longest nonce, in characters, a verified A2A request
+// may carry: the width of a2a_request_nonces.nonce, VARCHAR(64).
+const MaxA2ANonceLength = 64
+
+// ErrInvalidA2ANonce is returned by VerifyA2ARequest for a request whose nonce
+// cannot be recorded: an empty one, one longer than MaxA2ANonceLength
+// characters, or one that is not UTF-8 text without a NUL character. It is a
+// malformed request, not a verdict on one.
+var ErrInvalidA2ANonce = fmt.Errorf("nonce must be 1 to %d characters of UTF-8 text without a NUL character", MaxA2ANonceLength)
 
 // A2A Configuration Constants
 const (
@@ -502,13 +514,18 @@ type VerifyA2ARequestRequest struct {
 
 // VerifyA2ARequest verifies an incoming A2A request signature. A result that is
 // not valid is a verdict on the request. A read that fails (the nonce table, the
-// agent's grants), or a nonce that cannot be recorded, is returned as an error
-// instead: it says nothing about the request, and the caller must not report it
-// as an authentication failure.
+// agent row, the agent's grants), or a nonce that cannot be recorded, is
+// returned as an error instead: it says nothing about the request, and the
+// caller must not report it as an authentication failure. A nonce no request
+// may carry is returned as ErrInvalidA2ANonce before anything is read.
 func (s *A2AService) VerifyA2ARequest(
 	ctx context.Context,
 	req VerifyA2ARequestRequest,
 ) (*domain.A2ASignatureVerificationResult, error) {
+	if !validA2ANonce(req.Nonce) {
+		return nil, ErrInvalidA2ANonce
+	}
+
 	result := &domain.A2ASignatureVerificationResult{
 		Valid: false,
 	}
@@ -531,9 +548,13 @@ func (s *A2AService) VerifyA2ARequest(
 		return result, nil
 	}
 
-	// 3. Get the agent
+	// 3. Get the agent. Only an agent that is not stored is a verdict; a read
+	// that failed is returned as an error, as a failed nonce read is.
 	agent, err := s.agentRepo.GetByID(req.AgentID)
-	if err != nil || agent == nil {
+	if err != nil && !errors.Is(err, repository.ErrAgentNotFound) {
+		return nil, fmt.Errorf("failed to load agent: %w", err)
+	}
+	if agent == nil {
 		result.Error = "agent not found"
 		return result, nil
 	}
@@ -619,6 +640,16 @@ func (s *A2AService) VerifyA2ARequest(
 	result.AttestationValid = attestationValid
 
 	return result, nil
+}
+
+// validA2ANonce reports whether nonce can be recorded in a2a_request_nonces:
+// at least one and at most MaxA2ANonceLength characters, counted as Postgres
+// counts a VARCHAR, of UTF-8 text without the NUL character Postgres refuses.
+func validA2ANonce(nonce string) bool {
+	return nonce != "" &&
+		utf8.ValidString(nonce) &&
+		!strings.ContainsRune(nonce, 0) &&
+		utf8.RuneCountInString(nonce) <= MaxA2ANonceLength
 }
 
 // cardAttestationCurrent reports whether card is valid and carries an
