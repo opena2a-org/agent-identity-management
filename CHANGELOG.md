@@ -454,6 +454,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Routing SDK verifications through the 5-step engine is still open.
 - Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
 
+### Fixed — `GET /api/v1/status` reports no `oauth` feature, and the README names both verification routes (#685)
+
+- The `features` object in the `GET /api/v1/status` answer no longer has an `oauth` member. It was computed from
+  whether `GOOGLE_CLIENT_ID` is set, and no route serves provider sign-in (#667), so it described nothing the server
+  does. The other members are unchanged. A backend test fails if a source file of the server package reads a
+  provider setting.
+- The README's trust-score paragraph says that a verification request through either route, `POST
+  /api/v1/verifications` or `POST /api/v1/sdk-api/verifications`, does not recalculate the score; the two routes
+  share a handler, and the paragraph named only the first.
+- `npx @opena2a/aim-sdk init` reads the bootstrap token from `AIM_BOOTSTRAP_TOKEN` only and refuses a flag that
+  carries it; see the TypeScript SDK changelog.
+
 ### Removed — the guides no longer describe sign-in with Google, Microsoft or Okta, which no route serves (#667)
 
 - Users sign in with an email and password: the dashboard posts them to `POST /api/v1/public/login`, and API clients

@@ -214,28 +214,44 @@ describe('a token from AIM_BOOTSTRAP_TOKEN registers my-first-agent', () => {
 });
 
 describe('flags', () => {
-  it('--token and --name register under the given name', async () => {
-    const code = await runInit(['--token', TOKEN, '--url', baseUrl, '--name', 'billing-bot'], deps({}));
+  it('--name registers under the given name', async () => {
+    const code = await runInit(['--url', baseUrl, '--name', 'billing-bot'], deps());
     expect(code, allOutput()).toBe(0);
     expect(seen[0].headers['x-aim-bootstrap-token']).toBe(TOKEN);
     expect(JSON.parse(seen[0].body).name).toBe('billing-bot');
     expect(existsSync(credentialsPath('billing-bot'))).toBe(true);
-    // The flag form is visible in the process list; the user is told so.
-    expect(errLines.join('\n')).toContain('AIM_BOOTSTRAP_TOKEN');
     expect(allOutput()).not.toContain(TOKEN);
   });
 
-  it('accepts --flag=value forms, and --token wins over the environment', async () => {
-    const other = 'aim_ob_fromEnvironmentfromEnvironmentfromEnvironm';
-    const code = await runInit(
-      [`--token=${TOKEN}`, `--url=${baseUrl}`, '--name=ops agent'],
-      deps({ AIM_BOOTSTRAP_TOKEN: other }),
-    );
+  it('accepts --flag=value forms', async () => {
+    const code = await runInit([`--url=${baseUrl}`, '--name=ops agent'], deps());
     expect(code, allOutput()).toBe(0);
     expect(seen[0].headers['x-aim-bootstrap-token']).toBe(TOKEN);
     expect(JSON.parse(seen[0].body).name).toBe('ops agent');
     // The file name is sanitized exactly as the Python SDK does it.
     expect(existsSync(join(home, '.aim', 'agents', 'ops_agent.json'))).toBe(true);
+  });
+
+  it('a token given as a flag is refused before any request, in every form, without echoing it', async () => {
+    // A flag value is visible in the process list and shell history, so the
+    // token is read from the environment only; the flag is refused even when
+    // the environment holds a token too, and even without a value.
+    const forms = [
+      ['--token', TOKEN, '--url', baseUrl],
+      [['--token', TOKEN].join('='), '--url', baseUrl],
+      ['--url', baseUrl, '--token'],
+    ];
+    for (const argv of forms) {
+      errLines = [];
+      expect(await runInit(argv, deps({ AIM_BOOTSTRAP_TOKEN: TOKEN })), argv.join(' ')).toBe(1);
+      expect(errLines[0]).toBe(
+        'Error: the bootstrap token is read from AIM_BOOTSTRAP_TOKEN, not from a flag ' +
+          '(a flag value is visible in the process list and shell history)',
+      );
+      expect(allOutput()).not.toContain(TOKEN);
+    }
+    expect(seen).toHaveLength(0);
+    expect(initHelpText()).not.toContain('--token');
   });
 
   it('--help prints usage without contacting a server', async () => {
@@ -272,15 +288,6 @@ describe('refusals before any request', () => {
     expect(seen).toHaveLength(0);
     expect(allOutput()).not.toContain(notAToken);
     expect(allOutput()).not.toContain('shell history');
-  });
-
-  it('a --token value that is not a bootstrap token is refused with the shell history note', async () => {
-    const notAToken = 'not-a-token';
-    expect(await runInit(['--token', notAToken, '--url', baseUrl], deps({}))).toBe(1);
-    expect(seen).toHaveLength(0);
-    expect(errLines[0]).toBe('Note: --token is visible in the process list and shell history; AIM_BOOTSTRAP_TOKEN is not.');
-    expect(errLines[1]).toContain('that is not a bootstrap token');
-    expect(allOutput()).not.toContain(notAToken);
   });
 
   it('an invalid --url is refused', async () => {
