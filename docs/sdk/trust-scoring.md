@@ -52,7 +52,7 @@ Not every factor is wired to a live signal source in every AIM deployment. Per A
 | 5 | Compliance Score | **Conditional** — requires `ComplianceSnapshotRepository` to be wired AND an AIM-framework snapshot to exist for the agent's organization | **Excluded** from the composite (weight redistributed); reported in `excludedFactors` |
 | 6 | Age & History | **Live** — bucketed from `agent.CreatedAt` (<7d: 0.30, <30d: 0.50, <90d: 0.75, 90+: 1.0) | N/A (always measured) |
 | 7 | Drift Detection | **Conditional** — requires `alertRepo`; a wired repo with zero drift alerts scores 1.0 (measured absence of drift) | **Excluded** when `alertRepo` is nil OR the agent-alert query errors |
-| 8 | User Feedback | **Conditional** — requires `UserFeedbackRepository` (wired in production `main.go`) AND at least one feedback row (`POST /agents/:id/feedback`) | **Excluded** when un-wired, on query error, or with zero feedback rows |
+| 8 | User Feedback | **Conditional** — requires `UserFeedbackRepository` (wired in production `main.go`) AND at least one feedback row (`POST /api/v1/trust-score/agents/:id/feedback`) | **Excluded** when un-wired, on query error, or with zero feedback rows |
 | 9 | Execution Isolation | **Conditional** — requires `IsolationAttestationRepository` to be wired; the agent submits a runtime-isolation attestation via the SDK. An unverified report is capped at `0.65`, and any report older than 90 days scores the baseline | 0.3 low baseline when wired but no attestation, or when the attestation is stale (both deliberate scoring choices, both stay in the composite); **excluded** only when the repository is un-wired |
 
 Implications:
@@ -689,7 +689,7 @@ Default thresholds by risk level:
 | high       | 0.5            |
 | critical   | 0.7            |
 
-Admins can customize thresholds per capability via the REST API (`PUT /capabilities/:id`).
+Each capability definition carries its own threshold (`minTrustScore`). The server registers no API route that changes it.
 
 ### Delegation Trust Attenuation
 

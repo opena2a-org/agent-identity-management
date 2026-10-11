@@ -161,47 +161,44 @@ Agent created:
 
 ## Step 3: Centralized Audit Log
 
-When agents are connected to a server, all audit events are sent to the central PostgreSQL database. Query them via the API:
+When agents are connected to a server, all audit events are sent to the central PostgreSQL database. The organization's audit log needs an administrator's access token: sign in as the administrator Step 1 seeded and keep the `accessToken` from the answer.
 
 ```bash
-curl http://localhost:8080/api/v1/audit?limit=20
+set -a; . ./.env; set +a
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/public/login \
+  -H "Content-Type: application/json" \
+  -d "{\"email\": \"$ADMIN_EMAIL\", \"password\": \"$ADMIN_PASSWORD\"}" | jq -r '.accessToken')
+
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:8080/api/v1/admin/audit-logs?limit=20"
 ```
 
-Expected output:
+The answer has this shape:
 
 ```json
 {
-  "events": [
+  "logs": [
     {
-      "id": "evt_a1b2c3",
-      "agentId": "aim_9c4b2e1f",
-      "agentName": "data-processor",
-      "action": "identity:create",
-      "target": "data-processor",
-      "result": "allowed",
-      "timestamp": "2026-03-16T14:00:00Z",
-      "hash": "sha256:f8a1..."
-    },
-    {
-      "id": "evt_d4e5f6",
-      "agentId": "aim_2d8f5a3c",
-      "agentName": "code-reviewer",
-      "action": "identity:create",
-      "target": "code-reviewer",
-      "result": "allowed",
-      "timestamp": "2026-03-16T14:01:00Z",
-      "hash": "sha256:c2d4..."
+      "id": "aa0e8400-e29b-41d4-a716-446655440000",
+      "organizationId": "660e8400-e29b-41d4-a716-446655440000",
+      "action": "create",
+      "resourceType": "agent",
+      "resourceId": "550e8400-e29b-41d4-a716-446655440000",
+      "metadata": {},
+      "timestamp": "2026-03-16T14:00:00Z"
     }
   ],
-  "total": 2,
-  "limit": 20
+  "total": 1,
+  "limit": 20,
+  "offset": 0
 }
 ```
 
-Filter by agent:
+Filter by resource with `entity_type` and `entity_id`, or list one agent's entries by its server ID:
 
 ```bash
-curl http://localhost:8080/api/v1/audit?agentId=aim_9c4b2e1f&limit=50
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:8080/api/v1/agents/550e8400-e29b-41d4-a716-446655440000/audit-logs"
 ```
 
 ## Step 4: Service Tokens for Agents

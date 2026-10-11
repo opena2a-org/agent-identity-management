@@ -78,10 +78,14 @@ curl -X POST "http://localhost:8080/api/v1/mcp-servers" \
   }'
 ```
 
+Linking an agent to MCP servers takes a signed-in member's access token (the `accessToken` from `POST /api/v1/public/login`); an API key is not accepted here. `mcpServerIds` holds MCP server IDs or names.
+
 ```bash
 # Link agent to MCP server
-curl -X POST "http://localhost:8080/api/v1/agents/$AGENT_ID/mcp-servers/$MCP_ID" \
-  -H "Authorization: Bearer $AIM_API_KEY"
+curl -X PUT "http://localhost:8080/api/v1/agents/$AGENT_ID/mcp-servers" \
+  -H "Authorization: Bearer $AIM_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"mcpServerIds\": [\"$MCP_ID\"]}"
 ```
 
 ---

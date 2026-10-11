@@ -634,20 +634,16 @@ sudo chown $USER ~/.aim/credentials.json
 
 **Immediate Response**:
 ```bash
-# Revoke all tokens for a user
-curl -X POST http://localhost:8080/api/v1/admin/revoke-user-tokens \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"user_id": "COMPROMISED_USER_ID"}'
-
-# Force password reset
-curl -X POST http://localhost:8080/api/v1/admin/force-password-reset \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"user_id": "COMPROMISED_USER_ID"}'
+# Deactivate the account (administrator's session)
+curl -X POST http://localhost:8080/api/v1/admin/users/COMPROMISED_USER_ID/deactivate \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 
 # Notify user
 # Investigate source of compromise
 # Review access logs
 ```
+
+The server registers no route that revokes another user's tokens or forces their password to be reset. The user revokes their own SDK tokens with `POST /api/v1/users/me/sdk-tokens/revoke-all` and changes their password with `POST /api/v1/auth/change-password`.
 
 ---
 

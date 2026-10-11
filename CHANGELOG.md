@@ -11,6 +11,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The API reference pages, tutorials and guides name only routes the server registers (#671)
+
+- `docs/API.md`, `docs/guides/API_REFERENCE.md`, `docs/guides/API_ENDPOINT_SUMMARY.md`, `docs/api/direct-api-usage.md`,
+  the API quickstart and MCP registration tutorials, the fleet governance, trust scoring, A2A and capability scope
+  pages, both troubleshooting pages, the SDK test plan and the Python SDK's LangChain guide named methods and paths
+  that are not in the server's route table, among them `/api/v1/keys`, `/api/v1/trust-scores/{agentId}`,
+  `/api/v1/audit-logs`, `/api/v1/alerts`, `/api/v1/compliance/reports`, `/auth/google`, `/api/v1/auth/login/:provider`,
+  `/api/agents/register`, `/api/v1/audit`, `PATCH /api/v1/agents/{id}`, `/debug/pprof/heap` and `/swagger/`. Each now
+  names the route that does the job (`/api/v1/api-keys`, `/api/v1/trust-score/agents/{id}`, `/api/v1/admin/audit-logs`,
+  `/api/v1/admin/alerts`, `/api/v1/compliance/export`, `/api/v1/public/login`, `POST /api/v1/agents`,
+  `POST /api/v1/agents/{id}/reactivate`) or says the server has none.
+- The rate limits read as the limiter sets them: 100 requests a minute on most routes and 10 on the credential routes,
+  with a 429 body of `{"error": "Rate limit exceeded. Please try again later."}`. An error is documented as a JSON body
+  whose `error` member is a message, and the pagination section gives each list route's own response, such as
+  `{"agents": [...], "total": n}` for `GET /api/v1/agents`, in place of a common envelope.
+- The agent registration examples send the `display_name` and `agent_type` values the server requires, and linking an
+  agent to MCP servers is `PUT /api/v1/agents/{id}/mcp-servers` with a member's access token. The endpoint summary no
+  longer reports endpoint counts and completion percentages.
+- A backend test (`apps/backend/cmd/server/api_docs_routes_contract_test.go`) reads these pages and fails on a method
+  and path the server does not register.
+
 ### Fixed — `migrate status` lists migrations without changing the database, and `migrate down`, `force` and `drop` are refused (#668)
 
 - `cmd/migrate` read no arguments. On an empty PostgreSQL 18 database, `status`, `create add_column_to_agents`,

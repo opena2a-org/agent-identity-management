@@ -211,7 +211,7 @@ ls ~/.aim/credentials.json
 **Check**:
 ```bash
 # Test connectivity
-curl -v http://localhost:8080/api/v1/health
+curl -v http://localhost:8080/health
 
 # Check firewall
 sudo lsof -i :8080
@@ -328,10 +328,9 @@ WHERE id = 'your-agent-id';
 **Fix**:
 ```bash
 # Reactivate agent via dashboard
-# Or API call
-curl -X PATCH http://localhost:8080/api/v1/agents/YOUR_ID \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"is_active": true}'
+# Or API call (a manager's or administrator's session)
+curl -X POST http://localhost:8080/api/v1/agents/YOUR_ID/reactivate \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
@@ -440,11 +439,9 @@ VACUUM ANALYZE;
 ```bash
 # Check memory usage
 docker stats identity-backend
-
-# Check Go memory profile
-curl http://localhost:8080/debug/pprof/heap > heap.prof
-go tool pprof -http=:8081 heap.prof
 ```
+
+The server does not serve Go's `pprof` profiling endpoints.
 
 **Solutions**:
 

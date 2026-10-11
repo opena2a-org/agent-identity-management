@@ -1,9 +1,6 @@
 # AIM API Endpoint Summary
 
-**Total Endpoints**: 62+ (103% of 60+ target)
-**Status**: ✅ Complete
-**Backend Status**: ✅ Compiles Successfully
-**Date**: October 6, 2025
+This page lists the server's main routes by area. It is not the whole route table: that is `apps/backend/cmd/server/main.go` and `apps/backend/cmd/server/sdk_api_routes.go`. A backend test (`apps/backend/cmd/server/api_docs_routes_contract_test.go`) fails when this page names a method and path the server does not register.
 
 ---
 
@@ -62,12 +59,14 @@ POST /api/v1/agents/agent_123/verify-capability
 
 ---
 
-### 2. **Authentication & Authorization** - 4 endpoints
+### 2. **Authentication & Authorization** - 6 endpoints
 
 | Method | Endpoint | Description | Authentication |
 |--------|----------|-------------|----------------|
+| POST | `/api/v1/public/register` | Request a user account (waits for an administrator's approval) | None |
+| POST | `/api/v1/public/login` | Sign in with email and password | None |
 | POST | `/api/v1/auth/login/local` | Email and password login; returns an access token and a refresh token | None |
-| POST | `/api/v1/auth/refresh` | Exchange a refresh token for new tokens; the refresh token is rotated | None |
+| POST | `/api/v1/auth/refresh` | Exchange a refresh token (in the JSON body) for new tokens; the refresh token is rotated | None |
 | POST | `/api/v1/auth/logout` | User logout; revokes the bearer and the refresh token in the JSON body, reports what was revoked | None |
 | GET | `/api/v1/auth/me` | Get current user info | JWT Required |
 
@@ -85,20 +84,21 @@ POST /api/v1/agents/agent_123/verify-capability
 | PUT | `/api/v1/agents/:id` | Update agent | JWT Required | Member+ |
 | DELETE | `/api/v1/agents/:id` | Delete agent | JWT Required | Manager+ |
 | POST | `/api/v1/agents/:id/verify` | Admin verification of agent | JWT Required | Manager+ |
-| POST | `/api/v1/agents/:id/verify-action` | **Runtime verification** ⭐️ | JWT Required | Any |
-| POST | `/api/v1/agents/:id/log-action/:audit_id` | **Log action result** ⭐️ | JWT Required | Any |
+| POST | `/api/v1/agents/:id/verify-capability` | **Runtime verification** ⭐️ | JWT Required | Any |
+| POST | `/api/v1/agents/:id/log-capability/:audit_id` | **Log action result** ⭐️ | JWT Required | Any |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/agent_handler.go`
 
 ---
 
-### 4. **API Key Management** - 3 endpoints
+### 4. **API Key Management** - 4 endpoints
 
 | Method | Endpoint | Description | Authentication | Authorization |
 |--------|----------|-------------|----------------|---------------|
 | GET | `/api/v1/api-keys/` | List API keys | JWT Required | Any |
 | POST | `/api/v1/api-keys/` | Create API key | JWT Required | Member+ |
-| DELETE | `/api/v1/api-keys/:id` | Revoke API key | JWT Required | Member+ |
+| PATCH | `/api/v1/api-keys/:id/disable` | Disable API key | JWT Required | Member+ |
+| DELETE | `/api/v1/api-keys/:id` | Delete a disabled API key | JWT Required | Member+ |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/apikey_handler.go`
 
@@ -111,7 +111,7 @@ POST /api/v1/agents/agent_123/verify-capability
 | POST | `/api/v1/trust-score/calculate/:id` | Trigger trust score calculation | JWT Required | Manager+ |
 | GET | `/api/v1/trust-score/agents/:id` | Get agent trust score | JWT Required | Any |
 | GET | `/api/v1/trust-score/agents/:id/history` | Get trust score history | JWT Required | Any |
-| GET | `/api/v1/trust-score/trends` | Get trust score trends | JWT Required | Any |
+| GET | `/api/v1/trust-score/agents/:id/breakdown` | Get each factor's weight and contribution | JWT Required | Any |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/trustscore_handler.go`
 
@@ -133,35 +133,28 @@ POST /api/v1/agents/agent_123/verify-capability
 
 ---
 
-### 7. **Compliance & Reporting** - 12 endpoints
+### 7. **Compliance & Reporting** - 10 endpoints
 
 | Method | Endpoint | Description | Authentication | Authorization |
 |--------|----------|-------------|----------------|---------------|
-| POST | `/api/v1/compliance/reports/generate` | Generate compliance report | JWT Required | Admin |
 | GET | `/api/v1/compliance/status` | Get compliance status | JWT Required | Admin |
 | GET | `/api/v1/compliance/metrics` | Get compliance metrics | JWT Required | Admin |
-| GET | `/api/v1/compliance/audit-log/export` | Export audit log | JWT Required | Admin |
 | GET | `/api/v1/compliance/access-review` | Get access review | JWT Required | Admin |
-| GET | `/api/v1/compliance/data-retention` | Get data retention status | JWT Required | Admin |
 | POST | `/api/v1/compliance/check` | Run compliance check | JWT Required | Admin |
-| GET | `/api/v1/compliance/frameworks` | List compliance frameworks | JWT Required | Admin |
-| GET | `/api/v1/compliance/reports/:framework` | Get framework-specific report | JWT Required | Admin |
-| POST | `/api/v1/compliance/scan/:framework` | Run framework scan | JWT Required | Admin |
-| GET | `/api/v1/compliance/violations` | Get compliance violations | JWT Required | Admin |
-| POST | `/api/v1/compliance/remediate/:violation_id` | Remediate violation | JWT Required | Admin |
+| GET | `/api/v1/compliance/export` | Download a compliance report (`format=csv` or `json`) | JWT Required | Admin |
+| GET | `/api/v1/compliance/trending` | Get compliance score history | JWT Required | Admin |
+| POST | `/api/v1/compliance/snapshot` | Record a point-in-time compliance score | JWT Required | Admin |
+| GET | `/api/v1/compliance/evidence` | List collected evidence | JWT Required | Admin |
+| POST | `/api/v1/compliance/evidence/collect` | Collect evidence for a check | JWT Required | Admin |
+| GET | `/api/v1/compliance/evidence/check/:checkName` | Get evidence for one check | JWT Required | Admin |
 
-**Supported Frameworks**:
-- SOC 2
-- HIPAA
-- GDPR
-- ISO 27001
-- NIST
+The audit log export is `GET /api/v1/admin/audit-logs/export`. The compliance export supports one framework, `aim`.
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/compliance_handler.go`
 
 ---
 
-### 8. **MCP Server Management** - 8 endpoints
+### 8. **MCP Server Management** - 9 endpoints
 
 | Method | Endpoint | Description | Authentication | Authorization |
 |--------|----------|-------------|----------------|---------------|
@@ -173,7 +166,7 @@ POST /api/v1/agents/agent_123/verify-capability
 | POST | `/api/v1/mcp-servers/:id/verify` | Cryptographic verification | JWT Required | Manager+ |
 | POST | `/api/v1/mcp-servers/:id/keys` | Add public key | JWT Required | Member+ |
 | GET | `/api/v1/mcp-servers/:id/verification-status` | Get verification status | JWT Required | Any |
-| POST | `/api/v1/mcp-servers/:id/verify-action` | **Runtime verification** ⭐️ | JWT Required | Any |
+| POST | `/api/v1/mcp-servers/:id/verify-capability` | **Runtime verification** ⭐️ | JWT Required | Any |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/mcp_handler.go`
 
@@ -183,24 +176,26 @@ POST /api/v1/agents/agent_123/verify-capability
 
 | Method | Endpoint | Description | Authentication | Authorization |
 |--------|----------|-------------|----------------|---------------|
+| GET | `/api/v1/security/dashboard` | Get the security dashboard | JWT Required | Manager+ |
+| GET | `/api/v1/security/alerts` | List security alerts | JWT Required | Manager+ |
 | GET | `/api/v1/security/threats` | Get detected threats | JWT Required | Manager+ |
 | GET | `/api/v1/security/anomalies` | Get anomaly detections | JWT Required | Manager+ |
 | GET | `/api/v1/security/metrics` | Get security metrics | JWT Required | Manager+ |
-| GET | `/api/v1/security/scan/:id` | Run security scan on agent | JWT Required | Manager+ |
-| GET | `/api/v1/security/incidents` | Get security incidents | JWT Required | Manager+ |
-| POST | `/api/v1/security/incidents/:id/resolve` | Resolve incident | JWT Required | Manager+ |
+| GET | `/api/v1/security/violations` | Get capability violations | JWT Required | Manager+ |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/security_handler.go`
 
 ---
 
-### 10. **Analytics & Reporting** - 4 endpoints
+### 10. **Analytics & Reporting** - 6 endpoints
 
 | Method | Endpoint | Description | Authentication | Authorization |
 |--------|----------|-------------|----------------|---------------|
+| GET | `/api/v1/analytics/dashboard` | Get dashboard statistics | JWT Required | Any |
 | GET | `/api/v1/analytics/usage` | Get usage statistics | JWT Required | Any |
+| GET | `/api/v1/analytics/activity` | Get an activity summary | JWT Required | Any |
 | GET | `/api/v1/analytics/trends` | Get trust score trends | JWT Required | Any |
-| GET | `/api/v1/analytics/reports/generate` | Generate analytics report | JWT Required | Any |
+| GET | `/api/v1/analytics/verification-activity` | Get verification activity | JWT Required | Any |
 | GET | `/api/v1/analytics/agents/activity` | Get agent activity | JWT Required | Any |
 
 **Implementation**: `apps/backend/internal/interfaces/http/handlers/analytics_handler.go`
@@ -240,9 +235,13 @@ POST /api/v1/agents/agent_123/verify-capability
    - `POST /api/v1/auth/login/local`
 
 2. **JWT Tokens**:
-   - Issued after a successful login
+   - Issued when a user signs in with email and password (`POST /api/v1/public/login`)
    - Used for subsequent API calls
    - Include in header: `Authorization: Bearer <token>`
+
+3. **API Keys**: created with `POST /api/v1/api-keys`, sent in `X-API-Key` or `Authorization: Bearer <key>`
+
+The server registers no single sign-on (OAuth provider) login routes.
 
 ### Authorization Roles
 - **Viewer**: Read-only access
@@ -257,34 +256,6 @@ POST /api/v1/agents/agent_123/verify-capability
 - `MemberMiddleware`: Requires Member+ role
 - `ManagerMiddleware`: Requires Manager+ role
 - `AdminMiddleware`: Requires Admin role
-
----
-
-## 📈 Endpoint Statistics
-
-### By Category
-| Category | Count | Percentage |
-|----------|-------|------------|
-| Runtime Verification (Core) | 3 | 5% |
-| Agent Management | 8 | 13% |
-| MCP Server Management | 9 | 15% |
-| Compliance & Reporting | 12 | 19% |
-| Admin & User Management | 7 | 11% |
-| Security Dashboard | 6 | 10% |
-| Trust Scoring | 4 | 6% |
-| Webhooks | 5 | 8% |
-| Analytics | 4 | 6% |
-| API Keys | 3 | 5% |
-| Authentication | 4 | 6% |
-| Health & Monitoring | 3 | 5% |
-| **TOTAL** | **62+** | **100%** |
-
-### By Authentication Requirement
-- **No Auth Required**: 3 endpoints (health checks, email and password login)
-- **JWT Required**: 59+ endpoints
-- **Admin Only**: 20+ endpoints
-- **Manager+**: 12+ endpoints
-- **Member+**: 10+ endpoints
 
 ---
 
@@ -372,85 +343,9 @@ type AgentCapabilities struct {
 
 ## 📝 API Documentation
 
-### OpenAPI/Swagger
-- **Available at**: `/swagger/` (when implemented)
-- **Version**: 1.0
-- **Format**: OpenAPI 3.0
-
-### SDK Support (Planned)
-- **Python**: `aim-sdk-python`
-- **TypeScript**: `@aim/sdk`
-- **Go**: `github.com/opena2a/aim-sdk-go`
+The server serves no OpenAPI or Swagger document. The API references are [docs/API.md](../API.md) and [API_REFERENCE.md](API_REFERENCE.md).
 
 ---
 
-## 🔍 Verification Checklist
-
-### Backend ✅
-- [x] All 62+ endpoints implemented
-- [x] Backend compiles without errors
-- [x] Routes configured in main.go
-- [x] Handlers implemented
-- [x] Services implemented
-- [x] Repositories implemented
-- [x] Database migrations created
-
-### Core Mission ✅
-- [x] ADR-006 created documenting architecture
-- [x] Runtime verification endpoints implemented
-- [x] Capability schema defined
-- [x] Audit logging integrated
-
-### Documentation ✅
-- [x] API endpoint summary created
-- [x] Architecture decision records
-- [x] Code comments and examples
-
-### Pending 🚧
-- [ ] Database migrations executed
-- [ ] Full capability matching logic
-- [ ] Complete audit log persistence
-- [ ] SDK client libraries
-- [ ] Frontend UI redesign
-- [ ] Integration testing
-- [ ] Performance benchmarking
-
----
-
-## 📊 Project Progress
-
-**Overall Completion**: 62/60+ endpoints (103%)
-
-**Status by Feature**:
-- ✅ Authentication & Authorization: 100%
-- ✅ Agent Management: 100%
-- ✅ MCP Server Management: 100%
-- ✅ Runtime Verification: 100%
-- ✅ Trust Scoring: 100%
-- ✅ Admin & User Management: 100%
-- ✅ Compliance Reporting: 100%
-- ✅ Security Dashboard: 100%
-- ✅ Analytics & Reporting: 100%
-- ✅ Webhooks: 100%
-- 🚧 Frontend UI: 60%
-- 🚧 Database Setup: 80%
-- 🚧 Testing: 20%
-
----
-
-## 🎉 Success Criteria Met
-
-✅ **60+ Endpoints Target**: 62+ endpoints implemented (103%)
-✅ **Core Mission Defined**: ADR-006 documents runtime verification
-✅ **Backend Compiles**: Zero compilation errors
-✅ **Clean Architecture**: Domain → Application → Infrastructure → Interfaces
-✅ **Multi-Tenancy**: Organization-level isolation
-✅ **Security**: OAuth2, JWT, RLS, Rate limiting
-✅ **Advanced Features**: Compliance, audit logs, trust scoring
-
----
-
-**Last Updated**: October 6, 2025
-**Created By**: Claude Sonnet 4.5
 **Project**: Agent Identity Management (AIM)
 **Repository**: github.com/opena2a-org/agent-identity-management

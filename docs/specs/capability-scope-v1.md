@@ -38,7 +38,7 @@ The TODO comment at `agent_service.go:1383-1386` explicitly anticipates this:
 // - Context-aware matching
 ```
 
-### 2.2 Path B: FGA engine (`/api/v1/fga/authorize`)
+### 2.2 Path B: FGA engine (`POST /api/v1/agents/:id/authorize`)
 
 This is the newer, fuller path: explicit per-capability policy rows in `fga_policies`, evaluated by `FGAEngine.Authorize` through the 5-step model.
 
@@ -61,7 +61,7 @@ Here Step 2 IS implemented. `req.Attributes[]` is matched against `policy.Allowe
 | Reads `resource` parameter? | No (declared, ignored) | Yes, against `allowed_objects` |
 | Enforces attribute scoping? | No | Yes (from `fga_policies`) |
 | Used by SDK `verify_capability` | Yes | No (separate endpoint) |
-| Used by `/api/v1/fga/authorize` | No | Yes |
+| Used by `POST /api/v1/agents/:id/authorize` | No | Yes |
 
 The implication for operators: setting `capability_scope` on a grant is purely decorative under Path A, and Path B ignores it entirely. The attribute-level scoping that the 5-step deck promises only flows through Path B, and only when an `fga_policies` row exists for the capability — not from the JSON on the grant.
 
