@@ -1923,7 +1923,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// ============================================================================
 
 	// A2A signature verification (no auth - validates incoming A2A requests)
-	v1.Post("/a2a/verify", h.A2A.VerifyRequest)
+	mountA2AVerifyRoute(v1, h.A2A.VerifyRequest)
 
 	// A2A routes (multi-auth: API key, agent signature, or JWT)
 	a2a := v1.Group("/a2a")
@@ -1996,7 +1996,6 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 
 	// SDK Compatibility Routes (alternative paths that SDKs expect)
 	a2a.Post("/sign", h.A2A.SignRequestAlt)
-	a2a.Post("/verify", h.A2A.VerifyRequest) // SDK verify request endpoint
 	a2aHeld.Get("/trust/:id", h.A2A.GetTrustScoreAlt)
 	a2a.Put("/trust/:id", h.A2A.RefuseTrustScoreWrite)          // 405: the composite is measured, not asserted
 	a2a.Post("/trust/:id/interaction", h.A2A.RecordInteraction) // SDK record interaction
@@ -2019,6 +2018,20 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2aAdmin.Use(middleware.AdminMiddleware())
 	a2aAdmin.Post("/cleanup-nonces", h.A2A.CleanupExpiredNonces)
 	a2aAdmin.Post("/refresh-cards", h.A2A.RefreshExpiredCards)
+}
+
+// mountA2AVerifyRoute mounts POST /a2a/verify on v1, without authentication:
+// the receiver of an A2A request verifies its signature with no credentials of
+// its own. It is mounted before the authenticated /a2a group, and is the path's
+// only mount: any other method is answered 405 here, where the group's
+// authentication would answer it 401. It is a function of its own so the
+// mounted router can be exercised in a test.
+func mountA2AVerifyRoute(v1 fiber.Router, verify fiber.Handler) {
+	v1.Post("/a2a/verify", verify)
+	v1.All("/a2a/verify", func(c fiber.Ctx) error {
+		c.Set(fiber.HeaderAllow, fiber.MethodPost)
+		return fiber.ErrMethodNotAllowed
+	})
 }
 
 // mountVerificationEventRoutes mounts /verification-events on v1. It is a
