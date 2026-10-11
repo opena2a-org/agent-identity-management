@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -o /bin/aim-server ./cmd/server
 
 # Build the migrate and bootstrap binaries so operators can run them inside the
-# container (`docker compose run --rm aim-backend /app/aim-migrate` then
+# container (`docker compose run --rm backend /app/aim-migrate` then
 # `aim-bootstrap --default`). Bootstrap is the post-B2 seed path for the default
 # admin user; migration 013 only seeds the org now.
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \

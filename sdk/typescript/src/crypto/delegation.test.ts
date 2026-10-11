@@ -790,8 +790,6 @@ describe('Trust attenuation through delegation hops', () => {
       delegatePublicKey: b.publicKey,
       scopes: ['search', 'read', 'write'],
     });
-    d1.trustAttenuation = 0.5;
-    d1.minDelegatedTrust = 0.3;
 
     const d2 = await createDelegation({
       delegatorKeyPair: b,
@@ -799,8 +797,6 @@ describe('Trust attenuation through delegation hops', () => {
       scopes: ['search', 'read'],
       parentExpiresAt: d1.expiresAt,
     });
-    d2.trustAttenuation = 0.5;
-    d2.minDelegatedTrust = 0.3;
 
     const d3 = await createDelegation({
       delegatorKeyPair: c,
@@ -810,11 +806,77 @@ describe('Trust attenuation through delegation hops', () => {
     });
 
     // Trust: 1.0 -> 0.5 -> 0.25 (below 0.3 minimum)
-    const result = await verifyDelegationChain([d1, d2, d3], { rootTrustScore: 1.0 });
+    const result = await verifyDelegationChain([d1, d2, d3], {
+      rootTrustScore: 1.0,
+      trustAttenuation: 0.5,
+      minDelegatedTrust: 0.3,
+    });
     expect(result.valid).toBe(false);
     expect(result.results[1].effectiveTrust).toBeCloseTo(0.5, 4);
     expect(result.results[2].effectiveTrust).toBeCloseTo(0.25, 4);
-    expect(result.results[2].error).toMatch(/below minimum threshold/);
+    expect(result.results[2].error).toMatch(/below minimum threshold 0.3/);
+  });
+
+  // trustAttenuation and minDelegatedTrust on a delegation are outside its
+  // signature. If the verifier read them, whoever passes a chain on could set
+  // the factor to 1 and the floor to 0 and keep every signature valid.
+  async function threeHopChain() {
+    const [a, b, c, d] = await Promise.all([generateKeyPair(), generateKeyPair(), generateKeyPair(), generateKeyPair()]);
+    const d1 = await createDelegation({ delegatorKeyPair: a, delegatePublicKey: b.publicKey, scopes: ['search'] });
+    const d2 = await createDelegation({ delegatorKeyPair: b, delegatePublicKey: c.publicKey, scopes: ['search'], parentExpiresAt: d1.expiresAt });
+    const d3 = await createDelegation({ delegatorKeyPair: c, delegatePublicKey: d.publicKey, scopes: ['search'], parentExpiresAt: d2.expiresAt });
+    return [d1, d2, d3];
+  }
+
+  it('a factor and a floor set on the delegations change nothing: the verifier\'s options apply', async () => {
+    const chain = await threeHopChain();
+    for (const delegation of chain) {
+      delegation.trustAttenuation = 1;
+      delegation.minDelegatedTrust = 0;
+    }
+
+    const result = await verifyDelegationChain(chain, { trustAttenuation: 0.5, minDelegatedTrust: 0.3 });
+    expect(result.results.map((r) => r.signatureValid)).toEqual([true, true, true]);
+    expect(result.results[1].effectiveTrust).toBeCloseTo(0.5, 4);
+    expect(result.results[2].effectiveTrust).toBeCloseTo(0.25, 4);
+    expect(result.results[2].error).toMatch(/below minimum threshold 0.3/);
+    expect(result.valid).toBe(false);
+  });
+
+  it('with no options the defaults apply, whatever factor the delegations carry', async () => {
+    const chain = await threeHopChain();
+    for (const delegation of chain) delegation.trustAttenuation = 1;
+
+    const result = await verifyDelegationChain(chain);
+    expect(result.valid).toBe(true);
+    expect(result.results.map((r) => r.effectiveTrust)).toEqual([1, expect.closeTo(0.8, 4), expect.closeTo(0.64, 4)]);
+  });
+
+  it('the floor is the verifier\'s minDelegatedTrust, not the one a delegation carries', async () => {
+    const chain = await threeHopChain();
+    for (const delegation of chain) delegation.minDelegatedTrust = 0;
+
+    const result = await verifyDelegationChain(chain, { minDelegatedTrust: 0.7 });
+    expect(result.valid).toBe(false);
+    expect(result.results[1].error).toBeUndefined();
+    expect(result.results[2].effectiveTrust).toBeCloseTo(0.64, 4);
+    expect(result.results[2].error).toMatch(/below minimum threshold 0.7/);
+  });
+
+  it('refuses a factor or a floor outside 0 to 1 before verifying anything', async () => {
+    const chain = await threeHopChain();
+    for (const options of [
+      { trustAttenuation: 1.5 },
+      { trustAttenuation: -0.1 },
+      { trustAttenuation: Number.NaN },
+      { minDelegatedTrust: 2 },
+      { minDelegatedTrust: Number.NaN },
+    ]) {
+      const result = await verifyDelegationChain(chain, options);
+      expect(result.valid, JSON.stringify(options)).toBe(false);
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].error).toBe('trustAttenuation and minDelegatedTrust must be numbers from 0 to 1');
+    }
   });
 
   it('should use default attenuation values when not specified', async () => {

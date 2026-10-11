@@ -165,7 +165,6 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
 
 3. **[Audit Logs](./security/audit-logs.md)** *(Coming Soon)*
    - Complete audit trail
-   - Immutable logging
    - Compliance queries
    - Export formats
 

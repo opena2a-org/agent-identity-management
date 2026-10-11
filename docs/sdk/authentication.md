@@ -593,7 +593,7 @@ AIM's Ed25519 authentication meets SOC 2 Type II requirements:
 
 2. **CC6.2 - Access Authorization**
    - ✅ Agent identity verification
-   - ✅ Immutable audit trail
+   - ✅ Audit trail of agent actions
    - ✅ Challenge-response prevents impersonation
 
 3. **CC6.7 - Data Encryption**

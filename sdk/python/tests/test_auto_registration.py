@@ -35,7 +35,7 @@ def test_auto_registration():
             description="Test agent with high trust score for auto-approval",
             agent_type="ai_agent",
             version="1.0.0",
-            repository_url="https://github.com/opena2a/aim-sdk",  # +10 points
+            repository_url="https://github.com/opena2a-org/agent-identity-management",  # +10 points
             documentation_url="https://docs.aim.opena2a.org",      # +5 points
             force_new=True  # Force new registration for testing
         )

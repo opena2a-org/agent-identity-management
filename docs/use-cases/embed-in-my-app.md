@@ -247,7 +247,7 @@ Delete operation blocked by policy
 
 - Cryptographic identity embedded in your application code
 - Capability enforcement without external dependencies
-- A tamper-evident audit log for every action
+- An audit log entry for every action
 - Trust scores your users or upstream systems can query
 
 ## Next Steps

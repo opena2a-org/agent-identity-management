@@ -254,7 +254,7 @@ func checkBackendCommand(word string, shipped map[string]bool) string {
 }
 
 // TestDocumentedDockerCommandsUseNamesComposeDefines reads every docker and
-// docker compose command in the repository's markdown and checks the names it
+// docker compose command in the repository's markdown and Dockerfiles and checks the names it
 // gives against the compose files. A `docker compose` command must name a
 // service of the compose file it addresses (`backend`, not the container name
 // `aim-backend`); a `docker` command must name a container a compose file
@@ -292,6 +292,10 @@ func TestDocumentedDockerCommandsUseNamesComposeDefines(t *testing.T) {
 			}
 			composeFiles[p] = f
 		case strings.HasSuffix(name, ".md") && !(p == filepath.Join(root, "CHANGELOG.md")):
+			docs = append(docs, p)
+		case strings.HasPrefix(name, "Dockerfile"):
+			// A Dockerfile's comments tell operators what to run against
+			// the image it builds.
 			docs = append(docs, p)
 		}
 		return nil

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
@@ -151,9 +152,10 @@ func TestSDKHandler_generateSetupInstructions(t *testing.T) {
 	javaInstructions := handler.generateSetupInstructions("java", "aim-sdk-test")
 	assert.Contains(t, javaInstructions, "java")
 
-	// Test Go instructions
+	// The repository carries no Go SDK, so Go gets the generic text and no
+	// sample that imports a module nobody can fetch.
 	goInstructions := handler.generateSetupInstructions("go", "aim-sdk-test")
-	assert.Contains(t, goInstructions, "go")
+	assert.Equal(t, handler.generateSetupInstructions("unknown", "aim-sdk-test"), goInstructions)
 
 	// Test JavaScript instructions
 	jsInstructions := handler.generateSetupInstructions("javascript", "aim-sdk-test")
@@ -162,6 +164,18 @@ func TestSDKHandler_generateSetupInstructions(t *testing.T) {
 	// Test unknown SDK (default case)
 	unknownInstructions := handler.generateSetupInstructions("unknown", "aim-sdk-test")
 	assert.Contains(t, unknownInstructions, "SDK documentation")
+}
+
+// The README a downloaded SDK carries names no module or repository under the
+// opena2a GitHub account: the project has none there, so `go get` or a clone
+// of such a path fails.
+func TestSDKHandler_generateSetupInstructionsNameNoOpena2aAccountPath(t *testing.T) {
+	handler := &SDKHandler{}
+	link := regexp.MustCompile(`(?i)github\.com[/:]opena2a/`)
+	for _, sdkType := range []string{"python", "java", "go", "javascript", "unknown"} {
+		instructions := handler.generateSetupInstructions(sdkType, "aim-sdk-"+sdkType)
+		assert.Empty(t, link.FindAllString(instructions, -1), "%s: the setup README names a path under the opena2a GitHub account", sdkType)
+	}
 }
 
 func TestGetSDKDisplayName(t *testing.T) {
