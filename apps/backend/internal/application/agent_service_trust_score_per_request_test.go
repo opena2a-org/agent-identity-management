@@ -63,6 +63,10 @@ func verificationScoreWrites(t *testing.T, mode domain.EnforcementMode, capabili
 	mockCapabilityRepo.On("GetActiveCapabilitiesByAgentID", agent.ID).Return([]*domain.AgentCapability{
 		{ID: uuid.New(), AgentID: agent.ID, CapabilityType: "db:read"},
 	}, nil)
+	// A granted capability is checked against its definition's minimum; the
+	// core db:read definition is low-risk and has none.
+	mockCapabilityRepo.On("GetCapabilityDefinition", "db", "read", &agent.OrganizationID).
+		Return(definitionWithMinimum("db:read", "low"), nil)
 	mockOrgRepo.On("GetByID", agent.OrganizationID).Return(&domain.Organization{
 		ID:              agent.OrganizationID,
 		EnforcementMode: mode,

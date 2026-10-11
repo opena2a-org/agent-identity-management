@@ -1743,6 +1743,23 @@ func (s *AgentService) VerifyCapability(
 		}
 	}
 
+	// 6.0 Per-capability trust threshold. The capability's definition (the
+	// organization's own, else the core one) names the minimum trust score an
+	// agent needs to use it, even when it is granted. In MONITORING mode the request
+	// goes on to the checks below and is allowed, as it is for every other
+	// check on this path.
+	minTrustScore, hasMinTrustScore, defErr := s.capabilityMinTrustScore(capability, agent.OrganizationID)
+	if defErr != nil {
+		return false, fmt.Sprintf("Failed to fetch the definition of capability '%s'", capability), auditID, defErr
+	}
+	belowCapabilityThreshold := ""
+	if hasMinTrustScore && agent.TrustScore < minTrustScore {
+		if policyEnforcementMode != domain.EnforcementModeMonitoring {
+			return false, TrustBelowCapabilityThresholdReason(agent.TrustScore, minTrustScore, capability), auditID, nil
+		}
+		belowCapabilityThreshold = trustBelowCapabilityThreshold(agent.TrustScore, minTrustScore, capability)
+	}
+
 	// 6.1 Trust Score Policy Evaluation
 	trustScoreBlocked, trustScoreAlert, trustScorePolicyName, err := s.policyService.EvaluateTrustScoreLow(
 		ctx, agent, capability, resource, auditID,
@@ -1865,7 +1882,29 @@ func (s *AgentService) VerifyCapability(
 	}
 
 	// 7. ✅ ALL POLICIES PASSED - Action is allowed
+	if belowCapabilityThreshold != "" {
+		return true, "Action allowed by MONITORING mode: " + belowCapabilityThreshold, auditID, nil
+	}
 	return true, "Action matches registered capabilities and passes all security policies", auditID, nil
+}
+
+// capabilityMinTrustScore returns the minimum trust score the definition of
+// capability requires in the organization, and whether it requires one. A
+// capability that is not in namespace:action form, or that has no
+// definition, requires none.
+func (s *AgentService) capabilityMinTrustScore(capability string, orgID uuid.UUID) (float64, bool, error) {
+	namespace, action, err := domain.ParseCapability(capability)
+	if err != nil {
+		return 0, false, nil
+	}
+	def, err := s.capabilityRepo.GetCapabilityDefinition(namespace, action, &orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return def.MinTrustScore, def.MinTrustScore > 0, nil
 }
 
 // matchesCapability checks if a requested capability matches a registered capability
