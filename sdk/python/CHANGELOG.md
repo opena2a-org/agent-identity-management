@@ -45,6 +45,18 @@ What changed:
 
 ### Fixed
 
+- The `secure()` calls in `docs/sdk/python.md`, `docs/sdk/authentication.md`, the LangChain and CrewAI
+  integration guides and the example guides under `docs/` no longer pass `private_key=`
+  ([#665](https://github.com/opena2a-org/agent-identity-management/issues/665)). `secure()` has no such
+  parameter, and each of those 20 calls stopped with
+  `TypeError: register_agent() got an unexpected keyword argument 'private_key'`. Where a guide registers
+  the agent, the call drops `private_key=` (the production example in `docs/sdk/python.md` passes an agent
+  API key instead): `secure()` generates the keypair and saves it to `~/.aim/agents/<name>.json`, so the
+  example and integration guides no longer ask you to register the agent in the
+  dashboard or export `AIM_PRIVATE_KEY` first. Where a guide signs with a keypair you hold, it passes the
+  keypair, the agent ID and `aim_url` to `AIMClient(...)`. The `secure()` parameter list in
+  `docs/sdk/python.md` names the parameters `secure()` takes, and no longer lists `private_key` or
+  `auto_verify`.
 - `requirements.txt`, which ships in the SDK download, lists `PyJWT`, which the SDK uses to read its
   sign-in tokens ([#664](https://github.com/opena2a-org/agent-identity-management/issues/664)). So do the
   dependency install commands in `docs/sdk/python.md`, `sdk/python/docs/ENV_CONFIG.md` and the integration

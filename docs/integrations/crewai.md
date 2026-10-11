@@ -95,26 +95,12 @@ result = secured_crew.kickoff()
 
 ---
 
-## Step 1: Register Crew (30 seconds)
+## Step 1: Save Your API Key (30 seconds)
 
-### In AIM Dashboard
-
-1. **Login** to http://localhost:3000
-2. **Navigate**: Agents → Register New Agent
-3. **Fill in**:
-   ```
-   Agent Name: research-crew
-   Agent Type: Multi-Agent Team
-   Description: CrewAI research team (Researcher + Writer)
-   ```
-4. **Click** "Register Agent"
-5. **Copy** the private key
-
-### Save Private Key
+There is no crew to register in the dashboard: `secure()` registers `research-crew` the first time the script runs, with the credentials in the SDK you downloaded. It generates the crew's Ed25519 keypair locally and saves it to `~/.aim/agents/research-crew.json`; later runs load that file. An agent of the same name registered in the dashboard first would make that registration fail, because AIM keeps agent names unique within an organization.
 
 ```bash
 # Save to environment variable
-export AIM_PRIVATE_KEY="your-private-key-here"
 export OPENAI_API_KEY="your-openai-api-key"
 ```
 
@@ -140,8 +126,7 @@ import os
 # 🔐 ONE LINE - Secure your crew!
 aim_crew = secure(
     name="research-crew",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 # Initialize LLM
@@ -309,7 +294,6 @@ if __name__ == "__main__":
 
 ```bash
 # Make sure environment variables are set
-export AIM_PRIVATE_KEY="your-key"
 export OPENAI_API_KEY="your-openai-key"
 export SERPER_API_KEY="your-serper-key"  # For search tool
 export AIM_URL="http://localhost:8080"
@@ -636,9 +620,8 @@ response = secured_crew.kickoff(inputs={"ticket_id": "T-12345"})
 **Error**: `AIMError: Agent 'research-crew' not registered`
 
 **Solution**:
-1. Register crew in AIM dashboard first
-2. Verify `AIM_PRIVATE_KEY` is set correctly
-3. Check AIM backend is running: `curl http://localhost:8080/health`
+1. Check that `~/.aim/agents/research-crew.json` exists: `secure()` writes it when it registers the crew
+2. Check AIM backend is running: `curl http://localhost:8080/health`
 
 ### Issue: "CrewAI tools not verified"
 
@@ -670,8 +653,6 @@ response = secured_crew.kickoff(inputs={"ticket_id": "T-12345"})
 
 ## ✅ Checklist
 
-- [ ] Crew registered in AIM dashboard
-- [ ] Private key saved securely
 - [ ] CrewAI installed (`pip install crewai`)
 - [ ] AIM SDK downloaded from dashboard
 - [ ] SDK dependencies installed (`pip install keyring PyNaCl requests cryptography PyJWT`)

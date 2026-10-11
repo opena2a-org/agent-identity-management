@@ -95,25 +95,11 @@ docker exec -i test-postgres psql -U postgres -d testdb < schema.sql
 
 ---
 
-## Step 2: Register Agent (30 seconds)
+## Step 2: Save Credentials (30 seconds)
 
-### In AIM Dashboard
-
-1. **Login** to http://localhost:3000
-2. **Navigate**: Agents → Register New Agent
-3. **Fill in**:
-   ```
-   Agent Name: database-agent
-   Agent Type: AI Agent
-   Description: Secure database access with risk assessment
-   ```
-4. **Click** "Register Agent"
-5. **Copy** the private key
-
-### Save Credentials
+There is no agent to register in the dashboard: `secure()` registers `database-agent` the first time the script runs, with the credentials in the SDK you downloaded. It generates the agent's Ed25519 keypair locally and saves it to `~/.aim/agents/database-agent.json`; later runs load that file. An agent of the same name registered in the dashboard first would make that registration fail, because AIM keeps agent names unique within an organization.
 
 ```bash
-export AIM_PRIVATE_KEY="your-aim-private-key"
 export DATABASE_URL="postgresql://postgres:testpass@localhost:5432/testdb"
 export AIM_URL="http://localhost:8080"
 ```
@@ -140,8 +126,7 @@ from contextlib import contextmanager
 # 🔐 ONE LINE - Secure your agent!
 agent = secure(
     name="database-agent",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 
@@ -528,7 +513,6 @@ if __name__ == "__main__":
 
 ```bash
 # Set environment variables
-export AIM_PRIVATE_KEY="your-key"
 export DATABASE_URL="postgresql://postgres:testpass@localhost:5432/testdb"
 export AIM_URL="http://localhost:8080"
 

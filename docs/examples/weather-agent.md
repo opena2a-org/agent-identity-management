@@ -28,29 +28,15 @@ A simple AI agent that:
 
 ---
 
-## Step 1: Register Agent (30 seconds)
+## Step 1: Save Your API Key (30 seconds)
 
-### In AIM Dashboard
-
-1. **Login** to http://localhost:3000
-2. **Navigate**: Agents → Register New Agent
-3. **Fill in**:
-   ```
-   Agent Name: weather-agent
-   Agent Type: AI Agent
-   Description: Fetches weather data from OpenWeatherMap API
-   ```
-4. **Click** "Register Agent"
-5. **Copy** the private key shown (only shown once!)
-
-### Save Private Key
+There is no agent to register in the dashboard: `secure()` registers `weather-agent` the first time the script runs, with the credentials in the SDK you downloaded. It generates the agent's Ed25519 keypair locally and saves it to `~/.aim/agents/weather-agent.json`; later runs load that file. An agent of the same name registered in the dashboard first would make that registration fail, because AIM keeps agent names unique within an organization.
 
 ```bash
 # Save to environment variable
-export AIM_PRIVATE_KEY="your-private-key-here"
+export OPENWEATHER_API_KEY="your-openweather-api-key"
 
 # Or add to .env file
-echo "AIM_PRIVATE_KEY=your-private-key-here" >> .env
 echo "OPENWEATHER_API_KEY=your-openweather-api-key" >> .env
 ```
 
@@ -74,8 +60,7 @@ from typing import Dict, Optional
 # 🔐 ONE LINE - Secure your agent!
 agent = secure(
     name="weather-agent",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 class WeatherAgent:
@@ -194,7 +179,6 @@ if __name__ == "__main__":
 
 ```bash
 # Make sure environment variables are set
-export AIM_PRIVATE_KEY="your-key"
 export OPENWEATHER_API_KEY="your-openweather-key"
 export AIM_URL="http://localhost:8080"
 
@@ -292,8 +276,7 @@ No security alerts. Your agent is behaving normally. ✅
 ```python
 agent = secure(
     name="weather-agent",
-    aim_url="http://localhost:8080",
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url="http://localhost:8080"
 )
 ```
 
@@ -552,8 +535,7 @@ docker compose restart aim-backend
 
 ## ✅ Checklist
 
-- [ ] Agent registered in AIM dashboard
-- [ ] Private key saved securely
+- [ ] AIM SDK downloaded from the dashboard
 - [ ] OpenWeatherMap API key obtained
 - [ ] Code runs without errors
 - [ ] Dashboard shows agent status
