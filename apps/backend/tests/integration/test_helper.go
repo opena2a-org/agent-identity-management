@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,12 +22,28 @@ type TestConfig struct {
 	TestTimeout  time.Duration
 }
 
+var testBaseURLDeprecationOnce sync.Once
+
+// getBaseURL returns the address of the backend under test: BACKEND_URL, or
+// http://localhost:8080 when it is unset. TEST_BASE_URL is deprecated and is
+// read only when BACKEND_URL is unset. Every helper in this package takes its
+// address from here.
+func getBaseURL() string {
+	if url := os.Getenv("BACKEND_URL"); url != "" {
+		return url
+	}
+	if url := os.Getenv("TEST_BASE_URL"); url != "" {
+		testBaseURLDeprecationOnce.Do(func() {
+			fmt.Fprintln(os.Stderr, "integration tests: TEST_BASE_URL is deprecated; set BACKEND_URL instead")
+		})
+		return url
+	}
+	return "http://localhost:8080"
+}
+
 // GetTestConfig returns test configuration from environment or defaults
 func GetTestConfig() *TestConfig {
-	baseURL := os.Getenv("TEST_BASE_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:8080"
-	}
+	baseURL := getBaseURL()
 
 	// TEST_ADMIN_PASSWORD is the bootstrap-printed password from
 	// `aim-bootstrap --default` (post-B2 deploys) or the legacy default

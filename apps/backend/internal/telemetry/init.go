@@ -37,13 +37,19 @@ const (
 	dialTimeout        = 5 * time.Second
 )
 
+// ErrDisabled is returned by Init when Config.Endpoint is empty and
+// OTEL_EXPORTER_OTLP_ENDPOINT is set to the empty string. Init then installs
+// no provider and dials nothing, so there is no exporter to flush at shutdown.
+var ErrDisabled = errors.New("telemetry: disabled, OTEL_EXPORTER_OTLP_ENDPOINT is set and empty")
+
 // Config controls provider wiring.
 type Config struct {
 	// ServiceName populates the `service.name` resource attribute.
 	ServiceName string
 	// ServiceVersion populates the `service.version` resource attribute.
 	ServiceVersion string
-	// Endpoint is the OTLP gRPC endpoint (host:port). Empty = "localhost:4317".
+	// Endpoint is the OTLP gRPC endpoint (host:port). Empty = the value of
+	// OTEL_EXPORTER_OTLP_ENDPOINT, or "localhost:4317" when that is unset.
 	Endpoint string
 	// Insecure controls TLS. Demo stack runs without TLS.
 	Insecure bool
@@ -57,7 +63,8 @@ type Config struct {
 // in the background — the server does not crash.
 //
 // Reads OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME if Config fields
-// are empty.
+// are empty. An OTEL_EXPORTER_OTLP_ENDPOINT set to the empty string turns
+// telemetry off: Init returns ErrDisabled and a nil shutdown func.
 func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error, err error) {
 	if cfg.ServiceName == "" {
 		cfg.ServiceName = os.Getenv("OTEL_SERVICE_NAME")
@@ -66,9 +73,14 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		}
 	}
 	if cfg.Endpoint == "" {
-		cfg.Endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-		if cfg.Endpoint == "" {
+		endpoint, set := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")
+		switch {
+		case set && endpoint == "":
+			return nil, ErrDisabled
+		case endpoint == "":
 			cfg.Endpoint = defaultEndpoint
+		default:
+			cfg.Endpoint = endpoint
 		}
 	}
 	if cfg.ServiceVersion == "" {

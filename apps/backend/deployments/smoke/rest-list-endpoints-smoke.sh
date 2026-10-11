@@ -21,7 +21,10 @@
 # What it does, in order:
 #   1. Pre-flight: docker, curl, jq, go, openssl on PATH.
 #   2. Throwaway Postgres (aim-listsmoke-postgres) on $SMOKE_POSTGRES_PORT.
-#   3. Build + run the backend on $SMOKE_BACKEND_PORT. Wait on /health.
+#   3. Build + run the backend on $SMOKE_BACKEND_PORT, its metrics listener
+#      on 127.0.0.1:$SMOKE_METRICS_PORT, with Redis and OpenTelemetry off
+#      (REDIS_HOST and OTEL_EXPORTER_OTLP_ENDPOINT set to the empty string).
+#      Wait on /health.
 #   4. Seed admin via bootstrap; reset force_password_change; login.
 #   5. MCP list contract: create tag -> create server with that tag ->
 #      seed one 'tool' capability row -> GET /api/v1/mcp-servers and assert
@@ -48,6 +51,7 @@ SMOKE_DIR="$(pwd)"
 BACKEND_DIR="$(cd ../.. && pwd)"
 
 SMOKE_BACKEND_PORT="${SMOKE_BACKEND_PORT:-18081}"
+SMOKE_METRICS_PORT="${SMOKE_METRICS_PORT:-19465}"
 SMOKE_POSTGRES_PORT="${SMOKE_POSTGRES_PORT:-55433}"
 SMOKE_PG_CONTAINER="${SMOKE_PG_CONTAINER:-aim-listsmoke-postgres}"
 SMOKE_PG_PASSWORD="${SMOKE_PG_PASSWORD:-listsmoke_postgres_password}"
@@ -61,6 +65,7 @@ API="http://localhost:${SMOKE_BACKEND_PORT}/api/v1"
 
 echo "==> AIM REST list-endpoints smoke (hermetic)"
 echo "    Backend  : localhost:${SMOKE_BACKEND_PORT}"
+echo "    Metrics  : 127.0.0.1:${SMOKE_METRICS_PORT}"
 echo "    Postgres : localhost:${SMOKE_POSTGRES_PORT} (container ${SMOKE_PG_CONTAINER})"
 
 echo
@@ -131,6 +136,7 @@ echo "==> [3/6] Build + run backend (no OTel)"
         ADMIN_EMAIL="$ADMIN_EMAIL" \
         ADMIN_PASSWORD="$ADMIN_PASSWORD" \
         OTEL_EXPORTER_OTLP_ENDPOINT="" \
+        METRICS_LISTEN_ADDR="127.0.0.1:${SMOKE_METRICS_PORT}" \
         "$BACKEND_BIN" >"$BACKEND_LOG" 2>&1 &
     echo $! > "$SMOKE_DIR/.list-smoke-backend.pid"
 )

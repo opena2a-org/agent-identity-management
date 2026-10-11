@@ -21,8 +21,9 @@
 #      Grafana) from the existing docker-compose.yml under this run's own
 #      compose project. Wait on /ready.
 #   4. Build the backend binary and run it in the background on
-#      $SMOKE_BACKEND_PORT (default 18080), pointing at the throwaway
-#      Postgres + OTLP collector. Wait on /health.
+#      $SMOKE_BACKEND_PORT (default 18080), with its metrics listener on
+#      127.0.0.1:$SMOKE_METRICS_PORT (default 19464), pointing at the
+#      throwaway Postgres + OTLP collector. Wait on /health.
 #   5. Reset force_password_change=FALSE on the default admin (migration 013
 #      ships the row with the flag set, which would block the public-login
 #      flow even after ADMIN_PASSWORD rewrites the hash).
@@ -70,6 +71,7 @@ GRAFANA_PORT="${GRAFANA_PORT:-3001}"
 # Throwaway backend + Postgres on alt ports so the smoke does not collide
 # with a user's long-running aim-backend / aim-postgres.
 SMOKE_BACKEND_PORT="${SMOKE_BACKEND_PORT:-18080}"
+SMOKE_METRICS_PORT="${SMOKE_METRICS_PORT:-19464}"
 SMOKE_POSTGRES_PORT="${SMOKE_POSTGRES_PORT:-55432}"
 # One compose project per run, with container names to match, so this script
 # only ever stops or removes what it started itself.
@@ -106,6 +108,7 @@ JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 
 echo "==> AIM real-backend smoke (hermetic)"
 echo "    Backend     : localhost:${SMOKE_BACKEND_PORT}"
+echo "    Metrics     : 127.0.0.1:${SMOKE_METRICS_PORT}"
 echo "    Postgres    : localhost:${SMOKE_POSTGRES_PORT} (container ${SMOKE_PG_CONTAINER})"
 echo "    OTLP gRPC   : localhost:${OTEL_GRPC_PORT}"
 echo "    Tempo HTTP  : localhost:${TEMPO_HTTP_PORT}"
@@ -226,6 +229,7 @@ echo "==> [4/8] Build + run backend"
         ADMIN_EMAIL="$ADMIN_EMAIL" \
         ADMIN_PASSWORD="$ADMIN_PASSWORD" \
         OTEL_EXPORTER_OTLP_ENDPOINT="localhost:${OTEL_GRPC_PORT}" \
+        METRICS_LISTEN_ADDR="127.0.0.1:${SMOKE_METRICS_PORT}" \
         "$BACKEND_BIN" >"$BACKEND_LOG" 2>&1 &
     echo $! > "$DEMO_DIR/.smoke-backend.pid"
 )

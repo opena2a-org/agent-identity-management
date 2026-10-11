@@ -132,6 +132,21 @@ Run `make -C tests coverage` to generate current coverage reports.
 - Test type validation against specs
 - Ensure cross-SDK consistency
 
+## Backend integration tests
+
+The Go suite in `apps/backend/tests/integration/` sends HTTP requests to a running backend.
+
+| Variable | Default | Read as |
+|---|---|---|
+| `BACKEND_URL` | `http://localhost:8080` | The address of the backend under test, for every test in the suite. |
+| `TEST_BASE_URL` | none | Deprecated. Read only when `BACKEND_URL` is unset, with a note on standard error; set `BACKEND_URL` instead. |
+| `TEST_ADMIN_PASSWORD` | the legacy seed password in `test_helper.go` | The password of `admin@opena2a.org`, the account the suite signs in with. |
+
+```bash
+cd apps/backend
+BACKEND_URL=http://localhost:8080 TEST_ADMIN_PASSWORD='<admin password>' go test ./tests/integration/
+```
+
 ## CI Integration
 
 The Makefile provides CI-ready targets:

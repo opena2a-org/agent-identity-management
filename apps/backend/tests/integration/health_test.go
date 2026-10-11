@@ -3,7 +3,6 @@ package integration
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,17 +38,6 @@ func TestHealthEndpointWithInvalidMethod(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode, "Health endpoint should only accept GET")
-}
-
-// getBaseURL returns the base URL for the API server
-// Override with BACKEND_URL environment variable
-func getBaseURL() string {
-	if url := os.Getenv("BACKEND_URL"); url != "" {
-		return url
-	}
-	// Default to localhost:8080
-	// In CI/CD, set BACKEND_URL environment variable
-	return "http://localhost:8080"
 }
 
 // ensureAIMBackendRunning checks if the AIM backend is running on the expected port

@@ -11,6 +11,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off (#688)
+
+- When `REDIS_HOST` is set to the empty string, the backend makes no Redis connection and logs
+  `Redis disabled (REDIS_HOST is set and empty)`. When it is unset, the backend still tries `localhost` on `REDIS_PORT`.
+- When `OTEL_EXPORTER_OTLP_ENDPOINT` is set to the empty string, the backend installs no trace, metric or log exporter,
+  dials no collector, and logs `OpenTelemetry disabled`. When it is unset, the endpoint is still `localhost:4317`.
+- Measured on one host with both variables set to the empty string and nothing listening on `localhost:6379` or
+  `localhost:4317`: the backend built from the previous commit logged `Redis connection failed: dial tcp [::1]:6379`,
+  took 5.08 s to exit after SIGTERM, and logged `OpenTelemetry shutdown error` for `dial tcp [::1]:4317`. This build
+  exited in 0.08 s and logged neither.
+- `apps/backend/deployments/otel-demo/smoke-backend.sh` and `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh`
+  set `METRICS_LISTEN_ADDR` for the backend they start, to `127.0.0.1:$SMOKE_METRICS_PORT` (default 19464 and 19465),
+  instead of leaving it on the default `127.0.0.1:9464`.
+- Tests: `internal/telemetry/init_test.go`, `cmd/server/redis_startup_test.go`, `TestLoad_RedisHost` in
+  `internal/config/config_test.go`.
+
+### Changed — the backend integration tests read their address from `BACKEND_URL` (#688)
+
+- Every test in `apps/backend/tests/integration/` takes the backend address from `BACKEND_URL`, default
+  `http://localhost:8080`. `TEST_BASE_URL` is deprecated: it is read only when `BACKEND_URL` is unset, with a note on
+  standard error. Before, the helpers built on `NewTestContext` read only `TEST_BASE_URL` and `getBaseURL` read only
+  `BACKEND_URL`.
+- `tests/README.md` names the variables, and `docs/testing/release-smoke.md` gives the suite's path as
+  `apps/backend/tests/integration/` and its run command.
+- The A2A progressive-load row of `docs/testing/release-smoke.md` starts the dashboard with
+  `node .next/standalone/apps/web/server.js` after copying the static files beside it, as the frontend image does;
+  `next start` printed that it does not work with the `output: 'standalone'` build.
+- Tests: `tests/integration/base_url_test.go`.
+
 ### Changed — the backend test that reads the guides reads the tracked file list (#686)
 
 - The test in `apps/backend/cmd/server/provider_sign_in_docs_test.go` that fails if a guide, README or `.env.example`
