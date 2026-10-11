@@ -227,6 +227,13 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidChange, name)
 	}
 	assert.False(t, ran, "a refused change ran its statement")
+
+	// The agent's own opening event id is refused by its own rule, not only by
+	// the rule that takes no event id but its request's.
+	c := valid
+	c.EventID = OpeningEventID(c.AgentID)
+	_, err := r.Record(context.Background(), c)
+	require.ErrorContains(t, err, "event_id is the agent's opening event id")
 }
 
 // A change given an event id reads its own agent before and after its
@@ -290,6 +297,7 @@ func TestCheckTakesOnlyTheEventIDOfTheRequestTheChangeNames(t *testing.T) {
 		"another agent's opening event id":       func(c *Change) { c.EventID = OpeningEventID(other) },
 		"an opening event id with no request":    func(c *Change) { c.EventID, c.RequestID = OpeningEventID(other), uuid.Nil },
 		"the request's event id with no request": func(c *Change) { c.RequestID = uuid.Nil },
+		"the nil request's event id":             func(c *Change) { c.EventID, c.RequestID = RequestEventID(uuid.Nil), uuid.Nil },
 		"another request's event id":             func(c *Change) { c.EventID = RequestEventID(uuid.New()) },
 		"a random event id":                      func(c *Change) { c.EventID = uuid.NewString() },
 		"the request's own id":                   func(c *Change) { c.EventID = request.String() },
