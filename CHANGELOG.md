@@ -296,12 +296,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   header when the backend sends one, and with none otherwise. A 308 redirect for a moved page listed in
   `apps/web/lib/redirects.ts`, or for a path with a trailing slash, carries none. The policy is built in
   `apps/web/lib/content-security-policy.ts` and set from `headers()` in `apps/web/next.config.ts`. Script loads only
-  from the dashboard origin. The page connects only to the dashboard origin and to the origin of
-  `NEXT_PUBLIC_API_URL`. `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`
-  rule out plugins, a `<base>` rewrite, a form post to another origin, and framing by any site.
-- When the dashboard's hostname contains `-frontend`, the client calls the backend at the same hostname with
-  `-backend` in its place. For such a host, `connect-src` also lists that backend host, taken from the request's
-  `Host` header.
+  from the dashboard origin. `connect-src` limits a request made with `fetch`, `XMLHttpRequest`, WebSocket,
+  `EventSource` or `sendBeacon` to the dashboard origin and the origin of `NEXT_PUBLIC_API_URL`. The policy does not
+  close every route by which a script running on the page could send data out: `img-src` allows an image request to
+  any `https:` origin. `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'` rule
+  out plugins, a `<base>` that points to another origin, a form post to another origin, and framing by any site.
+- On a `-frontend` hostname the client calls the backend at the same hostname with one `-frontend` replaced by
+  `-backend`, and `connect-src` also lists that backend host: `aim-frontend.example.com` calls
+  `aim-backend.example.com`. One rule, in `apps/web/lib/backend-host.ts`, decides both. It applies to a hostname made
+  only of `a-z`, `0-9`, `.` and `-`, and the `-frontend` it replaces is the first one with 1 to 253 characters before
+  it and at most 253 after it (253 is the length limit of a host name). Where the rule does not apply
+  (`my_app-frontend.test`; `-frontend.example.com`, where nothing precedes the `-frontend`), the client calls the
+  `NEXT_PUBLIC_API_URL` origin and `connect-src` lists no derived host.
+- The header takes the derived backend host from the `Host` header the dashboard server receives, and does not read
+  `X-Forwarded-Host` for it. A reverse proxy in front of a `-frontend` dashboard has to pass the public host name on
+  in `Host` (nginx: `proxy_set_header Host $host;`). When the server receives another `Host`, `connect-src` does not
+  list the backend the browser derives from the address bar unless that backend is also the `NEXT_PUBLIC_API_URL`
+  origin.
 - `script-src` and `style-src` keep `'unsafe-inline'`. Next.js writes its bootstrap data as inline scripts and the
   theme is set by one, and a header set in `next.config` cannot carry a per-request nonce for statically rendered
   pages. `img-src` allows `https:` so a registration request shows the profile picture its identity provider
@@ -309,6 +320,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - For deployers: `NEXT_PUBLIC_API_URL` is read when the dashboard is built, for both the client bundle and this
   header. The browser refuses an API request to any origin other than the dashboard's own, the `NEXT_PUBLIC_API_URL`
   origin and the derived `-backend` host, so build with `NEXT_PUBLIC_API_URL` set to the origin the browser uses.
+  Setting the variable on the running container does not change the header: the standalone server of a dashboard
+  built with one value and started with another sends the built value. `docs/guides/DEPLOYMENT_CHECKLIST.md` has the
+  build command and the proxy requirement.
   `frame-ancestors 'none'` stops every site, the dashboard's own origin included, from showing it inside a frame.
 
 ### Fixed — `POST /api/v1/a2a/verify` carries the shared rate limiter (#654)

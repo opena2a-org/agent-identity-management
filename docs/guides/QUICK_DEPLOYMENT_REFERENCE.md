@@ -119,7 +119,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login/local \
   - Agent CRUD
 - [ ] Security review
   - Add CSRF protection
-  - Review CSP headers
+  - Check the dashboard's `Content-Security-Policy` header lists your API origin (see [Deployment Checklist](DEPLOYMENT_CHECKLIST.md#dashboard-api-origin-and-content-security-policy))
 - [ ] Load testing
   - Verify <100ms responses under load
 
@@ -143,7 +143,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login/local \
 - [x] Audit logging (all actions)
 - [x] CORS configuration
 - [ ] CSRF protection (recommended)
-- [ ] Content Security Policy headers (recommended)
+- [x] Content Security Policy header on dashboard pages (build the dashboard with `NEXT_PUBLIC_API_URL` set; see [Deployment Checklist](DEPLOYMENT_CHECKLIST.md#dashboard-api-origin-and-content-security-policy))
 
 ---
 
