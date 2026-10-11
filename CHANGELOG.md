@@ -43,6 +43,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   tests of both documentation lints, which include a run on the repository. The A2A guide test requires
   `verifyDelegationChain()` to read neither field from a delegation.
 
+### Fixed — the startup cache line says Redis is disabled when `REDIS_HOST` is empty (#693)
+
+- When `REDIS_HOST` is set to the empty string, the backend's startup line for the cache service is
+  `Cache service skipped (Redis disabled)`. `Cache service skipped (Redis unavailable)` is logged when the startup
+  Redis ping fails, whether `REDIS_HOST` names a host or is unset.
+- Tests: `TestInitCache_EmptyRedisHostIsLoggedAsDisabled` and `TestInitCache_FailedRedisPingIsLoggedAsUnavailable` in
+  `apps/backend/cmd/server/redis_startup_test.go`.
+
+### Changed — the scratch-repository docs test passes under a global git excludes file (#693)
+
+- The test in `apps/backend/cmd/server/provider_sign_in_docs_test.go` that builds a scratch repository stages its
+  tracked fixtures with `git add -f`, so it passes when the developer's global git excludes file names one of them.
+  `TestProviderSignInDocFilesWithAGlobalExcludesFile` builds the same repository under a global excludes file that
+  names every tracked fixture.
+- The cells in `scripts/test-pr-review-generated-files.mjs` for the generated-file placeholder are named
+  `GENERATED-FILES.AC<n>`, in place of a tracker identifier that resolves to nothing in this repository.
+
 ### Fixed — an empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off (#688)
 
 - When `REDIS_HOST` is set to the empty string, the backend makes no Redis connection and logs

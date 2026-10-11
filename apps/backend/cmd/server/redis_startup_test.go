@@ -5,6 +5,7 @@ package main
 
 import (
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -84,4 +85,51 @@ func TestInitRedis_SetRedisHostIsDialed(t *testing.T) {
 	assert.Error(t, err, "the listener closes every connection, so the startup ping fails")
 	assert.Nil(t, client)
 	assert.GreaterOrEqual(t, accepted(), int64(1), "a set REDIS_HOST is dialed")
+}
+
+// The cache line that follows the Redis line at startup gives the same reason:
+// Redis turned off by an empty REDIS_HOST is not Redis that could not be reached.
+func TestInitCache_EmptyRedisHostIsLoggedAsDisabled(t *testing.T) {
+	port, _ := countingListener(t)
+	t.Setenv("REDIS_HOST", "")
+	cfg := loadConfigForRedisTest(t, port)
+	client, err := initRedis(cfg)
+	require.NoError(t, err)
+	require.Nil(t, client)
+
+	logged := captureLog(t)
+	cacheService := initCache(cfg, client)
+
+	assert.Nil(t, cacheService)
+	assert.Equal(t, "ℹ️  Cache service skipped (Redis disabled)\n", logged.String())
+}
+
+func TestInitCache_FailedRedisPingIsLoggedAsUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		set   bool
+		value string
+	}{
+		{name: "REDIS_HOST names a host", set: true, value: "127.0.0.1"},
+		{name: "REDIS_HOST is unset"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			port, _ := countingListener(t)
+			// Setenv first, so the variable is restored after an unset.
+			t.Setenv("REDIS_HOST", tc.value)
+			if !tc.set {
+				require.NoError(t, os.Unsetenv("REDIS_HOST"))
+			}
+			cfg := loadConfigForRedisTest(t, port)
+			client, err := initRedis(cfg)
+			require.Error(t, err, "the listener closes every connection, so the startup ping fails")
+			require.Nil(t, client)
+
+			logged := captureLog(t)
+			cacheService := initCache(cfg, client)
+
+			assert.Nil(t, cacheService)
+			assert.Equal(t, "ℹ️  Cache service skipped (Redis unavailable)\n", logged.String())
+		})
+	}
 }
