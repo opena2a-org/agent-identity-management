@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the tutorials, the deployment reference, the backend README and the SDK test plan give no count the repository does not bear out (#676)
+
+- `docs/tutorials/README.md` and `docs/tutorials/api-quickstart.md` linked `docs/API.md` as "All 160 endpoints".
+  That file documents 32 endpoints. Both lines now say what it holds, REST endpoints with request and response
+  examples, and give no total.
+- `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` gave the database 16 tables, in two places. The 127 migrations create
+  96 tables and the migration runner creates `schema_migrations`, 97 in all. The guide no longer gives a total.
+- `apps/backend/README.md` carried a table of coverage percentages for ten packages. It gave `internal/domain`
+  97.5%, and `go test -cover ./internal/domain/` prints `coverage: 92.1% of statements`. The table is removed: a
+  coverage figure holds for the commit it was measured on, and the README now says so and points to
+  `go test -cover`, which prints the current figure for each package.
+- `docs/SDK_TEST_PLAN.md` named Java SDK 1.1.0. `sdk/java/pom.xml` says 1.0.0, and said 1.0.0 on the report's
+  date; the plan now names 1.0.0. The plan gave the Python SDK a 100% pass rate in its results table and 94.7% in
+  its recommendations; the recommendations no longer restate a rate. A note at the top says the report is dated
+  December 23, 2025, that it records no run against a later SDK version, where the current versions are, and that
+  the Python runner it lists, `sdk_test_runner.py`, is not in the repository.
+- Four tests hold these. A markdown line that links to `docs/API.md` and counts its endpoints must give the number
+  that file documents. A table total in the deployment reference must be the number of tables the migrations and
+  the migration runner create. The backend README must give no coverage percentage for a package. The SDK test
+  plan must name no SDK version later than the one in `sdk/python/VERSION` or `sdk/java/pom.xml`, and every pass
+  rate it gives an SDK must be the one its results table gives.
+
 ### Fixed — the guides' docker commands name the services, containers and network the compose file defines (#673)
 
 - A `docker compose` command takes a service name from `docker-compose.yml` (`backend`, `postgres`, `redis`,

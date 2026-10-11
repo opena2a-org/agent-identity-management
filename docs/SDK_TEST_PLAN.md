@@ -1,5 +1,10 @@
 # AIM SDK Comprehensive Test Plan
 
+> This report is dated December 23, 2025. It names Python SDK 1.14.0 and Java SDK 1.0.0, the versions
+> `sdk/python/VERSION` and `sdk/java/pom.xml` held on that date, and it records no run against a later version.
+> Read those two files for the versions in the repository today. The Python runner the report lists,
+> `sdk_test_runner.py`, is not in this repository, so the Python results cannot be re-run from it.
+
 ## Executive Summary
 
 This document provides a comprehensive test plan and validation report for the AIM (Agent Identity Management) SDKs. The testing validates that both Python and Java SDKs are production-ready for enterprise deployment.
@@ -8,7 +13,7 @@ This document provides a comprehensive test plan and validation report for the A
 | SDK | Tests | Passed | Failed | Success Rate |
 |-----|-------|--------|--------|--------------|
 | Python SDK v1.14.0 | 19 | 19 | 0 | 100% |
-| Java SDK v1.1.0 | 19 | 19 | 0 | 100% |
+| Java SDK v1.0.0 | 19 | 19 | 0 | 100% |
 
 Both SDKs achieve 100% pass rate on all core functionality tests.
 
@@ -154,8 +159,8 @@ No known issues. Both SDKs achieve 100% pass rate on all functionality.
 
 ### 7.1 Production Deployment
 
-1. **Use Java SDK** for JVM-based applications (100% pass rate)
-2. **Use Python SDK** for Python/ML workloads (94.7% pass rate)
+1. **Use Java SDK** for JVM-based applications
+2. **Use Python SDK** for Python/ML workloads
 3. Enable **strict mode** for production workloads
 4. Configure **JIT approval** for high-risk operations
 
@@ -178,7 +183,7 @@ No known issues. Both SDKs achieve 100% pass rate on all functionality.
 
 ### 8.1 Test Scripts
 
-- **Python**: `sdk_test_runner.py`
+- **Python**: `sdk_test_runner.py` (not in this repository)
 - **Java**: `src/test/java/org/opena2a/aim/SDKTestRunner.java`
 
 ### 8.2 Test Execution
@@ -238,4 +243,4 @@ cd /path/to/aim/sdk/java && mvn test-compile exec:java \
 *Document generated: December 23, 2025*
 *AIM Version: 1.0.0*
 *Python SDK Version: 1.14.0*
-*Java SDK Version: 1.1.0*
+*Java SDK Version: 1.0.0*
