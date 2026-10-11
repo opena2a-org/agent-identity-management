@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DERIVED_BACKEND_SOURCE, FRONTEND_HOST } from "./backend-host";
 import { contentSecurityPolicy, dashboardSecurityHeaders } from "./content-security-policy";
 
 function directives(policy: string): Record<string, string[]> {
@@ -58,5 +59,14 @@ describe("dashboardSecurityHeaders", () => {
     expect("dashboard.example.com".match(pattern)).toBeNull();
     // A Host carrying policy syntax does not match, so it never reaches the value.
     expect("x-frontend.example.com; script-src *".match(pattern)).toBeNull();
+    // Nothing before -frontend: no backend is derived, by the header or by the client.
+    expect("-frontend.example.com".match(pattern)).toBeNull();
+    expect("my_app-frontend.test".match(pattern)).toBeNull();
+  });
+
+  it("reads the Host pattern the client derives its backend with", () => {
+    const rule = dashboardSecurityHeaders().find((r) => r.has);
+    expect(rule!.has).toEqual([{ type: "host", value: FRONTEND_HOST }]);
+    expect(directives(rule!.headers[0].value)["connect-src"]).toContain(DERIVED_BACKEND_SOURCE);
   });
 });

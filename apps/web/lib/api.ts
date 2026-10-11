@@ -1,6 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
+import { derivedBackendHost } from "./backend-host";
 import { forgetOnboardingViewed } from "./onboarding-viewed";
 import { normalizeViolation, type SecurityViolation } from "./violations";
 import { SERVER_ERROR_MESSAGE, isServerErrorStatus } from "./error-messages";
@@ -50,9 +51,10 @@ const getApiUrl = (): string => {
   // IMPORTANT: Do this BEFORE checking process.env because Next.js bakes env vars at build time
   const { protocol, hostname } = window.location;
 
-  // Match both 'aim-frontend' and 'aim-dev-frontend' or any variant with '-frontend'
-  if (hostname.includes("-frontend")) {
-    const backendHost = hostname.replace("-frontend", "-backend");
+  // 'aim-frontend', 'aim-dev-frontend' or any hostname the rule in lib/backend-host.ts
+  // covers. The Content-Security-Policy header lists the backend for the same hostnames.
+  const backendHost = derivedBackendHost(hostname);
+  if (backendHost) {
     const detectedUrl = `${protocol}//${backendHost}`;
     console.log("[API] Auto-detected URL from hostname:", detectedUrl);
     return detectedUrl;

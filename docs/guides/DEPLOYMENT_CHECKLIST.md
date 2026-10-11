@@ -201,6 +201,35 @@ docker build -f infrastructure/docker/Dockerfile.frontend -t aim-frontend:latest
 - [ ] Images are under 500MB each
 - [ ] No build errors
 
+#### Dashboard API origin and Content-Security-Policy
+
+The dashboard sends a `Content-Security-Policy` header with the pages it serves. Its `connect-src` lists the
+dashboard's own origin and the origin of `NEXT_PUBLIC_API_URL`, and the browser refuses an API request to any
+other origin. `NEXT_PUBLIC_API_URL` is read when the dashboard is **built**, for the client bundle and for this
+header. Setting it on the running container does not change either: the `NEXT_PUBLIC_API_URL` entry under
+`environment:` in `docker-compose.yml` and `docker-compose.quickstart.yml` reaches the container only, and the
+published `aim-dashboard` image is built for `http://localhost:8080`.
+
+```bash
+# Build the dashboard for the origin the browser reaches the API on
+docker build -f infrastructure/docker/Dockerfile.frontend \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.aim.example.com \
+  -t aim-frontend:latest .
+
+# Read the policy a page is served with
+curl -sI https://aim.example.com/ | grep -i content-security-policy
+```
+
+On a hostname such as `aim-frontend.example.com` the dashboard calls `aim-backend.example.com` instead, and the
+header lists that host as well. It takes the name from the `Host` header the dashboard server receives, not from
+`X-Forwarded-Host`, so a reverse proxy in front of the dashboard has to pass the public host name on in `Host`
+(nginx: `proxy_set_header Host $host;`).
+
+**Checklist:**
+- [ ] Dashboard image built with `NEXT_PUBLIC_API_URL` set to the API origin the browser uses
+- [ ] `connect-src` in the served header lists that origin
+- [ ] A reverse proxy in front of a `-frontend` hostname passes the public host name on in `Host`
+
 ### Step 2: Configure Production Environment
 ```bash
 # Create .env with the secrets docker compose requires
@@ -578,7 +607,8 @@ Deployment is successful when:
 - Verify migrations completed
 
 **Issue: Frontend won't connect to backend**
-- Verify NEXT_PUBLIC_API_URL is correct
+- Verify NEXT_PUBLIC_API_URL is correct, and that the dashboard was built with it (see [Dashboard API origin and Content-Security-Policy](#dashboard-api-origin-and-content-security-policy))
+- Look in the browser console for a request refused by the Content Security Policy: `connect-src` in the page's `Content-Security-Policy` header has to list the API origin
 - Check CORS configuration
 - Verify backend is accessible
 - Check network/firewall rules
