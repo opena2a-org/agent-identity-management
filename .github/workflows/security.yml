@@ -129,7 +129,10 @@ jobs:
         #                          baseline today is 100/100 with the
         #                          .env.example allowlist + .gitleaks.toml
         #                          deletion landed.
-        run: npx hackmyagent@latest secure . --ci --scan-depth quick --static-only --fail-below 90
+        # hackmyagent is pinned to an exact version so the gate changes
+        # only with a commit here. Bump it deliberately: run the new
+        # version with these flags locally and confirm the score first.
+        run: npx hackmyagent@0.33.2 secure . --ci --scan-depth quick --static-only --fail-below 90
 
   # ADVISORY ONLY — this job cannot fail, by construction. Both Trivy steps pass
   # `exit-code: 0` and the npm audit ends in `|| true`, so a green "Dependency Audit"
