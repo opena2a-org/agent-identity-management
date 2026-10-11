@@ -288,6 +288,7 @@ func TestTransitionTriggerOfADecisionWhoseRequestRecordIsNotItsOwn(t *testing.T)
 		Actor:          transition.User(f.userID),
 		TraceID:        trace,
 		EventID:        transition.RequestEventID(request.ID),
+		RequestID:      request.ID,
 		Apply: func(ctx context.Context, tx *sql.Tx) error {
 			return repository.CreateCapabilityTx(ctx, tx, &domain.AgentCapability{
 				AgentID: f.agentID, CapabilityType: "files:read", GrantedBy: &f.userID, GrantedAt: time.Now(),
