@@ -97,6 +97,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `aim_sdk` import resolves, each attribute read on an `AIMClient` exists, and each keyword passed to an SDK
   callable is one of its parameters.
 
+### Changed — `aim-sdk login` names where an administrator turns strict mode on (#681)
+
+- The closing text of `aim-sdk login` ends by saying that an administrator turns strict mode on with Global
+  Enforcement Mode on the dashboard page `/dashboard/admin/security-policies`. It said that calls outside the granted
+  capabilities are denied in strict enforcement mode and run in monitoring mode, the default, and did not say where
+  strict mode is set.
+- Test: `tests/test_cli_device_login.py`.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

@@ -269,12 +269,19 @@ You've just secured your first AI agent in **5 minutes**!
 Behind those **3 lines of code**, AIM prevents your agent from going rogue:
 
 1. ✅ **Line 1** (`secure("weather-agent")`) - Cryptographic identity created
-2. ✅ **Line 2** (`@agent.perform_action`) - **Verification BEFORE execution** (prevents malicious actions!)
-3. ✅ **Line 3** (your code) - Runs ONLY if verification passes
+2. ✅ **Line 2** (`@agent.perform_action`) - **Verification BEFORE execution**: AIM checks the call against the capabilities the agent was granted
+3. ✅ **Line 3** (your code) - Runs when AIM allows the call
+
+What AIM allows depends on your organization's enforcement mode. A new organization starts in monitoring mode: the
+decorator registers `get_weather` as a capability the first time it runs, AIM grants it, and a call for a capability
+the agent was not granted runs and is recorded. AIM refuses that call only in strict mode, which an administrator
+turns on per organization: Global Enforcement Mode on `/dashboard/admin/security-policies`, or
+`PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`. Strict mode also refuses every action
+of an agent that is not verified, and does not verify an agent when it registers.
 
 **Every time `get_weather()` is called**, AIM automatically:
 
-- 🛡️ **Verifies** the action BEFORE it executes (prevents unauthorized API calls!)
+- 🛡️ **Verifies** the action BEFORE it executes, and in strict mode refuses one the agent was not granted
 - 📝 **Logs** to the audit trail (who, what, when, why)
 - 📊 **Updates** real-time trust score (9-factor algorithm)
 - 🚨 **Monitors** for anomalies (unusual patterns trigger alerts)

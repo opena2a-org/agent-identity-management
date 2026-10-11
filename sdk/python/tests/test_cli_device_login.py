@@ -217,6 +217,20 @@ def test_login_refuses_a_non_http_verification_uri(stack):
     assert stack.saved == {}
 
 
+def test_login_closing_text_names_where_an_administrator_turns_strict_mode_on(stack):
+    """The closing text says calls outside the granted capabilities are denied
+    in strict mode and run in monitoring mode, the default; it also names where
+    an administrator turns strict mode on (#681). It named no such place."""
+    rc, out = _login(stack)
+    assert rc == 0, out
+    text = " ".join(out.split())
+    assert "denied at the tool-call boundary" not in text
+    assert (
+        "An administrator turns strict mode on with Global Enforcement Mode on the "
+        "dashboard page /dashboard/admin/security-policies." in text
+    )
+
+
 def test_login_tolerates_a_non_numeric_interval(stack):
     """A server answer with a malformed interval is refused or defaulted, never a traceback."""
     stack.code = (200, dict(DEVICE, interval="abc"))

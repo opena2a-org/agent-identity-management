@@ -169,6 +169,14 @@ Trust: 0.72
 
 ### Python
 
+The Python SDK asks the AIM server about each call, so what happens to a call outside the agent's capabilities depends
+on the organization's enforcement mode. A new organization starts in monitoring mode: the decorator registers the
+capability the first time the function runs, AIM grants it, and the call runs and is recorded. AIM refuses the call
+only in strict mode. An administrator turns strict mode on per organization: Global Enforcement Mode on
+`/dashboard/admin/security-policies`, or `PUT /api/v1/admin/enforcement-settings` with
+`{"enforcementMode": "strict"}`. Strict mode also refuses every action of an agent that is not verified, so verify
+`my-agent` (**Verify agent** on its page in the dashboard) before you run the example.
+
 ```bash
 pip install -e sdk/python/
 ```
@@ -188,12 +196,12 @@ agent = register_agent(
 def read_users():
     return db.query("SELECT * FROM users")
 
-# Actions not in the capabilities list are denied automatically
+# In strict mode, an action not in the capabilities list is denied
 @agent.perform_action("network:fetch", resource="external-api")
 def fetch_external():
     return requests.get("https://external.example.com")
 
-# Calling read_users() succeeds; calling fetch_external() raises ActionDeniedError
+# In strict mode, read_users() succeeds and fetch_external() raises ActionDeniedError
 try:
     read_users()
     print("db:read is allowed")
@@ -207,14 +215,18 @@ except Exception:
     print("network:fetch is denied by policy")
 ```
 
-Expected output:
+Expected output in strict mode:
 
 ```
 db:read is allowed
 network:fetch is denied by policy
 ```
 
-The TypeScript SDK uses `checkCapability()` which returns a boolean. The Python SDK uses the `@agent.perform_action()` decorator which raises `ActionDeniedError` when a capability is not in the agent's registered capabilities list.
+In monitoring mode AIM allows `fetch_external()`, and its body runs.
+
+The TypeScript SDK uses `checkCapability()` which returns a boolean, from the policy saved on the machine. The Python
+SDK uses the `@agent.perform_action()` decorator, which raises `ActionDeniedError` when AIM refuses the call; in strict
+mode AIM refuses a capability the agent was not granted.
 
 ## Policy Format Reference
 

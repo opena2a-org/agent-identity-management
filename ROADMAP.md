@@ -1,6 +1,6 @@
 # AIM roadmap
 
-Last updated: 2026-10-10
+Last updated: 2026-10-11
 
 This file lists what AIM provides today and what may come next. Only Shipped lines carry versions and dates, each taken from the linked release or image. Requests and bug reports go through GitHub issues.
 
@@ -15,7 +15,7 @@ This file lists what AIM provides today and what may come next. Only Shipped lin
 
 - **SDKs:** The TypeScript SDK installs an `aim-arp` command to read its telemetry status and send log, opt out or back in, and request deletion of data already sent. [@opena2a/aim-sdk 1.3.0 for TypeScript](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-ts-v1.3.0), on npm, August 2026
 - **SDKs:** The TypeScript SDK's runtime-protection telemetry stays off until the user turns it on. [@opena2a/aim-sdk 1.2.0 for TypeScript](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-ts-v1.2.0), on npm, August 2026
-- **SDKs:** In the Python SDK, an action that AIM denies raises an error and does not run, in every enforcement mode. [aim-sdk 2.0.0 for Python](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-py-v2.0.0), on PyPI, August 2026
+- **SDKs:** In the Python SDK, an action that AIM denies raises an error and does not run, whatever the organization's enforcement mode. AIM denies a capability the agent was not granted only in strict mode; a new organization starts in monitoring mode, where AIM grants a capability when the agent registers it and the call runs. [aim-sdk 2.0.0 for Python](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-py-v2.0.0), on PyPI, August 2026
 - **SDKs:** A Node.js agent registers with AIM and has each action verified through the TypeScript SDK, with middleware for Express and Fastify. [@opena2a/aim-sdk 1.0.0 for TypeScript](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-ts-v1.0.0), on npm, July 2026
 - **SDKs:** The TypeScript SDK can verify an agent's signed trust credential offline, against issuer keys it has cached, with no call to AIM for each action. [@opena2a/aim-sdk 1.0.0 for TypeScript](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-ts-v1.0.0), on npm, July 2026
 - **SDKs:** A Python agent registers with AIM in one call, and a decorator has AIM authorize each action and record it in the audit log. [aim-sdk 1.23.0 for Python](https://github.com/opena2a-org/agent-identity-management/releases/tag/sdk-py-v1.23.0), on PyPI, June 2026
