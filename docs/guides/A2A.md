@@ -242,7 +242,7 @@ Trust decays along a delegation chain only where the TypeScript SDK's `verifyDel
 - `trustAttenuation` (default 0.8): the factor that turns one delegation's trust into the next one's
 - `minDelegatedTrust` (default 0.3): the floor a later delegation's trust must not fall below
 
-Each must be a number from 0 to 1; any other value fails the chain before a delegation is checked. The first delegation keeps the trust passed as `rootTrustScore` (default 1.0). Each later delegation's effective trust is the previous one's multiplied by `trustAttenuation`. A delegation whose effective trust falls below `minDelegatedTrust` carries an error, and the chain is not valid. With the defaults:
+Each must be a number from 0 to 1, and so must `rootTrustScore`; any other value fails the chain before a delegation is checked. The first delegation keeps the trust passed as `rootTrustScore` (default 1.0). Each later delegation's effective trust is the previous one's multiplied by `trustAttenuation`. A delegation whose effective trust falls below `minDelegatedTrust` carries an error, and the chain is not valid. With the defaults:
 
 ```
 root               effectiveTrust 1.0
@@ -251,7 +251,7 @@ root               effectiveTrust 1.0
   subdelegation-3  effectiveTrust 0.512   # 0.64 × 0.8
 ```
 
-A delegation can also carry fields named `trustAttenuation` and `minDelegatedTrust`. `createDelegation()` sets neither field, and the SDK leaves both out of the signed payload, so whoever passes a chain on can change them without failing verification. `verifyDelegationChain()` does not read them: a chain cannot raise the trust it is given or lower the floor it is held to.
+A delegation can also carry fields named `trustAttenuation` and `minDelegatedTrust`. `createDelegation()` sets neither field, and the SDK leaves both out of the signed payload, so whoever passes a chain on can change them without failing verification. `verifyDelegationChain()` does not read them as its factor or floor: a chain cannot raise the trust it is given or lower the floor it is held to. A chain in which any delegation carries `trustAttenuation` fails unless the verifier passes `trustAttenuation` in the options, and the same holds for `minDelegatedTrust`; the error names the field to pass. A verifier that sets these fields on each delegation passes the same values in the options instead.
 
 ```typescript
 const result = await verifyDelegationChain(chain, {

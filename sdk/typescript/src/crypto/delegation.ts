@@ -149,8 +149,9 @@ export interface Delegation {
   signature: string;
   publicKey: string;
   parentDelegation?: string;
-  // Interop metadata, outside the signed payload. verifyDelegationChain() does
-  // not read either: the verifier passes the factor and the floor in its options.
+  // Interop metadata, outside the signed payload. verifyDelegationChain() applies
+  // neither: the verifier passes the factor and the floor in its options, and a
+  // chain that carries one is refused unless the matching option is set.
   trustAttenuation?: number;  // Multiplier per hop (0.0-1.0)
   minDelegatedTrust?: number; // Floor below which chain is invalid (0.0-1.0)
 }
@@ -390,23 +391,52 @@ export function verifyScopeNarrowing(parent: Delegation, child: Delegation): boo
 }
 
 export interface DelegationChainVerificationOptions extends DelegationTemporalOptions {
-  rootTrustScore?: number; // Trust score of the root delegator (default 1.0)
+  rootTrustScore?: number; // Trust score of the root delegator (0.0-1.0, default 1.0)
   /**
    * Factor each later delegation's effective trust is the previous one's
    * multiplied by (0.0-1.0, default 0.8). Set by the verifier: a delegation's
-   * own `trustAttenuation` is outside its signature and is not read.
+   * own `trustAttenuation` is outside its signature and is never applied, and a
+   * chain in which a delegation carries one is refused while this is unset.
    */
   trustAttenuation?: number;
   /**
    * Floor a later delegation's effective trust must not fall below
    * (0.0-1.0, default 0.3). Set by the verifier: a delegation's own
-   * `minDelegatedTrust` is outside its signature and is not read.
+   * `minDelegatedTrust` is outside its signature and is never applied, and a
+   * chain in which a delegation carries one is refused while this is unset.
    */
   minDelegatedTrust?: number;
 }
 
 function isUnitInterval(value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null;
+}
+
+/**
+ * Names of the attenuation fields that some delegation in the chain carries
+ * while the verifier's options leave them unset. Only whether a field is there
+ * is looked at: its value is outside the signature and is never applied.
+ */
+function carriedTrustFieldsWithoutOption(
+  chain: Delegation[],
+  options: DelegationChainVerificationOptions | undefined,
+): string[] {
+  const names: string[] = [];
+  if (!isSet(options?.trustAttenuation) && chain.some((d) => isSet(d.trustAttenuation))) {
+    names.push('trustAttenuation');
+  }
+  if (!isSet(options?.minDelegatedTrust) && chain.some((d) => isSet(d.minDelegatedTrust))) {
+    names.push('minDelegatedTrust');
+  }
+  return names;
+}
+
+function refusedChain(error: string): { valid: false; results: DelegationChainResult[] } {
+  return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error }] };
 }
 
 export interface DelegationChainResult {
@@ -435,7 +465,8 @@ export interface DelegationChainResult {
  *    `trustAttenuation` and must stay at or above the verifier's
  *    `minDelegatedTrust`. The fields of the same names on a delegation are left
  *    out of its signed payload, so whoever passes the chain on could set them;
- *    they are not read.
+ *    their values are never applied, and a chain that carries either one is
+ *    refused unless the verifier passes the matching option.
  */
 export async function verifyDelegationChain(
   chain: Delegation[],
@@ -445,27 +476,42 @@ export async function verifyDelegationChain(
   results: DelegationChainResult[];
 }> {
   if (chain.length === 0) {
-    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'Empty delegation chain' }] };
+    return refusedChain('Empty delegation chain');
   }
 
   // Capture ONE evaluation instant for the whole chain so every hop is judged
   // against the same clock. Fail closed if a supplied verifyAt is unparseable.
   const evalAtMs = resolveVerifyAtMs(options?.verifyAt);
   if (Number.isNaN(evalAtMs)) {
-    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'Unparseable verifyAt evaluation time' }] };
+    return refusedChain('Unparseable verifyAt evaluation time');
   }
 
   // The factor and the floor come from the verifier, never from the chain.
   // Fail closed on a value outside 0 to 1: a factor above 1 would raise trust
-  // at each hop, and NaN would pass every floor.
+  // at each hop, and NaN would pass every floor. The root trust is held to the
+  // same range, since NaN there would pass every floor too.
   const attenuation = options?.trustAttenuation ?? 0.8;
   const minTrust = options?.minDelegatedTrust ?? 0.3;
   if (!isUnitInterval(attenuation) || !isUnitInterval(minTrust)) {
-    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'trustAttenuation and minDelegatedTrust must be numbers from 0 to 1' }] };
+    return refusedChain('trustAttenuation and minDelegatedTrust must be numbers from 0 to 1');
+  }
+  let effectiveTrust = options?.rootTrustScore ?? 1.0;
+  if (!isUnitInterval(effectiveTrust)) {
+    return refusedChain('rootTrustScore must be a number from 0 to 1');
+  }
+
+  // A factor or a floor carried on a delegation is never applied. Refuse the
+  // chain unless the verifier set the matching option, so that a verifier who
+  // still sets the fields on each delegation is told to pass them in the
+  // options instead of being held to the defaults without notice.
+  const carriedWithoutOption = carriedTrustFieldsWithoutOption(chain, options);
+  if (carriedWithoutOption.length > 0) {
+    const fields = carriedWithoutOption.join(' and ');
+    const verb = carriedWithoutOption.length === 1 ? 'is' : 'are';
+    return refusedChain(`${fields} on a delegation ${verb} outside its signature and never applied: pass ${fields} in the options to verify this chain`);
   }
 
   const results: DelegationChainResult[] = [];
-  let effectiveTrust = options?.rootTrustScore ?? 1.0;
 
   for (let i = 0; i < chain.length; i++) {
     const delegation = chain[i];
