@@ -243,6 +243,7 @@
     --chart-axis-line: var(--stroke);
     --chart-axis-text: var(--text-tertiary);
     --chart-cursor: var(--surface-inset-gray);
+    --chart-track: var(--track);
     --chart-tooltip-bg: var(--glass-fill);
     --chart-tooltip-border: var(--glass-border);
     --chart-tooltip-text: var(--text-primary);

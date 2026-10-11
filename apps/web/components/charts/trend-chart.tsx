@@ -3,6 +3,7 @@
 import { useId, type ReactNode } from "react";
 import {
   Area,
+  Bar,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -21,10 +22,12 @@ export interface TrendSeries {
   key: string;
   name: string;
   color: ChartColor;
-  /** "area" fills below the line; "line" draws the line alone. */
-  kind?: "area" | "line";
+  /** "area" fills below the line; "line" draws the line alone; "bar" draws one bar per point. */
+  kind?: "area" | "line" | "bar";
   /** Mark every point, for sparse series. */
   dots?: boolean;
+  /** Bars sharing a stack id are drawn on top of each other, in series order. */
+  stack?: string;
 }
 
 export interface TrendChartProps<T extends Record<string, unknown>> {
@@ -40,12 +43,15 @@ export interface TrendChartProps<T extends Record<string, unknown>> {
   /** How a value reads in the aria-label (default: the number). */
   formatValue?: (value: number) => string;
   legend?: boolean;
+  /** Draw the grid and both axes; false for a compact card that labels its window outside the chart. */
+  axes?: boolean;
   /** Replaces the default tooltip body for the hovered point. */
   renderTooltip?: (point: T) => ReactNode;
   className?: string;
 }
 
 const AREA_TOP_OPACITY = 0.2;
+const BAR_RADIUS: [number, number, number, number] = [4, 4, 0, 0];
 
 export function TrendChart<T extends Record<string, unknown>>({
   title,
@@ -56,12 +62,16 @@ export function TrendChart<T extends Record<string, unknown>>({
   yLabel,
   formatValue,
   legend = false,
+  axes = true,
   renderTooltip,
   className,
 }: TrendChartProps<T>) {
   // url(#...) needs an id without the punctuation useId may produce.
   const gradientBase = `chart-area-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const label = describeTrend(title, data, xKey, series, formatValue);
+  // Only the top bar of a stack is rounded, so a stack reads as one column.
+  const topOfStack = new Map<string, string>();
+  for (const s of series) if (s.kind === "bar") topOfStack.set(s.stack ?? s.key, s.key);
   return (
     <ChartFrame label={label} className={className}>
       <ResponsiveContainer width="100%" height="100%">
@@ -76,9 +86,16 @@ export function TrendChart<T extends Record<string, unknown>>({
               ) : null,
             )}
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={chartChrome.grid} />
-          <XAxis dataKey={xKey} stroke={chartChrome.axisLine} tick={chartAxisTick} interval="preserveStartEnd" />
+          {axes && <CartesianGrid strokeDasharray="3 3" stroke={chartChrome.grid} />}
+          <XAxis
+            dataKey={xKey}
+            hide={!axes}
+            stroke={chartChrome.axisLine}
+            tick={chartAxisTick}
+            interval="preserveStartEnd"
+          />
           <YAxis
+            hide={!axes}
             stroke={chartChrome.axisLine}
             tick={chartAxisTick}
             domain={yDomain}
@@ -102,7 +119,16 @@ export function TrendChart<T extends Record<string, unknown>>({
             <Legend formatter={(value: string) => <span className="text-ink-secondary text-sm">{value}</span>} />
           )}
           {series.map((s, i) =>
-            (s.kind ?? "area") === "area" ? (
+            s.kind === "bar" ? (
+              <Bar
+                key={s.key}
+                dataKey={s.key}
+                name={s.name}
+                fill={s.color}
+                stackId={s.stack}
+                radius={topOfStack.get(s.stack ?? s.key) === s.key ? BAR_RADIUS : 0}
+              />
+            ) : (s.kind ?? "area") === "area" ? (
               <Area
                 key={s.key}
                 type="monotone"

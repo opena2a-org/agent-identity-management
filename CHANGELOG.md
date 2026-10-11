@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the overview and security pages draw their charts through the chart layer
+
+- The overview's verification activity (developer and executive views), the executive view's trust distribution
+  and the security page's posture score were drawn by hand as SVG arcs and CSS bars. They now render through
+  `apps/web/components/charts`, so they take their colours from the `--chart-*` tokens in both themes and carry the
+  layer's tooltip and screen-reader label.
+- Verification activity is one stacked bar per month, verified and pending drawn as separate series; before, a month
+  was one bar of both together. The chart's label reads its window, `Verifications per month, last N months`, from
+  the months the endpoint returned. The executive view shows a legend for the two series.
+- The trust distribution's label reads every bucket and the average trust score. When the stats carry no average, the
+  centre of the donut is left empty instead of showing a dash. "Not scored" is drawn in the muted series colour
+  instead of the near-transparent track colour.
+- The layer gains a score ring (`ScoreRing`), stacked bars and an axis-free mode in `TrendChart`, a centre summary in
+  `DonutChart`, and a `--chart-track` token.
+- `tests/chart-standard.test.ts` now also fails when a file under `app/` or `components/` outside `components/charts`
+  draws a chart by hand: an SVG `<circle>` or `<ellipse>`, a dashed stroke, or an element marked `role="img"`.
+
 ### Fixed — the docs link lint reads every file, the SDK download carries no Go README, the documentation lints pass, and the migrate command prints words, not pictographs (#690)
 
 - The setup README the server writes into a downloaded SDK has no Go variant. The repository carries no Go SDK, the

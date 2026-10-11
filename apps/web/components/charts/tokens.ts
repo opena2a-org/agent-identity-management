@@ -21,6 +21,7 @@ export const chartChrome = {
   axisLine: "var(--chart-axis-line)",
   axisText: "var(--chart-axis-text)",
   cursor: "var(--chart-cursor)",
+  track: "var(--chart-track)",
 } as const;
 
 export const chartTooltipStyle = {
