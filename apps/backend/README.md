@@ -69,7 +69,7 @@ apps/backend/
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - PostgreSQL 15+
 - Docker (optional, for local development)
 

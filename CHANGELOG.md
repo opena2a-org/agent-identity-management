@@ -59,6 +59,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Routing SDK verifications through the 5-step engine is still open.
 - Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
 
+### Fixed — the setup, installation and contributing guides state the Go and Node.js versions the platform needs (#660)
+
+- `apps/backend/go.mod` declares `go 1.25.0`: Go 1.24.0 refuses to build the backend
+  (`go.mod requires go >= 1.25.0`), and Go 1.25.0 builds every backend package and compiles its tests. The guides
+  named Go 1.21+ (`apps/backend/README.md`, `docs/guides/CONTRIBUTING.md`, `docs/guides/INSTALLATION.md`), 1.22+
+  (`README.md`), 1.23+ (`CONTRIBUTING.md`, `docs/DEPLOYMENT.md`, `docs/guides/QUICK_START.md`) and 1.23.1+
+  (`docs/guides/SETUP_GUIDE.md`). Each now names Go 1.25+.
+- The dashboard's locked dependencies declare the Node.js versions they support: Next.js 16 declares 20.9 or later,
+  and the test and lint dependencies declare 20.19 or later on Node.js 20 and 22.13 or later on Node.js 22. The
+  guides named Node.js 18+ (`CONTRIBUTING.md`, `docs/guides/CONTRIBUTING.md`, `docs/guides/INSTALLATION.md`,
+  `docs/guides/QUICK_START.md`), 20+ (`README.md`, `docs/guides/SETUP_GUIDE.md`) and 22+ (`docs/DEPLOYMENT.md`).
+  Each now names Node.js 20.19+ or 22.13+.
+- `docs/guides/CONTRIBUTING.md` and `docs/guides/INSTALLATION.md` listed pnpm 8+ and gave pnpm commands; the
+  repository installs with npm from `package-lock.json`. They now list npm 10+, which the root `package.json`
+  requires, and give the npm form of each command.
+- A test in the TypeScript SDK suite fails when one of these guides states a Go version below the `go` directive of
+  `apps/backend/go.mod`, a Node.js version outside the `engines.node` range of the root `package.json` or of a
+  package in the root or dashboard lockfile that is not limited to one platform, or a pnpm command.
+
 ### Added — the server forwards every audit log entry it writes to a Splunk HTTP Event Collector (#657)
 
 - No server code imported the SIEM adapters in `internal/integrations/siem`. Setting `SIEM_SPLUNK_HEC_URL` and

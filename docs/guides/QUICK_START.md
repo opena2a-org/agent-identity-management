@@ -22,8 +22,8 @@ This script handles everything: pulls images, generates secrets, starts services
 ### Prerequisites
 
 - Docker Desktop running
-- Go 1.23+ installed
-- Node.js 18+ installed
+- Go 1.25+ installed
+- Node.js 20.19+ or 22.13+ installed
 
 ### Step 1: Clone and Start Infrastructure
 

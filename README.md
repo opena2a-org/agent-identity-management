@@ -266,7 +266,7 @@ The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5
 
 ### From source
 
-Prerequisites: Docker, Go 1.22+, Node 20+, Python 3.11+.
+Prerequisites: Docker, Go 1.25+, Node.js 20.19+ or 22.13+, Python 3.11+.
 
 ```bash
 git clone https://github.com/opena2a-org/agent-identity-management.git

@@ -7,8 +7,8 @@ Complete installation guide for Agent Identity Management platform.
 ### Required Software
 
 - **Docker** 24.0+ and **Docker Compose** 2.20+
-- **Go** 1.21+ (for backend development)
-- **Node.js** 18+ and **pnpm** 8+ (for frontend development)
+- **Go** 1.25+ (for backend development)
+- **Node.js** 20.19+ or 22.13+ and **npm** 10+ (for frontend development)
 - **PostgreSQL** 16+ (or use Docker)
 - **Redis** 7+ (or use Docker)
 
@@ -117,10 +117,10 @@ Server will start on `http://localhost:8080`
 cd apps/web
 
 # Install dependencies
-pnpm install
+npm install
 
 # Start development server
-pnpm dev
+npm run dev
 ```
 
 Frontend will start on `http://localhost:3000`
@@ -191,17 +191,17 @@ go build -o bin/server cmd/server/main.go
 cd apps/web
 
 # Install dependencies
-pnpm install
+npm install
 
 # Run development server
-pnpm dev
+npm run dev
 
 # Run tests
-pnpm test
+npm test
 
 # Build for production
-pnpm build
-pnpm start
+npm run build
+npm start
 ```
 
 ### Database Management
