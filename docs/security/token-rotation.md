@@ -73,11 +73,15 @@ With token rotation:
 
 4. Attacker tries to use stolen refresh_token_v1
    → ❌ REJECTED - Token has been revoked
-   → ✅ Security alert generated
-   → ✅ Your data is protected
+   → Backend revokes the whole token family, refresh_token_v2 included
+   → Backend writes a refresh_token_reuse audit record
 ```
 
-**Result**: Token theft is **automatically detected and blocked**.
+**Result**: The reused token is refused, and so is every token of its token family
+from then on. The backend cannot tell which holder is the legitimate one, so the
+agent's own refresh_token_v2 stops working too: download a fresh SDK or run
+`aim-sdk login` to get new credentials. The reuse is recorded in the audit log;
+no notification is sent.
 
 ---
 
@@ -198,7 +202,7 @@ Download SDK → production credentials
 ❌ **Incorrect**:
 ```bash
 # Don't share credentials across environments
-cp dev/.aim/credentials.json production/.aim/  # Will cause rotation conflicts
+cp dev/.aim/sdk_credentials.json production/.aim/  # Will cause rotation conflicts
 ```
 
 ---
@@ -258,14 +262,16 @@ SELECT
 FROM sdk_tokens;
 ```
 
-**Dashboard** - View token rotation events:
-- Navigate to: Admin → Security → Token Activity
-- See real-time token issuance and revocation
+**Dashboard** - View SDK tokens:
+- Navigate to: Developers → Credentials → SDK tokens (`/dashboard/credentials#sdk-tokens`)
+- See each token's last use and IP address; **Show revoked** lists revoked tokens too
 
-**Alerts** - Monitor suspicious activity:
-- Alert when revoked token is used (potential theft)
-- Alert on unusual token rotation patterns
-- Track tokens that haven't rotated in 30+ days
+**Audit log** - Review reused tokens (administrators):
+- Navigate to: Organization → Audit log (`/dashboard/admin/audit-logs`)
+- A rotated-out refresh token presented again is recorded as `refresh_token_reuse` and
+  revokes its token family; each later refused token of that family is recorded as
+  `refresh_session_revoked`
+- Neither sends a notification, so review the audit log for these records
 
 ---
 
@@ -276,9 +282,9 @@ FROM sdk_tokens;
 **A:** Tokens rotate **every time they're used** to refresh the access token.
 
 Typical rotation frequency:
-- Access tokens expire every **1 hour**
-- Agent refreshes access token → triggers rotation
-- So tokens typically rotate **once per hour** during active use
+- Access tokens last **2 hours** by default (`JWT_ACCESS_TTL` on the server)
+- The SDK refreshes an access token once it is within a minute of expiring → triggers rotation
+- So tokens typically rotate about **every 2 hours** during active use
 
 ### Q: Will my agent stop working during rotation?
 
@@ -356,7 +362,7 @@ You'll see clear error messages with instructions to fix.
 └──────┬──────┘
        │
        │ 1. POST /api/v1/auth/refresh
-       │    { "refresh_token": "old_token" }
+       │    { "refreshToken": "old_token" }
        │
        ▼
 ┌─────────────────┐
@@ -373,8 +379,8 @@ You'll see clear error messages with instructions to fix.
     ┌──────────────┐
     │  Response:   │
     │  {           │
-    │    "access_token": "new_access",   │
-    │    "refresh_token": "new_refresh"  │ ◄── NEW!
+    │    "accessToken": "new_access",    │
+    │    "refreshToken": "new_refresh"   │ ◄── NEW!
     │  }           │
     └──────┬───────┘
            │

@@ -117,9 +117,10 @@ def write_data():
 
 ### 1. **Credential Storage**
 
-SDK credentials are stored as JSON at `~/.aim/sdk_credentials.json` (agent
-credentials at `~/.aim/credentials.json`), readable only by the owner (`0600`).
-This file is the single source of truth — there is **no** encrypted shadow file.
+SDK credentials are stored as JSON at `~/.aim/sdk_credentials.json`, and each
+registered agent's credentials at `~/.aim/agents/<agent-name>.json`. Each file is
+readable only by the owner (`0600`), and the SDK creates `~/.aim/agents/` as `0700`.
+These files are the single source of truth — there is **no** encrypted shadow file.
 An earlier `~/.aim/credentials.encrypted` scheme was removed; the SDK migrates
 away from any leftover encrypted file.
 
@@ -185,16 +186,20 @@ sdkToken.TokenHash = tokenHash
 POST /api/v1/auth/refresh
 Content-Type: application/json
 
-{
-  "refresh_token": "old-token-abc123"
-}
+{"refreshToken": "old-refresh-abc123"}
+```
 
-Response:
+The response carries a new refresh token, and `rotated` is `true` when the
+presented token was retired. `expiresIn` is the access token's lifetime in
+seconds: 7200 (2 hours) by default, set by `JWT_ACCESS_TTL` on the server.
+
+```json
 {
-  "access_token": "new-access-xyz",
-  "refresh_token": "new-refresh-def456",  ← NEW TOKEN!
-  "token_type": "Bearer",
-  "expires_in": 86400
+  "accessToken": "new-access-xyz",
+  "refreshToken": "new-refresh-def456",
+  "tokenType": "Bearer",
+  "expiresIn": 7200,
+  "rotated": true
 }
 ```
 
@@ -301,7 +306,7 @@ CREATE TABLE sdk_tokens (
 
 ❌ **WRONG**:
 ```bash
-git add .aim/credentials.json
+git add .aim/sdk_credentials.json
 git commit -m "add config"  # NEVER DO THIS!
 ```
 
@@ -347,8 +352,8 @@ manager.revoke_token()  # Deletes local credentials + revokes server-side
 
 ### 5. **Monitor Token Usage**
 
-Check dashboard regularly:
-- https://your-aim-instance.com/dashboard/settings/sdk-tokens
+Check the SDK tokens list (Developers → Credentials → SDK tokens) regularly:
+- https://your-aim-instance.com/dashboard/credentials#sdk-tokens
 - Review active tokens
 - Revoke unknown tokens
 - Check for suspicious IPs
@@ -374,7 +379,7 @@ aim-cli download --env prod
 ```bash
 # Ensure credentials are only readable by owner (the SDK already sets 0600)
 chmod 600 ~/.aim/sdk_credentials.json
-chmod 600 ~/.aim/credentials.json
+chmod 600 ~/.aim/agents/*.json
 ```
 
 ## Security Incident Response
@@ -384,9 +389,9 @@ chmod 600 ~/.aim/credentials.json
 **Step 1: Immediate Revocation**
 ```bash
 # Via dashboard UI
-1. Go to Settings → SDK Tokens
-2. Click "Revoke All Tokens"
-3. Confirm with reason: "Security incident"
+1. Go to Developers → Credentials → SDK tokens (/dashboard/credentials#sdk-tokens)
+2. Click "Revoke all"
+3. Enter a reason, such as "Security incident", and confirm
 ```
 
 **Step 2: Download Fresh SDK**
@@ -423,7 +428,7 @@ AND last_used_at > NOW() - INTERVAL '24 hours';
 ```bash
 # 1. Revoke token immediately via dashboard
 # 2. Remove from Git history
-git filter-branch --tree-filter 'rm -f .aim/credentials.json' HEAD
+git filter-branch --tree-filter 'rm -f .aim/sdk_credentials.json' HEAD
 git push --force
 
 # 3. Rotate token
@@ -488,8 +493,7 @@ AIM token security supports SOC 2 requirements:
 
 ### For Developers
 
-- [ ] Install cryptography + keyring packages
-- [ ] Verify credentials are encrypted (.encrypted file exists)
+- [ ] Know that `~/.aim/sdk_credentials.json` and `~/.aim/agents/<agent-name>.json` are plaintext JSON protected by file permissions only (there is no `.encrypted` file)
 - [ ] Check file permissions (0o600)
 - [ ] Add .aim/ to .gitignore
 - [ ] Never commit credentials
