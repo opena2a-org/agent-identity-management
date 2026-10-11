@@ -569,7 +569,7 @@ Content-Type: application/json
 ```json
 {
   "id": "990e8400-e29b-41d4-a716-446655440000",
-  "apiKey": "aim_sk_1234567890abcdefghijklmnopqrstuvwxyz",
+  "apiKey": "aim_live_...",
   "name": "Production API Key",
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
   "expiresAt": "2026-01-06T00:00:00Z",
