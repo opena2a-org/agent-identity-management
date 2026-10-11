@@ -106,7 +106,7 @@ func TestSecurityPolicyConfigurationStatementHoldsForTheServer(t *testing.T) {
 	require.Contains(t, policy, "With `ENVIRONMENT=production` it refuses an empty or `postgres` `POSTGRES_PASSWORD` for a remote database host")
 
 	t.Setenv("KEYVAULT_MASTER_KEY", "")
-	secret := "security-policy-contract-test-secret-0123456789"
+	secret := strings.Repeat("s", 47)
 
 	require.ErrorContains(t, (&config.Config{}).Validate(), "JWT_SECRET is required")
 	short := &config.Config{JWT: config.JWTConfig{Secret: secret[:31]}}
