@@ -2,8 +2,9 @@
 
 The charts of the overview's three lenses, the security page and the compliance page,
 measured in a browser with the readability sweep. Nothing below is estimated; every
-figure is copied from the instrument's result file. No finding is fixed here: this is
-the measurement.
+figure is copied from the instrument's result file. No finding is fixed in the first
+run: it is the measurement. The last section is a second run, after the compliance
+page's two chart cards were changed.
 
 ## Instrument
 
@@ -114,3 +115,52 @@ from.
   agents; the "monitored" unit in the security lens, 4.20 dark; and the active sidebar
   link, 4.38 dark, on the executive lens and the security page. The compliance page
   also overflows by 104px at 375x812.
+
+## Second run: the compliance chart cards on glass
+
+The first finding above is fixed in the commit that adds this section: the two cards
+that hold the compliance page's charts ("Trust Score Trend" and "Risk Distribution") are
+glass cards, as on every other chart page, and the text inside them uses the ink
+colours. Nothing else on the page changed.
+
+- Command: the same, over the same five entries with the populated fixture.
+- Run: started 2026-10-11T17:51:07Z, finished 2026-10-11T17:51:53Z, 20 loads, exit code 1
+  (the whole-page criteria below still fail). The result file lists no request the mock
+  did not recognise.
+
+| Criterion | Entries failing, first run | Entries failing, second run |
+|---|---|---|
+| Chart series mark contrast | 0 of 5 | 0 of 5 |
+| Chart text contrast | 1 of 5 | 0 of 5 |
+| Chart without label or table control | 0 of 5 | 0 of 5 |
+| Off-token paints (recorded, not gated) | 0 of 5 | 0 of 5 |
+| Body text contrast, whole page | 5 of 5 | 5 of 5 |
+| Large text contrast, whole page | 0 of 5 | 0 of 5 |
+| Horizontal overflow | 1 of 5 | 1 of 5 (`/dashboard/compliance`, 104px at 375x812) |
+| Console errors | 0 of 5 | 0 of 5 |
+| Could not load | 0 of 5 | 0 of 5 |
+
+`/dashboard/compliance`, the same in both viewports:
+
+| Measure | Theme | First run | Second run | Foreground | Background, second run |
+|---|---|---|---|---|---|
+| Chart text minimum | light | 5.71 | 5.48 | rgb(102,102,107) | rgb(249,250,253) |
+| Chart text minimum | dark | 4.05 | 4.79 | rgb(134,134,139) | rgb(25,26,29) |
+| Mark minimum (`--chart-4`, fill) | light | 3.55 | 3.40 | rgb(255,59,48) | rgb(249,250,253) |
+| Mark minimum (`--chart-4`, fill) | dark | 4.14 | 4.90 | rgb(255,59,48) | rgb(25,26,29) |
+
+The light theme's figures fall because the glass card is a shade darker than white;
+both stay over their floors. No chart text on the page is under its floor in any
+variant (19 were in the first run). The other four entries measured what they did in
+the first run: marks 4.50 and 3.70 (developer lens), 3.53 and 3.70 (executive lens),
+3.40 and 3.70 (security page), and chart text 5.48 light and 4.79 dark on the executive
+lens and the security page.
+
+`apps/web/tests/chart-surface.test.ts` now fails when a chart is drawn on anything but
+the glass card, so the surface `tests/chart-contrast.test.ts` measures is the surface
+every chart has.
+
+Not changed by this: the page's other cards keep `bg-white dark:bg-gray-800`, so the
+two chart cards differ from their neighbours in fill and corner radius; the "Trust:"
+label still measures 2.43 light and 2.56 dark; and the page still overflows by 104px at
+375x812.

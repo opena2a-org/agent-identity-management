@@ -33,7 +33,8 @@ function color(tokens: Map<string, string>, value: string): Rgba {
   return c;
 }
 
-// A chart sits on a glass card. The card is translucent over the page, so its
+// A chart sits on a glass card (tests/chart-surface.test.ts fails for one that
+// does not). The card is translucent over the page, so its
 // colour is the glass composited over each stop of the page gradient, bare and
 // under the peak of either radial wash; where the glass is drawn solid (reduced
 // transparency, no backdrop-filter) it is the solid fill.
