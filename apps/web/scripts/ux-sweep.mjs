@@ -14,14 +14,17 @@
  *     A gradient background is scored against its worst colour stop; text over
  *     a url() image is reported as unmeasured rather than guessed
  *   - the count of visible text nodes rendered under 14px
- *   - the count of interactive targets whose box is under 44x44 CSS px
- *     (inline links inside running text are exempt, as in WCAG 2.5.8)
+ *   - the count of interactive targets whose box is under 44x44 CSS px, and of
+ *     those under 24x24, the minimum of WCAG 2.5.8 (inline links inside running
+ *     text are exempt from both, as in 2.5.8; its spacing exception is not
+ *     applied, so an undersized target counts wherever it sits)
  *   - whether a <main> landmark exists
  *   - horizontal overflow of the document in CSS px
  *   - console errors and uncaught page errors, verbatim
  *   - for every chart (a role="img" element holding an <svg>, as the chart layer
  *     in components/charts renders them): whether it carries an aria-label and a
- *     "view as table" control; the minimum contrast of its series marks (painted
+ *     "view as table" control, and whether that control's box is at least 44x44
+ *     CSS px; the minimum contrast of its series marks (painted
  *     shapes whose fill or stroke resolves to a --chart-* series token) against
  *     the chart's background, which needs 3:1 (WCAG 1.4.11); the minimum contrast
  *     of text drawn inside the svg, held to the same floors as other text; and
@@ -41,9 +44,10 @@
  *
  * Exit code 1 when any route has body-text contrast under 4.5:1, large-text
  * contrast under 3:1, a chart series mark under 3:1, chart text under its floor,
- * a chart without an aria-label or a table control, horizontal overflow, a console
- * error, or could not be loaded; 0 otherwise. The result file is written in both
- * cases.
+ * a chart without an aria-label or a table control, a chart's table control under
+ * 44x44, a target under 24x24, horizontal overflow, a console error, or could not
+ * be loaded; 0 otherwise. Text under 14px and targets under 44x44 are counted, not
+ * gated. The result file is written in both cases.
  */
 
 import { chromium } from "@playwright/test";
@@ -64,6 +68,7 @@ const LARGE_MIN_RATIO = 3;
 const GRAPHIC_MIN_RATIO = 3;
 const BODY_TEXT_FLOOR_PX = 14;
 const HIT_AREA_FLOOR_PX = 44;
+const TARGET_MIN_PX = 24;
 const SAMPLE_SEGMENT_VALUES = { id: "00000000-0000-4000-8000-000000000001" };
 const SAMPLE_UUID = SAMPLE_SEGMENT_VALUES.id;
 // The colour tokens of components/charts/tokens.ts. A shape painted in a series
@@ -344,7 +349,7 @@ export function findMock(method, pathname, mocks = MOCKS) {
 }
 
 /** Runs inside the page. Returns the per-variant measurement. */
-export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFloor, seriesTokens, chromeTokens }) {
+export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFloor, targetMin, seriesTokens, chromeTokens }) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -506,6 +511,8 @@ export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFlo
   let interactiveTargets = 0;
   let smallTargets = 0;
   const smallTargetSamples = [];
+  let targetsUnderMinimum = 0;
+  const targetMinimumSamples = [];
   for (const el of document.querySelectorAll(TARGETS)) {
     if (SKIP.has(el.tagName) || !isRendered(el)) continue;
     const rect = el.getBoundingClientRect();
@@ -516,9 +523,14 @@ export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFlo
       if (parentText.length > (el.textContent ?? "").trim().length) continue; // link inside running text
     }
     interactiveTargets += 1;
+    const target = () => ({ text: (el.getAttribute("aria-label") || el.textContent || el.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim().slice(0, 40), widthPx: +rect.width.toFixed(1), heightPx: +rect.height.toFixed(1), where: describe(el) });
     if (rect.width < hitFloor || rect.height < hitFloor) {
       smallTargets += 1;
-      if (smallTargetSamples.length < 5) smallTargetSamples.push({ text: (el.getAttribute("aria-label") || el.textContent || el.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim().slice(0, 40), widthPx: +rect.width.toFixed(1), heightPx: +rect.height.toFixed(1), where: describe(el) });
+      if (smallTargetSamples.length < 5) smallTargetSamples.push(target());
+    }
+    if (rect.width < targetMin || rect.height < targetMin) {
+      targetsUnderMinimum += 1;
+      if (targetMinimumSamples.length < 25) targetMinimumSamples.push(target());
     }
   }
 
@@ -564,6 +576,8 @@ export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFlo
   let chartsUnlabelled = 0;
   let chartsWithoutTable = 0;
   const chartAccessSamples = [];
+  let chartControlsUnderFloor = 0;
+  const chartControlSamples = [];
   let chartMarks = 0;
   let minMark = Infinity;
   let worstMark = null;
@@ -586,6 +600,13 @@ export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFlo
     if (!control) chartsWithoutTable += 1;
     if ((!chartLabel || !control) && chartAccessSamples.length < 5) chartAccessSamples.push({ label: chartLabel.slice(0, 80), hasLabel: !!chartLabel, hasTableControl: !!control, where: describe(frame) });
     const chart = chartLabel.slice(0, 80);
+    if (control) {
+      const box = control.getBoundingClientRect();
+      if (box.width < hitFloor || box.height < hitFloor) {
+        chartControlsUnderFloor += 1;
+        if (chartControlSamples.length < 5) chartControlSamples.push({ chart, widthPx: +box.width.toFixed(1), heightPx: +box.height.toFixed(1), where: describe(control) });
+      }
+    }
     const { candidates } = compositedBackgrounds(frame);
 
     for (const shape of frame.querySelectorAll(SHAPES)) {
@@ -653,6 +674,8 @@ export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFlo
     interactiveTargets,
     smallTargets,
     smallTargetSamples,
+    targetsUnderMinimum,
+    targetMinimumSamples,
     minBodyContrast: Number.isFinite(minBody) ? +minBody.toFixed(2) : null,
     minLargeContrast: Number.isFinite(minLarge) ? +minLarge.toFixed(2) : null,
     worstBody,
@@ -662,6 +685,8 @@ export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFlo
     chartsUnlabelled,
     chartsWithoutTable,
     chartAccessSamples,
+    chartControlsUnderFloor,
+    chartControlSamples,
     chartMarks,
     minChartMarkContrast: Number.isFinite(minMark) ? +minMark.toFixed(2) : null,
     worstChartMark: worstMark,
@@ -684,6 +709,7 @@ export const MEASURE_ARGS = {
   graphicMin: GRAPHIC_MIN_RATIO,
   textFloor: BODY_TEXT_FLOOR_PX,
   hitFloor: HIT_AREA_FLOOR_PX,
+  targetMin: TARGET_MIN_PX,
   seriesTokens: CHART_SERIES_TOKENS,
   chromeTokens: CHART_CHROME_TOKENS,
 };
@@ -736,13 +762,14 @@ export function summarize(variants, routes) {
   const byRoute = new Map();
   for (const v of variants) {
     const name = entryName(v);
-    const s = byRoute.get(name) ?? { route: name, path: v.route, lens: v.lens ?? null, file: v.file, minBodyContrast: null, minLargeContrast: null, smallTextNodes: 0, smallTargets: 0, hasMain: true, overflowPx: 0, consoleErrors: 0, loadErrors: 0, redirectedTo: null, charts: 0, chartMarks: 0, minChartMarkContrast: null, minChartBodyContrast: null, minChartLargeContrast: null, chartMarksBelowFloor: 0, chartTextBelowFloor: 0, chartsUnlabelled: 0, chartsWithoutTable: 0, offTokenPaints: 0, variants: 0 };
+    const s = byRoute.get(name) ?? { route: name, path: v.route, lens: v.lens ?? null, file: v.file, minBodyContrast: null, minLargeContrast: null, smallTextNodes: 0, smallTargets: 0, targetsUnderMinimum: 0, hasMain: true, overflowPx: 0, consoleErrors: 0, loadErrors: 0, redirectedTo: null, charts: 0, chartMarks: 0, minChartMarkContrast: null, minChartBodyContrast: null, minChartLargeContrast: null, chartMarksBelowFloor: 0, chartTextBelowFloor: 0, chartsUnlabelled: 0, chartsWithoutTable: 0, chartControlsUnderFloor: 0, offTokenPaints: 0, variants: 0 };
     s.variants += 1;
     if (v.loadError) s.loadErrors += 1;
     s.minBodyContrast = minOf(s.minBodyContrast, v.minBodyContrast);
     s.minLargeContrast = minOf(s.minLargeContrast, v.minLargeContrast);
     s.smallTextNodes = Math.max(s.smallTextNodes, v.smallTextNodes ?? 0);
     s.smallTargets = Math.max(s.smallTargets, v.smallTargets ?? 0);
+    s.targetsUnderMinimum = Math.max(s.targetsUnderMinimum, v.targetsUnderMinimum ?? 0);
     if (v.hasMain === false) s.hasMain = false;
     s.overflowPx = Math.max(s.overflowPx, v.overflowPx ?? 0);
     s.consoleErrors += v.consoleErrors.length;
@@ -758,6 +785,7 @@ export function summarize(variants, routes) {
     }
     s.chartsUnlabelled = Math.max(s.chartsUnlabelled, v.chartsUnlabelled ?? 0);
     s.chartsWithoutTable = Math.max(s.chartsWithoutTable, v.chartsWithoutTable ?? 0);
+    s.chartControlsUnderFloor = Math.max(s.chartControlsUnderFloor, v.chartControlsUnderFloor ?? 0);
     s.offTokenPaints = Math.max(s.offTokenPaints, v.offTokenPaints ?? 0);
     byRoute.set(name, s);
   }
@@ -769,6 +797,8 @@ export function summarize(variants, routes) {
     chartMarkContrast: names((r) => r.chartMarksBelowFloor > 0),
     chartTextContrast: names((r) => r.chartTextBelowFloor > 0),
     chartAccess: names((r) => r.chartsUnlabelled > 0 || r.chartsWithoutTable > 0),
+    chartControlSize: names((r) => r.chartControlsUnderFloor > 0),
+    targetSize: names((r) => r.targetsUnderMinimum > 0),
     overflow: names((r) => r.overflowPx > 0),
     consoleErrors: names((r) => r.consoleErrors > 0),
     loadErrors: names((r) => r.loadErrors > 0),
@@ -781,7 +811,9 @@ export function summarize(variants, routes) {
 }
 
 // The failures that fail the gate; the others are reported and counted only.
-const GATING = ["bodyContrast", "largeContrast", "chartMarkContrast", "chartTextContrast", "chartAccess", "overflow", "consoleErrors", "loadErrors"];
+// Targets are gated at the 24x24 minimum and counted at 44x44; a chart's table
+// control is gated at 44x44, the floor the chart standard sets for chart controls.
+const GATING = ["bodyContrast", "largeContrast", "chartMarkContrast", "chartTextContrast", "chartAccess", "overflow", "consoleErrors", "loadErrors", "chartControlSize", "targetSize"];
 
 /** The gating failure kinds that list at least one route. */
 export function gateFailures(fails) {
@@ -808,7 +840,7 @@ async function main() {
       for (const entry of routes) {
         const r = await sweepRoute(context, args.base, entry, args.settleMs, mocks);
         variants.push({ viewport: viewport.name, theme, ...r });
-        const flag = r.loadError ? "LOAD-ERROR" : `body ${r.minBodyContrast ?? "-"} large ${r.minLargeContrast ?? "-"} small-text ${r.smallTextNodes} small-targets ${r.smallTargets} main ${r.hasMain} overflow ${r.overflowPx} errors ${r.consoleErrors.length} charts ${r.chartCount} marks ${r.chartMarks} mark ${r.minChartMarkContrast ?? "-"} chart-text ${r.minChartBodyContrast ?? "-"}`;
+        const flag = r.loadError ? "LOAD-ERROR" : `body ${r.minBodyContrast ?? "-"} large ${r.minLargeContrast ?? "-"} small-text ${r.smallTextNodes} small-targets ${r.smallTargets} under-24 ${r.targetsUnderMinimum} main ${r.hasMain} overflow ${r.overflowPx} errors ${r.consoleErrors.length} charts ${r.chartCount} marks ${r.chartMarks} mark ${r.minChartMarkContrast ?? "-"} chart-text ${r.minChartBodyContrast ?? "-"}`;
         console.log(`${viewport.name} ${theme.padEnd(5)} ${entryName(entry).padEnd(44)} ${flag}`);
       }
       await context.close();
@@ -825,7 +857,7 @@ async function main() {
     appDir: args.app,
     fixture: args.fixture,
     only: args.only,
-    thresholds: { bodyContrast: BODY_MIN_RATIO, largeContrast: LARGE_MIN_RATIO, graphicContrast: GRAPHIC_MIN_RATIO, textFloorPx: BODY_TEXT_FLOOR_PX, hitAreaFloorPx: HIT_AREA_FLOOR_PX },
+    thresholds: { bodyContrast: BODY_MIN_RATIO, largeContrast: LARGE_MIN_RATIO, graphicContrast: GRAPHIC_MIN_RATIO, textFloorPx: BODY_TEXT_FLOOR_PX, hitAreaFloorPx: HIT_AREA_FLOOR_PX, targetMinPx: TARGET_MIN_PX },
     viewports: VIEWPORTS.map((v) => v.name),
     themes: THEMES,
     routeCount: routes.length,

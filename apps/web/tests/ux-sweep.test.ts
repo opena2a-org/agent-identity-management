@@ -97,6 +97,7 @@ function variant(overrides: Record<string, unknown>) {
     minLargeContrast: 7,
     smallTextNodes: 0,
     smallTargets: 0,
+    targetsUnderMinimum: 0,
     hasMain: true,
     overflowPx: 0,
     chartCount: 1,
@@ -107,6 +108,7 @@ function variant(overrides: Record<string, unknown>) {
     chartBelowFloor: [],
     chartsUnlabelled: 0,
     chartsWithoutTable: 0,
+    chartControlsUnderFloor: 0,
     offTokenPaints: 0,
     ...overrides,
   };
@@ -142,6 +144,23 @@ describe("ux-sweep gate", () => {
   it("fails a chart with no aria-label or no table control", () => {
     expect(gateFailures(summarize([variant({ chartsUnlabelled: 1 })], routes).fails)).toEqual(["chartAccess"]);
     expect(gateFailures(summarize([variant({ chartsWithoutTable: 1 })], routes).fails)).toEqual(["chartAccess"]);
+  });
+
+  it("fails a target under 24x24, and counts one under 44x44 or small text without failing", () => {
+    const counted = summarize([variant({ smallTargets: 6, smallTextNodes: 12 })], routes);
+    expect(counted.fails.smallTargets).toEqual(["/dashboard/security"]);
+    expect(counted.fails.smallText).toEqual(["/dashboard/security"]);
+    expect(gateFailures(counted.fails)).toEqual([]);
+    const { rows, fails } = summarize([variant({ smallTargets: 6, targetsUnderMinimum: 2 }), variant({ targetsUnderMinimum: 1 })], routes);
+    expect(rows[0].targetsUnderMinimum).toBe(2);
+    expect(fails.targetSize).toEqual(["/dashboard/security"]);
+    expect(gateFailures(fails)).toEqual(["targetSize"]);
+  });
+
+  it("fails a chart whose table control is under 44x44", () => {
+    const { fails } = summarize([variant({ chartControlsUnderFloor: 1 })], routes);
+    expect(fails.chartControlSize).toEqual(["/dashboard/security"]);
+    expect(gateFailures(fails)).toEqual(["chartControlSize"]);
   });
 
   it("reports a paint outside the chart tokens without failing the gate", () => {
@@ -222,6 +241,28 @@ const CHART_PAGE = `<!doctype html>
   </div>
 </main></body></html>`;
 
+// Targets as a page draws them: a 44px button (clears both floors), a 30px button
+// (under 44, over 24), a button 20px tall (under 24), a link inside running text
+// (exempt from both, as in WCAG 2.5.8), a standalone link 16px tall (under 24),
+// and two charts whose table controls are 44px and 28px tall.
+const box = (w: string, h: string) => `box-sizing: border-box; padding: 0; border: 0; width: ${w}; height: ${h};`;
+const TARGET_PAGE = `<!doctype html>
+<html><head><style>body { margin: 0; font-family: sans-serif; }</style></head><body><main>
+  <button type="button" style="${box("44px", "44px")}">A</button>
+  <button type="button" style="${box("30px", "30px")}">B</button>
+  <button type="button" style="${box("60px", "20px")}">C</button>
+  <p>Read the <a href="#guide">policy guide</a> before you start.</p>
+  <div><a href="#agents" style="display: inline-block; font-size: 12px; line-height: 16px;">See all</a></div>
+  <div>
+    <button type="button" aria-controls="view-a" style="${box("auto", "44px")} min-width: 44px;">View as table</button>
+    <div id="view-a"><div role="img" aria-label="Verifications: Jan 3"><svg width="50" height="50"></svg></div></div>
+  </div>
+  <div>
+    <button type="button" aria-controls="view-b" style="${box("auto", "28px")}">View as table</button>
+    <div id="view-b"><div role="img" aria-label="Attestations: Jan 2"><svg width="50" height="50"></svg></div></div>
+  </div>
+</main></body></html>`;
+
 // Runs where a Chromium build for this Playwright is installed (`npx playwright
 // install chromium`), as on any machine the sweep itself runs on.
 const browserInstalled = existsSync(chromium.executablePath());
@@ -275,5 +316,23 @@ describe.skipIf(!browserInstalled)("ux-sweep chart measurement in a browser", ()
     expect(r.chartsWithoutTable).toBe(1);
     expect(r.offTokenPaints).toBe(1);
     expect(r.offTokenSamples[0].color).toEqual([255, 0, 255]);
+  });
+
+  it("holds every target to 24x24 and counts those under 44x44, exempting a link in running text", async () => {
+    const page = await browser.newPage({ viewport: { width: 400, height: 400 } });
+    await page.setContent(TARGET_PAGE);
+    const r = await page.evaluate(measureInPage, MEASURE_ARGS);
+    await page.close();
+    type Target = { text: string; widthPx: number; heightPx: number };
+    expect(r.interactiveTargets).toBe(6);
+    expect(r.smallTargets).toBe(4);
+    expect(r.targetsUnderMinimum).toBe(2);
+    expect((r.targetMinimumSamples as Target[]).map((t) => [t.text, t.heightPx])).toEqual([
+      ["C", 20],
+      ["See all", 16],
+    ]);
+    expect(r.chartCount).toBe(2);
+    expect(r.chartControlsUnderFloor).toBe(1);
+    expect(r.chartControlSamples[0]).toMatchObject({ chart: "Attestations: Jan 2", heightPx: 28 });
   });
 });

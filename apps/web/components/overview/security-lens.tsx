@@ -173,7 +173,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
           )}
           <p className="mt-auto pt-4 text-2xs text-ink-tertiary">Actions sent through the SDK are checked against policy. In monitoring mode a failed check is recorded and the action still runs.</p>
           {canOpenSecurity && (
-            <Link href="/dashboard/security" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
+            <Link href="/dashboard/security" className="mt-2 inline-flex min-h-6 items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
               Open Security <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
           )}
