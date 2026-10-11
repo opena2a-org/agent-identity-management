@@ -120,16 +120,15 @@ The migrations will create the following tables:
 ### 1. Check Backend Health
 
 ```bash
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/health
 ```
 
 Expected response:
 ```json
-{
-  "status": "healthy",
-  "timestamp": "2025-01-XX..."
-}
+{"service":"agent-identity-management","status":"healthy","time":"2026-03-16T14:00:00.123456789Z"}
 ```
+
+`time` is the server's clock in UTC when it answered.
 
 ### 2. Test Database Connection
 

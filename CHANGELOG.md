@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the setup, deployment and troubleshooting guides check the server's health at `/health` (#670)
+
+- `docs/guides/SETUP_GUIDE.md`, `docs/guides/DEPLOYMENT_CHECKLIST.md` (six places),
+  `docs/troubleshooting/README.md` and `examples/README.md` told readers to check `/api/v1/health`, a path the
+  server does not mount. They now check `/health`, which the server mounts beside `/health/ready`, and which the
+  dashboard passes to the server on a deployment's domain (`apps/web/next.config.ts`). The setup guide's sample
+  response now has the fields `/health` returns: `service`, `status` and `time`.
+- A test reads every markdown file in the repository and fails on a health URL for the server, on port 8080 or a
+  deployment's domain, whose path `main.go` does not mount. It also checks the setup guide's sample response
+  against the handler's fields. Test: `health_docs_paths_test.go` (server routes).
+
 ### Fixed — the security guides name the credential files, the SDK tokens page, the access token lifetime and the record a reused token writes (#678)
 
 - `docs/guides/SECURITY.md` names `~/.aim/agents/<agent-name>.json` for agent credentials in its storage section, its

@@ -225,7 +225,7 @@ Ensure AIM platform is running:
 
 ```bash
 # Check if backend is running
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/health
 
 # Check if frontend is running
 curl http://localhost:3000
