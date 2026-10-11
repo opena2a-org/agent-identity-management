@@ -301,6 +301,11 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	}
 
 	result, err := h.a2aService.VerifyA2ARequest(c.Context(), req)
+	if errors.Is(err, application.ErrInvalidA2ANonce) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 	if err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}

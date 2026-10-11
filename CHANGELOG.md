@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — an A2A request whose nonce cannot be stored is answered 400, and other follow-ups (#645)
+
+- `POST /api/v1/a2a/verify` stored the request's nonce without checking it. A nonce longer than 64 characters failed
+  the write and was answered 500, and an empty nonce was recorded and the request verified. A nonce that is empty,
+  longer than 64 characters, not UTF-8, or that contains a NUL character is now answered 400 with
+  `nonce must be 1 to 64 characters of UTF-8 text without a NUL character`, before anything is read or recorded.
+- When the agent row could not be read, `POST /api/v1/a2a/verify` answered 401 with `agent not found`. It now answers
+  500, as it does when the nonce table or the agent's grants cannot be read. An agent that does not exist is still
+  answered 401 with `agent not found`.
+- The transition recorder refused a change given its own agent's opening event id only. A change given the opening
+  event id of another agent in the organization was recorded there, and that agent's next change was then refused
+  with `does not open its history`. Such a change is now refused before its statement runs. Only server code gives a
+  change an event id; no API request can.
+- Tests: `a2a_verify_status_test.go` (application) covers the nonce check, the 64-character limit counted in
+  characters, a failed agent read, and a nonce found used at the check, which is refused with
+  `nonce already used (replay attack)` without reading the agent or writing the nonce; no test covered that refusal
+  before. `a2a_verify_server_error_test.go` (HTTP handlers) covers the 400 and the 500. `transition_test.go` and
+  `authorization_transition_opening_integration_test.go` cover the opening event id of another agent.
+
 ### Fixed — an A2A request whose nonce cannot be recorded does not verify as valid, and other follow-ups (#643)
 
 - `POST /api/v1/a2a/verify` answered `valid: true` when the request's nonce could not be written to the nonce table:

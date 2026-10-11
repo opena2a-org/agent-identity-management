@@ -151,7 +151,12 @@ func insertAgent(ctx context.Context, db execer, agent *domain.Agent) error {
 	return err
 }
 
-// GetByID retrieves an agent by ID
+// ErrAgentNotFound is returned by GetByID and GetByName for an agent that is
+// not stored. Its text is the "agent not found" callers already compare;
+// errors.Is tells it apart from a read that failed.
+var ErrAgentNotFound = errors.New("agent not found")
+
+// GetByID retrieves an agent by ID. An id no agent has returns ErrAgentNotFound.
 func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version,
@@ -248,7 +253,7 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("agent not found")
+		return nil, ErrAgentNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -1142,7 +1147,7 @@ func (r *AgentRepository) GetByName(orgID uuid.UUID, name string) (*domain.Agent
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("agent not found")
+		return nil, ErrAgentNotFound
 	}
 	if err != nil {
 		return nil, err
