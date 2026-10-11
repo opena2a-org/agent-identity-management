@@ -79,10 +79,11 @@ export interface AIMClientConfig {
   timeout?: number;
   /**
    * Deadline in milliseconds over a WHOLE remote verification call:
-   * `verifyAction` from entry until it settles, covering the OAuth token
-   * exchange (when one is needed) and the verify POST under one shared budget.
-   * Resolution order: this option, then the AIM_ENFORCEMENT_TIMEOUT_MS
-   * environment variable (integer milliseconds), then 5000.
+   * `verifyAction` from entry until it settles. The verification POST is
+   * signed with the agent's key and needs no token, so no token exchange is
+   * made on this path. Resolution order: this option, then the
+   * AIM_ENFORCEMENT_TIMEOUT_MS environment variable (integer milliseconds),
+   * then 5000.
    */
   enforcementTimeout?: number;
   /** Enable debug logging */
@@ -198,6 +199,14 @@ export interface VerificationResult {
   timestamp: string;
   /** Verification event ID */
   eventId?: string;
+  /**
+   * The server's decision: `approved`, `auto-approved` (allowed by an
+   * organization in monitoring mode), `pending` or `denied`. Absent on a
+   * local verification.
+   */
+  status?: string;
+  /** The organization's enforcement mode, `strict` or `monitoring`, as the server reported it. */
+  enforcementMode?: string;
 }
 
 /**
@@ -208,7 +217,10 @@ export interface VerifyActionOptions {
   action: string;
   /** Resource being accessed */
   resource?: string;
-  /** Resource type */
+  /**
+   * Resource type. Not sent: the verification route has no resource type
+   * field. Put it in `context` to have it recorded with the verification.
+   */
   resourceType?: string;
   /** Additional context */
   context?: Record<string, unknown>;
@@ -226,6 +238,33 @@ export interface VerifyActionOptions {
     /** Injection-cause inference from NanoMind-Guard. */
     detection?: DetectionInput;
   };
+}
+
+/**
+ * The outcome of registering one capability: `granted` now (an organization in
+ * monitoring mode), `already_exists` (the agent holds it), or `pending` (an
+ * organization in strict mode, awaiting an administrator).
+ */
+export interface CapabilityRegistration {
+  capabilityType: string;
+  status: 'granted' | 'already_exists' | 'pending';
+  message: string;
+  /** The approval request's ID, for a pending request this call created. */
+  requestId?: string;
+}
+
+/**
+ * What `reportCapabilities` registered
+ */
+export interface CapabilityReport {
+  /** Capabilities the agent holds: granted now or already held */
+  granted: number;
+  /** Capabilities awaiting approval */
+  pending: number;
+  /** Distinct capabilities reported */
+  total: number;
+  /** One entry per distinct capability, in the order it was first reported */
+  results: CapabilityRegistration[];
 }
 
 /**

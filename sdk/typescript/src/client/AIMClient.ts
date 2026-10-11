@@ -6,6 +6,8 @@ import type {
   AIMClientConfig,
   Agent,
   AgentCredentials,
+  CapabilityRegistration,
+  CapabilityReport,
   RegisterAgentOptions,
   VerificationResult,
   VerifyActionOptions,
@@ -14,7 +16,11 @@ import { RiskLevel } from '../types';
 import { SDK_VERSION } from '../version';
 import { OAuthTokenManager, loadCredentialsFromEnv, missingAgentCredentialEnvVars } from '../auth/oauth';
 import { generateKeyPair, toBase64, createRequestSignature } from '../crypto/ed25519';
-import { decodeAgentPrivateKey } from '../crypto/agent-request';
+import {
+  createAgentRequestHeaders,
+  decodeAgentPrivateKey,
+  type AgentRequestMethod,
+} from '../crypto/agent-request';
 import {
   AIMError,
   AuthenticationError,
@@ -23,9 +29,15 @@ import {
   VerificationError,
   ConfigurationError,
   NetworkError,
+  capAPIErrorMessage,
   parseAPIError,
   unwrapErrnoCode,
 } from '../exceptions';
+import {
+  SDK_VERIFICATIONS_PATH,
+  signVerificationRequest,
+  type SDKVerificationResponse,
+} from './sdk-verification';
 import { LocalVerifier } from '../local';
 import type { Atx } from '../local';
 import {
@@ -51,9 +63,8 @@ import {
 const DEFAULT_BASE_URL = 'http://localhost:8080';
 const DEFAULT_TIMEOUT = 30000;
 // The enforcement deadline. ONE deadline, started when verifyAction's remote
-// call begins, bounds the WHOLE verification: the OAuth token exchange (when
-// one is needed) and the verify POST share the time left on it, never a
-// fresh budget each. No production
+// call begins, bounds the WHOLE verification: the signed verification POST,
+// the one request that call makes, is aborted at the time left on it. No production
 // latency distribution for the verification routes has been measured, so the
 // value is a choice, not a finding. UNMEASURED DEFAULT.
 const DEFAULT_ENFORCEMENT_TIMEOUT = 5000;
@@ -236,30 +247,17 @@ export class AIMClient {
     method: string,
     path: string,
     body?: unknown,
-    useApiKey = false,
-    extraHeaders?: Record<string, string>,
-    deadlineAt?: number
+    useApiKey = false
   ): Promise<T> {
-    const url = `${this.config.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'User-Agent': `AIM-SDK-TypeScript/${SDK_VERSION}`,
-      ...this.config.headers,
-      // Best-effort, non-auth extras (e.g. the correlation ID). Listed before
-      // auth/signature headers below so they can never override them.
-      ...extraHeaders,
-    };
+    const headers: Record<string, string> = {};
 
     // Add authentication
     if (useApiKey && this.config.apiKey) {
       headers['X-API-Key'] = this.config.apiKey;
     } else if (this.tokenManager) {
-      // On the enforcement path the token exchange spends the SAME deadline
-      // the verify POST will finish on; its abort surfaces as the one timeout
-      // error the caller already knows.
       let token: string;
       try {
-        token = await this.tokenManager.getAccessToken(deadlineAt);
+        token = await this.tokenManager.getAccessToken();
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           throw new NetworkError('Request timed out', error);
@@ -268,7 +266,7 @@ export class AIMClient {
         // cached token that is the exchange, and it is the same network
         // failure the request below would report.
         if (error instanceof TypeError) {
-          throw this.networkError(error, 'POST', `${this.config.baseUrl}/oauth/token`);
+          throw this.networkError(error, 'POST', `${this.config.baseUrl}/api/v1/oauth/token`);
         }
         throw error;
       }
@@ -296,27 +294,83 @@ export class AIMClient {
       headers['X-AIM-Agent-ID'] = this.credentials.agentId;
     }
 
+    return this.send<T>(method, path, body ? JSON.stringify(body) : undefined, headers);
+  }
+
+  /**
+   * Make a request as the agent, signed with `agent-request-v1` (the
+   * X-Agent-ID, X-Timestamp, X-Signature and X-Public-Key headers). This is
+   * how the SDK-API routes authenticate an agent; they refuse the OAuth
+   * service token, so no Authorization header is sent. A status in `accept`
+   * is answered like a 2xx.
+   */
+  private async requestAsAgent<T>(
+    method: AgentRequestMethod,
+    path: string,
+    body: unknown,
+    accept: readonly number[] = []
+  ): Promise<T> {
+    if (!this.credentials) {
+      throw this.noCredentialsError();
+    }
+    // Serialized once: the signature covers exactly the bytes that are sent.
+    const bodyText = JSON.stringify(body);
+    const signed = await createAgentRequestHeaders(
+      { method, url: `${this.config.baseUrl}${path}`, body: bodyText },
+      this.credentials
+    );
+    return this.send<T>(method, path, bodyText, { ...signed }, { accept });
+  }
+
+  /**
+   * Send one request and parse its JSON answer. A status that is not 2xx and
+   * not in `accept` throws the error parseAPIError maps it to. The request is
+   * aborted at `deadlineAt` when one is given (the time LEFT on the shared
+   * enforcement deadline, never a fresh budget), and after the general
+   * per-request timeout otherwise.
+   */
+  private async send<T>(
+    method: string,
+    path: string,
+    bodyText: string | undefined,
+    authHeaders: Record<string, string>,
+    options: {
+      extraHeaders?: Record<string, string>;
+      deadlineAt?: number;
+      accept?: readonly number[];
+    } = {}
+  ): Promise<T> {
+    const url = `${this.config.baseUrl}${path}`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': `AIM-SDK-TypeScript/${SDK_VERSION}`,
+      ...this.config.headers,
+      // Best-effort, non-auth extras (e.g. the correlation ID). Listed before
+      // the auth/signature headers so they can never override them.
+      ...options.extraHeaders,
+      ...authHeaders,
+    };
+
     this.log(`${method} ${path}`);
 
     const controller = new AbortController();
-    // On the enforcement path the abort fires at the time LEFT on the shared
-    // deadline (never a fresh budget per request); every other request keeps
-    // the general per-request timeout exactly as before.
     const abortAfterMs =
-      deadlineAt === undefined ? this.config.timeout : Math.max(deadlineAt - Date.now(), 0);
+      options.deadlineAt === undefined
+        ? this.config.timeout
+        : Math.max(options.deadlineAt - Date.now(), 0);
     const timeoutId = setTimeout(() => controller.abort(), abortAfterMs);
 
     try {
       const response = await fetch(url, {
         method,
         headers,
-        body: body ? JSON.stringify(body) : undefined,
+        body: bodyText,
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
+      if (!response.ok && !(options.accept ?? []).includes(response.status)) {
         const errorBody = await response.json().catch(() => ({}));
         throw parseAPIError(response.status, errorBody, response.headers);
       }
@@ -463,8 +517,15 @@ export class AIMClient {
    * passed to the constructor) AND a resolved ATX credential is available (via
    * {@link setLocalCredential} or the `atx` argument), the signed credential is
    * verified offline and authorization is decided from its signed claims — no
-   * call to the central PDP. Otherwise this falls back to the remote
-   * `POST /api/v1/verify` decision (the original behavior).
+   * call to the central PDP. Otherwise AIM decides it: the action is sent to
+   * `POST /api/v1/sdk-api/verifications`, signed with the agent's Ed25519 key
+   * in the body (see `sdk-verification.ts`), with no token exchange.
+   *
+   * Returns on `approved` and on `auto-approved` (an organization in
+   * monitoring mode). Throws {@link ActionDeniedError} on `denied`, carrying
+   * the server's reason, and on `pending` (a just-in-time request awaiting an
+   * administrator), and {@link VerificationError} on an answer with no known
+   * decision.
    *
    * @param atx Optional ATX credential to verify locally for this call. Overrides
    *   any credential set via {@link setLocalCredential}.
@@ -476,22 +537,20 @@ export class AIMClient {
     }
 
     // ONE deadline over the whole remote verification call, started on entry:
-    // the token exchange (when one is needed) and the verify POST are both
-    // aborted by the time left on it.
+    // the verification POST is aborted by the time left on it.
     const deadlineAt = Date.now() + this.config.enforcementTimeout;
 
     if (!this.credentials) {
       throw this.noCredentialsError();
     }
+    const agentId = this.credentials.agentId;
 
-    const payload = {
-      agentId: this.credentials.agentId,
-      action: options.action,
+    const payload = await signVerificationRequest(this.credentials, {
+      capability: options.action,
       resource: options.resource,
-      resourceType: options.resourceType,
-      context: options.context ?? {},
+      context: options.context,
       riskLevel: options.riskLevel,
-    };
+    });
 
     this.log('Verifying action:', options.action);
 
@@ -499,34 +558,41 @@ export class AIMClient {
     // best-effort. Minting/headers are skipped entirely when telemetry is off.
     const correlationId = this.telemetryEnabled ? mintCorrelationId() : undefined;
 
-    let result: VerificationResult;
+    let answer: SDKVerificationResponse;
     try {
-      result = await this.request<VerificationResult>(
+      answer = await this.send<SDKVerificationResponse>(
         'POST',
-        '/api/v1/verify',
-        payload,
-        false,
-        correlationHeaders(correlationId),
-        deadlineAt
+        SDK_VERIFICATIONS_PATH,
+        JSON.stringify(payload),
+        {},
+        { extraHeaders: correlationHeaders(correlationId), deadlineAt }
       );
     } catch (error) {
-      // A wire 403 IS an enforcement deny — the server refused the action at
-      // the HTTP layer instead of answering 200 {actionAllowed:false}. Record
-      // it with the same correlation the in-band deny path gets.
-      if (correlationId && error instanceof AuthorizationError) {
-        this.recordVerificationTelemetry(correlationId, options, {
-          verified: false,
-          agentId: this.credentials.agentId,
-          agentName: '',
-          trustScore: 0,
-          riskLevel: options.riskLevel ?? RiskLevel.LOW,
-          actionAllowed: false,
-          denialReason: error.message,
-          timestamp: new Date().toISOString(),
-        });
+      // A denial is answered 403 with the decision in the body; it is handled
+      // below exactly as an allow is.
+      if (error instanceof AuthorizationError && error.details?.status === 'denied') {
+        answer = error.details as SDKVerificationResponse;
+      } else {
+        // Any other 403 is a refusal before a decision (an agent whose status
+        // does not allow it to act). It is still an enforcement deny: record
+        // it with the same correlation the decided deny gets.
+        if (correlationId && error instanceof AuthorizationError) {
+          this.recordVerificationTelemetry(correlationId, options, {
+            verified: false,
+            agentId,
+            agentName: '',
+            trustScore: 0,
+            riskLevel: options.riskLevel ?? RiskLevel.LOW,
+            actionAllowed: false,
+            denialReason: error.message,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        throw error;
       }
-      throw error;
     }
+
+    const result = this.verificationResult(answer, options, agentId);
 
     // Record the enforcement outcome (allow OR deny) BEFORE the deny throw, so
     // the causal-denial case is captured. Never affects the result below.
@@ -538,11 +604,56 @@ export class AIMClient {
       throw new ActionDeniedError(
         options.action,
         result.denialReason ?? 'Action not allowed',
-        result.trustScore
+        result.trustScore,
+        { status: result.status, eventId: result.eventId }
       );
     }
 
     return result;
+  }
+
+  /**
+   * The verification route's answer as a {@link VerificationResult}. The route
+   * names no agent, so `agentName` is the name of the agent this client
+   * registered or read, and empty when it has neither.
+   */
+  private verificationResult(
+    answer: SDKVerificationResponse,
+    options: VerifyActionOptions,
+    agentId: string
+  ): VerificationResult {
+    const status = answer?.status;
+    if (status !== 'approved' && status !== 'auto-approved' && status !== 'pending' && status !== 'denied') {
+      throw new VerificationError(
+        `AIM answered the verification of '${options.action}' without a known decision`,
+        { ...answer }
+      );
+    }
+    const allowed = status === 'approved' || status === 'auto-approved';
+
+    let denialReason: string | undefined;
+    if (status === 'denied') {
+      denialReason =
+        typeof answer.denialReason === 'string' && answer.denialReason !== ''
+          ? capAPIErrorMessage(answer.denialReason)
+          : 'Action denied by policy';
+    } else if (status === 'pending') {
+      denialReason = "The action is awaiting an administrator's approval";
+    }
+
+    return {
+      verified: allowed,
+      agentId,
+      agentName: this.agent?.name ?? '',
+      trustScore: typeof answer.trustScore === 'number' ? answer.trustScore : 0,
+      riskLevel: (answer.riskLevel ?? options.riskLevel ?? RiskLevel.LOW) as RiskLevel,
+      actionAllowed: allowed,
+      denialReason,
+      timestamp: new Date().toISOString(),
+      eventId: typeof answer.id === 'string' ? answer.id : undefined,
+      status,
+      enforcementMode: typeof answer.enforcementMode === 'string' ? answer.enforcementMode : undefined,
+    };
   }
 
   /**
@@ -761,33 +872,92 @@ export class AIMClient {
   }
 
   /**
-   * Update agent metadata
+   * Update agent metadata. Sends the fields the server applies to an agent:
+   * `displayName`, `description`, `agentType`, `version`, `capabilities`,
+   * `talksTo` and `metadata`. An agent keeps the name it was registered with,
+   * so `name` is not sent, and neither is the deprecated
+   * `communityIntelligenceOptIn`.
    */
   async updateAgent(updates: Partial<RegisterAgentOptions>): Promise<Agent> {
     if (!this.credentials) {
       throw this.noCredentialsError();
     }
 
+    const { displayName, description, agentType, version, capabilities, talksTo, metadata } =
+      updates ?? {};
+
     this.agent = await this.request<Agent>(
       'PUT',
       `/api/v1/agents/${this.credentials.agentId}`,
-      updates
+      { displayName, description, agentType, version, capabilities, talksTo, metadata }
     );
 
     return this.agent;
   }
 
   /**
-   * Report capabilities
+   * Register the capabilities the agent uses. Each distinct capability is
+   * registered once, in the order it first appears, through
+   * `POST /api/v1/sdk-api/agents/:id/capabilities/register`, which follows the
+   * organization's enforcement mode: in monitoring mode a capability is
+   * granted, in strict mode it waits for an administrator's approval.
+   *
+   * An entry that is not a non-empty string throws `ConfigurationError`, and
+   * nothing is sent. A registration AIM refuses throws, and the capabilities
+   * after it are not sent.
    */
-  async reportCapabilities(capabilities: string[]): Promise<void> {
+  async reportCapabilities(capabilities: string[]): Promise<CapabilityReport> {
     if (!this.credentials) {
       throw this.noCredentialsError();
     }
+    const agentId = this.credentials.agentId;
 
-    await this.request('POST', `/api/v1/agents/${this.credentials.agentId}/capabilities/report`, {
-      capabilities,
-    });
+    const distinct: string[] = [];
+    for (const capability of capabilities) {
+      if (typeof capability !== 'string' || capability === '') {
+        throw new ConfigurationError(
+          `reportCapabilities takes capability types as non-empty strings, got ${JSON.stringify(capability)}; nothing was sent.`
+        );
+      }
+      if (!distinct.includes(capability)) {
+        distinct.push(capability);
+      }
+    }
+
+    const results: CapabilityRegistration[] = [];
+    for (const capabilityType of distinct) {
+      // 409 is an answer, not a failure: the agent already holds the
+      // capability, or a request for it is already pending.
+      const answer = await this.requestAsAgent<Record<string, unknown>>(
+        'POST',
+        `/api/v1/sdk-api/agents/${agentId}/capabilities/register`,
+        { capabilityType },
+        [409]
+      );
+      const status = answer?.status;
+      if (status !== 'granted' && status !== 'already_exists' && status !== 'pending') {
+        throw new VerificationError(
+          `AIM answered the registration of capability '${capabilityType}' without a known outcome`,
+          { ...answer }
+        );
+      }
+      const registration: CapabilityRegistration = {
+        capabilityType,
+        status,
+        message: typeof answer.message === 'string' ? capAPIErrorMessage(answer.message) : '',
+      };
+      if (status === 'pending' && typeof answer.requestId === 'string' && answer.requestId !== '') {
+        registration.requestId = answer.requestId;
+      }
+      results.push(registration);
+    }
+
+    return {
+      granted: results.filter((r) => r.status !== 'pending').length,
+      pending: results.filter((r) => r.status === 'pending').length,
+      total: distinct.length,
+      results,
+    };
   }
 
   /**
@@ -855,7 +1025,8 @@ export class AIMClient {
       throw this.noCredentialsError();
     }
 
-    const response = await this.request<IsolationAttestationResult>(
+    // Signed as the agent: the SDK-API routes refuse the OAuth service token.
+    const response = await this.requestAsAgent<IsolationAttestationResult>(
       'POST',
       `/api/v1/sdk-api/agents/${this.credentials.agentId}/isolation-attestation`,
       payload,

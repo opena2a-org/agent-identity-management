@@ -125,7 +125,7 @@ beforeEach(async () => {
       res.end(JSON.stringify({ access_token: 'token', expires_in: 300 }));
     } else if (req.url === `/api/v1/agents/${AGENT_ID}`) {
       res.end(JSON.stringify({ id: AGENT_ID, trustScore: 0.9 }));
-    } else if (req.url === '/api/v1/verify') {
+    } else if (req.url === '/api/v1/sdk-api/verifications') {
       res.statusCode = aimStatus;
       res.end(JSON.stringify(aimBody));
     } else {
@@ -200,8 +200,17 @@ describe('aimErrorHandler with an upstream error, through the README example', (
   });
 
   it('lets a success reach the route handler', async () => {
-    aimStatus = 200;
-    aimBody = { actionAllowed: true, verified: true, trustScore: 0.9, agentId: AGENT_ID };
+    // The verification route's answer to an approved action.
+    aimStatus = 201;
+    aimBody = {
+      id: '3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+      status: 'approved',
+      approvedBy: 'system',
+      trustScore: 0.9,
+      enforcementMode: 'strict',
+      riskLevel: 'medium',
+      riskAutoDetected: true,
+    };
 
     const { status, text } = await postData();
 
@@ -210,8 +219,8 @@ describe('aimErrorHandler with an upstream error, through the README example', (
   });
 
   it('answers an unreachable AIM on a cold start as a JSON network error', async () => {
-    // A fresh app has no cached token, so the first thing the SDK does is the
-    // token exchange, and that fetch is the one that rejects.
+    // The base middleware's agent lookup swallows its own failure, so the
+    // fetch that rejects into the error handler is the verification POST.
     const port = await new Promise<number>((resolve) => {
       const probe = createServer();
       probe.listen(0, '127.0.0.1', () => {
@@ -233,7 +242,7 @@ describe('aimErrorHandler with an upstream error, through the README example', (
       code: 'NETWORK_ERROR',
       error: 'Internal Server Error',
     });
-    expect(body.message).toContain('/oauth/token');
+    expect(body.message).toContain('/api/v1/sdk-api/verifications');
     expect(body.message).toContain('ECONNREFUSED');
     expect(text).not.toMatch(/<!DOCTYPE|<pre>|\bat \S+ \(|node_modules|\.[jt]s:\d+/);
     expect(stderr).not.toHaveBeenCalled();

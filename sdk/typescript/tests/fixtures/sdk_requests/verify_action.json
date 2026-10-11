@@ -1,0 +1,29 @@
+{
+  "description": "The request AIMClient.verifyAction sends for this action, signed with the RFC 8032 test 1 key. AIMClient.sdk-routes.test.ts requires the client to send exactly this body; the backend's sdk_typescript_request_contract_test.go posts it to the verification handler, which must accept the signature.",
+  "method": "POST",
+  "path": "/api/v1/sdk-api/verifications",
+  "requestType": "VerificationRequest",
+  "body": {
+    "agentId": "0f6b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d",
+    "capability": "file:write",
+    "resource": "/srv/data/report é.csv",
+    "context": {
+      "zeta": "last in byte order among the ASCII names",
+      "Zeta": "an upper-case name sorts before every lower-case one",
+      "é": "a name outside ASCII",
+      "": "a private-use name: before the next name in UTF-8 byte order, after it in UTF-16",
+      "😀": "a name outside the Basic Multilingual Plane",
+      "nested": {
+        "b": [3, 1.5, -2, 1e+21, 1e-7, 0.000001, 0.1, 12345678901234567000, true, false, null],
+        "a": {},
+        "c": []
+      },
+      "text": "<a href=\"x\">&amp;</a> \\ back \"quoted\"\ttab\nnewline",
+      "separators": "line paragraph end"
+    },
+    "timestamp": "2026-10-11T12:00:00.000Z",
+    "riskLevel": "high",
+    "signature": "B/MUZMpkZYqYdyU9TS1RRatIlRQa+RCIAtS+Ft5N2RKDYvz/qAS/qOewIXOFhi/BjSrLyCQQp03zqHFnhklHDw==",
+    "publicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+  }
+}

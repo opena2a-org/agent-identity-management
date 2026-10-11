@@ -147,7 +147,7 @@ agent.logEvent({
 
 The only SDK that runs without a server today. Backs local mode: the example writes `identity.json` and one `audit.jsonl` line under `~/.opena2a/aim-core/`. It runs as written with `@opena2a/aim-core` 0.2.0 (measured 2026-10-04). Source: [`packages/aim-core`](https://github.com/opena2a-org/opena2a/tree/main/packages/aim-core).
 
-The client for an AIM server is a separate package, `@opena2a/aim-sdk`, documented in [`sdk/typescript/README.md`](sdk/typescript/README.md). In 1.3.1 its `verifyAction` does not yet complete against a self-hosted server: it requests `/oauth/token` and then `/api/v1/verify` (measured 2026-10-04 on the published package), and the server registers neither path. Tracked for a fix.
+The client for an AIM server is a separate package, `@opena2a/aim-sdk`, documented in [`sdk/typescript/README.md`](sdk/typescript/README.md). In 1.3.1, the published version, `verifyAction` does not complete against a self-hosted server: it requests `/oauth/token` and then `/api/v1/verify` (measured 2026-10-04 on the published package), and the server registers neither path (it serves tokens at `/api/v1/oauth/token`). The source in this repository posts the action to `/api/v1/sdk-api/verifications`, signed with the agent's key, and makes no token request for it; it ships in the next release ([#662](https://github.com/opena2a-org/agent-identity-management/issues/662)).
 
 ## Server features
 

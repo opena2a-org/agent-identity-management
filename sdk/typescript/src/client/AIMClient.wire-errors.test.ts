@@ -3,9 +3,13 @@
  *
  * - RateLimitError.retryAfter reflects the server's Retry-After header, falling
  *   back to the body field then a default only when absent.
- * - A wire 403 on /api/v1/verify with telemetry enabled produces a correlated
- *   deny enforcement record exactly as the 200 {actionAllowed:false} path does;
- *   an ALLOWED verify carrying a detection produces one too.
+ * - A 403 on /api/v1/sdk-api/verifications that carries no decision (a refusal
+ *   such as a suspended agent) with telemetry enabled produces a correlated
+ *   deny enforcement record exactly as a decided denial does; an ALLOWED
+ *   verify carrying a detection produces one too.
+ *
+ * The verification POST is the only request verifyAction makes: it is signed
+ * in its body, and no token exchange precedes it.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -13,7 +17,7 @@ import { AIMClient } from './AIMClient';
 import { AuthorizationError, RateLimitError, parseAPIError } from '../exceptions';
 import { CorrelationJoiner, type CorrelatedRecord, type DetectionInput } from '../telemetry';
 import { generateKeyPair, toBase64 } from '../crypto/ed25519';
-import type { AgentCredentials, VerificationResult } from '../types';
+import type { AgentCredentials } from '../types';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -29,27 +33,19 @@ async function realCredentials(agentId = 'agent-wire-1'): Promise<AgentCredentia
   };
 }
 
-function mockTokenOk(): void {
-  mockFetch.mockResolvedValueOnce({
-    ok: true,
-    json: async () => ({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 3600 }),
-  });
-}
-
-function mockVerifyOk(overrides: Partial<VerificationResult> = {}): void {
-  const body: VerificationResult = {
-    verified: true,
-    agentId: 'agent-wire-1',
-    agentName: 'wire-agent',
+/** The route's answer to an approved action. */
+function mockVerifyOk(): void {
+  const body = {
+    id: 'evt-wire',
+    status: 'approved',
     trustScore: 0.9,
-    riskLevel: 'low' as VerificationResult['riskLevel'],
-    actionAllowed: true,
-    timestamp: '2026-09-09T00:00:00Z',
-    eventId: 'evt-wire',
-    ...overrides,
+    enforcementMode: 'strict',
+    riskLevel: 'low',
+    riskAutoDetected: true,
   };
   mockFetch.mockResolvedValueOnce({
     ok: true,
+    status: 201,
     text: async () => JSON.stringify(body),
   });
 }
@@ -93,7 +89,6 @@ describe('Retry-After (item 4)', () => {
   it('AIM-11.AC4 a 429 with "Retry-After: 7" yields RateLimitError.retryAfter 7', async () => {
     const client = new AIMClient();
     client.setCredentials(await realCredentials());
-    mockTokenOk();
     mockVerifyFailure(429, { message: 'rate limited' }, { 'Retry-After': '7' });
 
     let caught: unknown;
@@ -121,7 +116,6 @@ describe('Retry-After (item 4)', () => {
   it('AIM-11.AC4 the header wins over the body field when both are present', async () => {
     const client = new AIMClient();
     client.setCredentials(await realCredentials());
-    mockTokenOk();
     mockVerifyFailure(429, { retryAfter: 999 }, { 'Retry-After': '7' });
 
     let caught: unknown;
@@ -135,13 +129,13 @@ describe('Retry-After (item 4)', () => {
 });
 
 describe('telemetry on wire 403 (item 5)', () => {
-  it('AIM-11.AC5 a wire 403 on /api/v1/verify with telemetry enabled produces a correlated deny record', async () => {
+  it('AIM-11.AC5 a 403 refusal with no decision, with telemetry enabled, produces a correlated deny record', async () => {
     const records: CorrelatedRecord[] = [];
     const joiner = new CorrelationJoiner({ windowMs: 60_000, onRecord: (r) => records.push(r) });
     const client = new AIMClient({ telemetry: { enabled: true, joiner } });
     client.setCredentials(await realCredentials());
-    mockTokenOk();
-    mockVerifyFailure(403, { message: 'agent suspended' });
+    // The body the route answers a suspended agent with.
+    mockVerifyFailure(403, { error: 'Agent status is suspended, cannot perform actions' });
 
     await expect(
       client.verifyAction({ action: 'file:write', resource: '/etc/passwd' })
@@ -164,8 +158,7 @@ describe('telemetry on wire 403 (item 5)', () => {
     const joiner = new CorrelationJoiner({ windowMs: 60_000, onRecord: (r) => records.push(r) });
     const client = new AIMClient({ telemetry: { enabled: true, joiner } });
     client.setCredentials(await realCredentials());
-    mockTokenOk();
-    mockVerifyOk({ actionAllowed: true });
+    mockVerifyOk();
 
     await client.verifyAction({
       action: 'file:read',

@@ -41,26 +41,27 @@ async function realCredentials(agentId = 'agent-tele-1'): Promise<AgentCredentia
   };
 }
 
-// Credentialed requests acquire an OAuth token first; queue that response,
-// then the verify response. The verify call is always the last fetch.
-function mockVerifyResponse(overrides: Partial<VerificationResult> = {}): void {
-  mockFetch.mockResolvedValueOnce({
-    ok: true,
-    json: async () => ({ accessToken: 'test-token', tokenType: 'Bearer', expiresIn: 3600 }),
-  });
-  const body: VerificationResult = {
-    verified: true,
-    agentId: 'agent-tele-1',
-    agentName: 'tele-agent',
+// The verification is the only request verifyAction makes (it is signed in
+// its body; no token exchange precedes it). The route answers an allowed
+// action 201 and a denied one 403, each with the decision in the body.
+function mockVerifyResponse(
+  overrides: Pick<Partial<VerificationResult>, 'actionAllowed' | 'denialReason'> = {}
+): void {
+  const allowed = overrides.actionAllowed ?? true;
+  const body = {
+    id: 'evt-123',
+    status: allowed ? 'approved' : 'denied',
     trustScore: 0.9,
-    riskLevel: 'low' as VerificationResult['riskLevel'],
-    actionAllowed: true,
-    timestamp: '2026-06-06T00:00:00Z',
-    eventId: 'evt-123',
-    ...overrides,
+    enforcementMode: 'strict',
+    riskLevel: 'low',
+    riskAutoDetected: true,
+    ...(allowed ? {} : { denialReason: overrides.denialReason ?? 'denied' }),
   };
   mockFetch.mockResolvedValueOnce({
-    ok: true,
+    ok: allowed,
+    status: allowed ? 201 : 403,
+    headers: new Headers(),
+    json: async () => body,
     text: async () => JSON.stringify(body),
   });
 }

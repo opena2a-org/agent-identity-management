@@ -1,0 +1,14 @@
+{
+  "description": "The request AIMClient.verifyAction sends for an action with no resource and no context, signed with the RFC 8032 test 1 key. The signed message carries resource as null and context as an empty object.",
+  "method": "POST",
+  "path": "/api/v1/sdk-api/verifications",
+  "requestType": "VerificationRequest",
+  "body": {
+    "agentId": "0f6b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d",
+    "capability": "db:read",
+    "context": {},
+    "timestamp": "2026-10-11T12:00:00.000Z",
+    "signature": "E1rMJRbBhS98zZAbf4O5X80LuZxpCqBxNzDWCCx/1QovCNGUpHaRHmi43GzxrYjrAHYb9FrobFJSmmzNgzXnCw==",
+    "publicKey": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="
+  }
+}

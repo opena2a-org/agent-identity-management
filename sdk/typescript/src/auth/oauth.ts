@@ -59,10 +59,9 @@ export class OAuthTokenManager {
    * Get a valid access token, refreshing if necessary
    *
    * @param deadlineAt Optional absolute instant (`Date.now()` ms) by which the
-   *   token fetch must have settled — the enforcement deadline, threaded from
-   *   the verification call so the exchange spends the same budget as the
-   *   verify POST rather than getting a fresh one. When omitted, the fetch is
-   *   unbounded, exactly as before.
+   *   token fetch must have settled — a caller's deadline, so the exchange
+   *   spends the caller's budget rather than getting a fresh one. When
+   *   omitted, the fetch is unbounded, exactly as before.
    */
   async getAccessToken(deadlineAt?: number): Promise<string> {
     // Check if we have a valid cached token
@@ -93,9 +92,8 @@ export class OAuthTokenManager {
     const tokenEndpoint = `${this.baseUrl}/api/v1/oauth/token`;
     const clientAssertion = await this.createClientAssertion(Date.now());
 
-    // The abort fires at the time LEFT on the enforcement deadline — the same
-    // deadline the verify POST that follows will finish on, never a fresh
-    // budget for the exchange alone.
+    // The abort fires at the time LEFT on the caller's deadline, never a
+    // fresh budget for the exchange alone.
     let signal: AbortSignal | undefined;
     let abortTimer: ReturnType<typeof setTimeout> | undefined;
     if (deadlineAt !== undefined) {

@@ -65,6 +65,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `AIMClient.verifyAction` posts the action to `POST /api/v1/sdk-api/verifications`, the route AIM serves action
+  verification on, in the body that route reads (`agentId`, `capability`, `resource`, `context`, `timestamp`,
+  `riskLevel`, `signature`, `publicKey`), signed with the agent's Ed25519 key over the message the server rebuilds
+  from that body. It makes no token request. An `approved` or `auto-approved` answer is returned, with the server's
+  `status` and `enforcementMode` on the result; `denied` and `pending` throw `ActionDeniedError` with the reason; a
+  403 with no decision in its body stays `AuthorizationError`; an answer with no known decision throws
+  `VerificationError`. It posted to `/api/v1/verify`, a path the server does not register (#662).
+- `reportCapabilities` registers each distinct capability through
+  `POST /api/v1/sdk-api/agents/:id/capabilities/register` and returns a `CapabilityReport`: how many were granted or
+  already held, how many await approval, and the outcome for each. `reportCapabilities` and `attestIsolation` sign
+  their requests as the agent (`X-Agent-ID`, `X-Timestamp`, `X-Signature`, `X-Public-Key`) and send no OAuth token.
+  `updateAgent` sends only `displayName`, `description`, `agentType`, `version`, `capabilities`, `talksTo` and
+  `metadata`, the fields the server applies; `name` and `communityIntelligenceOptIn` are not sent. A token request
+  that cannot reach AIM names `/api/v1/oauth/token`, the path it is sent to (#662).
+
 - `LocalVerifier` verifies every ML-DSA-65 signature a credential declares. `@opena2a/atx-verify` 0.3.0 checks
   Ed25519 only and recorded an ML-DSA-65 entry without checking it, so a credential whose ML-DSA-65 signature was
   forged verified as long as its Ed25519 signature was intact. Each declared ML-DSA-65 signature must now verify, over
