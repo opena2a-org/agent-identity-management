@@ -2,9 +2,10 @@
 # lint-docs-repo-links.sh — reject a link to the `opena2a` GitHub account in the
 # repository's Markdown pages.
 #
-# The project lives under the `opena2a-org` organization. There is no `opena2a`
-# account on GitHub, so a clone URL, issue link or module path under
-# github.com/opena2a/ does not resolve: the clone fails and the link is a 404.
+# The project lives under the `opena2a-org` organization. The `opena2a` account
+# on GitHub is not the project's, and the project has no repository under it,
+# so a clone URL, issue link or module path under github.com/opena2a/ does not
+# resolve: the clone fails and the link is a 404.
 # The guides carried such links for the repository under its current name and
 # under an older one (`identity`).
 #
@@ -30,7 +31,7 @@ done < <(grep -rIino -E \
     "$link_pattern" . || true)
 
 if [[ ${#hits[@]} -ne 0 ]]; then
-    echo "lint-docs-repo-links: ${#hits[@]} link(s) to the opena2a GitHub account, which does not exist:" >&2
+    echo "lint-docs-repo-links: ${#hits[@]} link(s) to the opena2a GitHub account, which is not the project's:" >&2
     printf '  %s\n' "${hits[@]}" >&2
     cat >&2 <<EOF
 
@@ -38,8 +39,8 @@ Fix by pointing each link at the opena2a-org organization:
   before:  git clone https://github.com/opena2a/agent-identity-management.git
   after:   git clone https://github.com/opena2a-org/agent-identity-management.git
 
-Reason: there is no opena2a account on GitHub. A clone from it fails and an
-issue link to it is a 404.
+Reason: the project has no repository under the opena2a account. A clone from
+it fails and an issue link to it is a 404.
 EOF
     exit 1
 fi

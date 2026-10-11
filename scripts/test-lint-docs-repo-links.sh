@@ -4,9 +4,9 @@
 # Markdown must pass it.
 #
 # The install, deployment and contributing guides told readers to clone from
-# github.com/opena2a/, an account that does not exist, and linked its issue
-# tracker. Each rejected link is paired with an accepted one of the same shape,
-# because "the lint fails" alone is also satisfied by a lint that rejects
+# github.com/opena2a/, an account that is not the project's, and linked its
+# issue tracker. Each rejected link is paired with an accepted one of the same
+# shape, because "the lint fails" alone is also satisfied by a lint that rejects
 # everything.
 
 set -euo pipefail

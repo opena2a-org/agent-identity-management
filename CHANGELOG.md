@@ -171,10 +171,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `docs/guides/` (`INSTALLATION.md`, `CONTRIBUTING.md`, `BOOTSTRAP_GUIDE.md`, `API_REFERENCE.md`,
   `API_ENDPOINT_SUMMARY.md`), `infrastructure/DEPLOYMENT.md` and `infrastructure/deployment/README.md` named
   `github.com/opena2a/agent-identity-management`, `github.com/opena2a/identity` or `github.com/opena2a/aim-sdk-go`.
-  There is no `opena2a` account on GitHub: `git ls-remote` on both repository URLs answers `Repository not found`,
-  and the repository, issue and discussion pages answer 404. The clone, upstream remote, issue and discussion links
-  now point at `github.com/opena2a-org/agent-identity-management`, and each clone step changes into
-  `agent-identity-management`.
+  The project has no repository under the `opena2a` account: `git ls-remote` on both repository URLs answers
+  `Repository not found`, and the repository, issue and discussion pages answer 404. The clone, upstream remote,
+  issue and discussion links now point at `github.com/opena2a-org/agent-identity-management`, and each clone step
+  changes into `agent-identity-management`.
 - The import path in the contributing guide's code-organization sample is the backend module's,
   `github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain`.
 - `scripts/lint-docs-repo-links.sh` rejects a link to the `opena2a` account in any Markdown page other than a
