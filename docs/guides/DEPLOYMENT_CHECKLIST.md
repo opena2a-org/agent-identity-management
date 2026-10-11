@@ -141,7 +141,7 @@ go run cmd/server/main.go
 
 **Checklist:**
 - [ ] Backend server starts without errors
-- [ ] Health endpoint responds: `curl http://localhost:8080/api/v1/health`
+- [ ] Health endpoint responds: `curl http://localhost:8080/health`
 - [ ] No panic or fatal errors in logs
 - [ ] All routes registered successfully
 
@@ -170,7 +170,7 @@ npm run dev
 ### Step 6: Smoke Test
 ```bash
 # Test backend health
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/health
 
 # Test protected endpoint (should return 401)
 curl http://localhost:8080/api/v1/agents
@@ -255,7 +255,7 @@ docker compose exec backend /app/migrate up
 ### Step 5: Production Smoke Test
 ```bash
 # Test health endpoint
-curl https://your-domain.com/api/v1/health
+curl https://your-domain.com/health
 
 # Test landing page
 curl -I https://your-domain.com
@@ -395,7 +395,7 @@ kubectl get ingress -w
 ### Step 8: Production Verification
 ```bash
 # Test health endpoint
-curl https://your-domain.com/api/v1/health
+curl https://your-domain.com/health
 
 # Test landing page
 curl -I https://your-domain.com
@@ -477,7 +477,7 @@ cp .env.backup .env
 docker compose up -d
 
 # Verify health
-curl http://localhost:8080/api/v1/health
+curl http://localhost:8080/health
 ```
 
 ### Kubernetes Rollback
@@ -493,7 +493,7 @@ kubectl rollout status deployment/backend
 kubectl rollout status deployment/frontend
 
 # Check health
-curl https://your-domain.com/api/v1/health
+curl https://your-domain.com/health
 ```
 
 **Rollback Checklist:**
