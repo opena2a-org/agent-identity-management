@@ -683,9 +683,9 @@ improve_trust_score()
 
 ### Per-Capability Trust Enforcement (Server)
 
-On the AIM server, each capability definition has a `minTrustScore` field. When an agent attempts an action, the server checks the agent's trust score against the capability's threshold. If the agent's score is too low, the action is denied — even if the capability is granted.
+On the AIM server, each capability definition has a `minTrustScore` field. When the SDK verifies an action (`POST /api/v1/sdk-api/verifications`, also `POST /api/v1/agents/:id/verify-capability`) and the capability is among the agent's grants, the server compares the agent's trust score with the minimum of the definition of the action requested. In an organization in strict enforcement mode, an agent below the minimum is denied the action even though the capability is granted. In monitoring mode the action is allowed, as it is for every other check.
 
-Default thresholds by risk level:
+Thresholds by risk level:
 
 | Risk Level | Min Trust Score |
 |------------|----------------|
@@ -694,7 +694,7 @@ Default thresholds by risk level:
 | high       | 0.5            |
 | critical   | 0.7            |
 
-Each capability definition carries its own threshold (`minTrustScore`). The server registers no API route that changes it.
+The definition used is the organization's own for that capability, else the core one; a capability with no definition has no minimum. `GET /api/v1/capabilities` lists the definitions with their minimums. The server registers no API route that changes a minimum.
 
 ### Delegation Trust Attenuation
 

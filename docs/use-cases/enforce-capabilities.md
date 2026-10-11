@@ -236,18 +236,18 @@ Wildcards (`*`) match any suffix after the colon. `api:*` allows `api:call`, `ap
 
 ## Per-Capability Trust Thresholds
 
-Each capability can require a minimum trust score. The defaults are based on risk level:
+Each capability definition on the server carries a minimum trust score (`minTrustScore`), set from its risk level:
 
 | Risk Level | Min Trust Score | Example Capabilities |
 |------------|----------------|---------------------|
 | low        | 0% (no gate)   | `file:read`, `api:call` |
 | medium     | 30%            | `db:write`, `file:write` |
-| high       | 50%            | `db:delete`, `data:export` |
+| high       | 50%            | `file:delete`, `network:listen` |
 | critical   | 70%            | `system:admin`, `user:impersonate` |
 
-When an agent's trust score drops below the threshold, the action is denied even if the capability is granted. This prevents compromised agents from executing high-risk actions.
+The server checks this minimum on every SDK verification (`POST /api/v1/sdk-api/verifications`) and on `POST /api/v1/agents/:id/verify-capability`, after it finds the capability among the agent's grants. A wildcard grant such as `file:*` is checked against the definition of the action requested, such as `file:delete`. In an organization in strict enforcement mode, an agent whose trust score is below the minimum is denied the action even though the capability is granted. In monitoring mode the action is allowed, as it is for every other check; the `reason` in the answer of `verify-capability` says the agent is below the minimum.
 
-On the server, trust thresholds are set per `CapabilityDefinition` and can be customized via the REST API.
+The definition used is the organization's own for that capability, else the core one. A capability outside the core set is registered as a medium-risk definition, with a 30% minimum, when it is first granted through `POST /api/v1/agents/:id/capabilities`. A capability with no definition has no minimum. `GET /api/v1/capabilities` lists the definitions with their minimums; no route changes a minimum.
 
 ## Execution Modes
 

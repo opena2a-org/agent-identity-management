@@ -218,7 +218,7 @@ func (s *CapabilityService) VerifyAction(
 				InScope:      true,
 				TrustScore:   agent.TrustScore,
 				DenialReason: "trust_below_capability_threshold",
-				Message:      fmt.Sprintf("Action denied: agent trust score %.0f%% is below the %.0f%% required for capability '%s'", agent.TrustScore*100, capDef.MinTrustScore*100, requestedCapability),
+				Message:      TrustBelowCapabilityThresholdReason(agent.TrustScore, capDef.MinTrustScore, requestedCapability),
 			}, nil
 		}
 	}
@@ -278,6 +278,20 @@ func (s *CapabilityService) VerifyAction(
 		ExecutionMode: executionMode,
 		Message:       "Action authorized",
 	}, nil
+}
+
+// TrustBelowCapabilityThresholdReason is the reason given when an action is
+// denied because the agent's trust score is below the minimum the capability's
+// definition requires. Both scores are on the [0,1] scale.
+func TrustBelowCapabilityThresholdReason(trustScore, minTrustScore float64, capability string) string {
+	return "Action denied: " + trustBelowCapabilityThreshold(trustScore, minTrustScore, capability)
+}
+
+// trustBelowCapabilityThreshold says that trustScore is below the minimum
+// minTrustScore the definition of capability requires.
+func trustBelowCapabilityThreshold(trustScore, minTrustScore float64, capability string) string {
+	return fmt.Sprintf("agent trust score %.0f%% is below the %.0f%% required for capability '%s'",
+		trustScore*100, minTrustScore*100, capability)
 }
 
 // findMatchedCapability finds the capability that matches the requested capability type

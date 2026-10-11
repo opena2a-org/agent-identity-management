@@ -181,6 +181,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   41-character name made the page scroll sideways and put the Dismiss button out of view, in the list view and in
   the error view.
 
+### Fixed — an SDK verification checks the minimum trust score of the capability's definition (#658)
+
+- `AgentService.VerifyCapability`, which decides `POST /api/v1/sdk-api/verifications` (where `@perform_action` and
+  `performAction()` post each call), `POST /api/v1/verifications` and `POST /api/v1/agents/:id/verify-capability`,
+  compares the agent's trust score with the `minTrustScore` of the requested capability's definition once it finds
+  the capability among the agent's grants. The definition is the organization's own, else the core one; a wildcard
+  grant such as `system:*` is checked against the definition of the action requested, such as `system:admin`. In
+  strict enforcement mode an agent below the minimum is denied, with a reason such as
+  `Action denied: agent trust score 40% is below the 50% required for capability 'file:delete'`, and the SDK route
+  answers 403. In monitoring mode the request goes on through the security policy checks and is allowed; the
+  `reason` `verify-capability` answers with says the agent is below the minimum. A capability with no definition, or
+  not in `namespace:action` form, has no minimum. A failure to read the definition is returned as an error: the SDK
+  route answers 403 and `verify-capability` answers 500. The check reads the trust score the agent has; it does not
+  recalculate it.
+- The same check is in `CapabilityService.VerifyAction`, whose handler no route mounts; both give the same reason.
+- `docs/server-features.md`, `docs/use-cases/enforce-capabilities.md` and `docs/sdk/trust-scoring.md` say where the
+  minimum is checked and that monitoring mode allows the action. `enforce-capabilities.md` said the minimums could be
+  changed through the REST API; no route changes a capability definition, and it says so. Its table gives
+  `file:delete` and `network:listen` as high-risk examples; it gave `db:delete`, which has no core definition, and
+  `data:export`, which is medium-risk.
+- Test: `agent_service_capability_trust_threshold_test.go`.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the
