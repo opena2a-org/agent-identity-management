@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — every refusal from `POST /api/v1/a2a/verify` carries `valid: false` (#649)
+
+- `POST /api/v1/a2a/verify` answered 400 with `error` only, both for a nonce it refuses and for a body it cannot read
+  (`Invalid request body`), while its 401 carried `valid: false`. A client that branches on `valid` found it absent
+  in the 400. Both 400 answers now carry `valid: false` beside `error`. The status codes and messages are unchanged.
+  A 500 still carries `error` only: it says nothing about the request.
+- Tests: `a2a_verify_server_error_test.go` (HTTP handlers) covers both 400 answers.
+
 ### Fixed — filing a pending capability request no longer reads every agent of the organization (#648)
 
 - The transition recorder read the id of every agent in the organization for each change that carried an event id, to

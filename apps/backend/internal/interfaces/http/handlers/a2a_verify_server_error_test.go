@@ -81,9 +81,45 @@ func postVerify(t *testing.T, svc *application.A2AService, agentID uuid.UUID, no
 	return resp.StatusCode, got
 }
 
+// POST /a2a/verify answers 400 with valid: false for a body it cannot read as
+// a verification request, as the 401 does: a caller that branches on valid
+// finds it in every answer that is a refusal of the request.
+func TestA2AVerifyAnswersValidFalseForABodyItCannotRead(t *testing.T) {
+	for name, body := range map[string]string{
+		"not JSON":              `{"nonce": `,
+		"agentId is not a UUID": `{"agentId": "not-a-uuid", "nonce": "n-1"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			nonceDB, nonceMock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer nonceDB.Close()
+			svc := application.NewA2AService(
+				nil, nil, nil, nil, nil, nil,
+				repository.NewA2ARequestNonceRepository(nonceDB),
+				nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			)
+			app := fiber.New()
+			app.Post("/a2a/verify", NewA2AHandler(svc, nil, nil).VerifyRequest)
+			req := httptest.NewRequest("POST", "/a2a/verify", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+			var got map[string]any
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+			assert.Equal(t, map[string]any{"valid": false, "error": "Invalid request body"}, got)
+			assert.NoError(t, nonceMock.ExpectationsWereMet())
+		})
+	}
+}
+
 // POST /a2a/verify answers 400 for a nonce the nonce table cannot record, an
 // empty one or one longer than 64 characters, before anything is read: not
 // 500 for the failed write, and not valid: true for a nonce recorded empty.
+// The answer carries valid: false, as the 401 does.
 func TestA2AVerifyAnswersBadRequestForANonceThatCannotBeRecorded(t *testing.T) {
 	for name, nonce := range map[string]string{
 		"empty":         "",
@@ -101,7 +137,7 @@ func TestA2AVerifyAnswersBadRequestForANonceThatCannotBeRecorded(t *testing.T) {
 
 			status, got := postVerify(t, svc, uuid.New(), nonce)
 			assert.Equal(t, fiber.StatusBadRequest, status)
-			assert.Equal(t, map[string]any{"error": application.ErrInvalidA2ANonce.Error()}, got)
+			assert.Equal(t, map[string]any{"valid": false, "error": application.ErrInvalidA2ANonce.Error()}, got)
 			assert.NoError(t, nonceMock.ExpectationsWereMet())
 		})
 	}
