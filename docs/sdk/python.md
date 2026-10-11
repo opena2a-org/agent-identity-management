@@ -4,16 +4,18 @@ The complete guide to the AIM Python SDK.
 
 ## Installation
 
-<div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-  <h3 className="text-lg font-semibold text-red-900 mb-2">⚠️ NO pip install Available</h3>
-  <p className="text-sm text-red-800 mb-2">
-    <strong>There is NO pip package for the AIM SDK.</strong> You must download it from your AIM dashboard with pre-configured credentials.
-  </p>
-</div>
+The SDK is published on PyPI as `aim-sdk`. Install it and sign in to your AIM instance:
 
-### Download Pre-Configured SDK (ONLY Option)
+```bash
+pip install aim-sdk                        # or "aim-sdk[rich]" for compact console output
+aim-sdk login --url http://localhost:8080
+```
 
-The AIM SDK comes with your embedded credentials - zero configuration required.
+pip installs the SDK's dependencies with it (Python 3.8+). `aim-sdk login` prints a code; approve it on your dashboard's `/device` page. The SDK saves its credentials to `~/.aim/`.
+
+### Alternative: Download a Pre-Configured SDK
+
+The dashboard can also give you the SDK as a ZIP with your credentials embedded, so you skip `aim-sdk login`.
 
 **Steps to Download**:
 1. **Login** to AIM Dashboard (http://localhost:3000)
@@ -23,7 +25,7 @@ The AIM SDK comes with your embedded credentials - zero configuration required.
 3. **Click** "Download Python SDK" button
 4. **Extract** the downloaded ZIP file to your project directory
 
-### Install Dependencies
+**Install Dependencies**:
 
 After downloading the SDK, install the required dependencies:
 

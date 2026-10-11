@@ -59,6 +59,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Routing SDK verifications through the 5-step engine is still open.
 - Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
 
+### Fixed — the pages that install the Python SDK give `pip install aim-sdk`, the README's install command (#663)
+
+- The Python SDK is published on PyPI as `aim-sdk` (`name="aim-sdk"` in `sdk/python/setup.py`). `docs/quick-start.md`
+  and `docs/tutorials/sdk-quickstart.md` said "There is NO pip package", `docs/sdk/python.md` said "There is NO pip
+  package for the AIM SDK" under a "NO pip install Available" heading, and `docs/examples/weather-agent.md`,
+  `docs/examples/flight-tracker.md`, `docs/examples/database-agent.md`, `docs/integrations/crewai.md` and
+  `docs/integrations/langchain.md` said "NO pip install available - must download from dashboard". Each page now gives
+  `pip install aim-sdk`; `docs/quick-start.md`, `docs/sdk/python.md` and `docs/tutorials/sdk-quickstart.md` follow it
+  with `aim-sdk login --url http://localhost:8080`, and describe the dashboard's pre-configured SDK download as an
+  alternative.
+- Those five example and integration pages linked to
+  `quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds`, an anchor no heading produced. Step 3
+  of the quick start is now "Install the AIM SDK", and each link points at its anchor.
+- A test in the Python SDK suite fails when a page under `docs/` says the SDK has no pip package, when one of these
+  eight pages does not give `pip install aim-sdk`, or when a link from a page under `docs/` into `quick-start.md` names
+  an anchor no heading produces.
+
 ### Fixed — the setup, installation and contributing guides state the Go and Node.js versions the platform needs (#660)
 
 - `apps/backend/go.mod` declares `go 1.25.0`: Go 1.24.0 refuses to build the backend

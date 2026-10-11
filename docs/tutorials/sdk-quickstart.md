@@ -32,9 +32,18 @@ The demo includes weather checks, product searches, user lookups, notifications,
 
 ---
 
-## Step 1: Download the SDK (30 seconds)
+## Step 1: Install the SDK (30 seconds)
 
-The SDK comes pre-configured with your credentials. No API keys to manage.
+The SDK is published on PyPI as `aim-sdk`. Install it and sign in to your AIM instance:
+
+```bash
+pip install aim-sdk
+aim-sdk login --url http://localhost:8080
+```
+
+`aim-sdk login` prints a code; approve it on your dashboard's `/device` page. The SDK saves its credentials to `~/.aim/`.
+
+**Or download a pre-configured SDK.** The dashboard can also give you the SDK as a ZIP with your personal credentials embedded, so you skip `aim-sdk login`:
 
 1. Login to AIM at http://localhost:3000
 2. Go to **Settings → SDK Download**
@@ -48,13 +57,11 @@ cd aim-sdk-python
 pip install -e .
 ```
 
-> **Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials.
-
 ---
 
 ## Step 2: Register Your Agent (1 Line)
 
-Create a new Python file in the extracted SDK folder:
+Create a new Python file (in the extracted SDK folder, if you downloaded the ZIP):
 
 ```python
 from aim_sdk import secure
