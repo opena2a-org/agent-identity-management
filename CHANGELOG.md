@@ -59,6 +59,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Routing SDK verifications through the 5-step engine is still open.
 - Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
 
+### Added — the server forwards every audit log entry it writes to a Splunk HTTP Event Collector (#657)
+
+- No server code imported the SIEM adapters in `internal/integrations/siem`. Setting `SIEM_SPLUNK_HEC_URL` and
+  `SIEM_SPLUNK_HEC_TOKEN` now forwards each audit log entry, once its write succeeds, as a HEC event with sourcetype
+  `opena2a:aim` and event type `aim.audit.<action>`. Entries are queued (up to 1,000) and sent in batches of up to 100
+  at least every 5 seconds. A batch the collector cannot take now (no connection, 408, 429 or 5xx) is tried up to 3
+  times; any other refusal is not retried. `SIEM_MIN_SEVERITY` leaves out entries below a severity. A full queue
+  leaves the entry out of forwarding and logs a warning; the request that wrote it never waits for the collector.
+  `SIEM_SPLUNK_INDEX` names an index; unset, the event names none and the token's default index applies.
+- Startup stops with an error that names the variable when only one of the URL and the token is set, when the URL is
+  `http` to a host that is not loopback, or when the severity is not `info`, `low`, `medium`, `high` or `critical`.
+  At shutdown the queued entries are sent within 2 seconds. See `docs/DEPLOYMENT.md`, "SIEM Forwarding".
+- The README no longer lists Microsoft Sentinel delivery: the Azure Monitor HTTP Data Collector API that the Sentinel
+  adapter targets was retired on 14 September 2026, and the server does not load the adapter.
+- Tests: `forwarder_test.go`, `splunk_test.go`, `audit_test.go` and `env_test.go` (SIEM adapters),
+  `audit_log_on_create_test.go` (audit log repository) and `siem_forwarding_test.go` (server).
+
 ### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path that reaches the routes is answered 405 (#652)
 
 - `POST /api/v1/a2a/verify` was mounted twice: once without authentication, and again inside the authenticated

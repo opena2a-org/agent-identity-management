@@ -10,11 +10,20 @@ import (
 )
 
 type AuditLogRepository struct {
-	db *sql.DB
+	db       *sql.DB
+	onCreate func(*domain.AuditLog)
 }
 
 func NewAuditLogRepository(db *sql.DB) *AuditLogRepository {
 	return &AuditLogRepository{db: db}
+}
+
+// OnCreate registers fn to receive each entry Create writes, once the write
+// has succeeded; an entry whose write fails is not given to it. fn runs on
+// the writer's goroutine, so it must not block. Register it at startup,
+// before the repository is shared.
+func (r *AuditLogRepository) OnCreate(fn func(*domain.AuditLog)) {
+	r.onCreate = fn
 }
 
 func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
@@ -48,7 +57,13 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 		metadataJSON,
 		log.Timestamp,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if r.onCreate != nil {
+		r.onCreate(log)
+	}
+	return nil
 }
 
 func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {

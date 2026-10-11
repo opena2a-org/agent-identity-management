@@ -365,6 +365,51 @@ Remove a retired key once nothing it signed is still valid: card attestations ex
 
 **Rotating `KEYVAULT_MASTER_KEY` moves every derived key.** Each key whose variable is unset gets a new key and a new `kid` at the next start, and what the old key signed stops verifying. Before rotating the master key, copy the `x` value of the active `card-attestation` and `atc-issuer` keys from `/.well-known/jwks.json` into `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED`. Provisioning both keys keeps them fixed when the master key rotates.
 
+### SIEM Forwarding
+
+The backend forwards every audit log entry it writes to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the entries of every organization on the server.
+
+| Variable | Value |
+|----------|-------|
+| `SIEM_SPLUNK_HEC_URL` | The collector's event endpoint, such as `https://splunk.example.com:8088/services/collector/event`. It must use `https`; `http` is accepted only for a loopback host. |
+| `SIEM_SPLUNK_HEC_TOKEN` | The HEC token, sent as `Authorization: Splunk <token>`. |
+| `SIEM_SPLUNK_INDEX` | Optional. Unset, events go to the token's default index. |
+| `SIEM_MIN_SEVERITY` | Optional. `info` (the default), `low`, `medium`, `high` or `critical`. Entries below it are not sent. |
+
+One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to splunk`.
+
+Each entry is one HEC event with sourcetype `opena2a:aim` and source `opena2a-aim`. Its `event` is:
+
+```json
+{
+  "eventType": "aim.audit.verification_refused",
+  "timestamp": "2026-10-11T18:00:00Z",
+  "agentId": "<agent id, when an agent acted>",
+  "severity": "medium",
+  "source": "opena2a-aim",
+  "details": {
+    "auditLogId": "<audit log entry id>",
+    "organizationId": "<organization id>",
+    "action": "verification_refused",
+    "actorType": "agent",
+    "resourceType": "agent",
+    "resourceId": "<resource id>",
+    "userId": "<user id, when recorded>",
+    "ipAddress": "<when recorded>",
+    "userAgent": "<when recorded>",
+    "metadata": {"<key>": "<the entry's metadata, when it has any>"}
+  }
+}
+```
+
+`eventType` is `aim.audit.` followed by the entry's action. `severity` is `high` for `honeytoken_triggered` and `refresh_token_reuse`, `medium` for `verification_refused`, `credential_mint_refused` and `refresh_session_revoked`, and `info` for every other action.
+
+Delivery runs in the background, so a request that writes an entry never waits for the collector. Entries wait in a queue of 1,000 and are sent in batches of up to 100, at least every 5 seconds. A batch is tried up to 3 times, 1 second and then 2 seconds apart, when the collector cannot be reached or answers 408, 429 or 5xx. Any other refusal, such as a token the collector does not accept, is not retried. Each batch that is not delivered is logged with the collector's answer. When the queue is full, the entry is not forwarded, and a warning is logged for the first such entry and every thousandth after it; the entry is still in the audit log. At shutdown the queued entries are sent within 2 seconds, and the backend logs how many were sent, failed and dropped.
+
+To check delivery, search Splunk for `sourcetype="opena2a:aim"`.
+
+Microsoft Sentinel is not supported: the Azure Monitor HTTP Data Collector API that the source tree's Sentinel adapter targets was retired on 14 September 2026.
+
 ### Database Migrations and the Application Role
 
 `aim-server migrate` applies the pending migrations and exits without starting the server. It reads only the `POSTGRES_*` variables and is meant to run as the role that owns the schema. A missing `POSTGRES_HOST`, `POSTGRES_USER` or `POSTGRES_DB` stops it with one line that names each missing variable.
