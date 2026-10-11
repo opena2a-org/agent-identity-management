@@ -62,8 +62,7 @@ from aim_sdk import secure
 # ONE LINE - Secure your agent!
 agent = secure(
     name="my-agent",
-    aim_url="http://localhost:8080",
-    private_key="your-private-key-here"
+    aim_url="http://localhost:8080"
 )
 
 # Use your agent normally
@@ -86,23 +85,23 @@ import langchain  # SDK detects this!
 
 agent = secure(
     name: str,                    # Agent name (required)
-    aim_url: str = None,          # AIM backend URL (default: http://localhost:8080)
-    private_key: str = None,      # Ed25519 private key (default: auto-generate)
-    agent_type: str = None,       # Agent type (default: auto-detected from imports)
+    aim_url: str = None,          # AIM backend URL (default: the URL in your SDK credentials)
+    api_key: str = None,          # Agent API key (default: use your SDK credentials)
+    agent_type: str = "ai_agent", # Agent type (default: auto-detected from imports)
     description: str = None,      # Agent description (optional)
-    auto_verify: bool = True      # Auto-verify actions (default: True)
-) -> AIMAgent
+) -> AIMClient
 ```
 
 **Parameters**:
 - **name** (required): Unique identifier for your agent
-- **aim_url**: AIM backend URL (defaults to `http://localhost:8080`)
-- **private_key**: Ed25519 private key (auto-generates if not provided)
+- **aim_url**: AIM backend URL (defaults to the URL in your SDK credentials; required with `api_key`)
+- **api_key**: Agent API key (`aim_live_...`); when given, `secure()` authenticates with it instead of your SDK credentials
 - **agent_type**: Type of agent (auto-detected if not specified). See [Supported Agent Types](#supported-agent-types)
 - **description**: Human-readable description
-- **auto_verify**: Automatically verify all actions (recommended)
 
-**Returns**: `AIMAgent` instance
+`secure()` takes no private key. The first time it registers an agent, it generates the agent's Ed25519 keypair locally and saves it, with the agent ID, to `~/.aim/agents/<name>.json`; later calls with the same name load that file. To sign with a keypair you hold elsewhere, construct `AIMClient(agent_id=..., public_key=..., private_key=..., aim_url=...)` instead (see [Best Practices](#1-use-environment-variables)).
+
+**Returns**: `AIMClient` instance
 
 **Example**:
 ```python
@@ -116,11 +115,11 @@ agent = secure("my-agent")  # Auto-detected as "langchain"
 from aim_sdk import secure, AgentType
 agent = secure("my-agent", agent_type=AgentType.CREWAI)
 
-# Production (with existing key)
+# Production (with an agent API key instead of SDK credentials)
 agent = secure(
     name="production-agent",
     aim_url="https://aim.yourcompany.com",
-    private_key=os.getenv("AIM_PRIVATE_KEY"),
+    api_key=os.getenv("AIM_API_KEY"),
     agent_type=AgentType.CLAUDE,
     description="Production customer service agent"
 )
@@ -663,8 +662,11 @@ result = secured_crew.kickoff(inputs={"topic": "AI in Healthcare"})
 # AIM Backend URL
 export AIM_URL="http://localhost:8080"
 
-# Agent Private Key (Ed25519)
-export AIM_PRIVATE_KEY="your-private-key-here"
+# Agent ID and Ed25519 keypair, for code that passes them to AIMClient
+# (see Best Practices; the values are in ~/.aim/agents/<name>.json)
+export AIM_AGENT_ID="your-agent-id"
+export AIM_PUBLIC_KEY="your-base64-public-key"
+export AIM_PRIVATE_KEY="your-base64-private-key"
 
 # Enable debug logging
 export AIM_DEBUG="true"
@@ -774,18 +776,23 @@ except AuthenticationError as e:
 ### 1. Use Environment Variables
 
 ```python
+from aim_sdk import AIMClient
+import os
+
 # ✅ GOOD - Use environment variables
-agent = secure(
-    name="my-agent",
-    aim_url=os.getenv("AIM_URL"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=os.getenv("AIM_PRIVATE_KEY"),
+    aim_url=os.getenv("AIM_URL")
 )
 
 # ❌ BAD - Hardcode credentials
-agent = secure(
-    name="my-agent",
-    aim_url="http://localhost:8080",
-    private_key="hardcoded-key-123"
+agent = AIMClient(
+    agent_id="550e8400-e29b-41d4-a716-446655440000",
+    public_key="hardcoded-public-key",
+    private_key="hardcoded-key-123",
+    aim_url="http://localhost:8080"
 )
 ```
 
@@ -875,8 +882,7 @@ import os
 # Secure agent
 agent = secure(
     name="weather-agent",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 class WeatherAgent:

@@ -31,31 +31,16 @@ A real-world AI agent that:
 
 ---
 
-## Step 1: Register Agent (30 seconds)
+## Step 1: Save Credentials (30 seconds)
 
-### In AIM Dashboard
-
-1. **Login** to http://localhost:3000
-2. **Navigate**: Agents → Register New Agent
-3. **Fill in**:
-   ```
-   Agent Name: flight-tracker
-   Agent Type: AI Agent
-   Description: Tracks real-time flight status and sends alerts
-   ```
-4. **Click** "Register Agent"
-5. **Copy** the private key (only shown once!)
-
-### Save Credentials
+There is no agent to register in the dashboard: `secure()` registers `flight-tracker` the first time the script runs, with the credentials in the SDK you downloaded. It generates the agent's Ed25519 keypair locally and saves it to `~/.aim/agents/flight-tracker.json`; later runs load that file. An agent of the same name registered in the dashboard first would make that registration fail, because AIM keeps agent names unique within an organization.
 
 ```bash
 # Save to environment variables
-export AIM_PRIVATE_KEY="your-aim-private-key"
 export FLIGHTAWARE_API_KEY="your-flightaware-api-key"
 
 # Or add to .env file
 cat >> .env <<EOF
-AIM_PRIVATE_KEY=your-aim-private-key
 FLIGHTAWARE_API_KEY=your-flightaware-api-key
 AIM_URL=http://localhost:8080
 EOF
@@ -83,8 +68,7 @@ from dataclasses import dataclass
 # 🔐 ONE LINE - Secure your agent!
 agent = secure(
     name="flight-tracker",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 
@@ -360,7 +344,6 @@ if __name__ == "__main__":
 
 ```bash
 # Set environment variables
-export AIM_PRIVATE_KEY="your-key"
 export FLIGHTAWARE_API_KEY="your-flightaware-key"
 export AIM_URL="http://localhost:8080"
 
@@ -631,7 +614,7 @@ class CachedFlightAgent(FlightTrackerAgent):
 
 ## ✅ Checklist
 
-- [ ] Agent registered in AIM dashboard
+- [ ] AIM SDK downloaded from the dashboard
 - [ ] FlightAware API key obtained and tested
 - [ ] Code runs without errors
 - [ ] Dashboard shows agent status

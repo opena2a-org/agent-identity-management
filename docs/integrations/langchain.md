@@ -30,16 +30,11 @@ Secure LangChain agents with AIM in **2 lines of code**.
 pip install keyring PyNaCl requests cryptography PyJWT langchain langchain-openai
 ```
 
-### Step 2: Register Agent
+### Step 2: Save Your API Key
 
-In AIM Dashboard (http://localhost:3000):
-1. Navigate to Agents → Register New Agent
-2. Name: `langchain-assistant`
-3. Type: AI Agent
-4. Copy private key
+There is no agent to register in the dashboard: `secure()` registers the agent the first time your script runs, with the credentials in the SDK you downloaded. It generates the agent's Ed25519 keypair locally and saves it to `~/.aim/agents/<name>.json`; later runs load that file. An agent of the same name registered in the dashboard first would make that registration fail, because AIM keeps agent names unique within an organization.
 
 ```bash
-export AIM_PRIVATE_KEY="your-private-key"
 export OPENAI_API_KEY="your-openai-key"
 ```
 
@@ -112,8 +107,7 @@ import os
 # 🔐 Register with AIM
 aim_agent = secure(
     name="langchain-weather-assistant",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=os.getenv("AIM_PRIVATE_KEY")
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 # Define tools
@@ -637,8 +631,6 @@ result = agent_executor.run("query")
 ## ✅ Checklist
 
 - [ ] AIM platform running
-- [ ] Agent registered in dashboard
-- [ ] Private key saved to environment
 - [ ] `aim-sdk` installed
 - [ ] `AIMCallbackHandler` added to agent executor
 - [ ] Code runs without errors

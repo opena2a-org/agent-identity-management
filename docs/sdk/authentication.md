@@ -121,35 +121,44 @@ export AIM_PRIVATE_KEY="<your-private-key>"
 echo "AIM_PRIVATE_KEY=<your-private-key>" >> .env
 ```
 
-#### Option 2: Generate Manually
+#### Option 2: Use the Keypair `secure()` Saved
+
+`secure()` takes no private key. When it registers an agent, it saves the agent ID and keypair to `~/.aim/agents/<name>.json`. To sign with a keypair, pass it to `AIMClient` together with the agent ID and public key.
 
 ```python
-from aim_sdk.crypto import generate_keypair
+from aim_sdk import AIMClient, load_agent_credentials
 
-# Generate Ed25519 keypair
-private_key, public_key = generate_keypair()
+# Saved by secure("my-agent") in ~/.aim/agents/my-agent.json
+creds = load_agent_credentials("my-agent")
 
-print(f"Private Key: {private_key}")  # Keep secret!
-print(f"Public Key: {public_key}")    # Share with AIM
-
-# Save private key securely
-with open("~/.aim/private_key.pem", "w") as f:
-    f.write(private_key)
+print(f"Agent ID: {creds['agent_id']}")
+print(f"Public Key: {creds['public_key']}")  # Share with AIM
+# creds["private_key"] is the secret: never print or log it
 
 # Use with agent
-agent = secure("my-agent", private_key=private_key)
+agent = AIMClient(
+    agent_id=creds["agent_id"],
+    public_key=creds["public_key"],
+    private_key=creds["private_key"],
+    aim_url=creds["aim_url"]
+)
 ```
 
 #### Option 3: Use Existing Key
 
 ```python
-from aim_sdk import secure
+from aim_sdk import AIMClient
 import os
 
 # Load from environment
 private_key = os.getenv("AIM_PRIVATE_KEY")
 
-agent = secure("my-agent", private_key=private_key)
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=private_key,
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
+)
 ```
 
 ---
@@ -160,14 +169,21 @@ agent = secure("my-agent", private_key=private_key)
 
 ```bash
 # .env file (NOT committed to git)
-AIM_PRIVATE_KEY=302e020100300506032b657004220420...
+AIM_AGENT_ID=550e8400-e29b-41d4-a716-446655440000
+AIM_PUBLIC_KEY=<base64 public key>
+AIM_PRIVATE_KEY=<base64 private key>
 
 # Load in Python
 from dotenv import load_dotenv
 load_dotenv()
 
 private_key = os.getenv("AIM_PRIVATE_KEY")
-agent = secure("my-agent", private_key=private_key)
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=private_key,
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
+)
 ```
 
 #### ✅ GOOD: Secret Management System
@@ -180,7 +196,12 @@ secrets = boto3.client("secretsmanager")
 response = secrets.get_secret_value(SecretId="aim/private-key")
 private_key = response["SecretString"]
 
-agent = secure("my-agent", private_key=private_key)
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=private_key,
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
+)
 ```
 
 ```python
@@ -192,16 +213,23 @@ credential = DefaultAzureCredential()
 client = SecretClient(vault_url="https://myvault.vault.azure.net/", credential=credential)
 private_key = client.get_secret("aim-private-key").value
 
-agent = secure("my-agent", private_key=private_key)
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=private_key,
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
+)
 ```
 
 #### ❌ BAD: Hardcoded in Code
 
 ```python
 # ❌ NEVER DO THIS
-agent = secure(
-    "my-agent",
-    private_key="302e020100300506032b657004220420..."  # Hardcoded!
+agent = AIMClient(
+    agent_id="550e8400-e29b-41d4-a716-446655440000",
+    public_key="hardcoded-public-key",
+    private_key="hardcoded-private-key",  # Hardcoded!
+    aim_url="http://localhost:8080"
 )
 ```
 
@@ -366,14 +394,20 @@ print(f"Private Key: {agent.private_key}")  # NEVER print/log!
 
 ```python
 # ✅ GOOD - Separate keys per environment
+# (one agent per environment: its ID, public key and private key belong together)
 if os.getenv("ENVIRONMENT") == "production":
-    private_key = os.getenv("AIM_PROD_PRIVATE_KEY")
+    prefix = "AIM_PROD"
 elif os.getenv("ENVIRONMENT") == "staging":
-    private_key = os.getenv("AIM_STAGING_PRIVATE_KEY")
+    prefix = "AIM_STAGING"
 else:
-    private_key = os.getenv("AIM_DEV_PRIVATE_KEY")
+    prefix = "AIM_DEV"
 
-agent = secure("my-agent", private_key=private_key)
+agent = AIMClient(
+    agent_id=os.getenv(f"{prefix}_AGENT_ID"),
+    public_key=os.getenv(f"{prefix}_PUBLIC_KEY"),
+    private_key=os.getenv(f"{prefix}_PRIVATE_KEY"),
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
+)
 ```
 
 ### 3. Rotate Keys Regularly
@@ -400,7 +434,12 @@ def get_private_key():
     response = secrets.get_secret_value(SecretId="aim/private-key")
     return response["SecretString"]
 
-agent = secure("my-agent", private_key=get_private_key())
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=get_private_key(),
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
+)
 ```
 
 ### 5. Implement Key Compromise Detection
@@ -601,37 +640,39 @@ for log in audit_logs:
 ### Complete Authentication Flow
 
 ```python
-from aim_sdk import secure
-from aim_sdk.crypto import generate_keypair
+from aim_sdk import AIMClient, load_agent_credentials, secure
 import os
 
-# 1. Generate keypair (first time only)
+# 1. Register and generate the keypair (first time only)
 if not os.getenv("AIM_PRIVATE_KEY"):
-    print("No existing key found. Generating new keypair...")
-    private_key, public_key = generate_keypair()
+    print("No existing key found. Registering the agent...")
+    secure("production-agent", aim_url=os.getenv("AIM_URL", "http://localhost:8080"))
+    creds = load_agent_credentials("production-agent")
 
-    print(f"✅ Keypair generated!")
-    print(f"Public Key: {public_key}")
-    print(f"Private Key: {private_key}")
+    print(f"✅ Keypair saved to ~/.aim/agents/production-agent.json")
+    print(f"Agent ID: {creds['agent_id']}")
+    print(f"Public Key: {creds['public_key']}")
     print()
-    print("⚠️  Save your private key securely:")
-    print(f"export AIM_PRIVATE_KEY='{private_key}'")
+    print("⚠️  Move the agent ID and keypair into your environment or secret manager:")
+    print(f"export AIM_AGENT_ID='{creds['agent_id']}'")
+    print(f"export AIM_PUBLIC_KEY='{creds['public_key']}'")
+    print("export AIM_PRIVATE_KEY=<private_key in ~/.aim/agents/production-agent.json>")
     exit(0)
 
 # 2. Load private key from environment
 private_key = os.getenv("AIM_PRIVATE_KEY")
 
 # 3. Secure agent
-agent = secure(
-    name="production-agent",
-    aim_url=os.getenv("AIM_URL", "http://localhost:8080"),
-    private_key=private_key
+agent = AIMClient(
+    agent_id=os.getenv("AIM_AGENT_ID"),
+    public_key=os.getenv("AIM_PUBLIC_KEY"),
+    private_key=private_key,
+    aim_url=os.getenv("AIM_URL", "http://localhost:8080")
 )
 
 print(f"✅ Agent secured!")
-print(f"Agent ID: {agent.id}")
+print(f"Agent ID: {agent.agent_id}")
 print(f"Public Key: {agent.public_key}")
-print(f"Trust Score: {agent.get_trust_score()}")
 
 # 4. All actions are now authenticated
 @agent.perform_action(risk_level="low")
