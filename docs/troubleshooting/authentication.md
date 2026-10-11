@@ -288,15 +288,11 @@ cat ~/.aim/credentials.json | jq -r '.["your-agent"].public_key'
 
 #### 2. Request Tampering
 
-```python
-# ❌ Don't modify request after signing
-request = client.sign_request(data)
-request['data'] = 'modified'  # Signature now invalid!
-
-# ✅ Sign the final request
-final_data = {'action': 'search'}
-request = client.sign_request(final_data)  # Don't modify after
-```
+The SDK signs each request as it sends it, over the method, the path with its
+query string, the timestamp and the JSON body; there is no separate signing call.
+Anything between the SDK and AIM that changes one of those (a proxy that rewrites
+the path, re-encodes the body or adds a query parameter) makes the signature
+invalid. Send the SDK's requests to AIM unmodified.
 
 #### 3. Clock Skew
 

@@ -335,19 +335,18 @@ agent = secure("my-agent")
 **Add to LangChain (2 lines)**:
 ```python
 aim_agent = secure("langchain-agent")
-callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]
+callbacks=[AIMCallbackHandler(agent=aim_agent)]
 ```
 
 **Check Trust Score**:
 ```python
-score = agent.get_trust_score()
-print(f"Trust Score: {score}")
+score = agent.get_trust_score()["score"]
+print(f"Trust Score: {score:.2f}")
 ```
 
-**Get Audit Trail**:
-```python
-logs = agent.get_audit_logs(limit=100)
-```
+**Get Audit Trail**: the SDK has no audit log method. Read an agent's audit log
+in the dashboard, or with `GET /api/v1/agents/{id}/audit-logs` and a user's
+access token.
 
 ---
 

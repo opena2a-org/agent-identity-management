@@ -68,10 +68,12 @@ agent = secure(
 )
 
 # Use your agent normally
-# All actions are automatically verified and logged
+# Actions you decorate with @agent.perform_action are verified and logged
 ```
 
-**That's it!** Your agent is now secure.
+**That's it!** Your agent is now registered. The agent's Ed25519 keypair is
+generated locally and saved in `~/.aim/agents/<name>.json`; the next call to
+`secure("my-agent")` loads it instead of registering again.
 
 ---
 
@@ -176,110 +178,72 @@ agent = secure("my-agent", agent_type=AgentType.CREWAI)
 
 ---
 
-### `AIMAgent` Class
+### `AIMClient` Class
 
-The main class representing a secured agent.
+`secure()` returns an `AIMClient`, the object every call below is made on.
 
 #### Agent Properties
 
 ```python
-# Access agent information
-print(agent.id)              # UUID of agent
-print(agent.name)            # Agent name
-print(agent.public_key)      # Ed25519 public key
-print(agent.trust_score)     # Current trust score (0.0 - 1.0)
-print(agent.is_verified)     # Verification status
-print(agent.created_at)      # Creation timestamp
+print(agent.agent_id)        # UUID of the agent
+print(agent.aim_url)         # AIM backend URL
+print(agent.public_key)      # Ed25519 public key (base64)
+
+# The rest of the agent's record (name, status, trust score) is on the server
+details = agent.get_agent_details()
 ```
 
 #### Verify Capability
 
-Manually verify a capability before execution.
+Manually verify a capability before execution. The call returns only when the
+action is permitted; a denial raises `ActionDeniedError`, and no decision
+raises `VerificationUnavailableError` (see [Error Handling](#error-handling)).
 
-```python
-agent.verify_capability(
-    capability: str,            # Capability in namespace:action format (e.g., "user:delete")
-    resource: str = None,       # Resource being accessed (optional)
-    context: dict = None        # Additional context (optional)
-) -> dict
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `capability` | (required) | Capability in `namespace:action` format (e.g. `"user:delete"`) |
+| `resource` | `None` | Resource being accessed |
+| `context` | `None` | Additional context dict |
+| `timeout_seconds` | `300` | Longest wait for an approval |
 
 **Example**:
 ```python
-# Verify before executing sensitive operation
-result = agent.verify_capability(
-    capability="user:delete",
-    resource="user_12345",
-    context={"reason": "account_cleanup"}
-)
-if result.get("verified"):
-    # Verification succeeded, execute action
-    delete_user(12345)
+from aim_sdk.exceptions import ActionDeniedError
+
+try:
+    result = agent.verify_capability(
+        capability="user:delete",
+        resource="user_12345",
+        context={"reason": "account_cleanup"}
+    )
+except ActionDeniedError:
+    print("Capability not allowed")
 else:
-    # Verification failed
-    print("Capability not allowed or requires approval")
-```
-
-#### Log Action
-
-Manually log an action after execution.
-
-```python
-agent.log_action(
-    action_name: str,           # Name of the action
-    parameters: dict = None,    # Action parameters
-    result: any = None,         # Action result
-    success: bool = True,       # Whether action succeeded
-    error: str = None           # Error message if failed
-) -> None
-```
-
-**Example**:
-```python
-# Execute and log action
-result = fetch_weather("San Francisco")
-
-agent.log_action(
-    action_name="fetch_weather",
-    parameters={"city": "San Francisco"},
-    result=result,
-    success=True
-)
+    delete_user(12345)
 ```
 
 #### Get Trust Score
 
-Get current trust score with breakdown.
+Get the agent's current trust score and its factors. Scores run from 0.0 to 1.0.
 
 ```python
-agent.get_trust_score(
-    detailed: bool = False      # Include factor breakdown
-) -> Union[float, dict]
-```
-
-**Example**:
-```python
-# Simple trust score
-score = agent.get_trust_score()
-print(f"Trust Score: {score}")  # 0.93
-
-# Detailed breakdown
-breakdown = agent.get_trust_score(detailed=True)
-print(breakdown)
+result = agent.get_trust_score()
+print(f"Trust Score: {result['score']:.2f}")  # 0.93
+print(result["factors"])
 # {
-#   "overall": 0.93,
-#   "factors": {
-#     "verification_status": 0.98,
-#     "uptime": 1.00,
-#     "success_rate": 0.98,
-#     "security_alerts": 1.00,
-#     "compliance": 1.00,
-#     "age": 0.50,
-#     "drift_detection": 1.00,
-#     "user_feedback": 1.00,
-#     "execution_isolation": 0.65
-#   }
+#   "verificationStatus": 0.98,
+#   "uptime": 1.00,
+#   "successRate": 0.98,
+#   "securityAlerts": 1.00,
+#   "compliance": 1.00,
+#   "age": 0.50,
+#   "driftDetection": 1.00,
+#   "userFeedback": 1.00,
+#   "executionIsolation": 0.65
 # }
+
+# Another agent in your organization
+other = agent.get_trust_score("uuid-of-other-agent")
 ```
 
 The values are for a verified agent 7 to 30 days old, 98% of whose verifications in the last 30
@@ -287,63 +251,26 @@ days succeeded, the latest within a day, with an AIM compliance snapshot of 100 
 organization, more than ten positive ratings and an unverified isolation attestation (held to
 0.65). The nine factors and their weights are in the [Trust Scoring Guide](./trust-scoring.md).
 
-#### Get Audit Logs
+#### Get Trust Score History
 
-Retrieve audit trail for compliance.
-
-```python
-agent.get_audit_logs(
-    limit: int = 100,           # Max number of logs
-    offset: int = 0,            # Pagination offset
-    start_date: str = None,     # Filter by start date (ISO 8601)
-    end_date: str = None,       # Filter by end date (ISO 8601)
-    action_name: str = None     # Filter by action name
-) -> list[dict]
-```
-
-**Example**:
-```python
-# Get last 100 logs
-logs = agent.get_audit_logs(limit=100)
-
-# Get logs for specific action
-delete_logs = agent.get_audit_logs(
-    action_name="delete_user",
-    start_date="2025-10-01T00:00:00Z"
-)
-
-# Print logs
-for log in logs:
-    print(f"{log['timestamp']} | {log['action_name']} | {log['status']}")
-```
-
-#### Export Compliance Report
-
-Generate compliance reports for SOC 2, HIPAA, GDPR.
+Get the recorded score changes, newest first. Without `limit` the server
+returns up to 30 entries.
 
 ```python
-agent.export_compliance_report(
-    report_type: str = "soc2",  # Report type (soc2/hipaa/gdpr)
-    start_date: str = None,     # Start date (ISO 8601)
-    end_date: str = None,       # End date (ISO 8601)
-    format: str = "json"        # Output format (json/csv/pdf)
-) -> Union[dict, str, bytes]
+history = agent.get_trust_score_history(limit=10)
+for entry in history["history"]:
+    print(f"{entry['timestamp']} | {entry['trustScore']:.2f} | {entry['reason']}")
 ```
 
-**Example**:
-```python
-# SOC 2 compliance report
-report = agent.export_compliance_report(
-    report_type="soc2",
-    start_date="2025-09-01T00:00:00Z",
-    end_date="2025-09-30T00:00:00Z",
-    format="pdf"
-)
+#### Audit Logs and Compliance Reports
 
-# Save to file
-with open("soc2_report_sept.pdf", "wb") as f:
-    f.write(report)
-```
+The SDK has no method for these: the server routes that serve them read a user
+identity, which an agent's own credentials do not carry. Read them in the
+dashboard, or call the REST API with a user's access token:
+
+- An agent's audit log: `GET /api/v1/agents/{id}/audit-logs?limit=50&offset=0`
+- Organization audit logs (admin): `GET /api/v1/admin/audit-logs`
+- Compliance report export (admin): `GET /api/v1/compliance/export`
 
 ---
 
@@ -353,28 +280,23 @@ with open("soc2_report_sept.pdf", "wb") as f:
 
 Automatically verify and track function calls. Capabilities are auto-registered on first use.
 
-```python
-from aim_sdk import secure
-
-agent = secure("my-agent")
-
-@agent.perform_action(
-    capability: str = None,     # Capability name (default: function name)
-    risk_level: str = "medium", # Risk level (low/medium/high/critical)
-    resource: str = None,       # Resource being accessed (optional)
-    jit_access: bool = False,   # Require admin approval (for critical actions)
-    auto_register: bool = True  # Auto-register capability on first use (default: True)
-)
-def your_function(*args, **kwargs):
-    # Function implementation
-    pass
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `capability` | function name | Capability name |
+| `resource` | `None` | Resource being accessed |
+| `context` | `None` | Additional context dict |
+| `timeout_seconds` | `300` | Longest wait for an approval |
+| `jit_access` | `False` | Require admin approval before each call |
+| `risk_level` | `None` | `low`, `medium`, `high` or `critical` |
+| `auto_register` | `True` | Register the capability on first use |
+| `grant` | `None` | Check the call against this grant |
 
 > **Note**: The `auto_register` parameter (default: `True`) automatically registers capabilities with AIM on first use. This works seamlessly with MONITORING mode, where actions are logged but not blocked.
 
 **Example**:
 ```python
 from aim_sdk import secure
+import os
 import requests
 
 agent = secure("weather-agent")
@@ -399,22 +321,17 @@ weather = get_weather("San Francisco")
 
 Require human approval before executing high-risk actions.
 
-```python
-from aim_sdk import secure
-
-agent = secure("database-agent")
-
-@agent.require_approval(
-    risk_level: str = "high"    # Risk level (high/critical)
-)
-def delete_user(user_id: int):
-    # Function implementation
-    pass
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `risk_level` | `"high"` | `high` or `critical`; any other value raises `ValueError` |
+| `action_name` | function name | Action name shown to the approver |
+| `resource` | `None` | Resource being accessed |
+| `timeout_seconds` | `3600` | Longest wait for the approval |
 
 **Example**:
 ```python
 from aim_sdk import secure
+import os
 import psycopg2
 
 agent = secure("database-agent")
@@ -445,14 +362,11 @@ result = delete_all_users()  # Waits for approval
 
 Explicitly register a capability with AIM. This is optional when using `@agent.perform_action` with `auto_register=True` (the default).
 
-```python
-agent.register_capability(
-    capability_type: str,       # Capability name (e.g., "api:weather", "db:read")
-    description: str = "",      # Description of what this capability does
-    risk_level: str = "medium", # Risk level (low/medium/high/critical)
-    auto_approve: bool = False  # Request auto-approval for low-risk capabilities
-) -> dict
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `capability_type` | (required) | Capability name (e.g. `"api:weather"`, `"db:read"`) |
+| `description` | `""` | What the capability does |
+| `risk_level` | `"medium"` | `low`, `medium`, `high` or `critical` |
 
 **Example**:
 ```python
@@ -475,14 +389,9 @@ def get_weather(city: str):
 
 ### `agent.request_capability()`
 
-Request a new capability that requires admin approval.
-
-```python
-agent.request_capability(
-    capability_type: str,       # Capability being requested
-    reason: str                 # Business justification (min 10 characters)
-) -> dict
-```
+Request a new capability that requires admin approval. Takes `capability_type`,
+`reason` (business justification, min 10 characters) and an optional
+`metadata` dict.
 
 **Example**:
 ```python
@@ -529,91 +438,42 @@ In STRICT mode, capabilities must be granted before use:
 
 ## MCP Integration
 
-### Auto-Detect MCP Servers
+### Detect MCP Servers
 
-Automatically discover MCP servers from Claude Desktop.
-
-```python
-from aim_sdk import auto_detect_mcp_servers
-
-servers = auto_detect_mcp_servers(
-    config_path: str = None     # Custom config path (default: auto-detect)
-) -> list[dict]
-```
-
-**Example**:
-```python
-from aim_sdk import auto_detect_mcp_servers
-
-# Auto-detect all MCP servers
-servers = auto_detect_mcp_servers()
-
-print(f"Found {len(servers)} MCP servers:")
-for server in servers:
-    print(f"  - {server['name']}: {server['command']}")
-
-# Output:
-# Found 3 MCP servers:
-#   - filesystem: npx -y @modelcontextprotocol/server-filesystem
-#   - github: npx -y @modelcontextprotocol/server-github
-#   - postgres: npx -y @modelcontextprotocol/server-postgres
-```
-
-### Register MCP Server
-
-Register an MCP server with AIM.
+`auto_detect_mcps()` reads the Claude Desktop config and the loaded Python
+modules and returns one detection per MCP server it finds. It runs nothing
+unless you pass `discover_tools=True`, which launches each configured server
+command to ask it for its tools (`timeout_per_server`, default 10 seconds, bounds
+each one).
 
 ```python
-from aim_sdk import register_mcp_server
+from aim_sdk import auto_detect_mcps
 
-result = register_mcp_server(
-    name: str,                  # Server name
-    command: str,               # Command to start server
-    args: list[str] = None,     # Command arguments
-    env: dict = None            # Environment variables
-) -> dict
+detections = auto_detect_mcps()
+
+print(f"Found {len(detections)} MCP servers:")
+for detection in detections:
+    print(f"  - {detection['mcpServer']} ({detection['detectionMethod']})")
 ```
 
-**Example**:
-```python
-from aim_sdk import register_mcp_server
+### Report MCP Servers to AIM
 
-# Register filesystem MCP server
-result = register_mcp_server(
-    name="filesystem",
-    command="npx",
-    args=["-y", "@modelcontextprotocol/server-filesystem"],
-    env={"ALLOWED_DIRECTORY": "~/Documents"}
-)
-
-print(f"Server ID: {result['server_id']}")
-print(f"Public Key: {result['public_key']}")
-```
-
-### Register All MCP Servers
-
-Register all auto-detected MCP servers at once.
+Send the detections to AIM, or register one server by name:
 
 ```python
-from aim_sdk import register_all_mcp_servers
+from aim_sdk import secure, auto_detect_mcps
 
-results = register_all_mcp_servers(
-    servers: list[dict] = None  # List of servers (default: auto-detect)
-) -> list[dict]
+agent = secure("my-agent")
+
+# Report everything detected
+agent.report_detections(auto_detect_mcps())
+
+# Or register one MCP server with this agent
+agent.register_mcp("filesystem")
 ```
 
-**Example**:
-```python
-from aim_sdk import auto_detect_mcp_servers, register_all_mcp_servers
-
-# Auto-detect and register all MCP servers
-servers = auto_detect_mcp_servers()
-results = register_all_mcp_servers(servers)
-
-print(f"Registered {len(results)} MCP servers:")
-for result in results:
-    print(f"  - {result['name']}: {result['server_id']}")
-```
+To do both at registration, pass `auto_detect_mcp=True` (scan the Claude
+Desktop config) or `mcp_servers=["github", "filesystem"]` to `secure()`.
 
 ---
 
@@ -633,10 +493,10 @@ aim_agent = secure("langchain-agent")
 agent_executor = AgentExecutor(
     agent=agent,
     tools=tools,
-    callbacks=[AIMCallbackHandler(aim_agent=aim_agent)]
+    callbacks=[AIMCallbackHandler(agent=aim_agent)]
 )
 
-# Run agent (all actions automatically verified and logged)
+# Run agent (tool calls are logged to AIM)
 result = agent_executor.run("What's the weather in SF?")
 ```
 
@@ -664,11 +524,15 @@ result = secured_crew.kickoff(inputs={"topic": "AI in Healthcare"})
 
 ## Configuration
 
+The SDK has no configuration file. Pass settings to `secure()`, or construct an
+`AIMClient` with `timeout` (seconds per request, default 30), `auto_retry`
+(default `True`), `max_retries` (default 3) and `enforcement_timeout` (seconds).
+
 ### Environment Variables
 
 ```bash
-# AIM Backend URL
-export AIM_URL="http://localhost:8080"
+# Deadline for one enforcement call, in integer milliseconds
+export AIM_ENFORCEMENT_TIMEOUT_MS="5000"
 
 # Agent ID and Ed25519 keypair, for code that passes them to AIMClient
 # (see Best Practices; the values are in ~/.aim/agents/<name>.json)
@@ -676,42 +540,12 @@ export AIM_AGENT_ID="your-agent-id"
 export AIM_PUBLIC_KEY="your-base64-public-key"
 export AIM_PRIVATE_KEY="your-base64-private-key"
 
-# Enable debug logging
+# Print the SDK's debug messages
 export AIM_DEBUG="true"
 
-# API timeout (seconds)
-export AIM_TIMEOUT="30"
-
-# Retry attempts for failed requests
-export AIM_RETRY_ATTEMPTS="3"
-```
-
-### Configuration File
-
-Create `~/.aim/config.yaml`:
-
-```yaml
-# AIM SDK Configuration
-aim_url: "http://localhost:8080"
-timeout: 30
-retry_attempts: 3
-debug: false
-
-# Logging
-log_level: "INFO"
-log_file: "~/.aim/aim-sdk.log"
-
-# Security
-verify_ssl: true
-```
-
-Load configuration:
-
-```python
-from aim_sdk import load_config
-
-config = load_config("~/.aim/config.yaml")
-agent = secure("my-agent", **config)
+# Security event log
+export AIM_SECURITY_LOG_FILE="$HOME/.aim/security.log"
+export AIM_SECURITY_LOG_LEVEL="INFO"
 ```
 
 ---
@@ -814,7 +648,7 @@ def get_weather(city: str):
 
 # ❌ BAD - Manual tracking everywhere
 def get_weather(city: str):
-    agent.verify_capability("weather:read", resource=city)
+    verification = agent.verify_capability("weather:read", resource=city)
     result = requests.get(f"https://api.weather.com/{city}").json()
     return result
 ```
@@ -841,36 +675,19 @@ def delete_all_data():  # Should be critical!
     pass
 ```
 
-### 4. Export Compliance Reports Regularly
-
-```python
-# ✅ GOOD - Regular compliance reporting
-def monthly_compliance_report():
-    """Run on 1st of each month"""
-    report = agent.export_compliance_report(
-        report_type="soc2",
-        start_date=first_day_of_last_month(),
-        end_date=last_day_of_last_month(),
-        format="pdf"
-    )
-    send_to_compliance_team(report)
-
-# Schedule this to run monthly
-```
-
-### 5. Monitor Trust Scores
+### 4. Monitor Trust Scores
 
 ```python
 # ✅ GOOD - Monitor trust scores
 def check_agent_health():
     """Run daily health check"""
-    breakdown = agent.get_trust_score(detailed=True)
+    result = agent.get_trust_score()
 
-    if breakdown["overall"] < 0.70:
-        send_alert(f"Low trust score: {breakdown['overall']}")
+    if result["score"] < 0.70:
+        send_alert(f"Low trust score: {result['score']:.2f}")
 
         # Check which factors are low
-        for factor, score in breakdown["factors"].items():
+        for factor, score in result["factors"].items():
             if score < 0.70:
                 print(f"⚠️  Low {factor}: {score}")
 ```
@@ -921,8 +738,8 @@ forecast = weather_agent.get_forecast("San Francisco")
 print(forecast)
 
 # Check trust score
-score = agent.get_trust_score()
-print(f"Trust Score: {score}")
+score = agent.get_trust_score()["score"]
+print(f"Trust Score: {score:.2f}")
 ```
 
 ---
@@ -937,12 +754,12 @@ Complete SDK API documentation: [https://opena2a.org/docs/sdk/api](https://opena
 
 ### Issue: "Authentication failed"
 
-**Error**: `AuthenticationError: Invalid private key`
+**Error**: `AuthenticationError: Authentication failed - invalid agent credentials`
 
 **Solution**:
-1. Check `AIM_PRIVATE_KEY` is set: `echo $AIM_PRIVATE_KEY`
-2. Verify key matches agent registered in dashboard
-3. Ensure key is valid Ed25519 private key
+1. Check the agent's credentials file exists: `ls ~/.aim/agents/`
+2. Verify the agent still exists in the dashboard and is not revoked
+3. Register again with `secure("my-agent", force_new=True)` if the saved keys no longer match
 
 ### Issue: "Connection refused"
 
@@ -950,7 +767,7 @@ Complete SDK API documentation: [https://opena2a.org/docs/sdk/api](https://opena
 
 **Solution**:
 1. Check AIM backend is running: `curl http://localhost:8080/health`
-2. Verify `AIM_URL` is correct
+2. Verify the `aim_url` you pass (or the one in the SDK credentials) is correct
 3. Check firewall/network settings
 
 ### Issue: "Low trust score"
@@ -959,11 +776,10 @@ Complete SDK API documentation: [https://opena2a.org/docs/sdk/api](https://opena
 
 **Solution**:
 ```python
-# Get detailed breakdown
-breakdown = agent.get_trust_score(detailed=True)
+result = agent.get_trust_score()
 
 # Check which factors are low
-for factor, score in breakdown["factors"].items():
+for factor, score in result["factors"].items():
     if score < 0.70:
         print(f"Low {factor}: {score}")
         # Address the specific factor

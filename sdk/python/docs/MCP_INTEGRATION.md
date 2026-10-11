@@ -742,7 +742,7 @@ from aim_sdk import secure
 from aim_sdk.integrations.mcp import register_mcp_server, MCPActionWrapper
 
 # Register AIM agent
-agent = secure("research-agent", AIM_URL)
+aim_client = secure("research-agent", AIM_URL)
 
 # Register MCP server
 research_server = register_mcp_server(

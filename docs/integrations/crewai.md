@@ -510,25 +510,27 @@ secured_crew = AIMCrewWrapper(crew, aim_agent=aim_crew)
 result = secured_crew.kickoff(inputs={"topic": "Quantum Computing"})
 ```
 
-### Custom Callbacks
+### Wrapper Options
+
+`AIMCrewWrapper` takes `crew`, `aim_agent`, `risk_level` (`low`, `medium` or
+`high`), `log_inputs`, `log_outputs` and `verbose`:
 
 ```python
 from aim_sdk.integrations.crewai import AIMCrewWrapper
 
-def on_agent_action(agent_name: str, action: str, result: str):
-    """Custom callback for each agent action"""
-    print(f"[{agent_name}] {action} → {result[:50]}...")
-
-# Secure crew with custom callbacks
 secured_crew = AIMCrewWrapper(
     crew,
     aim_agent=aim_crew,
-    on_action=on_agent_action
+    risk_level="high",
+    log_inputs=False,  # do not send the kickoff inputs to AIM
+    verbose=True       # print the wrapper's verification steps
 )
 
 result = secured_crew.kickoff(inputs={"topic": "Blockchain"})
-# Prints each action as it happens
 ```
+
+To log each task as it completes, pass
+`AIMTaskCallback(agent=aim_crew).on_task_complete` as the task's `callback`.
 
 ---
 

@@ -2,6 +2,7 @@ package application
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -23,22 +24,25 @@ import (
 // added (#675).
 
 // docsTrustFactors are the nine factors in the order and with the weights
-// Calculate uses: the display name the pages use, the key the SDK guides'
-// breakdowns use, and the weight in percent.
+// Calculate uses: the display name the pages use, the factor's key in the
+// calculator's excluded-factor list, the key the server's trust score answer
+// gives it under factors (which the SDK guides' breakdowns print), and the
+// weight in percent.
 var docsTrustFactors = []struct {
-	name   string
-	key    string
-	weight int
+	name    string
+	key     string
+	jsonKey string
+	weight  int
 }{
-	{"Verification Status", "verification_status", 25},
-	{"Uptime & Availability", "uptime", 15},
-	{"Action Success Rate", "success_rate", 15},
-	{"Security Alerts", "security_alerts", 15},
-	{"Compliance Score", "compliance", 10},
-	{"Age & History", "age", 5},
-	{"Drift Detection", "drift_detection", 3},
-	{"User Feedback", "user_feedback", 2},
-	{"Execution Isolation", "execution_isolation", 10},
+	{"Verification Status", "verification_status", "verificationStatus", 25},
+	{"Uptime & Availability", "uptime", "uptime", 15},
+	{"Action Success Rate", "success_rate", "successRate", 15},
+	{"Security Alerts", "security_alerts", "securityAlerts", 15},
+	{"Compliance Score", "compliance", "compliance", 10},
+	{"Age & History", "age", "age", 5},
+	{"Drift Detection", "drift_detection", "driftDetection", 3},
+	{"User Feedback", "user_feedback", "userFeedback", 2},
+	{"Execution Isolation", "execution_isolation", "executionIsolation", 10},
 }
 
 // docsFactorValues returns the nine factor values of score in docsTrustFactors
@@ -221,6 +225,17 @@ func TestTrustScoreDocs_PagesQuoteTheNineFactorScore(t *testing.T) {
 	})
 
 	t.Run("the SDK guides' breakdowns carry the nine factors and their overall", func(t *testing.T) {
+		// The breakdowns print the factors get_trust_score() returns, under
+		// the keys the server's answer gives them.
+		factorsType := reflect.TypeOf(domain.TrustScoreFactors{})
+		for _, f := range docsTrustFactors {
+			found := false
+			for i := 0; i < factorsType.NumField(); i++ {
+				found = found || strings.Split(factorsType.Field(i).Tag.Get("json"), ",")[0] == f.jsonKey
+			}
+			require.True(t, found, "TrustScoreFactors has no field with JSON key %q", f.jsonKey)
+		}
+
 		for _, page := range []struct {
 			rel     string
 			age     time.Duration
@@ -228,7 +243,7 @@ func TestTrustScoreDocs_PagesQuoteTheNineFactorScore(t *testing.T) {
 			factor  string
 		}{
 			{"docs/sdk/python.md", 20 * 24 * time.Hour,
-				[]string{"#   \"overall\": %.2f,", "print(f\"Trust Score: {score}\")  # %.2f\n"}, "#     %q: %.2f"},
+				[]string{"print(f\"Trust Score: {result['score']:.2f}\")  # %.2f\n"}, "#   %q: %.2f"},
 			{"docs/sdk/trust-scoring.md", 45 * 24 * time.Hour,
 				[]string{"Overall Trust Score: %.2f\n"}, "  %s: %.2f\n"},
 		} {
@@ -242,16 +257,16 @@ func TestTrustScoreDocs_PagesQuoteTheNineFactorScore(t *testing.T) {
 				assert.Contains(t, text, fmt.Sprintf(overall, score.Score), page.rel)
 			}
 			for i, f := range docsTrustFactors {
-				assert.Contains(t, text, fmt.Sprintf(page.factor, f.key, docsFactorValues(score)[i]),
-					"%s must list %s in its breakdown", page.rel, f.key)
+				assert.Contains(t, text, fmt.Sprintf(page.factor, f.jsonKey, docsFactorValues(score)[i]),
+					"%s must list %s in its breakdown", page.rel, f.jsonKey)
 			}
 		}
 
 		// The report example in the trust scoring guide weighs each factor.
 		guide := aim02ReadFile(t, root, "docs/sdk/trust-scoring.md")
 		for _, f := range docsTrustFactors {
-			assert.Contains(t, guide, fmt.Sprintf("'%s': %.2f", f.key, float64(f.weight)/100),
-				"the weight table in docs/sdk/trust-scoring.md must weigh %s at %d%%", f.key, f.weight)
+			assert.Contains(t, guide, fmt.Sprintf("'%s': %.2f", f.jsonKey, float64(f.weight)/100),
+				"the weight table in docs/sdk/trust-scoring.md must weigh %s at %d%%", f.jsonKey, f.weight)
 		}
 	})
 }

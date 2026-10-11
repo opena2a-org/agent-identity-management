@@ -3529,6 +3529,106 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"Failed to get agent details: {e}")
 
+    def get_trust_score(
+        self,
+        agent_id: Optional[str] = None
+    ) -> Dict:
+        """
+        Get an agent's current trust score.
+
+        Calls GET /api/v1/agents/{id}/trust-score. When the server holds no
+        stored score for the agent, it calculates one for this response.
+
+        Args:
+            agent_id: Agent ID to query (defaults to current agent)
+
+        Returns:
+            Dict containing:
+            - agentId: str
+            - agentName: str
+            - score: float - 0.0 to 1.0
+            - factors: Dict[str, float] - each 0.0 to 1.0: verificationStatus,
+              uptime, successRate, securityAlerts, compliance, age,
+              driftDetection, userFeedback, executionIsolation
+            - calculatedAt: str - ISO timestamp
+            - excludedFactors: List[str] - present only on a score calculated
+              for this response
+
+        Example:
+            result = client.get_trust_score()
+            print(f"Trust score: {result['score']:.2f}")
+
+        Raises:
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        try:
+            return self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/agents/{target_agent_id}/trust-score"
+            )
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to get trust score: {e}")
+
+    def get_trust_score_history(
+        self,
+        agent_id: Optional[str] = None,
+        limit: Optional[int] = None
+    ) -> Dict:
+        """
+        Get an agent's recorded trust score changes, newest first.
+
+        Calls GET /api/v1/agents/{id}/trust-score/history.
+
+        Args:
+            agent_id: Agent ID to query (defaults to current agent)
+            limit: Number of entries to return, a positive integer. When
+                omitted the server returns up to 30.
+
+        Returns:
+            Dict containing:
+            - agentId: str
+            - agentName: str
+            - history: List of entries, each with trustScore (0.0 to 1.0),
+              previousScore (absent when none was recorded), reason, timestamp
+              and changedBy (absent for automated changes)
+            - total: int - number of entries returned
+
+        Example:
+            result = client.get_trust_score_history(limit=10)
+            for entry in result["history"]:
+                print(entry["timestamp"], entry["trustScore"], entry["reason"])
+
+        Raises:
+            ConfigurationError: If limit is not a positive integer
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If request fails
+        """
+        if limit is not None and (
+            isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
+        ):
+            raise ConfigurationError(
+                f"limit must be a positive integer -- got {limit!r}"
+            )
+
+        target_agent_id = agent_id or self.agent_id
+        endpoint = f"/api/v1/agents/{target_agent_id}/trust-score/history"
+        if limit is not None:
+            endpoint += f"?limit={limit}"
+
+        try:
+            return self._make_request(method="GET", endpoint=endpoint)
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to get trust score history: {e}")
+
     def update_agent(
         self,
         agent_id: Optional[str] = None,

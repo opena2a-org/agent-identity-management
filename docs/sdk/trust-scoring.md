@@ -141,8 +141,8 @@ def health():
     """Health check endpoint for monitoring"""
     return {
         "status": "healthy",
-        "agent_id": agent.id,
-        "trust_score": agent.get_trust_score()
+        "agent_id": agent.agent_id,
+        "trust_score": agent.get_trust_score()["score"]
     }
 
 # Uptime monitoring pings /health every minute
@@ -269,25 +269,19 @@ agent = secure("database-agent")
 
 # Monitor for security alerts
 def check_security_alerts():
-    """Check for and respond to security alerts"""
-    breakdown = agent.get_trust_score(detailed=True)
+    """Flag the agent when alerts are lowering its trust score"""
+    result = agent.get_trust_score()
 
-    if breakdown["factors"]["security_alerts"] < 0.75:
-        # Get recent alerts
-        alerts = agent.get_security_alerts(severity="high")
-
-        for alert in alerts:
-            print(f"🚨 {alert['severity']}: {alert['message']}")
-
-            # Respond to alert
-            if alert['type'] == "unusual_pattern":
-                investigate_unusual_activity(alert)
-            elif alert['type'] == "failed_verifications":
-                rotate_key_immediately(agent)
+    if result["factors"]["securityAlerts"] < 0.75:
+        print(f"🚨 Security alerts factor is {result['factors']['securityAlerts']:.2f}")
+        # Review the alerts in the dashboard and acknowledge or resolve each one
 
 # Run daily
 check_security_alerts()
 ```
+
+The SDK has no method that lists alerts. The dashboard shows them, and
+`GET /api/v1/agents/{id}/alerts` returns them.
 
 ---
 
@@ -319,29 +313,9 @@ compliance_score = compliant_actions / total_actions_requiring_compliance
 - ✅ Classify data properly (PII, PHI, etc.)
 - ✅ Implement data retention policies
 
-**Code Example**:
-```python
-from aim_sdk import secure
-
-agent = secure("hr-agent")
-
-# Export compliance report monthly
-def generate_monthly_compliance_report():
-    """Generate SOC 2 compliance report"""
-    report = agent.export_compliance_report(
-        report_type="soc2",
-        start_date="2025-10-01T00:00:00Z",
-        end_date="2025-10-31T23:59:59Z",
-        format="pdf"
-    )
-
-    # Save report
-    with open(f"compliance_report_oct_2025.pdf", "wb") as f:
-        f.write(report)
-
-    print("✅ Compliance report generated")
-    # High compliance → high trust score
-```
+**Compliance reports**: the SDK does not export them. An organization admin
+exports one from the dashboard, or with `GET /api/v1/compliance/export` and an
+admin's access token.
 
 ---
 
@@ -351,7 +325,7 @@ def generate_monthly_compliance_report():
 
 **Calculation**:
 ```python
-days_active = (now - agent.created_at).days
+days_active = (now - agent_created_at).days
 
 if days_active < 7:
     age_score = 0.30
@@ -425,25 +399,19 @@ agent = secure("api-agent")
 # Monitor for drift
 def monitor_behavioral_drift():
     """Check for unexpected behavior changes"""
-    breakdown = agent.get_trust_score(detailed=True)
+    result = agent.get_trust_score()
 
-    if breakdown["factors"]["drift_detection"] < 1.0:
-        # Get drift details
-        drift_events = agent.get_drift_events()
-
-        for event in drift_events:
-            print(f"⚠️  Drift detected: {event['type']}")
-            print(f"   Baseline: {event['baseline']}")
-            print(f"   Current: {event['current']}")
-            print(f"   Deviation: {event['deviation']}%")
-
-            # Acknowledge if expected
-            if event['type'] == "increased_traffic" and is_expected_traffic_increase():
-                agent.acknowledge_drift(event['id'], reason="Black Friday sales")
+    if result["factors"]["driftDetection"] < 1.0:
+        print(f"⚠️  Drift detection factor is {result['factors']['driftDetection']:.2f}")
+        # Review the drift alert in the dashboard; acknowledge it there if the
+        # change was expected
 
 # Run daily
 monitor_behavioral_drift()
 ```
+
+The SDK has no method to list or acknowledge drift events; both are dashboard
+actions.
 
 ---
 
@@ -471,25 +439,28 @@ else:
 - Negative feedback: 1
 - **Score**: 1.0 (100%)
 
-**How to collect feedback**:
+**How to collect feedback**: feedback is a user's rating, so it is submitted
+with a user's access token, not with the agent's credentials. The SDK has no
+feedback method; call the REST route from the application that signs your users
+in:
+
 ```python
-from aim_sdk import secure
+import requests
 
-agent = secure("chatbot-agent")
-
-# Collect user feedback
-def submit_user_feedback(agent_id: str, rating: int, comment: str):
-    """Submit user feedback for agent"""
-    agent.submit_feedback(
-        rating=rating,  # 1-5 stars
-        comment=comment,
-        user_id=current_user.id
+def submit_user_feedback(aim_url: str, user_token: str, agent_id: str, rating: int, comment: str):
+    """Record a 1-5 rating of the agent from a signed-in AIM user"""
+    response = requests.post(
+        f"{aim_url}/api/v1/trust-score/agents/{agent_id}/feedback",
+        headers={"Authorization": f"Bearer {user_token}"},
+        json={"rating": rating, "comment": comment},
+        timeout=10,
     )
+    response.raise_for_status()
 
 # In your chatbot UI
 # "Was this helpful? 👍 👎"
-# If 👍: submit_user_feedback(agent.id, 5, "Very helpful!")
-# If 👎: submit_user_feedback(agent.id, 1, "Incorrect information")
+# If 👍: submit_user_feedback(aim_url, user_token, agent.agent_id, 5, "Very helpful!")
+# If 👎: submit_user_feedback(aim_url, user_token, agent.agent_id, 1, "Incorrect information")
 ```
 
 ---
@@ -543,9 +514,14 @@ from aim_sdk import secure
 agent = secure("my-agent")
 
 # Get overall trust score
-score = agent.get_trust_score()
-print(f"Trust Score: {score}")  # 0.95
+result = agent.get_trust_score()
+print(f"Trust Score: {result['score']:.2f}")  # 0.95
 ```
+
+`get_trust_score()` reads `GET /api/v1/agents/{id}/trust-score`. It returns
+`agentId`, `agentName`, `score`, `factors`, `calculatedAt` and, on a score
+calculated for that response, `excludedFactors`. Pass another agent's ID to read
+an agent in your organization: `agent.get_trust_score("uuid-of-other-agent")`.
 
 ### Detailed Breakdown
 
@@ -554,12 +530,11 @@ from aim_sdk import secure
 
 agent = secure("my-agent")
 
-# Get detailed breakdown
-breakdown = agent.get_trust_score(detailed=True)
+result = agent.get_trust_score()
 
-print(f"Overall Trust Score: {breakdown['overall']}")
+print(f"Overall Trust Score: {result['score']:.2f}")
 print("\nFactor Breakdown:")
-for factor, score in breakdown['factors'].items():
+for factor, score in result['factors'].items():
     print(f"  {factor}: {score:.2f}")
 ```
 
@@ -568,15 +543,15 @@ for factor, score in breakdown['factors'].items():
 Overall Trust Score: 0.94
 
 Factor Breakdown:
-  verification_status: 0.98
+  verificationStatus: 0.98
   uptime: 1.00
-  success_rate: 0.98
-  security_alerts: 1.00
+  successRate: 0.98
+  securityAlerts: 1.00
   compliance: 1.00
   age: 0.75
-  drift_detection: 1.00
-  user_feedback: 1.00
-  execution_isolation: 0.65
+  driftDetection: 1.00
+  userFeedback: 1.00
+  executionIsolation: 0.65
 ```
 
 The output is for a verified agent 30 to 90 days old, 98% of whose verifications in the last 30
@@ -595,12 +570,12 @@ from aim_sdk import secure
 agent = secure("my-agent")
 
 # Get breakdown
-breakdown = agent.get_trust_score(detailed=True)
+result = agent.get_trust_score()
 
 # Find low-scoring factors
 low_factors = {
     factor: score
-    for factor, score in breakdown['factors'].items()
+    for factor, score in result['factors'].items()
     if score < 0.75
 }
 
@@ -621,57 +596,56 @@ agent = secure("my-agent")
 
 def improve_trust_score():
     """Systematic trust score improvement"""
-    breakdown = agent.get_trust_score(detailed=True)
+    factors = agent.get_trust_score()['factors']
 
     # Factor 1: Verification Status
-    if breakdown['factors']['verification_status'] < 0.95:
+    if factors['verificationStatus'] < 0.95:
         print("❌ Low verification status")
         print("   → Add @agent.perform_action decorators to all functions")
 
     # Factor 2: Uptime
-    if breakdown['factors']['uptime'] < 0.95:
+    if factors['uptime'] < 0.95:
         print("❌ Low uptime")
         print("   → Deploy on more reliable infrastructure")
         print("   → Implement auto-restart on failure")
 
     # Factor 3: Success Rate
-    if breakdown['factors']['success_rate'] < 0.95:
+    if factors['successRate'] < 0.95:
         print("❌ Low success rate")
-        print("   → Review recent failed actions")
-        logs = agent.get_audit_logs(limit=100)
-        failed = [log for log in logs if not log['success']]
-        print(f"   → {len(failed)} failed actions in last 100")
+        print("   → Review recent failed actions in the agent's audit log (dashboard)")
 
     # Factor 4: Security Alerts
-    if breakdown['factors']['security_alerts'] < 1.0:
+    if factors['securityAlerts'] < 1.0:
         print("❌ Security alerts detected")
-        alerts = agent.get_security_alerts()
-        print(f"   → {len(alerts)} active alerts")
-        print("   → Investigate and resolve immediately")
+        print("   → Review the agent's alerts in the dashboard and resolve them")
 
     # Factor 5: Compliance
-    if breakdown['factors']['compliance'] < 1.0:
+    if factors['compliance'] < 1.0:
         print("❌ Compliance issues detected")
         print("   → Ensure all sensitive actions are logged")
 
     # Factor 6: Age
-    if breakdown['factors']['age'] < 0.75:
-        days_active = (datetime.now() - agent.created_at).days
-        print(f"⏰ New agent ({days_active} days old)")
+    if factors['age'] < 0.75:
+        print("⏰ New agent")
         print("   → Trust score will improve over time")
 
     # Factor 7: Drift Detection
-    if breakdown['factors']['drift_detection'] < 1.0:
+    if factors['driftDetection'] < 1.0:
         print("❌ Behavioral drift detected")
         print("   → Check the Drift Score card on the agent detail page (Trust tab)")
         print("   → Real-time per-event telemetry is on the agent.drift_score OTel gauge (Grafana)")
         print("   → Acknowledge expected changes")
 
     # Factor 8: User Feedback
-    if breakdown['factors']['user_feedback'] < 0.75:
+    if factors['userFeedback'] < 0.75:
         print("❌ Negative user feedback")
         print("   → Review user complaints")
         print("   → Improve agent responses")
+
+    # Factor 9: Execution Isolation
+    if factors['executionIsolation'] < 0.5:
+        print("❌ Low execution isolation")
+        print("   → Attest the agent's sandbox with agent.attest_isolation()")
 
 # Run weekly
 improve_trust_score()
@@ -716,7 +690,7 @@ agent = secure("production-agent")
 
 def check_production_readiness():
     """Verify agent is ready for production"""
-    score = agent.get_trust_score()
+    score = agent.get_trust_score()["score"]
 
     if score >= 0.95:
         print("✅ PRODUCTION READY - Excellent trust score")
@@ -748,7 +722,7 @@ agent = secure("my-agent")
 @agent.perform_action(capability="sensitive:execute", risk_level="high")
 def sensitive_action(data):
     """Sensitive capability with trust score check"""
-    score = agent.get_trust_score()
+    score = agent.get_trust_score()["score"]
 
     if score >= 0.90:
         # High trust - execute immediately
@@ -773,17 +747,18 @@ import matplotlib.pyplot as plt
 
 agent = secure("my-agent")
 
-# Get historical trust scores
-history = agent.get_trust_score_history(days=30)
+# Get the last 30 recorded trust score changes (newest first)
+history = agent.get_trust_score_history(limit=30)["history"]
 
-# Plot trend
-dates = [h['date'] for h in history]
-scores = [h['score'] for h in history]
+# Plot trend, oldest first
+entries = list(reversed(history))
+dates = [h['timestamp'] for h in entries]
+scores = [h['trustScore'] for h in entries]
 
 plt.plot(dates, scores)
 plt.xlabel("Date")
 plt.ylabel("Trust Score")
-plt.title("Trust Score Trend (Last 30 Days)")
+plt.title("Trust Score Trend (Last 30 Changes)")
 plt.ylim(0, 1)
 plt.axhline(y=0.95, color='g', linestyle='--', label='Excellent (0.95)')
 plt.axhline(y=0.80, color='y', linestyle='--', label='Good (0.80)')
@@ -801,7 +776,7 @@ agent = secure("my-agent")
 
 def monitor_trust_score():
     """Alert when trust score drops"""
-    score = agent.get_trust_score()
+    score = agent.get_trust_score()["score"]
 
     if score < 0.70:
         send_critical_alert(f"🚨 Trust score critically low: {score}")
@@ -832,10 +807,10 @@ def comprehensive_trust_check():
     print("=" * 60)
 
     # Get detailed breakdown
-    breakdown = agent.get_trust_score(detailed=True)
+    result = agent.get_trust_score()
 
     # Overall score
-    overall = breakdown['overall']
+    overall = result['score']
     print(f"\n📊 Overall Trust Score: {overall:.3f}")
 
     if overall >= 0.95:
@@ -853,18 +828,18 @@ def comprehensive_trust_check():
     print("\n📋 Factor Breakdown:")
     print("-" * 60)
 
-    factors = breakdown['factors']
+    factors = result['factors']
     for factor, score in factors.items():
         weight = {
-            'verification_status': 0.25,
+            'verificationStatus': 0.25,
             'uptime': 0.15,
-            'success_rate': 0.15,
-            'security_alerts': 0.15,
+            'successRate': 0.15,
+            'securityAlerts': 0.15,
             'compliance': 0.10,
             'age': 0.05,
-            'drift_detection': 0.03,
-            'user_feedback': 0.02,
-            'execution_isolation': 0.10
+            'driftDetection': 0.03,
+            'userFeedback': 0.02,
+            'executionIsolation': 0.10
         }[factor]
 
         contribution = score * weight
@@ -883,13 +858,13 @@ def comprehensive_trust_check():
     print("\n💡 Recommendations:")
     print("-" * 60)
 
-    if factors['verification_status'] < 0.95:
+    if factors['verificationStatus'] < 0.95:
         print("  • Add verification to all actions")
 
-    if factors['success_rate'] < 0.95:
+    if factors['successRate'] < 0.95:
         print("  • Improve error handling")
 
-    if factors['security_alerts'] < 1.0:
+    if factors['securityAlerts'] < 1.0:
         print("  • Resolve active security alerts")
 
     if factors['age'] < 0.75:
@@ -913,9 +888,9 @@ comprehensive_trust_check()
 ```python
 # ✅ GOOD - Check trust score every day
 def daily_trust_check():
-    score = agent.get_trust_score()
+    score = agent.get_trust_score()["score"]
     if score < 0.80:
-        send_alert(f"Trust score: {score}")
+        send_alert(f"Trust score: {score:.2f}")
 
 schedule.every().day.at("09:00").do(daily_trust_check)
 ```
@@ -924,9 +899,9 @@ schedule.every().day.at("09:00").do(daily_trust_check)
 
 ```python
 # ✅ GOOD - Respond to low factors promptly
-breakdown = agent.get_trust_score(detailed=True)
+result = agent.get_trust_score()
 
-for factor, score in breakdown['factors'].items():
+for factor, score in result['factors'].items():
     if score < 0.70:
         investigate_and_fix_immediately(factor, score)
 ```
@@ -935,7 +910,7 @@ for factor, score in breakdown['factors'].items():
 
 ```python
 # ✅ GOOD - Monitor trends, not just current score
-history = agent.get_trust_score_history(days=7)
+history = agent.get_trust_score_history(limit=7)["history"]
 
 # Check if trending down
 if is_trending_down(history):

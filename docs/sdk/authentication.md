@@ -1,20 +1,20 @@
 # 🔐 Authentication Guide - Ed25519 Cryptography
 
-Understanding how AIM secures your agents with military-grade cryptography.
+How the Python SDK proves an agent's identity to AIM.
 
 ## What is Ed25519?
 
-**Ed25519** is a modern, high-security public-key signature system that:
-- ✅ **Military-Grade Security**: Used by Signal, WhatsApp, SSH
-- ✅ **Fast**: 64,000+ signatures per second
-- ✅ **Small Keys**: 32-byte keys (256 bits)
-- ✅ **Collision-Resistant**: Practically impossible to forge signatures
+**Ed25519** is a modern public-key signature system:
+- **Widely deployed**: Used by Signal, WhatsApp, SSH
+- **Fast**: Signing and verification take microseconds
+- **Small Keys**: 32-byte keys (256 bits)
+- **Unforgeable**: Without the private key, a valid signature cannot be produced
 
 **Quantum attacks:** Ed25519, like RSA, is not resistant to quantum attacks. A large enough quantum computer running Shor's algorithm could recover a private key from its public key. For signatures designed to resist that, see [Post-Quantum Cryptography](../guides/PQC.md) (ML-DSA, alone or combined with Ed25519).
 
 **Why Ed25519?**
 - **RSA-2048**: Old, slow, large keys (2048 bits)
-- **Ed25519**: Modern, fast, small keys (256 bits), same security level
+- **Ed25519**: Modern, fast, small keys (256 bits), comparable security level
 
 ---
 
@@ -46,52 +46,46 @@ Understanding how AIM secures your agents with military-grade cryptography.
 ```python
 from aim_sdk import secure
 
-# Auto-generates Ed25519 keypair
+# Generates an Ed25519 keypair locally on first registration
 agent = secure("my-agent")
 
-print(f"Agent ID: {agent.id}")
+print(f"Agent ID: {agent.agent_id}")
 print(f"Public Key: {agent.public_key}")
-# Private key is kept secret, never transmitted
+# The private key never leaves this machine
 ```
 
-### 2. Challenge-Response Authentication
+### 2. Signed Requests
 
-Every time your agent performs an action, it proves its identity:
+There is no separate challenge round trip. Every request the SDK sends to AIM
+carries a fresh signature in four headers:
+
+| Header | Value |
+|--------|-------|
+| `X-Agent-ID` | The agent's ID |
+| `X-Public-Key` | The agent's Ed25519 public key (base64) |
+| `X-Timestamp` | Current Unix time in seconds |
+| `X-Signature` | Ed25519 signature (base64) of the message below |
+
+The signed message is the request's method, path (with its query string),
+timestamp and, when there is one, the JSON body with sorted keys, joined by
+newlines:
 
 ```
-┌─────────────┐                    ┌─────────────┐
-│   Agent     │                    │  AIM Server │
-└─────────────┘                    └─────────────┘
-      │                                   │
-      │  1. Request to verify action      │
-      ├──────────────────────────────────>│
-      │                                   │
-      │  2. Generate random challenge     │
-      │     Challenge: "abc123xyz"        │
-      │<──────────────────────────────────┤
-      │                                   │
-      │  3. Sign challenge with           │
-      │     private key                   │
-      │     Signature = sign(challenge,   │
-      │                      private_key) │
-      │                                   │
-      │  4. Send signature                │
-      ├──────────────────────────────────>│
-      │                                   │
-      │  5. Verify signature with         │
-      │     public key                    │
-      │     verify(challenge, signature,  │
-      │            public_key) → valid?   │
-      │                                   │
-      │  6. If valid: Action approved     │
-      │<──────────────────────────────────┤
-      │                                   │
+POST
+/api/v1/agents/abc-123/verify-capability
+1760140800
+{"capability": "db:read", ...}
 ```
 
-**Why Challenge-Response?**
-- **Prevents Replay Attacks**: Old signatures can't be reused
-- **Proves Identity**: Only holder of private key can create valid signature
-- **No Password Transmission**: Private key never leaves your machine
+The server rebuilds the same message, checks the signature against the public
+key it stored at registration, and refuses a timestamp more than 30 seconds
+from its own clock.
+
+**What this gives you**
+- **Proves Identity**: Only the holder of the private key can create a valid signature
+- **Limits Replay**: A captured request stops being accepted once its timestamp is out of range
+- **Binds the Request**: Changing the method, path, query or body breaks the signature
+- **No Password Transmission**: The private key never leaves your machine
 
 ---
 
@@ -99,27 +93,17 @@ Every time your agent performs an action, it proves its identity:
 
 ### Generating Keys
 
-#### Option 1: Auto-Generate (Easiest)
+#### Option 1: Let `secure()` Generate Them
 
-```python
-from aim_sdk import secure
+`secure()` saves each agent's credentials, including its private key, in
+`~/.aim/agents/<name>.json`. The directory is created with mode `0700` and
+the file with mode `0600`, so other users on the machine cannot read them.
+The next `secure("my-agent")` loads the saved keys instead of registering
+again.
 
-# AIM generates keypair automatically
-agent = secure("my-agent")
-
-# Private key is stored securely in environment
-print(f"Store this private key: {agent.private_key}")
-```
-
-**⚠️ WARNING**: Save the private key! It's only shown once.
-
-```bash
-# Save to environment variable
-export AIM_PRIVATE_KEY="<your-private-key>"
-
-# Or save to .env file
-echo "AIM_PRIVATE_KEY=<your-private-key>" >> .env
-```
+The SDK's own credentials, which `secure()` registers the agent with, are in
+`~/.aim/sdk_credentials.json` after `aim-sdk login`. With the SDK downloaded
+from the dashboard, they are in `.aim/sdk_credentials.json` in the download.
 
 #### Option 2: Use the Keypair `secure()` Saved
 
@@ -248,131 +232,51 @@ private_key.txt
 
 ## Key Rotation
 
-Rotate keys regularly for security.
+The Python SDK has no key rotation call. Rotate an agent's Ed25519 keys from
+the dashboard, or with `POST /api/v1/agents/{id}/rotate-credentials` and a
+member's access token. The server generates the new keypair and keeps the
+previous public key for a grace period; download the agent's credentials again
+afterwards so the SDK signs with the new key.
 
-### Step 1: Generate New Keypair
-
-```python
-from aim_sdk.crypto import generate_keypair
-
-# Generate new keypair
-new_private_key, new_public_key = generate_keypair()
-
-print(f"New Private Key: {new_private_key}")
-print(f"New Public Key: {new_public_key}")
-```
-
-### Step 2: Update Agent in AIM Dashboard
-
-1. **Login** to AIM Dashboard: http://localhost:3000
-2. **Navigate**: Agents → Your Agent → Settings
-3. **Click**: "Rotate Keys"
-4. **Paste**: New public key
-5. **Save**: Confirm rotation
-
-### Step 3: Update Your Application
-
-```python
-# Update environment variable
-# export AIM_PRIVATE_KEY="<new-private-key>"
-
-# Or update secret in secret manager
-secrets.put_secret_value(
-    SecretId="aim/private-key",
-    SecretString=new_private_key
-)
-
-# Restart application to load new key
-```
-
-### Automated Key Rotation
-
-```python
-from aim_sdk import secure
-from aim_sdk.crypto import generate_keypair
-from datetime import datetime, timedelta
-
-def rotate_key_if_needed(agent):
-    """Rotate key every 90 days"""
-    key_age = datetime.now() - agent.key_created_at
-
-    if key_age > timedelta(days=90):
-        print("Key is older than 90 days, rotating...")
-
-        # Generate new keypair
-        new_private_key, new_public_key = generate_keypair()
-
-        # Update agent
-        agent.rotate_key(new_public_key)
-
-        # Save new private key
-        save_to_secret_manager("aim/private-key", new_private_key)
-
-        print("✅ Key rotated successfully")
-
-# Check daily
-rotate_key_if_needed(agent)
-```
+For post-quantum keys the SDK does have calls: `register_pqc_key()`,
+`rotate_pqc_key()` and `set_hybrid_mode()`. See the
+[Post-Quantum Cryptography guide](../guides/PQC.md).
 
 ---
 
 ## Signing and Verifying
 
-### How Signatures Work
+The SDK signs every request for you; you do not call a signing function to use
+AIM. To sign or verify data yourself, `aim_sdk.crypto` provides ML-DSA and
+hybrid (Ed25519 + ML-DSA) functions. They need `liboqs-python`;
+`is_pqc_available()` says whether it is installed.
 
 ```python
-from aim_sdk.crypto import sign, verify
+from aim_sdk.crypto import (
+    generate_mldsa_keypair,
+    is_pqc_available,
+    sign_mldsa,
+    verify_mldsa,
+)
 
-# Data to sign
-message = "delete_user(id=12345)"
+if is_pqc_available():
+    keypair = generate_mldsa_keypair()
 
-# Sign with private key
-signature = sign(message, private_key)
-print(f"Signature: {signature}")
+    message = b"delete_user(id=12345)"
+    signature = sign_mldsa(keypair.private_key, message)
 
-# Verify with public key
-is_valid = verify(message, signature, public_key)
-print(f"Valid: {is_valid}")  # True
-
-# Tampered message fails verification
-is_valid = verify("delete_user(id=99999)", signature, public_key)
-print(f"Valid: {is_valid}")  # False
+    print(verify_mldsa(keypair.public_key, message, signature))                    # True
+    print(verify_mldsa(keypair.public_key, b"delete_user(id=99999)", signature))   # False
 ```
 
-### Timestamp Signing (Prevents Replay Attacks)
+For Ed25519 alone, use PyNaCl (an SDK dependency) directly:
 
 ```python
-from aim_sdk.crypto import sign_with_timestamp, verify_with_timestamp
-from datetime import datetime
+from nacl.signing import SigningKey
 
-# Sign with current timestamp
-message = "delete_user(id=12345)"
-signature, timestamp = sign_with_timestamp(message, private_key)
-
-print(f"Signature: {signature}")
-print(f"Timestamp: {timestamp}")
-
-# Verify signature (must be recent)
-is_valid = verify_with_timestamp(
-    message,
-    signature,
-    timestamp,
-    public_key,
-    max_age_seconds=300  # Must be within 5 minutes
-)
-
-print(f"Valid: {is_valid}")  # True if within 5 minutes
-
-# Old signatures are rejected
-is_valid = verify_with_timestamp(
-    message,
-    signature,
-    timestamp - timedelta(minutes=10),  # 10 minutes old
-    public_key,
-    max_age_seconds=300
-)
-
-print(f"Valid: {is_valid}")  # False (too old)
+signing_key = SigningKey.generate()
+signed = signing_key.sign(b"delete_user(id=12345)")
+signing_key.verify_key.verify(signed)  # raises BadSignatureError if tampered
 ```
 
 ---
@@ -383,12 +287,11 @@ print(f"Valid: {is_valid}")  # False (too old)
 
 ```python
 # ✅ GOOD
-print(f"Agent ID: {agent.id}")
+print(f"Agent ID: {agent.agent_id}")
 print(f"Public Key: {agent.public_key}")  # Safe to share
-
-# ❌ BAD
-print(f"Private Key: {agent.private_key}")  # NEVER print/log!
 ```
+
+Never print, log or paste the contents of `~/.aim/agents/<name>.json`.
 
 ### 2. Use Different Keys Per Environment
 
@@ -442,196 +345,65 @@ agent = AIMClient(
 )
 ```
 
-### 5. Implement Key Compromise Detection
+### 5. Watch for Signs of Key Compromise
 
 ```python
-# ✅ GOOD - Monitor for suspicious activity
+# ✅ GOOD - Alert when the trust score drops
 def check_for_key_compromise(agent):
-    """Check for signs of compromised key"""
-    trust_score = agent.get_trust_score(detailed=True)
+    result = agent.get_trust_score()
 
-    # Check for anomalies
-    if trust_score["factors"]["drift_detection"] < 0.50:
-        send_security_alert("Possible key compromise detected")
-        rotate_key_immediately(agent)
+    if result["factors"]["securityAlerts"] < 0.50:
+        send_security_alert("Security alerts are lowering this agent's trust score")
 
-    # Check for failed verifications
-    audit_logs = agent.get_audit_logs(limit=100)
-    failed_verifications = [log for log in audit_logs if log["status"] == "failed"]
-
-    if len(failed_verifications) > 10:
-        send_security_alert("High rate of failed verifications")
-        investigate_and_rotate_if_needed(agent)
+    history = agent.get_trust_score_history(limit=10)
+    drops = [
+        entry for entry in history["history"]
+        if entry.get("previousScore") is not None
+        and entry["previousScore"] - entry["trustScore"] > 0.10
+    ]
+    if drops:
+        send_security_alert(f"{len(drops)} trust score drops of more than 0.10")
 ```
 
----
-
-## Advanced Topics
-
-### Multi-Signature Support
-
-Use multiple keys for critical operations.
-
-```python
-from aim_sdk.crypto import multisig_sign, multisig_verify
-
-# Generate 3 keypairs
-keys = [generate_keypair() for _ in range(3)]
-private_keys = [key[0] for key in keys]
-public_keys = [key[1] for key in keys]
-
-# Sign with 2-of-3 threshold
-message = "transfer $1,000,000"
-signatures = [sign(message, key) for key in private_keys[:2]]
-
-# Verify (requires 2 signatures)
-is_valid = multisig_verify(
-    message,
-    signatures,
-    public_keys,
-    threshold=2
-)
-
-print(f"Valid: {is_valid}")  # True
-```
-
-### Hardware Security Modules (HSM)
-
-Use HSM for production key storage.
-
-```python
-from aim_sdk.crypto import HSMSigner
-
-# Initialize HSM signer
-signer = HSMSigner(
-    hsm_endpoint="https://hsm.yourcompany.com",
-    key_id="aim-agent-key-001",
-    credentials=credentials
-)
-
-# Sign using HSM (private key never leaves HSM)
-signature = signer.sign("delete_user(id=12345)")
-
-# Use with AIM
-agent = secure("my-agent", signer=signer)
-```
+If you suspect a key is compromised, rotate it (see [Key Rotation](#key-rotation))
+or suspend the agent in the dashboard.
 
 ---
 
 ## Troubleshooting
 
-### Issue: "Invalid signature"
+### Issue: "Authentication failed"
 
-**Error**: `AIMAuthenticationError: Signature verification failed`
+**Error**: `AuthenticationError: Authentication failed - invalid agent credentials`
+
+The server answered 401: the signature did not verify, the timestamp was out of
+range, or the agent is unknown.
 
 **Causes**:
-1. Wrong private key being used
-2. Message was tampered with
-3. Clock skew (timestamp too old/new)
+1. The saved keys do not match the public key AIM holds (for example after a rotation)
+2. The system clock is more than 30 seconds off
+3. The agent was deleted or its credentials revoked
 
 **Solution**:
 ```python
-# Verify you're using correct key
-print(f"Agent ID: {agent.id}")
+# Compare with the agent's public key in the AIM dashboard
+print(f"Agent ID: {agent.agent_id}")
 print(f"Public Key: {agent.public_key}")
 
-# Check in AIM dashboard that public key matches
-
 # Check clock synchronization
-from datetime import datetime
-print(f"System time: {datetime.now()}")
-# Ensure within 5 minutes of actual time
+from datetime import datetime, timezone
+print(f"System time (UTC): {datetime.now(timezone.utc)}")
 ```
 
-### Issue: "Key not found"
+If the keys no longer match, register again with `secure("my-agent", force_new=True)`.
 
-**Error**: `AIMAuthenticationError: No private key found`
+### Issue: "Forbidden"
 
-**Solution**:
-```python
-# Check environment variable is set
-import os
-private_key = os.getenv("AIM_PRIVATE_KEY")
+**Error**: `AuthenticationError: Forbidden - insufficient permissions`
 
-if private_key is None:
-    print("❌ AIM_PRIVATE_KEY not set!")
-    print("Set it with: export AIM_PRIVATE_KEY='your-key'")
-else:
-    print("✅ AIM_PRIVATE_KEY is set")
-```
-
-### Issue: "Weak key detected"
-
-**Error**: `AIMAuthenticationError: Key strength insufficient`
-
-**Cause**: Using non-Ed25519 key or corrupted key
-
-**Solution**:
-```python
-# Generate new Ed25519 keypair
-from aim_sdk.crypto import generate_keypair
-
-private_key, public_key = generate_keypair()
-
-# Verify key format
-print(f"Private key length: {len(private_key)}")  # Should be 64-88 chars
-print(f"Public key length: {len(public_key)}")    # Should be 64-88 chars
-```
-
----
-
-## Compliance & Auditing
-
-### SOC 2 Requirements
-
-AIM's Ed25519 authentication meets SOC 2 Type II requirements:
-
-1. **CC6.1 - Logical Access Security**
-   - ✅ Cryptographic authentication (Ed25519)
-   - ✅ No password-based authentication
-   - ✅ Multi-factor authentication support
-
-2. **CC6.2 - Access Authorization**
-   - ✅ Agent identity verification
-   - ✅ Audit trail of agent actions
-   - ✅ Challenge-response prevents impersonation
-
-3. **CC6.7 - Data Encryption**
-   - ✅ Ed25519 signatures (256-bit security)
-   - ✅ TLS for data in transit
-   - ✅ No plaintext credentials
-
-### HIPAA Compliance
-
-```python
-# Export HIPAA compliance report
-report = agent.export_compliance_report(
-    report_type="hipaa",
-    start_date="2025-10-01T00:00:00Z",
-    end_date="2025-10-31T23:59:59Z",
-    format="pdf"
-)
-
-# Report includes:
-# - All authentication events
-# - Failed authentication attempts
-# - Key rotation history
-# - Access patterns and anomalies
-```
-
-### GDPR Requirements
-
-```python
-# Right to Access (GDPR Article 15)
-audit_logs = agent.get_audit_logs(
-    start_date="2025-01-01T00:00:00Z"
-)
-
-# Export for user
-print("All authentication events for user:")
-for log in audit_logs:
-    print(f"{log['timestamp']} - {log['action_name']}")
-```
+The server answered 403: the credentials are valid but the route needs a role
+the agent does not have (several management routes accept only a member's or
+admin's access token).
 
 ---
 
@@ -673,14 +445,14 @@ agent = AIMClient(
 print(f"✅ Agent secured!")
 print(f"Agent ID: {agent.agent_id}")
 print(f"Public Key: {agent.public_key}")
+print(f"Trust Score: {agent.get_trust_score()['score']:.2f}")
 
-# 4. All actions are now authenticated
+# 4. Every call below is sent as a signed request
 @agent.perform_action(risk_level="low")
 def get_data(id: int):
     # This action is automatically:
-    # 1. Verified with challenge-response
-    # 2. Signed with Ed25519
-    # 3. Logged to audit trail
+    # 1. Verified with AIM in a signed request
+    # 2. Logged to the audit trail
     return {"data": f"Data for {id}"}
 
 # Use your agent

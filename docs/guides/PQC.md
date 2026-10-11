@@ -68,8 +68,8 @@ if is_pqc_available():
 # Detailed info
 info = get_pqc_availability_info()
 print(f"Available: {info['available']}")
-print(f"Version: {info.get('liboqs_version')}")
-print(f"Algorithms: {info.get('enabled_sig_mechanisms')}")
+print(f"Version: {info.get('version')}")
+print(f"Algorithms: {info['algorithms']}")  # the enabled ML-DSA variants
 ```
 
 #### Generate ML-DSA Keys
@@ -80,8 +80,8 @@ from aim_sdk.crypto.pqc import generate_mldsa_keypair, Algorithm
 # Generate ML-DSA-65 keypair (recommended)
 keypair = generate_mldsa_keypair(Algorithm.MLDSA_65)
 
-print(f"Public key (base64): {keypair.public_key_b64}")
-print(f"Private key (base64): {keypair.private_key_b64}")
+print(f"Public key (base64): {keypair.public_key_base64()}")
+# keypair.private_key_base64() returns the private key: store it, never print it
 print(f"Algorithm: {keypair.algorithm}")
 ```
 
@@ -94,8 +94,8 @@ from aim_sdk.crypto.pqc import generate_hybrid_keypair, Algorithm
 keypair = generate_hybrid_keypair(Algorithm.HYBRID_ED25519_MLDSA_65)
 
 # Access both key types
-print(f"Ed25519 public key: {keypair.ed25519_public_key_b64}")
-print(f"ML-DSA public key: {keypair.mldsa_public_key_b64}")
+print(f"Ed25519 public key: {keypair.ed25519_public_key_base64()}")
+print(f"ML-DSA public key: {keypair.mldsa_public_key_base64()}")
 ```
 
 #### Sign and Verify with ML-DSA
@@ -142,8 +142,8 @@ signature = sign_hybrid(
     keypair.algorithm
 )
 
-print(f"Ed25519 signature: {signature.ed25519_signature_b64}")
-print(f"ML-DSA signature: {signature.mldsa_signature_b64}")
+print(f"Ed25519 signature: {signature.ed25519_signature_base64()}")
+print(f"ML-DSA signature: {signature.mldsa_signature_base64()}")
 print(f"Timestamp: {signature.timestamp}")
 
 # Verify BOTH signatures (defense-in-depth)
@@ -260,16 +260,15 @@ PQC keys should be rotated regularly:
 
 ```python
 # Python SDK - Key rotation
-from aim_sdk.crypto.pqc import generate_hybrid_keypair
+from aim_sdk.crypto.pqc import Algorithm, generate_hybrid_keypair
 
 # Generate new keys
 new_keypair = generate_hybrid_keypair(Algorithm.HYBRID_ED25519_MLDSA_65)
 
-# Update agent with new PQC key (API call)
-client.update_agent_pqc_key(
-    agent_id="agent-uuid",
-    pqc_public_key=new_keypair.mldsa_public_key_b64,
-    pqc_algorithm="ML-DSA-65"
+# Replace the agent's PQC public key (PUT /api/v1/agents/{id}/pqc-key)
+client.rotate_pqc_key(
+    new_pqc_public_key=new_keypair.mldsa_public_key_base64(),
+    algorithm="ML-DSA-65",
 )
 ```
 
