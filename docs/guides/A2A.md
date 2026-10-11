@@ -119,41 +119,40 @@ curl -X POST https://aim.example.com/api/v1/mcp-servers \
 
 ## Attestation and Trust
 
-### Auto-Attestation
+### Attesting an MCP Server
 
-When an agent uses an MCP server for the first time, the SDK automatically creates an attestation:
+An attestation is an agent's signed statement that it has checked an MCP server. AIM records one only when it is submitted to the server. `@agent.perform_action` does not attest, and naming an MCP server as its `resource` creates no attestation.
 
-```python
-@agent.perform_action(capability="db:query", resource="database-mcp")
-def query_database(sql: str):
-    # First call creates attestation automatically
-    return mcp_client.query(sql)
-```
-
-The attestation includes:
-- Server identity (name, URL, public key)
-- Available tools
-- First seen timestamp
-- Trust score
-
-### Manual Attestation
-
-Create explicit attestations for known-good configurations:
+In the Python SDK the call is `attest_mcp()`. It requests a challenge from `GET /api/v1/mcp-servers/{id}/challenge`, signs the attestation and the challenge with the agent's Ed25519 key, and submits both to `POST /api/v1/mcp-servers/{id}/attest`. An agent registered in API-key mode has no signing key and cannot attest. The Java SDK's `AIMClient.attestMcp()` follows the same flow.
 
 ```python
-from aim_sdk import AIMClient
+from aim_sdk import secure
 
-client = AIMClient.from_sdk_token()
+agent = secure("my-agent")
 
-# Attest to an MCP server configuration
-client.create_attestation(
-    agent_id="my-agent-uuid",
-    mcp_server_name="database-mcp",
-    mcp_server_url="http://localhost:8000",
-    tools=["query", "insert"],
-    confidence_level="high"
+# mcp_server_id is the server's ID in AIM
+agent.attest_mcp(
+    mcp_server_id="550e8400-e29b-41d4-a716-446655440000",
+    capabilities=["query", "insert"],
+    mcp_url="http://localhost:8000",
+    mcp_name="database-mcp",
 )
 ```
+
+The signed attestation carries the agent ID, the server's URL and name, the tools the agent found, whether the connection and the health check succeeded, the connection latency, a timestamp, the SDK version and the challenge.
+
+`use_mcp_tool()` makes the call for you when it records a tool use. Given `mcp_url`, it attests on the agent's first use of the server, on the first use of a tool it has neither used nor attested, when its last attestation is more than 24 hours old or its recorded time cannot be read, and when discovery finds that the server's tools have changed. Pass `auto_attest=False` to turn this off.
+
+```python
+agent.use_mcp_tool(
+    server_id="550e8400-e29b-41d4-a716-446655440000",
+    tool_name="query",
+    mcp_url="http://localhost:8000",
+    mcp_name="database-mcp",
+)
+```
+
+A member of the organization can attest without an agent key from the MCP server's page in the dashboard, or with `POST /api/v1/mcp-servers/{id}/manual-attest`.
 
 ### Trust Verification
 
@@ -237,26 +236,27 @@ for i in range(1, 5):
 
 ### Delegation Trust Attenuation
 
-When agents delegate authority to other agents, trust decays through the chain. This prevents deep delegation chains from bypassing trust requirements.
+Trust decays along a delegation chain only where the TypeScript SDK's `verifyDelegationChain()` checks the chain. The AIM server does not apply attenuation: it stores a trust attenuation factor (default 0.8) and a minimum delegated trust score (default 0.3) for each delegation in its `a2a_delegation` table, and no server code reads them. Neither the Python SDK nor the Java SDK applies attenuation.
 
-Each delegation specifies:
-- `trustAttenuationFactor` (default 0.8): multiplied at each hop
-- `minDelegatedTrustScore` (default 0.3): floor below which the chain is invalid
+`verifyDelegationChain()` reads two optional fields of each delegation:
+- `trustAttenuation` (default 0.8): the factor that turns this delegation's trust into the next one's
+- `minDelegatedTrust` (default 0.3): the floor the next delegation's trust must not fall below
+
+The first delegation keeps the trust passed as `rootTrustScore` (default 1.0). Each later delegation's effective trust is the previous one's multiplied by the previous delegation's `trustAttenuation`. A delegation whose effective trust falls below the previous delegation's `minDelegatedTrust` carries an error, and the chain is not valid. With the defaults:
 
 ```
-Human (trust: 1.0)
-  └─ Orchestrator (effective: 0.8)    # 1.0 × 0.8
-       └─ Researcher (effective: 0.64) # 0.8 × 0.8
-            └─ Sub-agent (effective: 0.51) # 0.64 × 0.8
+root               effectiveTrust 1.0
+  subdelegation-1  effectiveTrust 0.8     # 1.0 × 0.8
+  subdelegation-2  effectiveTrust 0.64    # 0.8 × 0.8
+  subdelegation-3  effectiveTrust 0.512   # 0.64 × 0.8
 ```
 
-If any hop drops below the minimum, the delegation chain is rejected. Combined with per-capability trust thresholds, this means a deeply-delegated agent cannot execute high-risk capabilities even if it has been granted them.
-
-The TypeScript SDK enforces this in `verifyDelegationChain()`:
+`createDelegation()` sets neither field, so a chain it builds uses the defaults. Neither field is covered by the delegation's signature: the SDK leaves both out of the signed payload, so whoever passes a chain on can change them without failing verification. A verifier that receives a chain from another party should set the values it requires on each delegation before calling `verifyDelegationChain()`.
 
 ```typescript
 const result = await verifyDelegationChain(chain, { rootTrustScore: 0.95 });
-// result.results[i].effectiveTrust shows trust at each hop
+// result.valid is false when any delegation fails a check, the trust floor included
+// result.results[i].effectiveTrust is the trust at delegation i
 ```
 
 ## Supply Chain Analytics

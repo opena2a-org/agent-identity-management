@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the A2A guide documents MCP attestation as a call the agent makes, and says where delegation trust attenuation is applied (#679)
+
+- `docs/guides/A2A.md` said the SDK creates an attestation the first time an agent uses an MCP server, and showed
+  one being created under `@agent.perform_action`. The body of `perform_action` makes no attestation call. The
+  guide's manual example called `AIMClient.from_sdk_token()` and `client.create_attestation()`, and the Python SDK
+  defines neither. The section now names the call, `attest_mcp()` (`AIMClient.attestMcp()` in the Java SDK), the
+  challenge and attest routes it signs against, and the fields it signs. It names `use_mcp_tool()` as the method
+  that attests for the agent, with the cases in which it does, and the manual route a member can use without
+  an agent key.
+- The guide said each delegation's `trustAttenuationFactor` (default 0.8) is multiplied in at each hop, that a
+  chain falling below `minDelegatedTrustScore` (default 0.3) is rejected, and that with per-capability trust
+  thresholds a deeply delegated agent cannot execute high-risk capabilities. The server stores both values for
+  each delegation in `a2a_delegation`, and no server code reads them. Only the TypeScript SDK's
+  `verifyDelegationChain()` attenuates, from fields named `trustAttenuation` and `minDelegatedTrust`, and its
+  first delegation keeps the root trust: for the guide's chain of three delegations it reports 1.0, 0.8 and 0.64,
+  where the guide's diagram gave 0.8, 0.64 and 0.51. The section now says that the server, the Python SDK and the
+  Java SDK do not attenuate, gives the TypeScript fields and their defaults, and says that both fields are left
+  out of a delegation's signed payload, so whoever passes a chain on can change them.
+- Two tests hold these. Every route, SDK method, signed field, attestation trigger and default the attestation
+  section names must be the one the server, the Python SDK, the Java SDK and the dashboard carry, and every method
+  its Python examples call must be one the Python SDK defines. The attenuation section must say the server does not
+  attenuate for as long as no backend code outside the tests reads a delegation's attenuation factor or trust
+  floor, and its defaults and diagram must be the figures `verifyDelegationChain()` uses and reports.
+
 ### Fixed — the tutorials, the deployment reference, the backend README and the SDK test plan give no count the repository does not bear out (#676)
 
 - `docs/tutorials/README.md` and `docs/tutorials/api-quickstart.md` linked `docs/API.md` as "All 160 endpoints".
