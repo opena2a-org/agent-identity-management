@@ -5,8 +5,8 @@
 // consent filter debounces. The API is stubbed in-browser so response timing
 // can be controlled — no backend needed.
 //
-// IMPORTANT: run against a PRODUCTION build (`next build` + `next start`), NOT
-// `next dev`. Under dev-mode StrictMode/HMR the dashboard tab content does not
+// IMPORTANT: run against a PRODUCTION build (`next build` + the standalone
+// server), NOT `next dev`. Under dev-mode StrictMode/HMR the dashboard tab content does not
 // render deterministically, which is a dev-server artifact, not how users see
 // the app. The committed Playwright e2e suite (tests/e2e, dev webServer) is
 // therefore the wrong host for this timing-sensitive check; this standalone
@@ -14,7 +14,9 @@
 //
 // Usage:
 //   npm run build
-//   npx next start -p 3737 &            # serve the production build
+//   cp -R .next/static .next/standalone/apps/web/.next/
+//   cp -R public .next/standalone/apps/web/
+//   PORT=3737 node .next/standalone/apps/web/server.js &   # serve the production build
 //   BASE_URL=http://localhost:3737 node scripts/smoke-a2a-progressive.mjs
 //
 // Exit codes: 0 = both checks passed, 1 = a check failed.

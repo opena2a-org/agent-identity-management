@@ -98,6 +98,9 @@ type RedisConfig struct {
 	// Configured is true when REDIS_HOST names a Redis. The localhost default
 	// is still tried when it is unset, but does not make Redis configured.
 	Configured bool
+	// Disabled is true when REDIS_HOST is set to the empty string: the server
+	// makes no Redis connection, not even to the localhost default.
+	Disabled bool
 }
 
 // JWTConfig holds JWT configuration. Token lifetimes (JWT_ACCESS_TTL,
@@ -151,6 +154,7 @@ func Load() (*Config, error) {
 			UseTLS:   getEnv("REDIS_USE_TLS", "false") == "true",
 
 			Configured: os.Getenv("REDIS_HOST") != "",
+			Disabled:   isSetAndEmpty("REDIS_HOST"),
 		},
 		JWT: JWTConfig{
 			Secret: getEnvRequired("JWT_SECRET"),
@@ -301,6 +305,13 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+// isSetAndEmpty reports whether key is in the environment with an empty value,
+// which getEnv cannot tell apart from an unset key.
+func isSetAndEmpty(key string) bool {
+	value, set := os.LookupEnv(key)
+	return set && value == ""
 }
 
 func getEnvAsInt(key string, defaultValue int) int {

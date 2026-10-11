@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -74,16 +75,20 @@ func main() {
 
 	// Initialize OpenTelemetry (traces + metrics + logs to OTLP collector).
 	// Defaults to localhost:4317 (the demo stack at apps/backend/deployments/otel-demo).
-	// Override with OTEL_EXPORTER_OTLP_ENDPOINT. Failure is non-fatal: the server
-	// boots without telemetry if the collector is unreachable.
+	// Override with OTEL_EXPORTER_OTLP_ENDPOINT; set it to the empty string to
+	// turn telemetry off. Failure is non-fatal: the server boots without
+	// telemetry if the collector is unreachable.
 	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
 		ServiceName:    "aim-backend",
 		ServiceVersion: "0.x",
 		Insecure:       true,
 	})
-	if otelErr != nil {
+	switch {
+	case errors.Is(otelErr, telemetry.ErrDisabled):
+		log.Println("ℹ️  OpenTelemetry disabled (OTEL_EXPORTER_OTLP_ENDPOINT is set and empty)")
+	case otelErr != nil:
 		log.Printf("⚠️  OpenTelemetry init failed: %v (continuing without telemetry)", otelErr)
-	} else {
+	default:
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -123,11 +128,14 @@ func main() {
 
 	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
-	if err != nil {
+	switch {
+	case err != nil:
 		log.Printf("⚠️  Redis connection failed: %v", err)
 		log.Println("ℹ️  AIM will continue without caching (Redis is optional)")
 		redisClient = nil // Continue without Redis
-	} else {
+	case redisClient == nil:
+		log.Println("ℹ️  Redis disabled (REDIS_HOST is set and empty): AIM will continue without caching")
+	default:
 		defer redisClient.Close()
 	}
 
@@ -440,7 +448,14 @@ func initDatabase(cfg *config.Config) (*sql.DB, error) {
 	return db, nil
 }
 
+// initRedis connects to the Redis that cfg names and pings it. It returns a
+// nil client and a nil error, without dialing, when REDIS_HOST is set and
+// empty.
 func initRedis(cfg *config.Config) (*redis.Client, error) {
+	if cfg.Redis.Disabled {
+		return nil, nil
+	}
+
 	opts := &redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port),
 		Password: cfg.Redis.Password,

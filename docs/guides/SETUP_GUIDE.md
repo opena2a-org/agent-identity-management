@@ -90,7 +90,8 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=identity
 
-# Redis (matches Docker Compose)
+# Redis (matches Docker Compose). Optional: unset, localhost is tried;
+# set to the empty string (REDIS_HOST=), the backend runs without Redis.
 REDIS_HOST=localhost
 REDIS_PORT=6379
 ```

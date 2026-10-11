@@ -259,6 +259,46 @@ func TestLoad_MetricsAuthToken(t *testing.T) {
 	}
 }
 
+// TestLoad_RedisHost pins how REDIS_HOST is read: unset tries the localhost
+// default without making Redis configured, set to the empty string disables
+// Redis, and a host name makes it configured.
+func TestLoad_RedisHost(t *testing.T) {
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_USER", "aim")
+	t.Setenv("POSTGRES_DB", "aim")
+	t.Setenv("JWT_SECRET", strings.Repeat("a", 64))
+
+	cases := []struct {
+		name           string
+		set            bool
+		value          string
+		wantHost       string
+		wantConfigured bool
+		wantDisabled   bool
+	}{
+		{name: "unset", wantHost: "localhost"},
+		{name: "set and empty", set: true, value: "", wantHost: "localhost", wantDisabled: true},
+		{name: "set to a host", set: true, value: "redis", wantHost: "redis", wantConfigured: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("REDIS_HOST", tc.value)
+			if !tc.set {
+				os.Unsetenv("REDIS_HOST")
+			}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load(): %v", err)
+			}
+			if cfg.Redis.Host != tc.wantHost || cfg.Redis.Configured != tc.wantConfigured || cfg.Redis.Disabled != tc.wantDisabled {
+				t.Fatalf("Redis = {Host:%q Configured:%v Disabled:%v}, want {Host:%q Configured:%v Disabled:%v}",
+					cfg.Redis.Host, cfg.Redis.Configured, cfg.Redis.Disabled,
+					tc.wantHost, tc.wantConfigured, tc.wantDisabled)
+			}
+		})
+	}
+}
+
 // TestLoad_RefusesEnvTemplatesCopiedVerbatim starts Load() the way the server
 // starts when an operator copies an environment template to .env without
 // editing it: cmd/server reads the root .env with godotenv, and docker compose
