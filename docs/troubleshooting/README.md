@@ -224,7 +224,7 @@ sudo lsof -i :8080
 ```bash
 # Ensure no firewall blocking
 # Check Docker networking
-docker network inspect agent-identity-management_default
+docker network inspect agent-identity-management_aim-network
 ```
 
 ---
@@ -406,14 +406,14 @@ LIMIT 10;
 #### 2. Check Backend Logs
 
 ```bash
-docker logs identity-backend | grep "slow"
+docker logs aim-backend | grep "slow"
 ```
 
 #### 3. Monitor Resource Usage
 
 ```bash
 # Docker stats
-docker stats identity-backend identity-postgres
+docker stats aim-backend aim-postgres
 
 # CPU/Memory usage
 ```
@@ -441,7 +441,7 @@ VACUUM ANALYZE;
 
 ```bash
 # Check memory usage
-docker stats identity-backend
+docker stats aim-backend
 ```
 
 The server does not serve Go's `pprof` profiling endpoints.
@@ -450,7 +450,7 @@ The server does not serve Go's `pprof` profiling endpoints.
 
 ```bash
 # Increase Docker memory limit
-docker update --memory 2g identity-backend
+docker update --memory 2g aim-backend
 
 # Tune Go GC
 export GOGC=50  # More aggressive garbage collection
@@ -472,10 +472,10 @@ Error: Connection refused (localhost:8080)
 #### 1. Backend Not Running
 
 ```bash
-docker ps | grep identity-backend
+docker ps | grep aim-backend
 
 # If not running:
-docker compose up -d identity-backend
+docker compose up -d backend
 ```
 
 #### 2. Port Already in Use
@@ -488,14 +488,14 @@ sudo lsof -i :8080
 kill -9 <PID>
 
 # Restart backend
-docker compose restart identity-backend
+docker compose restart backend
 ```
 
 #### 3. Docker Networking
 
 ```bash
 # Inspect network
-docker network inspect agent-identity-management_default
+docker network inspect agent-identity-management_aim-network
 
 # Recreate network
 docker compose down
@@ -516,10 +516,10 @@ Error: Failed to connect to PostgreSQL
 #### 1. Check PostgreSQL Running
 
 ```bash
-docker ps | grep identity-postgres
+docker ps | grep aim-postgres
 
 # Check logs
-docker logs identity-postgres
+docker logs aim-postgres
 ```
 
 #### 2. Verify Connection String
@@ -539,7 +539,7 @@ cat apps/backend/.env | grep DATABASE_URL
 PGPASSWORD=postgres psql -h localhost -U postgres -d identity
 
 # Or using Docker
-docker exec -it identity-postgres psql -U postgres -d identity
+docker exec -it aim-postgres psql -U postgres -d identity
 ```
 
 ---
@@ -608,11 +608,11 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:3000
 
 # PostgreSQL
 echo -n "PostgreSQL (5432): "
-docker exec identity-postgres pg_isready
+docker exec aim-postgres pg_isready
 
 # Redis
 echo -n "Redis (6379): "
-docker exec identity-redis redis-cli ping
+docker exec aim-redis redis-cli ping
 
 echo "=== Docker Containers ==="
 docker ps --format "table {{.Names}}\t{{.Status}}"
@@ -638,15 +638,15 @@ docker ps -a > debug-output/containers.txt
 docker stats --no-stream > debug-output/container-stats.txt
 
 # Logs (last 500 lines)
-docker logs --tail=500 identity-backend > debug-output/backend.log 2>&1
-docker logs --tail=500 identity-frontend > debug-output/frontend.log 2>&1
-docker logs --tail=500 identity-postgres > debug-output/postgres.log 2>&1
+docker logs --tail=500 aim-backend > debug-output/backend.log 2>&1
+docker logs --tail=500 aim-frontend > debug-output/frontend.log 2>&1
+docker logs --tail=500 aim-postgres > debug-output/postgres.log 2>&1
 
 # Network
-docker network inspect agent-identity-management_default > debug-output/network.json
+docker network inspect agent-identity-management_aim-network > debug-output/network.json
 
 # Database
-docker exec identity-postgres psql -U postgres -d identity \
+docker exec aim-postgres psql -U postgres -d identity \
   -c "SELECT version();" > debug-output/postgres-version.txt
 
 echo "Debug info saved to debug-output/"

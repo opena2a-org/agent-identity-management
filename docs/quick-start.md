@@ -532,10 +532,10 @@ def delete_user(user_id: int):
 docker ps | grep aim-backend
 
 # If not running, restart:
-docker compose restart aim-backend
+docker compose restart backend
 
 # Check logs:
-docker compose logs aim-backend
+docker compose logs backend
 ```
 
 ### Issue: "Invalid private key"

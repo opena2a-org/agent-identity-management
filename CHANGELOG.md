@@ -11,6 +11,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the guides' docker commands name the services, containers and network the compose file defines (#673)
+
+- A `docker compose` command takes a service name from `docker-compose.yml` (`backend`, `postgres`, `redis`,
+  `frontend`); a `docker` command takes the container name the file sets (`aim-backend`, `aim-postgres`, ...).
+  `docs/quick-start.md`, `docs/examples/weather-agent.md` and the flight-search and LangChain CRUD example READMEs
+  gave `docker compose` the container names, and `docker compose restart aim-backend` answers
+  `no such service: aim-backend`. They now give the service names.
+- `docs/guides/INSTALLATION.md`, `docs/troubleshooting/README.md` and `docs/troubleshooting/authentication.md`
+  named containers `identity-backend`, `identity-postgres`, `identity-redis` and `identity-frontend`, which no
+  compose file creates, and gave `docker compose` the service `identity-backend`, which
+  `docker compose logs identity-backend` answers with `no such service: identity-backend`. They now name the
+  `aim-*` containers and the `backend` service. The troubleshooting guide inspects the network the stack creates,
+  `agent-identity-management_aim-network`, where it named `agent-identity-management_default`; every service joins
+  `aim-network`, so the stack creates no default network.
+- The installation guide's sample `docker compose ps` output lists each of the eleven services
+  `docker compose up -d` starts, with its container name beside its service name.
+- The backend image has no Go toolchain: its runtime stage holds the `aim-server`, `aim-migrate`, `aim-bootstrap`
+  and `aim-breakglass` binaries in `/app`. `docs/guides/BOOTSTRAP_GUIDE.md` ran `go run cmd/bootstrap/main.go` in
+  the backend container; it now passes the same flags to the one-shot `bootstrap` service
+  (`docker compose run --rm bootstrap --admin-email=... --yes`), which runs `/app/aim-bootstrap`.
+  `infrastructure/README.md` ran `go run cmd/migrate/main.go status` there; it now reads the migration lines the
+  server logs at startup. `docs/guides/DEPLOYMENT_CHECKLIST.md` ran `/app/migrate up`, a path the image does not
+  have; it now runs `/app/aim-server migrate`.
+- A test reads every docker and docker compose command in the repository's markdown, except this changelog, and
+  fails on a service the addressed compose file does not define, a container no compose file creates, a stack
+  network the stack does not create, or a command in the backend container that is `go` or an `/app/` path the
+  image does not ship. A second test pins the installation guide's sample `docker compose ps` output to
+  `docker-compose.yml`. Test: `compose_docs_names_test.go` (server documentation).
+
 ### Fixed — the setup, deployment and troubleshooting guides check the server's health at `/health` (#670)
 
 - `docs/guides/SETUP_GUIDE.md`, `docs/guides/DEPLOYMENT_CHECKLIST.md` (six places),

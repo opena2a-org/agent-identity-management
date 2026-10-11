@@ -29,7 +29,7 @@ If you have the `agent-identity-management` repo cloned, the SDK at `../../sdk/p
 ```bash
 # From the agent-identity-management repo root, start the AIM backend if it
 # isn't already running. The agent talks to localhost:8080 by default.
-docker compose up -d aim-postgres aim-redis aim-backend
+docker compose up -d postgres redis backend
 
 # From this directory:
 pip install -r requirements.txt
@@ -314,7 +314,7 @@ After running the agent, you should see:
 
 ```bash
 # 1. Bring AIM up locally (one-time)
-docker compose -f ../../docker-compose.yml up -d aim-postgres aim-redis aim-backend aim-frontend
+docker compose -f ../../docker-compose.yml up -d postgres redis backend frontend
 
 # 2. Follow browser prompts at http://localhost:3000 to log in and download the Python SDK
 
