@@ -265,7 +265,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `{"agents": [...], "total": n}` for `GET /api/v1/agents`, in place of a common envelope.
 - The agent registration examples send the `display_name` and `agent_type` values the server requires, and linking an
   agent to MCP servers is `PUT /api/v1/agents/{id}/mcp-servers` with a member's access token. The endpoint summary no
-  longer reports endpoint counts and completion percentages.
+  longer reports an endpoint total, completion percentages or its "SDK Support (Planned)" list, and the count in each
+  section's heading is the number of rows in that section's table.
 - A backend test (`apps/backend/cmd/server/api_docs_routes_contract_test.go`) reads these pages and fails on a method
   and path the server does not register.
 
