@@ -99,7 +99,7 @@ function SecurityScoreGauge({ score, grade, status }: { score: number; grade: st
   const colors = getScoreColor();
 
   return (
-    <ScoreRing title="Security posture score" value={score} max={100} color={colors.stroke} className="w-32 h-32">
+    <ScoreRing title="Security posture score" value={score} max={100} color={colors.stroke} className="w-32 h-[172px]">
       <span className={`text-3xl font-bold ${colors.text}`}>{score}</span>
       <span className="text-xs text-ink-secondary">/100</span>
     </ScoreRing>

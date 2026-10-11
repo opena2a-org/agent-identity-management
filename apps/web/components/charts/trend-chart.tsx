@@ -14,7 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { ChartFrame } from "./chart-frame";
-import { describeTrend } from "./describe";
+import { columnHeading, describeTrend, trendTable } from "./describe";
 import { chartAxisTick, chartChrome, chartTooltipStyle, type ChartColor } from "./tokens";
 
 export interface TrendSeries {
@@ -36,11 +36,13 @@ export interface TrendChartProps<T extends Record<string, unknown>> {
   data: T[];
   /** Field holding the x-axis value (a date or time label). */
   xKey: keyof T & string;
+  /** The table's heading for the x-axis column (default: the field name). */
+  xLabel?: string;
   series: TrendSeries[];
   yDomain?: [number, number];
   /** Unit drawn along the y axis. */
   yLabel?: string;
-  /** How a value reads in the aria-label (default: the number). */
+  /** How a value reads in the aria-label and the table (default: the number). */
   formatValue?: (value: number) => string;
   legend?: boolean;
   /** Draw the grid and both axes; false for a compact card that labels its window outside the chart. */
@@ -57,6 +59,7 @@ export function TrendChart<T extends Record<string, unknown>>({
   title,
   data,
   xKey,
+  xLabel = columnHeading(xKey),
   series,
   yDomain,
   yLabel,
@@ -69,11 +72,12 @@ export function TrendChart<T extends Record<string, unknown>>({
   // url(#...) needs an id without the punctuation useId may produce.
   const gradientBase = `chart-area-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const label = describeTrend(title, data, xKey, series, formatValue);
+  const table = trendTable(data, xKey, xLabel, series, formatValue);
   // Only the top bar of a stack is rounded, so a stack reads as one column.
   const topOfStack = new Map<string, string>();
   for (const s of series) if (s.kind === "bar") topOfStack.set(s.stack ?? s.key, s.key);
   return (
-    <ChartFrame label={label} className={className}>
+    <ChartFrame title={title} label={label} table={table} className={className}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={yLabel ? { top: 5, right: 30, left: 20, bottom: 5 } : undefined}>
           <defs>

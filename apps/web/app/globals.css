@@ -228,16 +228,32 @@
   /* Charts. components/charts reads every series, grid, axis and tooltip colour
      from these and carries no colour of its own. The slots alias the tokens
      above and resolve on whichever element carries the theme, so they hold for
-     light and dark and follow any contrast correction made there. */
+     light and dark and follow any contrast correction made there.
+     Every series holds 3:1 against the glass card and the chart text 4.5:1, in
+     both themes (tests/chart-contrast.test.ts measures them). On the light card
+     the vivid --green, --amber and --brand-sky and the orange measure 1.87 to
+     2.58, so the light theme draws those four series one step darker. */
+  :root {
+    --chart-green: #248a3d;
+    --chart-amber: #b87400;
+    --chart-sky: #0891b2;
+    --chart-orange: #d0590a;
+  }
+  .dark {
+    --chart-green: var(--green);
+    --chart-amber: var(--amber);
+    --chart-sky: var(--brand-sky);
+    --chart-orange: #f97316;
+  }
   :root,
   .dark {
     --chart-1: var(--brand);
-    --chart-2: var(--green);
-    --chart-3: var(--amber);
+    --chart-2: var(--chart-green);
+    --chart-3: var(--chart-amber);
     --chart-4: var(--red);
     --chart-5: var(--brand-indigo);
-    --chart-6: var(--brand-sky);
-    --chart-7: #f97316;
+    --chart-6: var(--chart-sky);
+    --chart-7: var(--chart-orange);
     --chart-muted: var(--text-tertiary);
     --chart-grid: var(--divider);
     --chart-axis-line: var(--stroke);

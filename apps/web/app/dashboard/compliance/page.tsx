@@ -615,11 +615,12 @@ function RiskDistributionChart({ agents, mcpServers }: { agents: AgentEntry[]; m
 
   return (
     <div className="flex items-center gap-6">
-      <div className="w-36 h-36">
+      <div className="w-36 h-[188px]">
         <DonutChart
           title="Risk distribution, share of agents and MCP servers"
           data={data}
           formatValue={(v) => `${v}%`}
+          columns={["Risk", "Share"]}
           tooltip={false}
           innerRadius={35}
           outerRadius={55}

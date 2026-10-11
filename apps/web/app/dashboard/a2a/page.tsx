@@ -315,6 +315,7 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
             <DonutChart
               title="Tasks by state"
               data={taskStateData}
+              columns={["State", "Tasks"]}
               sliceLabel={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
             />
             )}
@@ -333,6 +334,7 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
               data={trustDistData}
               categoryKey="range"
               valueKey="count"
+              columns={["Trust score", "Agents"]}
             />
             )}
           </div>

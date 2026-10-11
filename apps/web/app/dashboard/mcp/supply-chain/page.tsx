@@ -1033,6 +1033,7 @@ function SupplyChainPage() {
             <DonutChart
               title="MCP servers by confidence score"
               data={confidenceDistribution}
+              columns={["Confidence", "MCP servers"]}
               sliceLabel={({ value }) => (value > 0 ? `${value}` : "")}
               legend
             />
