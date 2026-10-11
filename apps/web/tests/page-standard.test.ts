@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { unshrinkableFlexItems } from "./flex-shrink";
-import { paletteClasses } from "./raw-colours";
+import { paletteClasses, rawColours } from "./raw-colours";
 
 // Two rules for the screens that hold the charts, read from the source.
 //
 // A chart screen takes its colours from the theme tokens. The tokens are what
-// tests/chart-contrast.test.ts and the browser sweep measure in both themes; a
-// palette class beside them is a second card style whose contrast nobody
-// measured (the compliance page's "Trust:" label read 2.43:1).
+// tests/chart-contrast.test.ts, tests/text-contrast.test.ts and the browser
+// sweep measure in both themes; a palette class or a hex value beside them is a
+// colour whose contrast nobody measured (the compliance page's "Trust:" label
+// read 2.43:1, the overview's agent initials on hex tints 4.14:1).
 //
 // A growing flex item around truncated text can shrink, so a long line is cut
 // with an ellipsis instead of pushing the page wider than a phone (the
@@ -37,9 +38,9 @@ describe("chart screens", () => {
     for (const rel of CHART_SCREENS) expect(statSync(join(root, rel)).isFile()).toBe(true);
   });
 
-  it("paint nothing from the raw palette", () => {
+  it("paint nothing from the raw palette, a hex value or a colour function", () => {
     const offenders = CHART_SCREENS.flatMap((rel) =>
-      paletteClasses(readFileSync(join(root, rel), "utf8")).map((hit) => `${rel}:${hit}`),
+      rawColours(readFileSync(join(root, rel), "utf8")).map((hit) => `${rel}:${hit}`),
     );
     expect(offenders).toEqual([]);
   });

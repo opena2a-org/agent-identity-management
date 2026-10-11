@@ -287,12 +287,12 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
             className={cn(
               "flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] transition-colors",
               active
-                ? "bg-nav-active font-bold text-brand-text"
+                ? "bg-nav-active font-bold text-nav-active-text"
                 : "font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
             )}
           >
             <item.icon
-              className={cn("h-4 w-4 flex-shrink-0", active ? "text-brand-text" : "text-ink-tertiary")}
+              className={cn("h-4 w-4 flex-shrink-0", active ? "text-nav-active-text" : "text-ink-tertiary")}
               strokeWidth={2}
               aria-hidden="true"
             />

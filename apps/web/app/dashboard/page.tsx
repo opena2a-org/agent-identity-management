@@ -101,12 +101,8 @@ function relative(iso?: string) {
   }
 }
 
-const AVATAR_TINTS = [
-  "from-[#e0f2fe] to-[#bae6fd] text-[#0369a1] dark:from-[#0c4a6e] dark:to-[#075985] dark:text-[#7dd3fc]",
-  "from-[#ede9fe] to-[#ddd6fe] text-[#6d28d9] dark:from-[#4c1d95] dark:to-[#5b21b6] dark:text-[#c4b5fd]",
-  "from-[#dcfce7] to-[#bbf7d0] text-[#15803d] dark:from-[#14532d] dark:to-[#166534] dark:text-[#86efac]",
-  "from-[#ffe4e6] to-[#fecdd3] text-[#be123c] dark:from-[#881337] dark:to-[#9f1239] dark:text-[#fda4af]",
-];
+// Declared with their contrast in app/globals.css.
+const AVATAR_TINTS = ["avatar-tint-1", "avatar-tint-2", "avatar-tint-3", "avatar-tint-4"];
 
 /* ----------------------------------------------------------------------------
  * Pieces
@@ -278,7 +274,7 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
           return (
             <li key={a.id}>
               <Link href={`/dashboard/agents/${a.id}`} className="flex items-center gap-3.5 py-3 hover:opacity-90">
-                <span className={cn("inline-flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-avatar bg-gradient-to-br text-[13px] font-bold", AVATAR_TINTS[i % AVATAR_TINTS.length])}>
+                <span className={cn("inline-flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-avatar text-[13px] font-bold", AVATAR_TINTS[i % AVATAR_TINTS.length])}>
                   {(a.displayName || a.name || "?").slice(0, 1).toLowerCase()}
                 </span>
                 <span className="min-w-0 flex-1">

@@ -48,6 +48,9 @@
     --segment-active-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
     --segment-inactive-text: var(--text-secondary); /* 4.91 on the track over the bare page; #66666b measured 4.21 */
     --nav-active-fill: rgba(0, 113, 227, 0.1);
+    /* The active link's text on that fill, held to 4.5 over the chrome on every page stop and the
+       drawer (tests/text-contrast.test.ts); --brand-text there measured 4.40 under the cyan wash. */
+    --nav-active-text: #005bb8;
 
     /* Brand accent (fill vs text differ for contrast: white on #0071e3 = 4.7:1, #0066cc on glass = 5.3:1).
        Named --brand because shadcn already owns --accent below. */
@@ -166,6 +169,7 @@
     --segment-active-shadow: none;
     --segment-inactive-text: var(--text-secondary); /* 5.39 on the track; #86868b measured 3.83 */
     --nav-active-fill: rgba(41, 151, 255, 0.16);
+    --nav-active-text: #4aa3ff; /* --brand-text measured 4.38 on the fill in the phone drawer */
 
     --brand: #0071e3;
     --brand-hover: #1a80f0;
@@ -264,6 +268,32 @@
     --chart-tooltip-border: var(--glass-border);
     --chart-tooltip-text: var(--text-primary);
     --chart-tooltip-shadow: var(--shadow-card);
+  }
+
+  /* Avatar tints. The initials in the overview's agent list cycle through four
+     tints, each a gradient and the colour of the initial drawn on it (.avatar-tint-1
+     to -4). The initial holds 4.5 on both stops in both themes
+     (tests/text-contrast.test.ts); on the darker light stop the earlier initials
+     measured 4.14 to 4.47, and the rose initial 4.24 in the dark theme. */
+  :root {
+    --avatar-1: linear-gradient(to bottom right, #e0f2fe, #bae6fd);
+    --avatar-1-text: #075985;
+    --avatar-2: linear-gradient(to bottom right, #ede9fe, #ddd6fe);
+    --avatar-2-text: #6d28d9;
+    --avatar-3: linear-gradient(to bottom right, #dcfce7, #bbf7d0);
+    --avatar-3-text: #166534;
+    --avatar-4: linear-gradient(to bottom right, #ffe4e6, #fecdd3);
+    --avatar-4-text: #9f1239;
+  }
+  .dark {
+    --avatar-1: linear-gradient(to bottom right, #0c4a6e, #075985);
+    --avatar-1-text: #bae6fd;
+    --avatar-2: linear-gradient(to bottom right, #4c1d95, #5b21b6);
+    --avatar-2-text: #c4b5fd;
+    --avatar-3: linear-gradient(to bottom right, #14532d, #166534);
+    --avatar-3-text: #86efac;
+    --avatar-4: linear-gradient(to bottom right, #881337, #9f1239);
+    --avatar-4-text: #fecdd3;
   }
 
   /* Reduced transparency, or no backdrop-filter support: solid composites of the same glass */
@@ -393,6 +423,22 @@
     border: 1px solid var(--glass-chrome-border);
     border-radius: 22px;
     box-shadow: var(--shadow-chrome);
+  }
+  .avatar-tint-1 {
+    background-image: var(--avatar-1);
+    color: var(--avatar-1-text);
+  }
+  .avatar-tint-2 {
+    background-image: var(--avatar-2);
+    color: var(--avatar-2-text);
+  }
+  .avatar-tint-3 {
+    background-image: var(--avatar-3);
+    color: var(--avatar-3-text);
+  }
+  .avatar-tint-4 {
+    background-image: var(--avatar-4);
+    color: var(--avatar-4-text);
   }
   .glass-alert {
     background: var(--red-fill);

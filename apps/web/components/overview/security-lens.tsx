@@ -112,7 +112,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
                   <div key={t.label} className="rounded-inset border border-glass-inset-border bg-glass-inset-gray p-3.5">
                     <p className="text-xs font-semibold text-ink-secondary">{t.label}</p>
                     <p className={cn("mt-1 text-[20px] font-bold tracking-[-0.02em]", t.ok ? "text-success-text" : "text-danger-text")}>
-                      {t.value} <span className="text-2xs font-semibold text-ink-tertiary">{t.unit}</span>
+                      {t.value} <span className="text-2xs font-semibold text-ink-secondary">{t.unit}</span>
                     </p>
                   </div>
                 ))}

@@ -115,6 +115,7 @@ module.exports = {
         },
         nav: {
           active: 'var(--nav-active-fill)',
+          'active-text': 'var(--nav-active-text)',
         },
         divider: 'var(--divider)',
         track: 'var(--track)',
