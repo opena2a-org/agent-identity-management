@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -173,6 +175,87 @@ func TestTokenRotationGuideDescribesWhatAReuseDoes(t *testing.T) {
 	textHas(t, monitoring, string(domain.AuditActionRefreshSessionRevoked), "the monitoring section names the family member record")
 	textHas(t, monitoring, "/dashboard/admin/audit-logs", "the monitoring section names the audit log page")
 	textLacks(t, monitoring, "Token Activity", "the dashboard has no Token Activity page")
+}
+
+// sdkRotationLine returns a pattern for the line the Python SDK prints after a
+// refresh that rotated its token: the literal oauth.py prints, then the new
+// token's id.
+func sdkRotationLine(t *testing.T) *regexp.Regexp {
+	t.Helper()
+	src := readBackendFile(t, "../../sdk/python/aim_sdk/oauth.py")
+	printed := regexp.MustCompile(`print\(\s*("Token rotated successfully[^"\n]*")\s*f"\(new id: \{[^\n]*\}\)"\s*\)`).FindStringSubmatch(src)
+	require.Len(t, printed, 2, "oauth.py must print the rotation line as one literal followed by the new id")
+	// The literal's escapes (—) read the same in Go.
+	text, err := strconv.Unquote(printed[1])
+	require.NoError(t, err)
+	return regexp.MustCompile(`^` + regexp.QuoteMeta(text) + `\(new id: \S+\)$`)
+}
+
+// The token rotation guide's FAQ quoted a line the Python SDK does not print
+// and said it follows every successful refresh (#697). The line is pinned here
+// to the SDK's print statement, and what the FAQ says it depends on to the
+// answers of the refresh route with and without a revocation store.
+func TestTokenRotationGuideQuotesTheRotationLineTheSDKPrints(t *testing.T) {
+	rotation := readBackendFile(t, tokenRotationGuidePath)
+	faq := guideSection(t, rotation, "### Q: How do I know if my token has been rotated?")
+
+	t.Run("the quoted line is the one the Python SDK prints", func(t *testing.T) {
+		blocks := regexp.MustCompile("(?s)```\n(.*?)\n```").FindAllStringSubmatch(faq, -1)
+		require.Len(t, blocks, 1, "the FAQ quotes the line in one fenced block")
+		assert.Regexp(t, sdkRotationLine(t), blocks[0][1], "the FAQ quotes the line in the format oauth.py prints")
+		textLacks(t, rotation, "new credentials saved", "the guide quotes a line no SDK in this repository prints")
+	})
+
+	t.Run("a sign-in from aim-sdk login rotates only with a revocation store", func(t *testing.T) {
+		// The device grant hands aim-sdk login a login-issued pair, the kind
+		// rotationApp presents.
+		textHas(t, readBackendFile(t, "internal/application/device_auth_service.go"),
+			"s.jwtService.GenerateTokenPair(", "the device grant issues a login token pair")
+
+		for _, tc := range []struct {
+			name     string
+			store    *rotationStore
+			failOpen bool
+			rotated  bool
+		}{
+			{name: "a revocation store", store: &rotationStore{}, rotated: true},
+			{name: "no revocation store"},
+			{name: "a store that refuses the write", store: &rotationStore{setErr: errors.New("write refused")}},
+			{name: "a store that refuses the write, fail-open", store: &rotationStore{setErr: errors.New("write refused")}, failOpen: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				app, _, presented := rotationApp(t, tc.store, tc.failOpen)
+				out, status := postRefresh(t, app, presented)
+				require.Equal(t, fiber.StatusOK, status)
+				assert.Equal(t, tc.rotated, out.Rotated, "the rotated field of the answer")
+				assert.Equal(t, tc.rotated, out.RefreshToken != presented,
+					"a new refresh token is answered only when the presented one was retired")
+			})
+		}
+
+		textHas(t, faq, "A sign-in from `aim-sdk login` is rotated only by a server with Redis", "the FAQ says which server rotates a sign-in")
+		textHas(t, faq, "A server without Redis, or one whose Redis refused the write, answers with the\n  refresh token it was given",
+			"the FAQ says what the server answers when it cannot retire the token")
+		textHas(t, faq, `"rotated": true`, "the FAQ names the field of the answer")
+		textHas(t, faq, `"rotated": false`, "the FAQ names the field of the answer")
+		textLacks(t, faq, "Token refresh succeeds", "the FAQ lists the line as following every successful refresh")
+	})
+
+	t.Run("a server without Redis logs the line the FAQ quotes", func(t *testing.T) {
+		const logged = "Token revocation disabled (no Redis configured)"
+		textHas(t, faq, "`"+logged+"`", "the FAQ quotes the startup line")
+		textHas(t, readBackendFile(t, "cmd/server/main.go"), `log.Println("ℹ️  `+logged, "the server logs that line at startup")
+	})
+
+	t.Run("an SDK download token rotates without a revocation store", func(t *testing.T) {
+		app, _, presented := sdkRotationApp(t, &rotationSDKRepo{})
+		out, status := postRefresh(t, app, presented)
+		require.Equal(t, fiber.StatusOK, status)
+		assert.True(t, out.Rotated, "the sdk_tokens row is retired with no revocation store")
+		assert.NotEqual(t, presented, out.RefreshToken)
+		textHas(t, faq, "A token from an SDK download is rotated in the database and does not need\n  Redis",
+			"the FAQ says an SDK download token needs no Redis")
+	})
 }
 
 func TestSecurityGuidesNameTheSDKCredentialFilesAndTheirPage(t *testing.T) {

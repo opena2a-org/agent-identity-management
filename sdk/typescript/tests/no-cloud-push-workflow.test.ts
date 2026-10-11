@@ -196,7 +196,7 @@ function kindsFor(result: CheckResult, file: string): FindingKind[] {
 const repositoryRoot = join(__dirname, '..', '..', '..');
 
 describe('no-cloud-push-workflow: the repository tree', () => {
-  it('QGF-271.AC1 has no retired push-sync workflow, no token name and no hosted repository name under .github/, after a real walk that parsed ci.yml', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC1 has no retired push-sync workflow, no token name and no hosted repository name under .github/, after a real walk that parsed ci.yml', () => {
     const result = checkNoCloudPushWorkflow(repositoryRoot);
     expect(result.findings).toEqual([]);
     expect(result.visited.length).toBeGreaterThan(0);
@@ -206,7 +206,7 @@ describe('no-cloud-push-workflow: the repository tree', () => {
 });
 
 describe('no-cloud-push-workflow: the check function', () => {
-  it('QGF-271.AC2 returns findings, visited and parsed, and a scalar finding carries the key path to the scalar', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC2 returns findings, visited and parsed, and a scalar finding carries the key path to the scalar', () => {
     const root = plantTree({
       '.github/workflows/sync.yml': workflowWithCheckout(
         '          token: ${{ secrets.AIM_CLOUD_SYNC_TOKEN }}',
@@ -223,7 +223,7 @@ describe('no-cloud-push-workflow: the check function', () => {
     });
   });
 
-  it('QGF-271.AC2 refuses the hosted repository name in a uses reference and in an env value with the one scalar rule', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC2 refuses the hosted repository name in a uses reference and in an env value with the one scalar rule', () => {
     const root = plantTree({
       '.github/workflows/uses.yml': [
         'name: planted',
@@ -263,7 +263,7 @@ describe('no-cloud-push-workflow: the check function', () => {
 });
 
 describe('no-cloud-push-workflow: planted forbidden shapes', () => {
-  it('QGF-271.AC3 (a) refuses the token name in a step env and in a checkout with.token', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (a) refuses the token name in a step env and in a checkout with.token', () => {
     const root = plantTree({
       '.github/workflows/env-token.yml': [
         'name: planted',
@@ -286,7 +286,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/workflows/with-token.yml')).toContain('token-name');
   });
 
-  it('QGF-271.AC3 (b) refuses the hosted repository name under checkout with.repository', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (b) refuses the hosted repository name under checkout with.repository', () => {
     const root = plantTree({
       '.github/workflows/repo.yml': workflowWithCheckout(
         '          repository: opena2a-org/aim-cloud',
@@ -296,7 +296,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/workflows/repo.yml')).toContain('cloud-repository');
   });
 
-  it('QGF-271.AC3 (c) refuses the hosted repository name in a run string', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (c) refuses the hosted repository name in a run string', () => {
     const root = plantTree({
       '.github/workflows/run.yml': [
         'name: planted',
@@ -313,7 +313,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/workflows/run.yml')).toContain('cloud-repository');
   });
 
-  it('QGF-271.AC3 (d) refuses a suffixed token name by containment, never equality', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (d) refuses a suffixed token name by containment, never equality', () => {
     const root = plantTree({
       '.github/workflows/v2.yml': workflowWithCheckout(
         '          token: ${{ secrets.AIM_CLOUD_SYNC_TOKEN_V2 }}',
@@ -323,7 +323,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/workflows/v2.yml')).toContain('token-name');
   });
 
-  it('QGF-271.AC3 (e) refuses the token name in a comment line, because raw text is read before parsing', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (e) refuses the token name in a comment line, because raw text is read before parsing', () => {
     const root = plantTree({
       '.github/workflows/comment.yml': `# needs AIM_CLOUD_SYNC_TOKEN\n${CLEAN_CI}`,
     });
@@ -331,7 +331,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/workflows/comment.yml')).toContain('token-name');
   });
 
-  it('QGF-271.AC3 (f) refuses the token name in a non-YAML file', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (f) refuses the token name in a non-YAML file', () => {
     const root = plantTree({
       '.github/CODEOWNERS': '# AIM_CLOUD_SYNC_TOKEN\n/.github/ @owner\n',
     });
@@ -339,7 +339,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/CODEOWNERS')).toContain('token-name');
   });
 
-  it('QGF-271.AC3 (g) refuses the retired workflow path even when its text carries neither string', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (g) refuses the retired workflow path even when its text carries neither string', () => {
     const root = plantTree({
       '.github/workflows/sync-to-cloud.yml': CLEAN_CI,
     });
@@ -347,7 +347,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
     expect(kindsFor(result, '.github/workflows/sync-to-cloud.yml')).toContain('workflow-path');
   });
 
-  it('QGF-271.AC3 (h) reports a symbolic link under .github/ as a non-regular entry without following it', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC3 (h) reports a symbolic link under .github/ as a non-regular entry without following it', () => {
     const root = plantTree({
       '.github/workflows/ci.yml': CLEAN_CI,
       'outside.yml': workflowWithCheckout(
@@ -363,7 +363,7 @@ describe('no-cloud-push-workflow: planted forbidden shapes', () => {
 });
 
 describe('no-cloud-push-workflow: shapes a raw-text scan admits', () => {
-  it('QGF-271.AC4 (a) refuses YAML-escaped spellings of the repository name and the token name', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC4 (a) refuses YAML-escaped spellings of the repository name and the token name', () => {
     const text = workflowWithCheckout(
       [
         '          repository: "opena2a-org/aim-\\x63loud"',
@@ -379,7 +379,7 @@ describe('no-cloud-push-workflow: shapes a raw-text scan admits', () => {
     expect(kinds).toContain('token-name');
   });
 
-  it('QGF-271.AC4 (b) refuses re-cased spellings of the repository name and the token name', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC4 (b) refuses re-cased spellings of the repository name and the token name', () => {
     const root = plantTree({
       '.github/workflows/cased.yml': workflowWithCheckout(
         [
@@ -396,18 +396,18 @@ describe('no-cloud-push-workflow: shapes a raw-text scan admits', () => {
 });
 
 describe('no-cloud-push-workflow: parse failure, empty walk and the admitted comment', () => {
-  it('QGF-271.AC5 (a) throws on a YAML file that does not parse', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC5 (a) throws on a YAML file that does not parse', () => {
     const root = plantTree({ '.github/workflows/broken.yml': 'jobs: [' });
     expect(() => checkNoCloudPushWorkflow(root)).toThrow();
   });
 
-  it('QGF-271.AC5 (b) throws when .github/ holds no regular file', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC5 (b) throws when .github/ holds no regular file', () => {
     const root = plantTree({});
     mkdirSync(join(root, '.github', 'workflows'), { recursive: true });
     expect(() => checkNoCloudPushWorkflow(root)).toThrow();
   });
 
-  it('QGF-271.AC5 (c) admits a comment naming aim-cloud alone', () => {
+  it('NO-CLOUD-PUSH-WORKFLOW.AC5 (c) admits a comment naming aim-cloud alone', () => {
     const root = plantTree({
       '.github/workflows/ci.yml': [
         'name: CI',

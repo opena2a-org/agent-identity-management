@@ -4,7 +4,7 @@ import { join, relative, sep } from 'path';
 import { load } from 'js-yaml';
 
 /**
- * QGF-230 — the base-image unit of the AIM image advisory.
+ * DOCKERFILE-FRONTEND-BASE-PINS — the base-image unit of the AIM image advisory.
  *
  * The released aim-dashboard runtime image inherited the npm CLI's tar and the
  * alpine OpenSSL pair from a floating `node:20-alpine`: all 20 node-pkg
@@ -33,7 +33,7 @@ import { load } from 'js-yaml';
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 // ---------------------------------------------------------------------------
-// The base-pin check (QGF-230.AC3)
+// The base-pin check (DOCKERFILE-FRONTEND-BASE-PINS.AC3)
 // ---------------------------------------------------------------------------
 
 interface Failure {
@@ -1212,8 +1212,8 @@ function repoRelative(absolute: string): string {
 
 // ---------------------------------------------------------------------------
 
-describe('QGF-230 both frontend Dockerfiles pin every base and root the runtime on alpine', () => {
-  it('QGF-230.AC1 infrastructure/docker/Dockerfile.frontend, the file docker-publish.yml builds, pins every base, roots its runtime on alpine, copies the node binary from the pinned builder of the same alpine release, runs non-root and keeps CMD ["node", "server.js"]', () => {
+describe('DOCKERFILE-FRONTEND-BASE-PINS both frontend Dockerfiles pin every base and root the runtime on alpine', () => {
+  it('DOCKERFILE-FRONTEND-BASE-PINS.AC1 infrastructure/docker/Dockerfile.frontend, the file docker-publish.yml builds, pins every base, roots its runtime on alpine, copies the node binary from the pinned builder of the same alpine release, runs non-root and keeps CMD ["node", "server.js"]', () => {
     const text = readFileSync(ROOT_DOCKERFILE, 'utf-8');
 
     // The file under test is the one the publish workflow actually builds.
@@ -1240,7 +1240,7 @@ describe('QGF-230 both frontend Dockerfiles pin every base and root the runtime 
     assertServerCmdSurvives(text, 'infrastructure/docker/Dockerfile.frontend');
   });
 
-  it('QGF-230.AC2 apps/backend/infrastructure/docker/Dockerfile.frontend, the twin, has the same properties: no unpinned node base for its stage table, an alpine-rooted runner, the node binary from the pinned builder, a non-root USER and CMD ["node", "server.js"]', () => {
+  it('DOCKERFILE-FRONTEND-BASE-PINS.AC2 apps/backend/infrastructure/docker/Dockerfile.frontend, the twin, has the same properties: no unpinned node base for its stage table, an alpine-rooted runner, the node binary from the pinned builder, a non-root USER and CMD ["node", "server.js"]', () => {
     const text = readFileSync(TWIN_DOCKERFILE, 'utf-8');
 
     expect(
@@ -1261,7 +1261,7 @@ describe('QGF-230 both frontend Dockerfiles pin every base and root the runtime 
     assertServerCmdSurvives(text, 'apps/backend/infrastructure/docker/Dockerfile.frontend');
   });
 
-  it('QGF-230.AC3 the base-pin check refuses the two base texts by line, admits the repaired text, and names the right line for every planted regression', () => {
+  it('DOCKERFILE-FRONTEND-BASE-PINS.AC3 the base-pin check refuses the two base texts by line, admits the repaired text, and names the right line for every planted regression', () => {
     for (const fixture of AC3_CASES) {
       expect(
         refusedLines(fixture.text),
@@ -1270,11 +1270,11 @@ describe('QGF-230 both frontend Dockerfiles pin every base and root the runtime 
     }
   });
 
-  it('QGF-230.AC4 every Dockerfile.frontend the tree walk finds passes the check, the population carries the path docker-publish.yml builds, and that build step names no target and no build-contexts', () => {
+  it('DOCKERFILE-FRONTEND-BASE-PINS.AC4 every Dockerfile.frontend the tree walk finds passes the check, the population carries the path docker-publish.yml builds, and that build step names no target and no build-contexts', () => {
     const population = walkDockerfileFrontends(REPO_ROOT).map(repoRelative);
     // Report the reach of the walk, not only its verdict.
     console.log(
-      `QGF-230.AC4 Dockerfile.frontend population (${population.length}): ${population.join(', ')}`,
+      `DOCKERFILE-FRONTEND-BASE-PINS.AC4 Dockerfile.frontend population (${population.length}): ${population.join(', ')}`,
     );
 
     const workflow = readPublishWorkflow();

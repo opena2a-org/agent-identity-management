@@ -1309,30 +1309,30 @@ function mutateScriptDropUnknownClass(source: string): string {
 // ══ AC1 ═══════════════════════════════════════════════════════════════
 
 describe('the Go license verdict is the checker exit status', () => {
-  it('QGF-251.AC1 the Check Go licenses step is one line ending in scripts/go-licenses-check.sh, with no pipe, tee, grep or continue-on-error', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC1 the Check Go licenses step is one line ending in scripts/go-licenses-check.sh, with no pipe, tee, grep or continue-on-error', () => {
     assertGoStepRunsOnlyTheScript(workflowSource());
   });
 
-  it('QGF-251.AC1 the script runs the checker as `check ./... --disallowed_types=forbidden,unknown,restricted,reciprocal` with apps/backend as its working directory', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC1 the script runs the checker as `check ./... --disallowed_types=forbidden,unknown,restricted,reciprocal` with apps/backend as its working directory', () => {
     const run = runCheckScript();
     assertDisallowedTypesArgv(run.log);
     assertCheckerRanInAppsBackend(run.log, run.repoRoot);
   });
 
-  it('QGF-251.AC1 (q) the recorded --ignore arguments are exactly the allowlist library column, in file order, and nothing else is ignored', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC1 (q) the recorded --ignore arguments are exactly the allowlist library column, in file order, and nothing else is ignored', () => {
     const run = runCheckScript();
     assertIgnoreArgvIsTheAllowlist(run.log, allowlistSource());
     assertReportIsUnignored(run.log);
   });
 
-  it('QGF-251.AC1 a planted reciprocal license the base grep would have missed makes the script exit 1', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC1 a planted reciprocal license the base grep would have missed makes the script exit 1', () => {
     const run = runCheckScript({ check: [{ rc: 1, out: PLANTED_FINDING }] });
     expect(run.status, `stdout:\n${run.stdout}\nstderr:\n${run.stderr}`).toBe(1);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.finding}`);
     expect(run.summary).toContain("example.com/planted");
   });
 
-  it('QGF-251.AC1 a non-zero checker exit never yields 0, and a zero checker exit yields 0 only while every allowance holds', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC1 a non-zero checker exit never yields 0, and a zero checker exit yields 0 only while every allowance holds', () => {
     expect(runCheckScript({ check: [{ rc: 0, out: '' }] }).status).toBe(0);
     for (const out of [
       PLANTED_FINDING,
@@ -1359,24 +1359,24 @@ describe('the Go license verdict is the checker exit status', () => {
 // ══ AC2 ═══════════════════════════════════════════════════════════════
 
 describe('the go-licenses pin is a literal asserted on the installed binary', () => {
-  it('QGF-251.AC2 security.yml pins GO_LICENSES_VERSION and GO_LICENSES_SUM as literals', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 security.yml pins GO_LICENSES_VERSION and GO_LICENSES_SUM as literals', () => {
     assertPinEnvLiterals(workflowSource());
   });
 
-  it('QGF-251.AC2 a comment beside the pin dates it: the v2.0.1 release, the measurement and the sum source', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 a comment beside the pin dates it: the v2.0.1 release, the measurement and the sum source', () => {
     assertPinCommentDatesThePin(workflowSource());
   });
 
-  it('QGF-251.AC2 the script installs the pinned /v2 module version into GOBIN, never @latest and never the v1 module path', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 the script installs the pinned /v2 module version into GOBIN, never @latest and never the v1 module path', () => {
     assertInstallArgv(runCheckScript().log);
   });
 
-  it('QGF-251.AC2 the checker that runs is the verified binary in GOBIN, not the go-licenses first on PATH', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 the checker that runs is the verified binary in GOBIN, not the go-licenses first on PATH', () => {
     const run = runCheckScript();
     assertCheckerRanFromGobin(run.log, run.gobin);
   });
 
-  it('QGF-251.AC2 a `go version -m` mod line whose sum differs exits 2 tool checksum mismatch and never invokes the checker', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 a `go version -m` mod line whose sum differs exits 2 tool checksum mismatch and never invokes the checker', () => {
     const run = runCheckScript({
       modSum: 'h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
@@ -1385,14 +1385,14 @@ describe('the go-licenses pin is a literal asserted on the installed binary', ()
     expect(run.checks, 'the checker must never run on an unverified binary').toEqual([]);
   });
 
-  it('QGF-251.AC2 an absent `go version -m` mod line exits 2 tool checksum mismatch and never invokes the checker', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 an absent `go version -m` mod line exits 2 tool checksum mismatch and never invokes the checker', () => {
     const run = runCheckScript({ emitModLine: false });
     expect(run.status).toBe(2);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.badSum}`);
     expect(run.checks).toEqual([]);
   });
 
-  it('QGF-251.AC2 neither security.yml nor the script relaxes module verification', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC2 neither security.yml nor the script relaxes module verification', () => {
     assertNoGoEscapeHatchesInWorkflow(workflowSource());
     assertNoGoEscapeHatchesReachTheToolchain(runCheckScript().log);
   });
@@ -1401,14 +1401,14 @@ describe('the go-licenses pin is a literal asserted on the installed binary', ()
 // ══ AC3 ═══════════════════════════════════════════════════════════════
 
 describe('every failure is classified once, in a fixed order', () => {
-  it('QGF-251.AC3 (a) the checker exits 0: exit 0, no disallowed license found, one check invocation', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (a) the checker exits 0: exit 0, no disallowed license found, one check invocation', () => {
     const run = runCheckScript();
     expect(run.status).toBe(0);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.pass}`);
     expect(run.checks).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (b) the checker reports a reciprocal finding: exit 1, disallowed license found, one check invocation', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (b) the checker reports a reciprocal finding: exit 1, disallowed license found, one check invocation', () => {
     const run = runCheckScript({ check: [{ rc: 1, out: PLANTED_FINDING }] });
     expect(run.status).toBe(1);
     expect(run.checks).toHaveLength(1);
@@ -1423,7 +1423,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.stdout.trim().split('\n')).toEqual(expected);
   });
 
-  it('QGF-251.AC3 (c) the install hits one proxy stream error then succeeds: exit 0, two install invocations', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (c) the install hits one proxy stream error then succeeds: exit 0, two install invocations', () => {
     const run = runCheckScript({
       install: [
         { rc: 1, out: `go: downloading ${GO_LICENSES_MODULE} ${GO_LICENSES_VERSION}\n${STREAM_ERROR}` },
@@ -1435,7 +1435,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.installs).toHaveLength(2);
   });
 
-  it('QGF-251.AC3 (d) the install hits that error twice: exit 2, tool could not be built, two install invocations', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (d) the install hits that error twice: exit 2, tool could not be built, two install invocations', () => {
     const run = runCheckScript({ install: [{ rc: 1, out: STREAM_ERROR }] });
     expect(run.status).toBe(2);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.notBuilt}`);
@@ -1443,7 +1443,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks, 'no checker may run without a tool').toEqual([]);
   });
 
-  it('QGF-251.AC3 (e) the checker hits one network-class failure then exits 0: exit 0, two check invocations', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (e) the checker hits one network-class failure then exits 0: exit 0, two check invocations', () => {
     const run = runCheckScript({
       check: [
         { rc: 1, out: 'go: dial tcp: i/o timeout' },
@@ -1455,14 +1455,14 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks).toHaveLength(2);
   });
 
-  it('QGF-251.AC3 (f) the checker hits that failure twice: exit 2, checker could not run, two check invocations', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (f) the checker hits that failure twice: exit 2, checker could not run, two check invocations', () => {
     const run = runCheckScript({ check: [{ rc: 1, out: 'go: dial tcp: i/o timeout' }] });
     expect(run.status).toBe(2);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.cannotRun}`);
     expect(run.checks).toHaveLength(2);
   });
 
-  it('QGF-251.AC3 (g) a finding naming a library that matches the network pattern is still a finding: exit 1, one check invocation', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (g) a finding naming a library that matches the network pattern is still a finding: exit 1, one check invocation', () => {
     const run = runCheckScript({ check: [{ rc: 1, out: PLANTED_FINDING_TIMEOUT }] });
     expect(run.status).toBe(1);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.finding}`);
@@ -1473,7 +1473,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks, 'a finding is never retried').toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (h) the checker exits 1 with neither a finding nor a network error: exit 2, checker failed before a verdict, one check invocation', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (h) the checker exits 1 with neither a finding nor a network error: exit 2, checker failed before a verdict, one check invocation', () => {
     const run = runCheckScript({
       check: [{ rc: 1, out: 'go: error loading module requirements' }],
     });
@@ -1486,7 +1486,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (i) a checksum mismatch during install is not retried: exit 2, tool checksum mismatch, one install invocation', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (i) a checksum mismatch during install is not retried: exit 2, tool checksum mismatch, one install invocation', () => {
     const run = runCheckScript({
       install: [
         {
@@ -1510,7 +1510,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks).toEqual([]);
   });
 
-  it('QGF-251.AC3 (j) the finding cell with GITHUB_STEP_SUMMARY unset: exit 1 unchanged, the phrase still on stdout', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (j) the finding cell with GITHUB_STEP_SUMMARY unset: exit 1 unchanged, the phrase still on stdout', () => {
     const run = runCheckScript({
       check: [{ rc: 1, out: PLANTED_FINDING }],
       stepSummary: false,
@@ -1521,7 +1521,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (k) an allowlisted library whose reported license differs: exit 1, allowlisted library changed license', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (k) an allowlisted library whose reported license differs: exit 1, allowlisted library changed license', () => {
     const rows = parseAllowlist(allowlistSource());
     const drifted = rows.map((r, i) =>
       i === rows.length - 1 ? { ...r, license: 'MPL-1.1' } : r,
@@ -1536,7 +1536,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.reports).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (l) a row the report never names: exit 1, allowlist entry unused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (l) a row the report never names: exit 1, allowlist entry unused', () => {
     const rows = parseAllowlist(allowlistSource());
     const absent = rows[0];
     const run = runCheckScript({
@@ -1550,7 +1550,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.reports).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (m) a reported library carrying a row\'s path as a strict prefix and not itself a row: exit 1, allowlist prefix covers an unlisted library', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (m) a reported library carrying a row\'s path as a strict prefix and not itself a row: exit 1, allowlist prefix covers an unlisted library', () => {
     const rows = parseAllowlist(allowlistSource());
     const covered = `${rows[rows.length - 1].library}/v2/hclsyntax`;
     const run = runCheckScript({
@@ -1572,7 +1572,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.reports).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (n) a malformed allowlist row: exit 2, allowlist malformed, zero check invocations', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (n) a malformed allowlist row: exit 2, allowlist malformed, zero check invocations', () => {
     const malformed = [
       '# library\tlicense\truled\treason',
       'github.com/hashicorp/hcl\tMPL-2.0\t2026-09-19T17:35:11Z',
@@ -1590,7 +1590,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.reports).toEqual([]);
   });
 
-  it('QGF-251.AC3 (n) an allowlist library outside ^[A-Za-z0-9._/~-]+$: exit 2, allowlist malformed, zero check invocations', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (n) an allowlist library outside ^[A-Za-z0-9._/~-]+$: exit 2, allowlist malformed, zero check invocations', () => {
     const run = runCheckScript({
       allowlist:
         'github.com/hashicorp/*\tMPL-2.0\t2026-09-19T17:35:11Z\ta glob is not a library path\n',
@@ -1603,7 +1603,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.checks).toEqual([]);
   });
 
-  it('QGF-251.AC3 (o) the checker exits 0 and the report is consistent with every row: exit 0, ten allowlisted lines', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (o) the checker exits 0 and the report is consistent with every row: exit 0, ten allowlisted lines', () => {
     const run = runCheckScript();
     expect(run.status, run.stdout).toBe(0);
     expect(run.summary).toContain(
@@ -1625,7 +1625,7 @@ describe('every failure is classified once, in a fixed order', () => {
     expect(run.reports).toHaveLength(1);
   });
 
-  it('QGF-251.AC3 (p) a finding for a library no row admits, with the allowlist present: exit 1, disallowed license found', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 (p) a finding for a library no row admits, with the allowlist present: exit 1, disallowed license found', () => {
     const run = runCheckScript({ check: [{ rc: 1, out: PLANTED_FINDING }] });
     expect(run.status, run.stdout).toBe(1);
     expect(run.summary).toContain(`License Compliance (Go): ${PHRASE.finding}`);
@@ -1647,7 +1647,7 @@ describe('every failure is classified once, in a fixed order', () => {
     ).toEqual([]);
   });
 
-  it('QGF-251.AC3 the report is classified by the same network-class and unclassified rules as the check', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC3 the report is classified by the same network-class and unclassified rules as the check', () => {
     const retried = runCheckScript({
       report: [
         { rc: 1, out: 'go: dial tcp: i/o timeout' },
@@ -1680,27 +1680,27 @@ describe('every failure is classified once, in a fixed order', () => {
 // ══ AC4 ═══════════════════════════════════════════════════════════════
 
 describe('the Go step and the npm step are gated on their own inputs', () => {
-  it('QGF-251.AC4 go_deps lists the Go module, the workflow and the script, and nothing outside apps/backend', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC4 go_deps lists the Go module, the workflow and the script, and nothing outside apps/backend', () => {
     assertGoDepsFilter(workflowSource());
   });
 
-  it('QGF-251.AC4 npm_deps lists the web manifests and the workflow', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC4 npm_deps lists the web manifests and the workflow', () => {
     assertNpmDepsFilter(workflowSource());
   });
 
-  it('QGF-251.AC4 the single `deps` filter, its job output and every read of it are gone', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC4 the single `deps` filter, its job output and every read of it are gone', () => {
     assertDepsFilterIsGone(workflowSource());
   });
 
-  it('QGF-251.AC4 each step carries its own gate and the job admits schedule, go_deps or npm_deps', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC4 each step carries its own gate and the job admits schedule, go_deps or npm_deps', () => {
     assertPerStepGating(workflowSource());
   });
 
-  it('QGF-251.AC4 a pull request whose only changed file is apps/web/package-lock.json sets go_deps false, while apps/backend/go.sum sets it true', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC4 a pull request whose only changed file is apps/web/package-lock.json sets go_deps false, while apps/backend/go.sum sets it true', () => {
     assertLockfileOnlyPrSkipsTheGoStep(workflowSource());
   });
 
-  it('QGF-251.AC4 the Check npm licenses step keeps its base run text and working directory', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC4 the Check npm licenses step keeps its base run text and working directory', () => {
     assertNpmStepUnchanged(workflowSource());
   });
 });
@@ -1708,55 +1708,55 @@ describe('the Go step and the npm step are gated on their own inputs', () => {
 // ══ AC5 ═══════════════════════════════════════════════════════════════
 
 describe('each bound property refuses a planted regression', () => {
-  it('QGF-251.AC5 (1) restoring the base run block — @latest, the tee pipe and the text grep — is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (1) restoring the base run block — @latest, the tee pipe and the text grep — is refused', () => {
     expect(() =>
       assertGoStepRunsOnlyTheScript(mutateRestoreBaseGoRun(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (2) continue-on-error on the Go step is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (2) continue-on-error on the Go step is refused', () => {
     expect(() =>
       assertGoStepRunsOnlyTheScript(mutateAddContinueOnError(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (3) dropping GO_LICENSES_SUM from the env is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (3) dropping GO_LICENSES_SUM from the env is refused', () => {
     expect(() =>
       assertPinEnvLiterals(mutateRemovePinSum(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (4) adding GOPRIVATE to the job env is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (4) adding GOPRIVATE to the job env is refused', () => {
     expect(() =>
       assertNoGoEscapeHatchesInWorkflow(mutateAddGoprivate(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (5) dropping scripts/go-licenses-check.sh from go_deps is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (5) dropping scripts/go-licenses-check.sh from go_deps is refused', () => {
     expect(() =>
       assertGoDepsFilter(mutateDropScriptFromGoDeps(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (6) adding apps/web/package-lock.json to go_deps is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (6) adding apps/web/package-lock.json to go_deps is refused', () => {
     const mutated = mutateAddWebLockfileToGoDeps(workflowSource());
     expect(() => assertGoDepsFilter(mutated)).toThrow();
     expect(() => assertLockfileOnlyPrSkipsTheGoStep(mutated)).toThrow();
   });
 
-  it('QGF-251.AC5 (7) removing the Go step\'s if: is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (7) removing the Go step\'s if: is refused', () => {
     expect(() =>
       assertPerStepGating(mutateRemoveGoStepIf(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (8) a fourth uses: step in the license-check job is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (8) a fourth uses: step in the license-check job is refused', () => {
     expect(() =>
       assertLicenseCheckActionSet(mutateAddFourthUsesStep(workflowSource())),
     ).toThrow();
   });
 
-  it('QGF-251.AC5 (9) a copy of the script with class `unknown` dropped is refused by the argv assertion', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (9) a copy of the script with class `unknown` dropped is refused by the argv assertion', () => {
     const run = runCheckScript({
       scriptSource: mutateScriptDropUnknownClass(scriptSource()),
     });
@@ -1767,7 +1767,7 @@ describe('each bound property refuses a planted regression', () => {
     expect(() => assertDisallowedTypesArgv(run.log)).toThrow();
   });
 
-  it('QGF-251.AC5 (10) dropping apps/backend/go-licenses-allowlist.tsv from go_deps is refused', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 (10) dropping apps/backend/go-licenses-allowlist.tsv from go_deps is refused', () => {
     const mutated = mutateDropAllowlistFromGoDeps(workflowSource());
     // The mutation must have landed, or the throw below would only be the
     // mutation failing to find its line.
@@ -1821,7 +1821,7 @@ describe('each bound property refuses a planted regression', () => {
     }
   });
 
-  it('QGF-251.AC5 none of those assertions throws on the delivered files', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC5 none of those assertions throws on the delivered files', () => {
     const source = workflowSource();
     assertGoStepRunsOnlyTheScript(source);
     assertPinEnvLiterals(source);
@@ -1856,11 +1856,11 @@ describe('each bound property refuses a planted regression', () => {
 // ══ AC6 ═══════════════════════════════════════════════════════════════
 
 describe('the workflow permissions, action set and sibling filters are held', () => {
-  it('QGF-251.AC6 the top-level permissions are exactly contents: read and security-events: write, and the job adds none', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC6 the top-level permissions are exactly contents: read and security-events: write, and the job adds none', () => {
     assertTopLevelPermissions(workflowSource());
   });
 
-  it('QGF-251.AC6 the license-check job uses exactly checkout, setup-go and setup-node, at the base tag or a sha with its version comment', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC6 the license-check job uses exactly checkout, setup-go and setup-node, at the base tag or a sha with its version comment', () => {
     assertLicenseCheckActionSet(workflowSource());
   });
 
@@ -1873,11 +1873,11 @@ describe('the workflow permissions, action set and sibling filters are held', ()
     assertGoStepStaysOnOneGoRelease(workflowSource());
   });
 
-  it('QGF-251.AC6 the docker filter keeps its five patterns and the backend, frontend and crypto filters keep theirs', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC6 the docker filter keeps its five patterns and the backend, frontend and crypto filters keep theirs', () => {
     assertSiblingFiltersHeld(workflowSource());
   });
 
-  it('QGF-251.AC6 scripts/go-licenses-check.sh is delivered executable', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC6 scripts/go-licenses-check.sh is delivered executable', () => {
     expect(existsSync(SCRIPT_PATH), 'the script must be delivered').toBe(true);
     expect(
       statSync(SCRIPT_PATH).mode & 0o111,
@@ -1885,11 +1885,11 @@ describe('the workflow permissions, action set and sibling filters are held', ()
     ).toBe(0o111);
   });
 
-  it('QGF-251.AC6 (r) apps/backend/LICENSE is byte-identical to the repository LICENSE', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC6 (r) apps/backend/LICENSE is byte-identical to the repository LICENSE', () => {
     assertBackendCarriesTheRepositoryLicense();
   });
 
-  it('QGF-251.AC6 (r) the allowlist admits exactly the ten ruled HashiCorp modules, each pinned to MPL-2.0 under the ruling stamp', () => {
+  it('LICENSE-COMPLIANCE-WORKFLOW.AC6 (r) the allowlist admits exactly the ten ruled HashiCorp modules, each pinned to MPL-2.0 under the ruling stamp', () => {
     assertAllowlistIsTheRuling(allowlistSource());
   });
 });

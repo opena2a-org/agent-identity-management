@@ -328,16 +328,25 @@ If you need long-lived credentials:
 
 ### Q: How do I know if my token has been rotated?
 
-**A:** The SDK will log rotation events:
+**A:** The Python SDK prints one line when a refresh returns a new refresh token:
 
 ```
-🔄 Token rotated successfully - new credentials saved
+Token rotated successfully — old refresh token revoked (new id: 461d130d...)
 ```
 
-You'll see this message when:
-- Token refresh succeeds
-- Backend issued a new refresh token
-- SDK saved the new token to credentials
+The SDK prints it after saving the new refresh token to its credentials file. It
+does not print it for every refresh: the line depends on what the server answers,
+and the `rotated` field of the refresh response says which answer it was.
+
+- A sign-in from `aim-sdk login` is rotated only by a server with Redis. The
+  server records the old refresh token as revoked there and answers with a new
+  one (`"rotated": true`).
+- A server without Redis, or one whose Redis refused the write, answers with the
+  refresh token it was given (`"rotated": false`), and the SDK prints no line. A
+  server without Redis logs `Token revocation disabled (no Redis configured)` at
+  startup.
+- A token from an SDK download is rotated in the database and does not need
+  Redis.
 
 ### Q: What happens if rotation fails?
 

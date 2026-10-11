@@ -5,7 +5,7 @@ import { spawnSync } from 'child_process';
 import { load } from 'js-yaml';
 
 /**
- * QGF-273 — docker-publish.yml publishes only from a platform-v tag push.
+ * DOCKER-PUBLISH-RELEASE-ONLY — docker-publish.yml publishes only from a platform-v tag push.
  *
  * Before this unit every merge to `main` under the workflow's path filter, and
  * every manual dispatch, pushed `latest` and `edge` for both images on both
@@ -664,7 +664,7 @@ const GUARD_CASES: GuardCase[] = [
 ];
 
 const GIT_STUB = `#!/usr/bin/env bash
-# QGF-273 stub git: answers "git ls-remote --tags <url>" from $QGF_CASE_DIR; any other invocation is refused.
+# DOCKER-PUBLISH-RELEASE-ONLY stub git: answers "git ls-remote --tags <url>" from $QGF_CASE_DIR; any other invocation is refused.
 set -u
 if [ "\${1:-}" != "ls-remote" ] || [ "\${2:-}" != "--tags" ] || [ -z "\${3:-}" ] || [ -n "\${4:-}" ]; then
   echo "stub git: unexpected invocation: $*" >&2
@@ -690,7 +690,7 @@ exit 0
 `;
 
 const DOCKER_STUB = `#!/usr/bin/env bash
-# QGF-273 stub docker: answers "docker buildx imagetools inspect <ref>" from $QGF_CASE_DIR/registry; logs every ref asked.
+# DOCKER-PUBLISH-RELEASE-ONLY stub docker: answers "docker buildx imagetools inspect <ref>" from $QGF_CASE_DIR/registry; logs every ref asked.
 set -u
 if [ "\${1:-}" != "buildx" ] || [ "\${2:-}" != "imagetools" ] || [ "\${3:-}" != "inspect" ] || [ -z "\${4:-}" ] || [ -n "\${5:-}" ]; then
   echo "stub docker: unexpected invocation: $*" >&2
@@ -1261,7 +1261,7 @@ const AC9_FORBIDDEN = ['every build of `main`', 'Built from `main` on every push
 
 // ---------------------------------------------------------------------------
 
-describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push', () => {
+describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a platform-v tag push', () => {
   beforeAll(() => {
     mintStubs();
   });
@@ -1269,7 +1269,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     if (scratch !== '') rmSync(scratch, { recursive: true, force: true });
   });
 
-  it('QGF-273.AC1 docker-publish.yml keeps the base triggers (push on platform-v* tags, main under the five paths, workflow_dispatch) and REGISTRY ghcr.io', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC1 docker-publish.yml keeps the base triggers (push on platform-v* tags, main under the five paths, workflow_dispatch) and REGISTRY ghcr.io', () => {
     const doc = readWorkflow();
     assertAC1(doc);
     const on = doc.on as Dict;
@@ -1286,7 +1286,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     expect((doc.env as Dict).REGISTRY).toBe('ghcr.io');
   });
 
-  it('QGF-273.AC2 a run of docker-publish.yml that is not a publish run holds no write permission, no secret and no push', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC2 a run of docker-publish.yml that is not a publish run holds no write permission, no secret and no push', () => {
     const doc = readWorkflow();
     assertAC2(doc);
     expect(doc.permissions).toEqual({ contents: 'read' });
@@ -1303,7 +1303,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     }
   });
 
-  it('QGF-273.AC3 only build-backend and build-frontend carry the publish if, with the publish permissions, logins, cosign, attest and a literal per-job concurrency group', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC3 only build-backend and build-frontend carry the publish if, with the publish permissions, logins, cosign, attest and a literal per-job concurrency group', () => {
     const doc = readWorkflow();
     assertAC3(doc);
     expect(publishJobs(doc).map(([n]) => n).sort()).toEqual(['build-backend', 'build-frontend']);
@@ -1316,7 +1316,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     expect((job(doc, 'build-backend').concurrency as Dict).group).not.toBe((job(doc, 'build-frontend').concurrency as Dict).group);
   });
 
-  it('QGF-273.AC4 the verify build is the publish build: for both Dockerfile paths the with maps agree once push, cache-from, cache-to, tags and labels are excluded', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC4 the verify build is the publish build: for both Dockerfile paths the with maps agree once push, cache-from, cache-to, tags and labels are excluded', () => {
     const doc = readWorkflow();
     assertAC4(doc);
     for (const name of PUBLISH_JOBS) {
@@ -1327,7 +1327,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     }
   });
 
-  it('QGF-273.AC5 a publish build reads nothing a merge-path run can write: no cache, ubuntu-latest, a closed uses list, five run steps and no artifact download', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC5 a publish build reads nothing a merge-path run can write: no cache, ubuntu-latest, a closed uses list, five run steps and no artifact download', () => {
     const doc = readWorkflow();
     assertAC5(doc);
     for (const name of PUBLISH_JOBS) {
@@ -1339,7 +1339,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     }
   });
 
-  it('QGF-273.AC6 the only tags a run can compute are a release\'s own: three anchored match lines per metadata step, no flavor, build tags from the two metadata outputs, no metadata step outside a publish job', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC6 the only tags a run can compute are a release\'s own: three anchored match lines per metadata step, no flavor, build tags from the two metadata outputs, no metadata step outside a publish job', () => {
     const doc = readWorkflow();
     assertAC6(doc);
     for (const name of PUBLISH_JOBS) {
@@ -1350,7 +1350,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     }
   });
 
-  it('QGF-273.AC7 the release guard is the first run step of each publish job, precedes every login, carries no if, no secrets and no inline expression, and reads tags only through git ls-remote', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC7 the release guard is the first run step of each publish job, precedes every login, carries no if, no secrets and no inline expression, and reads tags only through git ls-remote', () => {
     const doc = readWorkflow();
     assertAC7Shape(doc);
     for (const name of PUBLISH_JOBS) {
@@ -1365,21 +1365,21 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
   });
 
   for (const name of PUBLISH_JOBS) {
-    it(`QGF-273.AC7 ${name}'s release guard, run under bash -e -o pipefail with stub git and docker, refuses every non-release case and admits the newest unpublished tag over the seventeen cases`, () => {
+    it(`DOCKER-PUBLISH-RELEASE-ONLY.AC7 ${name}'s release guard, run under bash -e -o pipefail with stub git and docker, refuses every non-release case and admits the newest unpublished tag over the seventeen cases`, () => {
       const doc = readWorkflow();
       expect(GUARD_CASES).toHaveLength(17);
       for (const c of GUARD_CASES) assertGuardCase(doc, name, c);
     });
   }
 
-  it('QGF-273.AC8 on the delivered file every workflow-shape assertion passes', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC8 on the delivered file every workflow-shape assertion passes', () => {
     const doc = readWorkflow();
     for (const [ac, assertion] of Object.entries(ASSERTIONS)) {
       expect(() => assertion(doc), ac).not.toThrow();
     }
   });
 
-  it('QGF-273.AC8 (i) the base text (two push: true, four edge lines, four is_default_branch lines, zero if keys, workflow-level packages: write) is refused by AC2, AC3, AC4, AC6 and AC7, each naming a job', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC8 (i) the base text (two push: true, four edge lines, four is_default_branch lines, zero if keys, workflow-level packages: write) is refused by AC2, AC3, AC4, AC6 and AC7, each naming a job', () => {
     const lines = BASE_TEXT.split('\n');
     expect(lines.filter((l) => l.trim() === 'push: true')).toHaveLength(2);
     expect(lines.filter((l) => l.trim() === 'type=edge,branch=main')).toHaveLength(4);
@@ -1405,7 +1405,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
   });
 
   for (const plant of PLANTS) {
-    it(`QGF-273.AC8 (${plant.id}) is refused by ${plant.ac} naming what it found`, () => {
+    it(`DOCKER-PUBLISH-RELEASE-ONLY.AC8 (${plant.id}) is refused by ${plant.ac} naming what it found`, () => {
       const doc = readWorkflow();
       plant.apply(doc);
       const message = refusalOf(() => ASSERTIONS[plant.ac](doc));

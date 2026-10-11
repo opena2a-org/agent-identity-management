@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -102,6 +103,61 @@ func TestInitCache_EmptyRedisHostIsLoggedAsDisabled(t *testing.T) {
 
 	assert.Nil(t, cacheService)
 	assert.Equal(t, "ℹ️  Cache service skipped (Redis disabled)\n", logged.String())
+}
+
+// The startup summary's Redis line gives the reason too: with no connection,
+// "disabled" is only for an empty REDIS_HOST. A failed ping names the address
+// that was tried.
+func TestRedisStartupSummary_EmptyRedisHostIsDisabled(t *testing.T) {
+	port, _ := countingListener(t)
+	t.Setenv("REDIS_HOST", "")
+	cfg := loadConfigForRedisTest(t, port)
+	client, err := initRedis(cfg)
+	require.NoError(t, err)
+	require.Nil(t, client)
+
+	assert.Equal(t, "💾 Redis: disabled (running without caching)", redisStartupSummary(cfg, client))
+}
+
+func TestRedisStartupSummary_FailedRedisPingIsUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		set   bool
+		value string
+		host  string
+	}{
+		{name: "REDIS_HOST names a host", set: true, value: "127.0.0.1", host: "127.0.0.1"},
+		{name: "REDIS_HOST is unset", host: "localhost"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			port, _ := countingListener(t)
+			// Setenv first, so the variable is restored after an unset.
+			t.Setenv("REDIS_HOST", tc.value)
+			if !tc.set {
+				require.NoError(t, os.Unsetenv("REDIS_HOST"))
+			}
+			cfg := loadConfigForRedisTest(t, port)
+			client, err := initRedis(cfg)
+			require.Error(t, err, "the listener closes every connection, so the startup ping fails")
+			require.Nil(t, client)
+
+			assert.Equal(t,
+				"💾 Redis: "+tc.host+":"+strconv.Itoa(port)+" (unavailable, running without caching)",
+				redisStartupSummary(cfg, client))
+		})
+	}
+}
+
+func TestRedisStartupSummary_ConnectionIsConnected(t *testing.T) {
+	port, _ := countingListener(t)
+	t.Setenv("REDIS_HOST", "127.0.0.1")
+	cfg := loadConfigForRedisTest(t, port)
+	// The summary reads only whether there is a client, so one that has not
+	// dialed stands in for a connection.
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:" + strconv.Itoa(port)})
+	t.Cleanup(func() { _ = client.Close() })
+
+	assert.Equal(t, "💾 Redis: 127.0.0.1:"+strconv.Itoa(port)+" (connected)", redisStartupSummary(cfg, client))
 }
 
 func TestInitCache_FailedRedisPingIsLoggedAsUnavailable(t *testing.T) {
