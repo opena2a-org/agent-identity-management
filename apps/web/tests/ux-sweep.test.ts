@@ -77,10 +77,31 @@ describe("ux-sweep fixtures", () => {
     expect(scores.some((s) => s === null)).toBe(true);
   });
 
+  it("gives the A2A, supply chain and agent detail charts more than one point or slice to draw", () => {
+    const states = new Set((body(populated, "/api/v1/a2a/tasks").tasks as { state: string }[]).map((t) => t.state));
+    expect(states.size).toBeGreaterThan(1);
+    const a2aScores = (body(populated, "/api/v1/a2a/trust-scores").scores as { a2aTrustScore: number }[]).map((s) => s.a2aTrustScore);
+    expect(a2aScores.some((s) => s >= 0.9)).toBe(true);
+    expect(a2aScores.some((s) => s >= 0.7 && s < 0.9)).toBe(true);
+    expect(a2aScores.some((s) => s >= 0.5 && s < 0.7)).toBe(true);
+    expect(a2aScores.some((s) => s < 0.5)).toBe(true);
+    expect((body(populated, "/api/v1/a2a/cards").cards as unknown[]).length).toBeGreaterThan(1);
+    const supplyChain = body(populated, "/api/v1/supply-chain/analytics");
+    expect((supplyChain.attestationTrend as unknown[]).length).toBeGreaterThan(1);
+    expect((supplyChain.connections as unknown[]).length).toBeGreaterThan(1);
+    const confidence = (body(populated, "/api/v1/mcp-servers").mcpServers as { confidenceScore?: number }[]).map((s) => s.confidenceScore ?? 0);
+    expect(new Set(confidence.map((c) => (c >= 90 ? "high" : c >= 70 ? "good" : c >= 50 ? "medium" : "low"))).size).toBeGreaterThan(1);
+    const history = body(populated, "/api/v1/agents/00000000-0000-4000-8000-000000000001/trust-score/history").history as unknown[];
+    expect(history.length).toBeGreaterThan(1);
+  });
+
   it("leaves the default fixture empty, so the empty states stay measured", () => {
     expect(body(empty, "/api/v1/analytics/verification-activity").activity).toEqual([]);
     expect(body(empty, "/api/v1/agents").agents).toHaveLength(1);
     expect(body(empty, "/api/v1/security/metrics").protectionTimeline).toEqual([]);
+    expect(body(empty, "/api/v1/a2a/tasks").tasks).toEqual([]);
+    expect(body(empty, "/api/v1/supply-chain/analytics").attestationTrend).toEqual([]);
+    expect(body(empty, "/api/v1/agents/00000000-0000-4000-8000-000000000001/trust-score/history").history).toEqual([]);
   });
 });
 

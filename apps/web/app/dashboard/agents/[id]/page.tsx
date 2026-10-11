@@ -372,7 +372,7 @@ export default function AgentDetailsPage({
 
   // Status-badge color mapping (mirrors the agents list page so the detail
   // header and the list page describe the same agent the same way — fixes
-  // #165, where the detail page rendered a generic "Active/Inactive" pill
+  // issue 165, where the detail page rendered a generic "Active/Inactive" pill
   // derived from status that read as a second, contradicting status next to
   // the "Verified" badge).
   const getStatusBadgeClass = (status: string): string => {
@@ -1134,12 +1134,12 @@ export default function AgentDetailsPage({
                                 'border-stroke'
                               }`} />
 
-                              {/* Event card */}
+                              {/* Event card: outlined, not filled, so the badge tint sits on the card */}
                               <div className={`p-3 rounded-lg border ${
-                                event.type === 'alert' ? 'bg-danger-fill border-danger-border' :
-                                event.icon === 'trust_down' ? 'bg-warning-fill border-warning-border' :
-                                event.icon === 'trust_up' ? 'bg-success-fill border-success-border' :
-                                'bg-glass-inset-gray border-divider'
+                                event.type === 'alert' ? 'border-danger-border' :
+                                event.icon === 'trust_down' ? 'border-warning-border' :
+                                event.icon === 'trust_up' ? 'border-success-border' :
+                                'border-divider'
                               }`}>
                                 <div className="flex items-start justify-between gap-4">
                                   <div className="flex items-start gap-3">

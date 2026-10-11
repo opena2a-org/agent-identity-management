@@ -354,3 +354,91 @@ links and the "View all" beside blocked actions (shown past ten), and the compli
 page's "View all alerts" (shown past eight alerts) and "Reset page" buttons.
 `apps/web/tests/ux-sweep.test.ts` holds the new criteria: a target page in the browser
 with targets on both sides of each floor, and the gate.
+
+## Sixth run: the A2A, supply chain and agent detail pages
+
+The A2A page, the supply chain page and the agent detail page draw their charts through
+the same chart layer, but the populated fixture left them empty: swept with it at the
+previous commit (started 2026-10-11T19:04:56Z, 12 loads), the A2A page's two charts drew
+0 marks, the agent detail page drew no chart (its trust score history was empty), and the
+supply chain page's two charts drew 9 marks from two MCP servers with no confidence score.
+
+The commit that adds this section extends the populated fixture to the endpoints those
+charts read: three A2A agent cards, eight A2A tasks in five states, A2A trust scores of
+0.94, 0.78, 0.55 and 0.32, confidence scores of 96 and 58 on the two MCP servers, seven
+days of attestations with three agent to MCP server connections, and six trust score
+history points from 0.62 to 0.82. These are fixture values for measuring how a chart is
+drawn, not a measurement of any deployment. The five entries of the earlier runs read
+none of these endpoints, apart from the MCP server list, whose confidence score they do
+not draw.
+
+- Command: the same as the second run with
+  `--only /dashboard/a2a,/dashboard/mcp/supply-chain,/dashboard/agents/00000000-0000-4000-8000-000000000001`,
+  on the dashboard served by `next dev`.
+- Before: the changed fixture over the page sources of the previous commit. Started
+  2026-10-11T19:06:37Z, finished 2026-10-11T19:07:04Z, 12 loads, exit code 1.
+- After: started 2026-10-11T19:14:09Z, finished 2026-10-11T19:14:36Z, 12 loads, exit code 0
+  (`GATE: PASS`).
+- All eight entries (the five above and these three) after the change: started
+  2026-10-11T19:14:53Z, finished 2026-10-11T19:16:06Z, 32 loads, exit code 0. No result
+  file lists a request the mock did not recognise, and none recorded a console error.
+
+| Criterion | Entries failing, before | Entries failing, after |
+|---|---|---|
+| Body text contrast, whole page | 2 of 3 | 0 of 3 |
+| Large text contrast, whole page | 1 of 3 | 0 of 3 |
+| Target under 24x24 | 2 of 3 | 0 of 3 |
+| Horizontal overflow | 2 of 3 | 0 of 3 |
+| Chart series mark, chart text, label and table control | 0 of 3 | 0 of 3 |
+| Targets under 44x44 (counted, not gated) | 3 of 3 | 3 of 3 |
+| Text under 14px (counted, not gated) | 3 of 3 | 3 of 3 |
+
+What failed before the change, the same in both viewports unless named:
+
+| Entry | Finding | Before |
+|---|---|---|
+| /dashboard/a2a | The header's "Refresh" and "A2A spec" stay beside the title at 375x812 | 25px overflow |
+| /dashboard/mcp/supply-chain | The header's "Refresh" and "Export report" stay beside the title at 375x812 | 27px overflow |
+| /dashboard/mcp/supply-chain | "Active connections" figure in `--brand-sky`, large text, light | 2.05 |
+| /dashboard/mcp/supply-chain | "Bill of Materials" tab label, brand ink on the brand tint, light | 4.21 |
+| /dashboard/mcp/supply-chain | Eye button in each MCP server row, no accessible name | 16x16, 2 buttons |
+| /dashboard/agents/:id | Trust score badges in the activity timeline, a badge tint on a tinted event card | 4.21 light, 3.58 dark |
+| /dashboard/agents/:id | Trust score history table headers, tertiary ink on the inset tint, dark | 4.20 |
+| /dashboard/agents/:id | "About drift score" button | 16x16 |
+| /dashboard/agents/:id | Info button beside each of the nine trust factors, no accessible name | 14x14, 9 buttons |
+
+Targets under 24x24 summed over the 12 variants: 48 before, 0 after. The changes: below
+640px both headers put their buttons under the title, and the buttons wrap; the
+connections figure and its icon
+use the brand ink; the tab label uses the neutral badge of the tab beside it; the eye
+button is 32x32 and named for its server; the timeline's event cards are outlined
+rather than filled, as on the compliance page; the table headers use the secondary ink;
+the drift and factor info buttons are 24x24, and each factor's is named for its factor.
+
+Chart figures after the change. Minimums are the lowest over both viewports for that
+theme.
+
+| Entry | Charts | Marks | Mark min, light | Mark min, dark | Chart text min, light | Chart text min, dark |
+|---|---|---|---|---|---|---|
+| /dashboard/a2a | 2 | 14 | 3.40 | 3.70 | 5.48 | 4.79 |
+| /dashboard/mcp/supply-chain | 2 | 11 | 3.40 | 3.70 | 5.48 | 4.79 |
+| /dashboard/agents/:id | 1 | 14 | 4.50 | 3.70 | 5.48 | 4.79 |
+
+The lowest body text after the change is 4.67 light and 4.59 dark on the A2A and agent
+detail pages, 4.70 light and 4.59 dark on the supply chain page.
+
+`apps/web/tests/page-standard.test.ts` now holds these three pages, and the trust score
+and drift score cards the agent detail page draws, to the same source rules as the five
+entries above. Before the change it reported 19 raw colours, 4 growing flex items around
+truncated text and 1 link under 24px. Of the colours, 14 were in the supply chain page's
+printable report, a standalone document that loads no theme: its stylesheet moves to
+`apps/web/lib/abom-print-style.ts` with the same rules, and the one inline style in the
+report becomes a class there. One was an issue number in a comment read as a hex value,
+and four were palette classes in the drift score card: its baseline state, which the
+fixture does not draw, its error icon and the hover colour of its info icon. Of the flex
+items, two were `w-0 flex-1` stat cards, which shrink (a set width caps the automatic
+minimum), so the rule now accepts `w-0`; the other two were the supply chain page's
+connection rows, which now carry `min-w-0`. The link is the A2A page's agent card URL,
+now at least 24px tall. `apps/web/tests/ux-sweep.test.ts` holds the fixture to drawing
+more than one point or slice in each of these charts, and the default fixture to leaving
+them empty.

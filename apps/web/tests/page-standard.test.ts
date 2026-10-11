@@ -28,18 +28,26 @@ function files(dir: string): string[] {
 }
 
 // The screens the chart standard covers: the overview (its three lenses live in
-// components/overview), the security page and the compliance page.
+// components/overview), the security page and the compliance page; then the A2A
+// page, the supply chain page and the agent detail page with the trust score and
+// drift score cards it draws.
 const CHART_SCREENS = [
   "app/dashboard/page.tsx",
   "app/dashboard/security/page.tsx",
   "app/dashboard/compliance/page.tsx",
   ...files("components/overview").filter((f) => f.endsWith(".tsx") && !f.endsWith(".test.tsx")),
+  "app/dashboard/a2a/page.tsx",
+  "app/dashboard/mcp/supply-chain/page.tsx",
+  "app/dashboard/agents/[id]/page.tsx",
+  "components/agent/trust-score-breakdown.tsx",
+  "components/agent/drift-score-card.tsx",
 ];
 
 describe("chart screens", () => {
-  it("covers the overview's lenses, the security page and the compliance page", () => {
+  it("covers the overview's lenses, the security, compliance, A2A and supply chain pages and the agent detail page", () => {
     expect(CHART_SCREENS).toContain("components/overview/executive-lens.tsx");
     expect(CHART_SCREENS).toContain("components/overview/security-lens.tsx");
+    expect(CHART_SCREENS).toContain("components/agent/trust-score-breakdown.tsx");
     for (const rel of CHART_SCREENS) expect(statSync(join(root, rel)).isFile()).toBe(true);
   });
 
@@ -140,12 +148,14 @@ describe("unshrinkable flex items", () => {
     expect(unshrinkableFlexItems("row.tsx", text)).toEqual([{ file: "row.tsx", line: 4, truncatedAt: 6, classes: "flex-1 p-4" }]);
   });
 
-  it("are not reported with min-w-0 or a clipping overflow, or above a clipping ancestor", () => {
+  it("are not reported with min-w-0, a zero width or a clipping overflow, or above a clipping ancestor", () => {
     const shrinks = '<div className="flex"><div className="flex-1 min-w-0"><p className="truncate">{t}</p></div></div>';
+    const zeroWidth = '<div className="flex"><div className="ml-5 w-0 flex-1"><dt className="truncate">{t}</dt></div></div>';
     const clipsItself = '<div className="flex"><div className="flex-1 overflow-hidden"><p className="truncate">{t}</p></div></div>';
     const clippedAbove =
       '<div className="flex-1"><div className="overflow-x-auto"><div className="flex"><p className="truncate">{t}</p></div></div></div>';
     expect(unshrinkableFlexItems("a.tsx", shrinks)).toEqual([]);
+    expect(unshrinkableFlexItems("a.tsx", zeroWidth)).toEqual([]);
     expect(unshrinkableFlexItems("a.tsx", clipsItself)).toEqual([]);
     expect(unshrinkableFlexItems("a.tsx", clippedAbove)).toEqual([]);
   });

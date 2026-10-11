@@ -464,7 +464,7 @@ function AgentCardsTab({ agentCards, loading, onRefresh, onDelete }: {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <a href={card.url} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-text hover:underline flex items-center gap-1">
+                    <a href={card.url} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-text hover:underline flex min-h-6 items-center gap-1">
                       <Globe className="h-3 w-3" />
                       <span className="truncate max-w-[200px]">{card.url}</span>
                     </a>
@@ -1044,7 +1044,7 @@ export default function A2AProtocolPage() {
     <AuthGuard>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-ink flex items-center gap-3">
               <Network className="h-7 w-7 text-brand-text" />
@@ -1054,7 +1054,7 @@ export default function A2AProtocolPage() {
               Secure agent-to-agent communication with AIM attestation and trust scoring
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={fetchData}
               className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-ink-body border border-stroke rounded-pill transition-colors hover:bg-glass-inset-gray"

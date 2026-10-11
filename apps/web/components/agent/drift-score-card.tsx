@@ -73,8 +73,8 @@ const STATUS_META: Record<DriftStatus, { label: string; badgeClass: string; scor
   },
   baseline: {
     label: 'Baseline',
-    badgeClass: 'bg-gray-500/10 text-gray-700 dark:text-gray-200 border-gray-500/20',
-    scoreClass: 'text-gray-600 dark:text-gray-200',
+    badgeClass: 'bg-glass-inset-gray text-ink-body border-glass-inset-border',
+    scoreClass: 'text-ink-secondary',
     icon: HelpCircle,
     description: 'No drift signal available yet (alert backend unreachable or no history). Score is the neutral baseline.',
   },
@@ -147,7 +147,7 @@ export function DriftScoreCard({ agentId }: DriftScoreCardProps) {
         </CardHeader>
         <CardContent>
           <div className="text-center py-6 text-muted-foreground">
-            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-yellow-600" />
+            <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-warning-text" />
             <p className="text-sm">{error || 'No drift data available'}</p>
           </div>
         </CardContent>
@@ -177,8 +177,8 @@ export function DriftScoreCard({ agentId }: DriftScoreCardProps) {
               </CardDescription>
             </div>
             <Tooltip>
-              <TooltipTrigger aria-label="About drift score">
-                <Info className="h-4 w-4 text-muted-foreground hover:text-blue-600 transition-colors" />
+              <TooltipTrigger aria-label="About drift score" className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-pill">
+                <Info className="h-4 w-4 text-ink-tertiary hover:text-brand-text transition-colors" />
               </TooltipTrigger>
               <TooltipContent side="left" className="max-w-xs">
                 <p>
