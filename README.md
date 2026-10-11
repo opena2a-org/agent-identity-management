@@ -31,7 +31,7 @@ Token rotated successfully — old refresh token revoked (new id: 461d130d...)
 
 `aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. The `Token rotated` line comes from the first call after sign-in, which exchanges the refresh token `aim-sdk login` saved for a new one. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
 
-The agent starts `pending`, and every call is refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents in the dashboard (measured 2026-09-22 on a self-hosted stack). Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+The agent starts `pending` until an administrator verifies it under Agents in the dashboard. On a new organization, which starts in monitoring mode (described below), a pending agent's call runs and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until the agent is verified. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
 
 Once it is verified, protect a function with the capability the agent holds and call it:
 

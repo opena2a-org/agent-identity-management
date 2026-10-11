@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The PyPI "Homepage" link and the first link in this README go to the project page,
   https://opena2a.org/agent-identity-management. They pointed at the GitHub repository and at the
   PyPI page itself. The repository stays listed under "Source".
+- The README Quick start says what a pending agent's call does in each enforcement mode
+  ([#655](https://github.com/opena2a-org/agent-identity-management/issues/655)). It said every call
+  of a pending agent is refused with `Agent not verified - all actions denied`. That refusal
+  needs a strict-mode organization; on a new organization, which starts in monitoring mode, the
+  call runs and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it. The root
+  README carries the same correction.
 
 ### Changed — `report_capabilities` follows the enforcement mode and raises when a registration fails
 
