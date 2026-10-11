@@ -1,0 +1,11 @@
+# License URLs for the backend image's third-party notices (scripts/third-party-notices.sh).
+# `go-licenses report` finds a library's upstream repository from its module path, and for a
+# gopkg.in path only by asking gopkg.in over the network while the image builds. When that
+# lookup does not answer, the report gives the library no license URL and the image build fails.
+# For each library listed here, the notices script writes this URL into manifest.csv in place of
+# whatever the report gave, so the manifest row does not depend on the lookup.
+# {version} is replaced with the library's version in this module's build list (`go list -m`).
+# The URL must name the library's license file in its upstream repository at that version.
+# Every library listed here must be in the notices manifest exactly once.
+# library	licenseURL
+gopkg.in/yaml.v3	https://github.com/go-yaml/yaml/blob/{version}/LICENSE

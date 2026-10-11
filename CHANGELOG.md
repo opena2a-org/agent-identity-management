@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the backend image's license manifest takes the URL for `gopkg.in/yaml.v3` from the repository (#687)
+
+- The license-notices step of the backend image build (`apps/backend/scripts/third-party-notices.sh`) now writes
+  the `manifest.csv` license URL of each library listed in `apps/backend/go-licenses-urls.tsv` from that file, with
+  `{version}` replaced by the library's version in the module's build list (`go list -m`). It replaces whatever URL
+  `go-licenses report` gave for that library, so the row no longer depends on go-licenses resolving the library's
+  repository during the build. The file lists `gopkg.in/yaml.v3`, whose row now reads
+  `https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE`.
+- An image build of `main` on 2026-10-11 failed at this step with `third-party notices: gopkg.in/yaml.v3 has no
+  license URL, so the manifest cannot say where its source is`.
+- The build fails if `go-licenses-urls.tsv` is missing, if a row's URL is not `https://` with `{version}`, if a
+  library is listed twice, if `go list -m` gives no version for a listed library or `go.mod` replaces it, or if a
+  listed library is not in the manifest exactly once. A library not listed in the file still fails the build when
+  the report gives it no license URL.
+
 ### Fixed — the A2A guide documents MCP attestation as a call the agent makes, and says where delegation trust attenuation is applied (#679)
 
 - `docs/guides/A2A.md` said the SDK creates an attestation the first time an agent uses an MCP server, and showed

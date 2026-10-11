@@ -16,13 +16,17 @@
 #   manifest.csv         one row per library, `library,licenseURL,licenseName`,
 #                        from `go-licenses report`; the URL points at the
 #                        license file in the library's upstream repository at
-#                        the version that was built in
+#                        the version that was built in. For a library listed
+#                        in go-licenses-urls.tsv the URL is that file's, at
+#                        the library's version in the build list, so the row
+#                        does not depend on a network lookup during the build
 #   README               what the two are
 #
 # and then verifies what it wrote before the build may continue:
 #
 #   * every manifest row names a library, a license and a URL that is not
 #     Unknown;
+#   * every row of go-licenses-urls.tsv is in the manifest exactly once;
 #   * every manifest row has a directory under licenses/ holding a file;
 #   * every MPL-2.0 library's directory holds its Go source;
 #   * every row of go-licenses-allowlist.tsv is in the manifest exactly once,
@@ -81,6 +85,9 @@ fi
 module_root="$(cd "$(dirname "$0")/.." && pwd)"
 allowlist="$module_root/go-licenses-allowlist.tsv"
 [ -f "$allowlist" ] || fail "$allowlist is missing"
+urls="$module_root/go-licenses-urls.tsv"
+[ -f "$urls" ] || fail "$urls is missing"
+tab="$(printf '\t')"
 
 # ---- The checker, at the pin, verified on the binary that was built --------
 
@@ -111,6 +118,40 @@ trap 'rm -rf "$staging"' EXIT
 mkdir -p "$staging"
 cd "$module_root"
 
+# The license URLs go-licenses-urls.tsv carries, each with {version} replaced by
+# the library's version in this module's build list: library<TAB>URL.
+pinned="$staging/pinned-urls.tsv"
+: > "$pinned"
+url_rows="$staging/urls.rows"
+awk '/^[ \t]*#/ { next } /^[ \t]*$/ { next } { print }' "$urls" > "$url_rows"
+while IFS="$tab" read -r library template _rest; do
+  case "$library" in
+    '' | *[!A-Za-z0-9._/~-]* | *..*) fail "go-licenses-urls.tsv has a row whose library is not a module path: $library" ;;
+  esac
+  case "$template" in
+    https://*'{version}'*) ;;
+    *) fail "go-licenses-urls.tsv gives $library a URL that is not https:// with {version}: $template" ;;
+  esac
+  case "$template" in
+    *[!A-Za-z0-9._~:/{}%+-]*) fail "go-licenses-urls.tsv gives $library a URL with a character a manifest row cannot carry: $template" ;;
+  esac
+  [ -z "$(awk -F'\t' -v lib="$library" '$1 == lib' "$pinned")" ] ||
+    fail "go-licenses-urls.tsv lists $library more than once"
+  built="$(go list -m -f '{{if .Replace}}replaced{{else}}{{.Version}}{{end}}' "$library")" ||
+    fail "go list -m $library failed, so its license URL has no version"
+  [ "$built" != "replaced" ] ||
+    fail "$library is replaced in go.mod, so the URL go-licenses-urls.tsv gives is not where its source is"
+  case "$built" in
+    v[0-9]*) ;;
+    *) fail "go list -m $library gave no module version: $built" ;;
+  esac
+  case "$built" in
+    *[!A-Za-z0-9.+-]*) fail "go list -m $library gave no module version: $built" ;;
+  esac
+  printf '%s\t%s\n' "$library" "$(printf '%s' "$template" | sed "s/{version}/$built/g")" >> "$pinned"
+done < "$url_rows"
+rm -f "$url_rows"
+
 if ! "$checker" report ./... > "$staging/report.csv" 2> "$staging/report.err"; then
   tail -n 20 "$staging/report.err" >&2
   fail "go-licenses report failed"
@@ -121,10 +162,25 @@ if ! "$checker" save ./... "--save_path=$staging/licenses" 2> "$staging/save.err
   fail "go-licenses save failed"
 fi
 
-# go-licenses v2.0.1 writes no header; drop one if a later version does.
+# go-licenses v2.0.1 writes no header; drop one if a later version does. A
+# library in go-licenses-urls.tsv gets that URL, whatever the report gave.
 {
   printf 'library,licenseURL,licenseName\n'
-  awk 'NR == 1 && $0 == "name,licenseURL,licenseName" { next } NF > 0 { print }' "$staging/report.csv"
+  awk -F'\t' '
+    FILENAME == ARGV[1] { url[$1] = $2; next }
+    FNR == 1 && $0 == "name,licenseURL,licenseName" { next }
+    NF > 0 {
+      name = $0
+      sub(/,.*/, "", name)
+      if ((name in url) && $0 ~ /,.*,/) {
+        license = $0
+        sub(/.*,/, "", license)
+        print name "," url[name] "," license
+        next
+      }
+      print
+    }
+  ' "$pinned" "$staging/report.csv"
 } > "$staging/manifest.csv"
 rm -f "$staging/report.csv" "$staging/report.err" "$staging/save.err"
 
@@ -168,7 +224,6 @@ allowlisted=""
 allowlisted_count=0
 allowlist_rows="$staging/allowlist.rows"
 awk '/^[ \t]*#/ { next } /^[ \t]*$/ { next } { print }' "$allowlist" > "$allowlist_rows"
-tab="$(printf '\t')"
 while IFS="$tab" read -r library ruled_license _rest; do
   case "$library" in
     '' | *[!A-Za-z0-9._/~-]*) fail "go-licenses-allowlist.tsv has a row whose library is not a module path: $library" ;;
@@ -182,7 +237,15 @@ while IFS="$tab" read -r library ruled_license _rest; do
 "
   allowlisted_count=$((allowlisted_count + 1))
 done < "$allowlist_rows"
-rm -f "$pairs" "$allowlist_rows"
+
+pinned_lines=""
+while IFS="$tab" read -r library pinned_url; do
+  hits="$(awk -F'\t' -v lib="$library" '$1 == lib' "$pairs" | wc -l | tr -d ' ')"
+  [ "$hits" -eq 1 ] || fail "$library has a URL in go-licenses-urls.tsv but appears $hits times in the manifest, not once"
+  pinned_lines="${pinned_lines}license URL from go-licenses-urls.tsv: $library $pinned_url
+"
+done < "$pinned"
+rm -f "$pairs" "$allowlist_rows" "$pinned"
 
 cat > "$staging/README" <<'EOF'
 Third-party license notices for the AIM server image
@@ -210,3 +273,4 @@ mv "$staging" "$out"
 printf 'third-party notices: %s libraries, %s MPL-2.0 with source, %s allowlisted, written to %s\n' \
   "$libraries" "$mpl" "$allowlisted_count" "$out"
 printf '%s' "$allowlisted"
+printf '%s' "$pinned_lines"
