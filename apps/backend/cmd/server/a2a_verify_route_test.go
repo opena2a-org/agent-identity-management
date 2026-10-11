@@ -54,7 +54,7 @@ func TestA2AVerifyAnswersOtherMethods405(t *testing.T) {
 
 // setupRoutes mounts POST /a2a/verify once, through mountA2AVerifyRoute. A
 // second mount inside the /a2a group is never reached: the first answers every
-// POST.
+// POST that reaches the routes.
 func TestA2AVerifyIsMountedOnce(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "runtime.Caller failed; cannot locate main.go")
