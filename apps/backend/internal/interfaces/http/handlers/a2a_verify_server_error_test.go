@@ -83,7 +83,7 @@ func postVerify(t *testing.T, svc *application.A2AService, agentID uuid.UUID, no
 
 // POST /a2a/verify answers 400 with valid: false for a body it cannot read as
 // a verification request, as the 401 does: a caller that branches on valid
-// finds it in every answer that is a refusal of the request.
+// finds it in both of the handler's 400 answers, as in its 401.
 func TestA2AVerifyAnswersValidFalseForABodyItCannotRead(t *testing.T) {
 	for name, body := range map[string]string{
 		"not JSON":              `{"nonce": `,
