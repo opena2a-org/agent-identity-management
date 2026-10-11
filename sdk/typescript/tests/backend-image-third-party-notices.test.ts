@@ -42,13 +42,19 @@ import { load } from 'js-yaml';
  *   - the pin equals the one security.yml gives the license gate;
  *   - the script, end to end against stub `go` and `go-licenses` binaries:
  *     the tree it writes, the ten MPL-2.0 entries by module path, and every
- *     failure it must turn into a failed build with nothing left behind.
+ *     failure it must turn into a failed build with nothing left behind;
+ *   - the license URLs carried in apps/backend/go-licenses-urls.tsv: a
+ *     gopkg.in/yaml.v3 row the report gives no URL (its lookup did not answer)
+ *     still gets one, at the version in the build list, so the manifest is the
+ *     same whether or not the lookup answered.
  */
 
 const REPO_ROOT = realpathSync(join(__dirname, '..', '..', '..'));
 const DOCKERFILE_PATH = join(REPO_ROOT, 'infrastructure', 'docker', 'Dockerfile.backend');
 const SCRIPT_PATH = join(REPO_ROOT, 'apps', 'backend', 'scripts', 'third-party-notices.sh');
 const ALLOWLIST_PATH = join(REPO_ROOT, 'apps', 'backend', 'go-licenses-allowlist.tsv');
+const URLS_PATH = join(REPO_ROOT, 'apps', 'backend', 'go-licenses-urls.tsv');
+const GO_MOD_PATH = join(REPO_ROOT, 'apps', 'backend', 'go.mod');
 const SECURITY_WORKFLOW_PATH = join(REPO_ROOT, '.github', 'workflows', 'security.yml');
 
 const CHECKER_MODULE = 'github.com/google/go-licenses/v2';
@@ -72,6 +78,18 @@ const MPL_LIBRARIES = [
   'github.com/hashicorp/go-sockaddr',
   'github.com/hashicorp/hcl',
 ];
+
+/**
+ * A library whose upstream repository go-licenses finds only by asking
+ * gopkg.in over the network during the build. go-licenses-urls.tsv carries its
+ * license URL, so its manifest row does not depend on that lookup.
+ */
+const YAML = 'gopkg.in/yaml.v3';
+const YAML_VERSION = 'v3.0.1';
+const yamlUrl = (version: string) => `https://github.com/go-yaml/yaml/blob/${version}/LICENSE`;
+
+/** The `go list` the script runs for each go-licenses-urls.tsv row, as the stub logs it. */
+const GO_LIST_VERSION = 'go list -m -f {{if .Replace}}replaced{{else}}{{.Version}}{{end}}';
 
 // ---------------------------------------------------------------------------
 // The pin
@@ -237,11 +255,23 @@ describe('Dockerfile.backend ships verified third-party notices', () => {
 
 /**
  * Stub `go`: `install` materialises the stub checker in $GOBIN as a real
- * install would; `version -m` reports the build-info mod line.
+ * install would; `version -m` reports the build-info mod line; `list -m`
+ * prints the planted version of its last argument, and fails, as go does, for
+ * a module that is not in the build list.
  */
 const STUB_GO = `#!/bin/sh
 printf 'go %s\\n' "$*" >> "$STUB_LOG"
 case "$1" in
+  list)
+    for mod; do :; done
+    built="$(awk -v m="$mod" '$1 == m { print $2 }' "$STUB_DIR/versions")"
+    if [ -z "$built" ]; then
+      printf 'go: module %s: not a known dependency\\n' "$mod" >&2
+      exit 1
+    fi
+    printf '%s\\n' "$built"
+    exit 0
+    ;;
   install)
     rc="$(cat "$STUB_DIR/install.rc")"
     if [ "$rc" -eq 0 ]; then
@@ -309,7 +339,10 @@ function allowlistRows(): [string, string][] {
     });
 }
 
-/** A module graph shaped like the backend's: permissive libraries, a nested path, the MPL-2.0 ten. */
+/**
+ * A module graph shaped like the backend's: permissive libraries, a nested
+ * path, a gopkg.in library whose URL lookup answered, the MPL-2.0 ten.
+ */
 function backendLikeLibraries(): Library[] {
   return [
     lib('cloud.google.com/go/auth', 'Apache-2.0'),
@@ -317,12 +350,55 @@ function backendLikeLibraries(): Library[] {
     lib('github.com/google/uuid', 'BSD-3-Clause'),
     lib('github.com/opena2a-org/agent-identity-management/apps/backend', 'Apache-2.0'),
     lib('golang.org/x/crypto', 'BSD-3-Clause'),
+    lib(YAML, 'MIT'),
     ...allowlistRows().map(([library, license]) => lib(library, license)),
   ];
 }
 
+/** The URL the manifest must carry for a library: the committed one for yaml.v3 at the built version. */
+function manifestUrl(l: Library, yamlVersion = YAML_VERSION): string {
+  return l.name === YAML ? yamlUrl(yamlVersion) : l.url;
+}
+
+/** The library paths apps/backend/go.mod requires, direct and indirect. */
+function goModRequirements(): string[] {
+  const text = readFileSync(GO_MOD_PATH, 'utf-8');
+  const paths: string[] = [];
+  let inBlock = false;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\/\/.*$/, '').trim();
+    if (/^require\s*\($/.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (inBlock && line === ')') {
+      inBlock = false;
+      continue;
+    }
+    const single = /^require\s+(\S+)\s+\S+$/.exec(line);
+    if (single) paths.push(single[1]);
+    else if (inBlock && line) paths.push(line.split(/\s+/)[0]);
+  }
+  return paths;
+}
+
+/** The rows of the committed go-licenses-urls.tsv, as [library, URL template]. */
+function urlRows(): [string, string][] {
+  return readFileSync(URLS_PATH, 'utf-8')
+    .split('\n')
+    .filter((line) => !/^[ \t]*(#|$)/.test(line))
+    .map((line) => {
+      const [library, template] = line.split('\t');
+      return [library, template];
+    });
+}
+
 interface Sandbox {
   libraries?: Library[];
+  /** go-licenses-urls.tsv contents; null leaves the file out; default the committed file */
+  urls?: string | null;
+  /** what `go list -m` gives per library; default yaml.v3 at YAML_VERSION */
+  versions?: Record<string, string>;
   /** library names save writes no directory for */
   unsaved?: string[];
   /** MPL-2.0 library names save writes without source */
@@ -385,6 +461,8 @@ function runNotices(opts: Sandbox = {}): Run {
     }
     copyFileSync(SCRIPT_PATH, join(moduleRoot, 'scripts', 'third-party-notices.sh'));
     copyFileSync(ALLOWLIST_PATH, join(moduleRoot, 'go-licenses-allowlist.tsv'));
+    if (opts.urls === undefined) copyFileSync(URLS_PATH, join(moduleRoot, 'go-licenses-urls.tsv'));
+    else if (opts.urls !== null) writeFileSync(join(moduleRoot, 'go-licenses-urls.tsv'), opts.urls);
     if (opts.outExists) mkdirSync(out);
 
     writeExecutable(join(binDir, 'go'), STUB_GO);
@@ -394,6 +472,12 @@ function runNotices(opts: Sandbox = {}): Run {
     writeFileSync(join(stubDir, 'install.rc'), String(opts.installRc ?? 0));
     writeFileSync(join(stubDir, 'report.rc'), String(opts.reportRc ?? 0));
     writeFileSync(join(stubDir, 'save.rc'), String(opts.saveRc ?? 0));
+    writeFileSync(
+      join(stubDir, 'versions'),
+      Object.entries(opts.versions ?? { [YAML]: YAML_VERSION })
+        .map(([library, version]) => `${library} ${version}\n`)
+        .join(''),
+    );
     writeFileSync(
       join(stubDir, 'report.csv'),
       libraries.map((l) => `${l.name},${l.url},${l.license}\n`).join(''),
@@ -473,11 +557,14 @@ describe('third-party-notices.sh writes and verifies the notices tree', () => {
     expect(lines[0]).toBe(
       `third-party notices: ${libraries.length} libraries, 10 MPL-2.0 with source, 10 allowlisted, written to ${run.out}`,
     );
-    expect(lines.slice(1)).toEqual(MPL_LIBRARIES.map((m) => `allowlisted: ${m} MPL-2.0`));
+    expect(lines.slice(1)).toEqual([
+      ...MPL_LIBRARIES.map((m) => `allowlisted: ${m} MPL-2.0`),
+      `license URL from go-licenses-urls.tsv: ${YAML} ${yamlUrl(YAML_VERSION)}`,
+    ]);
 
     expect(run.manifest).toBe(
       'library,licenseURL,licenseName\n' +
-        libraries.map((l) => `${l.name},${l.url},${l.license}\n`).join(''),
+        libraries.map((l) => `${l.name},${manifestUrl(l)},${l.license}\n`).join(''),
     );
     const expected = ['README', 'manifest.csv'];
     for (const l of libraries) {
@@ -503,9 +590,59 @@ describe('third-party-notices.sh writes and verifies the notices tree', () => {
     expect(run.log).toEqual([
       `go install ${CHECKER_MODULE}@${pin.version}`,
       `go version -m ${checker}`,
+      `${GO_LIST_VERSION} ${YAML}`,
       `${checker} report ./... [cwd ${run.moduleRoot}]`,
       `${checker} save ./... --save_path=${run.out}.partial/licenses [cwd ${run.moduleRoot}]`,
     ]);
+  });
+
+  it('go-licenses-urls.tsv gives every gopkg.in library apps/backend/go.mod requires an https URL at {version}', () => {
+    const rows = urlRows();
+    const required = goModRequirements();
+    expect(required).toContain(YAML);
+    for (const library of required.filter((path) => path.startsWith('gopkg.in/'))) {
+      expect(rows.map(([l]) => l), `${library} has a row`).toContain(library);
+    }
+    for (const [library, template] of rows) {
+      expect(required, `${library} is required by apps/backend/go.mod`).toContain(library);
+      expect(template).toMatch(/^https:\/\/[A-Za-z0-9._~:/{}%+-]*\{version\}[A-Za-z0-9._~:/{}%+-]*$/);
+    }
+    expect(rows).toContainEqual([YAML, yamlUrl('{version}')]);
+  });
+
+  it('writes the committed URL at the built version when the report gives gopkg.in/yaml.v3 no license URL', () => {
+    // The measured failure: the lookup did not answer and the report row was
+    // `gopkg.in/yaml.v3,Unknown,MIT`.
+    const libraries = backendLikeLibraries().map((l) => (l.name === YAML ? { ...l, url: 'Unknown' } : l));
+    const run = runNotices({ libraries });
+    expect(run.stderr).toBe('');
+    expect(run.status).toBe(0);
+    expect(run.manifest).toContain(`\n${YAML},${yamlUrl(YAML_VERSION)},MIT\n`);
+    expect(run.manifest).not.toContain('Unknown');
+    expect(run.stdout).toContain(`license URL from go-licenses-urls.tsv: ${YAML} ${yamlUrl(YAML_VERSION)}\n`);
+    expect(run.outFiles).toContain(`licenses/${YAML}/LICENSE`);
+  });
+
+  it('writes the same manifest whether or not the URL lookup answered', () => {
+    const answered = runNotices();
+    const unanswered = runNotices({
+      libraries: backendLikeLibraries().map((l) => (l.name === YAML ? { ...l, url: 'Unknown' } : l)),
+    });
+    expect(answered.status).toBe(0);
+    expect(unanswered.status).toBe(0);
+    expect(unanswered.manifest).toBe(answered.manifest);
+  });
+
+  it('takes the version in the URL from the build list', () => {
+    const run = runNotices({ versions: { [YAML]: 'v3.0.2' } });
+    expect(run.status).toBe(0);
+    expect(run.manifest).toContain(`\n${YAML},${yamlUrl('v3.0.2')},MIT\n`);
+    expect(run.manifest).toBe(
+      'library,licenseURL,licenseName\n' +
+        backendLikeLibraries()
+          .map((l) => `${l.name},${manifestUrl(l, 'v3.0.2')},${l.license}\n`)
+          .join(''),
+    );
   });
 
   interface Refusal {
@@ -606,6 +743,55 @@ describe('third-party-notices.sh writes and verifies the notices tree', () => {
       }),
       status: 1,
       message: `allowlisted ${hcl} is MIT in the manifest, not the ruled MPL-2.0`,
+      checkerRan: true,
+    },
+    {
+      label: 'go-licenses-urls.tsv is missing',
+      opts: () => ({ urls: null }),
+      status: 1,
+      message: 'go-licenses-urls.tsv is missing',
+      checkerRan: false,
+    },
+    {
+      label: 'a go-licenses-urls.tsv URL has no {version}',
+      opts: () => ({ urls: `${YAML}\thttps://github.com/go-yaml/yaml/blob/v3/LICENSE\n` }),
+      status: 1,
+      message: `go-licenses-urls.tsv gives ${YAML} a URL that is not https:// with {version}`,
+      checkerRan: false,
+    },
+    {
+      label: 'a go-licenses-urls.tsv URL carries a comma',
+      opts: () => ({ urls: `${YAML}\thttps://github.com/go-yaml/yaml/blob/{version}/LICENSE,MIT\n` }),
+      status: 1,
+      message: `go-licenses-urls.tsv gives ${YAML} a URL with a character a manifest row cannot carry`,
+      checkerRan: false,
+    },
+    {
+      label: 'go-licenses-urls.tsv lists a library twice',
+      opts: () => ({ urls: `${YAML}\t${yamlUrl('{version}')}\n${YAML}\t${yamlUrl('{version}')}\n` }),
+      status: 1,
+      message: `go-licenses-urls.tsv lists ${YAML} more than once`,
+      checkerRan: false,
+    },
+    {
+      label: 'go list gives no version for a library in go-licenses-urls.tsv',
+      opts: () => ({ versions: {} }),
+      status: 1,
+      message: `go list -m ${YAML} failed, so its license URL has no version`,
+      checkerRan: false,
+    },
+    {
+      label: 'a library in go-licenses-urls.tsv is replaced in go.mod',
+      opts: () => ({ versions: { [YAML]: 'replaced' } }),
+      status: 1,
+      message: `${YAML} is replaced in go.mod`,
+      checkerRan: false,
+    },
+    {
+      label: 'a library in go-licenses-urls.tsv is missing from the report',
+      opts: () => ({ libraries: backendLikeLibraries().filter((l) => l.name !== YAML) }),
+      status: 1,
+      message: `${YAML} has a URL in go-licenses-urls.tsv but appears 0 times in the manifest, not once`,
       checkerRan: true,
     },
   ];
