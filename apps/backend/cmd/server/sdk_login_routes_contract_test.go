@@ -7,15 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// routeCensus composes "METHOD /full/path" for every route main.go registers on
-// a Fiber group rooted at app, following x := parent.Group("...") chains.
-func routeCensus(src string) map[string]bool {
+// routeGroupPrefixes maps each Fiber group variable in main.go to its full
+// path, following x := parent.Group("...") chains from app.
+func routeGroupPrefixes(src string) map[string]string {
 	groupRe := regexp.MustCompile(`(?m)^\s*(\w+)\s*:?=\s*(\w+)\.Group\("([^"]*)"`)
-	routeRe := regexp.MustCompile(`(?m)^\s*(\w+)\.(Get|Post|Put|Patch|Delete|All)\("([^"]*)"`)
 	prefix := map[string]string{"app": ""}
 	for _, m := range groupRe.FindAllStringSubmatch(src, -1) {
 		parent, ok := prefix[m[2]]
@@ -24,6 +24,14 @@ func routeCensus(src string) map[string]bool {
 		}
 		prefix[m[1]] = parent + m[3]
 	}
+	return prefix
+}
+
+// routeCensus composes "METHOD /full/path" for every route main.go registers on
+// a Fiber group rooted at app, following x := parent.Group("...") chains.
+func routeCensus(src string) map[string]bool {
+	routeRe := regexp.MustCompile(`(?m)^\s*(\w+)\.(Get|Post|Put|Patch|Delete|All)\("([^"]*)"`)
+	prefix := routeGroupPrefixes(src)
 	routes := map[string]bool{}
 	for _, m := range routeRe.FindAllStringSubmatch(src, -1) {
 		p, ok := prefix[m[1]]
@@ -33,6 +41,37 @@ func routeCensus(src string) map[string]bool {
 		routes[strings.ToUpper(m[2])+" "+p+m[3]] = true
 	}
 	return routes
+}
+
+// addBootstrapTokenRoutes adds the routes main.go mounts through
+// registerBootstrapTokenRoutes. Their paths are constants, which the literal
+// census cannot read, so the helper is mounted on a real Fiber app under the
+// group main.go passes it, with stand-in handlers, and the app's own route
+// table is read back.
+func addBootstrapTokenRoutes(t *testing.T, src string, routes map[string]bool) {
+	t.Helper()
+	call := regexp.MustCompile(`(?m)^\s*registerBootstrapTokenRoutes\((\w+),`).FindStringSubmatch(src)
+	require.Len(t, call, 2, "main.go must call registerBootstrapTokenRoutes")
+	group, ok := routeGroupPrefixes(src)[call[1]]
+	require.True(t, ok, "registerBootstrapTokenRoutes must be passed a group rooted at app, got %s", call[1])
+
+	var stub fiber.Handler = func(fiber.Ctx) error { return nil }
+	app := fiber.New()
+	registerBootstrapTokenRoutes(app.Group(group), bootstrapTokenRouteDeps{
+		Authenticate:  stub,
+		RequireMember: stub,
+		MintLimit:     stub,
+		RevokeLimit:   stub,
+		ExchangeLimit: stub,
+		Mint:          stub,
+		Revoke:        stub,
+		Exchange:      stub,
+	})
+	mounted := app.GetRoutes(true)
+	require.NotEmpty(t, mounted, "registerBootstrapTokenRoutes must mount at least one route")
+	for _, r := range mounted {
+		routes[r.Method+" "+r.Path] = true
+	}
 }
 
 func routeServed(routes map[string]bool, path string) bool {
@@ -55,6 +94,7 @@ func routeServed(routes map[string]bool, path string) bool {
 func TestSDKLoginRoutesContract(t *testing.T) {
 	mainSrc := aim03ReadRepoFile(t, "apps/backend/cmd/server/main.go")
 	routes := routeCensus(mainSrc)
+	addBootstrapTokenRoutes(t, mainSrc, routes)
 	require.True(t, routes["POST /api/v1/auth/login/local"], "census sanity: the local login route must be found")
 	require.True(t, routes["POST /api/v1/auth/refresh"], "census sanity: the refresh route must be found")
 
