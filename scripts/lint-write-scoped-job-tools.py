@@ -57,11 +57,10 @@ DEFAULT_DIR = REPO_ROOT / ".github" / "workflows"
 FIXTURE_DIR = REPO_ROOT / "scripts" / "testdata" / "write-scoped-job-tools"
 
 # (workflow, job, site) present before this check existed. security.yml grants
-# `security-events: write` to every job; these five run-time tools run under it.
+# `security-events: write` to every job; these four run-time tools run under it.
 # Fix: pin each tool to an exact version (or move it to a job with
 # `permissions: contents: read`) and delete its entry here.
 KNOWN_SITES = [
-    (".github/workflows/security.yml", "secret-scan", "@latest hackmyagent@latest"),
     (".github/workflows/security.yml", "secret-scan", "npx hackmyagent"),
     (".github/workflows/security.yml", "go-security-scan", "@latest github.com/securego/gosec/v2/cmd/gosec@latest"),
     (".github/workflows/security.yml", "go-security-scan", "@latest golang.org/x/vuln/cmd/govulncheck@latest"),
