@@ -85,7 +85,9 @@ AIM includes the following security features:
 - **Input Validation**: Comprehensive request validation
 - **SQL Injection Prevention**: Parameterized queries throughout
 - **XSS Protection**: Content Security Policy and output encoding
-- **CSRF Protection**: Token-based CSRF prevention
+- **CSRF Protection**: No CSRF token is issued or checked. The server reads no credential from a cookie: a request
+  is authenticated only by a token, API key or signature the client sends in a request header, such as
+  `Authorization` or `X-API-Key`, and a browser does not add those headers to a cross-site request on its own
 - **Rate Limiting**: API request throttling
 - **Audit Logging**: Comprehensive security event logging
 
@@ -142,9 +144,9 @@ AIM ships at 1.0 with the gate criteria above closed. This section maps each com
 | CC6.1 Logical Access | Enforced | RBAC, JWT authentication, API key scoping | |
 | CC6.3 Privileged Access | Partial | `RiskLevel` constants on capabilities (`apps/backend/internal/domain/capability.go` Low/Medium/High/Critical) gate approval requirements via `CapabilityRequestService` | The SDK registration path can still grant capabilities directly without routing through the approval workflow. See HARDENING.md "Capability lifecycle." |
 | CC6.6 System Boundaries | Enforced | Network segmentation, CORS, rate limiting | |
-| CC6.7 Data Classification | Partial | Credential encryption (Fernet + system keyring on the SDK side; AES-256-GCM at rest on the backend) | "Log sanitization" is per-event truncation of token IDs, not a tested PII redaction pipeline — treat as best-effort. |
+| CC6.7 Data Classification | Partial | Agent private keys encrypted at rest on the backend with AES-256-GCM | The Python SDK does not encrypt the credentials it stores: `aim-sdk login` writes its tokens to `~/.aim/sdk_credentials.json`, and each agent's keys go to `~/.aim/agents/<name>.json`, as plain JSON with file mode 0600. "Log sanitization" is per-event truncation of token IDs, not a tested PII redaction pipeline — treat as best-effort. |
 | CC6.8 Data Retention | Partial | `ComplianceService.GetDataRetentionStatus` exposes the configured retention policy (`apps/backend/internal/application/compliance_service.go:458`) | No background job currently enforces the policy via row-level deletion; values are reported, not yet swept. |
-| CC7.1 Configuration Management | Partial | Environment-variable-driven config | Several required secrets currently fall back to weak defaults when unset. Removing those defaults is HARDENING.md "Bootstrap secrets and configuration." |
+| CC7.1 Configuration Management | Partial | Environment-variable-driven config | The server refuses to start without `JWT_SECRET`, with one shorter than 32 characters, or with a known development value of `JWT_SECRET` or `KEYVAULT_MASTER_KEY`; it also refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is `development` or `test`. With `ENVIRONMENT=production` it refuses an empty or `postgres` `POSTGRES_PASSWORD` for a remote database host. `POSTGRES_SSL_MODE` still defaults to `disable`, which logs a warning for a remote host in production and does not stop the server. See HARDENING.md "Bootstrap secrets and configuration." |
 | CC7.2 Change Management | Enforced | Git history; `audit_logs` table records every privileged action | |
 
 ### Frameworks beyond SOC 2
@@ -165,7 +167,10 @@ If you are evaluating AIM against a specific certification, please read [HARDENI
 
 - **Data Minimization**: Only essential data collected
 - **Right to Erasure**: Agent and credential deletion supported
-- **Encryption**: All PII encrypted at rest and in transit
+- **Encryption**: The application does not encrypt personal data at rest. Users' email addresses and names are
+  stored in plain database columns; use database or volume encryption if they must be encrypted at rest. The server
+  listens on plain HTTP, so encryption in transit comes from the HTTPS endpoint in front of it and from
+  `POSTGRES_SSL_MODE` for the database connection
 - **Audit Trail**: Complete logging of data access
 - **No PII in Logs**: Token IDs and sensitive data truncated/hashed
 
