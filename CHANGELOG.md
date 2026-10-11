@@ -20,7 +20,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   405. It is now answered 405 with `Allow: POST` before the group's authentication runs. A POST is answered as
   before.
 - The transition recorder's tests now refuse a change whose event id is the event id of the nil request and which
-  names no request, and tell the refusal of a change given its own agent's opening event id by its own message.
+  names no request, and a registration given the event id of the request it names. They tell the refusal of a
+  change given its own agent's opening event id, and of an event id that is not a lowercase hyphenated UUID, each by
+  its own message.
 - Tests: `a2a_verify_route_test.go` (server routes) and `transition_test.go` (transition recorder).
 
 ### Fixed — both 400 answers of the `POST /api/v1/a2a/verify` handler carry `valid: false` (#649)

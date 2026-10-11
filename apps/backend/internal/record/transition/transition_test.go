@@ -234,6 +234,12 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 	c.EventID = OpeningEventID(c.AgentID)
 	_, err := r.Record(context.Background(), c)
 	require.ErrorContains(t, err, "event_id is the agent's opening event id")
+
+	// So is an event id that is not a lowercase hyphenated UUID.
+	c = valid
+	c.EventID = strings.ReplaceAll(uuid.NewString(), "-", "")
+	_, err = r.Record(context.Background(), c)
+	require.ErrorContains(t, err, "event_id is not a lowercase hyphenated UUID")
 }
 
 // A change given an event id reads its own agent before and after its
@@ -463,6 +469,12 @@ func TestOpeningStateIsTheRecordersOwn(t *testing.T) {
 	registration.EventID = uuid.NewString()
 	_, err = r.Record(context.Background(), registration)
 	require.ErrorIs(t, err, ErrInvalidChange)
+	// A registration that names a request is refused that request's event id
+	// too, by the rule that gives a registration its agent's opening event id.
+	request := uuid.New()
+	registration.EventID, registration.RequestID = RequestEventID(request), request
+	_, err = r.Record(context.Background(), registration)
+	require.ErrorContains(t, err, "takes the agent's opening event id, not one given")
 	assert.False(t, ran, "a refused change ran its statement")
 
 	_, err = r.OpenStates(context.Background(), uuid.Nil)
