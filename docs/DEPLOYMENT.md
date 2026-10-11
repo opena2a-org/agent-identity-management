@@ -56,7 +56,7 @@ Complete guide for deploying AIM (Agent Identity Management) in development, sta
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/opena2a/agent-identity-management.git
+git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
 # 2. Generate local secrets into .env (compose does not start without them)
@@ -83,7 +83,7 @@ open http://localhost:3000
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/opena2a/agent-identity-management.git
+git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
 # 2. Generate secrets into .env, then set ENVIRONMENT=production and your
@@ -439,7 +439,7 @@ sudo chmod +x /usr/local/bin/docker-compose
 
 ```bash
 # Clone repository
-git clone https://github.com/opena2a/agent-identity-management.git
+git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
 # Create .env with the secrets docker compose requires
@@ -732,7 +732,7 @@ docker compose up -d postgres redis
 ## 📞 Support
 
 - **Documentation**: https://opena2a.org/docs
-- **GitHub Issues**: https://github.com/opena2a/agent-identity-management/issues
+- **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 - **Discord**: https://discord.gg/opena2a
 - **Email**: info@opena2a.org
 

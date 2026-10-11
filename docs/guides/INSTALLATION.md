@@ -521,6 +521,6 @@ After installation:
 ## Getting Help
 
 - **Documentation**: https://opena2a.org/docs
-- **GitHub Issues**: https://github.com/opena2a/identity/issues
+- **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 - **Discord**: https://discord.gg/opena2a
 - **Email**: info@opena2a.org

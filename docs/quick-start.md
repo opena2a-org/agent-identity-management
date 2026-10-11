@@ -23,7 +23,7 @@ By the end of this guide, you'll have:
 
 ```bash
 # Clone the repository
-git clone https://github.com/opena2a/agent-identity-management.git
+git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
 # Generate local secrets into .env (compose does not start without them)
@@ -49,7 +49,7 @@ docker compose run --rm bootstrap
 
 ```bash
 # Clone the repository
-git clone https://github.com/opena2a/agent-identity-management.git
+git clone https://github.com/opena2a-org/agent-identity-management.git
 cd agent-identity-management
 
 # Deploy to Azure (creates all infrastructure)
@@ -567,7 +567,7 @@ agent = secure("Weather Agent")  # ❌ Wrong (spaces, capitals)
 
 - 💬 **Discord**: https://discord.gg/opena2a
 - 📧 **Email**: info@opena2a.org
-- 🐛 **GitHub Issues**: https://github.com/opena2a/agent-identity-management/issues
+- 🐛 **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 - 📚 **Documentation**: https://opena2a.org
 
 ---

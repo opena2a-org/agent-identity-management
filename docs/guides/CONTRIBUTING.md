@@ -49,12 +49,12 @@ We pledge to make participation in our project a harassment-free experience for 
 1. Fork the repository on GitHub
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/identity.git
-   cd identity
+   git clone https://github.com/YOUR_USERNAME/agent-identity-management.git
+   cd agent-identity-management
    ```
 3. Add upstream remote:
    ```bash
-   git remote add upstream https://github.com/opena2a/identity.git
+   git remote add upstream https://github.com/opena2a-org/agent-identity-management.git
    ```
 
 ### Set Up Development Environment
@@ -188,7 +188,7 @@ import (
 
     "github.com/google/uuid"
 
-    "github.com/opena2a/identity/backend/internal/domain"
+    "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 // 3. Constants
@@ -613,8 +613,8 @@ go run cmd/migrate/main.go status
 
 ## Getting Help
 
-- **Questions**: [GitHub Discussions](https://github.com/opena2a/identity/discussions)
-- **Bugs**: [GitHub Issues](https://github.com/opena2a/identity/issues)
+- **Questions**: [GitHub Discussions](https://github.com/opena2a-org/agent-identity-management/discussions)
+- **Bugs**: [GitHub Issues](https://github.com/opena2a-org/agent-identity-management/issues)
 - **Chat**: [Discord](https://discord.gg/opena2a)
 
 ## Recognition

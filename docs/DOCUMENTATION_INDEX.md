@@ -357,7 +357,7 @@ logs = agent.get_audit_logs(limit=100)
 ### Community Support
 - 💬 **Discord**: https://discord.gg/opena2a
 - 📧 **Email**: info@opena2a.org
-- 🐛 **GitHub Issues**: https://github.com/opena2a/agent-identity-management/issues
+- 🐛 **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 
 ### Professional Support
 - 🏢 **Commercial**: info@opena2a.org
