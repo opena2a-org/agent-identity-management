@@ -457,7 +457,11 @@ itself has not been assessed against any of them - see [SECURITY.md](../../SECUR
 
 ## Configuration Options
 
-### Custom Risk Levels
+### Callback Options
+
+`AIMCallbackHandler` logs tool calls; it does not verify them. It takes
+`agent`, `log_inputs`, `log_outputs`, `log_errors` (each default `True`) and
+`verbose` (default `False`):
 
 ```python
 from aim_sdk import secure
@@ -465,16 +469,8 @@ from aim_sdk.integrations.langchain import AIMCallbackHandler
 
 aim_agent = secure("my-agent")
 
-# Configure callback with custom risk levels
-callback = AIMCallbackHandler(
-    agent=aim_agent,
-    risk_levels={
-        "search": "low",           # Auto-approve searches
-        "database_query": "medium",  # Log but auto-approve
-        "delete_user": "high",     # Require approval
-        "send_email": "medium",
-    }
-)
+# Log tool calls without their inputs (for example, when inputs carry personal data)
+callback = AIMCallbackHandler(agent=aim_agent, log_inputs=False)
 
 agent_executor = AgentExecutor(
     agent=agent,
@@ -483,16 +479,29 @@ agent_executor = AgentExecutor(
 )
 ```
 
-### Auto-Retry on Verification Failure
+### Custom Risk Levels
+
+To verify each tool call with AIM before it runs, at a risk level per tool, wrap
+the tools instead:
 
 ```python
-callback = AIMCallbackHandler(
-    agent=aim_agent,
-    auto_retry=True,          # Retry failed verifications
-    max_retries=3,            # Up to 3 retries
-    retry_delay=1.0           # 1 second between retries
-)
+from aim_sdk import secure
+from aim_sdk.integrations.langchain import aim_verify, wrap_tools_with_aim
+
+aim_agent = secure("my-agent")
+
+# Every tool verified at one risk level
+verified_tools = wrap_tools_with_aim(tools, aim_agent=aim_agent, default_risk_level="medium")
+
+# Or one tool at its own level
+@aim_verify(agent=aim_agent, risk_level="high")
+def delete_user(user_id: str) -> str:
+    """Delete a user account"""
+    return database.delete_user(user_id)
 ```
+
+Retries of the requests to AIM are the client's: `AIMClient` takes `auto_retry`
+(default `True`) and `max_retries` (default 3).
 
 ### Async Support
 
@@ -536,22 +545,23 @@ search_tool = Tool(
 
 ### 3. Handle Approval Timeouts
 ```python
-from aim_sdk.exceptions import ApprovalTimeoutError
+from aim_sdk.exceptions import VerificationUnavailableError
 
 try:
     result = agent_executor.run("Delete all users")
-except ApprovalTimeoutError:
-    print("⏳ Waiting for admin approval...")
+except VerificationUnavailableError:
+    # Raised when no decision arrived in time, including an approval that timed out
+    print("⏳ No approval decision yet...")
     # Notify user to check dashboard
 ```
 
 ### 4. Monitor Trust Score
 ```python
 # Check trust score periodically
-trust_score = aim_agent.get_trust_score()
+trust_score = aim_agent.get_trust_score()["score"]
 
 if trust_score < 0.7:
-    print(f"⚠️  Low trust score: {trust_score}")
+    print(f"⚠️  Low trust score: {trust_score:.2f}")
     # Take action: notify admin, pause agent, etc.
 ```
 

@@ -66,6 +66,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The MCP registration tutorial and `docs/MCP_INTEGRATION.md` describe `register_mcp()` as it is: it takes the
   server's ID or name, returns `added_servers`, and does not attest the server.
 
+### Added — `get_trust_score()` and `get_trust_score_history()`, and the SDK pages name only what the SDK has (#666)
+
+- `AIMClient.get_trust_score(agent_id=None)` reads `GET /api/v1/agents/{id}/trust-score` and returns the
+  server's answer: `agentId`, `agentName`, `score`, `factors`, `calculatedAt`, and `excludedFactors` on a score
+  calculated for that response.
+- `AIMClient.get_trust_score_history(agent_id=None, limit=None)` reads
+  `GET /api/v1/agents/{id}/trust-score/history`, newest first; without `limit` the server returns up to 30
+  entries. A `limit` that is not a positive integer raises `ConfigurationError`.
+- `MCPActionWrapper` and `log_mcp_action_result` can be imported from `aim_sdk.integrations.mcp`, as
+  `sdk/python/docs/MCP_INTEGRATION.md` shows. They were defined in `aim_sdk.integrations.mcp.verification`
+  and not exported by the package.
+- The Python SDK pages (`docs/sdk/`, `docs/guides/A2A.md`, `docs/guides/PQC.md`, `docs/integrations/`,
+  `docs/troubleshooting/`, `docs/DOCUMENTATION_INDEX.md` and `sdk/python/docs/MCP_INTEGRATION.md`) no longer
+  document methods, functions, modules, attributes or keyword arguments the SDK does not have, among them
+  `get_audit_logs`, `export_compliance_report`, `log_action`, `submit_feedback`, `rotate_key`,
+  `create_attestation`, `update_agent_pqc_key`, `sign_request`, `AIMClient.from_sdk_token`,
+  `aim_sdk.crypto.generate_keypair`, `sign`, `verify`, `multisig_*` and `HSMSigner`, `auto_detect_mcp_servers`,
+  `register_all_mcp_servers`, `load_config`, `aim_sdk.detection.detect_*_mcp_servers` and
+  `health_check_server`, `aim_sdk.validation`, `ApprovalTimeoutError`, the `*_b64` key attributes,
+  `get_trust_score(detailed=True)`, `agent.id`, `agent.private_key` and `AIMCallbackHandler(aim_agent=...)`.
+  Each page shows the SDK call that does the job instead. Audit logs, compliance reports, user feedback and
+  webhooks are served on routes that read a user's identity, and the pages point to those REST routes and the
+  dashboard.
+- The trust score breakdowns in `docs/sdk/python.md` and `docs/sdk/trust-scoring.md` print the factors under the
+  keys the server's answer gives them (`verificationStatus`, `successRate`, ...), where they used the snake_case
+  names, and the weighted report in `trust-scoring.md` looks the weights up by those keys.
+  `TestTrustScoreDocs_PagesQuoteTheNineFactorScore` checks the values under the same keys.
+- `tests/test_documented_names_exist.py` checks every python block on those pages against the package: each
+  `aim_sdk` import resolves, each attribute read on an `AIMClient` exists, and each keyword passed to an SDK
+  callable is one of its parameters.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

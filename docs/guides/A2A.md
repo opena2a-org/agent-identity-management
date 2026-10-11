@@ -156,18 +156,10 @@ A member of the organization can attest without an agent key from the MCP server
 
 ### Trust Verification
 
-Before connecting to an MCP server, verify its trust status:
-
-```python
-# Check if MCP server is trusted
-trust_info = client.get_mcp_trust_status("database-mcp")
-
-if trust_info["trust_score"] < 0.7:
-    raise SecurityError("MCP server trust score too low")
-
-if trust_info["drift_detected"]:
-    raise SecurityError("MCP server configuration has drifted")
-```
+The SDK has no call that reads an MCP server's trust status. Check it before
+granting an agent access: the dashboard's **MCP Servers** page shows each
+server, and `GET /api/v1/mcp-servers/{id}` returns the server's record to a
+signed-in user.
 
 ## Multi-Agent Patterns
 
@@ -296,18 +288,11 @@ Visualize agent relationships in the dashboard:
 
 ### Drift Detection
 
-AIM automatically detects when agent configurations change:
-
-```python
-# Get drift alerts
-drift_alerts = client.get_drift_alerts(agent_id="my-agent-uuid")
-
-for alert in drift_alerts:
-    print(f"Drift detected: {alert['type']}")
-    print(f"  Before: {alert['previous_value']}")
-    print(f"  After: {alert['current_value']}")
-    print(f"  Severity: {alert['severity']}")
-```
+AIM automatically detects when agent configurations change. Drift alerts appear
+on the agent's page in the dashboard, and `GET /api/v1/agents/{id}/alerts`
+returns them. The SDK has no drift method; an agent's
+`get_trust_score()["factors"]["driftDetection"]` drops below 1.0 while drift is
+detected.
 
 ## Security Best Practices
 
@@ -331,16 +316,19 @@ agent = secure(
 
 ### 2. Verify Before Connect
 
-Check MCP server trust before sensitive operations:
+Check an MCP server's trust in the dashboard before granting a sensitive
+capability, and record each call so AIM keeps the server's attestation current:
 
 ```python
 @agent.perform_action(capability="payment:process")
 def process_payment(amount: float):
-    # Verify MCP server trust first
-    trust = client.get_mcp_trust_status("payment-mcp")
-    if trust["trust_score"] < 0.9:
-        raise SecurityError("Payment MCP server trust insufficient")
-
+    # Record the tool call; the SDK attests the server when needed
+    agent.use_mcp_tool(
+        "payment-mcp-uuid",
+        "process",
+        mcp_url="http://localhost:9000",
+        mcp_name="payment-mcp",
+    )
     return payment_mcp.process(amount)
 ```
 
@@ -360,33 +348,25 @@ curl -X POST http://localhost:8080/api/v1/webhooks \
 
 ### 4. Regular Attestation Review
 
-Periodically review and re-attest MCP servers:
+Periodically review and re-attest MCP servers. The dashboard lists every
+attestation of an MCP server (`GET /api/v1/mcp-servers/{id}/attestations`), and
+the SDK reports what this agent has used and attested:
 
 ```python
-# Get all attestations for an agent
-attestations = client.get_agent_attestations(agent_id="my-agent-uuid")
+report = agent.get_mcp_supply_chain_report()
 
-for att in attestations:
-    if att["age_days"] > 30:
-        print(f"Stale attestation: {att['mcp_server_name']}")
-        # Consider re-attesting or removing
+print(f"{report['mcpServerCount']} MCP servers, {report['totalToolInvocations']} tool calls")
+for server_id, stats in report["servers"].items():
+    print(server_id, stats)
 ```
 
 ## Compliance and Audit
 
 ### Audit Trail
 
-All A2A interactions are logged:
-
-```python
-# Query agent communication history
-audit_logs = client.get_audit_logs(
-    agent_id="my-agent-uuid",
-    event_types=["mcp.connection", "attestation.created"],
-    start_date="2025-01-01",
-    end_date="2025-01-31"
-)
-```
+All A2A interactions are logged. The SDK has no audit log method: read an
+agent's audit log in the dashboard, or with
+`GET /api/v1/agents/{id}/audit-logs?limit=50&offset=0` and a user's access token.
 
 ### Compliance Reports
 
@@ -474,28 +454,28 @@ agent = secure(
 
 ### Attestation Failures
 
-If attestation is failing:
+If attestation is failing, attest again and read the error:
 
 ```python
-# Check MCP server reachability
+from aim_sdk.exceptions import AIMError
+
 try:
-    response = client.verify_mcp_server("database-mcp")
-    print(f"Server status: {response['status']}")
-except Exception as e:
-    print(f"Server unreachable: {e}")
+    agent.attest_mcp(mcp_server_id="mcp-server-uuid", capabilities=["query"])
+except AIMError as e:
+    print(f"Attestation failed: {e}")
 ```
 
 ### Trust Score Too Low
 
-If trust scores are unexpectedly low:
+If an agent's trust score is unexpectedly low, read its factors:
 
 ```python
-# Get detailed trust breakdown
-trust_details = client.get_mcp_trust_details("database-mcp")
-
-for factor in trust_details["factors"]:
-    print(f"{factor['name']}: {factor['score']} (weight: {factor['weight']})")
+for factor, score in agent.get_trust_score()["factors"].items():
+    print(f"{factor}: {score:.2f}")
 ```
+
+For an MCP server's trust, open the server in the dashboard's **MCP Servers**
+page.
 
 ## Related Documentation
 

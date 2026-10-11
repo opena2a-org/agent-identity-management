@@ -45,7 +45,11 @@ from aim_sdk.integrations.mcp.registration import (
     use_mcp_tool,
     get_attestation_challenge,  # For proof of private key possession
 )
-from aim_sdk.integrations.mcp.verification import verify_mcp_action
+from aim_sdk.integrations.mcp.verification import (
+    verify_mcp_action,
+    log_mcp_action_result,
+    MCPActionWrapper,
+)
 from aim_sdk.integrations.mcp.discovery import (
     discover_capabilities,
     auto_discover_capabilities,
@@ -66,6 +70,8 @@ __all__ = [
     "get_attestation_challenge",
     # Verification
     "verify_mcp_action",
+    "log_mcp_action_result",
+    "MCPActionWrapper",
     # Discovery (opt-in feature)
     "discover_capabilities",
     "auto_discover_capabilities",

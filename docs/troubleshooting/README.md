@@ -257,13 +257,13 @@ If auto-detection misses capabilities, add manually:
 ```python
 client = secure(
     "my-agent",
-    auto_detect_capabilities=False,  # Disable auto-detection
-    capabilities=[
-        {"name": "send_email", "risk_level": "medium"},
-        {"name": "read_database", "risk_level": "low"}
-    ]
+    capabilities=["email:send", "db:read"]  # Replaces the auto-detected capabilities
 )
 ```
+
+`auto_detect=False` turns off agent type and capability detection altogether.
+To set a capability's risk level, register it with
+`client.register_capability("email:send", risk_level="medium")`.
 
 #### 3. Check Claude Desktop Config
 
