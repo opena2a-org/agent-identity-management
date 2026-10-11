@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the compliance page fits a phone screen and its text is readable in both themes
+
+- On a 375px screen the compliance page scrolled sideways by 104px: each audit trail event is a growing flex box,
+  and without `min-w-0` it stayed as wide as its whole description line, so a long URL was never cut with an
+  ellipsis. The box can now shrink, and the page has no horizontal overflow at 375x812 or 1280x800.
+- The "Trust:" label and the event status in the audit trail read at 2.43:1 in the light theme and 2.56:1 in the dark
+  theme. Every card on the page is now a glass card and every colour comes from the theme tokens (ink colours for text;
+  the success, warning, danger and brand tokens for status), as on the overview and the security page. Measured in a
+  browser after the change, no text on the page is under 4.5:1 in either theme or viewport except the active sidebar
+  link, part of the shared navigation, which still reads 4.38:1 in the dark theme at 375x812.
+- In the audit trail and the security alerts list, high and medium severity now share the warning colour (they were
+  orange and yellow); critical stays in the danger colour, and the badge names the severity in words.
+- `tests/page-standard.test.ts` holds the overview's lenses, the security page and the compliance page to two rules:
+  no Tailwind palette class, and no growing flex item around truncated text that cannot shrink.
+- `docs/ux/chart-contrast-2026-10-11.md` gains the third run, before and after, over the compliance page.
+
 ### Fixed — the compliance page's charts are drawn on the glass card, so their axis text is readable in the dark theme
 
 - The trust score trend and the risk distribution on the compliance page sat on a `bg-white dark:bg-gray-800` card,

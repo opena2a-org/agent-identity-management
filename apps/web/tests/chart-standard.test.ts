@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { rawColours } from "./raw-colours";
 
 // The chart standard, enforced. Every chart renders through components/charts,
 // so nothing else in app/ or components/ imports recharts; chart code takes its
@@ -27,12 +28,6 @@ function files(dir: string, out: string[] = []): string[] {
 
 const RECHARTS_IMPORT = /from\s+["']recharts["']|import\(\s*["']recharts["']\s*\)|require\(\s*["']recharts["']\s*\)/;
 
-// Hex colours, functional colour notation, and Tailwind palette classes.
-const HEX = /#[0-9a-fA-F]{3,6}/;
-const COLOR_FUNCTION = /\b(?:rgb|rgba|hsl|hsla)\(/;
-const PALETTE_CLASS =
-  /\b(?:text|bg|stroke|fill|border|ring|outline|from|via|to|divide|shadow|accent|decoration)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
-
 // The marks of a chart drawn by hand: SVG arcs dashed into slices or a gauge, and
 // any element announced as one image, which is how a CSS bar row passes for a chart.
 const HAND_DRAWN = /<circle\b|<ellipse\b|strokeDash(?:array|offset)|role=\{?\s*["']img["']/;
@@ -42,17 +37,6 @@ function handDrawn(text: string): string[] {
   text.split("\n").forEach((line, i) => {
     const m = line.match(HAND_DRAWN);
     if (m) found.push(`${i + 1}: ${m[0]}`);
-  });
-  return found;
-}
-
-function rawColours(text: string): string[] {
-  const found: string[] = [];
-  text.split("\n").forEach((line, i) => {
-    for (const pattern of [HEX, COLOR_FUNCTION, PALETTE_CLASS]) {
-      const m = line.match(pattern);
-      if (m) found.push(`${i + 1}: ${m[0]}`);
-    }
   });
   return found;
 }

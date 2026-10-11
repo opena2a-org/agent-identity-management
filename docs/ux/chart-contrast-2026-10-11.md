@@ -164,3 +164,57 @@ Not changed by this: the page's other cards keep `bg-white dark:bg-gray-800`, so
 two chart cards differ from their neighbours in fill and corner radius; the "Trust:"
 label still measures 2.43 light and 2.56 dark; and the page still overflows by 104px at
 375x812.
+
+## Third run: the whole compliance page on the theme tokens
+
+The commit that adds this section moves every card on the compliance page onto the glass
+card and every colour on the page onto the theme tokens (the ink colours for text, the
+success, warning, danger and brand tokens for status, `bg-glass-inset-gray`, `bg-track`
+and `border-divider` for surfaces and rules). The page carried 198 lines with a palette
+class; it now carries none. No other page or component of the dashboard changes in that
+commit, so only `/dashboard/compliance` was measured, before and after, on the same
+dashboard served by `next dev`.
+
+- Command: `node apps/web/scripts/ux-sweep.mjs --base http://localhost:<port> --out result.json --only /dashboard/compliance --fixture populated`
+- Before: started 2026-10-11T18:08:13Z, finished 2026-10-11T18:08:22Z, 4 loads, exit code 1.
+- After: started 2026-10-11T18:20:27Z, finished 2026-10-11T18:20:36Z, 4 loads, exit code 1
+  (the body text criterion still fails, on the sidebar link named below). Neither result
+  file lists a request the mock did not recognise, and neither recorded a console error.
+
+| Measure | Variant | Before | After |
+|---|---|---|---|
+| Body text minimum | 375x812 light | 2.43 ("Trust:") | 4.67 ("View ABOM") |
+| Body text minimum | 1280x800 light | 2.43 ("Trust:") | 4.62 (active sidebar link) |
+| Body text minimum | 375x812 dark | 2.56 ("Trust:") | 4.38 (active sidebar link) |
+| Body text minimum | 1280x800 dark | 2.56 ("Trust:") | 4.59 (active sidebar link) |
+| Horizontal overflow | 375x812, both themes | 104px | 0px |
+| Horizontal overflow | 1280x800, both themes | 0px | 0px |
+| Chart text minimum | light / dark | 5.48 / 4.79 | 5.48 / 4.79 |
+| Series mark minimum | light / dark | 3.40 / 4.90 | 3.40 / 4.90 |
+
+- **The overflow.** Each event in the audit trail is a `flex-1` box beside its timeline
+  dot. A flex item is never narrower than its content unless it carries `min-w-0`, so
+  the box was as wide as its whole description line before truncation (a registration
+  event's URL): the widest box ended at 479px on a 375px screen. The box now carries
+  `min-w-0`, and the description is cut with an ellipsis inside it.
+- **Text under 4.5:1.** Before, the sweep listed text under the floor in all four
+  variants (its list stops at 25 entries per variant, and the light variants reached it):
+  the "Trust:" label with its score and the event status ("verified", "pending",
+  "suspended"), all `text-gray-400` at 2.43 light and 2.56 dark; the page subtitle at 4.15
+  and the ABOM description at 4.32 in the light theme; and the indigo "registration" badge
+  at 4.10 in the dark theme. After, the only text under the floor in any variant is the
+  active sidebar link at 375x812 dark. The label and the status are now the secondary ink
+  colour.
+- **Badges inside the event box.** A first pass filled the event box with
+  `bg-glass-inset-gray`; the brand-tinted "registration" badge on that second tint
+  measured 4.28 light and 4.00 dark. The event box is now outlined with `border-divider`
+  rather than filled, so a badge sits on one tint over the glass card.
+- **Left under the floor:** the active sidebar link, 4.38 in the dark theme at 375x812.
+  It belongs to the shared navigation, not to this page, and was recorded on the
+  executive lens and the security page in the first run.
+
+`apps/web/tests/page-standard.test.ts` holds the overview's lenses, the security page and
+the compliance page to two rules read from the source: no palette class, and no growing
+flex item (`flex-1`, `grow`) around a `truncate` line without `min-w-0` or a clipping
+overflow. Before this commit it reported the 198 palette lines and the event box at the
+line the browser measured.
