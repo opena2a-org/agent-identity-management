@@ -13,7 +13,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Security — every dashboard page is served with a Content-Security-Policy
 
-- The dashboard sends a `Content-Security-Policy` header on every response. The policy is built in
+- The dashboard sends a `Content-Security-Policy` header with the pages, static files and not-found answers it
+  serves. Two kinds of response do not carry this policy. A path the dashboard relays to the backend (`/api/*`,
+  `/health`, `/health/*`, `/.well-known/agent.json`, `/.well-known/aip`) is answered with the backend's
+  `Content-Security-Policy` header when the backend sends one, and with none otherwise. A 308 redirect for a moved
+  page listed in `apps/web/lib/redirects.ts`, or for a path with a trailing slash, carries none. The policy is built in
   `apps/web/lib/content-security-policy.ts` and set from `headers()` in `apps/web/next.config.ts`. Script loads only
   from the dashboard origin. The page connects only to the dashboard origin and to the origin of
   `NEXT_PUBLIC_API_URL`. `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` and `frame-ancestors 'none'`
