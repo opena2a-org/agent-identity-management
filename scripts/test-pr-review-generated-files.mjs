@@ -1,5 +1,5 @@
 // node:test cells for scripts/pr-review-generated-files.mjs and for the three
-// workflows that wire it in (QGF-226). Run from the repository root:
+// workflows that wire it in. Run from the repository root:
 //
 //   node --test scripts/test-pr-review-generated-files.mjs
 //
@@ -255,7 +255,7 @@ function expectedPlaceholder({ p, status, sha, section, deltaLines, verdict, che
 // AC1
 // ---------------------------------------------------------------------------
 
-test('QGF-226.AC1 a generated lockfile path is recognised by its final segment at any depth or its .lock suffix, excluded from the context list, and reported in input order', (t) => {
+test('GENERATED-FILES.AC1 a generated lockfile path is recognised by its final segment at any depth or its .lock suffix, excluded from the context list, and reported in input order', (t) => {
   const generated = [];
   for (const prefix of ['', 'apps/web/', 'a/b/c/']) for (const name of GENERATED_BASENAMES) generated.push(`${prefix}${name}`);
   generated.push('mix.lock', 'apps/web/flake.lock');
@@ -396,7 +396,7 @@ function ac2Expected(tree, sections, spAceDelta) {
   );
 }
 
-test('QGF-226.AC2 npm-family sections are replaced by a placeholder carrying status, digest, elided counts, delta, instrument and verdict; every other section is preserved byte-identical and recorded', (t) => {
+test('GENERATED-FILES.AC2 npm-family sections are replaced by a placeholder carrying status, digest, elided counts, delta, instrument and verdict; every other section is preserved byte-identical and recorded', (t) => {
   const { tree, baseTree, sections, diff, changedFiles } = ac2Inputs(t);
   const r = compose(t, { tree, baseTree, changedFiles, diff });
   assert.equal(r.status, 0, r.stderr);
@@ -445,7 +445,7 @@ test('QGF-226.AC2 npm-family sections are replaced by a placeholder carrying sta
   );
 });
 
-test('QGF-226.AC2 an entry path carrying a line feed renders as one escaped delta line', (t) => {
+test('GENERATED-FILES.AC2 an entry path carrying a line feed renders as one escaped delta line', (t) => {
   const { tree, baseTree, sections, diff, changedFiles } = ac2Inputs(t, { evil: true });
   const r = compose(t, { tree, baseTree, changedFiles, diff });
   assert.equal(r.status, 0, r.stderr);
@@ -466,7 +466,7 @@ function lockfileSections(tree, paths) {
   return paths.map((p) => addedSection(p, fs.readFileSync(path.join(tree, p), 'utf8').split('\n').slice(0, -1))).join('');
 }
 
-test('QGF-226.AC3 the six checks hold over a consistent fixture tree: PASS with root-parity PASS for the workspace member, root lockfile and standalone not applicable', (t) => {
+test('GENERATED-FILES.AC3 the six checks hold over a consistent fixture tree: PASS with root-parity PASS for the workspace member, root lockfile and standalone not applicable', (t) => {
   const { dir: tree } = writeFixtureTree(t);
   const paths = ['apps/web/package-lock.json', 'package-lock.json', 'sdk/typescript/package-lock.json'];
   const r = compose(t, { tree, changedFiles: `${paths.join('\n')}\n`, diff: lockfileSections(tree, paths) });
@@ -558,7 +558,7 @@ function runPlant(t, plant) {
   return { ...r, tree };
 }
 
-test('QGF-226.AC4 each planted defect yields verdict FAIL with the named check line, no other check failing except root-parity where parity detects the plant, exit 0 and the diff written', (t) => {
+test('GENERATED-FILES.AC4 each planted defect yields verdict FAIL with the named check line, no other check failing except root-parity where parity detects the plant, exit 0 and the diff written', (t) => {
   for (const plant of AC4_PLANTS) {
     const r = runPlant(t, plant);
     assert.equal(r.status, 0, `plant (${plant.id}): ${r.stderr}`);
@@ -680,7 +680,7 @@ const AC5_PLANTS = [
   },
 ];
 
-test('QGF-226.AC5 a missing precondition is exit 2 with one standard-error line naming the path and the cause, and no output file is created or modified', (t) => {
+test('GENERATED-FILES.AC5 a missing precondition is exit 2 with one standard-error line naming the path and the cause, and no output file is created or modified', (t) => {
   for (const plant of AC5_PLANTS) {
     for (const preset of [undefined, 'sentinel: untouched\n']) {
       const { tree, baseTree, diff } = plant.build(t);
@@ -699,7 +699,7 @@ test('QGF-226.AC5 a missing precondition is exit 2 with one standard-error line 
   }
 });
 
-test('QGF-226.AC5 a deleted npm lockfile yields a placeholder with sha256 absent, verdict DELETED, no check lines and every base entry removed, exit 0', (t) => {
+test('GENERATED-FILES.AC5 a deleted npm lockfile yields a placeholder with sha256 absent, verdict DELETED, no check lines and every base entry removed, exit 0', (t) => {
   const { dir: tree } = writeFixtureTree(t);
   const { dir: baseTree } = writeFixtureTree(t);
   const section = deletedSection(WEB, webLines(tree));
@@ -752,7 +752,7 @@ function runText(text, name) {
     .join('\n');
 }
 
-test('QGF-226.AC10 --enforce-report exits 0 on an all-PASS report, 1 on a FAIL naming the path and check, 2 on an absent or malformed report, and the workflow ends on the always-run enforce step', (t) => {
+test('GENERATED-FILES.AC10 --enforce-report exits 0 on an all-PASS report, 1 on a FAIL naming the path and check, 2 on an absent or malformed report, and the workflow ends on the always-run enforce step', (t) => {
   const { tree, baseTree, diff, changedFiles } = ac2Inputs(t);
   const green = compose(t, { tree, baseTree, changedFiles, diff });
   assert.equal(green.status, 0, green.stderr);
@@ -806,7 +806,7 @@ const PLACEHOLDER_SENTENCES = [
   'The "delta:" lines of a placeholder list every package entry the change adds, removes or alters, by entry path and version, computed from the lockfile at the base and at the pull request head; a lockfile change is reviewed from those lines.',
 ];
 
-test('QGF-226.AC6 pr-review.yml hands the substituted diff and the filtered file list to the reviewer, and the instrument imports node built-ins only', () => {
+test('GENERATED-FILES.AC6 pr-review.yml hands the substituted diff and the filtered file list to the reviewer, and the instrument imports node built-ins only', () => {
   const text = fs.readFileSync(PR_REVIEW, 'utf8');
   const gather = runText(text, 'Gather review context');
   const lines = gather.split('\n');
@@ -1019,7 +1019,7 @@ function jobBlock(text, id) {
   return lines.slice(start, end).filter((l) => !l.trim().startsWith('#'));
 }
 
-test('QGF-226.AC8 ci.yml runs the cells in a pr-review-input-guard job the CI Gate needs, with no escape hatch', () => {
+test('GENERATED-FILES.AC8 ci.yml runs the cells in a pr-review-input-guard job the CI Gate needs, with no escape hatch', () => {
   const text = fs.readFileSync(CI, 'utf8');
   const job = jobBlock(text, 'pr-review-input-guard');
   assert.ok(job.some((l) => /^\s+- uses: actions\/checkout@/.test(l)), 'the job checks out the repository');
@@ -1048,7 +1048,7 @@ test('QGF-226.AC8 ci.yml runs the cells in a pr-review-input-guard job the CI Ga
 // AC11
 // ---------------------------------------------------------------------------
 
-test('QGF-226.AC11 gate-file-approval.yml covers the instrument path in its gate-file predicate and names it in the no-gate-files summary', () => {
+test('GENERATED-FILES.AC11 gate-file-approval.yml covers the instrument path in its gate-file predicate and names it in the no-gate-files summary', () => {
   const text = fs.readFileSync(GATE, 'utf8');
   const run = runText(text, 'Evaluate and post the check run');
   const lines = run.split('\n').map((l) => l.trim());

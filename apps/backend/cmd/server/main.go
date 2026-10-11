@@ -151,27 +151,8 @@ func main() {
 		log.Fatal("SIEM forwarding: ", err)
 	}
 
-	// Initialize cache (optional - skip if Redis is unavailable)
-	var cacheService *cache.RedisCache
-	if redisClient != nil {
-		cacheService, err = cache.NewRedisCache(&cache.CacheConfig{
-			Host:     cfg.Redis.Host,
-			Port:     cfg.Redis.Port,
-			Password: cfg.Redis.Password,
-			DB:       cfg.Redis.DB,
-			UseTLS:   cfg.Redis.UseTLS,
-		})
-		if err != nil {
-			log.Printf("⚠️  Cache initialization failed: %v", err)
-			log.Println("ℹ️  AIM will continue without caching")
-			cacheService = nil
-		} else {
-			log.Println("✅ Cache service initialized")
-		}
-	} else {
-		log.Println("ℹ️  Cache service skipped (Redis unavailable)")
-		cacheService = nil
-	}
+	// Initialize cache (optional - skipped when there is no Redis connection)
+	cacheService := initCache(cfg, redisClient)
 
 	// Initialize infrastructure services
 	jwtService := auth.NewJWTService()
@@ -479,6 +460,35 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 
 	log.Println("✅ Redis connected")
 	return client, nil
+}
+
+// initCache builds the cache service when startup has a Redis connection.
+// With no connection it returns nil and logs why the cache was skipped: Redis
+// turned off by an empty REDIS_HOST, or Redis that could not be reached.
+func initCache(cfg *config.Config, redisClient *redis.Client) *cache.RedisCache {
+	if redisClient == nil {
+		if cfg.Redis.Disabled {
+			log.Println("ℹ️  Cache service skipped (Redis disabled)")
+		} else {
+			log.Println("ℹ️  Cache service skipped (Redis unavailable)")
+		}
+		return nil
+	}
+
+	cacheService, err := cache.NewRedisCache(&cache.CacheConfig{
+		Host:     cfg.Redis.Host,
+		Port:     cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		UseTLS:   cfg.Redis.UseTLS,
+	})
+	if err != nil {
+		log.Printf("⚠️  Cache initialization failed: %v", err)
+		log.Println("ℹ️  AIM will continue without caching")
+		return nil
+	}
+	log.Println("✅ Cache service initialized")
+	return cacheService
 }
 
 type Repositories struct {

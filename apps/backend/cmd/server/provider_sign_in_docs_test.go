@@ -157,10 +157,10 @@ func providerSignInDocFiles(t *testing.T, root string) []string {
 	return files
 }
 
-// The doc files are the tracked guides and templates: a file that is untracked
-// or ignored is not read, whatever its name or directory, and a tracked file
-// that is neither Markdown nor an environment template is not read either.
-func TestProviderSignInDocFilesAreTheTrackedGuides(t *testing.T) {
+// scratchRepositoryDocFiles builds a git repository that holds tracked,
+// untracked and ignored files, and returns the doc files read from it.
+func scratchRepositoryDocFiles(t *testing.T) []string {
+	t.Helper()
 	requireGit(t)
 	top := t.TempDir()
 	noHooks := t.TempDir()
@@ -186,7 +186,9 @@ func TestProviderSignInDocFilesAreTheTrackedGuides(t *testing.T) {
 			write(rel, "tracked "+rel+"\n")
 		}
 	}
-	git(append([]string{"add", "--"}, tracked...)...)
+	// Staged with -f: these files are tracked whatever this machine's own git
+	// ignore rules name (a global excludes file, for one).
+	git(append([]string{"add", "-f", "--"}, tracked...)...)
 
 	// Untracked, in a dotted directory, and ignored: none is a guide.
 	write("LOCAL.md", "untracked\n")
@@ -194,7 +196,33 @@ func TestProviderSignInDocFilesAreTheTrackedGuides(t *testing.T) {
 	write("build/out.md", "ignored\n")
 	write("build/.env.example", "ignored\n")
 
-	assert.Equal(t, []string{".env.example", "README.md", "docs/guide.md"}, providerSignInDocFiles(t, top))
+	return providerSignInDocFiles(t, top)
+}
+
+// The doc files are the tracked guides and templates: a file that is untracked
+// or ignored is not read, whatever its name or directory, and a tracked file
+// that is neither Markdown nor an environment template is not read either.
+func TestProviderSignInDocFilesAreTheTrackedGuides(t *testing.T) {
+	assert.Equal(t, []string{".env.example", "README.md", "docs/guide.md"}, scratchRepositoryDocFiles(t))
+}
+
+// The scratch repository does not depend on the developer's git configuration:
+// a global excludes file that names every tracked fixture changes nothing.
+func TestProviderSignInDocFilesWithAGlobalExcludesFile(t *testing.T) {
+	requireGit(t)
+	home := t.TempDir()
+	excludes := filepath.Join(home, "excludes")
+	require.NoError(t, os.WriteFile(excludes, []byte(".env.example\n.gitignore\n*.md\nnotes.txt\n"), 0o600))
+	globalConfig := filepath.Join(home, "gitconfig")
+	_, err := gitIn(home, "config", "--file", globalConfig, "core.excludesFile", excludes)
+	require.NoError(t, err)
+	t.Setenv("GIT_CONFIG_GLOBAL", globalConfig)
+
+	inEffect, err := gitIn(home, "config", "--global", "--get", "core.excludesFile")
+	require.NoError(t, err)
+	require.Equal(t, excludes, strings.TrimSpace(inEffect), "git reads the global configuration this test wrote")
+
+	assert.Equal(t, []string{".env.example", "README.md", "docs/guide.md"}, scratchRepositoryDocFiles(t))
 }
 
 // No guide, README or environment template tells a reader to configure or use
