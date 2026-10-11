@@ -4,15 +4,90 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 )
+
+// migrationsDir is read relative to the working directory, so the tool runs
+// from apps/backend.
+const migrationsDir = "migrations"
+
+const (
+	commandUp     = "up"
+	commandStatus = "status"
+	commandCreate = "create"
+	commandHelp   = "help"
+)
+
+type command struct {
+	name          string
+	migrationName string
+}
+
+// unavailableCommands are verbs other migration tools offer that this one
+// refuses, each with the reason and what to do instead.
+var unavailableCommands = map[string]string{
+	"down": "the migrations in migrations/ have no down scripts, so there is nothing to roll back. " +
+		"To reverse a change, add a migration that undoes it (`migrate create <name>`) and run `migrate up`.",
+	"force": "applied migrations are recorded by file name in schema_migrations, not as one version number, " +
+		"so there is no version to force. `migrate status` lists the applied and pending migrations.",
+	"drop": "the tool does not delete data. To reset a development database, drop and recreate it " +
+		"(for example with dropdb and createdb), then run `migrate up`.",
+}
+
+var migrationNamePattern = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*$`)
+
+// parseArgs reads the command line. No arguments means up, which is how CI and
+// the deploy scripts call the tool.
+func parseArgs(args []string) (command, error) {
+	if len(args) == 0 {
+		return command{name: commandUp}, nil
+	}
+	name, rest := args[0], args[1:]
+	switch name {
+	case commandUp, commandStatus:
+		if len(rest) > 0 {
+			return command{}, fmt.Errorf("migrate %s takes no arguments, got %q", name, strings.Join(rest, " "))
+		}
+		return command{name: name}, nil
+	case commandCreate:
+		if len(rest) != 1 {
+			return command{}, fmt.Errorf("migrate create takes one argument, the migration name (for example add_column_to_agents)")
+		}
+		if !migrationNamePattern.MatchString(rest[0]) {
+			return command{}, fmt.Errorf("migration name %q must be lowercase letters and digits joined by underscores (for example add_column_to_agents)", rest[0])
+		}
+		return command{name: commandCreate, migrationName: rest[0]}, nil
+	case commandHelp, "-h", "--help":
+		return command{name: commandHelp}, nil
+	}
+	if reason, ok := unavailableCommands[name]; ok {
+		return command{}, fmt.Errorf("migrate %s is not available: %s", name, reason)
+	}
+	return command{}, fmt.Errorf("unknown command %q", name)
+}
+
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage: migrate [command]
+
+Run from apps/backend with DATABASE_URL set (create needs neither the variable nor a database).
+
+Commands:
+  up             Apply every pending migration in migrations/ (the default when no command is given)
+  status         List applied and pending migrations without changing the database
+  create <name>  Write an empty migration file numbered one above the highest existing number
+  help           Show this message
+`)
+}
 
 const (
 	// ANSI color codes
@@ -33,6 +108,28 @@ type Migration struct {
 }
 
 func main() {
+	// Read the command before connecting, so a command this tool refuses never
+	// reaches the database.
+	cmd, err := parseArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n\n", err)
+		printUsage(os.Stderr)
+		os.Exit(2)
+	}
+
+	switch cmd.name {
+	case commandHelp:
+		printUsage(os.Stdout)
+		return
+	case commandCreate:
+		path, err := createMigration(migrationsDir, cmd.migrationName)
+		if err != nil {
+			log.Fatalf("❌ Failed to create migration: %v", err)
+		}
+		fmt.Printf("Created %s\n", path)
+		return
+	}
+
 	// Get database URL from environment
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -52,6 +149,13 @@ func main() {
 
 	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("❌ Failed to ping database: %v", err)
+	}
+
+	if cmd.name == commandStatus {
+		if err := printStatus(ctx, db, migrationsDir, os.Stdout); err != nil {
+			log.Fatalf("❌ Failed to read migration status: %v", err)
+		}
+		return
 	}
 
 	fmt.Printf("%s════════════════════════════════════════%s\n", colorCyan, colorReset)
@@ -271,6 +375,107 @@ func filterPendingMigrations(migrations []Migration, applied map[string]bool) []
 		}
 	}
 	return pending
+}
+
+// printStatus lists the applied and pending migrations. It only reads: on a
+// database the tool has not run against, schema_migrations does not exist yet
+// and every migration is pending.
+func printStatus(ctx context.Context, db *sql.DB, dir string, w io.Writer) error {
+	migrations, err := readMigrationFiles(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read migration files: %w", err)
+	}
+
+	var tableExists bool
+	if err := db.QueryRowContext(ctx, "SELECT to_regclass('schema_migrations') IS NOT NULL").Scan(&tableExists); err != nil {
+		return fmt.Errorf("failed to look up schema_migrations: %w", err)
+	}
+	applied := map[string]bool{}
+	if tableExists {
+		if applied, err = getAppliedMigrations(ctx, db); err != nil {
+			return fmt.Errorf("failed to get applied migrations: %w", err)
+		}
+	}
+	pending := filterPendingMigrations(migrations, applied)
+
+	lastApplied := ""
+	known := make(map[string]bool, len(migrations))
+	for _, m := range migrations {
+		known[m.Version] = true
+		if applied[m.Version] {
+			lastApplied = m.Filename
+		}
+	}
+	var unknown []string
+	for version := range applied {
+		if !known[version] {
+			unknown = append(unknown, version)
+		}
+	}
+	sort.Strings(unknown)
+
+	fmt.Fprintf(w, "Migration files in %s/: %d\n", dir, len(migrations))
+	if !tableExists {
+		fmt.Fprintf(w, "schema_migrations does not exist yet; `migrate up` creates it\n")
+	}
+	if lastApplied != "" {
+		fmt.Fprintf(w, "Applied: %d (last: %s)\n", len(migrations)-len(pending), lastApplied)
+	} else {
+		fmt.Fprintf(w, "Applied: 0\n")
+	}
+	fmt.Fprintf(w, "Pending: %d\n", len(pending))
+	for _, m := range pending {
+		fmt.Fprintf(w, "  pending  %s\n", m.Filename)
+	}
+	if len(unknown) > 0 {
+		fmt.Fprintf(w, "Recorded in schema_migrations with no file in %s/: %d\n", dir, len(unknown))
+		for _, version := range unknown {
+			fmt.Fprintf(w, "  recorded %s\n", version)
+		}
+	}
+	return nil
+}
+
+// createMigration writes an empty migration file numbered one above the
+// highest number in dir and returns its path. It never overwrites a file.
+func createMigration(dir, name string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read %s: %w", dir, err)
+	}
+	highest := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		number, _, ok := strings.Cut(entry.Name(), "_")
+		if !ok || number == "" || strings.Trim(number, "0123456789") != "" {
+			continue
+		}
+		n, err := strconv.Atoi(number)
+		if err != nil {
+			continue
+		}
+		if n > highest {
+			highest = n
+		}
+	}
+
+	path := filepath.Join(dir, fmt.Sprintf("%03d_%s.sql", highest+1, name))
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return "", err
+	}
+	header := fmt.Sprintf("-- Migration %03d: %s\n"+
+		"--\n"+
+		"-- `migrate up` applies this file once, in one transaction, and records it in\n"+
+		"-- schema_migrations by file name. There is no down script: to reverse this\n"+
+		"-- change, add another migration.\n\n", highest+1, strings.ReplaceAll(name, "_", " "))
+	if _, err := file.WriteString(header); err != nil {
+		file.Close()
+		return "", err
+	}
+	return path, file.Close()
 }
 
 func applyMigration(ctx context.Context, db *sql.DB, migration Migration) error {

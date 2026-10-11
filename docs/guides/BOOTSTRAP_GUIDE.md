@@ -29,12 +29,22 @@ cd apps/backend
 go run cmd/migrate/main.go up
 ```
 
-Expected output:
+Expected output on an empty database (abbreviated):
 ```
-✅ Applied migration: 001_initial_schema_fixed.sql
-✅ Applied migration: 002_performance_indexes.sql
-✅ Applied migration: 003_local_authentication.up.sql
+🆕 Fresh database detected
+   No V1 consolidated schema present; applying incremental migrations
+
+📝 Found <n> pending migration(s)
+
+▶ Applying: 001_initial_schema.sql
+  ✓ Applied
+▶ Applying: 002_add_missing_user_columns.sql
+  ✓ Applied
+...
+  ✅ All migrations applied successfully
 ```
+
+`go run cmd/migrate/main.go status` then reports every migration as applied and none pending.
 
 ### Step 2: Run Bootstrap Command
 
