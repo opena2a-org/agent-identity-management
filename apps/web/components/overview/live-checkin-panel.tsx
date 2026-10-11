@@ -62,7 +62,7 @@ export function LiveCheckinPanel({ arrived, onArrived }: { arrived: Agent | null
     >
       {arrived ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-avatar bg-gradient-to-br from-[#e0f2fe] to-[#bae6fd] text-sm font-bold text-[#0369a1] dark:from-[#0c4a6e] dark:to-[#075985] dark:text-[#7dd3fc]">
+          <span className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-avatar avatar-tint-1 text-sm font-bold">
             {(arrived.displayName || arrived.name || "?").slice(0, 1).toLowerCase()}
           </span>
           <div className="min-w-0 flex-1">

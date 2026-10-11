@@ -3,12 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { chartChrome, chartSeries, chartTooltipStyle } from "@/components/charts/tokens";
 import {
-  colorsIn,
   contrastRatio,
   over,
   parseColor,
-  resolveValue,
   themeTokens,
+  tokenColor,
+  translucentSurfaces,
   type Rgba,
   type Theme,
 } from "./theme-contrast";
@@ -26,12 +26,7 @@ const THEMES: Theme[] = ["light", "dark"];
 
 const css = readFileSync(join(__dirname, "..", "app", "globals.css"), "utf8");
 
-function color(tokens: Map<string, string>, value: string): Rgba {
-  const resolved = resolveValue(tokens, value);
-  const c = parseColor(resolved);
-  if (!c) throw new Error(`${value} resolves to ${resolved}, not a colour`);
-  return c;
-}
+const color = tokenColor;
 
 // A chart sits on a glass card (tests/chart-surface.test.ts fails for one that
 // does not). The card is translucent over the page, so its
@@ -39,11 +34,7 @@ function color(tokens: Map<string, string>, value: string): Rgba {
 // under the peak of either radial wash; where the glass is drawn solid (reduced
 // transparency, no backdrop-filter) it is the solid fill.
 function chartSurfaces(tokens: Map<string, string>): Rgba[] {
-  const page = [...colorsIn(resolveValue(tokens, "var(--bg-page)")), color(tokens, "var(--bg-page-solid)")];
-  const washes = ["var(--wash-1)", "var(--wash-2)"].map((w) => color(tokens, w));
-  const grounds = page.flatMap((p) => [p, ...washes.map((w) => over(w, p))]);
-  const glass = color(tokens, "var(--glass-fill)");
-  return [...grounds.map((g) => over(glass, g)), color(tokens, "var(--glass-fill-solid)")];
+  return translucentSurfaces(tokens, "var(--glass-fill)", "var(--glass-fill-solid)");
 }
 
 function lowest(fg: Rgba, backgrounds: Rgba[]): number {

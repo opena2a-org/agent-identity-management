@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the active navigation link, the overview's agent initials and the security tiles' units are readable in both themes
+
+- The active link in the navigation read at 4.38:1 in the dark theme in the phone drawer, and its colour held under
+  4.5:1 over the light chrome under the page's cyan wash. It now has its own colour token, held to 4.5:1 over every
+  surface the navigation sits on in both themes (4.93:1 dark, 5.21:1 light at its lowest).
+- The agent initials in the overview's agent list were drawn on four hex gradients written into the page, and read as
+  low as 4.14:1 in the light theme and 4.24:1 in the dark theme. The four tints are now theme tokens with the same
+  gradients, and each initial holds 4.5:1 on both stops in both themes (4.87:1 at the lowest). The check-in panel's
+  avatar uses the first tint.
+- The unit beside each figure in the security view's policy tiles ("monitored", "verified", "incidents") read at 4.20:1
+  in the dark theme; it is now the secondary text colour.
+- Measured in a browser with the readability sweep over the overview's three views, the security page and the
+  compliance page, both themes and both viewports: no text under 4.5:1 remains (21 texts were), and the sweep's gate
+  passes. The run is recorded in `docs/ux/chart-contrast-2026-10-11.md`.
+- `tests/text-contrast.test.ts` holds the active link, the four tints and the tile units to 4.5:1 from the theme
+  tokens in both themes, and `tests/page-standard.test.ts` now also fails on a hex value or colour function on these
+  screens.
+
 ### Fixed — the compliance page fits a phone screen and its text is readable in both themes
 
 - On a 375px screen the compliance page scrolled sideways by 104px: each audit trail event is a growing flex box,

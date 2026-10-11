@@ -83,6 +83,16 @@ export function resolveValue(tokens: Map<string, string>, value: string, depth =
 
 const COLOR = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g;
 
+/** `hsl(h s% l%)` or `hsl(h, s%, l%)` (the shadcn triplets) as sRGB. */
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const sat = s / 100;
+  const light = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(light, 1 - light);
+  const f = (n: number) => light - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return [f(0) * 255, f(8) * 255, f(4) * 255];
+}
+
 export function parseColor(value: string): Rgba | null {
   const v = value.trim();
   const hex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.exec(v);
@@ -98,7 +108,35 @@ export function parseColor(value: string): Rgba | null {
     if (parts.length < 3 || parts.some(Number.isNaN)) return null;
     return [parts[0], parts[1], parts[2], parts[3] ?? 1];
   }
+  const hsl = /^hsla?\(([^)]*)\)$/.exec(v);
+  if (hsl) {
+    const parts = hsl[1].split(/[\s,/]+/).filter(Boolean).map((p) => parseFloat(p));
+    if (parts.length < 3 || parts.some(Number.isNaN)) return null;
+    return [...hslToRgb(parts[0], parts[1], parts[2]), parts[3] ?? 1];
+  }
   return null;
+}
+
+/** The colour `value` resolves to in `tokens`; an error when it names no single colour. */
+export function tokenColor(tokens: Map<string, string>, value: string): Rgba {
+  const resolved = resolveValue(tokens, value);
+  const c = parseColor(resolved);
+  if (!c) throw new Error(`${value} resolves to ${resolved}, not a colour`);
+  return c;
+}
+
+/**
+ * The colours a translucent surface (`fill`) takes over the page: composited
+ * over each stop of the page gradient, bare and under the peak of either radial
+ * wash, plus `solid`, the opaque fill drawn under reduced transparency or
+ * without backdrop-filter.
+ */
+export function translucentSurfaces(tokens: Map<string, string>, fill: string, solid: string): Rgba[] {
+  const page = [...colorsIn(resolveValue(tokens, "var(--bg-page)")), tokenColor(tokens, "var(--bg-page-solid)")];
+  const washes = ["var(--wash-1)", "var(--wash-2)"].map((w) => tokenColor(tokens, w));
+  const grounds = page.flatMap((p) => [p, ...washes.map((w) => over(w, p))]);
+  const surface = tokenColor(tokens, fill);
+  return [...grounds.map((g) => over(surface, g)), tokenColor(tokens, solid)];
 }
 
 /** Every colour a value names, in order: one for a plain colour, each stop for a gradient. */

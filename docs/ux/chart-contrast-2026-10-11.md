@@ -218,3 +218,79 @@ the compliance page to two rules read from the source: no palette class, and no 
 flex item (`flex-1`, `grow`) around a `truncate` line without `min-w-0` or a clipping
 overflow. Before this commit it reported the 198 palette lines and the event box at the
 line the browser measured.
+
+## Fourth run: the last text under the floor on the five entries
+
+The commit that adds this section changes the three kinds of text the earlier runs left
+under 4.5:1 on these entries: the active link of the shared navigation, the agent initials
+in the developer lens's agent list, and the unit beside a figure in the security lens's
+inset tiles. Nothing else on the dashboard changes in that commit.
+
+- Command: the same as the second run, over the same five entries with the populated
+  fixture, on the dashboard served by `next dev` before and after the change.
+- Before: started 2026-10-11T18:31:14Z, finished 2026-10-11T18:32:00Z, 20 loads, exit code 1.
+- After: started 2026-10-11T18:37:24Z, finished 2026-10-11T18:38:10Z, 20 loads, exit code 0
+  (`GATE: PASS`). Neither result file lists a request the mock did not recognise, and
+  neither recorded a console error.
+
+| Criterion | Entries failing, before | Entries failing, after |
+|---|---|---|
+| Body text contrast, whole page | 5 of 5 | 0 of 5 |
+| Every other gated criterion | 0 of 5 | 0 of 5 |
+
+Body text minimum per variant. Text under the floor, summed over the 20 variants: 21
+before, 0 after.
+
+| Entry | Variant | Before | After |
+|---|---|---|---|
+| /dashboard (developer lens) | 375x812 light | 4.14 (agent initial) | 4.70 |
+| /dashboard (developer lens) | 1280x800 light | 4.14 (agent initial) | 4.70 |
+| /dashboard (developer lens) | 375x812 dark | 4.24 (agent initial) | 4.59 |
+| /dashboard (developer lens) | 1280x800 dark | 4.24 (agent initial) | 4.70 |
+| /dashboard (security lens) | 375x812 light | 4.85 | 5.28 |
+| /dashboard (security lens) | 1280x800 light | 4.62 (active sidebar link) | 4.70 |
+| /dashboard (security lens) | 375x812 dark | 4.20 ("monitored") | 4.59 |
+| /dashboard (security lens) | 1280x800 dark | 4.20 ("monitored") | 4.70 |
+| /dashboard (executive lens) | 375x812 light | 4.70 | 4.70 |
+| /dashboard (executive lens) | 1280x800 light | 4.62 (active sidebar link) | 4.70 |
+| /dashboard (executive lens) | 375x812 dark | 4.38 (active sidebar link) | 4.59 |
+| /dashboard (executive lens) | 1280x800 dark | 4.59 (active sidebar link) | 4.70 |
+| /dashboard/compliance | 375x812 light | 4.67 | 4.67 |
+| /dashboard/compliance | 1280x800 light | 4.62 (active sidebar link) | 4.67 |
+| /dashboard/compliance | 375x812 dark | 4.38 (active sidebar link) | 4.59 |
+| /dashboard/compliance | 1280x800 dark | 4.59 (active sidebar link) | 4.59 |
+| /dashboard/security | 375x812 light | 4.67 | 4.67 |
+| /dashboard/security | 1280x800 light | 4.62 (active sidebar link) | 4.67 |
+| /dashboard/security | 375x812 dark | 4.38 (active sidebar link) | 4.59 |
+| /dashboard/security | 1280x800 dark | 4.59 (active sidebar link) | 4.59 |
+
+After the change the lowest text in each variant is unchanged text the sweep already held
+over the floor: white on the brand button (4.70), brand text on its tint (4.67 light, 4.59
+dark), and the "Viewing as" label in the phone drawer (4.59 dark).
+
+- **Active sidebar link.** It was drawn in `--brand-text` on `--nav-active-fill`:
+  rgb(41,151,255) on rgb(32,49,68) in the dark phone drawer (4.38), and rgb(0,102,204) on
+  rgb(223,235,250) over the light chrome (4.62). It now has its own token,
+  `--nav-active-text`. Computed from the tokens over every surface the navigation sits on
+  (the chrome over each page stop, bare and under either wash, the solid chrome, and the
+  drawer's opaque overlay), the lowest ratio is 4.30 dark and 4.40 light for `--brand-text`
+  and 4.93 dark and 5.21 light for the new token.
+- **Agent initials.** The four tints were hex gradients written into the overview and the
+  check-in panel; the initial was measured against the gradient's second stop: rgb(21,128,61)
+  on rgb(187,247,208) (4.14 light) and rgb(253,164,175) on rgb(159,18,57) (4.24 dark), with
+  the sky and rose initials at 4.47 and 4.46 light. The tints are now `--avatar-1` to `-4`
+  in `app/globals.css`, drawn by `.avatar-tint-1` to `-4`, with the same gradients and an
+  initial one step deeper (light) or lighter (dark) where it fell short. Lowest computed
+  ratio on either stop: 5.12 light and 4.87 dark.
+- **Inset tile unit.** "monitored", "verified" and "incidents" were the tertiary ink,
+  rgb(134,134,139) on rgb(37,38,40) (4.20 dark). They are now the secondary ink. Computed
+  over the inset tile on the glass card: tertiary 3.94 dark and 4.81 light, secondary 5.55
+  dark and 5.60 light.
+
+Not changed: the sweep's ungated counts of text under 12px and targets under 24px still
+list all five entries, as in every earlier run.
+
+`apps/web/tests/text-contrast.test.ts` holds the three pairings to 4.5:1 from the tokens
+in both themes, and `apps/web/tests/page-standard.test.ts` now also fails on a hex value or
+colour function on these screens. Before this commit they reported the missing tokens and
+the five hex lines.
