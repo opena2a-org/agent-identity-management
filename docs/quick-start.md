@@ -100,7 +100,18 @@ echo "AIM_PRIVATE_KEY=your-private-key-from-dashboard" >> .env
 
 ---
 
-## Step 3: Download AIM SDK (15 seconds)
+## Step 3: Install the AIM SDK (15 seconds)
+
+The SDK is published on PyPI as `aim-sdk`. Install it and sign in to your AIM instance:
+
+```bash
+pip install aim-sdk
+aim-sdk login --url http://localhost:8080
+```
+
+`aim-sdk login` prints a code; approve it on your dashboard's `/device` page. The SDK saves its credentials to `~/.aim/`.
+
+**Alternative: download a pre-configured SDK.** The dashboard can also give you the SDK as a ZIP with your personal credentials embedded, so you skip `aim-sdk login`:
 
 1. **Login** to AIM dashboard
 2. **Navigate** to Settings → SDK Download
@@ -115,8 +126,6 @@ cd aim-sdk-python
 # Install dependencies
 pip install -r requirements.txt
 ```
-
-**Note**: There is NO pip package. The SDK must be downloaded from your AIM instance as it contains your personal credentials.
 
 **Verify Installation**:
 ```bash

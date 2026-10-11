@@ -18,13 +18,14 @@ Secure LangChain agents with AIM in **2 lines of code**.
 
 ## Quick Start (5 Minutes)
 
-### Step 1: Download AIM SDK and Install Dependencies
+### Step 1: Install the AIM SDK and LangChain
 
-**Download AIM SDK from dashboard** ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds)):
-- **NO pip install available** - must download from dashboard
-- Extract the ZIP file to your project directory
+**Install from PyPI** ([Install Instructions](../quick-start.md#step-3-install-the-aim-sdk-15-seconds)):
+```bash
+pip install aim-sdk langchain langchain-openai
+```
 
-**Install Dependencies**:
+**Or download a pre-configured SDK from the dashboard**, extract the ZIP file to your project directory, and install its dependencies:
 ```bash
 # Install AIM SDK dependencies and LangChain
 pip install keyring PyNaCl requests cryptography PyJWT langchain langchain-openai

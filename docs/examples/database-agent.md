@@ -23,13 +23,16 @@ An AI agent that:
 1. ✅ AIM platform running ([Quick Start Guide](../quick-start.md))
 2. ✅ PostgreSQL database (local or cloud)
 3. ✅ Python 3.8+ installed
-4. ✅ AIM SDK downloaded from dashboard ([Download Instructions](../quick-start.md#step-3-download-aim-sdk-and-install-dependencies-30-seconds))
-   - **NO pip install available** - must download from dashboard
+4. ✅ AIM SDK installed ([Install Instructions](../quick-start.md#step-3-install-the-aim-sdk-15-seconds))
 
 ### Install Dependencies
 
 ```bash
-# Install AIM SDK dependencies and PostgreSQL driver
+# Install the AIM SDK and the PostgreSQL driver
+pip install aim-sdk psycopg2-binary
+
+# Or, with a pre-configured SDK downloaded from the dashboard,
+# install its dependencies and the PostgreSQL driver
 pip install keyring PyNaCl requests cryptography PyJWT psycopg2-binary
 ```
 
