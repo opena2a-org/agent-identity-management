@@ -89,7 +89,7 @@ export function ExecutiveLens({
           {activity.length === 0 ? (
             <EmptyNote>No verifications recorded yet.</EmptyNote>
           ) : (
-            <VerificationsPerMonthChart activity={activity} legend className="mt-4 h-[190px]" />
+            <VerificationsPerMonthChart activity={activity} legend className="mt-4 h-[234px]" />
           )}
         </div>
 
@@ -102,12 +102,13 @@ export function ExecutiveLens({
               <DonutChart
                 title="Agents by trust score"
                 data={buckets}
+                columns={["Trust score", "Agents"]}
                 center={avgTrust !== null ? { value: avgTrust, caption: "Avg trust" } : undefined}
                 tooltip={false}
                 innerRadius={38}
                 outerRadius={52}
                 paddingAngle={2}
-                className="h-[118px] w-[118px] flex-shrink-0"
+                className="h-[162px] w-[118px] flex-shrink-0"
               />
               <ul className="flex flex-1 flex-col gap-2">
                 {buckets.map((b) => (

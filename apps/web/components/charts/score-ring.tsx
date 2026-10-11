@@ -24,8 +24,21 @@ export function ScoreRing({ title, value, max = 100, color = chartSeries.brand, 
     { name: "score", value: filled },
     { name: "remaining", value: max - filled },
   ];
+  const table = {
+    columns: ["Measure", "Value"],
+    rows: [
+      [title, String(value)],
+      ["Out of", String(max)],
+    ],
+  };
   return (
-    <ChartFrame label={`${title}: ${value} of ${max}`} className={className} center={children}>
+    <ChartFrame
+      title={title}
+      label={`${title}: ${value} of ${max}`}
+      table={table}
+      className={className}
+      center={children}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

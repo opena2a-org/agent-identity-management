@@ -405,6 +405,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
                       changedBy: entry.changedBy,
                     }))}
                     xKey="timestamp"
+                    xLabel="Date"
                     series={[{ key: 'score', name: 'Trust score (%)', color: chartSeries.brand, kind: 'line', dots: true }]}
                     yDomain={[0, 100]}
                     yLabel="Trust score (%)"

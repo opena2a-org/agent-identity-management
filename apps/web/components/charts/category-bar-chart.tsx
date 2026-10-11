@@ -2,7 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "./chart-frame";
-import { describeParts } from "./describe";
+import { columnHeading, describeParts } from "./describe";
 import { chartAxisTick, chartChrome, chartSeries, chartTooltipStyle, type ChartColor } from "./tokens";
 
 export interface CategoryBarChartProps<T extends Record<string, unknown>> {
@@ -13,6 +13,8 @@ export interface CategoryBarChartProps<T extends Record<string, unknown>> {
   categoryKey: keyof T & string;
   /** Field holding the count drawn as the bar. */
   valueKey: keyof T & string;
+  /** The table's column headings (default: the two field names). */
+  columns?: [string, string];
   color?: ChartColor;
   className?: string;
 }
@@ -22,15 +24,15 @@ export function CategoryBarChart<T extends Record<string, unknown>>({
   data,
   categoryKey,
   valueKey,
+  columns = [columnHeading(categoryKey), columnHeading(valueKey)],
   color = chartSeries.brand,
   className,
 }: CategoryBarChartProps<T>) {
-  const label = describeParts(
-    title,
-    data.map((d) => ({ name: String(d[categoryKey]), value: String(d[valueKey]) })),
-  );
+  const parts = data.map((d) => ({ name: String(d[categoryKey]), value: String(d[valueKey]) }));
+  const label = describeParts(title, parts);
+  const table = { columns, rows: parts.map((p) => [p.name, p.value]) };
   return (
-    <ChartFrame label={label} className={className}>
+    <ChartFrame title={title} label={label} table={table} className={className}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke={chartChrome.grid} />

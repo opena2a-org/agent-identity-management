@@ -250,7 +250,7 @@ function VerificationActivityCard({ activity }: { activity: VerificationActivity
         <p className="mt-3 text-xs text-ink-secondary">No verifications yet. They show up here as your agents check in.</p>
       ) : (
         <>
-          <VerificationsPerMonthChart activity={activity} axes={false} className="mt-3 h-16" />
+          <VerificationsPerMonthChart activity={activity} axes={false} className="mt-3 h-[108px]" />
           <div className="mt-2 flex justify-between text-2xs text-ink-tertiary">
             <span>{activity[0]?.month}</span>
             <span>{activity[activity.length - 1]?.month}</span>

@@ -11,6 +11,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — every chart offers its values as a table, and the light theme draws four series darker
+
+- Every chart drawn by `apps/web/components/charts` has a "View as table" control above the plot that swaps the
+  chart for a table of the same values: one row per slice, bar or point, one column per series, a donut's centre
+  summary as a closing row, and the chart's title as the table's caption. A point that does not carry a series'
+  value reads "not reported", never zero. The table reads without colour and is the keyboard path to the data;
+  "View as chart" swaps back. `DonutChart` and `CategoryBarChart` take `columns` and `TrendChart` takes `xLabel` for
+  the table's headings.
+- The control is 44px tall and takes that height from the chart's box. The overview's verification activity
+  (developer and executive views), the executive view's trust distribution, the compliance page's risk distribution
+  and the security page's posture score are 44px taller so their plots keep their size; the other charts give the
+  44px from the plot.
+- In the light theme the green, amber, sky and orange series measured 2.04, 1.87, 1.97 and 2.58 to 1 against the
+  glass card, under the 3:1 floor for graphical objects (WCAG 1.4.11). The light theme now draws them as `#248a3d`,
+  `#b87400`, `#0891b2` and `#d0590a`, measured 4.05, 3.49, 3.39 and 3.78 to 1. The dark theme is unchanged. Donut
+  slice labels are drawn in the axis text colour instead of the slice colour, so they are held to the text floor.
+- `tests/chart-contrast.test.ts` reads the `--chart-*` tokens from `app/globals.css` in both themes and fails when a
+  series colour falls under 3:1, or the axis or tooltip text under 4.5:1, against any surface a chart is drawn on:
+  the glass card over each stop of the page gradient, bare or under either wash, and the solid glass fallback.
+
 ### Changed — the overview and security pages draw their charts through the chart layer
 
 - The overview's verification activity (developer and executive views), the executive view's trust distribution
