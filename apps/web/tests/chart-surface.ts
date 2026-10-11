@@ -49,7 +49,7 @@ const NOT_A_PAINT =
   /^bg-(?:transparent|none|clip-|origin-|repeat|no-repeat|cover|contain|auto|center|top|bottom|left|right|fixed|local|scroll|blend-|opacity-)/;
 
 /** A class with its variants (`dark:`, `hover:`, `md:`) and `!` removed. */
-function baseClass(token: string): string {
+export function baseClass(token: string): string {
   let depth = 0;
   let start = 0;
   for (let i = 0; i < token.length; i++) {
@@ -93,9 +93,9 @@ function classesIn(attribute: ts.JsxAttribute): string[] {
   return out;
 }
 
-type JsxTag = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+export type JsxTag = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
 
-function classNameOf(tag: JsxTag): string[] {
+export function classNameOf(tag: JsxTag): string[] {
   for (const property of tag.attributes.properties) {
     if (ts.isJsxAttribute(property) && property.name.getText() === "className") return classesIn(property);
   }

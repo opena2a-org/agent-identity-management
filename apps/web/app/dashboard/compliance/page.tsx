@@ -217,41 +217,16 @@ function ComplianceSummaryCard({
   passed: number;
   total: number;
   icon: any;
-  color: "blue" | "green" | "purple" | "orange";
+  color: "brand" | "success";
   checks: CheckResult[];
   onNavigate?: (url: string) => void;
 }) {
   const progress = total > 0 ? Math.round((passed / total) * 100) : 0;
 
+  // Theme tokens only: the icon tile is a tint with the icon in the matching text colour.
   const colorMap = {
-    blue: {
-      bg: "bg-blue-500",
-      bgLight: "bg-blue-50 dark:bg-blue-950",
-      border: "border-blue-100 dark:border-blue-900",
-      text: "text-blue-600 dark:text-blue-400",
-      badge: "bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300"
-    },
-    purple: {
-      bg: "bg-purple-500",
-      bgLight: "bg-purple-50 dark:bg-purple-950",
-      border: "border-purple-100 dark:border-purple-900",
-      text: "text-purple-600 dark:text-purple-400",
-      badge: "bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300"
-    },
-    green: {
-      bg: "bg-green-500",
-      bgLight: "bg-green-50 dark:bg-green-950",
-      border: "border-green-100 dark:border-green-900",
-      text: "text-green-600 dark:text-green-400",
-      badge: "bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300"
-    },
-    orange: {
-      bg: "bg-orange-500",
-      bgLight: "bg-orange-50 dark:bg-orange-950",
-      border: "border-orange-100 dark:border-orange-900",
-      text: "text-orange-600 dark:text-orange-400",
-      badge: "bg-orange-100 dark:bg-orange-900/50 text-orange-700 dark:text-orange-300"
-    },
+    brand: { tile: "bg-brand-soft", icon: "text-brand-text", text: "text-brand-text", bar: "bg-brand" },
+    success: { tile: "bg-success-fill", icon: "text-success-text", text: "text-success-text", bar: "bg-success" },
   };
   const colors = colorMap[color];
 
@@ -350,24 +325,24 @@ function ComplianceSummaryCard({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div className="glass overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-5 border-b border-gray-100 dark:border-gray-700">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className={`${colors.bg} p-3 rounded-xl shadow-lg`}>
-              <Icon className="h-6 w-6 text-white" />
+      <div className="px-6 py-5 border-b border-divider">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className={`${colors.tile} p-3 rounded-inset-sm flex-shrink-0`}>
+              <Icon className={`h-6 w-6 ${colors.icon}`} />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{description}</p>
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-ink">{title}</h3>
+              <p className="text-sm text-ink-secondary">{description}</p>
             </div>
           </div>
-          <div className="text-right">
-            <div className={`text-3xl font-bold ${progress === 100 ? "text-green-600 dark:text-green-400" : progress >= 80 ? colors.text : "text-amber-600 dark:text-amber-400"}`}>
+          <div className="text-right flex-shrink-0">
+            <div className={`text-3xl font-bold ${progress === 100 ? "text-success-text" : progress >= 80 ? colors.text : "text-warning-text"}`}>
               {progress}%
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <div className="text-xs text-ink-secondary mt-0.5">
               {progress === 100 ? "All Passed" : `${passed}/${total} Passed`}
             </div>
           </div>
@@ -375,17 +350,17 @@ function ComplianceSummaryCard({
       </div>
 
       {/* Progress bar */}
-      <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+      <div className="px-6 py-3 border-b border-divider bg-glass-inset-gray">
+        <div className="w-full bg-track rounded-full h-2">
           <div
-            className={`h-2 rounded-full transition-all duration-500 ${progress === 100 ? "bg-green-500" : progress >= 80 ? colors.bg : "bg-amber-500"}`}
+            className={`h-2 rounded-full transition-all duration-500 ${progress === 100 ? "bg-success" : progress >= 80 ? colors.bar : "bg-warning"}`}
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
       {/* Individual checks with details */}
-      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+      <div className="divide-y divide-divider">
         {checks.map((check, idx) => {
           const info = getCheckInfo(check);
           const hasIssues = !check.passed && (check.count || 0) > 0;
@@ -393,33 +368,33 @@ function ComplianceSummaryCard({
           return (
             <div
               key={idx}
-              className={`px-6 py-3 ${hasIssues && onNavigate ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50" : ""} transition-colors`}
+              className={`px-6 py-3 ${hasIssues && onNavigate ? "cursor-pointer hover:bg-glass-inset-gray" : ""} transition-colors`}
               onClick={() => hasIssues && onNavigate && onNavigate(info.actionUrl)}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div className="mt-0.5">
                     {check.passed ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <CheckCircle className="h-5 w-5 text-success" />
                     ) : (
-                      <AlertTriangle className="h-5 w-5 text-amber-500" />
+                      <AlertTriangle className="h-5 w-5 text-warning" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">{info.label}</span>
+                      <span className="text-sm font-medium text-ink">{info.label}</span>
                       {hasIssues && onNavigate && (
-                        <ArrowUpRight className="h-3 w-3 text-gray-400" />
+                        <ArrowUpRight className="h-3 w-3 text-ink-tertiary" />
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{info.description}</p>
+                    <p className="text-xs text-ink-secondary mt-0.5">{info.description}</p>
                   </div>
                 </div>
                 <div className="flex-shrink-0">
                   <span className={`inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full ${
                     check.passed
-                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                      : "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                      ? "bg-success-fill text-success-text"
+                      : "bg-warning-fill text-warning-text"
                   }`}>
                     {info.statusText}
                   </span>
@@ -429,12 +404,12 @@ function ComplianceSummaryCard({
               {hasIssues && check.affectedItems && check.affectedItems.length > 0 && (
                 <div className="mt-2 ml-8 flex flex-wrap gap-1">
                   {check.affectedItems.slice(0, 3).map((item, i) => (
-                    <span key={i} className="inline-flex items-center text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <span key={i} className="inline-flex items-center text-xs px-2 py-0.5 rounded bg-glass-inset-gray text-ink-secondary">
                       {item.name}
                     </span>
                   ))}
                   {check.affectedItems.length > 3 && (
-                    <span className="text-xs text-gray-400">+{check.affectedItems.length - 3} more</span>
+                    <span className="text-xs text-ink-secondary">+{check.affectedItems.length - 3} more</span>
                   )}
                 </div>
               )}
@@ -450,34 +425,34 @@ function ComplianceSummaryCard({
 // Component: Alert Activity Item - for showing security alerts/violations
 function AlertActivityItem({ alert }: { alert: AlertEntry }) {
   const severityStyles = {
-    critical: { icon: XCircle, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20", badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
-    high: { icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20", badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
-    medium: { icon: AlertTriangle, color: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20", badge: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
-    low: { icon: Info, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20", badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    info: { icon: Info, color: "text-gray-600 dark:text-gray-400", bg: "bg-gray-50 dark:bg-gray-900/20", badge: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400" },
+    critical: { icon: XCircle, color: "text-danger", bg: "bg-danger-fill", badge: "bg-danger-fill text-danger-text" },
+    high: { icon: AlertTriangle, color: "text-warning", bg: "bg-warning-fill", badge: "bg-warning-fill text-warning-text" },
+    medium: { icon: AlertTriangle, color: "text-warning", bg: "bg-warning-fill", badge: "bg-warning-fill text-warning-text" },
+    low: { icon: Info, color: "text-brand-text", bg: "bg-brand-soft", badge: "bg-brand-soft text-brand-text" },
+    info: { icon: Info, color: "text-ink-tertiary", bg: "bg-glass-inset-gray", badge: "bg-glass-inset-gray text-ink-body" },
   };
   const style = severityStyles[alert.severity] || severityStyles.info;
   const Icon = style.icon;
 
   return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+    <div className="flex items-start gap-3 py-2.5 border-b border-divider last:border-0">
       <div className={`p-1.5 rounded-lg ${style.bg} flex-shrink-0`}>
         <Icon className={`h-4 w-4 ${style.color}`} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{alert.title}</p>
+          <p className="text-sm font-medium text-ink truncate">{alert.title}</p>
           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full uppercase ${style.badge}`}>
             {alert.severity}
           </span>
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{alert.description}</p>
+        <p className="text-xs text-ink-secondary mt-0.5 truncate">{alert.description}</p>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-gray-400">{formatRelativeTime(alert.createdAt)}</span>
+          <span className="text-xs text-ink-secondary">{formatRelativeTime(alert.createdAt)}</span>
           {alert.isAcknowledged && (
             <>
-              <span className="text-xs text-gray-400">•</span>
-              <span className="text-xs text-green-600 dark:text-green-400">Acknowledged</span>
+              <span className="text-xs text-ink-secondary" aria-hidden="true">•</span>
+              <span className="text-xs text-success-text">Acknowledged</span>
             </>
           )}
         </div>
@@ -485,61 +460,22 @@ function AlertActivityItem({ alert }: { alert: AlertEntry }) {
     </div>
   );
 }
-
-// Component: Compliance Activity Item - for agent/check-related activities
-function ComplianceActivityItem({ activity }: { activity: { type: "agent" | "check" | "trust"; title: string; description: string; timestamp: string; status?: "passed" | "failed" | "warning" } }) {
-  const typeStyles = {
-    agent: { icon: Shield, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
-    check: { icon: FileCheck, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-900/20" },
-    trust: { icon: TrendingUp, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
-  };
-  const statusStyles = {
-    passed: "text-green-600 dark:text-green-400",
-    failed: "text-red-600 dark:text-red-400",
-    warning: "text-yellow-600 dark:text-yellow-400",
-  };
-  const style = typeStyles[activity.type];
-  const Icon = style.icon;
-
-  return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
-      <div className={`p-1.5 rounded-lg ${style.bg} flex-shrink-0`}>
-        <Icon className={`h-4 w-4 ${style.color}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.title}</p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{activity.description}</p>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-gray-400">{formatRelativeTime(activity.timestamp)}</span>
-          {activity.status && (
-            <>
-              <span className="text-xs text-gray-400">•</span>
-              <span className={`text-xs capitalize ${statusStyles[activity.status]}`}>{activity.status}</span>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 
 // Component: Stat Card
 function StatCard({ stat }: { stat: { name: string; value: string; icon: any; iconColor?: string; change?: string; changeType?: string } }) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+    <div className="glass p-5">
       <div className="flex items-center justify-between">
-        <div className="flex-shrink-0 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-700">
-          <stat.icon className={`h-5 w-5 ${stat.iconColor || "text-gray-500"}`} />
+        <div className="flex-shrink-0 p-2.5 rounded-lg bg-glass-inset-gray">
+          <stat.icon className={`h-5 w-5 ${stat.iconColor || "text-ink-tertiary"}`} />
         </div>
         {stat.change && (
           <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
             stat.changeType === "positive"
-              ? "text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400"
+              ? "text-success-text bg-success-fill"
               : stat.changeType === "negative"
-              ? "text-red-700 bg-red-100 dark:bg-red-900/30 dark:text-red-400"
-              : "text-gray-700 bg-gray-100 dark:bg-gray-700 dark:text-gray-400"
+              ? "text-danger-text bg-danger-fill"
+              : "text-ink-body bg-glass-inset-gray"
           }`}>
             {stat.changeType === "positive" ? <ArrowUpRight className="h-3 w-3" /> :
              stat.changeType === "negative" ? <ArrowDownRight className="h-3 w-3" /> :
@@ -549,8 +485,8 @@ function StatCard({ stat }: { stat: { name: string; value: string; icon: any; ic
         )}
       </div>
       <div className="mt-4">
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{stat.name}</p>
-        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stat.value}</p>
+        <p className="text-sm font-medium text-ink-secondary">{stat.name}</p>
+        <p className="text-2xl font-bold text-ink mt-1">{stat.value}</p>
       </div>
     </div>
   );
@@ -650,24 +586,24 @@ function CompliancePageSkeleton() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-8 w-64 rounded" />
-        <div className="animate-pulse bg-gray-200 dark:bg-gray-700 h-4 w-96 rounded" />
+        <div className="animate-pulse bg-track h-8 w-64 max-w-full rounded" />
+        <div className="animate-pulse bg-track h-4 w-96 max-w-full rounded" />
       </div>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700">
+          <div key={i} className="glass p-5">
             <div className="animate-pulse space-y-3">
-              <div className="h-10 w-10 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-              <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
-              <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+              <div className="h-10 w-10 bg-track rounded-lg" />
+              <div className="h-4 w-20 bg-track rounded" />
+              <div className="h-8 w-16 bg-track rounded" />
             </div>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-5">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 h-64">
-            <div className="animate-pulse h-full bg-gray-200 dark:bg-gray-700 rounded" />
+          <div key={i} className="glass p-5 h-64">
+            <div className="animate-pulse h-full bg-track rounded" />
           </div>
         ))}
       </div>
@@ -682,28 +618,28 @@ function ErrorDisplay({ message, onRetry }: { message: string; onRetry: () => vo
   return (
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center px-4">
-        <Shield className={`h-16 w-16 ${is403 ? "text-amber-500" : "text-red-500"}`} />
+        <Shield className={`h-16 w-16 ${is403 ? "text-warning" : "text-danger"}`} />
         <div className="space-y-2">
-          <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          <h3 className="text-2xl font-bold text-ink">
             {is403 ? "Access Restricted" : "Failed to Load Compliance Data"}
           </h3>
           {is403 ? (
             <div className="space-y-3">
-              <p className="text-base text-gray-600 dark:text-gray-400">
+              <p className="text-base text-ink-body">
                 Compliance monitoring is only available to <strong>Admin</strong> roles.
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-ink-secondary">
                 Contact your organization administrator to access compliance features.
               </p>
             </div>
           ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">{message}</p>
+            <p className="text-sm text-ink-secondary">{message}</p>
           )}
         </div>
         {!is403 && (
           <button
             onClick={onRetry}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-brand text-white rounded-pill shadow-glow hover:bg-brand-hover transition-colors"
           >
             Retry
           </button>
@@ -1029,23 +965,25 @@ export default function CompliancePage() {
   // Get icon and color for compliance event
   const getEventStyle = (event: ComplianceEvent) => {
     // By type
+    const danger = { color: "text-danger", bg: "bg-danger-fill", badge: "bg-danger-fill text-danger-text" };
+    const warning = { color: "text-warning", bg: "bg-warning-fill", badge: "bg-warning-fill text-warning-text" };
+    const success = { color: "text-success-text", bg: "bg-success-fill", badge: "bg-success-fill text-success-text" };
+    const brand = { color: "text-brand-text", bg: "bg-brand-soft", badge: "bg-brand-soft text-brand-text" };
     if (event.type === "violation") {
-      if (event.severity === "critical") return { icon: XCircle, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20", badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" };
-      if (event.severity === "high") return { icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-900/20", badge: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" };
-      return { icon: AlertTriangle, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20", badge: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" };
+      if (event.severity === "critical") return { icon: XCircle, ...danger };
+      return { icon: AlertTriangle, ...warning };
     }
     if (event.type === "capability") {
-      if (event.severity === "high") return { icon: Shield, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/20", badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" };
-      return { icon: Shield, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20", badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400" };
+      if (event.severity === "high") return { icon: Shield, ...danger };
+      return { icon: Shield, ...brand };
     }
     if (event.type === "attestation") {
-      return { icon: FileCheck, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20", badge: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" };
+      return { icon: FileCheck, ...success };
     }
     if (event.type === "registration") {
-      if (event.resourceType === "agent") return { icon: Bot, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20", badge: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400" };
-      return { icon: Server, color: "text-indigo-600", bg: "bg-indigo-50 dark:bg-indigo-900/20", badge: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400" };
+      return { icon: event.resourceType === "agent" ? Bot : Server, ...brand };
     }
-    return { icon: Activity, color: "text-gray-600", bg: "bg-gray-50 dark:bg-gray-900/20", badge: "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-400" };
+    return { icon: Activity, color: "text-ink-tertiary", bg: "bg-glass-inset-gray", badge: "bg-glass-inset-gray text-ink-body" };
   };
 
   if (loading) return <CompliancePageSkeleton />;
@@ -1068,10 +1006,10 @@ export default function CompliancePage() {
   const attestationCount = activitySummary?.attestationCount || 0;
 
   const stats = [
-    { name: "Avg Trust Score", value: `${Math.round(status?.averageTrustScore || 0)}%`, icon: Shield, iconColor: (status?.averageTrustScore || 0) >= 80 ? "text-green-500" : (status?.averageTrustScore || 0) >= 60 ? "text-yellow-500" : "text-red-500" },
-    { name: "Verified Agents", value: `${status?.verifiedAgents || 0} / ${status?.totalAgents || 0}`, icon: CheckCircle, iconColor: "text-green-500" },
-    { name: "Verified MCPs", value: `${verifiedMcps} / ${totalMcps}`, icon: ShieldCheck, iconColor: verifiedMcps === totalMcps && totalMcps > 0 ? "text-green-500" : verifiedMcps > 0 ? "text-yellow-500" : "text-gray-500" },
-    { name: "MCP Attestations", value: `${attestationCount}`, icon: FileCheck, iconColor: attestationCount > 0 ? "text-blue-500" : "text-gray-500" },
+    { name: "Avg Trust Score", value: `${Math.round(status?.averageTrustScore || 0)}%`, icon: Shield, iconColor: (status?.averageTrustScore || 0) >= 80 ? "text-success" : (status?.averageTrustScore || 0) >= 60 ? "text-warning" : "text-danger" },
+    { name: "Verified Agents", value: `${status?.verifiedAgents || 0} / ${status?.totalAgents || 0}`, icon: CheckCircle, iconColor: "text-success" },
+    { name: "Verified MCPs", value: `${verifiedMcps} / ${totalMcps}`, icon: ShieldCheck, iconColor: verifiedMcps === totalMcps && totalMcps > 0 ? "text-success" : verifiedMcps > 0 ? "text-warning" : "text-ink-tertiary" },
+    { name: "MCP Attestations", value: `${attestationCount}`, icon: FileCheck, iconColor: attestationCount > 0 ? "text-brand-text" : "text-ink-tertiary" },
   ];
 
   return (
@@ -1080,18 +1018,18 @@ export default function CompliancePage() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-              <Shield className="h-7 w-7 text-blue-600" />
+            <h1 className="text-2xl font-bold text-ink flex items-center gap-3">
+              <Shield className="h-7 w-7 text-brand-text" />
               Compliance Dashboard
             </h1>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-ink-secondary">
               Monitor agent and MCP server verification, trust scores, and security compliance for your organization.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
             <button
               onClick={() => fetchComplianceData()}
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-ink bg-glass border border-stroke rounded-pill hover:bg-glass-inset transition-colors"
             >
               <RefreshCw className="h-4 w-4" />
               Refresh
@@ -1101,21 +1039,21 @@ export default function CompliancePage() {
             <div className="relative group">
               <button
                 disabled={exportingReport}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-ink bg-glass border border-stroke rounded-pill hover:bg-glass-inset transition-colors disabled:opacity-50"
               >
                 {exportingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Export Report
               </button>
-              <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+              <div className="absolute right-0 mt-1 w-40 overlay-surface rounded-inset-sm overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                 <button
                   onClick={() => handleExportReport("json")}
-                  className="w-full px-4 py-2 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-lg"
+                  className="w-full px-4 py-2 text-sm text-left text-ink-body hover:bg-glass-inset-gray"
                 >
                   Export as JSON
                 </button>
                 <button
                   onClick={() => handleExportReport("csv")}
-                  className="w-full px-4 py-2 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-lg"
+                  className="w-full px-4 py-2 text-sm text-left text-ink-body hover:bg-glass-inset-gray"
                 >
                   Export as CSV
                 </button>
@@ -1152,22 +1090,22 @@ export default function CompliancePage() {
         </div>
 
         {/* ABOM Summary Card */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
-                <Database className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+        <div className="glass p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="p-3 bg-brand-soft rounded-lg flex-shrink-0">
+                <Database className="h-6 w-6 text-brand-text" />
               </div>
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Agent Bill of Materials (ABOM)</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-ink">Agent Bill of Materials (ABOM)</h3>
+                <p className="text-xs text-ink-secondary">
                   Complete inventory of all agents, MCP servers, tools, and data access patterns observed by AIM
                 </p>
               </div>
             </div>
             <Link
               href="/dashboard/mcp/supply-chain?tab=abom"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/60 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-brand-text bg-brand-soft rounded-pill hover:brightness-95 transition-colors"
             >
               View ABOM
               <ExternalLink className="h-4 w-4" />
@@ -1179,8 +1117,8 @@ export default function CompliancePage() {
         {checkResults && checkResults.length > 0 && (
           <div>
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Compliance Status</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Real-time security and operational health checks</p>
+              <h2 className="text-lg font-semibold text-ink">Compliance Status</h2>
+              <p className="text-sm text-ink-secondary">Real-time security and operational health checks</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Security Checks - focuses on security posture */}
@@ -1190,7 +1128,7 @@ export default function CompliancePage() {
                 passed={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name) && c.passed).length}
                 total={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name)).length}
                 icon={Lock}
-                color="blue"
+                color="brand"
                 checks={checkResults.filter(c => ["apiKeyRotationNeeded", "trustScoreDegradation", "capabilityViolations", "adminAccessReview", "auditLogGaps"].includes(c.name))}
                 onNavigate={(url) => router.push(url)}
               />
@@ -1202,7 +1140,7 @@ export default function CompliancePage() {
                 passed={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name) && c.passed).length}
                 total={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name)).length}
                 icon={Activity}
-                color="green"
+                color="success"
                 checks={checkResults.filter(c => ["inactiveAgents", "unverifiedAgentBacklog", "orphanedResources", "inactiveMCPServers", "unverifiedMCPBacklog"].includes(c.name))}
                 onNavigate={(url) => router.push(url)}
               />
@@ -1247,30 +1185,30 @@ export default function CompliancePage() {
               </div>
 
               {/* Compliance Checks */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Compliance Checks</h3>
+                  <h3 className="text-lg font-semibold text-ink">Compliance Checks</h3>
                   {runningCheck ? (
-                    <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                    <Loader2 className="h-5 w-5 text-brand animate-spin" />
                   ) : (
-                    <FileCheck className="h-5 w-5 text-gray-400" />
+                    <FileCheck className="h-5 w-5 text-ink-tertiary" />
                   )}
                 </div>
                 {runningCheck ? (
                   <div className="flex flex-col items-center justify-center h-40 text-center">
-                    <Loader2 className="h-8 w-8 text-blue-500 animate-spin mb-2" />
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Running compliance checks...</p>
+                    <Loader2 className="h-8 w-8 text-brand animate-spin mb-2" />
+                    <p className="text-sm text-ink-secondary">Running compliance checks...</p>
                   </div>
                 ) : checkResults && checkResults.length > 0 ? (
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {checkResults.slice(0, 6).map((result, idx) => (
-                      <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${result.passed ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"}`}>
+                      <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${result.passed ? "bg-success-fill" : "bg-danger-fill"}`}>
                         {result.passed ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <CheckCircle className="h-4 w-4 text-success-text flex-shrink-0" />
                         ) : (
-                          <XCircle className="h-4 w-4 text-red-600" />
+                          <XCircle className="h-4 w-4 text-danger-text flex-shrink-0" />
                         )}
-                        <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                        <span className="text-sm text-ink-body truncate">
                           {result.name.replace(/_/g, " ")}
                         </span>
                       </div>
@@ -1278,8 +1216,8 @@ export default function CompliancePage() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-40 text-center">
-                    <CheckCircle className="h-10 w-10 text-gray-300 dark:text-gray-600 mb-2" />
-                    <p className="text-sm text-gray-500 dark:text-gray-400">No compliance issues detected</p>
+                    <CheckCircle className="h-10 w-10 text-ink-tertiary mb-2" />
+                    <p className="text-sm text-ink-secondary">No compliance issues detected</p>
                   </div>
                 )}
               </div>
@@ -1290,13 +1228,13 @@ export default function CompliancePage() {
           {/* Right Column - Security Alerts */}
           <div className="flex flex-col">
             {/* Security Alerts & Violations */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 flex-1 flex flex-col">
+            <div className="glass p-6 flex-1 flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white">Security Alerts</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Recent violations and warnings</p>
+                  <h3 className="font-semibold text-ink">Security Alerts</h3>
+                  <p className="text-xs text-ink-secondary">Recent violations and warnings</p>
                 </div>
-                <AlertTriangle className="h-5 w-5 text-gray-400" />
+                <AlertTriangle className="h-5 w-5 text-ink-tertiary" />
               </div>
               <div className="space-y-0 flex-1">
                 {alerts.length > 0 ? (
@@ -1305,16 +1243,16 @@ export default function CompliancePage() {
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center h-32 text-center">
-                    <CheckCircle className="h-8 w-8 text-green-400 mb-2" />
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">All Clear</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">No security alerts</p>
+                    <CheckCircle className="h-8 w-8 text-success mb-2" />
+                    <p className="text-sm font-medium text-ink-body">All Clear</p>
+                    <p className="text-xs text-ink-secondary">No security alerts</p>
                   </div>
                 )}
               </div>
               {alerts.length > 8 && (
                 <button
                   onClick={() => router.push("/dashboard/admin/alerts")}
-                  className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:underline text-center"
+                  className="mt-3 text-sm text-brand-text hover:underline text-center"
                 >
                   View all {alerts.length} alerts →
                 </button>
@@ -1324,38 +1262,38 @@ export default function CompliancePage() {
         </div>
 
         {/* Access Review Table */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="glass overflow-hidden">
+          <div className="p-6 border-b border-divider">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Access Review</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Review user access patterns and permissions</p>
+                <h3 className="text-lg font-semibold text-ink">Access Review</h3>
+                <p className="text-sm text-ink-secondary">Review user access patterns and permissions</p>
               </div>
-              <Users className="h-5 w-5 text-gray-400" />
+              <Users className="h-5 w-5 text-ink-tertiary" />
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800">
+            <table className="w-full divide-y divide-divider">
+              <thead className="bg-glass-inset-gray">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Last Login</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Last Login</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ink-secondary uppercase tracking-wider">Created</th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-divider">
                 {accessReview.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{user.email}</td>
+                  <tr key={user.id} className="hover:bg-glass-inset-gray transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-ink">{user.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">{user.email}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
                         user.role === "admin"
-                          ? "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300"
-                          : "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300"
+                          ? "bg-brand-soft text-brand-text"
+                          : "bg-glass-inset-gray text-ink-body"
                       }`}>
                         {user.role}
                       </span>
@@ -1363,16 +1301,16 @@ export default function CompliancePage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
                         user.status === "active"
-                          ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300"
+                          ? "bg-success-fill text-success-text"
+                          : "bg-glass-inset-gray text-ink-body"
                       }`}>
                         {user.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {user.lastLogin ? formatDateTime(user.lastLogin) : "Never"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-ink-secondary">
                       {formatDateTime(user.createdAt)}
                     </td>
                   </tr>
@@ -1383,26 +1321,26 @@ export default function CompliancePage() {
         </div>
 
         {/* Comprehensive Audit Trail Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+        <div className="glass">
+          <div className="p-6 border-b border-divider">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => setAuditTrailExpanded(!auditTrailExpanded)}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                  className="p-1 hover:bg-glass-inset-gray rounded transition-colors"
                 >
                   {auditTrailExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-gray-500" />
+                    <ChevronUp className="h-5 w-5 text-ink-tertiary" />
                   ) : (
-                    <ChevronDown className="h-5 w-5 text-gray-500" />
+                    <ChevronDown className="h-5 w-5 text-ink-tertiary" />
                   )}
                 </button>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-blue-600" />
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-brand-text" />
                     Audit Trail
                   </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-sm text-ink-secondary">
                     Control-plane lifecycle events (agent create/update, MCP changes, user actions). For runtime verification activity on a specific agent, open that agent and use the <span className="font-medium">Recent Activity</span> timeline.
                   </p>
                 </div>
@@ -1412,21 +1350,21 @@ export default function CompliancePage() {
                 <div className="relative group">
                   <button
                     disabled={exportingAuditLogs}
-                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-ink bg-glass border border-stroke rounded-pill hover:bg-glass-inset transition-colors disabled:opacity-50 whitespace-nowrap"
                   >
                     {exportingAuditLogs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                     Export Logs
                   </button>
-                  <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                  <div className="absolute right-0 mt-1 w-40 overlay-surface rounded-inset-sm overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                     <button
                       onClick={() => handleExportAuditLogs("json")}
-                      className="w-full px-4 py-2 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-t-lg"
+                      className="w-full px-4 py-2 text-sm text-left text-ink-body hover:bg-glass-inset-gray"
                     >
                       Export as JSON
                     </button>
                     <button
                       onClick={() => handleExportAuditLogs("csv")}
-                      className="w-full px-4 py-2 text-sm text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-b-lg"
+                      className="w-full px-4 py-2 text-sm text-left text-ink-body hover:bg-glass-inset-gray"
                     >
                       Export as CSV
                     </button>
@@ -1439,27 +1377,27 @@ export default function CompliancePage() {
           {auditTrailExpanded && (
             <>
               {/* Filters */}
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <div className="p-4 border-b border-divider bg-glass-inset-gray">
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Search */}
                   <div className="relative flex-1 min-w-[200px] max-w-xs">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-tertiary" />
                     <input
                       type="text"
                       placeholder="Search events, agents, resources..."
                       value={auditLogFilter.search}
                       onChange={(e) => setAuditLogFilter(prev => ({ ...prev, search: e.target.value }))}
-                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-stroke rounded-inset bg-glass-inset text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-2 focus:ring-brand"
                     />
                   </div>
 
                   {/* Event Type Filter */}
                   <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-gray-400" />
+                    <Filter className="h-4 w-4 text-ink-tertiary" />
                     <select
                       value={auditLogFilter.eventType}
                       onChange={(e) => setAuditLogFilter(prev => ({ ...prev, eventType: e.target.value }))}
-                      className="text-sm border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="text-sm border border-stroke rounded-inset px-3 py-2 bg-glass-inset text-ink focus:outline-none focus:ring-2 focus:ring-brand"
                     >
                       <option value="all">All Events</option>
                       <option value="violation">Violations</option>
@@ -1470,7 +1408,7 @@ export default function CompliancePage() {
                   </div>
 
                   {/* Results count */}
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                  <span className="text-sm text-ink-secondary">
                     {unifiedTimeline.length} events
                   </span>
 
@@ -1478,7 +1416,7 @@ export default function CompliancePage() {
                   {(auditLogFilter.search || auditLogFilter.eventType !== "all") && auditTrailPage > 1 && (
                     <button
                       onClick={() => setAuditTrailPage(1)}
-                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      className="text-xs text-brand-text hover:underline"
                     >
                       Reset page
                     </button>
@@ -1491,26 +1429,29 @@ export default function CompliancePage() {
                 {unifiedTimeline.length > 0 ? (
                   <div className="relative">
                     {/* Vertical line */}
-                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-track" />
 
                     <div className="space-y-4">
                       {unifiedTimeline.slice(0, auditTrailPage * AUDIT_TRAIL_PAGE_SIZE).map((event) => {
                         const { icon: Icon, color, bg, badge } = getEventStyle(event);
                         return (
                           <div key={event.id} className="relative flex items-start gap-4 pl-10">
-                            {/* Timeline dot */}
-                            <div className={`absolute left-2 w-5 h-5 rounded-full ${bg} flex items-center justify-center ring-4 ring-white dark:ring-gray-800`}>
-                              <Icon className={`h-3 w-3 ${color}`} />
+                            {/* Timeline dot: an opaque disc under the tint, so the line stops at the dot */}
+                            <div className="absolute left-2 w-5 h-5 rounded-full bg-page">
+                              <div className={`w-full h-full rounded-full ${bg} flex items-center justify-center`}>
+                                <Icon className={`h-3 w-3 ${color}`} />
+                              </div>
                             </div>
 
-                            {/* Content */}
-                            <div className="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            {/* Content. min-w-0 lets the box shrink to the row, so a long description is cut with an
+                                ellipsis. The box is outlined, not filled: a badge's tint over a second tint loses contrast. */}
+                            <div className="flex-1 min-w-0 border border-divider rounded-inset-sm p-4">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                  <p className="text-sm font-medium text-ink break-words">
                                     {event.title}
                                   </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                                  <p className="text-xs text-ink-secondary mt-1 truncate">
                                     {event.description}
                                   </p>
                                   <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -1521,45 +1462,44 @@ export default function CompliancePage() {
                                     {/* Severity badge for violations/high severity events */}
                                     {(event.type === "violation" || event.severity === "high" || event.severity === "critical") && (
                                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium uppercase ${
-                                        event.severity === "critical" ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" :
-                                        event.severity === "high" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" :
-                                        event.severity === "medium" ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400" :
-                                        "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                                        event.severity === "critical" ? "bg-danger-fill text-danger-text" :
+                                        event.severity === "high" || event.severity === "medium" ? "bg-warning-fill text-warning-text" :
+                                        "bg-brand-soft text-brand-text"
                                       }`}>
                                         {event.severity}
                                       </span>
                                     )}
                                     {/* Agent/Resource name */}
                                     {(event.agentName || event.resourceName) && (
-                                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                                      <span className="text-xs text-ink-secondary break-all">
                                         {event.agentName || event.resourceName}
                                       </span>
                                     )}
                                     {/* Trust score for capability events */}
                                     {event.metadata?.trustScore !== undefined && (
-                                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                                      <span className="text-xs text-ink-secondary">
                                         Trust: {Math.round(event.metadata.trustScore * 100)}%
                                       </span>
                                     )}
                                   </div>
                                 </div>
                                 <div className="text-right flex-shrink-0">
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  <p className="text-xs text-ink-secondary">
                                     {formatRelativeTime(event.timestamp)}
                                   </p>
                                   {/* Status indicator */}
                                   {event.metadata?.status && (
                                     <p className={`text-xs mt-0.5 ${
-                                      event.metadata.status === "success" || event.metadata.status === "allowed" ? "text-green-500" :
-                                      event.metadata.status === "failed" || event.metadata.status === "denied" ? "text-red-500" :
-                                      "text-gray-400"
+                                      event.metadata.status === "success" || event.metadata.status === "allowed" ? "text-success-text" :
+                                      event.metadata.status === "failed" || event.metadata.status === "denied" ? "text-danger-text" :
+                                      "text-ink-secondary"
                                     }`}>
                                       {event.metadata.status}
                                     </p>
                                   )}
                                   {/* Acknowledged indicator for violations */}
                                   {event.metadata?.isAcknowledged && (
-                                    <p className="text-xs text-green-500 mt-0.5">acknowledged</p>
+                                    <p className="text-xs text-success-text mt-0.5">acknowledged</p>
                                   )}
                                 </div>
                               </div>
@@ -1571,15 +1511,15 @@ export default function CompliancePage() {
 
                     {/* Pagination Controls */}
                     {unifiedTimeline.length > 0 && (
-                      <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-divider">
+                        <p className="text-sm text-ink-secondary">
                           Showing {Math.min(auditTrailPage * AUDIT_TRAIL_PAGE_SIZE, unifiedTimeline.length)} of {unifiedTimeline.length} events
                         </p>
                         <div className="flex items-center gap-2">
                           {auditTrailPage > 1 && (
                             <button
                               onClick={() => setAuditTrailPage(1)}
-                              className="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                              className="px-3 py-1.5 text-sm font-medium text-ink-body bg-glass-inset-gray rounded-pill hover:bg-glass-inset transition-colors"
                             >
                               Show Less
                             </button>
@@ -1587,7 +1527,7 @@ export default function CompliancePage() {
                           {auditTrailPage * AUDIT_TRAIL_PAGE_SIZE < unifiedTimeline.length && (
                             <button
                               onClick={() => setAuditTrailPage(auditTrailPage + 1)}
-                              className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                              className="px-3 py-1.5 text-sm font-medium text-white bg-brand rounded-pill hover:bg-brand-hover transition-colors"
                             >
                               Load More ({Math.min(AUDIT_TRAIL_PAGE_SIZE, unifiedTimeline.length - auditTrailPage * AUDIT_TRAIL_PAGE_SIZE)} more)
                             </button>
@@ -1598,9 +1538,9 @@ export default function CompliancePage() {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <Clock className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-500 dark:text-gray-400">No compliance events found</p>
-                    <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                    <Clock className="h-12 w-12 text-ink-tertiary mx-auto mb-3" />
+                    <p className="text-ink-secondary">No compliance events found</p>
+                    <p className="text-sm text-ink-secondary mt-1">
                       {auditLogFilter.search || auditLogFilter.eventType !== "all"
                         ? "Try adjusting your filters"
                         : "Violations, capability usage, and registrations will appear here"}
