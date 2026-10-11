@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — the readability sweep measures the charts it loads
+
+- `apps/web/scripts/ux-sweep.mjs` measures every chart on a page in the browser: each painted shape whose fill or
+  stroke is a series colour (`--chart-1` to `--chart-7`, `--chart-muted`) is held to 3:1 against the chart's
+  background (WCAG 1.4.11), each text drawn inside the chart to 4.5:1 (3:1 large), and each chart must carry an
+  `aria-label` and its "View as table" control. A failure of any of these fails the sweep's gate. Shapes painted in
+  no `--chart-*` colour are counted and listed without failing it.
+- The overview is loaded once per lens (developer, security, executive). `--only <route,route>` limits a run to the
+  named routes and refuses a name that is no route. `--fixture populated` answers the endpoints the overview, security
+  and compliance charts read with sample series, so those charts draw marks instead of their empty states; the
+  default fixture is unchanged.
+- `tests/ux-sweep.test.ts` covers the lens entries, `--only`, the populated fixture and the gate, and measures a
+  chart page in Chromium where Playwright's Chromium is installed.
+- `docs/ux/chart-contrast-2026-10-11.md` records the first run over the overview's three lenses, the security page
+  and the compliance page in both themes: every series mark measured 3.40:1 or higher, and every chart carried its
+  label and table control. The compliance page's trust score trend, drawn on a `dark:bg-gray-800` card instead of a
+  glass surface, has axis text at 4.05:1 in the dark theme.
+
 ### Changed — every chart offers its values as a table, and the light theme draws four series darker
 
 - Every chart drawn by `apps/web/components/charts` has a "View as table" control above the plot that swaps the

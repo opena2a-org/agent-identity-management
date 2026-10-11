@@ -19,13 +19,31 @@
  *   - whether a <main> landmark exists
  *   - horizontal overflow of the document in CSS px
  *   - console errors and uncaught page errors, verbatim
+ *   - for every chart (a role="img" element holding an <svg>, as the chart layer
+ *     in components/charts renders them): whether it carries an aria-label and a
+ *     "view as table" control; the minimum contrast of its series marks (painted
+ *     shapes whose fill or stroke resolves to a --chart-* series token) against
+ *     the chart's background, which needs 3:1 (WCAG 1.4.11); the minimum contrast
+ *     of text drawn inside the svg, held to the same floors as other text; and
+ *     painted shapes whose colour resolves to no --chart-* token at all
+ *
+ * The overview (`/dashboard`) is loaded once per lens (developer, security,
+ * executive), since each lens draws different charts.
  *
  * Usage:
  *   node apps/web/scripts/ux-sweep.mjs --base http://localhost:3000 --out result.json
+ *     [--only /dashboard,/dashboard/security] [--fixture empty|populated]
+ *
+ * `--only` limits the sweep to the named routes. `--fixture populated` answers the
+ * endpoints the overview, security and compliance charts read with sample series,
+ * so those charts draw marks instead of their empty states; the default `empty`
+ * answers every collection empty.
  *
  * Exit code 1 when any route has body-text contrast under 4.5:1, large-text
- * contrast under 3:1, horizontal overflow, a console error, or could not be
- * loaded; 0 otherwise. The result file is written in both cases.
+ * contrast under 3:1, a chart series mark under 3:1, chart text under its floor,
+ * a chart without an aria-label or a table control, horizontal overflow, a console
+ * error, or could not be loaded; 0 otherwise. The result file is written in both
+ * cases.
  */
 
 import { chromium } from "@playwright/test";
@@ -43,30 +61,69 @@ const VIEWPORTS = [
 const THEMES = ["light", "dark"];
 const BODY_MIN_RATIO = 4.5;
 const LARGE_MIN_RATIO = 3;
+const GRAPHIC_MIN_RATIO = 3;
 const BODY_TEXT_FLOOR_PX = 14;
 const HIT_AREA_FLOOR_PX = 44;
 const SAMPLE_SEGMENT_VALUES = { id: "00000000-0000-4000-8000-000000000001" };
 const SAMPLE_UUID = SAMPLE_SEGMENT_VALUES.id;
+// The colour tokens of components/charts/tokens.ts. A shape painted in a series
+// token is a series mark; one painted in a chrome token is grid, axis, track or
+// cursor; one painted in neither did not take its colour from the chart layer.
+const CHART_SERIES_TOKENS = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6", "--chart-7", "--chart-muted"];
+const CHART_CHROME_TOKENS = ["--chart-grid", "--chart-axis-line", "--chart-axis-text", "--chart-cursor", "--chart-track", "--chart-tooltip-bg", "--chart-tooltip-border", "--chart-tooltip-text"];
+// The overview draws a different home screen per lens (lib/persona.ts), stored
+// by that module under this localStorage key.
+const LENS_ROUTE = "/dashboard";
+const LENSES = ["developer", "security", "executive"];
+const PERSONA_STORAGE_KEY = "aim.persona";
+const FIXTURES = ["empty", "populated"];
 
-function parseArgs(argv) {
-  const args = { base: "http://localhost:3000", out: null, app: DEFAULT_APP_DIR, settleMs: 1500 };
+export function parseArgs(argv) {
+  const args = { base: "http://localhost:3000", out: null, app: DEFAULT_APP_DIR, settleMs: 1500, only: null, fixture: "empty" };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--base") args.base = argv[++i];
     else if (a === "--out") args.out = argv[++i];
     else if (a === "--app") args.app = path.resolve(argv[++i]);
     else if (a === "--settle-ms") args.settleMs = Number(argv[++i]);
+    else if (a === "--only") args.only = String(argv[++i] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    else if (a === "--fixture") args.fixture = argv[++i];
     else if (a === "--help" || a === "-h") {
-      console.log("usage: ux-sweep.mjs --out <result.json> [--base <url>] [--app <app dir>] [--settle-ms <n>]");
+      console.log("usage: ux-sweep.mjs --out <result.json> [--base <url>] [--app <app dir>] [--settle-ms <n>] [--only <route,route>] [--fixture empty|populated]");
       process.exit(0);
     } else throw new Error(`unknown argument: ${a}`);
   }
   if (!args.out) throw new Error("--out <result.json> is required");
+  if (!FIXTURES.includes(args.fixture)) throw new Error(`--fixture must be one of ${FIXTURES.join(", ")}`);
+  if (args.only && args.only.length === 0) throw new Error("--only needs at least one route");
   return args;
 }
 
-/** Every page.tsx under the app dir, as a URL path. Route groups `(name)` are dropped. */
-async function enumerateRoutes(appDir) {
+/**
+ * Every page.tsx under the app dir, as a URL path. Route groups `(name)` are dropped.
+ * The overview yields one entry per lens; every other route one entry with no lens.
+ */
+export async function enumerateRoutes(appDir) {
+  const pages = await enumeratePages(appDir);
+  return pages.flatMap((entry) =>
+    entry.route === LENS_ROUTE ? LENSES.map((lens) => ({ ...entry, lens })) : [{ ...entry, lens: null }],
+  );
+}
+
+/** The name a route entry is reported under: the path, and the lens when there is one. */
+export function entryName(entry) {
+  return entry.lens ? `${entry.route} (${entry.lens} lens)` : entry.route;
+}
+
+/** The entries `--only` names, by path; a name that matches no route is an error, not an empty sweep. */
+export function selectRoutes(routes, only) {
+  if (!only) return routes;
+  const unknown = only.filter((name) => !routes.some((r) => r.route === name));
+  if (unknown.length) throw new Error(`--only names no page route: ${unknown.join(", ")}`);
+  return routes.filter((r) => only.includes(r.route));
+}
+
+async function enumeratePages(appDir) {
   const files = [];
   async function walk(dir) {
     for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
@@ -208,13 +265,86 @@ const MOCKS = [
   ["POST", /^\/api\/v1\/auth\/refresh$/, { token: sessionToken(), refreshToken: "refresh" }],
 ];
 
-function findMock(method, pathname) {
-  for (const [m, re, body] of MOCKS) if (m === method && re.test(pathname)) return body;
+/** `count` ISO dates, one per `stepDays`, ending today. */
+function sampleDates(count, stepDays) {
+  return Array.from({ length: count }, (_, i) => new Date(Date.now() - (count - 1 - i) * stepDays * 86_400_000).toISOString().slice(0, 10));
+}
+
+/** The last `count` months, oldest first, as the verification-activity endpoint names them. */
+function sampleMonths(count) {
+  const now = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (count - 1 - i), 1));
+    const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+    return { month, monthYear: `${month} ${d.getUTCFullYear()}` };
+  });
+}
+
+// Sample series for the populated fixture: enough agents to fill every trust and
+// risk bucket (one agent carries no score), and several points per trend, so each
+// overview, security and compliance chart draws its marks. The values are
+// fixture values for measuring how a chart is drawn, not a measurement of anything.
+const SAMPLE_AGENTS = [
+  [0.92, "verified"],
+  [0.85, "verified"],
+  [0.64, "pending"],
+  [0.45, "verified"],
+  [0.21, "suspended"],
+  [null, "pending"],
+].map(([trustScore, status], i) => ({
+  ...AGENT,
+  id: `00000000-0000-4000-8000-00000000010${i}`,
+  name: `sample-agent-${i + 1}`,
+  displayName: `Sample agent ${i + 1}`,
+  status,
+  trustScore,
+}));
+const SAMPLE_MCP_SERVERS = [
+  MCP_SERVER,
+  { ...MCP_SERVER, id: "00000000-0000-4000-8000-000000000201", name: "sample-mcp-2", status: "pending", isVerified: false },
+];
+const POPULATED_MOCKS = [
+  ["GET", /^\/api\/v1\/agents$/, { agents: SAMPLE_AGENTS }],
+  ["GET", /^\/api\/v1\/mcp-servers$/, { mcpServers: SAMPLE_MCP_SERVERS, total: SAMPLE_MCP_SERVERS.length }],
+  ["GET", /^\/api\/v1\/analytics\/dashboard$/, { totalAgents: 6, verifiedAgents: 3, pendingAgents: 2, verificationRate: 50, avgTrustScore: 61, totalMcpServers: 2, activeMcpServers: 1, totalUsers: 1, activeUsers: 1, activeAlerts: 0, criticalAlerts: 0, securityIncidents: 0, totalVerifications: 42, successfulVerifications: 38, failedVerifications: 4, avgResponseTime: 0, organizationId: SAMPLE_UUID }],
+  ["GET", /^\/api\/v1\/analytics\/verification-activity/, {
+    period: "6 months",
+    activity: sampleMonths(6).map((m, i) => ({ ...m, verified: [3, 5, 4, 7, 6, 9][i], pending: [2, 1, 3, 2, 1, 2][i], agentsVerified: [2, 4, 3, 5, 4, 7][i], agentsPending: [1, 1, 2, 1, 1, 1][i], mcpVerified: [1, 1, 1, 2, 2, 2][i], mcpPending: [1, 0, 1, 1, 0, 1][i] })),
+    currentStats: { totalVerified: 9, totalPending: 2, totalAgents: 6, totalMCP: 2, agentsVerified: 3, agentsPending: 2, mcpVerified: 1, mcpPending: 1 },
+  }],
+  ["GET", /^\/api\/v1\/security\/metrics$/, {
+    ...MOCKS.find(([m, re]) => m === "GET" && re.test("/api/v1/security/metrics"))[2],
+    securityScore: 82,
+    agentsMonitored: 6,
+    agentsTrusted: 3,
+    protectionTimeline: sampleDates(10, 3).map((date, i) => ({ date, actions: [12, 18, 15, 22, 19, 25, 21, 28, 24, 30][i], blocked: [1, 0, 2, 1, 3, 1, 0, 2, 1, 1][i] })),
+  }],
+  ["GET", /^\/api\/v1\/compliance\/metrics$/, {
+    startDate: NOW,
+    endDate: NOW,
+    interval: "day",
+    metrics: {
+      period: { start: NOW, end: NOW, interval: "day" },
+      agentVerificationTrend: sampleDates(6, 5).map((date, i) => ({ date, verified: [1, 1, 2, 2, 3, 3][i] })),
+      trustScoreTrend: sampleDates(6, 5).map((date, i) => ({ date, avgScore: [0.55, 0.57, 0.58, 0.6, 0.61, 0.61][i] })),
+      auditActivityTrend: [],
+      complianceScoreTrend: [],
+    },
+  }],
+];
+
+/** The mock table for a fixture: the populated entries are tried before the empty ones. */
+export function mocksFor(fixture) {
+  return fixture === "populated" ? [...POPULATED_MOCKS, ...MOCKS] : MOCKS;
+}
+
+export function findMock(method, pathname, mocks = MOCKS) {
+  for (const [m, re, body] of mocks) if (m === method && re.test(pathname)) return body;
   return null;
 }
 
 /** Runs inside the page. Returns the per-variant measurement. */
-function measureInPage({ bodyMin, largeMin, textFloor, hitFloor }) {
+export function measureInPage({ bodyMin, largeMin, graphicMin, textFloor, hitFloor, seriesTokens, chromeTokens }) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -392,6 +522,123 @@ function measureInPage({ bodyMin, largeMin, textFloor, hitFloor }) {
     }
   }
 
+  // Charts. Each token is resolved to the colour this theme gives it by painting a
+  // probe with it, so a mark's computed colour can be named by the token it came from.
+  const rgbKey = (c) => c.slice(0, 3).map(Math.round).join(",");
+  const tokenByColor = new Map();
+  const seriesColors = new Set();
+  const rootStyle = getComputedStyle(document.documentElement);
+  const probe = document.createElement("span");
+  document.body.appendChild(probe);
+  for (const token of [...seriesTokens, ...chromeTokens]) {
+    if (!rootStyle.getPropertyValue(token).trim()) continue;
+    probe.style.color = `var(${token})`;
+    const key = rgbKey(parseColor(getComputedStyle(probe).color));
+    if (!tokenByColor.has(key)) tokenByColor.set(key, token);
+    if (seriesTokens.includes(token)) seriesColors.add(key);
+  }
+  probe.remove();
+
+  /** Product of `opacity` from the shape up to its svg root; HTML ancestor opacity is not modelled, as for text. */
+  function svgOpacity(el) {
+    let a = 1;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      a *= parseFloat(getComputedStyle(n).opacity);
+      if (n.tagName.toLowerCase() === "svg") break;
+    }
+    return a;
+  }
+  /** Lowest ratio of a paint, composited at its alpha, over each background candidate. */
+  function worstOver(paint, alpha, candidates) {
+    let worst = null;
+    for (const b of candidates) {
+      const f = over([paint[0], paint[1], paint[2], paint[3] * alpha], b);
+      const r = ratio(f, b);
+      if (!worst || r < worst.r) worst = { r, fg: f, bg: b };
+    }
+    return worst;
+  }
+
+  const SHAPES = "path, rect, circle, ellipse, polygon, polyline, line";
+  let chartCount = 0;
+  let chartsUnlabelled = 0;
+  let chartsWithoutTable = 0;
+  const chartAccessSamples = [];
+  let chartMarks = 0;
+  let minMark = Infinity;
+  let worstMark = null;
+  let offTokenPaints = 0;
+  const offTokenSamples = [];
+  let chartTextNodes = 0;
+  let smallChartTextNodes = 0;
+  let minChartBody = Infinity;
+  let minChartLarge = Infinity;
+  let worstChartText = null;
+  const chartBelowFloor = [];
+  for (const frame of document.querySelectorAll('[role="img"]')) {
+    const svg = frame.querySelector("svg");
+    if (!svg || !isRendered(frame)) continue;
+    chartCount += 1;
+    const chartLabel = (frame.getAttribute("aria-label") || "").trim();
+    const view = frame.parentElement;
+    const control = view && view.id ? document.querySelector(`button[aria-controls="${CSS.escape(view.id)}"]`) : null;
+    if (!chartLabel) chartsUnlabelled += 1;
+    if (!control) chartsWithoutTable += 1;
+    if ((!chartLabel || !control) && chartAccessSamples.length < 5) chartAccessSamples.push({ label: chartLabel.slice(0, 80), hasLabel: !!chartLabel, hasTableControl: !!control, where: describe(frame) });
+    const chart = chartLabel.slice(0, 80);
+    const { candidates } = compositedBackgrounds(frame);
+
+    for (const shape of frame.querySelectorAll(SHAPES)) {
+      if (!shape.closest("svg") || !isRendered(shape)) continue;
+      const rect = shape.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+      const cs = getComputedStyle(shape);
+      const opacity = svgOpacity(shape);
+      const paints = [];
+      // A <line> has no interior: its computed fill (black by default) paints nothing.
+      const fills = shape.tagName.toLowerCase() !== "line";
+      if (fills && cs.fill && cs.fill !== "none" && !/url\(/.test(cs.fill)) paints.push(["fill", parseColor(cs.fill), parseFloat(cs.fillOpacity)]);
+      if (cs.stroke && cs.stroke !== "none" && !/url\(/.test(cs.stroke) && parseFloat(cs.strokeWidth) > 0) paints.push(["stroke", parseColor(cs.stroke), parseFloat(cs.strokeOpacity)]);
+      for (const [kind, paint, paintOpacity] of paints) {
+        const alpha = paintOpacity * opacity;
+        if (paint[3] * alpha <= 0) continue;
+        const key = rgbKey(paint);
+        if (!tokenByColor.has(key)) {
+          offTokenPaints += 1;
+          if (offTokenSamples.length < 5) offTokenSamples.push({ chart, paint: kind, color: paint.slice(0, 3).map(Math.round), where: describe(shape) });
+          continue;
+        }
+        if (!seriesColors.has(key)) continue;
+        chartMarks += 1;
+        const w = worstOver(paint, alpha, candidates);
+        const sample = { chart, token: tokenByColor.get(key), paint: kind, ratio: +w.r.toFixed(2), fg: w.fg.slice(0, 3).map(Math.round), bg: w.bg.slice(0, 3).map(Math.round), where: describe(shape) };
+        if (w.r < minMark) { minMark = w.r; worstMark = sample; }
+        if (w.r < graphicMin && chartBelowFloor.length < 25) chartBelowFloor.push({ kind: "mark", floor: graphicMin, ...sample });
+      }
+    }
+
+    for (const text of frame.querySelectorAll("svg text")) {
+      const value = (text.textContent || "").replace(/\s+/g, " ").trim();
+      if (!value || !isRendered(text)) continue;
+      const rect = text.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      const cs = getComputedStyle(text);
+      if (!cs.fill || cs.fill === "none" || /url\(/.test(cs.fill)) continue;
+      const size = parseFloat(cs.fontSize);
+      const weight = parseInt(cs.fontWeight, 10) || (cs.fontWeight === "bold" ? 700 : 400);
+      const large = size >= 24 || (size >= 18.66 && weight >= 700);
+      chartTextNodes += 1;
+      if (size < textFloor) smallChartTextNodes += 1;
+      const w = worstOver(parseColor(cs.fill), parseFloat(cs.fillOpacity) * svgOpacity(text), candidates);
+      const floor = large ? largeMin : bodyMin;
+      const sample = { chart, text: value.slice(0, 60), ratio: +w.r.toFixed(2), fontSizePx: size, fontWeight: weight, large, fg: w.fg.slice(0, 3).map(Math.round), bg: w.bg.slice(0, 3).map(Math.round), where: describe(text) };
+      if (large) minChartLarge = Math.min(minChartLarge, w.r);
+      else minChartBody = Math.min(minChartBody, w.r);
+      if (!worstChartText || w.r / floor < worstChartText.ratio / (worstChartText.large ? largeMin : bodyMin)) worstChartText = sample;
+      if (w.r < floor && chartBelowFloor.length < 25) chartBelowFloor.push({ kind: "text", floor, ...sample });
+    }
+  }
+
   const doc = document.documentElement;
   const overflowPx = Math.max(0, doc.scrollWidth - doc.clientWidth, document.body.scrollWidth - doc.clientWidth);
   return {
@@ -411,11 +658,37 @@ function measureInPage({ bodyMin, largeMin, textFloor, hitFloor }) {
     worstBody,
     worstLarge,
     belowFloor,
+    chartCount,
+    chartsUnlabelled,
+    chartsWithoutTable,
+    chartAccessSamples,
+    chartMarks,
+    minChartMarkContrast: Number.isFinite(minMark) ? +minMark.toFixed(2) : null,
+    worstChartMark: worstMark,
+    chartTextNodes,
+    smallChartTextNodes,
+    minChartBodyContrast: Number.isFinite(minChartBody) ? +minChartBody.toFixed(2) : null,
+    minChartLargeContrast: Number.isFinite(minChartLarge) ? +minChartLarge.toFixed(2) : null,
+    worstChartText,
+    chartBelowFloor,
+    offTokenPaints,
+    offTokenSamples,
     title: document.title,
   };
 }
 
-async function sweepRoute(context, base, entry, settleMs) {
+/** The arguments measureInPage takes: the floors and the chart colour tokens. */
+export const MEASURE_ARGS = {
+  bodyMin: BODY_MIN_RATIO,
+  largeMin: LARGE_MIN_RATIO,
+  graphicMin: GRAPHIC_MIN_RATIO,
+  textFloor: BODY_TEXT_FLOOR_PX,
+  hitFloor: HIT_AREA_FLOOR_PX,
+  seriesTokens: CHART_SERIES_TOKENS,
+  chromeTokens: CHART_CHROME_TOKENS,
+};
+
+async function sweepRoute(context, base, entry, settleMs, mocks) {
   const page = await context.newPage();
   const consoleErrors = [];
   const unmocked = new Set();
@@ -423,21 +696,27 @@ async function sweepRoute(context, base, entry, settleMs) {
     if (msg.type() === "error") consoleErrors.push(msg.text().slice(0, 500));
   });
   page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${String(err.message || err).slice(0, 500)}`));
+  // The lens is stored per origin, so it is set (or cleared) before every load
+  // rather than once per context: a lens left by the previous route must not leak.
+  await page.addInitScript(({ key, lens }) => {
+    if (lens) localStorage.setItem(key, JSON.stringify({ state: { persona: lens, source: "user" }, version: 1 }));
+    else localStorage.removeItem(key);
+  }, { key: PERSONA_STORAGE_KEY, lens: entry.lens });
   await page.route("**/api/v1/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
-    const body = findMock(req.method(), url.pathname);
+    const body = findMock(req.method(), url.pathname, mocks);
     if (body === null) unmocked.add(`${req.method()} ${url.pathname}`);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
   });
-  const result = { route: entry.route, file: entry.file, requestedUrl: base + entry.route, finalUrl: null, redirected: false, loadError: null };
+  const result = { route: entry.route, lens: entry.lens, file: entry.file, requestedUrl: base + entry.route, finalUrl: null, redirected: false, loadError: null };
   try {
     await page.goto(base + entry.route, { waitUntil: "networkidle", timeout: 45_000 });
     await page.waitForTimeout(settleMs);
     try { await page.waitForLoadState("networkidle", { timeout: 10_000 }); } catch { /* keep going with what rendered */ }
     result.finalUrl = page.url();
     result.redirected = new URL(result.finalUrl).pathname !== entry.route;
-    Object.assign(result, await page.evaluate(measureInPage, { bodyMin: BODY_MIN_RATIO, largeMin: LARGE_MIN_RATIO, textFloor: BODY_TEXT_FLOOR_PX, hitFloor: HIT_AREA_FLOOR_PX }));
+    Object.assign(result, await page.evaluate(measureInPage, MEASURE_ARGS));
   } catch (err) {
     result.loadError = String(err.message || err).slice(0, 500);
   }
@@ -447,39 +726,72 @@ async function sweepRoute(context, base, entry, settleMs) {
   return result;
 }
 
-function summarize(variants, routes) {
+/** The lower of two optional ratios. */
+function minOf(a, b) {
+  if (b === null || b === undefined) return a;
+  return a === null || b < a ? b : a;
+}
+
+export function summarize(variants, routes) {
   const byRoute = new Map();
   for (const v of variants) {
-    const s = byRoute.get(v.route) ?? { route: v.route, file: v.file, minBodyContrast: null, minLargeContrast: null, smallTextNodes: 0, smallTargets: 0, hasMain: true, overflowPx: 0, consoleErrors: 0, loadErrors: 0, redirectedTo: null, variants: 0 };
+    const name = entryName(v);
+    const s = byRoute.get(name) ?? { route: name, path: v.route, lens: v.lens ?? null, file: v.file, minBodyContrast: null, minLargeContrast: null, smallTextNodes: 0, smallTargets: 0, hasMain: true, overflowPx: 0, consoleErrors: 0, loadErrors: 0, redirectedTo: null, charts: 0, chartMarks: 0, minChartMarkContrast: null, minChartBodyContrast: null, minChartLargeContrast: null, chartMarksBelowFloor: 0, chartTextBelowFloor: 0, chartsUnlabelled: 0, chartsWithoutTable: 0, offTokenPaints: 0, variants: 0 };
     s.variants += 1;
     if (v.loadError) s.loadErrors += 1;
-    if (v.minBodyContrast !== null && v.minBodyContrast !== undefined && (s.minBodyContrast === null || v.minBodyContrast < s.minBodyContrast)) s.minBodyContrast = v.minBodyContrast;
-    if (v.minLargeContrast !== null && v.minLargeContrast !== undefined && (s.minLargeContrast === null || v.minLargeContrast < s.minLargeContrast)) s.minLargeContrast = v.minLargeContrast;
+    s.minBodyContrast = minOf(s.minBodyContrast, v.minBodyContrast);
+    s.minLargeContrast = minOf(s.minLargeContrast, v.minLargeContrast);
     s.smallTextNodes = Math.max(s.smallTextNodes, v.smallTextNodes ?? 0);
     s.smallTargets = Math.max(s.smallTargets, v.smallTargets ?? 0);
     if (v.hasMain === false) s.hasMain = false;
     s.overflowPx = Math.max(s.overflowPx, v.overflowPx ?? 0);
     s.consoleErrors += v.consoleErrors.length;
     if (v.redirected) s.redirectedTo = new URL(v.finalUrl).pathname;
-    byRoute.set(v.route, s);
+    s.charts = Math.max(s.charts, v.chartCount ?? 0);
+    s.chartMarks = Math.max(s.chartMarks, v.chartMarks ?? 0);
+    s.minChartMarkContrast = minOf(s.minChartMarkContrast, v.minChartMarkContrast);
+    s.minChartBodyContrast = minOf(s.minChartBodyContrast, v.minChartBodyContrast);
+    s.minChartLargeContrast = minOf(s.minChartLargeContrast, v.minChartLargeContrast);
+    for (const f of v.chartBelowFloor ?? []) {
+      if (f.kind === "mark") s.chartMarksBelowFloor += 1;
+      else s.chartTextBelowFloor += 1;
+    }
+    s.chartsUnlabelled = Math.max(s.chartsUnlabelled, v.chartsUnlabelled ?? 0);
+    s.chartsWithoutTable = Math.max(s.chartsWithoutTable, v.chartsWithoutTable ?? 0);
+    s.offTokenPaints = Math.max(s.offTokenPaints, v.offTokenPaints ?? 0);
+    byRoute.set(name, s);
   }
-  const rows = routes.map((r) => byRoute.get(r.route));
+  const rows = routes.map((r) => byRoute.get(entryName(r)));
+  const names = (pred) => rows.filter(pred).map((r) => r.route);
   const fails = {
-    bodyContrast: rows.filter((r) => r.minBodyContrast !== null && r.minBodyContrast < BODY_MIN_RATIO).map((r) => r.route),
-    largeContrast: rows.filter((r) => r.minLargeContrast !== null && r.minLargeContrast < LARGE_MIN_RATIO).map((r) => r.route),
-    overflow: rows.filter((r) => r.overflowPx > 0).map((r) => r.route),
-    consoleErrors: rows.filter((r) => r.consoleErrors > 0).map((r) => r.route),
-    loadErrors: rows.filter((r) => r.loadErrors > 0).map((r) => r.route),
-    smallText: rows.filter((r) => r.smallTextNodes > 0).map((r) => r.route),
-    smallTargets: rows.filter((r) => r.smallTargets > 0).map((r) => r.route),
-    noMain: rows.filter((r) => !r.hasMain).map((r) => r.route),
+    bodyContrast: names((r) => r.minBodyContrast !== null && r.minBodyContrast < BODY_MIN_RATIO),
+    largeContrast: names((r) => r.minLargeContrast !== null && r.minLargeContrast < LARGE_MIN_RATIO),
+    chartMarkContrast: names((r) => r.chartMarksBelowFloor > 0),
+    chartTextContrast: names((r) => r.chartTextBelowFloor > 0),
+    chartAccess: names((r) => r.chartsUnlabelled > 0 || r.chartsWithoutTable > 0),
+    overflow: names((r) => r.overflowPx > 0),
+    consoleErrors: names((r) => r.consoleErrors > 0),
+    loadErrors: names((r) => r.loadErrors > 0),
+    smallText: names((r) => r.smallTextNodes > 0),
+    smallTargets: names((r) => r.smallTargets > 0),
+    noMain: names((r) => !r.hasMain),
+    offTokenPaints: names((r) => r.offTokenPaints > 0),
   };
   return { rows, fails };
 }
 
+// The failures that fail the gate; the others are reported and counted only.
+const GATING = ["bodyContrast", "largeContrast", "chartMarkContrast", "chartTextContrast", "chartAccess", "overflow", "consoleErrors", "loadErrors"];
+
+/** The gating failure kinds that list at least one route. */
+export function gateFailures(fails) {
+  return GATING.filter((k) => fails[k].length > 0);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const routes = await enumerateRoutes(args.app);
+  const routes = selectRoutes(await enumerateRoutes(args.app), args.only);
+  const mocks = mocksFor(args.fixture);
   const browser = await chromium.launch();
   const variants = [];
   const startedAt = new Date().toISOString();
@@ -494,41 +806,46 @@ async function main() {
         localStorage.setItem("theme", theme);
       }, { token: sessionToken(), theme, now: String(Date.now()) });
       for (const entry of routes) {
-        const r = await sweepRoute(context, args.base, entry, args.settleMs);
+        const r = await sweepRoute(context, args.base, entry, args.settleMs, mocks);
         variants.push({ viewport: viewport.name, theme, ...r });
-        const flag = r.loadError ? "LOAD-ERROR" : `body ${r.minBodyContrast ?? "-"} large ${r.minLargeContrast ?? "-"} small-text ${r.smallTextNodes} small-targets ${r.smallTargets} main ${r.hasMain} overflow ${r.overflowPx} errors ${r.consoleErrors.length}`;
-        console.log(`${viewport.name} ${theme.padEnd(5)} ${entry.route.padEnd(44)} ${flag}`);
+        const flag = r.loadError ? "LOAD-ERROR" : `body ${r.minBodyContrast ?? "-"} large ${r.minLargeContrast ?? "-"} small-text ${r.smallTextNodes} small-targets ${r.smallTargets} main ${r.hasMain} overflow ${r.overflowPx} errors ${r.consoleErrors.length} charts ${r.chartCount} marks ${r.chartMarks} mark ${r.minChartMarkContrast ?? "-"} chart-text ${r.minChartBodyContrast ?? "-"}`;
+        console.log(`${viewport.name} ${theme.padEnd(5)} ${entryName(entry).padEnd(44)} ${flag}`);
       }
       await context.close();
     }
   }
   await browser.close();
   const { rows, fails } = summarize(variants, routes);
-  const gateFailed = fails.bodyContrast.length + fails.largeContrast.length + fails.overflow.length + fails.consoleErrors.length + fails.loadErrors.length > 0;
+  const gateFailed = gateFailures(fails).length > 0;
   const result = {
     instrument: path.relative(process.cwd(), fileURLToPath(import.meta.url)),
     startedAt,
     finishedAt: new Date().toISOString(),
     base: args.base,
     appDir: args.app,
-    thresholds: { bodyContrast: BODY_MIN_RATIO, largeContrast: LARGE_MIN_RATIO, textFloorPx: BODY_TEXT_FLOOR_PX, hitAreaFloorPx: HIT_AREA_FLOOR_PX },
+    fixture: args.fixture,
+    only: args.only,
+    thresholds: { bodyContrast: BODY_MIN_RATIO, largeContrast: LARGE_MIN_RATIO, graphicContrast: GRAPHIC_MIN_RATIO, textFloorPx: BODY_TEXT_FLOOR_PX, hitAreaFloorPx: HIT_AREA_FLOOR_PX },
     viewports: VIEWPORTS.map((v) => v.name),
     themes: THEMES,
     routeCount: routes.length,
     variantCount: variants.length,
-    gate: { passed: !gateFailed, failing: fails },
+    gate: { passed: !gateFailed, gating: GATING, failing: fails },
     routes: rows,
     variants,
   };
   await fs.mkdir(path.dirname(path.resolve(args.out)), { recursive: true });
   await fs.writeFile(args.out, JSON.stringify(result, null, 2) + "\n");
   console.log(`\n${routes.length} routes x ${variants.length / routes.length} variants -> ${args.out}`);
-  for (const [k, v] of Object.entries(fails)) console.log(`  ${k.padEnd(14)} ${v.length} route(s)${v.length ? ": " + v.join(", ") : ""}`);
+  for (const [k, v] of Object.entries(fails)) console.log(`  ${k.padEnd(17)} ${v.length} route(s)${v.length ? ": " + v.join(", ") : ""}`);
   console.log(gateFailed ? "GATE: FAIL" : "GATE: PASS");
   process.exit(gateFailed ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(2);
-});
+// Run only when executed, so the measurement and the summary can be imported by tests.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(2);
+  });
+}
