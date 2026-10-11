@@ -163,6 +163,11 @@ cd apps/backend
 go test ./tests/integration/... -v
 ```
 
+Under `ENVIRONMENT=test` the backend starts without `KEYVAULT_MASTER_KEY`, on a key it generates at every start, so
+the agent private keys one run stores cannot be decrypted by the next. Set `KEYVAULT_MASTER_KEY` (generate one with
+`openssl rand -base64 32`) when the test database is kept between runs. `docker-compose.yml` takes the key from the
+environment or `.env` and stops with an error when neither sets it.
+
 Never set `ENVIRONMENT=test` on a deployment: the backend logs a warning at start when it does.
 
 ---

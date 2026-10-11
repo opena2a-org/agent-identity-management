@@ -31,17 +31,17 @@ go run cmd/migrate/main.go up
 
 Expected output on an empty database (abbreviated):
 ```
-🆕 Fresh database detected
+Fresh database detected
    No V1 consolidated schema present; applying incremental migrations
 
-📝 Found <n> pending migration(s)
+Found <n> pending migration(s)
 
-▶ Applying: 001_initial_schema.sql
-  ✓ Applied
-▶ Applying: 002_add_missing_user_columns.sql
-  ✓ Applied
+Applying: 001_initial_schema.sql
+  Applied
+Applying: 002_add_missing_user_columns.sql
+  Applied
 ...
-  ✅ All migrations applied successfully
+  All migrations applied successfully
 ```
 
 `go run cmd/migrate/main.go status` then reports every migration as applied and none pending.

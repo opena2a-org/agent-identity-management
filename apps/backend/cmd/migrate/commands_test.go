@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -222,4 +223,35 @@ func TestPrintStatusWithEveryMigrationApplied(t *testing.T) {
 	assert.Equal(t, "Migration files in "+dir+"/: 2\n"+
 		"Applied: 2 (last: 002_b.sql)\n"+
 		"Pending: 0\n", out.String())
+}
+
+// isPictograph reports whether r is one of the characters that
+// sdk/python/tests/test_no_emoji_in_console_output.py keeps out of the Python
+// SDK's console output: the same blocks and the same four code points.
+func isPictograph(r rune) bool {
+	return (r >= 0x1F000 && r <= 0x1FAFF) ||
+		(r >= 0x2600 && r <= 0x27BF) ||
+		(r >= 0x2B00 && r <= 0x2BFF) ||
+		r == 0xFE0F || r == 0x2139 || r == 0x23F3 || r == 0x23F8
+}
+
+// The migrate command's status and error lines say what happened in words.
+// Most of them are printed only against a live database, so main.go is read
+// for every line that carries a mark, and the one error reachable without a
+// database is checked as printed.
+func TestMigrateMessagesCarryNoPictographs(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	require.NoError(t, err)
+	var marked []string
+	for i, line := range strings.Split(string(src), "\n") {
+		if strings.IndexFunc(line, isPictograph) != -1 {
+			marked = append(marked, fmt.Sprintf("main.go:%d: %s", i+1, strings.TrimSpace(line)))
+		}
+	}
+	assert.Empty(t, marked, "lines of the migrate command that print a pictographic mark:\n%s", strings.Join(marked, "\n"))
+
+	code, _, stderr := runMain(t, t.TempDir(), "status")
+	assert.Equal(t, 1, code, stderr)
+	assert.Contains(t, stderr, "Failed to ping database")
+	assert.Equal(t, -1, strings.IndexFunc(stderr, isPictograph), "the error line carries a pictographic mark: %s", stderr)
 }

@@ -20,7 +20,7 @@ agent = register_agent(
     display_name="Demo Agent v2",
     description="Demonstration agent for AIM SDK",
     version="1.0.0",
-    repository_url="https://github.com/opena2a/agent-identity-management"
+    repository_url="https://github.com/opena2a-org/agent-identity-management"
 )
 
 # ============================================================================

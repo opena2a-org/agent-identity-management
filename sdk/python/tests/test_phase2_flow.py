@@ -35,7 +35,7 @@ def test_complete_flow():
             description="Testing automatic challenge-response verification",
             agent_type="ai_agent",
             version="1.0.0",
-            repository_url="https://github.com/opena2a/aim-sdk",  # +10 points
+            repository_url="https://github.com/opena2a-org/agent-identity-management",  # +10 points
             documentation_url="https://docs.aim.opena2a.org",      # +5 points
             # Base: 50 + Repo: 10 + Docs: 5 + Version: 5 + GitHub: 10 = 80 points
             # After verification: 80 + 25 = 105 (capped at 100) -> auto-approved!

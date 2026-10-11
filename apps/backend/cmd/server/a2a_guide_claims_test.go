@@ -32,8 +32,11 @@ var (
 	attenuationDiagramLine = regexp.MustCompile(`(?m)^\s*(root|subdelegation-\d+)\s+effectiveTrust (\d+(?:\.\d+)?)`)
 
 	tsRootTrustDefault   = regexp.MustCompile(`let effectiveTrust = options\?\.rootTrustScore \?\? (\d+(?:\.\d+)?);`)
-	tsAttenuationDefault = regexp.MustCompile(`const attenuation = chain\[i - 1\]\.trustAttenuation \?\? (\d+(?:\.\d+)?);`)
-	tsMinTrustDefault    = regexp.MustCompile(`const minTrust = chain\[i - 1\]\.minDelegatedTrust \?\? (\d+(?:\.\d+)?);`)
+	tsAttenuationDefault = regexp.MustCompile(`const attenuation = options\?\.trustAttenuation \?\? (\d+(?:\.\d+)?);`)
+	tsMinTrustDefault    = regexp.MustCompile(`const minTrust = options\?\.minDelegatedTrust \?\? (\d+(?:\.\d+)?);`)
+	// tsChainTrustRead matches a read of either attenuation field from anything
+	// but the verifier's options: a delegation's own fields are unsigned.
+	tsChainTrustRead     = regexp.MustCompile(`[^?]\.(?:trustAttenuation|minDelegatedTrust)\b`)
 	sqlAttenuationColumn = regexp.MustCompile(`trust_attenuation_factor DOUBLE PRECISION NOT NULL DEFAULT (\d+(?:\.\d+)?);`)
 	sqlMinTrustColumn    = regexp.MustCompile(`min_delegated_trust_score DOUBLE PRECISION NOT NULL DEFAULT (\d+(?:\.\d+)?);`)
 )
@@ -267,7 +270,9 @@ func TestA2AGuideAttestationIsAnExplicitCall(t *testing.T) {
 // reject a chain below the floor, so that a deeply delegated agent cannot
 // execute high-risk capabilities. No server code reads either field; only the
 // TypeScript SDK's verifyDelegationChain() attenuates, under other field names,
-// and its first delegation keeps the root trust. A server change that starts
+// and its first delegation keeps the root trust. It takes the factor and the
+// floor from the verifier's options and never from a delegation, whose fields
+// of those names are outside its signature. A server change that starts
 // reading the fields fails here until the guide says what it does.
 func TestA2AGuideDelegationAttenuationNamesWhereItApplies(t *testing.T) {
 	guide := aim03ReadRepoFile(t, "docs/guides/A2A.md")
@@ -299,8 +304,18 @@ func TestA2AGuideDelegationAttenuationNamesWhereItApplies(t *testing.T) {
 	ts := aim03ReadRepoFile(t, "sdk/typescript/src/crypto/delegation.ts")
 	srcContains(t, aim03ReadRepoFile(t, "sdk/typescript/src/index.ts"), "verifyDelegationChain,",
 		"the TypeScript SDK exports verifyDelegationChain")
-	srcContains(t, ts, "trustAttenuation?: number;", "a delegation carries trustAttenuation")
-	srcContains(t, ts, "minDelegatedTrust?: number;", "a delegation carries minDelegatedTrust")
+	srcContains(t, ts, "trustAttenuation?: number;", "a delegation and the verifier's options carry trustAttenuation")
+	srcContains(t, ts, "minDelegatedTrust?: number;", "a delegation and the verifier's options carry minDelegatedTrust")
+	verifyStart := strings.Index(ts, "export async function verifyDelegationChain(")
+	require.NotEqual(t, -1, verifyStart, "the SDK has verifyDelegationChain")
+	verify := ts[verifyStart:]
+	verifyEnd := strings.Index(verify, "\nexport ")
+	require.NotEqual(t, -1, verifyEnd, "verifyDelegationChain is followed by another export")
+	verify = verify[:verifyEnd]
+	assert.Empty(t, tsChainTrustRead.FindAllString(verify, -1),
+		"verifyDelegationChain takes the factor and the floor from its options, never from a delegation's unsigned fields")
+	srcContains(t, section, "`verifyDelegationChain()` does not read them", "the guide says the delegation's own fields are not read")
+	srcContains(t, section, "takes two optional settings from its caller, the verifier, in its options", "the guide says the verifier sets both")
 	srcContains(t, ts, "effectiveTrust = effectiveTrust * attenuation;", "each later delegation multiplies the trust")
 	srcContains(t, ts, "if (effectiveTrust < minTrust) {", "a delegation below the floor fails")
 	srcContains(t, ts, "const label = i === 0 ? 'root' : `subdelegation-${i}`;", "the delegations' labels")

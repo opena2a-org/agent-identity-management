@@ -7,6 +7,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- `verifyDelegationChain()` takes the trust attenuation factor and the trust floor from its options,
+  `trustAttenuation` (default 0.8) and `minDelegatedTrust` (default 0.3), which the verifier sets. It no longer reads
+  the fields of those names on a delegation: a delegation's signed payload leaves them out, so whoever passes a chain
+  on can set them and every signature still verifies. Run against the code before this change, a chain of three
+  delegations made by `createDelegation()`, each then given `trustAttenuation: 1` and verified with no options, was
+  valid with an effective trust of 1 at all three; it is now 1, 0.8 and 0.64. A factor or floor that is not a number
+  from 0 to 1 fails the chain with `trustAttenuation and minDelegatedTrust must be numbers from 0 to 1` before any
+  delegation is checked. A verifier that set the fields on each delegation before verifying passes the same values in
+  the options instead (#690).
+
 ### Changed
 
 - The npm "Homepage" link and the first link in this README go to the project page,

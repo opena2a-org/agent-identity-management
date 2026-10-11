@@ -479,15 +479,14 @@ func getSDKDisplayName(sdkType string) string {
 	}
 }
 
-// generateSetupInstructions creates SDK-specific setup instructions
+// generateSetupInstructions creates SDK-specific setup instructions. The
+// repository carries no Go SDK, so Go gets the generic text.
 func (h *SDKHandler) generateSetupInstructions(sdkType, zipPrefix string) string {
 	switch sdkType {
 	case "python":
 		return h.generatePythonInstructions(zipPrefix)
 	case "java":
 		return h.generateJavaInstructions(zipPrefix)
-	case "go":
-		return h.generateGoInstructions(zipPrefix)
 	case "javascript":
 		return h.generateJavaScriptInstructions(zipPrefix)
 	default:
@@ -653,80 +652,6 @@ Agent credentials (after registration) are stored separately in ` + "`~/.aim/age
 - Tokens can be revoked at any time from your dashboard
 
 For more examples, see the ` + "`examples/`" + ` directory.
-`
-}
-
-// generateGoInstructions creates Go-specific setup instructions
-func (h *SDKHandler) generateGoInstructions(zipPrefix string) string {
-	return `# AIM Go SDK - Quick Start
-
-This SDK is pre-configured with your credentials!
-
-## Installation
-
-1. Unzip this file:
-   ` + "```bash\n   unzip " + zipPrefix + ".zip\n   cd " + zipPrefix + "\n   ```" + `
-
-2. Initialize Go module (if needed):
-   ` + "```bash\n   go mod init your-project\n   go mod tidy\n   ```" + `
-
-## Usage
-
-The SDK is already configured with your identity. Just use it!
-
-` + "```go\n" +
-		`package main
-
-import (
-    "fmt"
-    "log"
-
-    "github.com/opena2a/aim-sdk-go/client"
-)
-
-func main() {
-    // Zero configuration needed! Your credentials are embedded.
-    c, err := client.NewClient()
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Register an agent
-    agent, err := c.RegisterAgent(&client.RegisterAgentRequest{
-        Name:        "my-awesome-agent",
-        AgentType:   "ai_agent",
-        Description: "An agent that does amazing things",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    fmt.Printf("Agent registered! ID: %s\n", agent.ID)
-    fmt.Printf("Trust Score: %.2f\n", agent.TrustScore)
-}
-` + "```" + `
-
-## Automatic Authentication
-
-Your SDK contains embedded OAuth credentials that automatically:
-- ✅ Authenticate your agent registrations
-- ✅ Link agents to your user account
-- ✅ Refresh tokens when they expire
-- ✅ Work for 90 days without re-authentication
-
-## Security
-
-Your SDK credentials are stored in ` + "`.aim/sdk_credentials.json`" + `. Keep this file secure!
-
-Agent credentials (after registration) are stored separately in ` + "`~/.aim/agents/{agent-name}.json`" + `.
-
-⚠️ **Important Security Notes:**
-- Credentials are valid for 90 days
-- Never commit credentials to Git
-- Revoke tokens from dashboard if compromised
-- Tokens can be revoked at any time from your dashboard
-
-For more examples, see the included test files.
 `
 }
 

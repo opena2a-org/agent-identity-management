@@ -11,6 +11,38 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the docs link lint reads every file, the SDK download carries no Go README, the documentation lints pass, and the migrate command prints words, not pictographs (#690)
+
+- The setup README the server writes into a downloaded SDK has no Go variant. The repository carries no Go SDK, the
+  download route serves only `python` and `java`, and the Go text imported `github.com/opena2a/aim-sdk-go/client`,
+  a module under the opena2a account, where the project has no repository.
+- `scripts/lint-docs-repo-links.sh` checks every text file git tracks and every untracked file git does not ignore,
+  not only Markdown. A disabled Go test, the Python SDK's example and two of its tests named the opena2a account;
+  they now name opena2a-org. Changelogs, the lint and its test are not checked, nor is the import prefix
+  `scripts/sync-to-cloud.sh` writes into the Go files of the repository it syncs to, which has to equal that
+  repository's module path.
+- `scripts/check-public-wording.py` passes on the public documents. It reported 7 hits in 6 files: lines calling the
+  audit trail immutable, tamper-proof, tamper-evident or append-only. They now say audit trail or audit log, the
+  quick start says the decorator signs the verification request with the agent's Ed25519 key, and the documentation
+  index drops an "Immutable logging" bullet.
+- `docs/guides/QUICK_START.md` says under Integration Tests that a backend started with `ENVIRONMENT=test` and no
+  `KEYVAULT_MASTER_KEY` runs on a key it generates at every start, so agent keys one run stores cannot be decrypted
+  by the next, and to set the key when the test database is kept. `scripts/test-lint-docs-keyvault-master-key.sh`
+  reported 1 failure on that section and now passes.
+- The comment in `infrastructure/docker/Dockerfile.backend` runs `docker compose run --rm backend /app/aim-migrate`,
+  naming the compose service rather than its container name `aim-backend`.
+- `cmd/migrate` prints its status and error lines without pictographic marks, and the sample output in
+  `docs/guides/BOOTSTRAP_GUIDE.md` matches.
+- The A2A guide and `docs/sdk/trust-scoring.md` say that the TypeScript SDK's `verifyDelegationChain()` takes the
+  trust attenuation factor and the trust floor from the verifier's options and not from a delegation, whose fields
+  of those names its signature does not cover. The TypeScript SDK's changelog describes the change.
+- Tests hold these. The generated setup README for every SDK type names no path under the opena2a account. The
+  migrate command's source has no line with a character the Python SDK's console-output test bars, and its
+  database error prints none. The test that checks documented docker commands against the compose files reads
+  Dockerfiles as well as Markdown. A test in the TypeScript SDK's suite runs `check-public-wording.py` and the
+  tests of both documentation lints, which include a run on the repository. The A2A guide test requires
+  `verifyDelegationChain()` to read neither field from a delegation.
+
 ### Fixed — an empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off (#688)
 
 - When `REDIS_HOST` is set to the empty string, the backend makes no Redis connection and logs

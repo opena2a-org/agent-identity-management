@@ -149,8 +149,10 @@ export interface Delegation {
   signature: string;
   publicKey: string;
   parentDelegation?: string;
-  trustAttenuation?: number;  // Multiplier per hop (0.0-1.0, default 0.8)
-  minDelegatedTrust?: number; // Floor below which chain is invalid (0.0-1.0, default 0.3)
+  // Interop metadata, outside the signed payload. verifyDelegationChain() does
+  // not read either: the verifier passes the factor and the floor in its options.
+  trustAttenuation?: number;  // Multiplier per hop (0.0-1.0)
+  minDelegatedTrust?: number; // Floor below which chain is invalid (0.0-1.0)
 }
 
 /**
@@ -389,6 +391,22 @@ export function verifyScopeNarrowing(parent: Delegation, child: Delegation): boo
 
 export interface DelegationChainVerificationOptions extends DelegationTemporalOptions {
   rootTrustScore?: number; // Trust score of the root delegator (default 1.0)
+  /**
+   * Factor each later delegation's effective trust is the previous one's
+   * multiplied by (0.0-1.0, default 0.8). Set by the verifier: a delegation's
+   * own `trustAttenuation` is outside its signature and is not read.
+   */
+  trustAttenuation?: number;
+  /**
+   * Floor a later delegation's effective trust must not fall below
+   * (0.0-1.0, default 0.3). Set by the verifier: a delegation's own
+   * `minDelegatedTrust` is outside its signature and is not read.
+   */
+  minDelegatedTrust?: number;
+}
+
+function isUnitInterval(value: number): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
 export interface DelegationChainResult {
@@ -413,7 +431,11 @@ export interface DelegationChainResult {
  *    window, evaluated against one shared instant for the whole chain, AND each
  *    child's expiresAt must not exceed its parent's (a child cannot outlive its
  *    delegator, even before the parent expires)
- * 6. Trust attenuation: effective trust decays per hop and must stay above minimum
+ * 6. Trust attenuation: effective trust decays per hop by the verifier's
+ *    `trustAttenuation` and must stay at or above the verifier's
+ *    `minDelegatedTrust`. The fields of the same names on a delegation are left
+ *    out of its signed payload, so whoever passes the chain on could set them;
+ *    they are not read.
  */
 export async function verifyDelegationChain(
   chain: Delegation[],
@@ -431,6 +453,15 @@ export async function verifyDelegationChain(
   const evalAtMs = resolveVerifyAtMs(options?.verifyAt);
   if (Number.isNaN(evalAtMs)) {
     return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'Unparseable verifyAt evaluation time' }] };
+  }
+
+  // The factor and the floor come from the verifier, never from the chain.
+  // Fail closed on a value outside 0 to 1: a factor above 1 would raise trust
+  // at each hop, and NaN would pass every floor.
+  const attenuation = options?.trustAttenuation ?? 0.8;
+  const minTrust = options?.minDelegatedTrust ?? 0.3;
+  if (!isUnitInterval(attenuation) || !isUnitInterval(minTrust)) {
+    return { valid: false, results: [{ index: 0, label: 'root', signatureValid: false, identityValid: false, scopeValid: false, temporalValid: false, effectiveTrust: 0, error: 'trustAttenuation and minDelegatedTrust must be numbers from 0 to 1' }] };
   }
 
   const results: DelegationChainResult[] = [];
@@ -471,12 +502,8 @@ export async function verifyDelegationChain(
         continue;
       }
 
-      // Apply trust attenuation from the parent delegation
-      const attenuation = chain[i - 1].trustAttenuation ?? 0.8;
+      // Apply the verifier's trust attenuation, then its minimum trust threshold
       effectiveTrust = effectiveTrust * attenuation;
-
-      // Check minimum trust threshold
-      const minTrust = chain[i - 1].minDelegatedTrust ?? 0.3;
       if (effectiveTrust < minTrust) {
         results.push({
           index: i,

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # test-lint-docs-repo-links.sh -- lint-docs-repo-links.sh must reject a link to
-# the `opena2a` GitHub account in a Markdown page, and the repository's own
-# Markdown must pass it.
+# the `opena2a` GitHub account in any file of the repository, Markdown or not,
+# and the repository's own files must pass it.
 #
 # The install, deployment and contributing guides told readers to clone from
 # github.com/opena2a/, an account that is not the project's, and linked its
-# issue tracker. Each rejected link is paired with an accepted one of the same
-# shape, because "the lint fails" alone is also satisfied by a lint that rejects
+# issue tracker; a Go import and repository URLs in Python files named the same
+# account. Each rejected link is paired with an accepted one of the same shape,
+# because "the lint fails" alone is also satisfied by a lint that rejects
 # everything.
 
 set -euo pipefail
@@ -28,12 +29,15 @@ pass() {
   echo "  ok:   $*"
 }
 
-# run_lint <page> <line>: lint a copy of the repository layout the lint expects
-# in which <page> holds a heading, a blank line and then <line> (line 3).
+# run_lint <page> <line>: lint a copy of the repository layout the lint expects,
+# a git work tree, in which <page> holds a first line, a blank line and then
+# <line> (line 3). The page is left untracked: the lint checks untracked files
+# git does not ignore.
 run_lint() {
   local page="$1" line="$2"
   rm -rf "$WORK/repo"
   mkdir -p "$WORK/repo/scripts" "$WORK/repo/$(dirname "$page")"
+  git init -q "$WORK/repo"
   cp "$LINT" "$WORK/repo/scripts/"
   printf '# Page\n\n%s\n' "$line" > "$WORK/repo/$page"
   bash "$WORK/repo/scripts/lint-docs-repo-links.sh" > "$WORK/out" 2>&1
@@ -100,12 +104,39 @@ expect_rejected README.md \
   'github.com/opena2a/agent-identity-management/issues'
 expect_accepted CHANGELOG.md \
   'https://github.com/opena2a/agent-identity-management/issues'
+expect_accepted sdk/python/CHANGELOG.md \
+  'https://github.com/opena2a/agent-identity-management/issues'
 
-echo "the repository's own Markdown passes"
+echo "a file other than Markdown is checked: a Go import, a Go string, a Python string"
+expect_rejected apps/backend/internal/application/mcp_server_service_test.go.disabled \
+  '	"github.com/opena2a/identity/backend/internal/crypto"' \
+  'github.com/opena2a/identity/backend/internal/crypto'
+expect_accepted apps/backend/internal/application/mcp_server_service_test.go.disabled \
+  '	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"'
+expect_rejected apps/backend/internal/interfaces/http/handlers/sdk_handler.go \
+  '    "github.com/opena2a/aim-sdk-go/client"' \
+  'github.com/opena2a/aim-sdk-go/client'
+expect_rejected sdk/python/examples/example.py \
+  '    repository_url="https://github.com/opena2a/agent-identity-management"' \
+  'github.com/opena2a/agent-identity-management'
+expect_accepted sdk/python/examples/example.py \
+  '    repository_url="https://github.com/opena2a-org/agent-identity-management"'
+
+echo "the sync script's import prefix for the repository it syncs to is exempt; another link in it is not"
+expect_accepted scripts/sync-to-cloud.sh \
+  'DST_IMPORT="github.com/opena2a/identity/backend/internal/"'
+expect_rejected scripts/sync-to-cloud.sh \
+  'git clone https://github.com/opena2a/identity.git' \
+  'github.com/opena2a/identity.git'
+expect_rejected scripts/other-sync.sh \
+  'DST_IMPORT="github.com/opena2a/identity/backend/internal/"' \
+  'github.com/opena2a/identity/backend/internal/'
+
+echo "the repository's own files pass"
 if bash "$LINT" > "$WORK/out" 2>&1; then
   pass "$(cat "$WORK/out")"
 else
-  fail "the repository's Markdown fails the lint"
+  fail "the repository's files fail the lint"
   sed 's/^/        /' "$WORK/out"
 fi
 

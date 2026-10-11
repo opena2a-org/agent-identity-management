@@ -195,7 +195,7 @@ For a full SDK walkthrough including policies and event logging, see [Embed in m
 ## What You Now Have
 
 - An Ed25519 keypair stored locally
-- A tamper-evident audit log recording identity events
+- An audit log recording identity events
 - Tool attestations linking your agent to its runtime environment
 - A trust score that other systems can query
 

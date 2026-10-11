@@ -1413,7 +1413,7 @@ describe('QGF-273 docker-publish.yml publishes only from a platform-v tag push',
     });
   }
 
-  it('QGF-273.AC9 no in-repo text still promises a merge-built image: the five files carry none of the retired phrases and each carries its new anchor', () => {
+  it('no in-repo text still promises a merge-built image: the five files carry none of the retired phrases and each carries its new anchor', () => {
     const texts: Record<string, string> = {};
     for (const f of AC9_FILES) texts[f] = readFileSync(join(REPO_ROOT, f), 'utf-8');
     for (const f of AC9_FILES) {

@@ -275,10 +275,10 @@ Behind those **3 lines of code**, AIM prevents your agent from going rogue:
 **Every time `get_weather()` is called**, AIM automatically:
 
 - 🛡️ **Verifies** the action BEFORE it executes (prevents unauthorized API calls!)
-- 📝 **Logs** to immutable audit trail (who, what, when, why)
+- 📝 **Logs** to the audit trail (who, what, when, why)
 - 📊 **Updates** real-time trust score (9-factor algorithm)
 - 🚨 **Monitors** for anomalies (unusual patterns trigger alerts)
-- 🔐 **Signs** with Ed25519 cryptography (tamper-proof verification)
+- 🔐 **Signs** the verification request with the agent's Ed25519 key
 
 **Without `@agent.perform_action`?** Your agent can do ANYTHING without oversight. ❌
 **With `@agent.perform_action`?** Every action verified, logged, monitored. ✅

@@ -124,7 +124,7 @@ func main() {
 	case commandCreate:
 		path, err := createMigration(migrationsDir, cmd.migrationName)
 		if err != nil {
-			log.Fatalf("❌ Failed to create migration: %v", err)
+			log.Fatalf("Failed to create migration: %v", err)
 		}
 		fmt.Printf("Created %s\n", path)
 		return
@@ -133,13 +133,13 @@ func main() {
 	// Get database URL from environment
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("❌ DATABASE_URL environment variable is required")
+		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
 	// Connect to database
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to database: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
@@ -148,12 +148,12 @@ func main() {
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		log.Fatalf("❌ Failed to ping database: %v", err)
+		log.Fatalf("Failed to ping database: %v", err)
 	}
 
 	if cmd.name == commandStatus {
 		if err := printStatus(ctx, db, migrationsDir, os.Stdout); err != nil {
-			log.Fatalf("❌ Failed to read migration status: %v", err)
+			log.Fatalf("Failed to read migration status: %v", err)
 		}
 		return
 	}
@@ -164,17 +164,17 @@ func main() {
 
 	// Create schema_migrations table if it doesn't exist
 	if err := ensureMigrationsTable(ctx, db); err != nil {
-		log.Fatalf("❌ Failed to create migrations table: %v", err)
+		log.Fatalf("Failed to create migrations table: %v", err)
 	}
 
 	// Check if database is empty (fresh deployment)
 	isFresh, err := isDatabaseFresh(ctx, db)
 	if err != nil {
-		log.Fatalf("❌ Failed to check database state: %v", err)
+		log.Fatalf("Failed to check database state: %v", err)
 	}
 
 	if isFresh {
-		fmt.Printf("%s🆕 Fresh database detected%s\n", colorGreen, colorReset)
+		fmt.Printf("%sFresh database detected%s\n", colorGreen, colorReset)
 
 		// Prefer the consolidated V1 schema when shipped (fast path for prod
 		// deployments). Repos that don't ship the consolidated file fall
@@ -183,25 +183,25 @@ func main() {
 		if _, err := os.Stat("migrations/V1__consolidated_schema.sql"); err == nil {
 			fmt.Printf("   Using consolidated V1 schema for fast deployment\n\n")
 			if err := applyConsolidatedSchema(ctx, db); err != nil {
-				log.Fatalf("❌ Failed to apply consolidated schema: %v", err)
+				log.Fatalf("Failed to apply consolidated schema: %v", err)
 			}
 		} else {
 			fmt.Printf("   No V1 consolidated schema present; applying incremental migrations\n\n")
 			if err := applyIncrementalMigrations(ctx, db); err != nil {
-				log.Fatalf("❌ Failed to apply incremental migrations: %v", err)
+				log.Fatalf("Failed to apply incremental migrations: %v", err)
 			}
 		}
 	} else {
-		fmt.Printf("%s📦 Existing database detected%s\n", colorYellow, colorReset)
+		fmt.Printf("%sExisting database detected%s\n", colorYellow, colorReset)
 		fmt.Printf("   Using incremental migrations\n\n")
 		
 		if err := applyIncrementalMigrations(ctx, db); err != nil {
-			log.Fatalf("❌ Failed to apply incremental migrations: %v", err)
+			log.Fatalf("Failed to apply incremental migrations: %v", err)
 		}
 	}
 
 	fmt.Printf("\n%s════════════════════════════════════════%s\n", colorGreen, colorReset)
-	fmt.Printf("%s  ✅ All migrations applied successfully%s\n", colorGreen, colorReset)
+	fmt.Printf("%s  All migrations applied successfully%s\n", colorGreen, colorReset)
 	fmt.Printf("%s════════════════════════════════════════%s\n\n", colorGreen, colorReset)
 }
 
@@ -243,7 +243,7 @@ func applyConsolidatedSchema(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("failed to read consolidated schema: %w", err)
 	}
 
-	fmt.Printf("%s⚡ Applying consolidated V1 schema...%s\n", colorBlue, colorReset)
+	fmt.Printf("%sApplying consolidated V1 schema...%s\n", colorBlue, colorReset)
 	
 	// Execute schema in a transaction
 	tx, err := db.BeginTx(ctx, nil)
@@ -260,7 +260,7 @@ func applyConsolidatedSchema(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	fmt.Printf("%s✓ Consolidated schema applied%s\n", colorGreen, colorReset)
+	fmt.Printf("%sConsolidated schema applied%s\n", colorGreen, colorReset)
 	return nil
 }
 
@@ -281,21 +281,21 @@ func applyIncrementalMigrations(ctx context.Context, db *sql.DB) error {
 	pending := filterPendingMigrations(migrations, applied)
 
 	if len(pending) == 0 {
-		fmt.Printf("%s✓ No pending migrations%s\n", colorGreen, colorReset)
+		fmt.Printf("%sNo pending migrations%s\n", colorGreen, colorReset)
 		return nil
 	}
 
-	fmt.Printf("%s📝 Found %d pending migration(s)%s\n\n", colorYellow, len(pending), colorReset)
+	fmt.Printf("%sFound %d pending migration(s)%s\n\n", colorYellow, len(pending), colorReset)
 
 	// Apply each pending migration
 	for _, migration := range pending {
-		fmt.Printf("%s▶ Applying: %s%s\n", colorBlue, migration.Filename, colorReset)
+		fmt.Printf("%sApplying: %s%s\n", colorBlue, migration.Filename, colorReset)
 		
 		if err := applyMigration(ctx, db, migration); err != nil {
 			return fmt.Errorf("failed to apply migration %s: %w", migration.Filename, err)
 		}
 
-		fmt.Printf("%s  ✓ Applied%s\n", colorGreen, colorReset)
+		fmt.Printf("%s  Applied%s\n", colorGreen, colorReset)
 	}
 
 	return nil

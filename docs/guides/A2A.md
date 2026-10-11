@@ -238,11 +238,11 @@ for i in range(1, 5):
 
 Trust decays along a delegation chain only where the TypeScript SDK's `verifyDelegationChain()` checks the chain. The AIM server does not apply attenuation: it stores a trust attenuation factor (default 0.8) and a minimum delegated trust score (default 0.3) for each delegation in its `a2a_delegation` table, and no server code reads them. Neither the Python SDK nor the Java SDK applies attenuation.
 
-`verifyDelegationChain()` reads two optional fields of each delegation:
-- `trustAttenuation` (default 0.8): the factor that turns this delegation's trust into the next one's
-- `minDelegatedTrust` (default 0.3): the floor the next delegation's trust must not fall below
+`verifyDelegationChain()` takes two optional settings from its caller, the verifier, in its options:
+- `trustAttenuation` (default 0.8): the factor that turns one delegation's trust into the next one's
+- `minDelegatedTrust` (default 0.3): the floor a later delegation's trust must not fall below
 
-The first delegation keeps the trust passed as `rootTrustScore` (default 1.0). Each later delegation's effective trust is the previous one's multiplied by the previous delegation's `trustAttenuation`. A delegation whose effective trust falls below the previous delegation's `minDelegatedTrust` carries an error, and the chain is not valid. With the defaults:
+Each must be a number from 0 to 1; any other value fails the chain before a delegation is checked. The first delegation keeps the trust passed as `rootTrustScore` (default 1.0). Each later delegation's effective trust is the previous one's multiplied by `trustAttenuation`. A delegation whose effective trust falls below `minDelegatedTrust` carries an error, and the chain is not valid. With the defaults:
 
 ```
 root               effectiveTrust 1.0
@@ -251,10 +251,14 @@ root               effectiveTrust 1.0
   subdelegation-3  effectiveTrust 0.512   # 0.64 × 0.8
 ```
 
-`createDelegation()` sets neither field, so a chain it builds uses the defaults. Neither field is covered by the delegation's signature: the SDK leaves both out of the signed payload, so whoever passes a chain on can change them without failing verification. A verifier that receives a chain from another party should set the values it requires on each delegation before calling `verifyDelegationChain()`.
+A delegation can also carry fields named `trustAttenuation` and `minDelegatedTrust`. `createDelegation()` sets neither field, and the SDK leaves both out of the signed payload, so whoever passes a chain on can change them without failing verification. `verifyDelegationChain()` does not read them: a chain cannot raise the trust it is given or lower the floor it is held to.
 
 ```typescript
-const result = await verifyDelegationChain(chain, { rootTrustScore: 0.95 });
+const result = await verifyDelegationChain(chain, {
+  rootTrustScore: 0.95,
+  trustAttenuation: 0.8,
+  minDelegatedTrust: 0.3,
+});
 // result.valid is false when any delegation fails a check, the trust floor included
 // result.results[i].effectiveTrust is the trust at delegation i
 ```

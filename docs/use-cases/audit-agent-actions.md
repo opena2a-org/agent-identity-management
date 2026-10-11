@@ -139,7 +139,7 @@ Events logged via the TypeScript SDK follow the same hash chain format as CLI-lo
 
 ## What You Now Have
 
-- An append-only log of every agent action
+- A log of every agent action
 - Tamper detection via SHA-256 hash chain
 - Filterable history for incident investigation
 
