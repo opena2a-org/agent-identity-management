@@ -189,7 +189,6 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
 
 2. **[Authentication API](./api/auth.md)** *(Coming Soon)*
    - Login, logout
-   - SSO (Google, Microsoft, Okta)
    - Token refresh
    - Session management
 

@@ -63,7 +63,6 @@ AIM includes the following security features:
 - **JWT-based Authentication**: Secure token-based authentication
 - **Bcrypt Password Hashing**: Industry-standard password protection
 - **Role-Based Access Control (RBAC)**: Granular permission management
-- **OAuth/OIDC Support**: SSO integration
 
 ### Cryptographic Security
 - **Ed25519 Key Pairs**: Modern elliptic curve cryptography for agent identity (RFC 8032)

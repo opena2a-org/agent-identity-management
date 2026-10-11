@@ -59,6 +59,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Routing SDK verifications through the 5-step engine is still open.
 - Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
 
+### Removed — the guides no longer describe sign-in with Google, Microsoft or Okta, which no route serves (#667)
+
+- Users sign in with an email and password: the dashboard posts them to `POST /api/v1/public/login`, and API clients
+  can use `POST /api/v1/auth/login/local`. The config reads the `GOOGLE_*`, `MICROSOFT_*` and `OKTA_*` variables, but
+  no mounted route signs a user in with a provider.
+  `docs/guides/INSTALLATION.md`, `docs/guides/SETUP_GUIDE.md`, `docs/DEPLOYMENT.md` and
+  `docs/guides/DEPLOYMENT_CHECKLIST.md` gave those variables and the steps to register an application with each
+  provider; `docs/API.md`, `docs/guides/API_REFERENCE.md`, `docs/guides/API_ENDPOINT_SUMMARY.md` and
+  `docs/guides/SETUP_GUIDE.md` listed `/auth/google`, `/api/v1/auth/login/:provider` and
+  `/api/v1/auth/callback/:provider`; `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md`, `docs/guides/START_HERE.md`,
+  `docs/guides/BOOTSTRAP_GUIDE.md`, `docs/guides/SECURITY.md`, `docs/DOCUMENTATION_INDEX.md`, `docs/troubleshooting/`,
+  `infrastructure/DEPLOYMENT.md`, `infrastructure/deployment/README.md` and `SECURITY.md` described sign-in with OAuth
+  or SSO. Those sections are removed, and the API guides list `POST /api/v1/auth/login/local` in their place.
+- `.env.example` no longer offers `GOOGLE_CLIENT_ID` for "Sign in with Google", and
+  `infrastructure/scripts/setup-oauth.sh`, which created a Google OAuth client with `gcloud` and wrote it to
+  `apps/backend/.env`, is removed with its entry in `infrastructure/README.md`.
+- A backend test sends a signed-in request to each provider login and callback path through the routes the server
+  mounts and fails if one is served, and fails if a guide, README or `.env.example` gives a provider route, a provider
+  variable, or sign-in with Google, Microsoft, Okta or SSO.
+
 ### Fixed — the pages that install the Python SDK give `pip install aim-sdk`, the README's install command (#663)
 
 - The Python SDK is published on PyPI as `aim-sdk` (`name="aim-sdk"` in `sdk/python/setup.py`). `docs/quick-start.md`

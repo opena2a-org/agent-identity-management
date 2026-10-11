@@ -30,7 +30,6 @@
 - [ ] Environment variables documented
 
 ### Security
-- [ ] OAuth credentials configured (Google, Microsoft, Okta)
 - [ ] JWT secret is strong (32+ characters)
 - [ ] Database credentials are strong
 - [ ] All secrets stored in environment variables (not hardcoded)
@@ -75,21 +74,6 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 
 JWT_SECRET=<32-char-random-string>
-
-GOOGLE_CLIENT_ID=<your-google-client-id>
-GOOGLE_CLIENT_SECRET=<your-google-client-secret>
-GOOGLE_REDIRECT_URL=http://localhost:8080/api/v1/auth/callback/google
-
-# Optional: Microsoft OAuth
-# MICROSOFT_CLIENT_ID=
-# MICROSOFT_CLIENT_SECRET=
-# MICROSOFT_REDIRECT_URL=
-
-# Optional: Okta OAuth
-# OKTA_CLIENT_ID=
-# OKTA_CLIENT_SECRET=
-# OKTA_DOMAIN=
-# OKTA_REDIRECT_URL=
 ```
 
 #### Frontend .env.local Required Variables
@@ -100,7 +84,6 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 **Checklist:**
 - [ ] Backend .env file created and configured
 - [ ] Frontend .env.local file created and configured
-- [ ] OAuth credentials obtained from providers
 - [ ] JWT secret generated (use `openssl rand -base64 32`)
 
 ### Step 2: Start Infrastructure Services
@@ -189,16 +172,12 @@ npm run dev
 # Test backend health
 curl http://localhost:8080/api/v1/health
 
-# Test OAuth endpoints (should redirect)
-curl -I http://localhost:8080/api/v1/auth/login/google
-
 # Test protected endpoint (should return 401)
 curl http://localhost:8080/api/v1/agents
 ```
 
 **Checklist:**
 - [ ] Health check returns 200 OK
-- [ ] OAuth endpoints return 302 redirect
 - [ ] Protected endpoints return 401 unauthorized
 - [ ] Frontend landing page loads
 - [ ] No console errors in browser
@@ -231,7 +210,6 @@ cp apps/backend/.env.example apps/backend/.env.production
 # - Strong database password
 # - Production JWT secret (64+ chars)
 # - KEYVAULT_MASTER_KEY from: openssl rand -base64 32
-# - Real OAuth credentials
 # - ENVIRONMENT=production
 # - Enable TLS
 ```
@@ -241,7 +219,6 @@ cp apps/backend/.env.example apps/backend/.env.production
 - [ ] Strong passwords (20+ characters)
 - [ ] JWT secret is 64+ characters
 - [ ] `KEYVAULT_MASTER_KEY` is set, stored with your other secrets, and kept the same across restarts (agent private keys are encrypted under it; the server refuses to start in production without it)
-- [ ] OAuth credentials are configured
 - [ ] Database connection string uses production host
 
 ### Step 3: Start Production Stack
@@ -282,9 +259,6 @@ curl https://your-domain.com/api/v1/health
 
 # Test landing page
 curl -I https://your-domain.com
-
-# Test OAuth flow
-curl -I https://your-domain.com/api/v1/auth/login/google
 ```
 
 **Checklist:**
@@ -292,7 +266,6 @@ curl -I https://your-domain.com/api/v1/auth/login/google
 - [ ] SSL certificate valid
 - [ ] Health check returns 200
 - [ ] Landing page loads
-- [ ] OAuth redirects to Google
 - [ ] No errors in production logs
 
 ---
@@ -323,11 +296,6 @@ kubectl create secret generic postgres-secret \
 # Create JWT secret
 kubectl create secret generic jwt-secret \
   --from-literal=secret=<64-char-random-string>
-
-# Create OAuth secrets
-kubectl create secret generic oauth-secrets \
-  --from-literal=google-client-id=<your-id> \
-  --from-literal=google-client-secret=<your-secret>
 ```
 
 **Checklist:**
@@ -451,7 +419,7 @@ kubectl logs -l app=frontend --tail=100
 ## Post-Deployment Verification
 
 ### Functional Testing
-- [ ] Can log in with Google OAuth
+- [ ] Can log in with an email and password
 - [ ] Can create an agent
 - [ ] Can generate API key
 - [ ] Can view trust score
@@ -468,7 +436,6 @@ kubectl logs -l app=frontend --tail=100
 
 ### Security Testing
 - [ ] HTTPS enforced
-- [ ] OAuth flow secure
 - [ ] JWT tokens expire correctly
 - [ ] API keys are hashed
 - [ ] SQL injection prevented
@@ -547,7 +514,7 @@ Deployment is successful when:
 - ✅ Health checks passing
 
 ### Functionality
-- ✅ OAuth login working
+- ✅ Email and password login working
 - ✅ Agent registration working
 - ✅ API key generation working
 - ✅ Trust scoring working
@@ -613,12 +580,6 @@ Deployment is successful when:
 - Check CORS configuration
 - Verify backend is accessible
 - Check network/firewall rules
-
-**Issue: OAuth login fails**
-- Verify OAuth credentials
-- Check redirect URLs match exactly
-- Verify callback URL is accessible
-- Check OAuth provider settings
 
 **Issue: Database connection fails**
 - Verify PostgreSQL is running

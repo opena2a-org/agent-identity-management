@@ -66,8 +66,8 @@ POST /api/v1/agents/agent_123/verify-capability
 
 | Method | Endpoint | Description | Authentication |
 |--------|----------|-------------|----------------|
-| GET | `/api/v1/auth/login/:provider` | OAuth2 login (Google, Microsoft, Okta) | None |
-| GET | `/api/v1/auth/callback/:provider` | OAuth2 callback handler | None |
+| POST | `/api/v1/auth/login/local` | Email and password login; returns an access token and a refresh token | None |
+| POST | `/api/v1/auth/refresh` | Exchange a refresh token for new tokens; the refresh token is rotated | None |
 | POST | `/api/v1/auth/logout` | User logout; revokes the bearer and the refresh token in the JSON body, reports what was revoked | None |
 | GET | `/api/v1/auth/me` | Get current user info | JWT Required |
 
@@ -236,13 +236,11 @@ POST /api/v1/agents/agent_123/verify-capability
 ## 🔐 Authentication & Authorization
 
 ### Authentication Methods
-1. **OAuth2/OIDC**:
-   - Google
-   - Microsoft
-   - Okta
+1. **Email and Password**:
+   - `POST /api/v1/auth/login/local`
 
 2. **JWT Tokens**:
-   - Issued after successful OAuth login
+   - Issued after a successful login
    - Used for subsequent API calls
    - Include in header: `Authorization: Bearer <token>`
 
@@ -282,7 +280,7 @@ POST /api/v1/agents/agent_123/verify-capability
 | **TOTAL** | **62+** | **100%** |
 
 ### By Authentication Requirement
-- **No Auth Required**: 3 endpoints (health checks, OAuth login)
+- **No Auth Required**: 3 endpoints (health checks, email and password login)
 - **JWT Required**: 59+ endpoints
 - **Admin Only**: 20+ endpoints
 - **Manager+**: 12+ endpoints

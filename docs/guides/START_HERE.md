@@ -45,7 +45,7 @@ Claude will:
 - Set up Turborepo monorepo structure
 - Configure Docker Compose (postgres, redis, elasticsearch, minio)
 - Create database schema with migrations
-- Build SSO authentication (Google, Microsoft, Okta)
+- Build email and password authentication
 - Create API framework with OpenAPI docs
 
 **You'll see**: Complete backend and frontend scaffolding
@@ -93,7 +93,7 @@ Claude will:
 ## What You'll Get After 30 Hours
 
 ### ✅ Complete Platform
-- Working SSO authentication
+- Working email and password authentication
 - Agent/MCP registration and verification
 - Trust scoring system
 - API key management
@@ -134,7 +134,7 @@ git log --oneline
 ```
 
 You'll see frequent commits like:
-- `feat: add SSO authentication`
+- `feat: add email and password authentication`
 - `feat: implement trust scoring`
 - `test: add unit tests for API service`
 - `docs: update installation guide`
@@ -230,7 +230,7 @@ open http://localhost:3000
 ```
 
 #### 2. Test Thoroughly
-- Log in via SSO
+- Log in with an email and password
 - Register an agent
 - Generate API key
 - Check admin dashboard
@@ -258,7 +258,7 @@ open http://localhost:3000
 After 30 hours, you should be able to:
 
 ### Functionality
-- ✅ Log in via Google OAuth
+- ✅ Log in with an email and password
 - ✅ Register an AI agent or MCP server
 - ✅ See trust score calculated
 - ✅ Generate and download API key

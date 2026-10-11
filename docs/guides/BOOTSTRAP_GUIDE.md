@@ -380,10 +380,9 @@ After bootstrap:
 
 1. ✅ **Login** with admin credentials
 2. ✅ **Change password** in user settings
-3. ✅ **Configure OAuth** (optional) for team logins
-4. ✅ **Invite users** to join organization
-5. ✅ **Register agents** and MCP servers
-6. ✅ **Configure security policies**
+3. ✅ **Invite users** to join organization
+4. ✅ **Register agents** and MCP servers
+5. ✅ **Configure security policies**
 
 ---
 
