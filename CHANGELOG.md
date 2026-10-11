@@ -11,6 +11,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the security guides name the credential files, the SDK tokens page, the access token lifetime and the record a reused token writes (#678)
+
+- `docs/guides/SECURITY.md` names `~/.aim/agents/<agent-name>.json` for agent credentials in its storage section, its
+  `chmod` example and its developer checklist, where it named `~/.aim/credentials.json`. The checklist no longer asks
+  for the cryptography and keyring packages or an `.encrypted` file: the SDK keeps credentials as plaintext JSON
+  protected by file permissions. Its git examples name `.aim/sdk_credentials.json`, the file an SDK download carries.
+- The guide links the SDK tokens list at `/dashboard/credentials#sdk-tokens` (Developers → Credentials → SDK tokens),
+  where it named `/dashboard/settings/sdk-tokens` and Settings → SDK Tokens, and its incident steps use the list's
+  **Revoke all** button, which asks for a reason.
+- The guide's refresh example sends `refreshToken`, the field `POST /api/v1/auth/refresh` binds, and shows the
+  response's `accessToken`, `refreshToken`, `tokenType`, `expiresIn` and `rotated` fields, with `expiresIn` 7200, the
+  2-hour default of `JWT_ACCESS_TTL`. It showed snake_case fields and an `expires_in` of 86400. The token rotation
+  guide's flow diagram uses the same field names.
+- `docs/security/token-rotation.md` says access tokens last 2 hours by default, set by `JWT_ACCESS_TTL`, so a refresh
+  token rotates about every 2 hours during active use, where it said 1 hour.
+- Its theft scenario and monitoring section say that a rotated-out refresh token presented again revokes its whole
+  token family, the agent's current token included, and writes a `refresh_token_reuse` audit record, and that each
+  later refused token of the family writes `refresh_session_revoked`; both are listed under Organization → Audit log
+  and neither sends a notification. They said a security alert was generated, and pointed to an Admin → Security →
+  Token Activity page that the dashboard does not serve.
+- `apps/backend/internal/interfaces/http/handlers/security_guides_token_docs_test.go` downloads an SDK, refreshes and
+  reuses its token against the refresh route, reads the Python SDK's credential paths and the dashboard's Credentials
+  page, and fails when either guide quotes another file, page, lifetime or response field, or when the token rotation
+  guide mentions an alert.
+
 ### Fixed — the guides describe the 9-factor trust score and quote the scores the trust calculator gives (#675)
 
 - `docs/quick-start.md`, `docs/examples/weather-agent.md`, `docs/sdk/python.md`, `docs/sdk/trust-scoring.md` and
