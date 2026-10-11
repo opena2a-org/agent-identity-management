@@ -33,6 +33,19 @@ const COLOR_FUNCTION = /\b(?:rgb|rgba|hsl|hsla)\(/;
 const PALETTE_CLASS =
   /\b(?:text|bg|stroke|fill|border|ring|outline|from|via|to|divide|shadow|accent|decoration)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
 
+// The marks of a chart drawn by hand: SVG arcs dashed into slices or a gauge, and
+// any element announced as one image, which is how a CSS bar row passes for a chart.
+const HAND_DRAWN = /<circle\b|<ellipse\b|strokeDash(?:array|offset)|role=\{?\s*["']img["']/;
+
+function handDrawn(text: string): string[] {
+  const found: string[] = [];
+  text.split("\n").forEach((line, i) => {
+    const m = line.match(HAND_DRAWN);
+    if (m) found.push(`${i + 1}: ${m[0]}`);
+  });
+  return found;
+}
+
 function rawColours(text: string): string[] {
   const found: string[] = [];
   text.split("\n").forEach((line, i) => {
@@ -59,6 +72,14 @@ describe("chart standard", () => {
     expect(outside).toEqual([]);
   });
 
+  it("draws no chart by hand outside components/charts", () => {
+    const offenders = ["app", "components"]
+      .flatMap((d) => files(d))
+      .filter((rel) => !rel.startsWith(`${CHARTS_DIR}/`) && /\.(?:tsx|jsx)$/.test(rel))
+      .flatMap((rel) => handDrawn(readFileSync(join(root, rel), "utf8")).map((hit) => `${rel}:${hit}`));
+    expect(offenders).toEqual([]);
+  });
+
   it("carries no hex, rgb/hsl or palette-class colour in chart code", () => {
     const offenders = chartFiles.flatMap((rel) =>
       rawColours(readFileSync(join(root, rel), "utf8")).map((hit) => `${rel}:${hit}`),
@@ -81,5 +102,13 @@ describe("chart standard", () => {
     expect(rawColours('className="text-yellow-600"')).toHaveLength(1);
     expect(rawColours('fill="hsl(45 93% 47%)"')).toHaveLength(1);
     expect(rawColours('stroke="var(--chart-1)"')).toEqual([]);
+  });
+
+  it("recognises a chart drawn by hand", () => {
+    expect(handDrawn('<circle cx="70" cy="70" r={r} strokeDasharray={a.dash} />')).toHaveLength(1);
+    expect(handDrawn("strokeDashoffset={offset}")).toHaveLength(1);
+    expect(handDrawn('<div className="flex h-16 items-end" role="img" aria-label={label}>')).toHaveLength(1);
+    expect(handDrawn('<path strokeLinecap="round" d="M5 13l4 4L19 7" />')).toEqual([]);
+    expect(handDrawn('screen.getByRole("img", { name })')).toEqual([]);
   });
 });

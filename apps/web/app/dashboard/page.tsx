@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SecurityLens } from "@/components/overview/security-lens";
 import { ExecutiveLens } from "@/components/overview/executive-lens";
 import { LiveCheckinPanel } from "@/components/overview/live-checkin-panel";
+import { VerificationsPerMonthChart } from "@/components/overview/shared";
 import type { LensData } from "@/components/overview/types";
 import { cn } from "@/lib/utils";
 
@@ -237,7 +238,6 @@ function Quickstart({ compact = false }: { compact?: boolean }) {
 }
 
 function VerificationActivityCard({ activity }: { activity: VerificationActivityMonth[] }) {
-  const max = Math.max(1, ...activity.map((m) => m.verified + m.pending));
   return (
     <div className="glass flex flex-col p-5">
       <div className="flex items-center justify-between">
@@ -250,18 +250,7 @@ function VerificationActivityCard({ activity }: { activity: VerificationActivity
         <p className="mt-3 text-xs text-ink-secondary">No verifications yet. They show up here as your agents check in.</p>
       ) : (
         <>
-          <div className="mt-3 flex h-16 items-end gap-1.5" role="img" aria-label={`Verified per month: ${activity.map((m) => `${m.month} ${m.verified}`).join(", ")}`}>
-            {activity.map((m, i) => {
-              const total = m.verified + m.pending;
-              const h = Math.max(4, Math.round((total / max) * 100));
-              const last = i === activity.length - 1;
-              return (
-                <div key={m.monthYear} className="flex flex-1 flex-col justify-end" style={{ height: "100%" }} title={`${m.month}: ${m.verified} verified, ${m.pending} pending`}>
-                  <div className="w-full rounded-[4px] bg-brand" style={{ height: `${h}%`, opacity: last ? 1 : 0.2 + 0.5 * (total / max) }} />
-                </div>
-              );
-            })}
-          </div>
+          <VerificationsPerMonthChart activity={activity} axes={false} className="mt-3 h-16" />
           <div className="mt-2 flex justify-between text-2xs text-ink-tertiary">
             <span>{activity[0]?.month}</span>
             <span>{activity[activity.length - 1]?.month}</span>

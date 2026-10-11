@@ -24,7 +24,7 @@ import {
   Folder,
 } from "lucide-react";
 import Link from "next/link";
-import { TrendChart, chartSeries } from "@/components/charts";
+import { ScoreRing, TrendChart, chartSeries } from "@/components/charts";
 import { api } from "@/lib/api";
 import ThreatDetailModal from "@/components/modals/threat-detail-modal";
 import { formatDateTime, formatRelativeTime } from "@/lib/date-utils";
@@ -88,50 +88,21 @@ interface SecurityThreat {
 // ============================================
 
 function SecurityScoreGauge({ score, grade, status }: { score: number; grade: string; status: string }) {
-  const circumference = 2 * Math.PI * 45;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
-
   const getScoreColor = () => {
-    if (score >= 90) return { stroke: "var(--green)", bg: "bg-success-fill", text: "text-success-text" };
-    if (score >= 80) return { stroke: "var(--green)", bg: "bg-success-fill", text: "text-success-text" };
-    if (score >= 70) return { stroke: "var(--amber)", bg: "bg-warning-fill", text: "text-warning-text" };
-    if (score >= 60) return { stroke: "var(--amber)", bg: "bg-warning-fill", text: "text-warning-text" };
-    return { stroke: "var(--brand)", bg: "bg-brand-soft", text: "text-brand-text" };
+    if (score >= 90) return { stroke: chartSeries.green, bg: "bg-success-fill", text: "text-success-text" };
+    if (score >= 80) return { stroke: chartSeries.green, bg: "bg-success-fill", text: "text-success-text" };
+    if (score >= 70) return { stroke: chartSeries.amber, bg: "bg-warning-fill", text: "text-warning-text" };
+    if (score >= 60) return { stroke: chartSeries.amber, bg: "bg-warning-fill", text: "text-warning-text" };
+    return { stroke: chartSeries.brand, bg: "bg-brand-soft", text: "text-brand-text" };
   };
 
   const colors = getScoreColor();
 
   return (
-    <div className="relative flex items-center justify-center">
-      <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
-        {/* Background circle */}
-        <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
-          stroke="var(--track)"
-          strokeWidth="8"
-        />
-        {/* Progress circle */}
-        <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
-          stroke={colors.stroke}
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          className="transition-all duration-1000 ease-out"
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center">
-        <span className={`text-3xl font-bold ${colors.text}`}>{score}</span>
-        <span className="text-xs text-ink-secondary">/100</span>
-      </div>
-    </div>
+    <ScoreRing title="Security posture score" value={score} max={100} color={colors.stroke} className="w-32 h-32">
+      <span className={`text-3xl font-bold ${colors.text}`}>{score}</span>
+      <span className="text-xs text-ink-secondary">/100</span>
+    </ScoreRing>
   );
 }
 

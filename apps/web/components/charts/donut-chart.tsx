@@ -21,6 +21,8 @@ export interface DonutChartProps {
   sliceLabel?: (slice: { name: string; value: number; percent: number }) => string;
   tooltip?: boolean;
   legend?: boolean;
+  /** A summary drawn in the hole and read after the slices, e.g. an average. */
+  center?: { value: string; caption: string };
   innerRadius?: number;
   outerRadius?: number;
   paddingAngle?: number;
@@ -34,17 +36,30 @@ export function DonutChart({
   sliceLabel,
   tooltip = true,
   legend = false,
+  center,
   innerRadius = 60,
   outerRadius = 80,
   paddingAngle = 5,
   className,
 }: DonutChartProps) {
-  const label = describeParts(
+  const parts = describeParts(
     title,
     data.map((d) => ({ name: d.name, value: formatValue(d.value) })),
   );
+  const label = center ? `${parts}; ${center.caption} ${center.value}` : parts;
   return (
-    <ChartFrame label={label} className={className}>
+    <ChartFrame
+      label={label}
+      className={className}
+      center={
+        center ? (
+          <>
+            <span className="text-[22px] font-bold leading-none text-ink">{center.value}</span>
+            <span className="mt-1 text-2xs text-ink-tertiary">{center.caption}</span>
+          </>
+        ) : undefined
+      }
+    >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie

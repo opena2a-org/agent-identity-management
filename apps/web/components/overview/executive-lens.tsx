@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { Agent } from "@/lib/api";
-import { CardTitle, EmptyNote, KpiTile, relativeTime, trustDisplay } from "@/components/overview/shared";
+import { DonutChart, chartSeries, type DonutSlice } from "@/components/charts";
+import { CardTitle, EmptyNote, KpiTile, VerificationsPerMonthChart, relativeTime, trustDisplay } from "@/components/overview/shared";
 import type { LensData, StatsData, VerificationActivityMonth, VerificationStatistics } from "@/components/overview/types";
 import type { UserRole } from "@/lib/permissions";
 import { effectiveEdgeRoles } from "@/lib/route-permissions";
@@ -39,29 +40,21 @@ export function ExecutiveLens({
   const newThisWeek = agents.filter((a) => a.createdAt && new Date(a.createdAt).getTime() >= weekAgo).length;
 
   // Trust distribution from the agents list (0-1 scale), bucketed by score.
-  const buckets = [
-    { label: "High (0.80+)", color: "var(--brand)", n: 0 },
-    { label: "Medium (0.50–0.79)", color: "var(--brand-sky)", n: 0 },
-    { label: "Low (below 0.50)", color: "var(--amber)", n: 0 },
-    { label: "Not scored", color: "var(--track)", n: 0 },
+  const buckets: DonutSlice[] = [
+    { name: "High (0.80+)", color: chartSeries.brand, value: 0 },
+    { name: "Medium (0.50–0.79)", color: chartSeries.sky, value: 0 },
+    { name: "Low (below 0.50)", color: chartSeries.amber, value: 0 },
+    { name: "Not scored", color: chartSeries.muted, value: 0 },
   ];
   for (const a of agents) {
     const s = typeof a.trustScore === "number" ? (a.trustScore <= 1 ? a.trustScore : a.trustScore / 100) : null;
-    if (s === null) buckets[3].n++;
-    else if (s >= 0.8) buckets[0].n++;
-    else if (s >= 0.5) buckets[1].n++;
-    else buckets[2].n++;
+    if (s === null) buckets[3].value++;
+    else if (s >= 0.8) buckets[0].value++;
+    else if (s >= 0.5) buckets[1].value++;
+    else buckets[2].value++;
   }
   const total = agents.length;
-  const r = 52;
-  const circ = 2 * Math.PI * r;
-  let offset = 0;
-  const arcs = buckets.map((b) => {
-    const frac = total ? b.n / total : 0;
-    const arc = { ...b, dash: `${frac * circ} ${circ}`, offset: -offset * circ };
-    offset += frac;
-    return arc;
-  });
+  const avgTrust = trustDisplay(stats.avgTrustScore);
 
   const recommended =
     stats.criticalAlerts > 0
@@ -96,23 +89,7 @@ export function ExecutiveLens({
           {activity.length === 0 ? (
             <EmptyNote>No verifications recorded yet.</EmptyNote>
           ) : (
-            <>
-              <div className="mt-4 flex h-[150px] items-end gap-2" role="img" aria-label={`Verified per month: ${activity.map((a) => `${a.month} ${a.verified}`).join(", ")}`}>
-                {activity.map((a, i) => {
-                  const max = Math.max(1, ...activity.map((x) => x.verified + x.pending));
-                  const h = Math.max(3, Math.round(((a.verified + a.pending) / max) * 100));
-                  return (
-                    <div key={a.monthYear} className="flex h-full flex-1 flex-col justify-end" title={`${a.month}: ${a.verified} verified, ${a.pending} pending`}>
-                      <div className="w-full rounded-[4px] bg-brand" style={{ height: `${h}%`, opacity: i === activity.length - 1 ? 1 : 0.25 + 0.5 * ((a.verified + a.pending) / max) }} />
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="mt-2 flex justify-between text-2xs text-ink-tertiary">
-                <span>{activity[0]?.month}</span>
-                <span>{activity[activity.length - 1]?.month}</span>
-              </div>
-            </>
+            <VerificationsPerMonthChart activity={activity} legend className="mt-4 h-[190px]" />
           )}
         </div>
 
@@ -122,20 +99,22 @@ export function ExecutiveLens({
             <EmptyNote>No agents yet.</EmptyNote>
           ) : (
             <div className="mt-3 flex items-center gap-5">
-              <svg viewBox="0 0 140 140" width="118" height="118" role="img" aria-label={arcs.map((a) => `${a.label}: ${a.n}`).join(", ")}>
-                <circle cx="70" cy="70" r={r} fill="none" stroke="var(--track)" strokeWidth="16" />
-                {arcs.map((a) => (
-                  <circle key={a.label} cx="70" cy="70" r={r} fill="none" stroke={a.color} strokeWidth="16" strokeDasharray={a.dash} strokeDashoffset={a.offset} transform="rotate(-90 70 70)" />
-                ))}
-                <text x="70" y="66" textAnchor="middle" fontSize="22" fontWeight="700" fill="var(--text-primary)">{trustDisplay(stats.avgTrustScore) ?? "–"}</text>
-                <text x="70" y="82" textAnchor="middle" fontSize="9" letterSpacing="0.5" fill="var(--text-tertiary)">Avg trust</text>
-              </svg>
+              <DonutChart
+                title="Agents by trust score"
+                data={buckets}
+                center={avgTrust !== null ? { value: avgTrust, caption: "Avg trust" } : undefined}
+                tooltip={false}
+                innerRadius={38}
+                outerRadius={52}
+                paddingAngle={2}
+                className="h-[118px] w-[118px] flex-shrink-0"
+              />
               <ul className="flex flex-1 flex-col gap-2">
-                {arcs.map((a) => (
-                  <li key={a.label} className="flex items-center gap-2 text-xs text-ink-body">
-                    <span className="h-[9px] w-[9px] rounded-[2px]" style={{ background: a.color }} aria-hidden="true" />
-                    <span className="flex-1">{a.label}</span>
-                    <span className="font-bold text-ink">{a.n}</span>
+                {buckets.map((b) => (
+                  <li key={b.name} className="flex items-center gap-2 text-xs text-ink-body">
+                    <span className="h-[9px] w-[9px] rounded-[2px]" style={{ background: b.color }} aria-hidden="true" />
+                    <span className="flex-1">{b.name}</span>
+                    <span className="font-bold text-ink">{b.value}</span>
                   </li>
                 ))}
               </ul>

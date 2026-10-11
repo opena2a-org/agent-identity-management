@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { formatDistanceToNowStrict } from "date-fns";
+import { TrendChart, chartSeries } from "@/components/charts";
+import type { VerificationActivityMonth } from "@/components/overview/types";
 import { cn } from "@/lib/utils";
 
 /** Presentation helpers shared by the overview lenses. Every number rendered through these comes from an endpoint. */
@@ -101,6 +103,37 @@ export function CardTitle({ children, sub, action }: { children: React.ReactNode
       </div>
       {action}
     </div>
+  );
+}
+
+/**
+ * Verified and pending verifications per month from /analytics/verification-activity, one stacked bar
+ * per month. The title names the window the endpoint returned, not the one requested.
+ */
+export function VerificationsPerMonthChart({
+  activity,
+  axes = true,
+  legend = false,
+  className,
+}: {
+  activity: VerificationActivityMonth[];
+  axes?: boolean;
+  legend?: boolean;
+  className?: string;
+}) {
+  return (
+    <TrendChart
+      title={`Verifications per month, last ${activity.length} ${activity.length === 1 ? "month" : "months"}`}
+      data={activity.map(({ month, verified, pending }) => ({ month, verified, pending }))}
+      xKey="month"
+      series={[
+        { key: "verified", name: "Verified", color: chartSeries.brand, kind: "bar", stack: "verifications" },
+        { key: "pending", name: "Pending", color: chartSeries.muted, kind: "bar", stack: "verifications" },
+      ]}
+      axes={axes}
+      legend={legend}
+      className={className}
+    />
   );
 }
 

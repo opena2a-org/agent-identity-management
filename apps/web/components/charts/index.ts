@@ -2,5 +2,6 @@
 // nothing outside this folder imports recharts (tests/chart-standard.test.ts).
 export { CategoryBarChart, type CategoryBarChartProps } from "./category-bar-chart";
 export { DonutChart, type DonutChartProps, type DonutSlice } from "./donut-chart";
+export { ScoreRing, type ScoreRingProps } from "./score-ring";
 export { TrendChart, type TrendChartProps, type TrendSeries } from "./trend-chart";
 export { chartSeries, type ChartColor } from "./tokens";

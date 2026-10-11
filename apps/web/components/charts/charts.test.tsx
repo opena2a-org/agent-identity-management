@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { CategoryBarChart, DonutChart, TrendChart, chartSeries } from "./index";
+import { CategoryBarChart, DonutChart, ScoreRing, TrendChart, chartSeries } from "./index";
 import { describeParts, describeTrend } from "./describe";
 
 // ResponsiveContainer observes its size; jsdom has no ResizeObserver and lays
@@ -63,6 +63,49 @@ describe("chart primitives", () => {
         name: "Protection timeline, last 30 days: 2 points from Sep 1 to Sep 2; Actions latest 6, Blocked latest 0",
       }),
     ).toBeTruthy();
+  });
+
+  it("read a donut's centre summary after its slices", () => {
+    render(
+      <DonutChart
+        title="Agents by trust score"
+        data={[{ name: "High", value: 3, color: chartSeries.brand }]}
+        center={{ value: "82", caption: "Avg trust" }}
+      />,
+    );
+    expect(screen.getByRole("img", { name: "Agents by trust score: High 3; Avg trust 82" })).toBeTruthy();
+  });
+
+  it("read a stacked bar trend the same way as its line and area trends", () => {
+    render(
+      <TrendChart
+        title="Verifications per month, last 2 months"
+        data={[
+          { month: "Sep", verified: 4, pending: 1 },
+          { month: "Oct", verified: 7, pending: 2 },
+        ]}
+        xKey="month"
+        axes={false}
+        series={[
+          { key: "verified", name: "Verified", color: chartSeries.brand, kind: "bar", stack: "v" },
+          { key: "pending", name: "Pending", color: chartSeries.muted, kind: "bar", stack: "v" },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByRole("img", {
+        name: "Verifications per month, last 2 months: 2 points from Sep to Oct; Verified latest 7, Pending latest 2",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("read a score against its ceiling", () => {
+    render(
+      <ScoreRing title="Security posture score" value={82}>
+        <span>82</span>
+      </ScoreRing>,
+    );
+    expect(screen.getByRole("img", { name: "Security posture score: 82 of 100" })).toBeTruthy();
   });
 
   it("say so when there is nothing to draw", () => {
