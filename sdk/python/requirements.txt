@@ -11,3 +11,6 @@ PyNaCl>=1.5.0
 # CVE-2023-50782, CVE-2024-0727: Update to 43.0.1+
 cryptography>=43.0.1
 keyring>=24.0.0
+
+# JWT parsing for the SDK sign-in (aim-sdk login, secure())
+PyJWT>=2.8.0
