@@ -403,7 +403,7 @@ If you encounter issues:
 1. Check logs: `tail -f /tmp/aim-backend-enhanced.log`
 2. Verify database: `psql $DATABASE_URL -c "\dt"`
 3. Review documentation: `USER_ADMIN_WORKFLOW_ANALYSIS.md`
-4. Open issue: https://github.com/opena2a/agent-identity-management/issues
+4. Open issue: https://github.com/opena2a-org/agent-identity-management/issues
 
 ---
 

@@ -805,6 +805,6 @@ Community SDKs welcome!
 
 ## Support
 
-- **API Issues**: https://github.com/opena2a/identity/issues
+- **API Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 - **Documentation**: https://opena2a.org/docs
 - **Discord**: https://discord.gg/opena2a

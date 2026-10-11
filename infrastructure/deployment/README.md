@@ -530,7 +530,7 @@ Before going to production on any cloud:
 ## 📞 Support
 
 - **Documentation**: https://opena2a.org/docs
-- **GitHub Issues**: https://github.com/opena2a/agent-identity-management/issues
+- **GitHub Issues**: https://github.com/opena2a-org/agent-identity-management/issues
 - **Discord**: https://discord.gg/opena2a
 - **Email**: info@opena2a.org
 
