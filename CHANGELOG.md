@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — The TypeScript examples in the PQC, A2A and direct API pages import names the SDK exports (#680)
+
+- `docs/guides/PQC.md` imported `isPqcAvailable`, `signHybrid`, `verifyHybrid` and `Algorithm` from
+  `@opena2a/aim-sdk`, and `docs/guides/A2A.md` and `docs/api/direct-api-usage.md` imported `secure`. In a build of the
+  SDK, `require('@opena2a/aim-sdk')` gives `undefined` for all five names: the SDK exports `isPQCAvailable`,
+  `hybridSign` and `hybridVerify`, exports `Algorithm` as a type only, and has no `secure`.
+- The PQC example now calls `isPQCAvailable`, `generateMLDSAKeyPair`, `signMLDSA`, `verifyMLDSA`,
+  `generateHybridKeyPair`, `getHybridPublicKey`, `hybridSign`, `hybridVerify` and `encodeHybridSignature` with the
+  SDK's signatures: a variant string such as `'ML-DSA-65'`, `hybridSign(keypair, message)`, and
+  `hybridVerify(publicKey, message, signature)` resolving to a boolean. The page says `Algorithm` is a type-only union
+  of the algorithm strings. The A2A example registers the orchestrator with `AIMClient.registerAgent` and lists its
+  peers in `talksTo`, the field the SDK sends, in place of `mcpServers`, which the registration options do not have.
+  The direct API page lists the TypeScript SDK as available, with a `registerAgent` and `verifyAction` example, in
+  place of a "coming in 2026" preview.
+- An SDK test (`sdk/typescript/src/docs-snippets.test.ts`) type-checks every TypeScript block under `docs/` that
+  imports `@opena2a/aim-sdk` against the SDK source, and fails on a name the entry point does not export, a type used
+  as a value, or a call that does not match the exported signature.
+
 ### Fixed — SECURITY.md describes the CSRF, SDK credential, configuration and personal-data controls the code has (#677)
 
 - `SECURITY.md` said CSRF was prevented with tokens, that SDK credentials were encrypted with Fernet and a system
