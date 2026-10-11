@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the compliance page's charts are drawn on the glass card, so their axis text is readable in the dark theme
+
+- The trust score trend and the risk distribution on the compliance page sat on a `bg-white dark:bg-gray-800` card,
+  a surface the chart colours were never measured against: the trend's axis text read at 4.05:1 in the dark theme,
+  under the 4.5:1 floor. Both cards are now glass cards, like the cards around every other chart, and their headings,
+  legend and caption use the ink colours. Measured in a browser after the change, the page's chart text is 4.79:1
+  dark and 5.48:1 light, and its lowest series mark 4.90:1 dark and 3.40:1 light. The page's other cards are
+  unchanged.
+- `tests/chart-surface.test.ts` reads where every chart in `app/` and `components/` is placed, following a component
+  that draws a chart to each place it is rendered, and fails when the nearest painted element around a chart is
+  anything but the glass card (`glass`, `bg-glass`, or the `Card` component) or when a chart has no card at all.
+- `docs/ux/chart-contrast-2026-10-11.md` gains the second run, over the same five entries.
+
 ### Added — the readability sweep measures the charts it loads
 
 - `apps/web/scripts/ux-sweep.mjs` measures every chart on a page in the browser: each painted shape whose fill or

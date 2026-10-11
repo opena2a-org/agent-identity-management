@@ -631,13 +631,13 @@ function RiskDistributionChart({ agents, mcpServers }: { agents: AgentEntry[]; m
         {data.map((item) => (
           <div key={item.name} className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-            <span className="text-sm text-gray-600 dark:text-gray-400">{item.name}</span>
-            <span className="text-sm font-semibold text-gray-900 dark:text-white">{item.value}%</span>
+            <span className="text-sm text-ink-secondary">{item.name}</span>
+            <span className="text-sm font-semibold text-ink">{item.value}%</span>
           </div>
         ))}
         {totalItems > 0 && (
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-700 mt-2">
-            <span className="text-xs text-gray-500">Based on {agents.length} agent{agents.length !== 1 ? "s" : ""} & {mcpServers.length} MCP{mcpServers.length !== 1 ? "s" : ""}</span>
+          <div className="pt-2 border-t border-divider mt-2">
+            <span className="text-xs text-ink-secondary">Based on {agents.length} agent{agents.length !== 1 ? "s" : ""} & {mcpServers.length} MCP{mcpServers.length !== 1 ? "s" : ""}</span>
           </div>
         )}
       </div>
@@ -1215,13 +1215,13 @@ export default function CompliancePage() {
           {/* Left Column - Charts & Risk */}
           <div className="xl:col-span-2 space-y-6">
             {/* Trust Score Trend */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+            <div className="glass p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Trust Score Trend</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">30-day compliance score history</p>
+                  <h3 className="text-lg font-semibold text-ink">Trust Score Trend</h3>
+                  <p className="text-sm text-ink-secondary">30-day compliance score history</p>
                 </div>
-                <TrendingUp className="h-5 w-5 text-gray-400" />
+                <TrendingUp className="h-5 w-5 text-ink-tertiary" />
               </div>
               <div className="h-64">
                 <TrendChart
@@ -1238,10 +1238,10 @@ export default function CompliancePage() {
             {/* Risk Assessment & Compliance Check Results */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Risk Distribution */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+              <div className="glass p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Risk Distribution</h3>
-                  <BarChart3 className="h-5 w-5 text-gray-400" />
+                  <h3 className="text-lg font-semibold text-ink">Risk Distribution</h3>
+                  <BarChart3 className="h-5 w-5 text-ink-tertiary" />
                 </div>
                 <RiskDistributionChart agents={agents} mcpServers={mcpServers} />
               </div>
