@@ -693,7 +693,7 @@ print(f"Result: {result}")
 ## Next Steps
 
 - **[Auto-Detection Guide →](./auto-detection.md)** - Automatic MCP server discovery
-- **[Trust Scoring Guide →](./trust-scoring.md)** - 8-factor trust algorithm
+- **[Trust Scoring Guide →](./trust-scoring.md)** - 9-factor trust algorithm
 - **[Python SDK Guide →](./python.md)** - Complete SDK reference
 
 ---

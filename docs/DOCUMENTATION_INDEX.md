@@ -108,7 +108,7 @@ Following the **Atomic Habits Philosophy**: Make it Obvious. Make it Easy. Make 
    - Automatic registration
 
 5. **[Trust Scoring Guide](./sdk/trust-scoring.md)** ✅ **Complete**
-   - 8-factor algorithm explained
+   - 9-factor algorithm explained
    - How to improve trust score
    - Real-time monitoring
 
@@ -272,7 +272,7 @@ agent = secure("my-agent")
 11. `/docs/sdk/java.md` - Complete Java SDK reference with enterprise features
 12. `/docs/sdk/authentication.md` - Ed25519 cryptography & key management
 13. `/docs/sdk/auto-detection.md` - Automatic MCP server discovery
-14. `/docs/sdk/trust-scoring.md` - 8-factor trust algorithm
+14. `/docs/sdk/trust-scoring.md` - 9-factor trust algorithm
 15. `/docs/SDK_TEST_PLAN.md` - Comprehensive SDK test plan and validation
 
 **Navigation**:

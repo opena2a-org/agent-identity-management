@@ -202,7 +202,7 @@ Open the AIM dashboard (http://localhost:3000) and navigate to "Agents" → "wea
 **Agent Status Card**:
 ```
 ✅ ACTIVE
-Trust Score: 0.95 (Excellent)
+Trust Score: 0.835 (Good)
 Last Verified: 3 seconds ago
 Total Actions: 1
 ```
@@ -220,13 +220,21 @@ Total Actions: 1
 ✅ Uptime & Availability:   100% (1.00)  [15%]
 ✅ Action Success Rate:     100% (1.00)  [15%]
 ✅ Security Alerts:           0  (1.00)  [15%]
-✅ Compliance Score:        100% (1.00)  [10%]
-✅ Age & History:           New  (0.50)  [10%]
-✅ Drift Detection:         None (1.00)  [ 5%]
-✅ User Feedback:           None (1.00)  [ 5%]
+➖ Compliance Score:    No snapshot (excluded)  [10%]
+✅ Age & History:           New  (0.30)  [ 5%]
+✅ Drift Detection:         None (1.00)  [ 3%]
+➖ User Feedback:          None  (excluded)  [ 2%]
+⚠️  Execution Isolation:  Not attested (0.30)  [10%]
 
-Overall Trust Score: 0.95 / 1.00
+Overall Trust Score: 0.835 / 1.00
 ```
+
+The breakdown is for an agent verified today whose verifications so far all succeeded, with no
+compliance snapshot for its organization, no user feedback and no isolation attestation. Compliance
+and user feedback have no data, so they are left out and their weight is spread over the other seven
+factors (0.881); the published score is capped at the sum with each of the two counted at 0.50
+(0.835), so that missing data never raises a score. A new agent that is still pending starts at 0.5925.
+See the [Trust Scoring Guide](./sdk/trust-scoring.md) for each factor.
 
 **Audit Trail**:
 ```
@@ -268,7 +276,7 @@ Behind those **3 lines of code**, AIM prevents your agent from going rogue:
 
 - 🛡️ **Verifies** the action BEFORE it executes (prevents unauthorized API calls!)
 - 📝 **Logs** to immutable audit trail (who, what, when, why)
-- 📊 **Updates** real-time trust score (8-factor algorithm)
+- 📊 **Updates** real-time trust score (9-factor algorithm)
 - 🚨 **Monitors** for anomalies (unusual patterns trigger alerts)
 - 🔐 **Signs** with Ed25519 cryptography (tamper-proof verification)
 
