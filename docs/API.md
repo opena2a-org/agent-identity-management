@@ -941,24 +941,50 @@ Create a webhook.
 
 ### Webhook Events
 
-- `agent.registered`
-- `agent.verified`
-- `agent.revoked`
-- `alert.created`
-- `alert.acknowledged`
-- `trust_score.updated`
-- `compliance.report_generated`
+Event delivery is not switched on in the server yet: the server does not connect its webhook sender to
+the services that produce the events below, so none of them reaches an endpoint.
+`POST /api/v1/webhooks/:id/test` sends a `webhook.test` delivery to an endpoint today.
+
+Once delivery is on, a webhook subscribed to an event receives it when:
+
+| Event | Sent when |
+|-------|-----------|
+| `agent.created` | An agent is registered. |
+| `agent.verified` | An agent is verified through `POST /api/v1/agents/:id/verify`, or at registration. |
+| `agent.updated` | An agent is updated through `PUT /api/v1/agents/:id`. |
+| `agent.suspended` | An agent is suspended through `POST /api/v1/agents/:id/suspend`, or by the trust score policy (see `trust_score.low`). |
+| `agent.deleted` | An agent is deleted through `DELETE /api/v1/agents/:id`. |
+| `trust_score.changed` | An administrator sets an agent's trust score through `PUT /api/v1/agents/:id/trust-score`, or a capability violation lowers it, and the stored score differs from the one before. Other trust score changes, including `POST /api/v1/agents/:id/trust-score/recalculate`, send no event. |
+| `trust_score.low` | After one of the changes `trust_score.changed` names, the trust score policy finds that a verified or pending agent's score fell and ends below 70%. `severity` is `critical` below 50%, where the policy also suspends the agent, and `warning` otherwise. |
+| `alert.created` | An alert is raised for a capability check denied because the agent has no granted capabilities. Other alerts send no event. |
+| `alert.acknowledged` | An alert is acknowledged through `POST /api/v1/admin/alerts/:id/acknowledge`. Acknowledging every alert at once, and resolving an alert, send no event. |
+| `api_key.created` | An API key is created, including the key created with an agent. |
+| `api_key.revoked` | An active API key is disabled through `PATCH /api/v1/api-keys/:id/disable`. |
+
+A subscription accepts these names, and no event is sent for them: `api_key.expired`, `security.violation`,
+`compliance.violation`, `security.capability_drift`, `security.data_exfiltration`.
+
+The data of an `agent.*` event is the agent after the change: `agentId`, `name`, `displayName`,
+`agentType`, `status` and `trustScore`. A `trust_score.*` event carries `agentId`, `agentName`,
+`previousScore` and `trustScore`, and `trust_score.low` adds `severity`. An `api_key.*` event carries
+`apiKeyId`, `agentId`, `name`, `prefix` and, for a key that expires, `expiresAt`; it never carries the
+key or its hash.
 
 ### Webhook Payload
 
 ```json
 {
+  "id": "0c6f3c1e-8f0e-4a63-9a43-2f1d8b7e5a10",
   "event": "agent.verified",
-  "timestamp": "2025-10-08T00:00:00Z",
+  "timestamp": "2026-10-11T00:00:00Z",
+  "organizationId": "7d9f2b4a-1c3e-4f5a-8b6c-9d0e1f2a3b4c",
   "data": {
     "agentId": "550e8400-e29b-41d4-a716-446655440000",
-    "trustScore": 0.755,
-    "verifiedAt": "2025-10-08T00:00:00Z"
+    "name": "billing-agent",
+    "displayName": "Billing Agent",
+    "agentType": "ai_agent",
+    "status": "verified",
+    "trustScore": 0.755
   }
 }
 ```

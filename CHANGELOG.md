@@ -11,6 +11,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — the agent and API key services send agent, trust score and API key webhook events (#672)
+
+- The agent service sends `agent.created` for an agent it registers, and `agent.verified` as well when the
+  agent's verification at registration is stored. It sends `agent.updated`, `agent.verified`, `agent.suspended`
+  and `agent.deleted` for an update, verification, suspension or deletion it stores. After an administrator's
+  trust score update (`PUT /api/v1/agents/:id/trust-score`) or a capability violation, it sends
+  `trust_score.changed` when the stored score differs from the one before, `trust_score.low` when the trust
+  score policy finds a fall that ends below 70% (`severity` is `critical` below 50% and `warning` otherwise),
+  and `agent.suspended` when the policy suspends the agent. A refused or failed registration, update,
+  verification, suspension or deletion sends nothing, and `trust_score.changed` is sent only for a stored score.
+- The API key service sends `api_key.created` for a key it creates and `api_key.revoked` for an active key it
+  disables. Neither event carries the key or its hash.
+- Each event is dispatched after the change is stored, on a goroutine of its own and under a background
+  context, so it does not end with the request.
+- The server does not set a webhook service on the alert, agent or API key service
+  (`TestSetWebhookService_HasNoCallerInCmd` holds that), so none of these events, and no alert event, reaches an
+  endpoint yet. `POST /api/v1/webhooks/:id/test` sends a test delivery.
+- `docs/API.md` lists each event, when it is sent, the data it carries, the defined names for which no event is
+  sent, and that delivery is not switched on. `docs/guides/API_REFERENCE.md` and the A2A guide point at that
+  list. The names `agent.registered`, `agent.revoked`, `trust_score.updated`, `compliance.report_generated`,
+  `api_key.expiring`, `mcp.connection.new` and `mcp.drift.detected`, which the backend does not define, are no
+  longer in the docs. Tests: `apps/backend/internal/application/webhook_events_test.go`.
+
 ### Fixed — the guides clone from and link to `github.com/opena2a-org/agent-identity-management` (#669)
 
 - Nineteen references in `docs/quick-start.md`, `docs/DEPLOYMENT.md`, `docs/DOCUMENTATION_INDEX.md`,

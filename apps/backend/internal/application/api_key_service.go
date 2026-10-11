@@ -16,6 +16,7 @@ import (
 type APIKeyService struct {
 	apiKeyRepo domain.APIKeyRepository
 	agentRepo  domain.AgentRepository
+	webhooks   webhookEventDispatcher // Optional: sends api_key.* events; set by SetWebhookService
 }
 
 // NewAPIKeyService creates a new API key service
@@ -27,6 +28,20 @@ func NewAPIKeyService(
 		apiKeyRepo: apiKeyRepo,
 		agentRepo:  agentRepo,
 	}
+}
+
+// SetWebhookService wires the webhook service that the api_key.* events are
+// sent to. When unset, no event is sent.
+func (s *APIKeyService) SetWebhookService(webhookService *WebhookService) {
+	s.webhooks = asWebhookEventDispatcher(webhookService)
+}
+
+// sendAPIKeyEvent sends event for key.
+func (s *APIKeyService) sendAPIKeyEvent(key *domain.APIKey, event domain.WebhookEvent) {
+	if s.webhooks == nil {
+		return
+	}
+	sendWebhookEvent(s.webhooks, key.OrganizationID, event, apiKeyEventData(key))
 }
 
 // GenerateAPIKey generates a new API key for an agent
@@ -83,6 +98,7 @@ func (s *APIKeyService) GenerateAPIKey(ctx context.Context, agentID, orgID, user
 		return "", nil, fmt.Errorf("failed to create API key: %w", err)
 	}
 
+	s.sendAPIKeyEvent(apiKey, domain.WebhookEventAPIKeyCreated)
 	return fullKey, apiKey, nil
 }
 
@@ -103,7 +119,14 @@ func (s *APIKeyService) RevokeAPIKey(ctx context.Context, keyID, orgID uuid.UUID
 		return fmt.Errorf("API key does not belong to organization")
 	}
 
-	return s.apiKeyRepo.Revoke(keyID)
+	if err := s.apiKeyRepo.Revoke(keyID); err != nil {
+		return err
+	}
+	// Revoking a key that is already revoked changes nothing and sends nothing.
+	if key.IsActive {
+		s.sendAPIKeyEvent(key, domain.WebhookEventAPIKeyRevoked)
+	}
+	return nil
 }
 
 // DeleteAPIKey permanently deletes an API key (only if disabled)
