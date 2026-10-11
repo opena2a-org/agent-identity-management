@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"math/big"
 	"strings"
 	"testing"
@@ -230,49 +229,76 @@ func TestRecordRefusesAChangeWithoutATraceID(t *testing.T) {
 	assert.False(t, ran, "a refused change ran its statement")
 }
 
-// A change given the opening event id of another agent in its organization is
-// refused in its transaction, before the agent is read or its statement runs:
-// a record there would refuse that agent's next change. An event id that is no
-// agent's opening event id goes on to read the agent.
-func TestChangeRefusesAnotherAgentsOpeningEventID(t *testing.T) {
-	org, agent, other := uuid.New(), uuid.New(), uuid.New()
-	for name, tc := range map[string]struct {
-		eventID string
-		refused bool
-	}{
-		"another agent's opening event id": {OpeningEventID(other), true},
-		"a request's event id":             {RequestEventID(uuid.New()), false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			db, mock, err := sqlmock.New()
-			require.NoError(t, err)
-			defer db.Close()
-			mock.ExpectBegin()
-			mock.ExpectQuery(`SELECT id FROM agents WHERE organization_id = \$1`).WithArgs(org).
-				WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(agent.String()).AddRow(other.String()))
-			read := errors.New("the agent's state was read")
-			if !tc.refused {
-				mock.ExpectQuery(`FROM agents\s+WHERE id = \$1 AND organization_id = \$2`).WillReturnError(read)
-			}
-			tx, err := db.Begin()
-			require.NoError(t, err)
+// A change given an event id reads its own agent before and after its
+// statement, and nothing else: the organization's agents are not read to tell
+// an opening event id from the one given, however many there are.
+func TestChangeGivenAnEventIDReadsOnlyItsAgent(t *testing.T) {
+	org, agent, request := uuid.New(), uuid.New(), uuid.New()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	mock.ExpectBegin()
+	for range 2 {
+		mock.ExpectQuery(`FROM agents\s+WHERE id = \$1 AND organization_id = \$2`).WithArgs(agent, org).
+			WillReturnRows(sqlmock.NewRows([]string{"status", "public_key", "key_algorithm", "server_custody",
+				"previous_public_key", "key_rotation_grace_until", "pqc_public_key", "pqc_key_algorithm",
+				"previous_pqc_public_key", "talks_to"}).
+				AddRow("verified", nil, nil, false, nil, nil, nil, nil, nil, []byte(`[]`)))
+		mock.ExpectQuery(`FROM agent_capabilities\s+WHERE agent_id = \$1`).WithArgs(agent).
+			WillReturnRows(sqlmock.NewRows([]string{"capability_type"}))
+	}
+	tx, err := db.Begin()
+	require.NoError(t, err)
 
-			ran := false
-			_, _, err = change(context.Background(), tx, Change{
-				OrganizationID: org,
-				AgentID:        agent,
-				Trigger:        TriggerDirectGrant,
-				EventID:        tc.eventID,
-				Apply:          func(context.Context, *sql.Tx) error { ran = true; return nil },
-			})
-			if tc.refused {
-				require.ErrorIs(t, err, ErrInvalidChange)
-			} else {
-				require.ErrorIs(t, err, read)
-			}
-			assert.False(t, ran, "the statement ran")
-			assert.NoError(t, mock.ExpectationsWereMet())
-		})
+	ran := false
+	prev, next, err := change(context.Background(), tx, Change{
+		OrganizationID: org,
+		AgentID:        agent,
+		Trigger:        TriggerCapabilityRequested,
+		EventID:        RequestEventID(request),
+		RequestID:      request,
+		Apply:          func(context.Context, *sql.Tx) error { ran = true; return nil },
+	})
+	require.NoError(t, err, "the change ran a statement other than the reads of its own agent")
+	assert.True(t, ran, "the statement did not run")
+	assert.Equal(t, "verified", prev.Status)
+	assert.True(t, Equal(prev, next))
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// A change is given an event id only with the request it is derived from. The
+// event id of the request the change names is taken before anything is read;
+// any other, an agent's opening event id among them, is refused there.
+func TestCheckTakesOnlyTheEventIDOfTheRequestTheChangeNames(t *testing.T) {
+	r := &Recorder{}
+	request, other := uuid.New(), uuid.New()
+	valid := Change{
+		OrganizationID: uuid.New(),
+		AgentID:        uuid.New(),
+		Trigger:        TriggerCapabilityRequested,
+		Actor:          User(uuid.New()),
+		TraceID:        strings.Repeat("ab", 16),
+		EventID:        RequestEventID(request),
+		RequestID:      request,
+		Apply:          func(context.Context, *sql.Tx) error { return nil },
+	}
+	class, err := r.check(valid)
+	require.NoError(t, err)
+	assert.Equal(t, store.ClassExpansion, class)
+
+	for name, edit := range map[string]func(c *Change){
+		"another agent's opening event id":       func(c *Change) { c.EventID = OpeningEventID(other) },
+		"an opening event id with no request":    func(c *Change) { c.EventID, c.RequestID = OpeningEventID(other), uuid.Nil },
+		"the request's event id with no request": func(c *Change) { c.RequestID = uuid.Nil },
+		"another request's event id":             func(c *Change) { c.EventID = RequestEventID(uuid.New()) },
+		"a random event id":                      func(c *Change) { c.EventID = uuid.NewString() },
+		"the request's own id":                   func(c *Change) { c.EventID = request.String() },
+		"a request with no event id":             func(c *Change) { c.EventID = "" },
+	} {
+		c := valid
+		edit(&c)
+		_, err := r.check(c)
+		require.ErrorIs(t, err, ErrInvalidChange, name)
 	}
 }
 

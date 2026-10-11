@@ -95,10 +95,15 @@ type Change struct {
 	// takes OpeningEventID of the agent. A given event id must not be an
 	// opening event id: OpeningEventID of any agent is reserved for the
 	// record that opens that agent's history, and a record of another change
-	// there refuses that agent's next change. The recorder refuses the
-	// opening event id of the change's own agent before anything runs, and
-	// that of another agent in the organization in the change's transaction.
+	// there refuses that agent's next change. An agent's opening event id
+	// cannot be told from the id, so the recorder takes a given event id only
+	// with the request it is derived from (RequestID), and refuses any other
+	// before anything runs. The two derive in separate namespaces, so a
+	// request's event id is no agent's opening event id.
 	EventID string
+	// RequestID is the capability request whose RequestEventID a given
+	// EventID is. It is set with EventID, and only with it.
+	RequestID uuid.UUID
 	// Apply makes the change in tx, after the agent's row is locked and its
 	// previous state read. It runs statements only.
 	Apply func(ctx context.Context, tx *sql.Tx) error
@@ -234,6 +239,10 @@ func (r *Recorder) check(c Change) (store.Class, error) {
 		return "", fmt.Errorf("%w: %s takes the agent's opening event id, not one given", ErrInvalidChange, c.Trigger)
 	case c.EventID != "" && c.EventID == OpeningEventID(c.AgentID):
 		return "", fmt.Errorf("%w: event_id is the agent's opening event id, which only the record that opens its history takes", ErrInvalidChange)
+	case c.EventID != "" && (c.RequestID == uuid.Nil || c.EventID != RequestEventID(c.RequestID)):
+		return "", fmt.Errorf("%w: event_id is not the event id of the request the change names, the only event id a change is given", ErrInvalidChange)
+	case c.EventID == "" && c.RequestID != uuid.Nil:
+		return "", fmt.Errorf("%w: the change names a request and gives no event_id", ErrInvalidChange)
 	case c.Apply == nil:
 		return "", fmt.Errorf("%w: the change has no statement", ErrInvalidChange)
 	}
@@ -289,15 +298,9 @@ func (r *Recorder) draft(c Change) record.Draft {
 // state again, all in tx. A registration finds no agent before its statement
 // runs and leaves prev zero; one that finds the agent is refused. A deletion
 // finds no agent after its statement runs and leaves next zero; one that
-// finds the agent is refused. A change given another agent's opening event id
-// (checkEventID), or whose states break its trigger's rule (checkStates), is
-// refused. A refused change's transaction rolls back.
+// finds the agent is refused. A change whose states break its trigger's rule
+// (checkStates) is refused. A refused change's transaction rolls back.
 func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err error) {
-	if c.EventID != "" {
-		if err = checkEventID(ctx, tx, c); err != nil {
-			return State{}, State{}, err
-		}
-	}
 	if c.Trigger.opens() {
 		_, err = readState(ctx, tx, c.OrganizationID, c.AgentID, false)
 		switch {
@@ -325,37 +328,6 @@ func change(ctx context.Context, tx *sql.Tx, c Change) (prev, next State, err er
 		return State{}, State{}, err
 	}
 	return prev, next, nil
-}
-
-// organizationAgentIDsQuery lists the ids of an organization's agents.
-const organizationAgentIDsQuery = `SELECT id FROM agents WHERE organization_id = $1`
-
-// checkEventID refuses a change given the opening event id of an agent in
-// its organization. check refuses the change's own agent's; another agent's
-// cannot be told from the id, so the organization's agents are read in q and
-// the opening event id of each compared. A record of the change there would
-// refuse that agent's next change, since it does not open its history. Event
-// ids are unique within an organization's chain, so only the opening event ids
-// of the organization's own agents are at stake.
-func checkEventID(ctx context.Context, q store.Querier, c Change) error {
-	rows, err := q.QueryContext(ctx, organizationAgentIDsQuery, c.OrganizationID)
-	if err != nil {
-		return fmt.Errorf("transition: read the organization's agents: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return fmt.Errorf("transition: read the organization's agents: %w", err)
-		}
-		if OpeningEventID(id) == c.EventID {
-			return fmt.Errorf("%w: event_id is the opening event id of agent %s, which only the record that opens its history takes", ErrInvalidChange, id)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("transition: read the organization's agents: %w", err)
-	}
-	return nil
 }
 
 // checkStates refuses a change whose states break its trigger's rule. A null

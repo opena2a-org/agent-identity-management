@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — filing a pending capability request no longer reads every agent of the organization (#648)
+
+- The transition recorder read the id of every agent in the organization for each change that carried an event id, to
+  refuse one that was another agent's opening event id. Only the record of a pending capability request carries one,
+  so each such filing in an organization of N agents read N rows. The recorder now takes a given event id only with
+  the request it is derived from, and refuses any other before anything is read. A request's event id and an agent's
+  opening event id are derived in separate namespaces, so the event id of a request is no agent's opening event id.
+- A change given the opening event id of its own agent, or of another agent in the organization, is still refused
+  before its statement runs. So is a change given an event id that is not the event id of the request it names, and
+  a change that names a request and gives no event id. Only server code gives a change an event id; no API request
+  can.
+- Tests: `transition_test.go` covers a change given an event id, which reads its own agent before and after its
+  statement and runs no other statement, and the event ids the recorder takes and refuses.
+  `authorization_transition_opening_integration_test.go` still covers the opening event id of another agent.
+
 ### Fixed — an A2A request whose nonce cannot be stored is answered 400, and other follow-ups (#645)
 
 - `POST /api/v1/a2a/verify` stored the request's nonce without checking it. A nonce longer than 64 characters failed

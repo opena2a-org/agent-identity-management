@@ -169,6 +169,7 @@ func (s *CapabilityRequestService) filePending(ctx context.Context, agent *domai
 		AgentID:        agent.ID,
 		Trigger:        transition.TriggerCapabilityRequested,
 		EventID:        transition.RequestEventID(request.ID),
+		RequestID:      request.ID,
 		Apply: func(ctx context.Context, tx *sql.Tx) error {
 			return repository.CreateCapabilityRequestTx(ctx, tx, request)
 		},
