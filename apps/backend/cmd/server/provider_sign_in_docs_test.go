@@ -63,13 +63,16 @@ func TestProviderSignInRoutesAreNotMounted(t *testing.T) {
 		"the only login or callback route under /auth is the email and password login")
 }
 
+// providerSettingPattern matches a provider sign-in setting by name.
+var providerSettingPattern = regexp.MustCompile(`\b(GOOGLE|MICROSOFT|OKTA)_(CLIENT_ID|CLIENT_SECRET|REDIRECT_URL|TENANT_ID|DOMAIN)\b`)
+
 // providerSignInDocPatterns match text that gives a provider login or callback
 // route, a provider setting, or sign-in with Google, Microsoft, Okta or SSO.
 var providerSignInDocPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)/auth/(login|callback)/(google|microsoft|okta|:provider)\b`),
 	regexp.MustCompile(`(?i)/o?auth/(google|microsoft|okta)\b`),
 	regexp.MustCompile(`(?i)/auth/callback\b`),
-	regexp.MustCompile(`\b(GOOGLE|MICROSOFT|OKTA)_(CLIENT_ID|CLIENT_SECRET|REDIRECT_URL|TENANT_ID|DOMAIN)\b`),
+	providerSettingPattern,
 	regexp.MustCompile(`\bOAUTH_REDIRECT_URL\b`),
 	regexp.MustCompile(`(?i)\b(sign|log)\w*[ -]?(in|on)\s+(with|via|using|through)\s+(an? )?(Google|Microsoft|Okta|OAuth|SSO)\b`),
 	regexp.MustCompile(`(?i)\b(Google|Microsoft|Okta)\s+(OAuth|SSO)\b`),
@@ -254,4 +257,31 @@ func TestAPIGuidesNameTheLocalLogin(t *testing.T) {
 	} {
 		assert.Contains(t, aim03ReadRepoFile(t, rel), "/api/v1/auth/login/local", rel)
 	}
+}
+
+// With no provider sign-in route, a flag or check the server derives from a
+// provider setting describes nothing it does: GET /api/v1/status reported an
+// "oauth" feature computed from GOOGLE_CLIENT_ID. No source file of this
+// package reads a provider setting; the config package still reads them.
+func TestServerPackageReadsNoProviderSetting(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	require.NoError(t, err)
+
+	var findings []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(name)
+		require.NoError(t, err, name)
+		for i, line := range strings.Split(string(body), "\n") {
+			if providerSettingPattern.MatchString(line) {
+				findings = append(findings, fmt.Sprintf("%s:%d: %s", name, i+1, strings.TrimSpace(line)))
+			}
+		}
+	}
+	assert.Empty(t, findings,
+		"no route serves provider sign-in, so nothing in the server package reads a provider setting:\n%s",
+		strings.Join(findings, "\n"))
 }

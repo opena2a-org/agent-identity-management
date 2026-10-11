@@ -289,7 +289,6 @@ func main() {
 				"email":    emailStatus,
 			},
 			"features": fiber.Map{
-				"oauth":              os.Getenv("GOOGLE_CLIENT_ID") != "",
 				"email_registration": true,
 				"mcp_auto_detection": true,
 				"trust_scoring":      true,

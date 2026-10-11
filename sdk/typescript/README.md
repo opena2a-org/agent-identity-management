@@ -63,7 +63,7 @@ Agent "my-first-agent" is registered.
 The private key was generated on this machine and has not been sent anywhere.
 ```
 
-The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. Prefer `AIM_BOOTSTRAP_TOKEN` to `--token`: a flag value is visible in the process list and shell history. Run `npx @opena2a/aim-sdk init --help` for every option.
+The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. Run `npx @opena2a/aim-sdk init --help` for every option.
 
 ## Features
 

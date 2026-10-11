@@ -5,8 +5,8 @@
  * The onboarding screen mints a 15-minute, single-use token scoped to
  * `agents:register` (POST /api/v1/onboarding/bootstrap-tokens). This command:
  *
- *   1. reads the token from AIM_BOOTSTRAP_TOKEN or --token (the environment is
- *      preferred: a flag value is visible in `ps` and shell history);
+ *   1. reads the token from AIM_BOOTSTRAP_TOKEN (a flag that carries it is
+ *      refused: a flag value is visible in `ps` and shell history);
  *   2. generates the agent's Ed25519 key pair locally, so the private key never
  *      leaves this machine;
  *   3. exchanges the token for an agent (POST
@@ -53,7 +53,6 @@ export interface InitDeps {
 }
 
 interface InitArgs {
-  token?: string;
   url?: string;
   name?: string;
   help: boolean;
@@ -69,11 +68,12 @@ export function initHelpText(): string {
     ${BOOTSTRAP_TOKEN_ENV}=<token> npx @opena2a/aim-sdk init [options]
 
   OPTIONS
-    --token <token>  Bootstrap token (prefer the ${BOOTSTRAP_TOKEN_ENV} variable:
-                     a flag value is visible in the process list and shell history)
     --url <url>      AIM server URL (default: AIM_URL, then ${DEFAULT_AIM_URL})
     --name <name>    Agent name (default: ${DEFAULT_AGENT_NAME})
     -h, --help       Show this help
+
+  The token is read from ${BOOTSTRAP_TOKEN_ENV} only: a flag value is visible
+  in the process list and shell history.
 
   The agent's Ed25519 key pair is generated on this machine; only the public
   key is sent. Credentials are saved to ~/.aim/agents/<name>.json (owner
@@ -81,7 +81,12 @@ export function initHelpText(): string {
 `;
 }
 
-const VALUE_FLAGS = new Set(['--token', '--url', '--name']);
+const VALUE_FLAGS = new Set(['--url', '--name']);
+
+/** Why a token on the command line is refused; the value is never read. */
+const TOKEN_FLAG_REFUSED =
+  `the bootstrap token is read from ${BOOTSTRAP_TOKEN_ENV}, not from a flag ` +
+  '(a flag value is visible in the process list and shell history)';
 
 function parseArgs(argv: string[]): ParseResult {
   const args: InitArgs = { help: false };
@@ -93,6 +98,9 @@ function parseArgs(argv: string[]): ParseResult {
     }
     const eq = raw.indexOf('=');
     const flag = raw.startsWith('--') && eq > 0 ? raw.slice(0, eq) : raw;
+    if (flag === '--token') {
+      return { ok: false, error: TOKEN_FLAG_REFUSED };
+    }
     if (!VALUE_FLAGS.has(flag)) {
       // Never echo an unknown argument verbatim: a token pasted without its
       // flag would be printed back.
@@ -104,13 +112,12 @@ function parseArgs(argv: string[]): ParseResult {
       value = raw.slice(eq + 1);
     } else {
       value = argv[i + 1];
-      if (value === undefined || (value.startsWith('-') && !value.startsWith(BOOTSTRAP_TOKEN_PREFIX))) {
+      if (value === undefined || value.startsWith('-')) {
         return { ok: false, error: `${flag} needs a value` };
       }
       i++;
     }
-    if (flag === '--token') args.token = value;
-    else if (flag === '--url') args.url = value;
+    if (flag === '--url') args.url = value;
     else args.name = value;
   }
   return { ok: true, args };
@@ -268,25 +275,17 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     return 0;
   }
 
-  const token = (args.token ?? env[BOOTSTRAP_TOKEN_ENV] ?? '').trim();
+  const token = (env[BOOTSTRAP_TOKEN_ENV] ?? '').trim();
   if (!token) {
     err('Error: no bootstrap token.');
     err('Copy the command from the onboarding screen, or set the token yourself:');
     err(`  ${BOOTSTRAP_TOKEN_ENV}=<token> npx @opena2a/aim-sdk init`);
     return 1;
   }
-  if (args.token !== undefined) {
-    // Said before the value is checked: a value that is not a bootstrap token,
-    // such as another credential pasted by mistake, is in the history too.
-    err(`Note: --token is visible in the process list and shell history; ${BOOTSTRAP_TOKEN_ENV} is not.`);
-  }
   if (!token.startsWith(BOOTSTRAP_TOKEN_PREFIX)) {
     err(`Error: that is not a bootstrap token (bootstrap tokens start with ${BOOTSTRAP_TOKEN_PREFIX}).`);
     err('Generate one from the onboarding screen in the dashboard.');
     return 1;
-  }
-  if (args.token !== undefined) {
-    err('The bootstrap token works once, so it is spent after this run.');
   }
 
   const rawUrl = args.url ?? env.AIM_URL ?? DEFAULT_AIM_URL;
