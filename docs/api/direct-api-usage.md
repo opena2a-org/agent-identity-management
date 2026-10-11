@@ -1,6 +1,7 @@
 # Direct API Usage (Without SDK)
 
-**For users of Go, JavaScript, Ruby, or other languages until official SDKs are released.**
+**For users of Go, Ruby, or other languages without an official SDK.** For JavaScript and TypeScript, use
+`@opena2a/aim-sdk` (see [Official SDKs](#official-sdks)).
 
 If you're not using the Python SDK, you can register and verify agents directly using the AIM REST API. This guide shows you how to implement the same security features using HTTP requests.
 
@@ -9,13 +10,10 @@ If you're not using the Python SDK, you can register and verify agents directly 
 - ✅ Developers using Go, JavaScript, Ruby, Java, or other languages
 - ✅ Users who prefer direct API control
 - ✅ Teams building custom integrations
-- ✅ Anyone waiting for official SDKs (Go and JavaScript coming in 2026)
+- ✅ Anyone waiting for an official Go SDK
 
-**Note**: Official SDKs planned for 2026:
-- Go SDK (Q1-Q2 2026)
-- JavaScript/TypeScript SDK (Q1-Q2 2026)
-
-Until then, use the REST API directly as shown in this guide.
+**Note**: The JavaScript/TypeScript SDK is available as `@opena2a/aim-sdk`. A Go SDK is planned; until then, use the
+REST API directly as shown in this guide.
 
 ---
 
@@ -690,25 +688,35 @@ For complete API documentation, see the [API Reference](../guides/API_REFERENCE.
 
 ---
 
-## Coming Soon: Official SDKs
+## Official SDKs
 
-Official SDKs planned for 2026:
+### JavaScript/TypeScript SDK
 
-### Go SDK (Q1 2026)
+Available on npm as `@opena2a/aim-sdk` (`npm install @opena2a/aim-sdk`). `registerAgent` generates the agent's Ed25519
+keypair and registers the agent in one call:
+
+```typescript
+import { AIMClient } from '@opena2a/aim-sdk';
+
+const client = new AIMClient({
+  baseUrl: 'https://aim.example.com',
+  apiKey: process.env.AIM_API_KEY,
+});
+
+const agent = await client.registerAgent({ name: 'my-node-agent' });
+
+const result = await client.verifyAction({ action: 'file:read', resource: 'config.json' });
+console.log(agent.id, result.actionAllowed);
+```
+
+See `sdk/typescript/README.md` for the full API.
+
+### Go SDK (planned)
 ```go
 // Preview of future Go SDK
 import "github.com/opena2a-org/aim-go-sdk"
 
 agent := aim.Secure("my-go-agent")
-// Same zero-config experience as Python!
-```
-
-### JavaScript/TypeScript SDK (Q2 2026)
-```typescript
-// Preview of future JS SDK
-import { secure } from '@opena2a/aim-sdk';
-
-const agent = secure('my-node-agent');
 // Same zero-config experience as Python!
 ```
 
@@ -772,6 +780,5 @@ curl -H "Authorization: Bearer YOUR_API_KEY" \
 4. Verify capabilities with `/api/v1/agents/{id}/verify-capability`
 5. Log results with `/api/v1/agents/{id}/log-capability/{audit_id}`
 
-**Until official SDKs are released**, use the REST API directly. The experience is straightforward and well-documented.
-
-**When SDKs are released in 2026**, you'll be able to migrate to the same zero-config experience as Python users enjoy today!
+**Until an official SDK covers your language**, use the REST API directly. JavaScript and TypeScript users can use
+`@opena2a/aim-sdk` today.

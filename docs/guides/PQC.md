@@ -163,43 +163,43 @@ print(f"Valid: {is_valid}, Reason: {reason}")
 
 ```typescript
 import {
-  isPqcAvailable,
+  isPQCAvailable,
   generateMLDSAKeyPair,
-  generateHybridKeyPair,
   signMLDSA,
   verifyMLDSA,
-  signHybrid,
-  verifyHybrid,
-  Algorithm
+  generateHybridKeyPair,
+  getHybridPublicKey,
+  hybridSign,
+  hybridVerify,
+  encodeHybridSignature,
 } from '@opena2a/aim-sdk';
 
-// Check availability
-console.log('PQC available:', isPqcAvailable());
+// Check availability (resolves to false when ML-DSA cannot be loaded)
+console.log('PQC available:', await isPQCAvailable());
 
-// Generate ML-DSA keypair
-const mldsaKeypair = await generateMLDSAKeyPair(Algorithm.MLDSA_65);
-
-// Generate hybrid keypair
-const hybridKeypair = await generateHybridKeyPair(Algorithm.HYBRID_ED25519_MLDSA_65);
-
-// Sign and verify
 const message = new TextEncoder().encode('Agent action data');
-const signature = await signHybrid(
-  hybridKeypair.ed25519PrivateKey,
-  hybridKeypair.mldsaPrivateKey,
-  message,
-  hybridKeypair.algorithm
-);
 
-const { isValid, reason } = await verifyHybrid(
-  hybridKeypair.ed25519PublicKey,
-  hybridKeypair.mldsaPublicKey,
-  message,
-  signature.ed25519Signature,
-  signature.mldsaSignature,
-  hybridKeypair.algorithm
-);
+// ML-DSA alone. The variant is 'ML-DSA-44', 'ML-DSA-65' (the default) or 'ML-DSA-87'.
+const mldsaKeypair = await generateMLDSAKeyPair('ML-DSA-65');
+const mldsaSignature = await signMLDSA('ML-DSA-65', mldsaKeypair.privateKey, message);
+const mldsaValid = await verifyMLDSA('ML-DSA-65', mldsaKeypair.publicKey, message, mldsaSignature);
+
+// Hybrid Ed25519+ML-DSA. hybridKeypair.algorithm is 'Ed25519+ML-DSA-65'.
+const hybridKeypair = await generateHybridKeyPair('ML-DSA-65');
+const signature = await hybridSign(hybridKeypair, message);
+
+// Resolves to true only when BOTH signatures are valid (defense-in-depth)
+const isValid = await hybridVerify(getHybridPublicKey(hybridKeypair), message, signature);
+
+// Base64 form for transmission: { alg, ed25519Sig, mldsaSig, ts }
+const encoded = encodeHybridSignature(signature);
+
+console.log({ mldsaValid, isValid, alg: encoded.alg });
 ```
+
+`Algorithm` is exported as a TypeScript type, the union of the algorithm strings
+(`'Ed25519'`, `'ML-DSA-44'` to `'ML-DSA-87'`, `'Ed25519+ML-DSA-44'` to `'Ed25519+ML-DSA-87'`);
+import it with `import type { Algorithm } from '@opena2a/aim-sdk'`. It has no runtime value.
 
 ## Backend PQC Agent Registration
 

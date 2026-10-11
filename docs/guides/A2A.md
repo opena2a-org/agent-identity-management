@@ -74,13 +74,19 @@ AIMClient agent = AIMClient.secure(
 ### TypeScript SDK
 
 ```typescript
-import { secure, AgentType } from '@opena2a/aim-sdk';
+import { AIMClient, AgentType } from '@opena2a/aim-sdk';
 
-const agent = await secure({
+const client = new AIMClient({
+  baseUrl: 'https://aim.example.com',
+  apiKey: process.env.AIM_API_KEY,
+});
+
+const agent = await client.registerAgent({
   name: 'orchestrator-agent',
   agentType: AgentType.LANGGRAPH,
   capabilities: ['task:delegate', 'agent:invoke'],
-  mcpServers: ['worker-agent-1', 'worker-agent-2', 'database-mcp']
+  talksTo: ['worker-agent-1', 'worker-agent-2', 'database-mcp'],
+  description: 'Orchestrator agent for task delegation',
 });
 ```
 
