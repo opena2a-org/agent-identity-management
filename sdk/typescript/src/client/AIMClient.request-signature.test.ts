@@ -6,7 +6,9 @@
  * passed all 64 bytes to the Ed25519 signer, which takes the seed alone, so
  * `verifyAction` obtained a token and then threw `Uint8Array expected` before
  * the verify request was sent. These tests send a request with each key form
- * and check the `X-AIM-Signature` header against the agent's public key.
+ * and check its signature against the agent's public key: the signature in the
+ * body of the verification POST, and the `X-AIM-Signature` header of a request
+ * made with the OAuth token.
  */
 
 import { createHash } from 'node:crypto';
@@ -27,35 +29,15 @@ function issuedForm(keyPair: { privateKey: Uint8Array; publicKey: Uint8Array }):
   return bytes;
 }
 
-function jsonResponse(body: unknown): Response {
+function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { 'Content-Type': 'application/json' },
   });
 }
 
-/** Sends `verifyAction` with the given key form and returns the verify request it sent. */
-async function sendVerify(privateKeyForm: 'seed' | 'issued'): Promise<{
-  headers: Record<string, string>;
-  body: string;
-  publicKey: Uint8Array;
-}> {
+async function credentialedClient(privateKeyForm: 'seed' | 'issued') {
   const keyPair = await generateKeyPair();
-  mockFetch.mockImplementation(async (url: string) => {
-    if (String(url) === `${BASE_URL}/api/v1/oauth/token`) {
-      return jsonResponse({ access_token: 'token', token_type: 'Bearer', expires_in: 7200 });
-    }
-    return jsonResponse({
-      verified: true,
-      agentId: AGENT_ID,
-      agentName: 'agent',
-      trustScore: 80,
-      riskLevel: 'low',
-      actionAllowed: true,
-      timestamp: new Date().toISOString(),
-    });
-  });
-
   const client = new AIMClient({ baseUrl: BASE_URL });
   client.setCredentials({
     agentId: AGENT_ID,
@@ -64,20 +46,46 @@ async function sendVerify(privateKeyForm: 'seed' | 'issued'): Promise<{
     organizationId: 'org-1',
     createdAt: new Date().toISOString(),
   });
+  return { client, publicKey: keyPair.publicKey };
+}
+
+/** Sends `verifyAction` with the given key form and returns the verification request it sent. */
+async function sendVerify(privateKeyForm: 'seed' | 'issued'): Promise<{
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+  publicKey: Uint8Array;
+}> {
+  mockFetch.mockImplementation(async () =>
+    jsonResponse(
+      { id: 'evt-1', status: 'approved', trustScore: 0.8, enforcementMode: 'strict', riskLevel: 'low' },
+      201
+    )
+  );
+  const { client, publicKey } = await credentialedClient(privateKeyForm);
 
   const result = await client.verifyAction({ action: 'db:read' });
   expect(result.actionAllowed).toBe(true);
 
-  const verifyCall = mockFetch.mock.calls.find(
-    ([url]) => String(url) !== `${BASE_URL}/api/v1/oauth/token`
-  );
-  expect(verifyCall).toBeDefined();
-  const [, init] = verifyCall!;
+  // One request, to the verification route: no token exchange precedes it.
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  const [url, init] = mockFetch.mock.calls[0];
+  expect(String(url)).toBe(`${BASE_URL}/api/v1/sdk-api/verifications`);
   return {
     headers: init.headers as Record<string, string>,
-    body: init.body as string,
-    publicKey: keyPair.publicKey,
+    body: JSON.parse(init.body as string) as Record<string, unknown>,
+    publicKey,
   };
+}
+
+/**
+ * The message the server verifies a verification signature over, written out
+ * for a request with no resource and an empty context.
+ */
+function verificationMessage(body: Record<string, unknown>): Uint8Array {
+  return new TextEncoder().encode(
+    `{"action_type": "${body.capability}", "agent_id": "${body.agentId}", "context": {}, ` +
+      `"resource": null, "timestamp": "${body.timestamp}"}`
+  );
 }
 
 /** The bytes `createRequestSignature` signs: timestamp:METHOD:path:hex(sha256(body)). */
@@ -96,23 +104,45 @@ describe('the request signature AIMClient sends with agent credentials', () => {
     vi.unstubAllGlobals();
   });
 
-  it('sends the verify request with a 64-byte issued key, signed with its seed', async () => {
+  it('signs the verification with a 64-byte issued key, using its seed', async () => {
     const { headers, body, publicKey } = await sendVerify('issued');
 
-    expect(headers['Authorization']).toBe('Bearer token');
-    expect(headers['X-AIM-Agent-ID']).toBe(AGENT_ID);
-    const message = signedMessage(headers['X-AIM-Timestamp'], 'POST', '/api/v1/verify', body);
-    const signature = fromBase64(headers['X-AIM-Signature']);
-    expect(await verify(signature, message, publicKey)).toBe(true);
+    expect(headers['Authorization']).toBeUndefined();
+    expect(body.agentId).toBe(AGENT_ID);
+    expect(body.publicKey).toBe(toBase64(publicKey));
+    const signature = fromBase64(body.signature as string);
+    expect(await verify(signature, verificationMessage(body), publicKey)).toBe(true);
 
     const otherKey = await generateKeyPair();
-    expect(await verify(signature, message, otherKey.publicKey)).toBe(false);
+    expect(await verify(signature, verificationMessage(body), otherKey.publicKey)).toBe(false);
   });
 
-  it('signs the verify request the same way with a 32-byte seed', async () => {
-    const { headers, body, publicKey } = await sendVerify('seed');
+  it('signs the verification the same way with a 32-byte seed', async () => {
+    const { body, publicKey } = await sendVerify('seed');
 
-    const message = signedMessage(headers['X-AIM-Timestamp'], 'POST', '/api/v1/verify', body);
+    expect(body.publicKey).toBe(toBase64(publicKey));
+    const signature = fromBase64(body.signature as string);
+    expect(await verify(signature, verificationMessage(body), publicKey)).toBe(true);
+  });
+
+  it('signs a request made with the OAuth token with the seed of a 64-byte issued key', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (String(url) === `${BASE_URL}/api/v1/oauth/token`) {
+        return jsonResponse({ access_token: 'token', token_type: 'Bearer', expires_in: 7200 });
+      }
+      return jsonResponse({ id: AGENT_ID, name: 'agent', displayName: 'Agent' });
+    });
+    const { client, publicKey } = await credentialedClient('issued');
+
+    await client.updateAgent({ displayName: 'Agent' });
+
+    const call = mockFetch.mock.calls.find(([url]) => String(url) === `${BASE_URL}/api/v1/agents/${AGENT_ID}`);
+    expect(call).toBeDefined();
+    const [, init] = call!;
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Authorization']).toBe('Bearer token');
+    expect(headers['X-AIM-Agent-ID']).toBe(AGENT_ID);
+    const message = signedMessage(headers['X-AIM-Timestamp'], 'PUT', `/api/v1/agents/${AGENT_ID}`, init.body as string);
     expect(await verify(fromBase64(headers['X-AIM-Signature']), message, publicKey)).toBe(true);
   });
 });

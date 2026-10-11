@@ -1,0 +1,17 @@
+{
+  "description": "The request AIMClient.updateAgent sends when every field it sends is given. {id} is the agent's ID.",
+  "method": "PUT",
+  "path": "/api/v1/agents/{id}",
+  "requestType": "CreateAgentRequest",
+  "body": {
+    "displayName": "Report Writer",
+    "description": "Writes the nightly report",
+    "agentType": "langchain",
+    "version": "2.1.0",
+    "capabilities": ["file:read"],
+    "talksTo": ["filesystem-mcp"],
+    "metadata": {
+      "team": "reporting"
+    }
+  }
+}

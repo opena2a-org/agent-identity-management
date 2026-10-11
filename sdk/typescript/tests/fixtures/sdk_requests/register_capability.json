@@ -1,0 +1,9 @@
+{
+  "description": "The request AIMClient.reportCapabilities sends for one capability. {id} is the agent's ID.",
+  "method": "POST",
+  "path": "/api/v1/sdk-api/agents/{id}/capabilities/register",
+  "requestType": "RegisterCapabilityRequest",
+  "body": {
+    "capabilityType": "file:read"
+  }
+}

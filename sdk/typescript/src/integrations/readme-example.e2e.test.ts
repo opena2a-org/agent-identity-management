@@ -10,8 +10,9 @@
  *
  * Express and Fastify are optional peers and are not installed for the test
  * run, so the middleware functions are invoked directly with request/response
- * doubles; everything past them (client, token exchange, signed verify POST)
- * is the real code talking HTTP to the fake server.
+ * doubles; everything past them (client, signed verification POST) is the
+ * real code talking HTTP to the fake server, which answers the verification
+ * route the way AIM does.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -24,6 +25,7 @@ import { generateKeyPair, toBase64 } from '../crypto/ed25519';
 import type { AgentCredentials } from '../types';
 
 const AGENT_ID = '550e8400-e29b-41d4-a716-446655440000';
+const VERIFICATIONS = '/api/v1/sdk-api/verifications';
 
 type Seen = { method: string; url: string; body: string };
 
@@ -45,16 +47,17 @@ async function startFakeAim(): Promise<{ server: Server; baseUrl: string; seen: 
       res.end('{"access_token":"t","token_type":"Bearer","expires_in":300}');
     } else if (req.method === 'GET' && req.url === `/api/v1/agents/${AGENT_ID}`) {
       res.end(JSON.stringify({ id: AGENT_ID, name: 'readme-agent', trustScore: 0.9 }));
-    } else if (req.method === 'POST' && req.url === '/api/v1/verify') {
+    } else if (req.method === 'POST' && req.url === VERIFICATIONS) {
+      res.statusCode = 201;
       res.end(
         JSON.stringify({
-          verified: true,
-          actionAllowed: true,
-          agentId: AGENT_ID,
-          agentName: 'readme-agent',
+          id: '3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+          status: 'approved',
+          approvedBy: 'system',
           trustScore: 0.9,
+          enforcementMode: 'strict',
           riskLevel: 'low',
-          timestamp: new Date().toISOString(),
+          riskAutoDetected: true,
         }),
       );
     } else {
@@ -131,9 +134,9 @@ describe('README Express example against a fake AIM server (#449)', () => {
 
     expect(res.statusCode).toBe(200);
     expect(req.aim.verified).toBe(true);
-    const verify = fake.seen.find((s) => s.method === 'POST' && s.url === '/api/v1/verify');
+    const verify = fake.seen.find((s) => s.method === 'POST' && s.url === VERIFICATIONS);
     expect(verify, `AIM saw: ${fake.seen.map((s) => `${s.method} ${s.url}`).join(', ')}`).toBeDefined();
-    expect(JSON.parse(verify!.body).action_type ?? JSON.parse(verify!.body).action).toBe('data:write');
+    expect(JSON.parse(verify!.body).capability).toBe('data:write');
   });
 
   it('accepts a ready client', async () => {
@@ -143,7 +146,7 @@ describe('README Express example against a fake AIM server (#449)', () => {
     await run(createAIMMiddleware({ client }), req, res);
     expect(await run(verifyAction('data:write'), req, res)).toBe('next');
     expect(req.aim.client).toBe(client);
-    expect(fake.seen.some((s) => s.url === '/api/v1/verify')).toBe(true);
+    expect(fake.seen.some((s) => s.url === VERIFICATIONS)).toBe(true);
   });
 
   it('refuses client and credentials together', async () => {
@@ -166,7 +169,7 @@ describe('README Express example against a fake AIM server (#449)', () => {
       await run(verifyAction('data:write'), req, res);
       expect(res.statusCode).toBe(401);
       expect(JSON.stringify(res.payload)).toContain('AIM_ORGANIZATION_ID');
-      expect(fake.seen.some((s) => s.url === '/api/v1/verify')).toBe(false);
+      expect(fake.seen.some((s) => s.url === VERIFICATIONS)).toBe(false);
     } finally {
       console.warn = warn;
     }
@@ -207,6 +210,6 @@ describe('README Fastify example against a fake AIM server (#449)', () => {
 
     expect(reply.statusCode).toBe(200);
     expect(req.aim.verified).toBe(true);
-    expect(fake.seen.some((s) => s.method === 'POST' && s.url === '/api/v1/verify')).toBe(true);
+    expect(fake.seen.some((s) => s.method === 'POST' && s.url === VERIFICATIONS)).toBe(true);
   });
 });

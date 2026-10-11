@@ -81,6 +81,8 @@ export {
   type RegisterAgentOptions,
   type VerificationResult,
   type VerifyActionOptions,
+  type CapabilityRegistration,
+  type CapabilityReport,
   type TokenResponse,
   type APIError,
   type WebhookPayload,

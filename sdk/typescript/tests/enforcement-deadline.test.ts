@@ -3,10 +3,12 @@
  *
  * AC3: `enforcementTimeout` (milliseconds) in AIMClientConfig, resolved
  * constructor argument → AIM_ENFORCEMENT_TIMEOUT_MS → DEFAULT_ENFORCEMENT_TIMEOUT
- * (5000). ONE deadline, started on entry to verifyAction, bounds the OAuth
- * token exchange AND the verify POST: each fetch is aborted at the time left
- * on the shared deadline, never given a fresh budget. Expiry surfaces as the
- * existing NetworkError('Request timed out').
+ * (5000). ONE deadline, started on entry to verifyAction, bounds the whole
+ * call. The call makes one request, the verification POST, which is signed in
+ * its body and needs no token, so a client that holds a token manager still
+ * makes no token exchange on this path; the POST is aborted at the time left
+ * on the deadline. Expiry surfaces as the existing NetworkError('Request
+ * timed out').
  *
  * AC4: DEFAULT_TIMEOUT stays 30000, and no seconds-spelled environment
  * variable exists.
@@ -96,9 +98,9 @@ class StubServer {
 
 const stallEverything: Handler = () => 'stall';
 
-/** Answer POST /api/v1/oauth/token (after delayMs) with the TokenResponse shape from
- * the contract; hold every other request (the verify POST) open forever. */
-function tokenThenStall(delayMs: number): Handler {
+/** Answer every request after delayMs: a token for POST /api/v1/oauth/token, and
+ * the verification route's approval for anything else. */
+function answerAfter(delayMs: number): Handler {
   return (requestLine) =>
     requestLine.startsWith('POST /api/v1/oauth/token')
       ? {
@@ -106,7 +108,11 @@ function tokenThenStall(delayMs: number): Handler {
           delayMs,
           body: '{"access_token":"t","token_type":"Bearer","expires_in":300}',
         }
-      : 'stall';
+      : {
+          status: 201,
+          delayMs,
+          body: '{"id":"evt-1","status":"approved","trustScore":0.9,"enforcementMode":"strict","riskLevel":"low"}',
+        };
 }
 
 async function credentialedClient(
@@ -161,11 +167,8 @@ afterAll(() => {
 
 describe('the enforcement deadline (AIM-06)', () => {
   it(
-    'AIM-06.AC3 (a) a stalled token exchange is ended by enforcementTimeout: 500 on the credentialed path',
+    'AIM-06.AC3 (a) a stalled verification POST is ended by enforcementTimeout: 500 on the credentialed path',
     async () => {
-      // Base (origin/main 5405500a, built dist, this fixture): STILL HANGING at
-      // a 20 000 ms watchdog, 1 connection, request line POST /oauth/token —
-      // the token fetch carried no signal, AbortController or timeout.
       const server = await startServer(stallEverything);
       const client = await credentialedClient(server.url, { enforcementTimeout: 500 });
 
@@ -180,7 +183,7 @@ describe('the enforcement deadline (AIM-06)', () => {
       expect((error as Error).message).toMatch(/Request timed out/);
       expect(elapsed).toBeLessThan(1500);
       expect(server.connections).toBe(1);
-      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/oauth\/token HTTP/);
+      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/sdk-api\/verifications HTTP/);
     },
     10000
   );
@@ -188,7 +191,6 @@ describe('the enforcement deadline (AIM-06)', () => {
   it(
     'AIM-06.AC3 (b) AIM_ENFORCEMENT_TIMEOUT_MS=2000 bounds the credentialed path with no constructor option',
     async () => {
-      // Base (origin/main 5405500a): still hanging at the 20 000 ms watchdog.
       // A value of 2000 is a 2 s deadline — were it misread as seconds the
       // call would still be pending at the 3 000 ms bound (AC4).
       process.env.AIM_ENFORCEMENT_TIMEOUT_MS = '2000';
@@ -202,21 +204,20 @@ describe('the enforcement deadline (AIM-06)', () => {
       const elapsed = performance.now() - start;
 
       expect(elapsed).toBeLessThan(3000);
-      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/oauth\/token HTTP/);
+      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/sdk-api\/verifications HTTP/);
     },
     10000
   );
 
   it(
-    'AIM-06.AC3 (c) the token exchange and the verify POST spend ONE deadline, not two budgets',
+    'AIM-06.AC3 (c) the verification POST is the only request, and an answer later than the deadline is not waited for',
     async () => {
-      // Token answered after 1500 ms, verify POST never answered, deadline
-      // 2000 ms: one shared deadline ends the call at ~2000 ms; two separate
-      // 2000 ms budgets would take 3500 ms or more. Base reading
-      // (origin/main 5405500a, host run): 31 531 ms — the verify POST hung
-      // for DEFAULT_TIMEOUT. Only the 3000 ms bound is asserted.
-      const server = await startServer(tokenThenStall(1500));
-      const client = await credentialedClient(server.url, { enforcementTimeout: 2000 });
+      // Every request is answered after 1500 ms and the deadline is 1000 ms.
+      // A token exchange would be answered, so one would show in the request
+      // lines; none may. The verification answer arrives after the deadline,
+      // so the call ends at ~1000 ms rather than at 1500 ms.
+      const server = await startServer(answerAfter(1500));
+      const client = await credentialedClient(server.url, { enforcementTimeout: 1000 });
 
       const start = performance.now();
       await expect(client.verifyAction({ action: 'db:read' })).rejects.toThrowError(
@@ -224,12 +225,9 @@ describe('the enforcement deadline (AIM-06)', () => {
       );
       const elapsed = performance.now() - start;
 
-      expect(elapsed).toBeLessThan(3000);
-      // The second phase really started: the verify POST went out after the
-      // token answer and was the fetch in flight when the deadline expired.
-      expect(server.requestLines.some((line) => line.startsWith('POST /api/v1/verify'))).toBe(
-        true
-      );
+      expect(elapsed).toBeLessThan(1400);
+      expect(server.requestLines).toHaveLength(1);
+      expect(server.requestLines[0]).toMatch(/^POST \/api\/v1\/sdk-api\/verifications HTTP/);
     },
     10000
   );
@@ -237,9 +235,8 @@ describe('the enforcement deadline (AIM-06)', () => {
   it(
     'AIM-06.AC3 (d) with no enforcement option anywhere the 5000 ms DEFAULT_ENFORCEMENT_TIMEOUT applies',
     async () => {
-      // Token answered at once, verify POST never answered. Base
-      // (origin/main 5405500a, token manager nulled): 30 008 ms, 1 connection.
-      const server = await startServer(tokenThenStall(0));
+      // Verification POST never answered.
+      const server = await startServer(stallEverything);
       const client = await credentialedClient(server.url);
 
       const start = performance.now();
