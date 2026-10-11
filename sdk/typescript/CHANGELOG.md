@@ -9,15 +9,27 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
-- `verifyDelegationChain()` takes the trust attenuation factor and the trust floor from its options,
-  `trustAttenuation` (default 0.8) and `minDelegatedTrust` (default 0.3), which the verifier sets. It no longer reads
-  the fields of those names on a delegation: a delegation's signed payload leaves them out, so whoever passes a chain
-  on can set them and every signature still verifies. Run against the code before this change, a chain of three
-  delegations made by `createDelegation()`, each then given `trustAttenuation: 1` and verified with no options, was
-  valid with an effective trust of 1 at all three; it is now 1, 0.8 and 0.64. A factor or floor that is not a number
-  from 0 to 1 fails the chain with `trustAttenuation and minDelegatedTrust must be numbers from 0 to 1` before any
-  delegation is checked. A verifier that set the fields on each delegation before verifying passes the same values in
-  the options instead (#690).
+- **Breaking change for a verifier that sets `trustAttenuation` or `minDelegatedTrust` on each delegation.**
+  `verifyDelegationChain()` takes the trust attenuation factor and the trust floor from its options,
+  `trustAttenuation` (default 0.8) and `minDelegatedTrust` (default 0.3), which the verifier sets. It no longer
+  applies the fields of those names on a delegation: a delegation's signed payload leaves them out, so whoever passes
+  a chain on can set them and every signature still verifies. Run against the code before this change, a chain of
+  three delegations made by `createDelegation()` and verified with no options was not valid, with an effective trust
+  of 1, 0.5 and 0.25, when each delegation was given `trustAttenuation: 0.5` and `minDelegatedTrust: 0.6`, and was
+  valid with an effective trust of 1 at all three when each was given `trustAttenuation: 1`. A chain in which any
+  delegation carries either field now fails unless the verifier passes the matching option, with an error naming
+  the field, for example `trustAttenuation on a delegation is outside its signature and never applied: pass
+  trustAttenuation in the options to verify this chain`. A verifier that set the fields on each delegation passes
+  the same values in the options instead: with `trustAttenuation: 0.5` and `minDelegatedTrust: 0.6` in the options,
+  the first chain above is again not valid, at 1, 0.5 and 0.25. A factor or floor that is not a number from 0 to 1
+  fails the chain with `trustAttenuation and minDelegatedTrust must be numbers from 0 to 1` before any delegation is
+  checked (#690, #695).
+
+- `verifyDelegationChain()` fails a chain with `rootTrustScore must be a number from 0 to 1` when the
+  `rootTrustScore` option is not a number from 0 to 1, before any delegation is checked. It took the value as given:
+  on a chain of three delegations made by `createDelegation()`, `rootTrustScore: NaN` gave a valid chain with an
+  effective trust of NaN at each delegation, which no floor fails, and `rootTrustScore: 5` a valid chain at 5, 4
+  and 3.2 (#695).
 
 ### Changed
 

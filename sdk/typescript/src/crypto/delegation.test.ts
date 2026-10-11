@@ -17,6 +17,7 @@ import {
   fromBase64url,
   base58btcEncode,
   base58btcDecode,
+  type Delegation,
 } from './delegation';
 
 describe('Base58btc', () => {
@@ -761,9 +762,6 @@ describe('Trust attenuation through delegation hops', () => {
       delegatePublicKey: coordinator.publicKey,
       scopes: ['search', 'memory.read'],
     });
-    // Set trust attenuation on root delegation
-    d1.trustAttenuation = 0.8;
-    d1.minDelegatedTrust = 0.3;
 
     const d2 = await createDelegation({
       delegatorKeyPair: coordinator,
@@ -772,7 +770,7 @@ describe('Trust attenuation through delegation hops', () => {
       parentExpiresAt: d1.expiresAt,
     });
 
-    const result = await verifyDelegationChain([d1, d2], { rootTrustScore: 1.0 });
+    const result = await verifyDelegationChain([d1, d2], { rootTrustScore: 1.0, trustAttenuation: 0.8, minDelegatedTrust: 0.3 });
     expect(result.valid).toBe(true);
     expect(result.results).toHaveLength(2);
     expect(result.results[0].effectiveTrust).toBe(1.0);
@@ -843,13 +841,69 @@ describe('Trust attenuation through delegation hops', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('with no options the defaults apply, whatever factor the delegations carry', async () => {
+  // A verifier written to set the factor and the floor on each delegation must
+  // not be held to the defaults without notice: the chain is refused, and the
+  // error says to pass the values in the options.
+  it('refuses a chain whose delegations carry a factor and a floor when neither option is set', async () => {
+    const chain = await threeHopChain();
+    for (const delegation of chain) {
+      delegation.trustAttenuation = 0.5;
+      delegation.minDelegatedTrust = 0.6;
+    }
+
+    const refused = await verifyDelegationChain(chain);
+    expect(refused.valid).toBe(false);
+    expect(refused.results).toHaveLength(1);
+    expect(refused.results[0].error).toBe(
+      'trustAttenuation and minDelegatedTrust on a delegation are outside its signature and never applied: pass trustAttenuation and minDelegatedTrust in the options to verify this chain',
+    );
+
+    const verified = await verifyDelegationChain(chain, { trustAttenuation: 0.5, minDelegatedTrust: 0.6 });
+    expect(verified.valid).toBe(false);
+    expect(verified.results.map((r) => r.effectiveTrust)).toEqual([1, expect.closeTo(0.5, 4), expect.closeTo(0.25, 4)]);
+    expect(verified.results[1].error).toMatch(/below minimum threshold 0.6/);
+  });
+
+  it('refuses a carried field only while its own option is unset', async () => {
     const chain = await threeHopChain();
     for (const delegation of chain) delegation.trustAttenuation = 1;
 
-    const result = await verifyDelegationChain(chain);
+    const refused = await verifyDelegationChain(chain, { minDelegatedTrust: 0.3 });
+    expect(refused.valid).toBe(false);
+    expect(refused.results[0].error).toBe(
+      'trustAttenuation on a delegation is outside its signature and never applied: pass trustAttenuation in the options to verify this chain',
+    );
+
+    chain[2].minDelegatedTrust = 0;
+    const floorRefused = await verifyDelegationChain(chain, { trustAttenuation: 0.8 });
+    expect(floorRefused.valid).toBe(false);
+    expect(floorRefused.results[0].error).toBe(
+      'minDelegatedTrust on a delegation is outside its signature and never applied: pass minDelegatedTrust in the options to verify this chain',
+    );
+
+    const result = await verifyDelegationChain(chain, { trustAttenuation: 0.8, minDelegatedTrust: 0.3 });
     expect(result.valid).toBe(true);
     expect(result.results.map((r) => r.effectiveTrust)).toEqual([1, expect.closeTo(0.8, 4), expect.closeTo(0.64, 4)]);
+  });
+
+  it('with no options a chain is held to a factor of 0.8 and a floor of 0.3', async () => {
+    const keys = await Promise.all(Array.from({ length: 8 }, () => generateKeyPair()));
+    const chain: Delegation[] = [];
+    for (let i = 0; i < 7; i++) {
+      chain.push(await createDelegation({
+        delegatorKeyPair: keys[i],
+        delegatePublicKey: keys[i + 1].publicKey,
+        scopes: ['search'],
+        parentExpiresAt: chain[i - 1]?.expiresAt,
+      }));
+    }
+
+    // 0.8^5 = 0.32768 holds the floor and 0.8^6 = 0.262144 falls below it.
+    const result = await verifyDelegationChain(chain);
+    expect(result.valid).toBe(false);
+    expect(result.results.map((r) => r.effectiveTrust)).toEqual([1, 0.8, 0.64, 0.512, 0.4096, 0.32768, 0.262144].map((v) => expect.closeTo(v, 6)));
+    expect(result.results.slice(0, 6).map((r) => r.error)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined]);
+    expect(result.results[6].error).toBe('Effective trust 0.2621 is below minimum threshold 0.3');
   });
 
   it('the floor is the verifier\'s minDelegatedTrust, not the one a delegation carries', async () => {
@@ -871,12 +925,28 @@ describe('Trust attenuation through delegation hops', () => {
       { trustAttenuation: Number.NaN },
       { minDelegatedTrust: 2 },
       { minDelegatedTrust: Number.NaN },
+      { trustAttenuation: '0.5' as unknown as number },
+      { minDelegatedTrust: '0.3' as unknown as number },
     ]) {
       const result = await verifyDelegationChain(chain, options);
       expect(result.valid, JSON.stringify(options)).toBe(false);
       expect(result.results).toHaveLength(1);
       expect(result.results[0].error).toBe('trustAttenuation and minDelegatedTrust must be numbers from 0 to 1');
     }
+  });
+
+  it('refuses a root trust outside 0 to 1 before verifying anything', async () => {
+    const chain = await threeHopChain();
+    for (const rootTrustScore of [Number.NaN, 5, -0.1, Number.POSITIVE_INFINITY, '0.5' as unknown as number]) {
+      const result = await verifyDelegationChain(chain, { rootTrustScore });
+      expect(result.valid, String(rootTrustScore)).toBe(false);
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].error).toBe('rootTrustScore must be a number from 0 to 1');
+    }
+
+    const result = await verifyDelegationChain(chain, { rootTrustScore: 0.9 });
+    expect(result.valid).toBe(true);
+    expect(result.results.map((r) => r.effectiveTrust)).toEqual([0.9, expect.closeTo(0.72, 4), expect.closeTo(0.576, 4)]);
   });
 
   it('should use default attenuation values when not specified', async () => {

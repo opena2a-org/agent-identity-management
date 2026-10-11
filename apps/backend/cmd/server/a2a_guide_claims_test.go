@@ -272,8 +272,10 @@ func TestA2AGuideAttestationIsAnExplicitCall(t *testing.T) {
 // TypeScript SDK's verifyDelegationChain() attenuates, under other field names,
 // and its first delegation keeps the root trust. It takes the factor and the
 // floor from the verifier's options and never from a delegation, whose fields
-// of those names are outside its signature. A server change that starts
-// reading the fields fails here until the guide says what it does.
+// of those names are outside its signature, and it refuses a chain that
+// carries one of them when the verifier left the matching option unset. A
+// server change that starts reading the fields fails here until the guide says
+// what it does.
 func TestA2AGuideDelegationAttenuationNamesWhereItApplies(t *testing.T) {
 	guide := aim03ReadRepoFile(t, "docs/guides/A2A.md")
 	section := guideSubsection(t, guide, "### Delegation Trust Attenuation")
@@ -315,6 +317,23 @@ func TestA2AGuideDelegationAttenuationNamesWhereItApplies(t *testing.T) {
 	assert.Empty(t, tsChainTrustRead.FindAllString(verify, -1),
 		"verifyDelegationChain takes the factor and the floor from its options, never from a delegation's unsigned fields")
 	srcContains(t, section, "`verifyDelegationChain()` does not read them", "the guide says the delegation's own fields are not read")
+	// The one function that looks at a delegation's own fields tests only
+	// whether they are there, to refuse the chain, and never takes their values.
+	carriedStart := strings.Index(ts, "function carriedTrustFieldsWithoutOption(")
+	require.NotEqual(t, -1, carriedStart, "the SDK has carriedTrustFieldsWithoutOption")
+	carried := ts[carriedStart:]
+	carriedEnd := strings.Index(carried, "\n}\n")
+	require.NotEqual(t, -1, carriedEnd, "carriedTrustFieldsWithoutOption ends")
+	carried = carried[:carriedEnd]
+	assert.Len(t, tsChainTrustRead.FindAllString(carried, -1), 2,
+		"carriedTrustFieldsWithoutOption reads each delegation field once, to test whether it is set")
+	srcContains(t, carried, "chain.some((d) => isSet(d.trustAttenuation))", "the factor on a delegation is only tested for presence")
+	srcContains(t, carried, "chain.some((d) => isSet(d.minDelegatedTrust))", "the floor on a delegation is only tested for presence")
+	srcContains(t, ts, "pass ${fields} in the options to verify this chain", "a chain carrying a field whose option is unset is refused")
+	srcContains(t, section, "A chain in which any delegation carries `trustAttenuation` fails unless the verifier passes `trustAttenuation` in the options",
+		"the guide says a chain carrying a field whose option is unset fails")
+	srcContains(t, ts, "refusedChain('rootTrustScore must be a number from 0 to 1')", "the root trust is held to 0 to 1")
+	srcContains(t, section, "and so must `rootTrustScore`", "the guide says the root trust is held to 0 to 1")
 	srcContains(t, section, "takes two optional settings from its caller, the verifier, in its options", "the guide says the verifier sets both")
 	srcContains(t, ts, "effectiveTrust = effectiveTrust * attenuation;", "each later delegation multiplies the trust")
 	srcContains(t, ts, "if (effectiveTrust < minTrust) {", "a delegation below the floor fails")
