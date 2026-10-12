@@ -12,8 +12,6 @@ Run with: pytest -m integration tests/test_langchain_integration.py
 """
 
 import sys
-import os
-from pathlib import Path
 
 import pytest
 
@@ -21,7 +19,6 @@ import pytest
 langchain_core = pytest.importorskip("langchain_core", reason="langchain-core not installed")
 
 from langchain_core.tools import tool
-from langchain_core.callbacks import BaseCallbackHandler
 
 from aim_sdk import AIMClient
 from aim_sdk.integrations.langchain import AIMCallbackHandler, aim_verify, wrap_tools_with_aim

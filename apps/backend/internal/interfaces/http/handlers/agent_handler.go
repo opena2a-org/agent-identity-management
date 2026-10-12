@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -27,10 +25,10 @@ type AgentHandler struct {
 	alertService             AlertServicer
 	verificationEventService VerificationEventServicer
 	capabilityService        CapabilityServicer
-	tagService               TagServicer                          // ✅ For fetching agent tags in responses
-	orgRepo                  domain.OrganizationRepository        // ✅ For enforcement mode lookup
-	attestationService       MCPAttestationServicer               // ✅ For getting MCP connections via attestations
-	mcpServiceConcrete       *application.MCPService              // Needed for DetectMCPServersFromConfig
+	tagService               TagServicer                   // ✅ For fetching agent tags in responses
+	orgRepo                  domain.OrganizationRepository // ✅ For enforcement mode lookup
+	attestationService       MCPAttestationServicer        // ✅ For getting MCP connections via attestations
+	mcpServiceConcrete       *application.MCPService       // Needed for DetectMCPServersFromConfig
 }
 
 func NewAgentHandler(
@@ -168,8 +166,8 @@ func agentResponse(agent *domain.Agent, capabilities []string, agentTags []*doma
 		"createdAt":                agent.CreatedAt,
 		"updatedAt":                agent.UpdatedAt,
 		"talksTo":                  agent.TalksTo,
-		"tags":                     tags,            // ✅ Include tags in response
-		"metadata":                 agent.Metadata,  // ✅ Include custom metadata (model, department, etc.)
+		"tags":                     tags,           // ✅ Include tags in response
+		"metadata":                 agent.Metadata, // ✅ Include custom metadata (model, department, etc.)
 		"declaredPurpose":          agent.DeclaredPurpose,
 		"capabilityViolationCount": agent.CapabilityViolationCount,
 		"isCompromised":            agent.IsCompromised,
@@ -217,8 +215,8 @@ func agentListFilter(c fiber.Ctx) (domain.AgentListFilter, error) {
 		{"status", status},
 		{agentTypeParam, agentType},
 	} {
-		if !utf8.ValidString(param.value) || strings.ContainsRune(param.value, 0) {
-			return domain.AgentListFilter{}, fmt.Errorf("%s must be UTF-8 text without a NUL character", param.name)
+		if err := queryTextError(param.name, param.value); err != nil {
+			return domain.AgentListFilter{}, err
 		}
 	}
 	return domain.AgentListFilter{
@@ -442,7 +440,7 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	if sdkTokenID == nil {
 		if apiKeyErr == nil && fullAPIKey != "" {
 			response["apiKey"] = fiber.Map{
-				"key":       fullAPIKey,           // ⚠️ SENSITIVE: Only shown once, never stored in plaintext
+				"key":       fullAPIKey, // ⚠️ SENSITIVE: Only shown once, never stored in plaintext
 				"id":        apiKeyRecord.ID,
 				"name":      apiKeyRecord.Name,
 				"prefix":    apiKeyRecord.Prefix,

@@ -183,7 +183,6 @@ def test_a_denial_under_monitoring_mode_never_reaches_the_console_at_all():
     block here means that regression shows up in the file that used to depend on
     it.
     """
-    from aim_sdk import console as console_module
     from aim_sdk.exceptions import ActionDeniedError
 
     def warm_stub(method, url, **kwargs):

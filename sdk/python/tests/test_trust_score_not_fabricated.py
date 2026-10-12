@@ -16,8 +16,6 @@ them independently produces a number the server never sent:
 A number on screen is a claim of measurement. Absent must render as absent.
 """
 
-import pytest
-
 from aim_sdk.console import AIMConsole
 
 

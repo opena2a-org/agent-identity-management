@@ -7,7 +7,6 @@ Tests will be skipped if liboqs-python is not installed.
 
 import base64
 import pytest
-from unittest.mock import patch, MagicMock
 
 from aim_sdk.crypto.pqc import (
     # Constants

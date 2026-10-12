@@ -9,18 +9,18 @@ This script tests the complete one-line setup workflow:
 """
 
 import sys
-import json
 from unittest.mock import patch, MagicMock
-from aim_sdk import auto_detect_capabilities, auto_detect_mcps, register_agent
+from aim_sdk import auto_detect_mcps, register_agent
 
 
 def test_capability_detection():
     """Test 1: Capability Auto-Detection (with import detection enabled)"""
     from aim_sdk.capability_detection import CapabilityDetector
 
-    # Import known packages to trigger detection
-    import requests
-    import smtplib
+    # Import known packages to trigger detection: the detector reads
+    # sys.modules, so these imports are what the assertions below detect.
+    import requests  # noqa: F401
+    import smtplib  # noqa: F401
 
     detector = CapabilityDetector()
     capabilities = detector.detect_all(include_imports=True)

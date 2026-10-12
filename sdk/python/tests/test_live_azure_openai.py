@@ -10,7 +10,6 @@ Run with: pytest -m integration tests/test_live_azure_openai.py
 
 import sys
 import os
-from pathlib import Path
 
 import pytest
 

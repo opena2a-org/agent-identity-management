@@ -7,11 +7,10 @@ import sys
 import json
 import tempfile
 import pathlib
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, MagicMock
 
 from aim_sdk.capability_detection import (
     CapabilityDetector,
-    auto_detect_capabilities,
     save_capabilities_config
 )
 

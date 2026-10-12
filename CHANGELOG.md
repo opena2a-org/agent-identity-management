@@ -11,6 +11,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `GET /api/v1/tags/search` answers 400 for a `q` or `category` that is not UTF-8 text or holds a NUL character (#718)
+
+- The handler answers `400` with `{"error": "<parameter> must be UTF-8 text without a NUL character"}`, naming `q` or
+  `category` (`q` when both are refused), and sends no statement to the database. PostgreSQL refuses such a value as a text
+  parameter. A `q` that is valid UTF-8, such as `q=%e2%82%ac`, is still searched for. `GET /api/v1/agents` and the tag
+  search share the check.
+- Tests: `TestSearchTags_ValueThatIsNotUTF8TextIsABadRequest` and `TestSearchTags_TextValuesReachTheSearchStatement`
+  in `apps/backend/internal/interfaces/http/handlers/tag_handler_search_text_test.go`.
+
+### Fixed — the password file entries say the driver reads a file only its owner may read or write and nobody may execute (#718)
+
+- The #716 and #709 entries below and the comment on the server's connection string in
+  `apps/backend/cmd/server/main.go` give `chmod 0600` as an example of such a mode, in place of saying that the file
+  needs mode `0600`: the #716 entry records `aim-server migrate` exiting 0 with the file at modes `0400` and `0610`.
+
+### Changed — `apps/backend/internal/interfaces/http/handlers/agent_handler.go` is gofmt-formatted (#718)
+
+- `TestHandlerFilesAreGofmtFormatted` in `apps/backend/internal/interfaces/http/handlers/gofmt_test.go` fails when
+  that file, `tag_handler.go` or `query_text.go` is not.
+
 ### Fixed — `GET /api/v1/agents` answers 400 for a status or agent type that is not UTF-8 text or holds a NUL character (#716)
 
 - The handler answers `400` with `{"error": "<parameter> must be UTF-8 text without a NUL character"}`, naming
@@ -42,7 +62,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - `docs/guides/BOOTSTRAP_GUIDE.md`, the #709 entry below and the comment on the server's connection string say that
   the driver (lib/pq 1.10.9) skips the password file, as if it were absent, when the group or others can read or
-  write it, or when its owner or others can execute it, and that the file needs mode `0600`.
+  write it, or when its owner or others can execute it, so it reads a file that only its owner may read or write and
+  nobody may execute (`chmod 0600`, for example).
 - Measured with `aim-server migrate` built from the previous commit against PostgreSQL 18.3 with `scram-sha-256`
   authentication, with `POSTGRES_PASSWORD`, `PGPASSWORD` and `PGPASSFILE` unset and the role's line in `.pgpass` in
   the home directory: at modes `0600`, `0400` and `0610` the command exited 0; at `0644`, `0640`, `0660`, `0604`,
@@ -59,7 +80,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   line that matches the login in the password file `PGPASSFILE` names, or in `.pgpass` in the home directory when
   `PGPASSFILE` is unset or empty, and sends an empty password when none of these gives one. The driver skips a password
   file, as if it were absent, when the group or others can read or write it, or when its owner or others can execute
-  it, so the file needs mode `0600` (`chmod 0600 ~/.pgpass`). `aim-server migrate` opens
+  it, so it reads a file that only its owner may read or write and nobody may execute (`chmod 0600 ~/.pgpass`, for
+  example). `aim-server migrate` opens
   the database with the same string. A `POSTGRES_PASSWORD` that is set is still the password sent, whatever
   `PGPASSWORD` and the password file hold.
 - The server wrote an empty password as `password=''`. With that setting the driver sent an empty password in each of

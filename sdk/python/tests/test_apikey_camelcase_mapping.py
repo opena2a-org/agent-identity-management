@@ -17,7 +17,6 @@ locally generated one, whatever the server says.
 
 import base64
 import json
-import pytest
 import responses
 from unittest.mock import patch
 

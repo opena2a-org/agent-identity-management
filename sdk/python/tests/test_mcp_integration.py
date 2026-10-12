@@ -18,7 +18,6 @@ For full end-to-end tests with backend, run: test_mcp_with_auth.py
 
 import sys
 import os
-from pathlib import Path
 
 import pytest
 
