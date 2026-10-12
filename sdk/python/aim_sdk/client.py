@@ -152,6 +152,7 @@ def _resolve_enforcement_timeout(enforcement_timeout: "Optional[float]") -> floa
 from .oauth import OAuthTokenManager, load_sdk_credentials
 from .capability_detection import auto_detect_capabilities
 from .console import console
+from ._dashboard import JIT_APPROVALS_PAGE, dashboard_url_for
 from .risk_detector import detect_risk_level
 from .security_logging import (
     security_logger,
@@ -3788,7 +3789,7 @@ class AIMClient:
                     merged_context["function"] = func.__name__
                     merged_context["module"] = func.__module__
                     console.jit_waiting(cap, detected_risk, timeout_seconds,
-                                        dashboard_url=f"{self.aim_url}/dashboard/admin/verifications")
+                                        dashboard_url=dashboard_url_for(self.aim_url) + JIT_APPROVALS_PAGE)
 
                 # Request capability verification and apply the one enforcement
                 # rule. Before 2.0.0 this read no decision at all -- it never
@@ -4039,7 +4040,7 @@ class AIMClient:
                 # every call, including an approval. @require_approval has never
                 # executed a wrapped function. It was fail-closed by crash.
                 console.jit_waiting(action, risk_level, timeout_seconds,
-                                     dashboard_url=f"{self.aim_url}/dashboard/admin/verifications")
+                                     dashboard_url=dashboard_url_for(self.aim_url) + JIT_APPROVALS_PAGE)
 
                 # Request capability verification with extended timeout, then
                 # apply the one enforcement rule.

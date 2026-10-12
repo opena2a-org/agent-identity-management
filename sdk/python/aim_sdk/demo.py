@@ -30,6 +30,8 @@ import time
 from datetime import datetime
 from typing import Optional
 
+from ._dashboard import dashboard_url_for
+
 DEMO_AGENT_NAME = "demo-agent"
 DEMO_CAPABILITIES = ["api:call", "user:read", "db:read"]
 
@@ -45,17 +47,6 @@ class _DemoContext:
         self.interactive = interactive
         self.delay = delay
         self.actions = _build_actions(agent)
-
-
-def _dashboard_url_for(aim_url: str) -> str:
-    """Derive the dashboard URL from the API URL."""
-    if "api.aim.opena2a.org" in aim_url:
-        return "https://aim.opena2a.org"
-    if "api.community.opena2a.org" in aim_url:
-        return "https://community.opena2a.org"
-    if ":8080" in aim_url:
-        return aim_url.replace(":8080", ":3000")
-    return aim_url.replace("/api", "").rstrip("/")
 
 
 def _print_box(title: str, content: str, width: int = 78):
@@ -191,7 +182,7 @@ def _setup(url_override: Optional[str], interactive: bool, delay: float) -> Opti
         return None
 
     aim_url = (url_override or creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
-    dashboard_url = _dashboard_url_for(aim_url)
+    dashboard_url = dashboard_url_for(aim_url)
     strict_mode = strict_mode_override()
 
     print(f"""

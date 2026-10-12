@@ -11,6 +11,67 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the compose `bootstrap` service hands a database password with a single quote or a backslash to PostgreSQL unchanged (#701)
+
+- Without `--database-url`, `aim-bootstrap` reads the database the way the server does: from `POSTGRES_HOST`,
+  `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `POSTGRES_SSL_MODE` when `POSTGRES_HOST` is
+  set, as a `postgres://` URL with the user and the password percent-encoded, and from `DATABASE_URL` otherwise. That
+  is the order `aim-breakglass` reads them in.
+- The `bootstrap` service in `docker-compose.yml` sets the backend's `POSTGRES_*` variables. Its `DATABASE_URL`, which
+  holds the password between single quotes, stays for the `aim-bootstrap` of `platform-v1.0.0`, which reads only
+  `--database-url` and `DATABASE_URL`; this `aim-bootstrap` does not read it while `POSTGRES_HOST` is set.
+- Measured with the connection string parser of lib/pq 1.10.9 on the service's previous `DATABASE_URL`: the password
+  `it's` was refused with `missing "=" after "s'" in connection info string`, and `ends-with\` with
+  `unterminated quoted string literal in connection string`.
+- `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` and `apps/backend/deployments/otel-demo/smoke-backend.sh`
+  give the `aim-bootstrap` they build the same `POSTGRES_*` variables as the backend they start, so a `.env` in
+  `apps/backend` does not redirect it.
+- Tests: `TestCompose_BootstrapServicePasswordReachesTheDriverUnchanged` in `apps/backend/cmd/bootstrap/compose_test.go`
+  (it fails on the previous `docker-compose.yml` for `it's`, `back\slash` and `ends-with\`),
+  `TestDatabaseURL_FlagThenServerVariablesThenDatabaseURL` and `TestDatabaseURL_ErrorsNameVariablesNotValues` in
+  `apps/backend/cmd/bootstrap/main_test.go`, and `apps/backend/internal/config/database_url_test.go`.
+
+### Removed — the unused `internal/infrastructure/database` package (#701)
+
+- No package imported it, and its `Connect` wrote the password into a key=value connection string with no quoting.
+  `TestOnlyDatabaseConnStringBuildsAKeyValueConnectionString` in
+  `apps/backend/cmd/server/database_conn_string_builders_test.go` holds the backend to one builder of that string,
+  `databaseConnString`, which quotes and escapes every value.
+
+### Fixed — the token revocation startup line names a Redis that could not be reached (#701)
+
+- With no cache service, the line gives the reason the cache line gives:
+  `Token revocation disabled (no Redis configured)` only when `REDIS_HOST` is set to the empty string,
+  `Token revocation disabled (Redis unavailable)` when the startup Redis ping failed, whether `REDIS_HOST` names a host
+  or is unset, and `Token revocation disabled (cache initialization failed)` when the cache could not be built on the
+  connection. Each goes on with `: refresh tokens are not rotated and logout cannot revoke`.
+- Tests: `TestTokenRevocationStartupLine_GivesTheCacheLinesReason` and
+  `TestTokenRotationGuideQuotesTheRevocationStartupLines` in `apps/backend/cmd/server/redis_startup_test.go`.
+
+### Fixed — the token rotation guide says which refreshes rotate, and the troubleshooting guide quotes refresh lines the backend writes (#701)
+
+- `docs/security/token-rotation.md` says in its opening, in "How often do tokens rotate?" and in "Can I disable token
+  rotation?" that a token from an SDK download rotates on every refresh and a sign-in from `aim-sdk login` only on a
+  server with Redis. Its configuration section names the environment variables the backend reads (`REDIS_HOST`,
+  `AUTH_REVOCATION_FAIL_OPEN` and `JWT_ACCESS_TTL`) and quotes the startup lines that say which applies, in place of a
+  block from `apps/backend/config/security.yaml`, a file the repository does not have.
+- `docs/troubleshooting/authentication.md` ("Monitor Token Refresh Attempts") points at the access log line of
+  `POST /api/v1/auth/refresh` and the refresh route's `Refresh:` warnings, and pipes `docker logs` with `2>&1`, since
+  the backend writes its warnings to standard error. It quoted `Token refresh successful` and
+  `Token rotated: old_token → new_token`, which nothing in the backend or the SDKs writes.
+- Tests: `TestTokenRotationGuideSaysWhichRefreshesRotate` and `TestTroubleshootingGuideQuotesRefreshLinesTheBackendWrites`
+  in `apps/backend/internal/interfaces/http/handlers/security_guides_token_docs_test.go`.
+
+### Fixed — the REST list-endpoints smoke runs no `docker exec` (#701)
+
+- `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` reaches its throwaway Postgres with `psql` and
+  `pg_isready` on the published port, as `otel-demo/smoke-backend.sh` does, and stops before running any command when
+  `SMOKE_PG_CONTAINER` holds a character outside `[A-Za-z0-9_.-]` or `SMOKE_PG_DB` one outside `[A-Za-z0-9_]`. Its
+  pre-flight checks for `psql` and `pg_isready` too.
+- `hackmyagent@0.33.2 secure . --ci --static-only` reported `Docker exec with variable interpolation` (HIGH) at line 94
+  of the script and scored the tree 69/100 before this change, and reports no finding and 100/100 after it.
+- Test: `apps/backend/deployments/smoke/smoke_script_test.go`.
+
 ### Fixed — the phone navigation drawer is a modal dialog, and the tab bar's Secure link covers its raised icon
 
 - The navigation drawer that the bottom tab bar's Menu button opens is now a modal dialog named "Navigation"

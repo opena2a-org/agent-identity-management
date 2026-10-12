@@ -1,11 +1,14 @@
 package main
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/lib/pq"
 	"gopkg.in/yaml.v3"
 )
 
@@ -139,7 +142,7 @@ func TestCompose_BootstrapServiceSeedsTheAdmin(t *testing.T) {
 		t.Errorf("the bootstrap service must be one-shot (a profile, no restart policy); profiles=%v restart=%q", svc.Profiles, svc.Restart)
 	}
 	env := environmentNames(t, svc.Environment)
-	for _, name := range []string{"DATABASE_URL", "DEFAULT_ADMIN_PASSWORD"} {
+	for _, name := range []string{"POSTGRES_HOST", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "DEFAULT_ADMIN_PASSWORD"} {
 		if !env[name] {
 			t.Errorf("the bootstrap service does not set %s", name)
 		}
@@ -157,5 +160,74 @@ func TestCompose_BootstrapServiceSeedsTheAdmin(t *testing.T) {
 	}
 	if deps["backend"].Condition != "service_healthy" {
 		t.Errorf("the bootstrap service depends on backend with condition %q; want service_healthy", deps["backend"].Condition)
+	}
+}
+
+// composeVariable matches ${NAME}, ${NAME:-default}, ${NAME-default},
+// ${NAME:?message} and ${NAME?message} in a compose value.
+var composeVariable = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?[-?])([^}]*))?\}`)
+
+// interpolate substitutes the variables of a compose value from dotenv, the
+// way compose does from .env.
+func interpolate(t *testing.T, value string, dotenv map[string]string) string {
+	t.Helper()
+	return composeVariable.ReplaceAllStringFunc(value, func(ref string) string {
+		m := composeVariable.FindStringSubmatch(ref)
+		v, set := dotenv[m[1]]
+		empty := !set || (strings.HasPrefix(m[2], ":") && v == "")
+		switch strings.TrimPrefix(m[2], ":") {
+		case "-":
+			if empty {
+				return m[3]
+			}
+		case "?":
+			if empty {
+				t.Fatalf("compose refuses to start: %s", m[3])
+			}
+		}
+		return v
+	})
+}
+
+// The bootstrap service hands aim-bootstrap the database the backend reads, and
+// the password in .env reaches the driver as it is written there, a single
+// quote or a backslash included. The service's DATABASE_URL, kept for an
+// earlier aim-bootstrap, holds the password between single quotes, where
+// lib/pq ends the value at the first quote and reads a backslash as an
+// escape; the POSTGRES_* variables beside it come first.
+func TestCompose_BootstrapServicePasswordReachesTheDriverUnchanged(t *testing.T) {
+	svc := readComposeServices(t, filepath.Join(repoRoot, "docker-compose.yml"))["bootstrap"]
+	if svc.Environment.Kind != yaml.SequenceNode {
+		t.Fatalf("the bootstrap service's environment at line %d is not a list of NAME=value", svc.Environment.Line)
+	}
+	for _, password := range []string{`it's`, `back\slash`, `ends-with\`} {
+		t.Run(password, func(t *testing.T) {
+			for _, name := range []string{"DATABASE_URL", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "POSTGRES_SSL_MODE"} {
+				t.Setenv(name, "")
+			}
+			for _, item := range svc.Environment.Content {
+				name, value, _ := strings.Cut(item.Value, "=")
+				t.Setenv(name, interpolate(t, value, map[string]string{"POSTGRES_PASSWORD": password}))
+			}
+
+			dsn, err := databaseURL("")
+			if err != nil {
+				t.Fatalf("aim-bootstrap finds no database in the service's environment: %v", err)
+			}
+			if _, err := pq.NewConnector(dsn); err != nil {
+				t.Fatalf("lib/pq refuses the connection string: %v", err)
+			}
+			u, err := url.Parse(dsn)
+			if err != nil {
+				t.Fatalf("the connection string is not a URL: %v", err)
+			}
+			if got, _ := u.User.Password(); got != password {
+				t.Errorf("the driver receives the password %q, want %q", got, password)
+			}
+			if u.Hostname() != "postgres" || u.Path != "/identity" || u.User.Username() != "postgres" {
+				t.Errorf("the connection string names host %q, database %q, user %q; want the compose defaults postgres, identity, postgres",
+					u.Hostname(), strings.TrimPrefix(u.Path, "/"), u.User.Username())
+			}
+		})
 	}
 }

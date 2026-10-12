@@ -112,16 +112,8 @@ func sdkModules(t *testing.T) []string {
 // is not here fails it, and so does an entry the SDK no longer builds or the
 // server has come to register.
 var sdkPathsOffTheRouteTable = []struct{ module, path, what string }{
-	{"a2a.py", "/api/v1/a2a/tasks/{}",
-		"get_task_history names the agent in the path; the server registers GET /api/v1/a2a/tasks and PUT /api/v1/a2a/tasks/:id/state"},
-	{"a2a.py", "/api/v1/a2a/security/settings/{}",
-		"get_security_settings and update_security_settings name the organization in the path; the server registers /api/v1/a2a/security/settings"},
-	{"a2a.py", "/api/v1/a2a/security/violations/{}",
-		"get_security_violations names the organization in the path; the server registers /api/v1/a2a/security/violations"},
 	{"auto_hooks.py", "/api/v1/agents/{}/policies",
 		"PolicyCache fetches a per-agent policy route; the module's own comment says no released server registers it"},
-	{"client.py", "/dashboard/admin/verifications",
-		"a dashboard link built on the server URL; the server registers no /dashboard route"},
 	{"telemetry/relay.py", "/api/v1/telemetry/runtime",
 		"a path on the Registry, joined to the Registry URL and not to the server URL"},
 }

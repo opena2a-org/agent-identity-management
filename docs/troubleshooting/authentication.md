@@ -490,14 +490,21 @@ ORDER BY depth;
 ### Monitor Token Refresh Attempts
 
 ```bash
-# Watch backend logs for token refresh
-docker logs -f aim-backend | grep "refresh"
-
-# Look for:
-# ✅ "Token refresh successful"
-# ❌ "Token refresh failed: invalid token"
-# 🔄 "Token rotated: old_token → new_token"
+# Watch the backend's refresh requests and the refresh route's warnings
+# (warnings go to stderr, hence 2>&1)
+docker logs -f aim-backend 2>&1 | grep -E "/api/v1/auth/refresh|Refresh:"
 ```
+
+Each refresh request writes one access log line ending in `POST /api/v1/auth/refresh`, with the
+response status after the time: 200 for a refresh the backend answered with tokens, 401 for a
+refresh token it refused.
+
+The backend writes no line when it rotates a refresh token. The `rotated` field of the refresh
+response says whether it did, and the Python SDK prints a `Token rotated successfully` line when
+it did (see [Token Rotation](../security/token-rotation.md)). A write during a refresh that failed
+writes a warning starting with `Refresh:`. When Redis refused to record the presented refresh token
+as retired, the warning reads
+`Refresh: denylist write failed for jti <id>; the presented refresh token was returned unchanged`.
 
 ### Test Authentication Flow
 

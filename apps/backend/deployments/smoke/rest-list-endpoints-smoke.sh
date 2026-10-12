@@ -19,7 +19,7 @@
 # port, torn down on exit. Does not touch a developer's running stack.
 #
 # What it does, in order:
-#   1. Pre-flight: docker, curl, jq, go, openssl on PATH.
+#   1. Pre-flight: docker, curl, jq, go, openssl, psql, pg_isready on PATH.
 #   2. Throwaway Postgres (aim-listsmoke-postgres) on $SMOKE_POSTGRES_PORT.
 #   3. Build + run the backend on $SMOKE_BACKEND_PORT, its metrics listener
 #      on 127.0.0.1:$SMOKE_METRICS_PORT, with Redis and OpenTelemetry off
@@ -57,6 +57,18 @@ SMOKE_PG_CONTAINER="${SMOKE_PG_CONTAINER:-aim-listsmoke-postgres}"
 SMOKE_PG_PASSWORD="${SMOKE_PG_PASSWORD:-listsmoke_postgres_password}"
 SMOKE_PG_DB="${SMOKE_PG_DB:-identity}"
 
+# The container name and database name reach docker and psql arguments. They
+# can be overridden from the environment, so a value outside these patterns
+# stops the run before any command uses it.
+case "$SMOKE_PG_CONTAINER" in
+    *[!A-Za-z0-9_.-]*|"")
+        echo "FAIL: SMOKE_PG_CONTAINER must match [A-Za-z0-9_.-]+"; exit 1 ;;
+esac
+case "$SMOKE_PG_DB" in
+    *[!A-Za-z0-9_]*|"")
+        echo "FAIL: SMOKE_PG_DB must match [A-Za-z0-9_]+"; exit 1 ;;
+esac
+
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@opena2a.org}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-AIM2025!ListSmoke}"
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
@@ -70,7 +82,9 @@ echo "    Postgres : localhost:${SMOKE_POSTGRES_PORT} (container ${SMOKE_PG_CONT
 
 echo
 echo "==> [1/6] Pre-flight"
-for tool in docker curl jq go openssl; do
+# psql and pg_isready reach the throwaway Postgres over its published port, so
+# no shell variable goes into a docker exec argument list.
+for tool in docker curl jq go openssl psql pg_isready; do
     command -v "$tool" >/dev/null || { echo "FAIL: $tool not on PATH"; exit 1; }
 done
 
@@ -91,8 +105,8 @@ cleanup() {
 trap cleanup EXIT
 
 psql_smoke() {
-    docker exec -e PGPASSWORD="$SMOKE_PG_PASSWORD" "$SMOKE_PG_CONTAINER" \
-        psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 "$@"
+    PGPASSWORD="$SMOKE_PG_PASSWORD" psql -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" \
+        -v ON_ERROR_STOP=1 "$@"
 }
 
 echo
@@ -105,7 +119,7 @@ docker run -d --name "$SMOKE_PG_CONTAINER" \
     timescale/timescaledb:latest-pg16 >/dev/null || { echo "FAIL: docker run postgres"; exit 2; }
 attempt=0
 while [ $attempt -lt 30 ]; do
-    if docker exec "$SMOKE_PG_CONTAINER" pg_isready -U postgres -d "$SMOKE_PG_DB" >/dev/null 2>&1; then
+    if pg_isready -h 127.0.0.1 -p "$SMOKE_POSTGRES_PORT" -U postgres -d "$SMOKE_PG_DB" >/dev/null 2>&1; then
         echo "    postgres ready"; break
     fi
     attempt=$((attempt+1)); sleep 2
@@ -160,8 +174,16 @@ done
 echo
 echo "==> [4/6] Seed admin + login"
 (
+    # The bootstrap reads the same POSTGRES_* variables as the backend; set
+    # here, they win over any .env in the backend directory.
     cd "$BACKEND_DIR"
-    env DATABASE_URL="postgres://postgres:${SMOKE_PG_PASSWORD}@localhost:${SMOKE_POSTGRES_PORT}/${SMOKE_PG_DB}?sslmode=disable" \
+    env \
+        POSTGRES_HOST="localhost" \
+        POSTGRES_PORT="$SMOKE_POSTGRES_PORT" \
+        POSTGRES_USER="postgres" \
+        POSTGRES_PASSWORD="$SMOKE_PG_PASSWORD" \
+        POSTGRES_DB="$SMOKE_PG_DB" \
+        POSTGRES_SSL_MODE="disable" \
         "$BOOTSTRAP_BIN" --default --admin-email="$ADMIN_EMAIL" --admin-password="$ADMIN_PASSWORD" --yes \
         >>"$BACKEND_LOG" 2>&1
 ) || { echo "FAIL: bootstrap --default"; tail -40 "$BACKEND_LOG"; exit 4; }
