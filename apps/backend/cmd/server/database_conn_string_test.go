@@ -50,11 +50,11 @@ func recordingPostgres(t *testing.T) (port int, logins func() []recordedLogin) {
 			if err != nil {
 				return
 			}
-			if login, ok := readPostgresLogin(conn); ok {
+			answerPostgresLogin(conn, func(login recordedLogin) {
 				mu.Lock()
 				recorded = append(recorded, login)
 				mu.Unlock()
-			}
+			})
 			_ = conn.Close()
 		}
 	}()
@@ -68,6 +68,25 @@ func recordingPostgres(t *testing.T) (port int, logins func() []recordedLogin) {
 		defer mu.Unlock()
 		return append([]recordedLogin(nil), recorded...)
 	}
+}
+
+// answerPostgresLogin reads one login from conn, hands it to record and only
+// then writes the refusal. initDatabase returns as soon as the refusal
+// arrives, so a login recorded after the refusal was written could still be
+// missing when the test reads the recorded logins.
+func answerPostgresLogin(conn net.Conn, record func(recordedLogin)) {
+	login, ok := readPostgresLogin(conn)
+	if !ok {
+		return
+	}
+	record(login)
+
+	// ErrorResponse, so the driver returns instead of waiting for a session.
+	fields := "SFATAL\x00C28P01\x00M" + loginRefusal + "\x00\x00"
+	refusal := make([]byte, 5, 5+len(fields))
+	refusal[0] = 'E'
+	binary.BigEndian.PutUint32(refusal[1:], uint32(4+len(fields)))
+	_, _ = conn.Write(append(refusal, fields...))
 }
 
 func readPostgresLogin(conn net.Conn) (recordedLogin, bool) {
@@ -105,13 +124,6 @@ func readPostgresLogin(conn net.Conn) (recordedLogin, bool) {
 		return login, false
 	}
 	login.password = strings.TrimSuffix(string(password), "\x00")
-
-	// ErrorResponse, so the driver returns instead of waiting for a session.
-	fields := "SFATAL\x00C28P01\x00M" + loginRefusal + "\x00\x00"
-	refusal := make([]byte, 5, 5+len(fields))
-	refusal[0] = 'E'
-	binary.BigEndian.PutUint32(refusal[1:], uint32(4+len(fields)))
-	_, _ = conn.Write(append(refusal, fields...))
 	return login, true
 }
 
@@ -162,6 +174,69 @@ func loginSentBy(t *testing.T, database func(port int) config.DatabaseConfig) re
 	got := logins()
 	require.Len(t, got, 1, "one login reaches the server")
 	return got[0]
+}
+
+// The recording server records a login before it refuses it, so loginSentBy,
+// which reads the recorded logins once initDatabase has seen the refusal,
+// finds the login on every run. net.Pipe has no buffer: the server's write of
+// the refusal does not return until the client has read all of it, so while
+// the client has read only the first byte, the server can have done nothing
+// that follows that write.
+func TestRecordingPostgres_RecordsTheLoginBeforeRefusingIt(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	require.NoError(t, client.SetDeadline(time.Now().Add(5*time.Second)))
+
+	var (
+		mu       sync.Mutex
+		recorded []recordedLogin
+	)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer server.Close()
+		answerPostgresLogin(server, func(login recordedLogin) {
+			mu.Lock()
+			recorded = append(recorded, login)
+			mu.Unlock()
+		})
+	}()
+
+	// StartupMessage: length, protocol version 3.0, then name and value pairs.
+	params := "user\x00aim\x00database\x00identity\x00\x00"
+	startup := make([]byte, 8, 8+len(params))
+	binary.BigEndian.PutUint32(startup, uint32(8+len(params)))
+	binary.BigEndian.PutUint32(startup[4:], 3<<16)
+	_, err := client.Write(append(startup, params...))
+	require.NoError(t, err)
+
+	ask := make([]byte, 9)
+	_, err = io.ReadFull(client, ask)
+	require.NoError(t, err)
+	require.Equal(t, []byte{'R', 0, 0, 0, 8, 0, 0, 0, 3}, ask, "the server asks for the password in clear text")
+
+	password := "plain\x00"
+	message := make([]byte, 5, 5+len(password))
+	message[0] = 'p'
+	binary.BigEndian.PutUint32(message[1:], uint32(4+len(password)))
+	_, err = client.Write(append(message, password...))
+	require.NoError(t, err)
+
+	kind := make([]byte, 1)
+	_, err = io.ReadFull(client, kind)
+	require.NoError(t, err)
+	require.Equal(t, byte('E'), kind[0], "the server refuses the login")
+
+	mu.Lock()
+	got := append([]recordedLogin(nil), recorded...)
+	mu.Unlock()
+	assert.Equal(t, []recordedLogin{{user: "aim", database: "identity", password: "plain"}}, got,
+		"the login is recorded before the refusal is written")
+
+	rest, err := io.ReadAll(client)
+	require.NoError(t, err)
+	assert.Contains(t, string(rest), loginRefusal)
+	<-done
 }
 
 func TestInitDatabase_PasswordReachesPostgresUnchanged(t *testing.T) {
