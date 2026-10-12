@@ -401,7 +401,7 @@ except PermissionError as e:
 
 ### Where verification results are logged
 
-`log_capability_result()` (and the deprecated `log_action_result()`, which calls it) posts the result to `POST /api/v1/sdk-api/verifications/{id}/result`. Code that posts results without the SDK uses the same path.
+No result is posted after a tool runs. `log_capability_result()` and `log_action_result()` are deprecated and send no request: they posted to `POST /api/v1/sdk-api/verifications/{id}/result`, and the server refuses every request to that route. Code that posts results without the SDK gets the same refusal.
 
 ---
 

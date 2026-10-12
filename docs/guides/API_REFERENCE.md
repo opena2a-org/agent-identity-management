@@ -199,8 +199,12 @@ Authorization: Bearer <access_token>
 **Query Parameters:**
 - `limit` (optional) - Page size. When omitted, every agent is returned.
 - `offset` (optional) - Number of agents to skip (default: 0). Applied only when `limit` is set.
+- `status` (optional) - Keep the agents whose status is exactly this value (`pending`, `verified`, `suspended` or `revoked`).
+- `agentType` (optional) - Keep the agents whose type is exactly this value (for example `ai_agent` or `langchain`). The server reads `agent_type` when `agentType` is absent or empty.
 
-`total` is the organization's agent count. `limit` and `offset` are echoed back only when `limit` was sent.
+A filter value that no agent holds returns no agents, and an empty filter value does not filter.
+
+`total` is the count of the organization's agents that pass the filters, the same on every page; with no filter it is the organization's agent count. `limit` and `offset` are echoed back only when `limit` was sent.
 
 **Response:**
 ```json
@@ -771,7 +775,7 @@ There is no common list envelope. Each list answers with an array named for what
 
 | Route | Response | Paging |
 |-------|----------|--------|
-| `GET /api/v1/agents` | `{"agents": [...], "total": 45}`, plus `limit` and `offset` when `limit` was sent | `limit` (no default: every agent), `offset` |
+| `GET /api/v1/agents` | `{"agents": [...], "total": 45}`, plus `limit` and `offset` when `limit` was sent; with a `status` or `agentType` filter, `total` counts the agents that pass it | `limit` (no default: every agent), `offset` |
 | `GET /api/v1/admin/audit-logs` | `{"logs": [...], "total": 1234, "limit": 100, "offset": 0}` | `limit` (default 100), `offset` |
 | `GET /api/v1/admin/alerts` | `{"alerts": [...], "total": 3, ...}` with per-state counts | `limit` (default 100), `offset` |
 | `GET /api/v1/api-keys` | `{"apiKeys": [...], "total": 2}` | none |

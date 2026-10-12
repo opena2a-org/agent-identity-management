@@ -154,14 +154,6 @@ class TestApiKeyOnlyVerifyCapability:
             },
             status=200,
         )
-        # Mock log_capability_result endpoint
-        responses.add(
-            responses.POST,
-            "https://aim.example.com/api/v1/sdk-api/verifications/ver-789/result",
-            json={"success": True},
-            status=200,
-        )
-
         @api_key_client.perform_action(capability="test:action")
         def my_test_function():
             return "success"

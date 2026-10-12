@@ -4,6 +4,7 @@ Tests for AIMClient
 
 import base64
 import json
+import warnings
 import pytest
 import responses
 from nacl.signing import SigningKey
@@ -364,67 +365,59 @@ class TestVerifyAction:
         verify_key.verify(canonical.encode("utf-8"), base64.b64decode(sig_header))
 
 
+# The route log_capability_result posted to. The server refuses every request
+# to it; its handler answers 403 with this body.
+WITHDRAWN_RESULT_URL = (
+    "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result"
+)
+WITHDRAWN_RESULT_REFUSAL = {
+    "error": "verification result reporting is not accepted on this endpoint; "
+             "result and status are the authorization-decision channel",
+    "code": "executionOutcomeNotAccepted",
+}
+
+
+def _mock_withdrawn_result_route():
+    """The result route as the server's handler answers it. A test that makes
+    the client reach it sees the request among responses.calls."""
+    responses.add(responses.POST, WITHDRAWN_RESULT_URL, json=WITHDRAWN_RESULT_REFUSAL, status=403)
+
+
 class TestLogActionResult:
-    """Test action result logging"""
+    """log_capability_result and log_action_result send no request: the
+    route they posted to refuses every request. Each warns that it is
+    deprecated and returns None."""
 
+    @pytest.mark.parametrize("method", ["log_capability_result", "log_action_result"])
+    @pytest.mark.parametrize("call", [
+        {"verification_id": "verification-123", "success": True,
+         "result_summary": "Operation completed successfully"},
+        {"verification_id": "verification-123", "success": False,
+         "error_message": "Database connection failed"},
+        {"verification_id": "verification-123", "success": True},
+        {"verification_id": None, "success": True},
+        {"verification_id": "", "success": False, "error_message": "boom"},
+    ])
     @responses.activate
-    def test_log_success(self, aim_client):
-        """Test logging successful action result"""
-        responses.add(
-            responses.POST,
-            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
-            json={"status": "logged"},
-            status=200
+    def test_sends_no_request_and_warns(self, aim_client, method, call):
+        _mock_withdrawn_result_route()
+
+        with pytest.warns(DeprecationWarning, match=rf"^{method}\(\) is deprecated and sends nothing"):
+            returned = getattr(aim_client, method)(**call)
+
+        assert returned is None
+        assert len(responses.calls) == 0, (
+            f"{method} sent {[c.request.url for c in responses.calls]}"
         )
 
-        # Should not raise exception
-        aim_client.log_action_result(
-            verification_id="verification-123",
-            success=True,
-            result_summary="Operation completed successfully"
-        )
+    def test_the_warning_points_at_the_caller(self, aim_client):
+        """The warning is attributed to the line that called the method, so
+        the default filters show it to the code that has to change."""
+        with pytest.warns(DeprecationWarning) as caught:
+            aim_client.log_capability_result("verification-123", True)
+            aim_client.log_action_result("verification-123", True)
 
-        assert len(responses.calls) == 1
-        request_body = json.loads(responses.calls[0].request.body)
-        assert request_body["result"] == "success"
-        assert request_body["resultSummary"] == "Operation completed successfully"
-
-    @responses.activate
-    def test_log_failure(self, aim_client):
-        """Test logging failed action result"""
-        responses.add(
-            responses.POST,
-            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
-            json={"status": "logged"},
-            status=200
-        )
-
-        aim_client.log_action_result(
-            verification_id="verification-123",
-            success=False,
-            error_message="Database connection failed"
-        )
-
-        assert len(responses.calls) == 1
-        request_body = json.loads(responses.calls[0].request.body)
-        assert request_body["result"] == "failure"
-        assert request_body["errorMessage"] == "Database connection failed"
-
-    @responses.activate
-    def test_log_ignores_errors(self, aim_client):
-        """Test that logging errors don't raise exceptions"""
-        responses.add(
-            responses.POST,
-            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
-            json={"error": "Internal server error"},
-            status=500
-        )
-
-        # Should not raise exception even on failure
-        aim_client.log_action_result(
-            verification_id="verification-123",
-            success=True
-        )
+        assert [w.filename for w in caught] == [__file__, __file__]
 
 
 class TestPerformActionDecorator:
@@ -454,22 +447,26 @@ class TestPerformActionDecorator:
             status=200
         )
 
-        # Mock result logging
-        responses.add(
-            responses.POST,
-            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
-            json={"status": "logged"},
-            status=200
-        )
+        # The result route as the server answers it; the decorator must not reach it.
+        _mock_withdrawn_result_route()
 
         @aim_client.perform_action("db:read", resource="users_table")
         def get_users():
             return {"users": [{"id": 1, "name": "Alice"}]}
 
-        result = get_users()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = get_users()
 
         assert result == {"users": [{"id": 1, "name": "Alice"}]}
-        assert len(responses.calls) == 3  # Auto-registration + Verification + logging
+        assert not [w for w in caught if "sends nothing" in str(w.message)], (
+            "the decorator called a deprecated result method"
+        )
+        # Auto-registration + Verification. No result is posted afterwards.
+        assert [call.request.url for call in responses.calls] == [
+            f"https://aim.example.com/api/v1/sdk-api/agents/{aim_client.agent_id}/capabilities/register",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
+        ]
 
     @responses.activate
     def test_decorator_action_denied(self, aim_client):
@@ -501,8 +498,8 @@ class TestPerformActionDecorator:
             dangerous_action()
 
     @responses.activate
-    def test_decorator_logs_execution_error(self, aim_client):
-        """Test decorator logs errors when function fails"""
+    def test_decorator_raises_the_execution_error_and_posts_no_result(self, aim_client):
+        """The function's error reaches the caller, and no result is posted"""
         # Mock capability auto-registration
         responses.add(
             responses.POST,
@@ -524,26 +521,27 @@ class TestPerformActionDecorator:
             status=200
         )
 
-        # Mock result logging
-        responses.add(
-            responses.POST,
-            "https://aim.example.com/api/v1/sdk-api/verifications/verification-123/result",
-            json={"status": "logged"},
-            status=200
-        )
+        # The result route as the server answers it; the decorator must not reach it.
+        _mock_withdrawn_result_route()
 
         @aim_client.perform_action("db:read", resource="users_table")
         def failing_function():
             raise ValueError("Database connection failed")
 
-        with pytest.raises(ValueError, match="Database connection failed"):
-            failing_function()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with pytest.raises(ValueError, match="Database connection failed"):
+                failing_function()
 
-        # Verify error was logged
-        assert len(responses.calls) == 3  # Auto-registration + Verification + logging
-        log_request = json.loads(responses.calls[2].request.body)
-        assert log_request["result"] == "failure"
-        assert "Database connection failed" in log_request["errorMessage"]
+        assert not [w for w in caught if "sends nothing" in str(w.message)], (
+            "the decorator called a deprecated result method"
+        )
+
+        # Auto-registration + Verification. No result is posted afterwards.
+        assert [call.request.url for call in responses.calls] == [
+            f"https://aim.example.com/api/v1/sdk-api/agents/{aim_client.agent_id}/capabilities/register",
+            "https://aim.example.com/api/v1/sdk-api/verifications",
+        ]
 
 
 class TestContextManager:

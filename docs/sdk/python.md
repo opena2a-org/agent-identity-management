@@ -816,7 +816,6 @@ def get_weather(city: str):
 def get_weather(city: str):
     agent.verify_capability("weather:read", resource=city)
     result = requests.get(f"https://api.weather.com/{city}").json()
-    agent.log_capability_result(verification_id, success=True)
     return result
 ```
 

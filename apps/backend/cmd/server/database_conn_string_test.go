@@ -5,14 +5,18 @@ package main
 // sent after parsing the string initDatabase built.
 
 import (
+	"database/sql"
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -239,7 +243,30 @@ func TestRecordingPostgres_RecordsTheLoginBeforeRefusingIt(t *testing.T) {
 	<-done
 }
 
+// withDriverPasswordSources sets the two places the driver takes a password
+// from when the connection string gives none: PGPASSWORD, and a password file
+// with one line for the login of databaseConfigForLoginTest on any port. An
+// empty value leaves that source out: PGPASSWORD unset, and PGPASSFILE naming
+// a file that does not exist, so no .pgpass of the machine is read.
+func withDriverPasswordSources(t *testing.T, pgPassword, filePassword string) {
+	t.Helper()
+	t.Setenv("PGPASSWORD", pgPassword)
+	if pgPassword == "" {
+		// Unset, not empty: the driver reads a variable that is set and empty
+		// as a password. The Setenv above restores the variable afterwards.
+		require.NoError(t, os.Unsetenv("PGPASSWORD"))
+	}
+	passFile := filepath.Join(t.TempDir(), "pgpass")
+	if filePassword != "" {
+		require.NoError(t, os.WriteFile(passFile, []byte("127.0.0.1:*:identity:aim:"+filePassword+"\n"), 0o600))
+	}
+	t.Setenv("PGPASSFILE", passFile)
+}
+
 func TestInitDatabase_PasswordReachesPostgresUnchanged(t *testing.T) {
+	// The last case sends an empty password only when the driver finds none
+	// of its own.
+	withDriverPasswordSources(t, "", "")
 	for _, tc := range []struct {
 		name     string
 		password string
@@ -284,6 +311,75 @@ func TestDatabaseConnString_QuotesAndEscapesEveryStringSetting(t *testing.T) {
 	assert.Equal(t,
 		`host='127.0.0.1' port=5432 user='aim owner' password='it\'s a\\b' dbname='o\'brien' sslmode='disable'`,
 		databaseConnString(database))
+
+	// An empty password is no setting at all, so the driver looks for one.
+	database.Password = ""
+	assert.Equal(t,
+		`host='127.0.0.1' port=5432 user='aim owner' dbname='o\'brien' sslmode='disable'`,
+		databaseConnString(database))
+}
+
+// loginSentThroughURL opens the URL aim-bootstrap builds from the same
+// settings against a recording server and returns the one login it received.
+func loginSentThroughURL(t *testing.T, database func(port int) config.DatabaseConfig) recordedLogin {
+	t.Helper()
+	port, logins := recordingPostgres(t)
+
+	connector, err := pq.NewConnector(database(port).URL())
+	require.NoError(t, err, "the driver must accept the URL of the POSTGRES_* settings")
+	db := sql.OpenDB(connector)
+	defer db.Close()
+	require.ErrorContains(t, db.Ping(), loginRefusal, "the login must reach the server, which refuses it")
+
+	got := logins()
+	require.Len(t, got, 1, "one login reaches the server")
+	return got[0]
+}
+
+// With POSTGRES_PASSWORD empty, the server and aim-bootstrap send the same
+// password: the driver's own, which is PGPASSWORD when it is set, else the
+// line of the password file that matches the login, else an empty one. The
+// server builds a key=value string and aim-bootstrap a URL; a password
+// setting with an empty value in the first would send an empty password
+// whatever the driver could find.
+func TestEmptyPostgresPassword_ServerAndBootstrapSendTheDriversPassword(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		pgPassword   string
+		filePassword string
+		want         string
+	}{
+		{name: "PGPASSWORD set", pgPassword: "from-pgpassword", want: "from-pgpassword"},
+		{name: "a password file line for the login", filePassword: "from-the-file", want: "from-the-file"},
+		{name: "PGPASSWORD and a password file line", pgPassword: "from-pgpassword", filePassword: "from-the-file", want: "from-pgpassword"},
+		{name: "neither", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withDriverPasswordSources(t, tc.pgPassword, tc.filePassword)
+			database := func(port int) config.DatabaseConfig {
+				database := databaseConfigForLoginTest(port)
+				database.Password = ""
+				return database
+			}
+
+			server := loginSentBy(t, database)
+			bootstrap := loginSentThroughURL(t, database)
+
+			assert.Equal(t, tc.want, server.password, "the password the server sends")
+			assert.Equal(t, tc.want, bootstrap.password, "the password aim-bootstrap sends")
+			assert.Equal(t, bootstrap, server, "the server and aim-bootstrap send the same login")
+		})
+	}
+}
+
+// A POSTGRES_PASSWORD that is set is the password sent, whatever PGPASSWORD
+// and the password file hold.
+func TestSetPostgresPassword_ComesBeforeTheDriversPassword(t *testing.T) {
+	withDriverPasswordSources(t, "from-pgpassword", "from-the-file")
+	database := func(port int) config.DatabaseConfig { return databaseConfigForLoginTest(port) }
+
+	assert.Equal(t, "plain", loginSentBy(t, database).password, "the password the server sends")
+	assert.Equal(t, "plain", loginSentThroughURL(t, database).password, "the password aim-bootstrap sends")
 }
 
 // The user and the database name are written by the same rule as the password.

@@ -127,12 +127,6 @@ except VerificationUnavailableError as e:
     print(f"AIM returned no decision: {e}")
 else:
     results = search_flights("NYC")
-
-    client.log_capability_result(
-        verification_id=verification["verification_id"],
-        success=True,
-        result_summary=f"Found {len(results)} flights"
-    )
 ```
 
 ### Pattern 3: LangChain Decorator

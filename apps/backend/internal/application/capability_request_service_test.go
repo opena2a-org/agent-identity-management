@@ -757,6 +757,16 @@ func TestCapabilityRequestService_RejectRequest_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+// GetByOrganizationFiltered filters and pages GetByOrganization for tests.
+func (m *MockAgentRepositoryForCapReq) GetByOrganizationFiltered(orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error) {
+	agents, err := m.GetByOrganization(orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	page, total := filter.Page(agents, limit, offset)
+	return page, total, nil
+}
+
 // GetByOrganizationPaged pages over GetByOrganization for tests.
 func (m *MockAgentRepositoryForCapReq) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
 	agents, err := m.GetByOrganization(orgID)

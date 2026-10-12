@@ -196,10 +196,14 @@ Authorization: Bearer YOUR_JWT_TOKEN
 **Query Parameters:**
 - `limit` (optional): Page size. When omitted, all agents are returned.
 - `offset` (optional): Number of agents to skip (default: 0). Only applied when `limit` is set.
+- `status` (optional): Keep the agents whose status is exactly this value (`pending`, `verified`, `suspended` or `revoked`).
+- `agentType` (optional): Keep the agents whose type is exactly this value (for example `ai_agent` or `langchain`). The server reads `agent_type` when `agentType` is absent or empty.
+
+A filter value that no agent holds returns no agents. An empty filter value does not filter.
 
 **Response:**
 
-`total` is always the organization-wide agent count, so clients can keep paginating. The `limit` and `offset` fields are echoed back only when `limit` was provided.
+`total` is the count of the organization's agents that pass the filters, the same on every page, so clients can keep paginating; with no filter it is the organization-wide agent count. The `limit` and `offset` fields are echoed back only when `limit` was provided.
 
 ```json
 {

@@ -1335,6 +1335,16 @@ func TestCapabilityService_ValidateAndRegisterCapability_InvalidFormat(t *testin
 	assert.Error(t, err)
 }
 
+// GetByOrganizationFiltered filters and pages GetByOrganization for tests.
+func (m *MockAgentRepoForCapability) GetByOrganizationFiltered(orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error) {
+	agents, err := m.GetByOrganization(orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	page, total := filter.Page(agents, limit, offset)
+	return page, total, nil
+}
+
 // GetByOrganizationPaged pages over GetByOrganization for tests.
 func (m *MockAgentRepoForCapability) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
 	agents, err := m.GetByOrganization(orgID)

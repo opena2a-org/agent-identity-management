@@ -199,9 +199,26 @@ func agentResponse(agent *domain.Agent, capabilities []string, agentTags []*doma
 	return response
 }
 
+// agentListFilter reads the filter of an agent list from the query: status,
+// and the agent type as agentType or, when that is absent or empty, as
+// agent_type, the spelling the Python SDK sends. A parameter that is absent or
+// empty does not filter.
+func agentListFilter(c fiber.Ctx) domain.AgentListFilter {
+	agentType := c.Query("agentType")
+	if agentType == "" {
+		agentType = c.Query("agent_type")
+	}
+	return domain.AgentListFilter{
+		Status:    domain.AgentStatus(c.Query("status")),
+		AgentType: domain.AgentType(agentType),
+	}
+}
+
 // ListAgents returns agents for the organization. Optional limit/offset
 // query parameters page server-side; without them all agents are
-// returned (existing client behavior).
+// returned (existing client behavior). Optional status and agentType query
+// parameters keep the agents whose status and type equal them; total then
+// counts the agents that pass, on every page.
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
@@ -221,7 +238,7 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 		}
 	}
 
-	agents, total, err := h.agentService.ListAgentsPaged(c.Context(), orgID, limit, offset)
+	agents, total, err := h.agentService.ListAgentsFiltered(c.Context(), orgID, agentListFilter(c), limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents",
