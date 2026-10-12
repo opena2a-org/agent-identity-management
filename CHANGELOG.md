@@ -88,8 +88,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the brand ink or the units in the tertiary ink; the new tests fail on either, at 4.30:1 and 3.94:1 in the dark theme
   on those surfaces. `app/dashboard/layout.drawer.test.tsx` covers the modal drawer with the real sidebar and tab bar,
   and `components/mobile-tab-bar.test.tsx` fails when a part of a tab carries a negative margin, offset or translate
-  class such as `-mt-*`, `-top-*` or `-translate-y-*`; it reads class names, not drawn boxes, so a bracketed or
-  variant-prefixed spelling of the same offset passes it.
+  class in any of its spellings: the `-` prefix (`-mt-3.5`), a bracketed negative value (`mt-[-14px]`,
+  `translate-y-[-14px]`), or either of those behind a variant (`max-lg:-mt-3.5`) or the `!` modifier. It reads class
+  names, not drawn boxes. `tests/e2e/mobile-tab-bar.spec.ts` measures the boxes in a browser at each phone and tablet
+  viewport it covers, 375x812 among them: every part of each tab lies inside that tab's own link or button.
 
 ### Changed — a full static scan passes, with each exemption recorded and reasoned in `.hmaignore`
 
@@ -99,6 +101,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   one argument with no `sh -c`. `.hmaignore` names each of the nine files with its reason as a
   `<path>:<CHECK-ID> # <reason>` rule, and the same scan now reports no findings (score 100). Each line exempts its
   file from the one check it names; every other check still reads the file.
+- The header of `.hmaignore` also documents the `expires:YYYY-MM-DD` attribute a rule can end in. The rule applies
+  through that UTC day; from the next day the scan lists the line under `hmaignore.errors`, stops applying it and
+  reports its findings again.
+- That scan's LOG-002 ("Sensitive Data in Logs") reads only the `.ts` and `.js` files directly in the scanned
+  directory. The repository root has none, so the scan records LOG-002 as not applicable and reads no file of
+  `apps/web`. `apps/web/tests/no-sensitive-log.test.ts` makes the same match, a call whose first argument begins with
+  `password`, `apiKey`, `secret` or `token`, for `console.log`, `info`, `warn`, `error`, `debug` and `trace`, over every
+  tracked TypeScript and JavaScript source file of the dashboard, and fails on any it finds.
 
 ### Fixed — a database password with a single quote or a backslash reaches PostgreSQL as configured (#697)
 

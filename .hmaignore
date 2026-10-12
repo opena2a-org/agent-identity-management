@@ -5,6 +5,12 @@
 #     (supports trailing `*` wildcard, e.g. `!SANDBOX-*`).
 #   - `<path>:<CHECK-ID> # <reason>` exempts one file or directory from one
 #     check only; the reason is required. Every other check still reads it.
+#   - Any of these rules can end in `expires:YYYY-MM-DD`, written after the
+#     rule and before its `# <reason>`, for example
+#     `<path>:<CHECK-ID> expires:2026-12-31 # <reason>`. The rule applies
+#     through that UTC day; from the next day the scan lists the line under
+#     `hmaignore.errors` as expired, stops applying it, and reports its
+#     findings again.
 # See `src/hardening/scanner.ts:loadHmaIgnore` in hackmyagent for the parser.
 
 # .env.example is a template file by convention. The whole purpose is
