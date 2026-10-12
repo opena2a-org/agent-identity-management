@@ -172,6 +172,24 @@ does: from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 is set, and from `DATABASE_URL` otherwise. A single quote or a backslash in
 `POSTGRES_PASSWORD` reaches PostgreSQL unchanged.
 
+With `POSTGRES_PASSWORD` empty or unset, bootstrap and the server both leave
+the password to the database driver, which takes it from `PGPASSWORD` when
+that is set, and otherwise from the line that matches the login in the
+password file `PGPASSFILE` names. With neither, an empty password is sent.
+
+The driver also reads `PGCLIENTENCODING` and `PGDATESTYLE`. It accepts `UTF8`
+and `ISO, MDY` for them. When one holds a value the driver refuses, `LATIN1`
+for example, and the connection string does not set the same setting,
+bootstrap stops before it connects and names the variable:
+
+```
+Failed to connect to database: the driver refuses a setting it reads from the environment, not from the database connection string: PGCLIENTENCODING must be unset or UTF8
+```
+
+A connection string the driver refuses for any other reason ends the run with
+`the database connection string is not one the driver accepts`, followed by
+the places the string is taken from.
+
 ### Docker Deployment
 
 The backend image has no Go toolchain; it ships the bootstrap as the binary

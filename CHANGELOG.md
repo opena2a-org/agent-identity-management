@@ -11,6 +11,70 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — with `POSTGRES_PASSWORD` empty, the server takes the database password from `PGPASSWORD` or the password file, as `aim-bootstrap` does (#709)
+
+- The server leaves an empty `POSTGRES_PASSWORD` out of its connection string, as the URL `aim-bootstrap` builds leaves
+  it out. The driver (lib/pq 1.10.9) then takes the password from `PGPASSWORD` when that is set, otherwise from the
+  line that matches the login in the password file `PGPASSFILE` names, and sends an empty password when neither gives
+  one. `aim-server migrate` opens the database with the same string. A
+  `POSTGRES_PASSWORD` that is set is still the password sent, whatever `PGPASSWORD` and the password file hold.
+- The server wrote an empty password as `password=''`. With that setting the driver sent an empty password in each of
+  three cases a recording server measured on the previous connection string: `PGPASSWORD` set, a password file line
+  for the login, and both.
+- Measured with binaries built from the previous commit against PostgreSQL 18.3 with `scram-sha-256` authentication,
+  with `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER` and `POSTGRES_DB` set and `POSTGRES_PASSWORD` unset: with
+  `PGPASSWORD` holding the role's password, and again with `PGPASSFILE` naming a file that holds the role's line and
+  no `PGPASSWORD`, `aim-server migrate` exited 1 with `pq: password authentication failed for user "aim"` and
+  `aim-bootstrap --default --yes` exited 0. With the binaries of this change `aim-server migrate` exits 0 in both
+  cases. With neither a `PGPASSWORD` nor a password file, both commands exit 1 with that error, before and after.
+- `docs/guides/BOOTSTRAP_GUIDE.md` says where the password comes from when `POSTGRES_PASSWORD` is empty.
+- Tests: `TestEmptyPostgresPassword_ServerAndBootstrapSendTheDriversPassword`,
+  `TestSetPostgresPassword_ComesBeforeTheDriversPassword` and
+  `TestDatabaseConnString_QuotesAndEscapesEveryStringSetting` in
+  `apps/backend/cmd/server/database_conn_string_test.go`. The first opens the server's string and the URL of
+  `aim-bootstrap` against a server that records the login, and holds the two to the same password.
+
+### Fixed — `aim-bootstrap` names `PGCLIENTENCODING` or `PGDATESTYLE` when the driver refuses it, and no longer reports a refused connection string for it (#709)
+
+- The driver reads both variables from the environment. It accepts `UTF8` for the first and `ISO, MDY` for the
+  second, and refuses `LATIN1` and `German`. When the driver refuses a variable's value and the connection string
+  does not set the same setting, `aim-bootstrap` ends
+  with `the driver refuses a setting it reads from the environment, not from the database connection string:`
+  followed by `PGCLIENTENCODING must be unset or UTF8`, by `PGDATESTYLE must be unset or "ISO, MDY"`, or by both. It
+  names the variable and not its value.
+- To tell the two causes apart it parses the string again with the accepted settings written before it. A string the
+  driver still refuses, one that sets `client_encoding=LATIN1` itself or one the driver cannot parse, ends the run
+  with `the database connection string is not one the driver accepts`, as before.
+- Measured with the `aim-bootstrap` of the previous commit and `POSTGRES_*` variables the driver accepts:
+  `PGCLIENTENCODING=LATIN1`, `PGDATESTYLE=German`, and the two together each ended `aim-bootstrap --default --yes`
+  with exit code 1 and `the database connection string is not one the driver accepts`.
+- Not changed: a variable the driver does not support stops both commands with a Go panic. Measured before and after
+  this change with `PGSERVICE=x` and with `PGHOSTADDR=127.0.0.1`: `aim-bootstrap --default --yes` and
+  `aim-server migrate` exit 2 with `panic: setting PGSERVICE not supported` and
+  `panic: setting PGHOSTADDR not supported`.
+- `docs/guides/BOOTSTRAP_GUIDE.md` quotes the new line.
+- Tests: `TestOpenDatabase_NamesTheEnvironmentVariableTheDriverRefuses` and
+  `TestMainNamesTheEnvironmentVariableTheDriverRefuses` in `apps/backend/cmd/bootstrap/main_test.go`.
+
+### Fixed — `GET /api/v1/agents` applies the `status` and `agentType` filters (#709)
+
+- The list keeps the agents whose status equals `status` and whose type equals `agentType`. The type is read from
+  `agent_type`, the name the Python SDK sends, when `agentType` is absent or empty. A value no agent holds returns
+  no agents, and an empty value does not filter. `total` counts the agents that pass the filters, the same on every
+  page. Each filter is an equality predicate of the list query and of its count, with the value sent as a parameter.
+- Measured on a server built from the previous commit, as the administrator of an organization with three agents
+  (two `verified` and one `suspended`; two `langchain` and one `crewai`):
+  `GET /api/v1/agents?limit=100&offset=0&status=no-such-status&agent_type=no-such-type`, `?status=suspended`,
+  `?agentType=langchain` and `?agent_type=crewai&limit=10` were each answered 200 with all three agents and a
+  `total` of 3. A server built from this change answers them 200 with 0, 1, 2 and 1 agents, and a `total` equal to
+  that count.
+- The Java SDK's `listAgents` sends `status` and `agentType`, and the Python SDK's `list_agents` sends `status` and
+  `agent_type`.
+- `docs/API.md` and `docs/guides/API_REFERENCE.md` list the two parameters and say what `total` counts.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_handler_list_filter_test.go`, which runs the handler,
+  the agent service and the agent repository over a connection that answers only the statement each case expects,
+  and `apps/backend/internal/domain/agent_list_filter_test.go`.
+
 ### Fixed — the compose `bootstrap` service hands a database password with a single quote or a backslash to PostgreSQL unchanged (#701)
 
 - Without `--database-url`, `aim-bootstrap` reads the database the way the server does: from `POSTGRES_HOST`,

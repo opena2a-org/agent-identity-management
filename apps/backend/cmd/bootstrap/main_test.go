@@ -165,6 +165,137 @@ func TestOpenDatabase_RefusedConnectionStringIsNotQuoted(t *testing.T) {
 	}
 }
 
+// setDriverEnv sets the two variables the driver reads a setting from and
+// accepts one value of, PGCLIENTENCODING and PGDATESTYLE, each to its value
+// in vars, and unsets the one that vars does not hold. Unset is not empty: the
+// driver refuses an encoding that is set and empty.
+func setDriverEnv(t *testing.T, vars map[string]string) {
+	t.Helper()
+	for _, name := range []string{"PGCLIENTENCODING", "PGDATESTYLE"} {
+		value, set := vars[name]
+		t.Setenv(name, value)
+		if !set {
+			// The Setenv above restores the variable when the test ends.
+			if err := os.Unsetenv(name); err != nil {
+				t.Fatalf("unset %s: %v", name, err)
+			}
+		}
+	}
+}
+
+// A connection string the driver would accept but for PGCLIENTENCODING or
+// PGDATESTYLE is answered with the name of that variable, and not as a refused
+// connection string. The driver reads both from the environment, and a setting
+// of the string comes before either. The answer holds no part of the string
+// and not the variable's value.
+func TestOpenDatabase_NamesTheEnvironmentVariableTheDriverRefuses(t *testing.T) {
+	const (
+		user     = "seed-user"
+		database = "seed-db"
+		secret   = "not-a-real-password-1234"
+	)
+	settings := serverconfig.DatabaseConfig{Host: "db.internal", Port: 6543, User: user, Password: secret, Database: database, SSLMode: "disable"}
+	fromVariables := settings.URL()
+	postgresqlScheme := "postgresql" + strings.TrimPrefix(fromVariables, "postgres")
+	keyValue := "host=db.internal port=6543 user=" + user + " password=" + secret + " dbname=" + database
+	socket := serverconfig.DatabaseConfig{Host: "/var/run/postgresql", Port: 6543, User: user, Password: secret, Database: database, SSLMode: "disable"}.URL()
+
+	cases := []struct {
+		name string
+		env  map[string]string
+		dsn  string
+		// named holds the variables the answer names; none means the answer
+		// is errConnectionStringRefused.
+		named []string
+		// accepted is true when the driver accepts the string.
+		accepted bool
+	}{
+		{name: "PGCLIENTENCODING the driver refuses, the URL of the POSTGRES_* variables",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: fromVariables, named: []string{"PGCLIENTENCODING"}},
+		{name: "PGCLIENTENCODING the driver refuses, a postgresql:// URL",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: postgresqlScheme, named: []string{"PGCLIENTENCODING"}},
+		{name: "PGCLIENTENCODING the driver refuses, a key=value string",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: keyValue, named: []string{"PGCLIENTENCODING"}},
+		{name: "PGCLIENTENCODING the driver refuses, the URL of a socket directory",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: socket, named: []string{"PGCLIENTENCODING"}},
+		{name: "PGCLIENTENCODING set and empty",
+			env: map[string]string{"PGCLIENTENCODING": ""}, dsn: fromVariables, named: []string{"PGCLIENTENCODING"}},
+		{name: "PGDATESTYLE the driver refuses, the URL of the POSTGRES_* variables",
+			env: map[string]string{"PGDATESTYLE": "German"}, dsn: fromVariables, named: []string{"PGDATESTYLE"}},
+		{name: "PGDATESTYLE the driver refuses, a key=value string",
+			env: map[string]string{"PGDATESTYLE": "German"}, dsn: keyValue, named: []string{"PGDATESTYLE"}},
+		{name: "both variables refused",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1", "PGDATESTYLE": "German"}, dsn: fromVariables, named: []string{"PGCLIENTENCODING", "PGDATESTYLE"}},
+		{name: "PGCLIENTENCODING refused and PGDATESTYLE accepted",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1", "PGDATESTYLE": "ISO, MDY"}, dsn: fromVariables, named: []string{"PGCLIENTENCODING"}},
+
+		{name: "both variables at the value the driver accepts",
+			env: map[string]string{"PGCLIENTENCODING": "UTF8", "PGDATESTYLE": "ISO, MDY"}, dsn: fromVariables, accepted: true},
+		{name: "PGCLIENTENCODING refused, and the URL sets the encoding the driver accepts",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: fromVariables + "&client_encoding=UTF8", accepted: true},
+		{name: "PGDATESTYLE refused, and the string sets the date style the driver accepts",
+			env: map[string]string{"PGDATESTYLE": "German"}, dsn: keyValue + " datestyle='ISO, MDY'", accepted: true},
+
+		{name: "no variable set, the URL sets an encoding the driver refuses",
+			dsn: fromVariables + "&client_encoding=LATIN1"},
+		{name: "PGCLIENTENCODING refused, and the URL sets an encoding the driver refuses",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: fromVariables + "&client_encoding=LATIN1"},
+		{name: "PGDATESTYLE refused, and the string sets a date style the driver refuses",
+			env: map[string]string{"PGDATESTYLE": "German"}, dsn: keyValue + " datestyle=German"},
+		{name: "PGCLIENTENCODING refused, and a URL the driver cannot parse",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: strings.Replace(fromVariables, "db.internal", "db host", 1)},
+		{name: "PGCLIENTENCODING refused, and a key=value string whose quote does not end",
+			env: map[string]string{"PGCLIENTENCODING": "LATIN1"}, dsn: "host=db.internal user=" + user + " dbname=" + database + " password='" + secret},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			setDriverEnv(t, c.env)
+
+			_, driverErr := pq.NewConnector(c.dsn)
+			if (driverErr == nil) != c.accepted {
+				t.Fatalf("the driver answered %v, so the case does not test what its name says", driverErr != nil)
+			}
+
+			db, err := openDatabase(c.dsn)
+			if c.accepted {
+				if err != nil {
+					t.Fatalf("openDatabase refused a string the driver accepts: %v", err)
+				}
+				db.Close()
+				return
+			}
+			if err == nil {
+				db.Close()
+				t.Fatal("openDatabase accepted the string")
+			}
+			for _, part := range []string{secret, user, database, "db host", "db.internal", "/var/run/postgresql", "6543", "LATIN1", "German"} {
+				if strings.Contains(err.Error(), part) {
+					t.Errorf("the error holds %q, a part of the connection string or the value of a variable: %q", part, err)
+				}
+			}
+			if len(c.named) == 0 {
+				if !errors.Is(err, errConnectionStringRefused) {
+					t.Errorf("openDatabase answered %q, want errConnectionStringRefused: the driver refuses this string whatever the environment holds", err)
+				}
+				return
+			}
+			if !errors.Is(err, errDriverEnvironmentRefused) || errors.Is(err, errConnectionStringRefused) {
+				t.Errorf("openDatabase answered %q, want errDriverEnvironmentRefused: the driver accepts this string without the variable", err)
+			}
+			for _, name := range []string{"PGCLIENTENCODING", "PGDATESTYLE"} {
+				named := strings.Contains(err.Error(), name)
+				want := false
+				for _, n := range c.named {
+					want = want || n == name
+				}
+				if named != want {
+					t.Errorf("the error %q names %s: %t, want %t", err, name, named, want)
+				}
+			}
+		})
+	}
+}
+
 // helperPassword is the database password the child processes below are
 // given. It holds only characters a URL leaves as they are, so a line that
 // quotes the connection URL holds it as written here.
@@ -259,6 +390,42 @@ func TestMainReportsARefusedConnectionStringWithoutQuotingIt(t *testing.T) {
 		}
 		if strings.Contains(output, helperPassword) {
 			t.Errorf("%s: the output holds the database password", c.name)
+		}
+	}
+}
+
+// With POSTGRES_* variables the driver accepts and a PGCLIENTENCODING or a
+// PGDATESTYLE it refuses, the run ends with the name of that variable and not
+// with the sentence of errConnectionStringRefused: the connection string is
+// not what the driver refused. No line of the output holds the password.
+func TestMainNamesTheEnvironmentVariableTheDriverRefuses(t *testing.T) {
+	cases := []struct {
+		variable string
+		value    string
+		want     string
+	}{
+		{"PGCLIENTENCODING", "LATIN1", "PGCLIENTENCODING must be unset or UTF8"},
+		{"PGDATESTYLE", "German", `PGDATESTYLE must be unset or "ISO, MDY"`},
+	}
+	for _, c := range cases {
+		code, output := runMain(t, map[string]string{
+			"POSTGRES_HOST":     "db.internal",
+			"POSTGRES_USER":     "aim",
+			"POSTGRES_PASSWORD": helperPassword,
+			"POSTGRES_DB":       "aim",
+			c.variable:          c.value,
+		})
+		if code != 1 {
+			t.Errorf("%s: exit code %d, want 1", c.variable, code)
+		}
+		if want := "Failed to connect to database: " + errDriverEnvironmentRefused.Error() + ": " + c.want; !strings.Contains(output, want) {
+			t.Errorf("%s: the output does not hold %q", c.variable, want)
+		}
+		if strings.Contains(output, errConnectionStringRefused.Error()) {
+			t.Errorf("%s: the output reports a refused connection string", c.variable)
+		}
+		if strings.Contains(output, helperPassword) {
+			t.Errorf("%s: the output holds the database password", c.variable)
 		}
 	}
 }

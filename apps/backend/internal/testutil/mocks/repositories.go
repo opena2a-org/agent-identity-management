@@ -725,6 +725,16 @@ func (m *MockSDKTokenRepository) GetByRecoveryCodeHash(recoveryCodeHash string) 
 	return args.Get(0).(*domain.SDKToken), args.Error(1)
 }
 
+// GetByOrganizationFiltered filters and pages GetByOrganization for tests.
+func (m *MockAgentRepository) GetByOrganizationFiltered(orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error) {
+	agents, err := m.GetByOrganization(orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	page, total := filter.Page(agents, limit, offset)
+	return page, total, nil
+}
+
 // GetByOrganizationPaged pages over GetByOrganization for tests.
 func (m *MockAgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
 	agents, err := m.GetByOrganization(orgID)

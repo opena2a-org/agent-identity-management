@@ -12,6 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional, Dict, List
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 import requests
 from nacl.signing import SigningKey, VerifyKey
@@ -81,6 +82,14 @@ RATE_LIMIT_RETRY_MAX_DELAY_SECONDS = 5
 # per invocation onto the exact path that is already degraded -- silently, since
 # the call cannot raise. UNMEASURED DEFAULT.
 EXECUTION_REPORT_TIMEOUT_SECONDS = 5
+
+# What log_capability_result and log_action_result warn with. Both posted to
+# /api/v1/sdk-api/verifications/{id}/result, and the server refuses every
+# request to that route.
+RESULT_REPORT_WITHDRAWN = (
+    "{method}() is deprecated and sends nothing: the server refuses every "
+    "request to the result route it posted to"
+)
 
 # The enforcement deadline. ONE deadline, started when the enforcement call
 # (`verify_capability`) begins, bounds the WHOLE remote verification: the
@@ -1837,9 +1846,9 @@ class AIMClient:
         leniency). Without this event the security log showed only the failed
         check -- rendered DENIED before AIM-14 -- and nothing recording that
         the action then ran, so "AIM said no" and "AIM was never asked, and
-        the action executed anyway" were indistinguishable to a SOC. The
-        server-side log_capability_result call cannot cover this case: in the
-        unreachable-server scenario it fails on the same dead transport.
+        the action executed anyway" were indistinguishable to a SOC. No request
+        to the server can cover this case: in the unreachable-server scenario
+        it fails on the same dead transport.
         """
         security_logger.log_authorization(
             AuthzEventType.ACTION_EXECUTED,
@@ -2185,66 +2194,22 @@ class AIMClient:
         error_message: Optional[str] = None
     ):
         """
-        Log the result of a capability execution to AIM.
+        DEPRECATED: sends nothing and records nothing.
 
-        This helps AIM track agent behavior and build trust scores.
+        This method posted the result of a capability execution to
+        POST /api/v1/sdk-api/verifications/{id}/result. The server refuses
+        every request to that route, so the post recorded nothing, and the
+        method no longer sends it. It is kept so that code that calls it
+        keeps running. The decorators of this client do not call it.
 
         Args:
-            verification_id: ID from verify_capability response
-            success: Whether the capability execution succeeded
-            result_summary: Brief summary of the result
-            error_message: Error message if execution failed
+            verification_id: accepted and not used
+            success: accepted and not used
+            result_summary: accepted and not used
+            error_message: accepted and not used
         """
-        if not verification_id:
-            # Same guard as report_execution_status: with no id there is
-            # nothing to attach the result to, and interpolating the absent
-            # value built a literal /verifications/None/result URL.
-            return
-
-        try:
-            # Use direct HTTP call to avoid signature issues
-            url = f"{self.aim_url}/api/v1/sdk-api/verifications/{verification_id}/result"
-
-            # Prepare headers - use API key if available, otherwise OAuth
-            headers = {
-                'Content-Type': 'application/json',
-                'User-Agent': f'AIM-Python-SDK/{__version__}'
-            }
-
-            if self.api_key:
-                headers[API_KEY_HEADER] = self.api_key
-            elif self.oauth_token_manager:
-                try:
-                    access_token = self.oauth_token_manager.get_access_token()
-                    if access_token:
-                        headers['Authorization'] = f'Bearer {access_token}'
-                except Exception:
-                    pass  # Continue without OAuth if it fails
-
-            # Add SDK token header if available
-            if self.sdk_token_id:
-                headers['X-SDK-Token'] = self.sdk_token_id
-
-            response = self.session.request(
-                method="POST",
-                url=url,
-                json={
-                    # camelCase keys, the convention of every other write body
-                    # this SDK sends (strictMode/executedAt, displayName/agentType).
-                    "result": "success" if success else "failure",
-                    "resultSummary": result_summary,
-                    "errorMessage": error_message,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                },
-                headers=headers,
-                timeout=self.timeout
-            )
-
-            # Don't raise on errors for logging - just continue
-            response.raise_for_status()
-        except Exception:
-            # Don't fail the action if logging fails
-            pass
+        warnings.warn(RESULT_REPORT_WITHDRAWN.format(method="log_capability_result"),
+                      DeprecationWarning, stacklevel=2)
 
     def report_execution_status(
         self,
@@ -2362,22 +2327,11 @@ class AIMClient:
         error_message: Optional[str] = None
     ):
         """
-        DEPRECATED: Use log_capability_result() instead.
-
-        Log the result of an action execution to AIM.
+        DEPRECATED: sends nothing and records nothing, like
+        log_capability_result(), whose older name it is.
         """
-        import warnings
-        warnings.warn(
-            "log_action_result() is deprecated, use log_capability_result() instead",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        return self.log_capability_result(
-            verification_id=verification_id,
-            success=success,
-            result_summary=result_summary,
-            error_message=error_message
-        )
+        warnings.warn(RESULT_REPORT_WITHDRAWN.format(method="log_action_result"),
+                      DeprecationWarning, stacklevel=2)
 
     def request_capability(
         self,
@@ -3469,35 +3423,41 @@ class AIMClient:
         Args:
             limit: Maximum number of agents to return (default: 50, max: 100)
             offset: Pagination offset (default: 0)
-            status: Filter by status ("pending", "verified", "denied")
-            agent_type: Filter by agent type ("ai_agent", "mcp_server")
+            status: Keep the agents with exactly this status ("pending",
+                "verified", "suspended" or "revoked")
+            agent_type: Keep the agents of exactly this type (for example
+                "ai_agent", "langchain" or "custom")
+
+            The server applies both filters. A value no agent holds returns
+            no agent. A server that predates the filters ignores them and
+            returns the unfiltered list.
 
         Returns:
             Dict containing:
             - agents: List[Dict] - List of agent objects
-            - total: int - Total number of agents
+            - total: int - Number of agents that pass the filters, on every
+              page; with no filter, the organization's agents
             - limit: int - Items per page
             - offset: int - Current offset
 
         Example:
-            result = client.list_agents(limit=10)
+            result = client.list_agents(limit=10, status="verified")
             for agent in result["agents"]:
-                print(f"{agent['name']}: {agent['status']} (trust: {agent['trust_score']})")
+                print(f"{agent['name']}: {agent['status']} (trust: {agent['trustScore']})")
 
         Raises:
             AuthenticationError: If authentication fails
             VerificationError: If request fails
         """
-        # Build query params
-        params = []
-        params.append(f"limit={min(limit, 100)}")
-        params.append(f"offset={offset}")
+        # Build query params. urlencode writes each value as one value: a
+        # status holding "&" or "=" stays a status and adds no parameter.
+        params = [("limit", min(limit, 100)), ("offset", offset)]
         if status:
-            params.append(f"status={status}")
+            params.append(("status", status))
         if agent_type:
-            params.append(f"agent_type={agent_type}")
+            params.append(("agent_type", agent_type))
 
-        query_string = "&".join(params)
+        query_string = urlencode(params)
 
         try:
             result = self._make_request(
@@ -3811,8 +3771,6 @@ class AIMClient:
                     # Running without a completed verification: record it.
                     self._log_unverified_execution(cap, resource, decision)
 
-                verification_id = decision.verification_id
-
                 # AAP: when a grant reference is set, bind a GrantSession to the broker and
                 # make it available to the function. The agent references the grant; the
                 # broker resolves it and returns only the operation result. No credential or
@@ -3830,27 +3788,10 @@ class AIMClient:
                     if _func_accepts_param(func, "grant") and "grant" not in kwargs:
                         call_kwargs = {**kwargs, "grant": session}
 
-                # Execute the function
+                # Execute the function. No result is posted afterwards: the
+                # server refuses every request to the result route.
                 try:
-                    result = func(*args, **call_kwargs)
-
-                    # Log success
-                    self.log_capability_result(
-                        verification_id=verification_id,
-                        success=True,
-                        result_summary=f"Capability '{cap}' executed successfully"
-                    )
-
-                    return result
-
-                except Exception as e:
-                    # Log failure
-                    self.log_capability_result(
-                        verification_id=verification_id,
-                        success=False,
-                        error_message=str(e)
-                    )
-                    raise
+                    return func(*args, **call_kwargs)
                 finally:
                     if grant_token is not None:
                         from .grant_client import _current_grant
@@ -3928,37 +3869,12 @@ class AIMClient:
                     # Running without a completed verification: record it.
                     self._log_unverified_execution(action, resource, decision)
 
-                verification_id = decision.verification_id
-
                 try:
-                    # Execute the function
-                    result = func(*args, **kwargs)
-
-                    # Log success (handle errors in logging gracefully)
-                    try:
-                        self.log_capability_result(
-                            verification_id=verification_id,
-                            success=True,
-                            result_summary=f"Capability '{action}' executed successfully"
-                        )
-                    except Exception as log_error:
-                        # Don't fail the function if logging fails
-                        console.warning(f"Failed to log capability result: {str(log_error)}")
-
-                    return result
+                    # Execute the function. No result is posted afterwards:
+                    # the server refuses every request to the result route.
+                    return func(*args, **kwargs)
 
                 except Exception as e:
-                    # Log failure (handle errors in logging gracefully)
-                    try:
-                        self.log_capability_result(
-                            verification_id=verification_id,
-                            success=False,
-                            error_message=str(e)
-                        )
-                    except Exception as log_error:
-                        # Don't fail if logging fails
-                        console.warning(f"Failed to log capability failure: {str(log_error)}")
-
                     # Return error result instead of raising
                     console.error(f"Error executing capability '{action}': {type(e).__name__}: {str(e)}")
                     return {
@@ -4076,37 +3992,13 @@ class AIMClient:
                     console.jit_unverified(action)
                     # Running without a completed verification: record it.
                     self._log_unverified_execution(action, resource, decision)
-                verification_id = decision.verification_id
 
                 try:
-                    # Execute the function
-                    result = func(*args, **kwargs)
-
-                    # Log success (handle errors in logging gracefully)
-                    try:
-                        self.log_capability_result(
-                            verification_id=verification_id,
-                            success=True,
-                            result_summary=f"Capability '{action}' executed successfully"
-                        )
-                    except Exception as log_error:
-                        # Don't fail the function if logging fails
-                        console.warning(f"Failed to log capability result: {str(log_error)}")
-
-                    return result
+                    # Execute the function. No result is posted afterwards:
+                    # the server refuses every request to the result route.
+                    return func(*args, **kwargs)
 
                 except Exception as e:
-                    # Log failure (handle errors in logging gracefully)
-                    try:
-                        self.log_capability_result(
-                            verification_id=verification_id,
-                            success=False,
-                            error_message=str(e)
-                        )
-                    except Exception as log_error:
-                        # Don't fail if logging fails
-                        console.warning(f"Failed to log capability failure: {str(log_error)}")
-
                     # Return error result instead of raising
                     console.error(f"Error executing capability '{action}': {type(e).__name__}: {str(e)}")
                     return {

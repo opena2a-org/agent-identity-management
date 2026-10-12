@@ -1004,3 +1004,24 @@ def test_no_verified_false_remains_in_the_sdk():
     source = open(source_module.__file__, encoding="utf-8").read()
     assert '"verified": False' not in source
     assert "'verified': False" not in source
+
+
+# ---------------------------------------------------------------------------
+# No entry point posts to the result route.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("warm", [None, "monitoring", "strict"])
+@pytest.mark.parametrize("case", ALL_CASES)
+@pytest.mark.parametrize("entry_point", ENTRY_POINTS)
+def test_no_entry_point_posts_to_the_result_route(entry_point, case, warm):
+    """
+    The server refuses every request to POST /verifications/{id}/result, so
+    no entry point sends one: not after the body ran, and not after it was
+    blocked. perform_action, track_action and require_approval posted there
+    after every body they ran under a verification.
+    """
+    tally = {"exec_reports": 0, "result_reports": 0}
+
+    run_case(entry_point, case, warm=warm, tally=tally)
+
+    assert tally["result_reports"] == 0

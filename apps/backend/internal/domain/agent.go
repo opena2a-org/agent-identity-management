@@ -119,6 +119,47 @@ type Agent struct {
 	DeclaredPurpose *DeclaredPurpose `json:"declaredPurpose,omitempty"`
 }
 
+// AgentListFilter narrows a list of an organization's agents to the agents
+// whose status and type equal its fields. An empty field does not narrow the
+// list. The comparison is exact, so a value no agent holds matches no agent.
+type AgentListFilter struct {
+	Status    AgentStatus
+	AgentType AgentType
+}
+
+// Matches reports whether the agent passes the filter.
+func (f AgentListFilter) Matches(agent *Agent) bool {
+	return (f.Status == "" || agent.Status == f.Status) &&
+		(f.AgentType == "" || agent.AgentType == f.AgentType)
+}
+
+// Page returns the agents that pass the filter, cut to one page, and the count
+// of all that pass. limit <= 0 returns all of them. A repository that holds
+// its agents in memory answers GetByOrganizationFiltered with it.
+func (f AgentListFilter) Page(agents []*Agent, limit, offset int) ([]*Agent, int) {
+	matching := make([]*Agent, 0, len(agents))
+	for _, agent := range agents {
+		if f.Matches(agent) {
+			matching = append(matching, agent)
+		}
+	}
+	total := len(matching)
+	if limit <= 0 {
+		return matching, total
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= total {
+		return []*Agent{}, total
+	}
+	matching = matching[offset:]
+	if len(matching) > limit {
+		matching = matching[:limit]
+	}
+	return matching, total
+}
+
 // AgentRepository defines the interface for agent persistence
 type AgentRepository interface {
 	Create(agent *Agent) error
@@ -126,6 +167,15 @@ type AgentRepository interface {
 	GetByName(orgID uuid.UUID, name string) (*Agent, error)
 	GetByOrganization(orgID uuid.UUID) ([]*Agent, error)
 	GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*Agent, int, error)
+	// GetByOrganizationFiltered returns one page of the organization's agents
+	// that pass the filter, newest first, and the count of all that pass.
+	// limit <= 0 returns all of them. With an empty filter it is
+	// GetByOrganizationPaged.
+	//
+	// The filter is a predicate of the query, not a pass over its rows: a
+	// page of a filtered list reads the rows of that page, and its total
+	// counts the agents that pass, not the organization's.
+	GetByOrganizationFiltered(orgID uuid.UUID, filter AgentListFilter, limit, offset int) ([]*Agent, int, error)
 	Update(agent *Agent) error
 	Delete(id uuid.UUID) error
 	List(limit, offset int) ([]*Agent, error)

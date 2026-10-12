@@ -404,12 +404,22 @@ func connStringValue(v string) string {
 // databaseConnString builds the key=value connection string, which needs no
 // URL encoding. Every string setting is quoted, so a space, a single quote or
 // a backslash in one reaches PostgreSQL as it is configured.
+//
+// An empty password is left out of the string, as config.DatabaseConfig.URL
+// leaves it out of the URL aim-bootstrap opens. The driver then takes the
+// password from PGPASSWORD, else from the password file PGPASSFILE names, and
+// sends an empty one when neither gives it. A password setting with an empty
+// value turns both of those off.
 func databaseConnString(database config.DatabaseConfig) string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+	password := ""
+	if database.Password != "" {
+		password = fmt.Sprintf(" password=%s", connStringValue(database.Password))
+	}
+	return fmt.Sprintf("host=%s port=%d user=%s%s dbname=%s sslmode=%s",
 		connStringValue(database.Host),
 		database.Port,
 		connStringValue(database.User),
-		connStringValue(database.Password),
+		password,
 		connStringValue(database.Database),
 		connStringValue(database.SSLMode),
 	)

@@ -372,6 +372,25 @@ func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, e
 // plus the total agent count for the organization. limit <= 0 returns
 // all agents.
 func (r *AgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+	return r.GetByOrganizationFiltered(orgID, domain.AgentListFilter{}, limit, offset)
+}
+
+// GetByOrganizationFiltered retrieves one page of the organization's agents
+// that pass the filter, plus the count of all that pass. limit <= 0 returns
+// all of them. Each field of the filter that is set is an equality predicate
+// of the query and of its count, with the value sent as a parameter.
+func (r *AgentRepository) GetByOrganizationFiltered(orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error) {
+	where := "organization_id = $1"
+	whereArgs := []interface{}{orgID}
+	if filter.Status != "" {
+		whereArgs = append(whereArgs, string(filter.Status))
+		where += fmt.Sprintf(" AND status = $%d", len(whereArgs))
+	}
+	if filter.AgentType != "" {
+		whereArgs = append(whereArgs, string(filter.AgentType))
+		where += fmt.Sprintf(" AND agent_type = $%d", len(whereArgs))
+	}
+
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
@@ -379,12 +398,12 @@ func (r *AgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset 
 		       COALESCE(created_by_name, ''), COALESCE(created_by_email, ''),
 		       COALESCE(capability_violation_count, 0), COALESCE(is_compromised, false), declared_purpose
 		FROM agents
-		WHERE organization_id = $1
+		WHERE ` + where + `
 		ORDER BY created_at DESC, id
 	`
-	args := []interface{}{orgID}
+	args := append([]interface{}{}, whereArgs...)
 	if limit > 0 {
-		query += " LIMIT $2 OFFSET $3"
+		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
 		args = append(args, limit, offset)
 	}
 
@@ -484,7 +503,7 @@ func (r *AgentRepository) GetByOrganizationPaged(orgID uuid.UUID, limit, offset 
 
 	total := len(agents)
 	if limit > 0 {
-		if err := r.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE organization_id = $1`, orgID).Scan(&total); err != nil {
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM agents WHERE `+where, whereArgs...).Scan(&total); err != nil {
 			return nil, 0, err
 		}
 	}

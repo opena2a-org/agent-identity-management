@@ -427,43 +427,25 @@ def _recording_session(client):
 def test_AIM_16_AC5_absent_verification_id_issues_no_request(closed_port_url, absent):
     client = _api_key_client(closed_port_url)
     calls = _recording_session(client)
-    client.log_capability_result(absent, True, result_summary="fine")
+    with pytest.warns(DeprecationWarning):
+        client.log_capability_result(absent, True, result_summary="fine")
     assert calls == [], (
         "log_capability_result must return without any HTTP request when "
         "verification_id is absent -- never POST to /verifications/None/result"
     )
 
 
-def test_AIM_16_AC5_result_body_uses_the_camel_case_convention(closed_port_url):
+def test_AIM_16_AC5_present_verification_id_issues_no_request(closed_port_url):
+    """The server refuses every request to /verifications/{id}/result, so
+    log_capability_result sends none for a verification id either. No result
+    body is left to hold to the camelCase convention."""
     client = _api_key_client(closed_port_url)
-    calls = []
-
-    class _Ok:
-        status_code = 200
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {}
-
-    def record(method=None, url=None, **kwargs):
-        calls.append({"method": method, "url": url, **kwargs})
-        return _Ok()
-
-    client.session.request = record
-    client.log_capability_result(
-        "vid-123", False, result_summary="s", error_message="boom"
-    )
-    assert len(calls) == 1
-    assert "/verifications/vid-123/result" in calls[0]["url"]
-    assert "/None/" not in calls[0]["url"]
-    body = calls[0]["json"]
-    assert "resultSummary" in body and "errorMessage" in body, (
-        "the result body uses the same camelCase convention as strictMode/"
-        "executedAt and displayName/agentType"
-    )
-    assert "result_summary" not in body and "error_message" not in body
+    calls = _recording_session(client)
+    with pytest.warns(DeprecationWarning):
+        client.log_capability_result(
+            "vid-123", False, result_summary="s", error_message="boom"
+        )
+    assert calls == []
 
 
 # ---------------------------------------------------------------------------

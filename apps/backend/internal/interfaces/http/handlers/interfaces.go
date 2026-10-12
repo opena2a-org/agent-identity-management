@@ -22,6 +22,7 @@ type AgentServicer interface {
 	GetAgentByName(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
 	ListAgents(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
 	ListAgentsPaged(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error)
+	ListAgentsFiltered(ctx context.Context, orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error)
 	UpdateAgent(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error)
 	DeleteAgent(ctx context.Context, id uuid.UUID) error
 	VerifyAgent(ctx context.Context, id uuid.UUID) error

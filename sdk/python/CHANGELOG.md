@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `log_capability_result` and `log_action_result` send no request, and the decorators post no result (#709)
+
+- `AIMClient.log_capability_result` posted to `POST /api/v1/sdk-api/verifications/{id}/result` and discarded the
+  answer. The server's handler for that route answers 403 to every request that reaches it, and the route's
+  authentication answers 401 to a request it cannot authenticate. The method now sends nothing, returns `None` and
+  warns with a `DeprecationWarning`. So does `log_action_result`, its older name, which the LangChain and CrewAI
+  integrations call.
+- `@perform_action`, `@track_action` and `@require_approval` no longer call it after the function they wrap, so a
+  wrapped call that ran under a verification makes one request fewer. That request went out after the function had
+  run, with the client's request timeout (30 seconds unless `timeout` is given).
+- Measured against a server built from the previous commit: the request the previous `log_capability_result` sent
+  from a client that holds an API key was answered 401 `No authentication token provided`. A `POST` to the same
+  route with no credential was answered 401, and one that carried an administrator's access token was answered 403
+  with the code `executionOutcomeNotAccepted`.
+- `docs/LANGCHAIN_INTEGRATION.md` says that no result is posted. At the repository root, the decorator example in
+  `docs/sdk/python.md` and the capability verification pattern in `examples/README.md` no longer call the method.
+- Tests: `TestLogActionResult` and `TestPerformActionDecorator` in `tests/test_client.py`,
+  `test_no_entry_point_posts_to_the_result_route` in `tests/test_enforcement_matrix.py`, and the two
+  `test_AIM_16_AC5_*_issues_no_request` tests in `tests/test_aim16_p3_release_findings.py`.
+
+### Fixed — `list_agents` writes each filter as one query value, and names the statuses and types the server filters by (#709)
+
+- `GET /api/v1/agents` applies the `status` and `agent_type` filters `list_agents` sends (see the platform
+  changelog). `total` in the answer then counts the agents that pass the filters. Measured on a server built from
+  the commit before that change: the server ignored both filters and answered with every agent of the organization.
+- `list_agents` percent-encodes each value. Read back with `urllib.parse`, the URL the previous `list_agents` built
+  for a status of `a&limit=1` held a second `limit` parameter of `1`, the one for `a#fragment` ended its query at the
+  `#`, and the one for `a+b` held `a b`.
+- The docstring names the statuses an agent can hold (`pending`, `verified`, `suspended` and `revoked`). It listed
+  `denied` as a status and `mcp_server` as an agent type; the server defines neither. Its example reads
+  `trustScore`, the key the server answers with, in place of `trust_score`.
+- Test: `tests/test_list_agents_filters.py`.
+
 ### Fixed — four A2A methods request the routes the server registers (#701)
 
 - `A2AClient.get_task_history` requests `GET /api/v1/a2a/tasks?agentId=<id>&limit=<n>`, and

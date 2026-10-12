@@ -22,6 +22,7 @@ type MockAgentServiceImpl struct {
 	GetAgentByNameFunc             func(ctx context.Context, orgID uuid.UUID, name string) (*domain.Agent, error)
 	ListAgentsFunc                 func(ctx context.Context, orgID uuid.UUID) ([]*domain.Agent, error)
 	ListAgentsPagedFunc            func(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*domain.Agent, int, error)
+	ListAgentsFilteredFunc         func(ctx context.Context, orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error)
 	UpdateAgentFunc                func(ctx context.Context, id uuid.UUID, req *application.CreateAgentRequest, requestedBy uuid.UUID) (*domain.Agent, error)
 	DeleteAgentFunc                func(ctx context.Context, id uuid.UUID) error
 	VerifyAgentFunc                func(ctx context.Context, id uuid.UUID) error
@@ -1736,6 +1737,24 @@ func (m *MockAgentServiceImpl) ListAgentsPaged(ctx context.Context, orgID uuid.U
 		}
 	}
 	return agents, total, nil
+}
+
+// ListAgentsFiltered filters and pages ListAgents for tests. With an empty
+// filter it is ListAgentsPaged, so a test that sets ListAgentsPagedFunc
+// answers the unfiltered list.
+func (m *MockAgentServiceImpl) ListAgentsFiltered(ctx context.Context, orgID uuid.UUID, filter domain.AgentListFilter, limit, offset int) ([]*domain.Agent, int, error) {
+	if m.ListAgentsFilteredFunc != nil {
+		return m.ListAgentsFilteredFunc(ctx, orgID, filter, limit, offset)
+	}
+	if filter == (domain.AgentListFilter{}) {
+		return m.ListAgentsPaged(ctx, orgID, limit, offset)
+	}
+	agents, err := m.ListAgents(ctx, orgID)
+	if err != nil {
+		return nil, 0, err
+	}
+	page, total := filter.Page(agents, limit, offset)
+	return page, total, nil
 }
 
 func (m *MockAgentRepositoryerImpl) ListRevokedIDs(limit, offset int) ([]uuid.UUID, error) {
