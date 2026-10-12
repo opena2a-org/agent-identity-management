@@ -1200,12 +1200,23 @@ class A2AClient:
             for c in response.get("cards", [])
         ]
 
+    @staticmethod
+    def _skill_identifier(skill: Union[str, Dict[str, Any]]) -> str:
+        """
+        The identifier of a skill given as one, or as a dictionary with an
+        `id`, the form the server answers a card's skills in.
+        """
+        identifier = skill.get("id") if isinstance(skill, dict) else skill
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError("each skill must be its identifier, or a dictionary with an `id`")
+        return identifier
+
     def update_agent_card(
         self,
         name: Optional[str] = None,
         description: Optional[str] = None,
         version: Optional[str] = None,
-        skills: Optional[List[Dict[str, Any]]] = None
+        skills: Optional[List[Union[str, Dict[str, Any]]]] = None
     ) -> A2AAgentCard:
         """
         Update the current agent's A2A card.
@@ -1214,10 +1225,16 @@ class A2AClient:
             name: New name for the agent
             description: New description
             version: New version string
-            skills: Updated list of skills
+            skills: Updated list of skills, each as its identifier. The server
+                reads `skills` as a list of identifiers; a dictionary, the
+                form it answers a card's skills in, is sent as its `id`.
 
         Returns:
             Updated A2AAgentCard
+
+        Raises:
+            ValueError: skills is not a list, or a skill in it is neither an
+                identifier nor a dictionary with an `id`. No request is sent.
 
         Example:
             >>> card = a2a.update_agent_card(
@@ -1233,7 +1250,9 @@ class A2AClient:
         if version is not None:
             data["version"] = version
         if skills is not None:
-            data["skills"] = skills
+            if not isinstance(skills, (list, tuple)):
+                raise ValueError("skills must be a list of skill identifiers")
+            data["skills"] = [self._skill_identifier(skill) for skill in skills]
 
         response = self._make_request(
             "PUT",
