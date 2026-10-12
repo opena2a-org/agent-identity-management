@@ -162,13 +162,11 @@ func main() {
 	// available. Fails CLOSED on a store outage by default; set
 	// AUTH_REVOCATION_FAIL_OPEN=true to prefer availability over strict
 	// revocation. Without Redis, revocation is disabled (tokens still expire).
+	failOpen := strings.EqualFold(os.Getenv("AUTH_REVOCATION_FAIL_OPEN"), "true")
 	if cacheService != nil {
-		failOpen := strings.EqualFold(os.Getenv("AUTH_REVOCATION_FAIL_OPEN"), "true")
 		jwtService.SetRevoker(auth.NewTokenRevoker(cacheService, failOpen))
-		log.Printf("ℹ️  Token revocation enabled (fail-open=%v)", failOpen)
-	} else {
-		log.Println("ℹ️  Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke")
 	}
+	log.Println(tokenRevocationStartupLine(cfg, redisClient, cacheService, failOpen))
 
 	// Initialize email service
 	emailService, err := initEmailService()
@@ -480,6 +478,23 @@ func redisStartupSummary(cfg *config.Config, redisClient *redis.Client) string {
 		return "💾 Redis: disabled (running without caching)"
 	default:
 		return fmt.Sprintf("💾 Redis: %s:%d (unavailable, running without caching)", cfg.Redis.Host, cfg.Redis.Port)
+	}
+}
+
+// tokenRevocationStartupLine says at startup whether refresh tokens are
+// rotated and logout can revoke. Without a cache service it gives the reason
+// the cache line gives: Redis turned off by an empty REDIS_HOST, Redis that
+// could not be reached, or a cache that could not be built on the connection.
+func tokenRevocationStartupLine(cfg *config.Config, redisClient *redis.Client, cacheService *cache.RedisCache, failOpen bool) string {
+	switch {
+	case cacheService != nil:
+		return fmt.Sprintf("ℹ️  Token revocation enabled (fail-open=%v)", failOpen)
+	case cfg.Redis.Disabled:
+		return "ℹ️  Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke"
+	case redisClient == nil:
+		return "ℹ️  Token revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
+	default:
+		return "ℹ️  Token revocation disabled (cache initialization failed): refresh tokens are not rotated and logout cannot revoke"
 	}
 }
 

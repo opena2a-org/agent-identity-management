@@ -7,9 +7,15 @@ AIM uses **token rotation** to protect your organization from token theft and un
 ## What is Token Rotation?
 
 Token rotation is a security mechanism where:
-1. **Every time you use a refresh token** → backend issues a **NEW** refresh token
-2. **The OLD refresh token is immediately invalidated** → cannot be reused
+1. **A refresh that rotates** → backend issues a **NEW** refresh token
+2. **The OLD refresh token is invalidated** → cannot be reused
 3. **Your credentials are automatically updated** with the new token
+
+Which refreshes rotate depends on the token and on the server:
+- A token from an SDK download is rotated on every refresh, in the database.
+- A sign-in from `aim-sdk login` is rotated only by a server with Redis. A server without Redis
+  answers a refresh with the refresh token it was given, and logout cannot revoke it. See
+  [How do I know if my token has been rotated?](#q-how-do-i-know-if-my-token-has-been-rotated).
 
 This prevents attackers from using stolen tokens, even if they manage to intercept or steal your credentials.
 
@@ -240,15 +246,21 @@ Token rotation provides:
 
 ### Configuration
 
-Token rotation is **enabled by default** and **cannot be disabled** for security reasons.
+There is no configuration file for token rotation. The backend reads these environment variables:
 
-Configuration options:
-```yaml
-# Backend configuration (apps/backend/config/security.yaml)
-token_rotation:
-  enabled: true          # Always true (required for compliance)
-  rotation_policy: always  # Rotate on every refresh
-  track_revocations: true  # Log all revocations
+- `REDIS_HOST` and `REDIS_PORT`: the Redis that records retired and revoked refresh tokens. With it,
+  a sign-in from `aim-sdk login` is rotated on every refresh and logout revokes it. Without it
+  (`REDIS_HOST` set to the empty string, or a Redis that could not be reached at startup), a sign-in
+  is not rotated and logout cannot revoke it. A token from an SDK download is rotated either way.
+- `AUTH_REVOCATION_FAIL_OPEN`: when the backend cannot read Redis to check a token, it refuses the
+  token. Set it to `true` to accept the token instead.
+- `JWT_ACCESS_TTL`: how long an access token lasts, and so how often the SDK refreshes.
+
+The backend's startup log says which applies, in one of these lines:
+```
+Token revocation enabled (fail-open=false)
+Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke
+Token revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke
 ```
 
 ### Monitoring Token Rotation
@@ -279,12 +291,14 @@ FROM sdk_tokens;
 
 ### Q: How often do tokens rotate?
 
-**A:** Tokens rotate **every time they're used** to refresh the access token.
+**A:** A refresh token that rotates does so each time it is used to refresh the access token: a
+token from an SDK download on every server, and a sign-in from `aim-sdk login` on a server with
+Redis (see [Configuration](#configuration)).
 
 Typical rotation frequency:
 - Access tokens last **2 hours** by default (`JWT_ACCESS_TTL` on the server)
-- The SDK refreshes an access token once it is within a minute of expiring → triggers rotation
-- So tokens typically rotate about **every 2 hours** during active use
+- The SDK refreshes an access token once it is within a minute of expiring → the refresh rotates the refresh token
+- So a refresh token that rotates does so about **every 2 hours** during active use
 
 ### Q: Will my agent stop working during rotation?
 
@@ -298,7 +312,10 @@ The SDK handles rotation automatically:
 
 ### Q: Can I disable token rotation?
 
-**A:** No. Token rotation is **required for security**, and it is a control SOC 2, HIPAA and GDPR programs commonly expect.
+**A:** Not for a token from an SDK download, which rotates on every refresh. A sign-in from
+`aim-sdk login` rotates only on a server with Redis: one started with `REDIS_HOST` set to the empty
+string does not rotate it, and cannot revoke it at logout. Run the server with Redis; rotation is a
+control SOC 2, HIPAA and GDPR programs commonly expect.
 
 If you need long-lived credentials:
 - Use **API keys** instead (different security model)
@@ -344,7 +361,8 @@ and the `rotated` field of the refresh response says which answer it was.
 - A server without Redis, or one whose Redis refused the write, answers with the
   refresh token it was given (`"rotated": false`), and the SDK prints no line. A
   server without Redis logs `Token revocation disabled (no Redis configured)` at
-  startup.
+  startup, and one whose Redis could not be reached logs
+  `Token revocation disabled (Redis unavailable)`.
 - A token from an SDK download is rotated in the database and does not need
   Redis.
 

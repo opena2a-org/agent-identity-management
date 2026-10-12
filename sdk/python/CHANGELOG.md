@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — four A2A methods request the routes the server registers (#701)
+
+- `A2AClient.get_task_history` requests `GET /api/v1/a2a/tasks?agentId=<id>&limit=<n>`, and
+  `get_security_settings`, `update_security_settings` and `get_security_violations` request
+  `/api/v1/a2a/security/settings` and `/api/v1/a2a/security/violations`. They put the agent or organization
+  identifier in the path, on routes the server does not register.
+- The server answers the settings and violations routes for the organization of the caller's credentials.
+  `organization_id` is optional in the three methods; when it is given and names another organization, they raise
+  `A2AError`, and `update_security_settings` writes nothing.
+- The server replaces every A2A security setting with the ones a `PUT` carries, so `update_security_settings` reads
+  the current settings and writes them back with the given ones changed. It sends `requireRequestSigning`,
+  `allowedAgentIds` and `blockedAgentIds`, the names the server reads, in place of `requireSigning`, `allowedAgents`
+  and `blockedAgents`.
+- `get_task_history` raises `ValueError` for a `target_agent_id` that is not a UUID, which the server would ignore and
+  answer with every task the organization can see. `get_security_violations` returns the list the server answers, and
+  an empty list when there is none.
+- Tests: `tests/test_a2a_task_and_security_routes.py`.
+
+### Fixed — the JIT approval link opens the dashboard's JIT requests page (#701)
+
+- `@perform_action(jit_access=True)` and `@require_approval` print `<dashboard>/dashboard/admin/jit-requests`, the
+  page that lists pending verifications for approval, where `<dashboard>` is the dashboard URL `aim-sdk demo` derives
+  from `aim_url` (`https://aim.opena2a.org` for `https://api.aim.opena2a.org`, port 3000 for port 8080). They printed
+  `{aim_url}/dashboard/admin/verifications`, a path the server does not register and a page the dashboard does not
+  have.
+- `aim-sdk demo` derives its dashboard URL with the same function, which now drops only a trailing `/api` path: for
+  `https://api.example.com` it keeps the host, where the demo derived `https:/.example.com`.
+- Tests: `tests/test_jit_approval_dashboard_link.py`.
+
 ### Changed — `aim-sdk login` and the README say what the server checks on an `@perform_action` call (#656)
 
 - The closing text of `aim-sdk login` says the server checks each `@perform_action` call against the agent's

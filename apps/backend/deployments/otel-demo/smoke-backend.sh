@@ -269,12 +269,19 @@ fi
 #
 # Idempotent: re-runs against an already-bootstrapped DB exit 0 with a "skip"
 # message. Pass --admin-password so the login in step 6 matches ADMIN_PASSWORD.
+# The bootstrap reads the same POSTGRES_* variables as the backend above; set
+# here, they win over any .env in the backend directory.
 echo
 echo "==> [4b/8] Seed default admin via bootstrap"
 (
     cd "$BACKEND_DIR"
     env \
-        DATABASE_URL="postgres://postgres:${SMOKE_PG_PASSWORD}@localhost:${SMOKE_POSTGRES_PORT}/${SMOKE_PG_DB}?sslmode=disable" \
+        POSTGRES_HOST="localhost" \
+        POSTGRES_PORT="$SMOKE_POSTGRES_PORT" \
+        POSTGRES_USER="postgres" \
+        POSTGRES_PASSWORD="$SMOKE_PG_PASSWORD" \
+        POSTGRES_DB="$SMOKE_PG_DB" \
+        POSTGRES_SSL_MODE="disable" \
         "${BACKEND_BIN}.bootstrap" \
             --default \
             --admin-email="$ADMIN_EMAIL" \

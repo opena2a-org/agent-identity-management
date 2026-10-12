@@ -6,6 +6,8 @@ package main
 import (
 	"net"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
 )
 
 // countingListener accepts on a loopback port, counts every connection and
@@ -158,6 +161,95 @@ func TestRedisStartupSummary_ConnectionIsConnected(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	assert.Equal(t, "💾 Redis: 127.0.0.1:"+strconv.Itoa(port)+" (connected)", redisStartupSummary(cfg, client))
+}
+
+// The token revocation line gives the cache line's reason too. "no Redis
+// configured" is only for an empty REDIS_HOST: a Redis that was tried and could
+// not be reached is unavailable, whether REDIS_HOST names it or is unset.
+func TestTokenRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
+	const notRotated = ": refresh tokens are not rotated and logout cannot revoke"
+	for _, tc := range []struct {
+		name  string
+		set   bool
+		value string
+		want  string
+	}{
+		{name: "REDIS_HOST is empty", set: true, value: "", want: "ℹ️  Token revocation disabled (no Redis configured)" + notRotated},
+		{name: "REDIS_HOST names a host", set: true, value: "127.0.0.1", want: "ℹ️  Token revocation disabled (Redis unavailable)" + notRotated},
+		{name: "REDIS_HOST is unset", want: "ℹ️  Token revocation disabled (Redis unavailable)" + notRotated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			port, _ := countingListener(t)
+			// Setenv first, so the variable is restored after an unset.
+			t.Setenv("REDIS_HOST", tc.value)
+			if !tc.set {
+				require.NoError(t, os.Unsetenv("REDIS_HOST"))
+			}
+			cfg := loadConfigForRedisTest(t, port)
+			client, _ := initRedis(cfg)
+			require.Nil(t, client, "the listener closes every connection, so there is no Redis client")
+			logged := captureLog(t)
+			cacheService := initCache(cfg, client)
+			require.Nil(t, cacheService)
+
+			assert.Equal(t, tc.want, tokenRevocationStartupLine(cfg, client, cacheService, false))
+			cacheLine := strings.TrimSuffix(logged.String(), "\n")
+			reason := cacheLine[strings.Index(cacheLine, "("):]
+			if cfg.Redis.Disabled {
+				assert.Equal(t, "(Redis disabled)", reason)
+			} else {
+				assert.Contains(t, tc.want, reason, "the revocation line gives the cache line's reason %s", reason)
+			}
+		})
+	}
+
+	t.Run("a connection whose cache could not be built", func(t *testing.T) {
+		port, _ := countingListener(t)
+		t.Setenv("REDIS_HOST", "127.0.0.1")
+		cfg := loadConfigForRedisTest(t, port)
+		// The line reads only whether there is a client, so one that has not
+		// dialed stands in for a connection.
+		client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:" + strconv.Itoa(port)})
+		t.Cleanup(func() { _ = client.Close() })
+		assert.Equal(t, "ℹ️  Token revocation disabled (cache initialization failed)"+notRotated,
+			tokenRevocationStartupLine(cfg, client, nil, false))
+	})
+
+	t.Run("a cache service", func(t *testing.T) {
+		port, _ := countingListener(t)
+		t.Setenv("REDIS_HOST", "127.0.0.1")
+		cfg := loadConfigForRedisTest(t, port)
+		client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:" + strconv.Itoa(port)})
+		t.Cleanup(func() { _ = client.Close() })
+		assert.Equal(t, "ℹ️  Token revocation enabled (fail-open=true)", tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, true))
+		assert.Equal(t, "ℹ️  Token revocation enabled (fail-open=false)", tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, false))
+	})
+}
+
+// The token rotation guide quotes the revocation line for each case as the
+// server writes it, after the log prefix.
+func TestTokenRotationGuideQuotesTheRevocationStartupLines(t *testing.T) {
+	guide, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "docs", "security", "token-rotation.md"))
+	require.NoError(t, err)
+	block := regexp.MustCompile("(?s)The backend's startup log says which applies, in one of these lines:\n```\n(.*?)\n```").FindSubmatch(guide)
+	require.NotNil(t, block, "the guide's Configuration section quotes the startup lines in one fenced block")
+
+	t.Setenv("REDIS_HOST", "127.0.0.1")
+	cfg := loadConfigForRedisTest(t, 1)
+	disabled := *cfg
+	disabled.Redis.Disabled = true
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() { _ = client.Close() })
+
+	var written []string
+	for _, line := range []string{
+		tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, false),
+		tokenRevocationStartupLine(&disabled, nil, nil, false),
+		tokenRevocationStartupLine(cfg, nil, nil, false),
+	} {
+		written = append(written, strings.TrimPrefix(line, "ℹ️  "))
+	}
+	assert.Equal(t, written, strings.Split(string(block[1]), "\n"))
 }
 
 func TestInitCache_FailedRedisPingIsLoggedAsUnavailable(t *testing.T) {

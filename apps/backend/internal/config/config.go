@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -218,6 +220,25 @@ func LoadDatabase() (DatabaseConfig, error) {
 		return DatabaseConfig{}, fmt.Errorf("required environment variable(s) not set: %s", strings.Join(missing, ", "))
 	}
 	return database, nil
+}
+
+// URL returns the settings as a postgres:// connection URL. The user and the
+// password are percent-encoded in it, and lib/pq decodes them, so a single
+// quote, a backslash or any other character in either reaches PostgreSQL as
+// it is configured.
+func (d DatabaseConfig) URL() string {
+	u := url.URL{
+		Scheme:   "postgres",
+		Host:     net.JoinHostPort(d.Host, strconv.Itoa(d.Port)),
+		Path:     "/" + d.Database,
+		RawQuery: url.Values{"sslmode": {d.SSLMode}}.Encode(),
+	}
+	if d.Password != "" {
+		u.User = url.UserPassword(d.User, d.Password)
+	} else {
+		u.User = url.User(d.User)
+	}
+	return u.String()
 }
 
 // printSecurityWarnings logs warnings for potentially insecure configurations

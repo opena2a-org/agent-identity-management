@@ -264,12 +264,24 @@ services:
   # DEFAULT_ADMIN_PASSWORD from .env (./scripts/gen-dev-secrets.sh emits one) and
   # is not printed. If it is unset, bootstrap generates a password and prints it
   # once. The profile keeps this service out of `docker compose up`.
+  # aim-bootstrap reads the database from the same POSTGRES_* variables as the
+  # backend, so any character in POSTGRES_PASSWORD reaches PostgreSQL
+  # unchanged. When POSTGRES_HOST is set it does not read DATABASE_URL, which
+  # is here for the aim-bootstrap of platform-v1.0.0: that one reads only
+  # DATABASE_URL, where a single quote or a backslash in the password breaks
+  # the connection string.
   bootstrap:
     image: ghcr.io/opena2a-org/aim-server:latest
     profiles: ["bootstrap"]
     entrypoint: ["/app/aim-bootstrap"]
     command: ["--default"]
     environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
+      - POSTGRES_DB=${POSTGRES_DB:-identity}
+      - POSTGRES_SSL_MODE=${POSTGRES_SSL_MODE:-disable}
       - DATABASE_URL=host=postgres port=5432 user=${POSTGRES_USER:-postgres} password='${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}' dbname=${POSTGRES_DB:-identity} sslmode=${POSTGRES_SSL_MODE:-disable}
       - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-}
     depends_on:

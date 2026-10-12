@@ -8,6 +8,8 @@ Uses Rich library when available, falls back to simple formatting otherwise.
 import sys
 from typing import Optional, Dict, Any, List
 
+from ._dashboard import JIT_APPROVALS_PAGE
+
 # Try to import Rich for beautiful output
 try:
     from rich.console import Console
@@ -343,18 +345,19 @@ class AIMConsole:
                      dashboard_url: Optional[str] = None):
         """Display JIT access waiting message.
 
-        ``dashboard_url`` is the caller's configured ``aim_url`` with the
-        verifications page appended. It used to be a hardcoded
+        ``dashboard_url`` is the JIT approvals page on the dashboard of the
+        server the client talks to (``dashboard_url_for(aim_url)`` with
+        ``JIT_APPROVALS_PAGE`` appended). It used to be a hardcoded
         ``http://localhost:3000/...`` regardless of what server the client was
         actually talking to, so a hosted user was told to approve at an address
-        that did not exist for them. Falls back to that same string only when
-        the caller has none, so offline/unconfigured callers still see a link
-        rather than nothing.
+        that did not exist for them. Falls back to the local stack's page only
+        when the caller has none, so offline/unconfigured callers still see a
+        link rather than nothing.
         """
         if self.quiet:
             return
 
-        url = dashboard_url or "http://localhost:3000/dashboard/admin/verifications"
+        url = dashboard_url or "http://localhost:3000" + JIT_APPROVALS_PAGE
 
         if RICH_AVAILABLE:
             self.console.print()

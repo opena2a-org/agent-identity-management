@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	serverconfig "github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
@@ -83,7 +84,7 @@ func main() {
 	flag.StringVar(&config.OrgDomain, "org-domain", "localhost", "Organization domain")
 	flag.IntVar(&config.MaxUsers, "max-users", 100, "Maximum users allowed")
 	flag.IntVar(&config.MaxAgents, "max-agents", 1000, "Maximum agents allowed")
-	flag.StringVar(&config.DatabaseURL, "database-url", os.Getenv("DATABASE_URL"), "PostgreSQL connection URL")
+	flag.StringVar(&config.DatabaseURL, "database-url", "", "PostgreSQL connection URL (default: the server's POSTGRES_* variables when POSTGRES_HOST is set, else DATABASE_URL)")
 	flag.BoolVar(&config.SkipPrompts, "yes", false, "Skip confirmation prompts")
 	flag.BoolVar(&config.Default, "default", false, "Seed the canonical OpenA2A admin org+admin with a random password (idempotent). Fills in canonical values for unset --admin-*/--org-*/--max-* flags; generates a random --admin-password if empty. Implies --yes and exits 0 without touching existing state if already bootstrapped.")
 	flag.Parse()
@@ -99,6 +100,12 @@ func main() {
 			log.Fatalf("❌ Failed to prepare default bootstrap values: %v", err)
 		}
 	}
+
+	dsn, err := databaseURL(config.DatabaseURL)
+	if err != nil {
+		log.Fatalf("❌ Configuration error: %v", err)
+	}
+	config.DatabaseURL = dsn
 
 	// Validate configuration
 	if err := validateConfig(config); err != nil {
@@ -302,6 +309,31 @@ func generateRandomPassword() (string, error) {
 	return string(pw), nil
 }
 
+// databaseURL returns the connection string for the database to seed: the
+// --database-url value when one is given; else, when POSTGRES_HOST is set, a
+// URL built from the POSTGRES_* variables the server reads (POSTGRES_HOST,
+// POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB and
+// POSTGRES_SSL_MODE), as aim-breakglass reads them; else DATABASE_URL. The
+// password is percent-encoded in that URL, so a single quote or a backslash in
+// it reaches PostgreSQL unchanged. Its errors name variables, never their
+// values.
+func databaseURL(flagValue string) (string, error) {
+	if flagValue != "" {
+		return flagValue, nil
+	}
+	if os.Getenv("POSTGRES_HOST") != "" {
+		database, err := serverconfig.LoadDatabase()
+		if err != nil {
+			return "", err
+		}
+		return database.URL(), nil
+	}
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		return dsn, nil
+	}
+	return "", fmt.Errorf("no database is configured: use --database-url, set POSTGRES_HOST, POSTGRES_USER and POSTGRES_DB as the server reads them, or set DATABASE_URL")
+}
+
 func validateConfig(config *BootstrapConfig) error {
 	if config.AdminEmail == "" {
 		return fmt.Errorf("admin email is required (use --admin-email)")
@@ -316,7 +348,7 @@ func validateConfig(config *BootstrapConfig) error {
 	}
 
 	if config.DatabaseURL == "" {
-		return fmt.Errorf("database URL is required (use --database-url or set DATABASE_URL env var)")
+		return fmt.Errorf("database URL is required (use --database-url, set the server's POSTGRES_* variables, or set DATABASE_URL)")
 	}
 
 	// Validate password strength

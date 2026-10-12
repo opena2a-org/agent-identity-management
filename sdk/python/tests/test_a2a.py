@@ -630,18 +630,18 @@ class TestA2AClient:
         """Test getting task history."""
         mock_request.return_value = {
             "tasks": [
-                {"taskId": "task-1", "status": "COMPLETED"},
-                {"taskId": "task-2", "status": "FAILED"},
+                {"externalTaskId": "task-1", "state": "COMPLETED"},
+                {"externalTaskId": "task-2", "state": "FAILED"},
             ]
         }
 
-        result = a2a_client.get_task_history("target-agent-123", limit=10)
+        result = a2a_client.get_task_history("550e8400-e29b-41d4-a716-446655440000", limit=10)
 
         assert len(result) == 2
-        assert result[0]["taskId"] == "task-1"
+        assert result[0]["externalTaskId"] == "task-1"
         mock_request.assert_called_with(
             "GET",
-            "/api/v1/a2a/tasks/target-agent-123?limit=10"
+            "/api/v1/a2a/tasks?agentId=550e8400-e29b-41d4-a716-446655440000&limit=10"
         )
 
     @patch.object(A2AClient, '_make_request')

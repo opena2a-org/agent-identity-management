@@ -12,6 +12,87 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
+// setDatabaseEnv sets every variable databaseURL reads, the ones not in vars to
+// the empty string, which databaseURL reads as unset.
+func setDatabaseEnv(t *testing.T, vars map[string]string) {
+	t.Helper()
+	for _, name := range []string{"DATABASE_URL", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB", "POSTGRES_SSL_MODE"} {
+		t.Setenv(name, vars[name])
+	}
+}
+
+// The database to seed is the --database-url value, then the server's
+// POSTGRES_* variables, whose password reaches the driver unchanged, then
+// DATABASE_URL: the order aim-breakglass reads them in.
+func TestDatabaseURL_FlagThenServerVariablesThenDatabaseURL(t *testing.T) {
+	server := map[string]string{
+		"POSTGRES_HOST":     "db.internal",
+		"POSTGRES_PORT":     "6543",
+		"POSTGRES_USER":     "aim",
+		"POSTGRES_PASSWORD": `it's\`,
+		"POSTGRES_DB":       "aim",
+		"POSTGRES_SSL_MODE": "require",
+	}
+
+	setDatabaseEnv(t, server)
+	dsn, err := databaseURL("")
+	if err != nil {
+		t.Fatalf("databaseURL: %v", err)
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("the connection string is not a URL: %v", err)
+	}
+	if got, _ := u.User.Password(); got != `it's\` {
+		t.Errorf("the password is %q, want %q", got, `it's\`)
+	}
+	if u.Host != "db.internal:6543" || u.Path != "/aim" || u.User.Username() != "aim" || u.Query().Get("sslmode") != "require" {
+		t.Errorf("the connection string is %s, want the server's POSTGRES_* settings", u.Redacted())
+	}
+
+	withURL := map[string]string{"DATABASE_URL": "postgres://aim@elsewhere/other"}
+	for k, v := range server {
+		withURL[k] = v
+	}
+	setDatabaseEnv(t, withURL)
+	if got, _ := databaseURL(""); got != dsn {
+		t.Errorf("with POSTGRES_HOST and DATABASE_URL set, databaseURL returned %q; the POSTGRES_* variables come before DATABASE_URL", got)
+	}
+	if got, _ := databaseURL("postgres://aim@flag/aim"); got != "postgres://aim@flag/aim" {
+		t.Errorf("with --database-url given, databaseURL returned %q; the flag comes first", got)
+	}
+
+	setDatabaseEnv(t, map[string]string{"DATABASE_URL": "postgres://aim@elsewhere/other"})
+	if got, _ := databaseURL(""); got != "postgres://aim@elsewhere/other" {
+		t.Errorf("with only DATABASE_URL set, databaseURL returned %q", got)
+	}
+}
+
+// With nothing configured, or a POSTGRES_HOST without the user and database it
+// needs, databaseURL fails and names variables, never a value.
+func TestDatabaseURL_ErrorsNameVariablesNotValues(t *testing.T) {
+	const secret = "not-a-real-password-1234"
+
+	setDatabaseEnv(t, nil)
+	if _, err := databaseURL(""); err == nil || !strings.Contains(err.Error(), "POSTGRES_HOST") || !strings.Contains(err.Error(), "DATABASE_URL") {
+		t.Errorf("with no database configured, databaseURL returned %v; want an error naming DATABASE_URL and POSTGRES_HOST", err)
+	}
+
+	setDatabaseEnv(t, map[string]string{"POSTGRES_HOST": "db", "POSTGRES_PASSWORD": secret})
+	_, err := databaseURL("")
+	if err == nil {
+		t.Fatal("POSTGRES_HOST without POSTGRES_USER and POSTGRES_DB must be an error")
+	}
+	for _, name := range []string{"POSTGRES_USER", "POSTGRES_DB"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("the error %q does not name %s", err, name)
+		}
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Errorf("the error carries the password: %q", err)
+	}
+}
+
 // TestApplyDefaultBootstrapValues_FillsEmptyFields confirms that --default mode
 // fills every empty canonical field and that operator-supplied flag values are
 // preserved.

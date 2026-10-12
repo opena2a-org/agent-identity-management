@@ -30,9 +30,11 @@ import base64
 import hashlib
 import json
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 import requests
 from nacl.signing import SigningKey
@@ -749,21 +751,30 @@ class A2AClient:
         """
         Get task history for interactions with a target agent.
 
+        Lists the tasks visible to the caller's organization in which the
+        target agent was the client or the remote agent.
+
         Args:
-            target_agent_id: ID of the target agent
+            target_agent_id: ID of the target agent (a UUID)
             limit: Maximum number of results
 
         Returns:
             List of task entries
 
+        Raises:
+            ValueError: target_agent_id is not a UUID. The server ignores an
+                agentId it cannot read as one and answers with every task the
+                organization can see, so the request is not sent.
+
         Example:
             >>> history = a2a.get_task_history("other-agent-id", limit=10)
             >>> for task in history:
-            ...     print(f"{task['taskId']}: {task['status']}")
+            ...     print(f"{task['externalTaskId']}: {task['state']}")
         """
+        agent_id = str(uuid.UUID(str(target_agent_id)))
         response = self._make_request(
             "GET",
-            f"/api/v1/a2a/tasks/{target_agent_id}?limit={limit}"
+            f"/api/v1/a2a/tasks?{urlencode({'agentId': agent_id, 'limit': limit})}"
         )
         return response.get("tasks", [])
 
@@ -1025,52 +1036,81 @@ class A2AClient:
             }
         )
 
-    def get_security_settings(self, organization_id: str) -> Dict[str, Any]:
+    @staticmethod
+    def _check_organization(organization_id: Optional[str], answered: Optional[str]) -> None:
         """
-        Get A2A security settings for an organization.
+        Raise A2AError when organization_id names an organization other than
+        the one the server answered for. The server answers for the
+        organization of the caller's credentials, whatever the caller names.
+        """
+        if organization_id is None or answered is None:
+            return
+        if str(organization_id).lower() != str(answered).lower():
+            raise A2AError(
+                f"the server answers for the caller's organization ({answered}), "
+                f"not for organization {organization_id}"
+            )
+
+    def get_security_settings(self, organization_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get the A2A security settings of the caller's organization.
 
         Args:
-            organization_id: Organization ID
+            organization_id: Optional. The server answers for the organization
+                of the caller's credentials; when given, this must be it.
 
         Returns:
             Security settings including enforcement mode and requirements
 
+        Raises:
+            A2AError: organization_id is not the caller's organization.
+
         Example:
-            >>> settings = a2a.get_security_settings("org-id")
+            >>> settings = a2a.get_security_settings()
             >>> print(f"Mode: {settings['enforcementMode']}")  # 'monitor' or 'strict'
         """
-        return self._make_request(
-            "GET",
-            f"/api/v1/a2a/security/settings/{organization_id}"
-        )
+        settings = self._make_request("GET", "/api/v1/a2a/security/settings")
+        self._check_organization(organization_id, settings.get("organizationId"))
+        return settings
 
     def get_security_violations(
         self,
-        organization_id: str,
+        organization_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        Get security violations for an organization.
+        Get the A2A security violations of the caller's organization.
 
         Args:
-            organization_id: Organization ID
+            organization_id: Optional. The server answers for the organization
+                of the caller's credentials; when given, this must be it.
             limit: Maximum number of results
             offset: Pagination offset
 
         Returns:
             List of security violations
 
+        Raises:
+            A2AError: organization_id is not the caller's organization.
+
         Example:
-            >>> violations = a2a.get_security_violations("org-id")
+            >>> violations = a2a.get_security_violations()
             >>> for v in violations:
             ...     print(f"{v['violationType']}: {v['actionTaken']}")
         """
         response = self._make_request(
             "GET",
-            f"/api/v1/a2a/security/violations/{organization_id}?limit={limit}&offset={offset}"
+            f"/api/v1/a2a/security/violations?{urlencode({'limit': limit, 'offset': offset})}"
         )
-        return response.get("violations", [])
+        # The server answers with the list itself, or null when there is none.
+        if isinstance(response, dict):
+            violations = response.get("violations") or []
+        else:
+            violations = response or []
+        for violation in violations:
+            self._check_organization(organization_id, violation.get("organizationId"))
+        return violations
 
     # =========================================================================
     # Policy Evaluation
@@ -1469,7 +1509,7 @@ class A2AClient:
 
     def update_security_settings(
         self,
-        organization_id: str,
+        organization_id: Optional[str] = None,
         enforcement_mode: Optional[str] = None,
         require_signing: Optional[bool] = None,
         min_trust_score: Optional[float] = None,
@@ -1478,10 +1518,17 @@ class A2AClient:
         blocked_agents: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
-        Update A2A security settings for an organization.
+        Update the A2A security settings of the caller's organization.
+
+        The server replaces every setting with the ones the request carries,
+        so this reads the current settings, changes the arguments that are
+        not None, and writes the whole set back. A change made by someone
+        else between the read and the write is overwritten.
 
         Args:
-            organization_id: Organization ID
+            organization_id: Optional. The server answers for the organization
+                of the caller's credentials; when given, this must be it, and
+                nothing is written otherwise.
             enforcement_mode: 'monitor' or 'strict'
             require_signing: Require Ed25519 request signing
             min_trust_score: Minimum trust score required (0.0-1.0)
@@ -1492,30 +1539,29 @@ class A2AClient:
         Returns:
             Updated security settings
 
+        Raises:
+            A2AError: organization_id is not the caller's organization.
+
         Example:
             >>> settings = a2a.update_security_settings(
-            ...     organization_id="org-id",
             ...     enforcement_mode="strict",
             ...     min_trust_score=0.7
             ... )
         """
-        data: Dict[str, Any] = {}
-        if enforcement_mode is not None:
-            data["enforcementMode"] = enforcement_mode
-        if require_signing is not None:
-            data["requireSigning"] = require_signing
-        if min_trust_score is not None:
-            data["minTrustScore"] = min_trust_score
-        if require_verified_skills is not None:
-            data["requireVerifiedSkills"] = require_verified_skills
-        if allowed_agents is not None:
-            data["allowedAgents"] = allowed_agents
-        if blocked_agents is not None:
-            data["blockedAgents"] = blocked_agents
+        data = dict(self.get_security_settings(organization_id))
+        changes = {
+            "enforcementMode": enforcement_mode,
+            "requireRequestSigning": require_signing,
+            "minTrustScore": min_trust_score,
+            "requireVerifiedSkills": require_verified_skills,
+            "allowedAgentIds": allowed_agents,
+            "blockedAgentIds": blocked_agents,
+        }
+        data.update({key: value for key, value in changes.items() if value is not None})
 
         return self._make_request(
             "PUT",
-            f"/api/v1/a2a/security/settings/{organization_id}",
+            "/api/v1/a2a/security/settings",
             data=data
         )
 

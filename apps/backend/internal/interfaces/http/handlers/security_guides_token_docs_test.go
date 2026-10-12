@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -242,9 +243,16 @@ func TestTokenRotationGuideQuotesTheRotationLineTheSDKPrints(t *testing.T) {
 	})
 
 	t.Run("a server without Redis logs the line the FAQ quotes", func(t *testing.T) {
-		const logged = "Token revocation disabled (no Redis configured)"
-		textHas(t, faq, "`"+logged+"`", "the FAQ quotes the startup line")
-		textHas(t, readBackendFile(t, "cmd/server/main.go"), `log.Println("ℹ️  `+logged, "the server logs that line at startup")
+		// One line for an empty REDIS_HOST, another for a Redis that could not
+		// be reached: the FAQ quotes both, as the server writes them.
+		server := readBackendFile(t, "cmd/server/main.go")
+		for _, logged := range []string{
+			"Token revocation disabled (no Redis configured)",
+			"Token revocation disabled (Redis unavailable)",
+		} {
+			textHas(t, faq, "`"+logged+"`", "the FAQ quotes the startup line")
+			textHas(t, server, `"ℹ️  `+logged+`: refresh tokens are not rotated`, "the server writes that line at startup")
+		}
 	})
 
 	t.Run("an SDK download token rotates without a revocation store", func(t *testing.T) {
@@ -256,6 +264,86 @@ func TestTokenRotationGuideQuotesTheRotationLineTheSDKPrints(t *testing.T) {
 		textHas(t, faq, "A token from an SDK download is rotated in the database and does not need\n  Redis",
 			"the FAQ says an SDK download token needs no Redis")
 	})
+}
+
+// oneLine joins text's lines, so a phrase is found across a line break.
+func oneLine(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+// The token rotation guide said in its opening and in its FAQ that every
+// refresh rotates the refresh token, and its configuration block named a file
+// the repository does not have (#701). A sign-in from aim-sdk login rotates
+// only on a server with Redis, which the FAQ test above holds to the refresh
+// route; every section that says how often a token rotates says so too.
+func TestTokenRotationGuideSaysWhichRefreshesRotate(t *testing.T) {
+	rotation := readBackendFile(t, tokenRotationGuidePath)
+	for _, claim := range []string{"Every time you use a refresh token", "every time they're used", "cannot be disabled"} {
+		textLacks(t, rotation, claim, "the guide says every refresh rotates")
+	}
+
+	for heading, phrases := range map[string][]string{
+		"## What is Token Rotation?": {
+			"A token from an SDK download is rotated on every refresh",
+			"A sign-in from `aim-sdk login` is rotated only by a server with Redis",
+		},
+		"### Q: How often do tokens rotate?": {
+			"a token from an SDK download on every server, and a sign-in from `aim-sdk login` on a server with Redis",
+		},
+		"### Q: Can I disable token rotation?": {
+			"A sign-in from `aim-sdk login` rotates only on a server with Redis",
+		},
+		"### Configuration": {
+			"There is no configuration file for token rotation",
+			"`REDIS_HOST`", "`AUTH_REVOCATION_FAIL_OPEN`", "`JWT_ACCESS_TTL`",
+		},
+	} {
+		section := oneLine(guideSection(t, rotation, heading))
+		for _, phrase := range phrases {
+			textHas(t, section, phrase, heading)
+		}
+	}
+	textHas(t, readBackendFile(t, "internal/config/config.go"), `"REDIS_HOST"`, "the server reads REDIS_HOST")
+	textHas(t, readBackendFile(t, "cmd/server/main.go"), `"AUTH_REVOCATION_FAIL_OPEN"`, "the server reads AUTH_REVOCATION_FAIL_OPEN")
+
+	// Every repository path the guide names is in the repository.
+	for _, path := range regexp.MustCompile("apps/backend/[A-Za-z0-9_./-]+[A-Za-z0-9_]").FindAllString(rotation, -1) {
+		_, err := os.Stat(backendFile(t, strings.TrimPrefix(path, "apps/backend/")))
+		assert.NoError(t, err, "the guide names %s, which the repository does not have", path)
+	}
+}
+
+// The troubleshooting guide told the reader to look for the backend log lines
+// "Token refresh successful" and "Token rotated: old_token → new_token", which
+// nothing in the backend writes (#701). What it quotes now is what the backend
+// writes: the access log line of the refresh route and a refresh warning.
+func TestTroubleshootingGuideQuotesRefreshLinesTheBackendWrites(t *testing.T) {
+	guide := readBackendFile(t, "../../docs/troubleshooting/authentication.md")
+	section := guideSection(t, guide, "### Monitor Token Refresh Attempts")
+	for _, line := range []string{"Token refresh successful", "Token rotated:", "Token refresh failed"} {
+		textLacks(t, section, line, "the guide quotes a line the backend does not write")
+	}
+
+	// The access log line: the logger writes the method and path last, and the
+	// refresh route is POST /api/v1/auth/refresh.
+	textHas(t, section, "`POST /api/v1/auth/refresh`", "the guide quotes the refresh route's access log line")
+	textHas(t, readBackendFile(t, "internal/interfaces/http/middleware/logger.go"),
+		`${status} - ${latency} ${method} ${redactedPath}\n"`, "the access log line ends with the method and path")
+	main := readBackendFile(t, "cmd/server/main.go")
+	textHas(t, main, `v1 := app.Group("/api/v1")`, "the v1 routes are under /api/v1")
+	textHas(t, main, `auth := v1.Group("/auth")`, "the auth routes are under /api/v1/auth")
+	textHas(t, main, `auth.Post("/refresh", h.AuthRefresh.RefreshToken)`, "the refresh route")
+
+	// The warnings are written with the log package, to stderr, which a
+	// pipe from docker logs reads only with 2>&1.
+	textHas(t, section, `docker logs -f aim-backend 2>&1 | grep -E "/api/v1/auth/refresh|Refresh:"`, "the guide's command reads stderr")
+	handler := readBackendFile(t, "internal/interfaces/http/handlers/auth_refresh_handler.go")
+	quoted := regexp.MustCompile("`(Refresh: [^`]+)`").FindAllStringSubmatch(oneLine(section), -1)
+	require.NotEmpty(t, quoted, "the guide quotes a refresh warning")
+	for _, q := range quoted {
+		format := strings.ReplaceAll(q[1], "<id>", "%s")
+		textHas(t, handler, `log.Printf("⚠️  `+format, "the refresh handler writes the warning the guide quotes")
+	}
 }
 
 func TestSecurityGuidesNameTheSDKCredentialFilesAndTheirPage(t *testing.T) {

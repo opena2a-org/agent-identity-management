@@ -162,9 +162,15 @@ go run cmd/bootstrap/main.go \
   --org-domain="acme.com" \               # Optional: Organization domain
   --max-users=500 \                       # Optional: Max users (default: 100)
   --max-agents=5000 \                     # Optional: Max agents (default: 1000)
-  --database-url="postgresql://..." \     # Optional: DB URL (uses DATABASE_URL env)
+  --database-url="postgresql://..." \     # Optional: DB URL (see below)
   --yes                                   # Optional: Skip confirmation prompts
 ```
+
+Without `--database-url`, bootstrap reads the database the way the server
+does: from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, `POSTGRES_DB` and `POSTGRES_SSL_MODE` when `POSTGRES_HOST`
+is set, and from `DATABASE_URL` otherwise. A single quote or a backslash in
+`POSTGRES_PASSWORD` reaches PostgreSQL unchanged.
 
 ### Docker Deployment
 
