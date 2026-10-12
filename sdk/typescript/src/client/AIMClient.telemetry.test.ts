@@ -264,7 +264,7 @@ describe('AIMClient causal-denial telemetry', () => {
   describe('upload relay wiring (stage-2 opt-in)', () => {
     const tmpDirs: string[] = [];
     function relayDir(): string {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-aimclient-relay-'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aimclient-telemetry-relay-wiring-'));
       tmpDirs.push(dir);
       // Seed one denied-injection record so the relay has something to ship.
       writeCorrelatedRecord(
@@ -333,7 +333,7 @@ describe('AIMClient causal-denial telemetry', () => {
     it('auto-joiner writes where the relay reads — full path uploads with no manual seed', async () => {
       // Regression: relay.dataDir must also steer the auto-created joiner, or the
       // relay reads an empty dir and silently uploads nothing.
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-aimclient-align-'));
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aimclient-telemetry-auto-joiner-'));
       tmpDirs.push(dir);
       const relayFetch = vi.fn(async () => ({
         ok: true,

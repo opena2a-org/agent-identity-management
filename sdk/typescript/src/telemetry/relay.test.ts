@@ -22,7 +22,7 @@ import { buildCorrelatedRecord, type CorrelatedRecord } from './correlated-recor
 const tmpDirs: string[] = [];
 
 function freshDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-relay-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'telemetry-relay-'));
   tmpDirs.push(dir);
   return dir;
 }
