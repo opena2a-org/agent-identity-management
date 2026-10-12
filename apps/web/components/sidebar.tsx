@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LogOut, Loader2, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { filterNavigationByRole, type UserRole } from "@/lib/permissions";
@@ -45,10 +45,49 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
   const router = useRouter();
   const [mobileOpenState, setMobileOpenState] = useState(false);
   const mobileOpen = mobileOpenProp ?? mobileOpenState;
-  const setMobileOpen = (open: boolean) => {
-    setMobileOpenState(open);
-    onMobileOpenChange?.(open);
-  };
+  const setMobileOpen = useCallback(
+    (open: boolean) => {
+      setMobileOpenState(open);
+      onMobileOpenChange?.(open);
+    },
+    [onMobileOpenChange]
+  );
+  const drawerRef = useRef<HTMLElement>(null);
+  const drawerOpenerRef = useRef<HTMLElement | null>(null);
+
+  // The phone drawer is a modal dialog: while it is open the dashboard layout makes the
+  // page and the tab bar behind it inert. Focus moves into the drawer, Escape closes it,
+  // and closing returns focus to the control that opened it. A layout effect reads that
+  // control before the browser moves focus off the newly inert tab bar. The drawer closes
+  // when the window reaches the desktop layout, where it is not drawn.
+  useLayoutEffect(() => {
+    if (!mobileOpen) return;
+    drawerOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    drawerRef.current?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    const desktop = typeof window.matchMedia === "function" ? window.matchMedia("(min-width: 1024px)") : null;
+    const closeOnDesktop = () => {
+      if (desktop?.matches) setMobileOpen(false);
+    };
+    closeOnDesktop();
+    document.addEventListener("keydown", onKeyDown);
+    desktop?.addEventListener("change", closeOnDesktop);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      desktop?.removeEventListener("change", closeOnDesktop);
+    };
+  }, [mobileOpen, setMobileOpen]);
+
+  // Focus goes back after the commit that closed the drawer, once the layout has lifted
+  // `inert` from the page; a layout effect's cleanup runs before that and cannot focus it.
+  useEffect(() => {
+    if (mobileOpen) return;
+    const opener = drawerOpenerRef.current;
+    drawerOpenerRef.current = null;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }, [mobileOpen]);
   const persona = usePersona((s) => s.persona);
   const [isLoading, setIsLoading] = useState(true); // Add loading state
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -378,7 +417,9 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
       </aside>
 
       {/* Mobile: drawer opened from the bottom tab bar; it ends above the bar so the
-          account section and Settings at its foot are never covered. */}
+          account section and Settings at its foot are never covered. It is a modal
+          dialog while open (see the layout effect above); closed, it is inert, so its
+          links off screen take no focus. */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
@@ -387,11 +428,17 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
         />
       )}
       <aside
+        ref={drawerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation"
+        tabIndex={-1}
         className={cn(
-          "overlay-surface fixed bottom-[calc(var(--mobile-tab-bar-height)+0.75rem)] left-3 top-3 z-50 flex w-[280px] max-w-[85vw] flex-col px-3.5 py-5 transition-transform duration-300 ease-out lg:hidden",
+          "overlay-surface fixed bottom-[calc(var(--mobile-tab-bar-height)+0.75rem)] left-3 top-3 z-50 flex w-[280px] max-w-[85vw] flex-col px-3.5 py-5 transition-transform duration-300 ease-out focus:outline-none lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-[120%]"
         )}
         aria-hidden={!mobileOpen}
+        inert={!mobileOpen}
       >
         <SidebarContent inDrawer />
       </aside>

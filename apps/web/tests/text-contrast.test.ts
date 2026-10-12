@@ -3,16 +3,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   colorsIn,
-  contrastRatio,
-  over,
   parseColor,
   resolveValue,
   themeTokens,
   tokenColor,
-  translucentSurfaces,
-  type Rgba,
   type Theme,
 } from "./theme-contrast";
+import { activeNavigationGrounds, insetTileGrounds, lowestContrast as lowest, TEXT_FLOOR, THEMES } from "./text-colour";
 
 // Text on the chart screens that the readability sweep measured under 4.5:1,
 // held to the floor from the tokens in app/globals.css in both themes, on every
@@ -20,17 +17,14 @@ import {
 // - the active link of the shared navigation (4.38:1 in the dark drawer),
 // - the agent initials in the overview's agent list (4.14:1 light, 4.24:1 dark),
 // - the unit beside a figure in an inset tile (4.20:1 dark).
+// components/sidebar.test.tsx and components/overview/security-lens.test.tsx
+// render the active link and the tile units and hold the colour each carries
+// to the same floor on the same surfaces.
 
-const TEXT_FLOOR = 4.5;
-const THEMES: Theme[] = ["light", "dark"];
 const AVATAR_TINTS = [1, 2, 3, 4];
 
 const webRoot = join(__dirname, "..");
 const css = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
-
-function lowest(fg: Rgba, backgrounds: Rgba[]): number {
-  return Math.min(...backgrounds.map((bg) => contrastRatio(over(fg, bg), bg)));
-}
 
 function below(checks: Array<{ theme: Theme; name: string; ratio: number }>): string[] {
   return checks.filter((c) => c.ratio < TEXT_FLOOR).map((c) => `${c.theme} ${c.name} ${c.ratio.toFixed(2)}:1`);
@@ -47,19 +41,11 @@ describe("text contrast on the chart screens", () => {
     const checks = THEMES.flatMap((theme) => {
       const tokens = themeTokens(css, theme);
       // The sidebar is glass chrome over the page; the phone drawer is an opaque overlay.
-      const grounds = [
-        ...translucentSurfaces(tokens, "var(--glass-chrome-fill)", "var(--glass-chrome-solid)"),
-        tokenColor(tokens, "hsl(var(--popover))"),
-      ];
-      const fill = tokenColor(tokens, "var(--nav-active-fill)");
       return [
         {
           theme,
           name: "active navigation link",
-          ratio: lowest(
-            tokenColor(tokens, "var(--nav-active-text)"),
-            grounds.map((g) => over(fill, g)),
-          ),
+          ratio: lowest(tokenColor(tokens, "var(--nav-active-text)"), activeNavigationGrounds(tokens)),
         },
       ];
     });
@@ -95,9 +81,7 @@ describe("text contrast on the chart screens", () => {
   it("draws the unit in an inset tile in the secondary ink at 4.5:1 or more", () => {
     const checks = THEMES.flatMap((theme) => {
       const tokens = themeTokens(css, theme);
-      const inset = tokenColor(tokens, "var(--surface-inset-gray)");
-      const tiles = translucentSurfaces(tokens, "var(--glass-fill)", "var(--glass-fill-solid)").map((g) => over(inset, g));
-      return [{ theme, name: "secondary ink on an inset tile", ratio: lowest(tokenColor(tokens, "var(--text-secondary)"), tiles) }];
+      return [{ theme, name: "secondary ink on an inset tile", ratio: lowest(tokenColor(tokens, "var(--text-secondary)"), insetTileGrounds(tokens)) }];
     });
     expect(below(checks)).toEqual([]);
   });
