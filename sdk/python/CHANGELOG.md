@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an empty list when there is none.
 - Tests: `tests/test_a2a_task_and_security_routes.py`.
 
+### Fixed — `A2AClient.update_agent_card` sends `skills` as the list of skill identifiers the server binds
+
+- `PUT /api/v1/a2a/cards/:id` binds `skills` as a list of strings. `update_agent_card` sends each skill as its
+  identifier: a string as it is, and a dictionary, the form the server answers a card's skills in, as its `id`. It
+  declared `skills` as a list of dictionaries and sent the list as given.
+- It raises `ValueError`, and sends no request, when `skills` is not a list or a skill in it is neither an identifier
+  nor a dictionary with an `id`.
+- Measured on a server built from this tree, as an organization's administrator on an agent of that organization: a
+  `PUT` whose `skills` holds an object is answered 400 `Invalid request body`, and one whose `skills` is `["s1"]` is
+  answered 200. The route answers with the card as stored: after a call that carries `name`, `description`,
+  `version` and `skills`, answered 200, the card read back holds none of the four values.
+- Test: `tests/test_a2a_update_agent_card_skills.py`.
+
 ### Fixed — the JIT approval link opens the dashboard's JIT requests page (#701)
 
 - `@perform_action(jit_access=True)` and `@require_approval` print `<dashboard>/dashboard/admin/jit-requests`, the
