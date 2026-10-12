@@ -407,9 +407,10 @@ func connStringValue(v string) string {
 //
 // An empty password is left out of the string, as config.DatabaseConfig.URL
 // leaves it out of the URL aim-bootstrap opens. The driver then takes the
-// password from PGPASSWORD, else from the password file PGPASSFILE names, and
-// sends an empty one when neither gives it. A password setting with an empty
-// value turns both of those off.
+// password from PGPASSWORD, else from the password file PGPASSFILE names or,
+// when PGPASSFILE is unset or empty, from .pgpass in the home directory, and
+// sends an empty one when none of these gives it. A password setting with an
+// empty value turns all of those off.
 func databaseConnString(database config.DatabaseConfig) string {
 	password := ""
 	if database.Password != "" {

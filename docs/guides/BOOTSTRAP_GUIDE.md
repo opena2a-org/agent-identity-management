@@ -175,7 +175,8 @@ is set, and from `DATABASE_URL` otherwise. A single quote or a backslash in
 With `POSTGRES_PASSWORD` empty or unset, bootstrap and the server both leave
 the password to the database driver, which takes it from `PGPASSWORD` when
 that is set, and otherwise from the line that matches the login in the
-password file `PGPASSFILE` names. With neither, an empty password is sent.
+password file `PGPASSFILE` names, or in `.pgpass` in the home directory when
+`PGPASSFILE` is unset or empty. With none of these, an empty password is sent.
 
 The driver also reads `PGCLIENTENCODING` and `PGDATESTYLE`. It accepts `UTF8`
 and `ISO, MDY` for them. When one holds a value the driver refuses, `LATIN1`
