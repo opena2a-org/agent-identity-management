@@ -17,6 +17,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` and `POSTGRES_SSL_MODE` when `POSTGRES_HOST` is
   set, as a `postgres://` URL with the user and the password percent-encoded, and from `DATABASE_URL` otherwise. That
   is the order `aim-breakglass` reads them in.
+- A `POSTGRES_HOST` that begins with `/` names the directory of a Unix socket, for `aim-bootstrap` as for the server.
+  A URL's host cannot hold a slash, so the URL then carries the directory and the port as its `host` and `port`
+  parameters.
+- A connection string the driver does not accept ends the run with
+  `the database connection string is not one the driver accepts`, followed by the places the string is taken from.
+  `aim-bootstrap` parses the string before it uses it and does not print the driver's parse error. Measured with
+  lib/pq 1.10.9 on a URL whose host holds a space: that error is `parse "<the URL>": invalid URL escape "%20"`, with
+  the password in the URL it quotes.
 - The `bootstrap` service in `docker-compose.yml` sets the backend's `POSTGRES_*` variables. Its `DATABASE_URL`, which
   holds the password between single quotes, stays for the `aim-bootstrap` of `platform-v1.0.0`, which reads only
   `--database-url` and `DATABASE_URL`; this `aim-bootstrap` does not read it while `POSTGRES_HOST` is set.
@@ -28,8 +36,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend` does not redirect it.
 - Tests: `TestCompose_BootstrapServicePasswordReachesTheDriverUnchanged` in `apps/backend/cmd/bootstrap/compose_test.go`
   (it fails on the previous `docker-compose.yml` for `it's`, `back\slash` and `ends-with\`),
-  `TestDatabaseURL_FlagThenServerVariablesThenDatabaseURL` and `TestDatabaseURL_ErrorsNameVariablesNotValues` in
-  `apps/backend/cmd/bootstrap/main_test.go`, and `apps/backend/internal/config/database_url_test.go`.
+  `TestDatabaseURL_FlagThenServerVariablesThenDatabaseURL`, `TestDatabaseURL_ErrorsNameVariablesNotValues`,
+  `TestOpenDatabase_RefusedConnectionStringIsNotQuoted`, `TestMainDialsTheUnixSocketInAPostgresHostDirectory` and
+  `TestMainReportsARefusedConnectionStringWithoutQuotingIt` in `apps/backend/cmd/bootstrap/main_test.go`, and
+  `apps/backend/internal/config/database_url_test.go`.
 
 ### Removed — the unused `internal/infrastructure/database` package (#701)
 
