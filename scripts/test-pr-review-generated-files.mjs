@@ -55,7 +55,7 @@ const countLines = (text) => (text === '' ? 0 : text.split('\n').length - (text.
 const byteLength = (text) => Buffer.byteLength(text, 'utf8');
 
 function tmpdir(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qgf-226-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-review-generated-files-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
