@@ -2,13 +2,18 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/lib/pq"
+	serverconfig "github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
@@ -90,6 +95,171 @@ func TestDatabaseURL_ErrorsNameVariablesNotValues(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), secret) {
 		t.Errorf("the error carries the password: %q", err)
+	}
+}
+
+// openDatabase accepts the URL built from the server's POSTGRES_* settings,
+// for a host name and for the directory of a Unix socket, and opens nothing
+// until the database is used.
+func TestOpenDatabase_AcceptsTheURLOfTheServerVariables(t *testing.T) {
+	for _, host := range []string{"db.internal", "/var/run/postgresql"} {
+		database := serverconfig.DatabaseConfig{Host: host, Port: 6543, User: "aim", Password: `it's\`, Database: "aim", SSLMode: "disable"}
+		db, err := openDatabase(database.URL())
+		if err != nil {
+			t.Errorf("POSTGRES_HOST %q: openDatabase refused the URL: %v", host, err)
+			continue
+		}
+		db.Close()
+	}
+}
+
+// For a connection string the driver does not accept, openDatabase answers a
+// sentence that holds no part of the string. The driver's own error quotes
+// the whole of a URL it cannot parse, and a part of a key=value string.
+func TestOpenDatabase_RefusedConnectionStringIsNotQuoted(t *testing.T) {
+	const (
+		user     = "seed-user"
+		database = "seed-db"
+		secret   = "not-a-real-password-1234"
+	)
+	inURL := func(host string) string {
+		u := url.URL{Scheme: "postgres", User: url.UserPassword(user, secret), Host: host, Path: "/" + database}
+		return u.String()
+	}
+	keyValue := "host=db.internal user=" + user + " dbname=" + database + " password="
+	cases := []struct {
+		name string
+		dsn  string
+		// quoted is true when the driver's own error holds the password.
+		quoted bool
+	}{
+		{"a URL whose host holds a space", inURL("db host:5432"), true},
+		{"a URL whose host is a directory", inURL(net.JoinHostPort("/var/run/postgresql", "5432")), true},
+		{"a key=value string whose password is two words", keyValue + "first " + secret, true},
+		{"a key=value string whose quote does not end", keyValue + "'" + secret, false},
+	}
+	for _, c := range cases {
+		_, driverErr := pq.NewConnector(c.dsn)
+		if driverErr == nil {
+			t.Errorf("%s: the driver accepts the string, so the case tests nothing", c.name)
+			continue
+		}
+		if c.quoted && !strings.Contains(driverErr.Error(), secret) {
+			t.Errorf("%s: the driver's error does not hold the password, so the case does not show what is kept out", c.name)
+		}
+
+		db, err := openDatabase(c.dsn)
+		if err == nil {
+			db.Close()
+			t.Errorf("%s: openDatabase accepted the string", c.name)
+			continue
+		}
+		if !errors.Is(err, errConnectionStringRefused) {
+			t.Errorf("%s: openDatabase answered an error of its own making, want errConnectionStringRefused", c.name)
+		}
+		for _, part := range []string{secret, user, database, "db host", "db.internal", "/var/run/postgresql", "5432"} {
+			if strings.Contains(err.Error(), part) {
+				t.Errorf("%s: the error holds %q, a part of the connection string", c.name, part)
+			}
+		}
+	}
+}
+
+// helperPassword is the database password the child processes below are
+// given. It holds only characters a URL leaves as they are, so a line that
+// quotes the connection URL holds it as written here.
+const helperPassword = "not-a-real-password-1234"
+
+// runMain runs main() with --default --yes in a child copy of the test
+// binary, from an empty directory, with no variable set but the ones given.
+// It returns the exit code and what the child wrote, standard output and
+// standard error together.
+func runMain(t *testing.T, env map[string]string) (int, string) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMainHelperProcess$")
+	cmd.Dir = t.TempDir()
+	cmd.Env = []string{"AIM_BOOTSTRAP_HELPER_PROCESS=1"}
+	for name, value := range env {
+		cmd.Env = append(cmd.Env, name+"="+value)
+	}
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	err := cmd.Run()
+	code := 0
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		code = exitErr.ExitCode()
+	} else if err != nil {
+		t.Fatalf("the child process did not run: %v", err)
+	}
+	return code, output.String()
+}
+
+func TestMainHelperProcess(t *testing.T) {
+	if os.Getenv("AIM_BOOTSTRAP_HELPER_PROCESS") != "1" {
+		t.Skip("runs main() for runMain")
+	}
+	os.Args = []string{"aim-bootstrap", "--default", "--yes"}
+	main()
+	os.Exit(0)
+}
+
+// With POSTGRES_HOST naming the directory of a Unix socket, aim-bootstrap
+// dials the socket of POSTGRES_PORT in that directory. The directory here
+// holds no socket, so the dial fails, and the line that says so holds no
+// password.
+func TestMainDialsTheUnixSocketInAPostgresHostDirectory(t *testing.T) {
+	dir := t.TempDir()
+	code, output := runMain(t, map[string]string{
+		"POSTGRES_HOST":     dir,
+		"POSTGRES_PORT":     "6543",
+		"POSTGRES_USER":     "aim",
+		"POSTGRES_PASSWORD": helperPassword,
+		"POSTGRES_DB":       "aim",
+	})
+	if code != 1 {
+		t.Errorf("exit code %d, want 1", code)
+	}
+	if want := "Failed to ping database: dial unix " + filepath.Join(dir, ".s.PGSQL.6543"); !strings.Contains(output, want) {
+		t.Errorf("the output does not hold %q", want)
+	}
+	if strings.Contains(output, errConnectionStringRefused.Error()) {
+		t.Error("the driver refused the connection string built for a socket directory")
+	}
+	if strings.Contains(output, helperPassword) {
+		t.Error("the output holds the database password")
+	}
+}
+
+// A connection string the driver does not accept ends the run with the
+// sentence of errConnectionStringRefused, from the POSTGRES_* variables and
+// from DATABASE_URL alike, and no line of the output holds the password. A
+// host with a space makes such a string: a URL's host cannot hold one.
+func TestMainReportsARefusedConnectionStringWithoutQuotingIt(t *testing.T) {
+	refused := url.URL{Scheme: "postgres", User: url.UserPassword("aim", helperPassword), Host: "db host:5432", Path: "/aim"}
+	cases := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"the POSTGRES_* variables", map[string]string{
+			"POSTGRES_HOST":     "db host",
+			"POSTGRES_USER":     "aim",
+			"POSTGRES_PASSWORD": helperPassword,
+			"POSTGRES_DB":       "aim",
+		}},
+		{"DATABASE_URL", map[string]string{"DATABASE_URL": refused.String()}},
+	}
+	for _, c := range cases {
+		code, output := runMain(t, c.env)
+		if code != 1 {
+			t.Errorf("%s: exit code %d, want 1", c.name, code)
+		}
+		if want := "Failed to connect to database: " + errConnectionStringRefused.Error(); !strings.Contains(output, want) {
+			t.Errorf("%s: the output does not hold %q", c.name, want)
+		}
+		if strings.Contains(output, helperPassword) {
+			t.Errorf("%s: the output holds the database password", c.name)
+		}
 	}
 }
 

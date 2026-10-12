@@ -226,13 +226,24 @@ func LoadDatabase() (DatabaseConfig, error) {
 // password are percent-encoded in it, and lib/pq decodes them, so a single
 // quote, a backslash or any other character in either reaches PostgreSQL as
 // it is configured.
+//
+// A host that begins with a slash is the directory of a Unix socket, as it is
+// in the server's connection string. A URL's host cannot hold a slash, so that
+// directory and the port go in the host and port query parameters, which
+// lib/pq reads as the same two settings.
 func (d DatabaseConfig) URL() string {
 	u := url.URL{
-		Scheme:   "postgres",
-		Host:     net.JoinHostPort(d.Host, strconv.Itoa(d.Port)),
-		Path:     "/" + d.Database,
-		RawQuery: url.Values{"sslmode": {d.SSLMode}}.Encode(),
+		Scheme: "postgres",
+		Path:   "/" + d.Database,
 	}
+	query := url.Values{"sslmode": {d.SSLMode}}
+	if strings.HasPrefix(d.Host, "/") {
+		query.Set("host", d.Host)
+		query.Set("port", strconv.Itoa(d.Port))
+	} else {
+		u.Host = net.JoinHostPort(d.Host, strconv.Itoa(d.Port))
+	}
+	u.RawQuery = query.Encode()
 	if d.Password != "" {
 		u.User = url.UserPassword(d.User, d.Password)
 	} else {

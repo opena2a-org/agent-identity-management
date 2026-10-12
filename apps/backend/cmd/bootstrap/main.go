@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	serverconfig "github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
@@ -114,7 +115,7 @@ func main() {
 
 	// Connect to database
 	fmt.Println("📊 Connecting to database...")
-	db, err := sql.Open("postgres", config.DatabaseURL)
+	db, err := openDatabase(config.DatabaseURL)
 	if err != nil {
 		log.Fatalf("❌ Failed to connect to database: %v", err)
 	}
@@ -332,6 +333,23 @@ func databaseURL(flagValue string) (string, error) {
 		return dsn, nil
 	}
 	return "", fmt.Errorf("no database is configured: use --database-url, set POSTGRES_HOST, POSTGRES_USER and POSTGRES_DB as the server reads them, or set DATABASE_URL")
+}
+
+// errConnectionStringRefused is what openDatabase answers for a connection
+// string the driver does not accept. It says where databaseURL takes the
+// string from and holds no part of it.
+var errConnectionStringRefused = errors.New("the database connection string is not one the driver accepts; it is the --database-url value when one is given, else built from the POSTGRES_* variables when POSTGRES_HOST is set, else DATABASE_URL")
+
+// openDatabase opens the database a connection string names. The driver
+// parses the string at its first use otherwise, and its parse error can quote
+// the string, password included. Parsing it here keeps that error out of
+// every later one, and it is not passed on.
+func openDatabase(dsn string) (*sql.DB, error) {
+	connector, err := pq.NewConnector(dsn)
+	if err != nil {
+		return nil, errConnectionStringRefused
+	}
+	return sql.OpenDB(connector), nil
 }
 
 func validateConfig(config *BootstrapConfig) error {
