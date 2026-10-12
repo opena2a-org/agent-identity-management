@@ -26,15 +26,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   surfaces for both). `tests/text-contrast.test.ts` and `tests/page-standard.test.ts` passed with the active link in
   the brand ink or the units in the tertiary ink; the new tests fail on either, at 4.30:1 and 3.94:1 in the dark theme
   on those surfaces. `app/dashboard/layout.drawer.test.tsx` covers the modal drawer with the real sidebar and tab bar,
-  and `components/mobile-tab-bar.test.tsx` fails when part of a tab is drawn outside its link or button.
+  and `components/mobile-tab-bar.test.tsx` fails when a part of a tab carries a negative margin, offset or translate
+  class such as `-mt-*`, `-top-*` or `-translate-y-*`; it reads class names, not drawn boxes, so a bracketed or
+  variant-prefixed spelling of the same offset passes it.
 
 ### Changed — a full static scan passes, with each exemption recorded and reasoned in `.hmaignore`
 
 - `npx hackmyagent@0.33.2 secure . --ci --format json` reported nine high-severity findings: AST-CRED-003 in eight Go
   test files whose literals are made up for the test, and DOCKERINJ-001 in
   `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh`, whose `docker exec` passes each variable quoted as
-  one argument with no `sh -c`. `.hmaignore` names each of the nine files with its reason, and the same scan now
-  reports no findings (score 100). An exempt file is exempt from every check, as the file's header states.
+  one argument with no `sh -c`. `.hmaignore` names each of the nine files with its reason as a
+  `<path>:<CHECK-ID> # <reason>` rule, and the same scan now reports no findings (score 100). Each line exempts its
+  file from the one check it names; every other check still reads the file.
 
 ### Fixed — a database password with a single quote or a backslash reaches PostgreSQL as configured (#697)
 
