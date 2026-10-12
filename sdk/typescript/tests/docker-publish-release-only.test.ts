@@ -664,7 +664,7 @@ const GUARD_CASES: GuardCase[] = [
 ];
 
 const GIT_STUB = `#!/usr/bin/env bash
-# DOCKER-PUBLISH-RELEASE-ONLY stub git: answers "git ls-remote --tags <url>" from $QGF_CASE_DIR; any other invocation is refused.
+# DOCKER-PUBLISH-RELEASE-ONLY stub git: answers "git ls-remote --tags <url>" from $GUARD_CASE_DIR; any other invocation is refused.
 set -u
 if [ "\${1:-}" != "ls-remote" ] || [ "\${2:-}" != "--tags" ] || [ -z "\${3:-}" ] || [ -n "\${4:-}" ]; then
   echo "stub git: unexpected invocation: $*" >&2
@@ -674,7 +674,7 @@ case "$3" in
   https://github.com/${REPOSITORY}|https://github.com/${REPOSITORY}.git) ;;
   *) echo "stub git: unexpected remote: $3" >&2; exit 99 ;;
 esac
-code=$(cat "$QGF_CASE_DIR/git-exit")
+code=$(cat "$GUARD_CASE_DIR/git-exit")
 if [ "$code" != "0" ]; then
   echo "fatal: unable to access 'https://github.com/${REPOSITORY}/': Could not resolve host: github.com" >&2
   exit "$code"
@@ -685,20 +685,20 @@ while IFS= read -r t; do
   n=$((n+1))
   printf '%040d\\trefs/tags/%s\\n' "$n" "$t"
   printf '%040d\\trefs/tags/%s^{}\\n' "$n" "$t"
-done < "$QGF_CASE_DIR/tags"
+done < "$GUARD_CASE_DIR/tags"
 exit 0
 `;
 
 const DOCKER_STUB = `#!/usr/bin/env bash
-# DOCKER-PUBLISH-RELEASE-ONLY stub docker: answers "docker buildx imagetools inspect <ref>" from $QGF_CASE_DIR/registry; logs every ref asked.
+# DOCKER-PUBLISH-RELEASE-ONLY stub docker: answers "docker buildx imagetools inspect <ref>" from $GUARD_CASE_DIR/registry; logs every ref asked.
 set -u
 if [ "\${1:-}" != "buildx" ] || [ "\${2:-}" != "imagetools" ] || [ "\${3:-}" != "inspect" ] || [ -z "\${4:-}" ] || [ -n "\${5:-}" ]; then
   echo "stub docker: unexpected invocation: $*" >&2
   exit 99
 fi
 ref="$4"
-printf '%s\\n' "$ref" >> "$QGF_CASE_DIR/log"
-f="$QGF_CASE_DIR/registry/$(printf '%s' "$ref" | tr '/:' '__')"
+printf '%s\\n' "$ref" >> "$GUARD_CASE_DIR/log"
+f="$GUARD_CASE_DIR/registry/$(printf '%s' "$ref" | tr '/:' '__')"
 if [ ! -f "$f" ]; then
   echo "stub docker: no answer configured for $ref" >&2
   exit 99
@@ -768,7 +768,7 @@ function runGuard(doc: Workflow, jobName: string, c: GuardCase): GuardRun {
     encoding: 'utf-8',
     env: {
       PATH: `${stubDir}:${process.env.PATH ?? ''}`,
-      QGF_CASE_DIR: caseDir,
+      GUARD_CASE_DIR: caseDir,
       ...substitutedEnv(guard, c.tag),
     },
   });
