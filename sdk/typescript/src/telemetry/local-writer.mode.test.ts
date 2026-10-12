@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 it('AIM-12.AC3 item 13: a freshly created correlated-events log is not group/world readable', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-mode-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'telemetry-local-writer-mode-'));
   tmpDirs.push(dir);
 
   const ok = writeCorrelatedRecord(

@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 it('AIM-12.AC3 item 7: the relay User-Agent carries the SDK version', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-relay-ua-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'telemetry-relay-user-agent-'));
   tmpDirs.push(dir);
   writeCorrelatedRecord(
     buildCorrelatedRecord({

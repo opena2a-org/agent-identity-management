@@ -13,7 +13,7 @@ import { buildCorrelatedRecord, type BuildCorrelatedRecordInput } from './correl
 const tmpDirs: string[] = [];
 
 function freshDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cde-telemetry-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'telemetry-local-writer-'));
   tmpDirs.push(dir);
   return dir;
 }

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'fs';
-import { join, relative } from 'path';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { dirname, join, relative } from 'path';
+import * as ts from 'typescript';
 
 /**
  * Scratch directories and shell helpers in the SDK's repository tests are
@@ -12,24 +14,36 @@ import { join, relative } from 'path';
  * work-item number, and the license test's stub helpers with the same
  * identifier, none of which says what made them.
  *
- * The scanner reads every source file under tests/ (fixtures aside), helpers
- * as well as test files. It reads a prefix written in any quote style, held in
- * a name bound once with `const`, or passed as the last segment of any `join`
- * or `resolve` call. A mkdtemp call whose prefix it cannot read fails the
- * guard, so a form it does not know is reported rather than passed unchecked.
+ * The scanner parses every source file under tests/, helpers as well as test
+ * files, and every test file under src/. It leaves out fixtures directories,
+ * and this file, whose scanner cases are sample mkdtemp calls. Comments and the
+ * text of strings are never read as calls. It reads a call to mkdtemp or
+ * mkdtempSync made by name or as a property (`fs.mkdtempSync`), and a prefix
+ * written as a literal in any quote style, held in a name the file declares
+ * once, with `const` and an initializer that is one string literal, or passed
+ * as the last argument of a `join` or `resolve` call (`path.join`, for one).
+ * Each of these is reported as unreadable and fails the guard: a call whose
+ * prefix it cannot read, an import or destructuring that renames either
+ * function, and any other mention of either name in code (`const mk =
+ * fs.mkdtempSync`, for one). A call that reaches either function without
+ * writing its name as code (`fs['mkdtempSync'](...)`, for one) is not seen.
  */
 
 const TESTS_DIR = __dirname;
+const SDK_ROOT = join(__dirname, '..');
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 const SOURCE_FILE = /\.[cm]?[jt]s$/;
+const TEST_FILE = /\.test\.ts$/;
+const MKDTEMP = new Set(['mkdtemp', 'mkdtempSync']);
 
-function sourceFiles(dir: string): string[] {
+/** Every file under `dir` whose name matches `pattern`, at any depth, fixtures directories and this file aside. */
+function sourceFiles(dir: string, pattern: RegExp): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name !== 'fixtures') out.push(...sourceFiles(path));
-    } else if (SOURCE_FILE.test(entry.name) && path !== __filename) {
+      if (entry.name !== 'fixtures') out.push(...sourceFiles(path, pattern));
+    } else if (pattern.test(entry.name) && path !== __filename) {
       // This file is left out: its scanner cases are sample mkdtemp calls.
       out.push(path);
     }
@@ -37,87 +51,81 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-/** The index just past the string literal that opens at `start`. */
-function endOfString(source: string, start: number): number {
-  const quote = source[start];
-  for (let i = start + 1; i < source.length; i++) {
-    const c = source[i];
-    if (c === '\\') i++;
-    else if (c === quote) return i + 1;
-    else if (quote === '`' && c === '$' && source[i + 1] === '{') i = endOfGroup(source, i + 1) - 1;
-  }
-  return source.length;
+/** The files the guard reads: every source file under tests/ and every test file under src/. */
+function scannedFiles(): string[] {
+  return [...sourceFiles(TESTS_DIR, SOURCE_FILE), ...sourceFiles(join(SDK_ROOT, 'src'), TEST_FILE)];
 }
 
-/** The index just past the bracket that closes the one at `start`. */
-function endOfGroup(source: string, start: number): number {
-  let depth = 0;
-  for (let i = start; i < source.length; ) {
-    const c = source[i];
-    if (c === "'" || c === '"' || c === '`') {
-      i = endOfString(source, i);
-      continue;
-    }
-    if ('([{'.includes(c)) depth++;
-    else if (')]}'.includes(c) && --depth === 0) return i + 1;
-    i++;
-  }
-  return source.length;
+/** Whether `name` is the name a declaration binds in the scope around it. */
+function declaresName(name: ts.Identifier): boolean {
+  const parent = name.parent;
+  return (
+    (ts.isVariableDeclaration(parent) ||
+      ts.isParameter(parent) ||
+      ts.isBindingElement(parent) ||
+      ts.isFunctionDeclaration(parent) ||
+      ts.isImportClause(parent) ||
+      ts.isImportSpecifier(parent) ||
+      ts.isNamespaceImport(parent)) &&
+    parent.name === name
+  );
 }
 
-/** The top-level comma-separated parts of an argument list. */
-function splitArguments(text: string): string[] {
-  const parts: string[] = [];
-  let from = 0;
-  for (let i = 0; i < text.length; ) {
-    const c = text[i];
-    if (c === "'" || c === '"' || c === '`') {
-      i = endOfString(text, i);
-      continue;
+/**
+ * The string each name a source file declares holds: the literal, for a name
+ * declared once, with `const` and an initializer that is one string literal,
+ * and null for a name declared any other way or more than once.
+ */
+function heldStrings(file: ts.SourceFile): Map<string, string | null> {
+  const held = new Map<string, string | null>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && declaresName(node)) {
+      const decl = node.parent;
+      const literal =
+        ts.isVariableDeclaration(decl) &&
+        (ts.getCombinedNodeFlags(decl) & ts.NodeFlags.BlockScoped) === ts.NodeFlags.Const &&
+        decl.initializer !== undefined &&
+        ts.isStringLiteralLike(decl.initializer)
+          ? decl.initializer.text
+          : null;
+      held.set(node.text, held.has(node.text) ? null : literal);
     }
-    if ('([{'.includes(c)) {
-      i = endOfGroup(text, i);
-      continue;
-    }
-    if (c === ',') {
-      parts.push(text.slice(from, i).trim());
-      from = i + 1;
-    }
-    i++;
-  }
-  const last = text.slice(from).trim();
-  if (last !== '') parts.push(last);
-  return parts;
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return held;
 }
 
-/** The text of a string literal with no substitutions, or null for any other expression. */
-function literalText(expr: string): string | null {
-  if (!/^['"`]/.test(expr) || endOfString(expr, 0) !== expr.length) return null;
-  if (expr[0] === '`' && expr.includes('${')) return null;
-  return expr.slice(1, -1);
+/** Whether `expr` is a name, or names joined by dots. */
+function isNameChain(expr: ts.Expression): expr is ts.Identifier | ts.PropertyAccessExpression {
+  return ts.isIdentifier(expr) || (ts.isPropertyAccessExpression(expr) && isNameChain(expr.expression));
 }
 
 /** The prefix an expression passed to mkdtemp spells, or null when it cannot be read. */
-function resolvePrefix(expr: string, source: string): string | null {
-  const literal = literalText(expr);
-  if (literal !== null) return literal;
-
-  const call = /^(?:[A-Za-z_$][\w$]*\.)*(?:join|resolve)\s*\(/.exec(expr);
-  if (call && endOfGroup(expr, call[0].length - 1) === expr.length) {
-    const segments = splitArguments(expr.slice(call[0].length, -1));
-    return segments.length > 0 ? resolvePrefix(segments[segments.length - 1], source) : null;
+function resolvePrefix(expr: ts.Expression, held: Map<string, string | null>): string | null {
+  if (ts.isStringLiteralLike(expr)) return expr.text;
+  if (ts.isIdentifier(expr)) return held.get(expr.text) ?? null;
+  if (ts.isCallExpression(expr) && isNameChain(expr.expression) && expr.arguments.length > 0) {
+    const callee = expr.expression;
+    const name = ts.isIdentifier(callee) ? callee.text : callee.name.text;
+    if (name === 'join' || name === 'resolve') {
+      return resolvePrefix(expr.arguments[expr.arguments.length - 1], held);
+    }
   }
-
-  if (/^[A-Za-z_$][\w$]*$/.test(expr)) {
-    const name = expr.replace(/\$/g, '\\$');
-    const bindings = [...source.matchAll(new RegExp(`\\bconst\\s+${name}\\s*(?::\\s*string\\s*)?=\\s*`, 'g'))];
-    if (bindings.length !== 1) return null;
-    const start = (bindings[0].index ?? 0) + bindings[0][0].length;
-    if (!/['"`]/.test(source[start] ?? '')) return null;
-    return literalText(source.slice(start, endOfString(source, start)));
-  }
-
   return null;
+}
+
+/** The call a mention of mkdtemp or mkdtempSync is the callee of, by name or as a property, if any. */
+function callOf(mention: ts.Identifier): ts.CallExpression | null {
+  const parent = mention.parent;
+  const callee = ts.isPropertyAccessExpression(parent) && parent.name === mention ? parent : mention;
+  return ts.isCallExpression(callee.parent) && callee.parent.expression === callee ? callee.parent : null;
+}
+
+/** Whether a mention of mkdtemp or mkdtempSync is a plain import or destructured binding, which renames nothing. */
+function bindsUnrenamed(mention: ts.Identifier): boolean {
+  const parent = mention.parent;
+  return (ts.isImportSpecifier(parent) || ts.isBindingElement(parent)) && parent.name.getText() === mention.text;
 }
 
 interface ScratchCall {
@@ -126,19 +134,29 @@ interface ScratchCall {
   prefix: string | null;
 }
 
-/** Every mkdtemp or mkdtempSync call in a source text, with the prefix it passes. */
+/**
+ * Every mkdtemp or mkdtempSync call in a source text, with the prefix it
+ * passes. A mention of either name that is neither a call nor a plain import
+ * or destructured binding counts as a call whose prefix cannot be read.
+ */
 function scratchCalls(source: string): ScratchCall[] {
+  const file = ts.createSourceFile('scanned.ts', source, ts.ScriptTarget.Latest, true);
+  const held = heldStrings(file);
   const calls: ScratchCall[] = [];
-  for (const m of source.matchAll(/\bmkdtemp(?:Sync)?\s*\(/g)) {
-    const at = m.index ?? 0;
-    const open = at + m[0].length - 1;
-    const args = splitArguments(source.slice(open + 1, endOfGroup(source, open) - 1));
-    const prefix = args.length > 0 ? resolvePrefix(args[0], source) : null;
-    calls.push({
-      line: source.slice(0, at).split('\n').length,
-      prefix: prefix === null ? null : prefix.slice(prefix.lastIndexOf('/') + 1),
-    });
-  }
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && MKDTEMP.has(node.text)) {
+      const call = callOf(node);
+      if (call !== null || !bindsUnrenamed(node)) {
+        const prefix = call !== null && call.arguments.length > 0 ? resolvePrefix(call.arguments[0], held) : null;
+        calls.push({
+          line: file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1,
+          prefix: prefix === null ? null : prefix.slice(prefix.lastIndexOf('/') + 1),
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
   return calls;
 }
 
@@ -160,6 +178,7 @@ describe('the mkdtemp prefix scanner', () => {
     { form: 'a single-quoted literal', source: "mkdtempSync(join(tmpdir(), 'single-'))", prefix: 'single-' },
     { form: 'a double-quoted literal', source: 'mkdtempSync(join(tmpdir(), "double-"))', prefix: 'double-' },
     { form: 'a template literal', source: 'mkdtempSync(join(tmpdir(), `template-`))', prefix: 'template-' },
+    { form: 'a literal holding an escaped quote', source: "mkdtempSync(join(tmpdir(), 'it\\'s-'))", prefix: "it's-" },
     {
       form: 'a nodePath.join call',
       source: "fs.mkdtempSync(nodePath.join(os.tmpdir(), 'node-path-'))",
@@ -173,9 +192,20 @@ describe('the mkdtemp prefix scanner', () => {
       prefix: 'held-',
     },
     {
+      form: 'a typed const name',
+      source: "const prefix: string = 'typed-';\nmkdtempSync(join(tmpdir(), prefix))",
+      prefix: 'typed-',
+    },
+    {
       form: 'a call with options',
       source: "mkdtempSync(join(tmpdir(), 'with-options-'), { encoding: 'utf8' })",
       prefix: 'with-options-',
+    },
+    { form: 'a call with a space before its parenthesis', source: "mkdtempSync (join(tmpdir(), 'spaced-'))", prefix: 'spaced-' },
+    {
+      form: 'a call through a destructured binding',
+      source: "const { mkdtempSync } = require('fs');\nmkdtempSync(join(tmpdir(), 'destructured-'))",
+      prefix: 'destructured-',
     },
   ])('reads a prefix written as $form', ({ source, prefix }) => {
     expect(scratchPrefixes(source)).toEqual([prefix]);
@@ -189,8 +219,68 @@ describe('the mkdtemp prefix scanner', () => {
     { form: 'a template with a substitution', source: 'mkdtempSync(join(tmpdir(), `${name}-`))' },
     { form: 'a concatenation', source: "mkdtempSync(join(tmpdir(), 'run-' + id))" },
     { form: 'a let name', source: "let prefix = 'held-';\nmkdtempSync(join(tmpdir(), prefix))" },
+    {
+      form: 'a const whose initializer continues past its first literal',
+      source: "const opaque = 'abc-' + 99 + '-';\nmkdtempSync(join(tmpdir(), opaque))",
+    },
+    {
+      form: 'a const name declared twice',
+      source: "const prefix = 'first-';\nfunction scratch() {\n  const prefix = 'second-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also declares as a parameter',
+      source: "const prefix = 'held-';\nfunction scratch(prefix: string) {\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also declares as a destructured parameter',
+      source: "const prefix = 'held-';\nfunction scratch({ prefix }) {\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also declares with let',
+      source: "const prefix = 'held-';\nfunction scratch() {\n  let prefix = 'other-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also declares with var',
+      source: "const prefix = 'held-';\nfunction scratch() {\n  var prefix = 'other-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also declares as a function',
+      source: "function scratch() {\n  const prefix = 'held-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}\nfunction prefix() {}",
+    },
+    {
+      form: 'a const name the file also imports by default',
+      source: "import prefix from './names';\nfunction scratch() {\n  const prefix = 'held-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also imports by name',
+      source: "import { prefix } from './names';\nfunction scratch() {\n  const prefix = 'held-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
+    {
+      form: 'a const name the file also imports as a namespace',
+      source: "import * as prefix from './names';\nfunction scratch() {\n  const prefix = 'held-';\n  return mkdtempSync(join(tmpdir(), prefix));\n}",
+    },
   ])('reports a prefix written as $form as unreadable', ({ source }) => {
     expect(scratchPrefixes(source)).toEqual([null]);
+  });
+
+  it.each([
+    {
+      form: 'an import that renames mkdtempSync',
+      source: "import { mkdtempSync as mk } from 'fs';\nmk(join(tmpdir(), 'renamed-'))",
+    },
+    {
+      form: 'a destructuring that renames mkdtempSync',
+      source: "const { mkdtempSync: mk } = require('fs');\nmk(join(tmpdir(), 'renamed-'))",
+    },
+    { form: 'mkdtemp taken as a value', source: "const mk = fs.mkdtemp;\nawait mk(join(tmpdir(), 'taken-'))" },
+    { form: 'mkdtempSync passed to another call', source: "wrap('passed-', mkdtempSync)" },
+  ])('reports $form as a call whose prefix it cannot read', ({ source }) => {
+    expect(scratchCalls(source)).toEqual([{ line: 1, prefix: null }]);
+  });
+
+  it('reads no call in a comment or a string', () => {
+    const source = "// wraps mkdtempSync(dir) per case\n/* mkdtemp(dir) */\nconst text = 'mkdtempSync(dir)';";
+    expect(scratchCalls(source)).toEqual([]);
   });
 
   it('names the line of each call', () => {
@@ -202,23 +292,57 @@ describe('the mkdtemp prefix scanner', () => {
   });
 });
 
+describe('the files the scratch-name guard reads', () => {
+  it('walks every depth, leaves out fixtures and keeps to the name pattern it is given', () => {
+    const root = mkdtempSync(join(tmpdir(), 'test-scratch-names-walk-'));
+    try {
+      const names = ['a.test.ts', 'helper.ts', 'helper.mjs', 'helper.cjs', 'notes.md', 'deep/er/b.test.ts', 'fixtures/c.test.ts'];
+      for (const name of names) {
+        mkdirSync(dirname(join(root, name)), { recursive: true });
+        writeFileSync(join(root, name), '');
+      }
+      const walked = (pattern: RegExp): string[] => sourceFiles(root, pattern).map((f) => relative(root, f)).sort();
+      expect(walked(SOURCE_FILE)).toEqual(['a.test.ts', 'deep/er/b.test.ts', 'helper.cjs', 'helper.mjs', 'helper.ts']);
+      expect(walked(TEST_FILE)).toEqual(['a.test.ts', 'deep/er/b.test.ts']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('are the source files under tests/ and the test files under src/, this file aside', () => {
+    const files = scannedFiles().map((f) => relative(SDK_ROOT, f));
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'tests/arp/intelligence/behavioral-risk.test.ts',
+        'tests/arp/harness/benchmark.ts',
+        'tests/local-verify-consumer.mjs',
+        'tests/local-verify-consumer.cjs',
+        'src/telemetry/relay.test.ts',
+        'src/arp/telemetry/signature/wire.test.ts',
+      ]),
+    );
+    expect(files).not.toContain('tests/test-scratch-names.test.ts');
+    expect(files).not.toContain('src/telemetry/relay.ts');
+  });
+});
+
 describe('scratch directories and shell helpers in the tests are named after what they serve', () => {
-  it('every mkdtemp call under tests/ passes a prefix the scanner reads', () => {
+  it("every mkdtemp call in the SDK's tests passes a prefix the scanner reads", () => {
     const unreadable: string[] = [];
-    for (const file of sourceFiles(TESTS_DIR)) {
+    for (const file of scannedFiles()) {
       for (const call of scratchCalls(readFileSync(file, 'utf-8'))) {
-        if (call.prefix === null) unreadable.push(`${relative(TESTS_DIR, file)}:${call.line}`);
+        if (call.prefix === null) unreadable.push(`${relative(SDK_ROOT, file)}:${call.line}`);
       }
     }
     expect(unreadable).toEqual([]);
   });
 
-  it('no mkdtemp prefix under tests/ opens with a short identifier and a number', () => {
+  it("no mkdtemp prefix in the SDK's tests opens with a short identifier and a number", () => {
     const offenders: string[] = [];
-    for (const file of sourceFiles(TESTS_DIR)) {
+    for (const file of scannedFiles()) {
       for (const call of scratchCalls(readFileSync(file, 'utf-8'))) {
         if (call.prefix !== null && /^[A-Za-z]{1,4}-\d+-/.test(call.prefix)) {
-          offenders.push(`${relative(TESTS_DIR, file)}:${call.line}: '${call.prefix}'`);
+          offenders.push(`${relative(SDK_ROOT, file)}:${call.line}: '${call.prefix}'`);
         }
       }
     }
@@ -248,5 +372,18 @@ describe('scratch directories and shell helpers in the tests are named after wha
   it('the generated-files review script test names its scratch directory after the test', () => {
     const source = readFileSync(join(REPO_ROOT, 'scripts', 'test-pr-review-generated-files.mjs'), 'utf-8');
     expect(scratchPrefixes(source)).toEqual(['pr-review-generated-files-']);
+  });
+
+  it.each([
+    { file: 'src/telemetry/local-writer.test.ts', prefixes: ['telemetry-local-writer-'] },
+    { file: 'src/telemetry/local-writer.mode.test.ts', prefixes: ['telemetry-local-writer-mode-'] },
+    { file: 'src/telemetry/relay.test.ts', prefixes: ['telemetry-relay-'] },
+    { file: 'src/telemetry/relay-user-agent.test.ts', prefixes: ['telemetry-relay-user-agent-'] },
+    {
+      file: 'src/client/AIMClient.telemetry.test.ts',
+      prefixes: ['aimclient-telemetry-relay-wiring-', 'aimclient-telemetry-auto-joiner-'],
+    },
+  ])('$file names its scratch directories after the test', ({ file, prefixes }) => {
+    expect(scratchPrefixes(readFileSync(join(SDK_ROOT, file), 'utf-8'))).toEqual(prefixes);
   });
 });
