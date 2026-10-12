@@ -166,7 +166,7 @@ func TestRedisStartupSummary_ConnectionIsConnected(t *testing.T) {
 // The token revocation line gives the cache line's reason too. "no Redis
 // configured" is only for an empty REDIS_HOST: a Redis that was tried and could
 // not be reached is unavailable, whether REDIS_HOST names it or is unset.
-func TestTokenRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
+func TestRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
 	const notRotated = ": refresh tokens are not rotated and logout cannot revoke"
 	for _, tc := range []struct {
 		name  string

@@ -45,7 +45,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `Token revocation disabled (Redis unavailable)` when the startup Redis ping failed, whether `REDIS_HOST` names a host
   or is unset, and `Token revocation disabled (cache initialization failed)` when the cache could not be built on the
   connection. Each goes on with `: refresh tokens are not rotated and logout cannot revoke`.
-- Tests: `TestTokenRevocationStartupLine_GivesTheCacheLinesReason` and
+- Tests: `TestRevocationStartupLine_GivesTheCacheLinesReason` and
   `TestTokenRotationGuideQuotesTheRevocationStartupLines` in `apps/backend/cmd/server/redis_startup_test.go`.
 
 ### Fixed — the token rotation guide says which refreshes rotate, and the troubleshooting guide quotes refresh lines the backend writes (#701)
