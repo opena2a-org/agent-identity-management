@@ -54,13 +54,17 @@ export default function DashboardLayout({
       {/* Below lg the content ends clear of the fixed bottom tab bar and its raised Secure action. */}
       <div className="flex gap-5 p-4 pb-[calc(var(--mobile-tab-bar-height)+1.75rem)] sm:px-6 sm:pt-6 lg:pb-6">
         <Sidebar mobileOpen={mobileNavOpen} onMobileOpenChange={setMobileNavOpen} />
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
+        {/* The open navigation drawer is a modal dialog: the page and the tab bar behind
+            its backdrop are inert until it closes. */}
+        <div className="flex min-w-0 flex-1 flex-col gap-4" inert={mobileNavOpen}>
           <DashboardHeader />
           <HubTabs role={role} />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
       </div>
-      <MobileTabBar role={role} onOpenMenu={() => setMobileNavOpen(true)} />
+      <div inert={mobileNavOpen}>
+        <MobileTabBar role={role} onOpenMenu={() => setMobileNavOpen(true)} />
+      </div>
     </div>
     </RouteGate>
   );

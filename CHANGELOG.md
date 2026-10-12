@@ -11,6 +11,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the phone navigation drawer is a modal dialog, and the tab bar's Secure link covers its raised icon
+
+- The navigation drawer that the bottom tab bar's Menu button opens is now a modal dialog named "Navigation"
+  (`role="dialog"`, `aria-modal="true"`). While it is open, the page and the tab bar behind its backdrop are `inert`,
+  so their links and buttons leave the keyboard order and the accessibility tree. Focus moves into the drawer, Escape
+  closes it, and closing returns focus to the control that opened it. The drawer closes when the window widens to the
+  desktop layout, where it is not drawn, and a closed drawer is `inert`.
+- The raised icon of the tab bar's "Secure" link had a `-mt-3.5` offset of its own, which drew it 14px above the
+  link's box. The link now carries that offset instead, so its box covers the icon it draws.
+- `components/sidebar.test.tsx` and `components/overview/security-lens.test.tsx` render the active navigation link
+  with its icon and the security tiles' units, read the theme colour each is drawn in, and hold it to 4.5:1 in both
+  themes on the surfaces `tests/text-contrast.test.ts` measures the tokens on (`tests/text-colour.ts` now holds those
+  surfaces for both). `tests/text-contrast.test.ts` and `tests/page-standard.test.ts` passed with the active link in
+  the brand ink or the units in the tertiary ink; the new tests fail on either, at 4.30:1 and 3.94:1 in the dark theme
+  on those surfaces. `app/dashboard/layout.drawer.test.tsx` covers the modal drawer with the real sidebar and tab bar,
+  and `components/mobile-tab-bar.test.tsx` fails when part of a tab is drawn outside its link or button.
+
+### Changed — a full static scan passes, with each exemption recorded and reasoned in `.hmaignore`
+
+- `npx hackmyagent@0.33.2 secure . --ci --format json` reported nine high-severity findings: AST-CRED-003 in eight Go
+  test files whose literals are made up for the test, and DOCKERINJ-001 in
+  `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh`, whose `docker exec` passes each variable quoted as
+  one argument with no `sh -c`. `.hmaignore` names each of the nine files with its reason, and the same scan now
+  reports no findings (score 100). An exempt file is exempt from every check, as the file's header states.
+
 ### Fixed — a database password with a single quote or a backslash reaches PostgreSQL as configured (#697)
 
 - The backend writes every string setting of its PostgreSQL connection string (host, user, password, database name and
@@ -128,8 +153,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The "Trust:" label and the event status in the audit trail read at 2.43:1 in the light theme and 2.56:1 in the dark
   theme. Every card on the page is now a glass card and every colour comes from the theme tokens (ink colours for text;
   the success, warning, danger and brand tokens for status), as on the overview and the security page. Measured in a
-  browser after the change, no text on the page is under 4.5:1 in either theme or viewport except the active sidebar
-  link, part of the shared navigation, which still reads 4.38:1 in the dark theme at 375x812.
+  browser after the change, no text on the page was under 4.5:1 in either theme or viewport except the active sidebar
+  link, part of the shared navigation, which then still read 4.38:1 in the dark theme at 375x812; the entry above on
+  the active navigation link fixes it.
 - In the audit trail and the security alerts list, high and medium severity now share the warning colour (they were
   orange and yellow); critical stays in the danger colour, and the badge names the severity in words.
 - `tests/page-standard.test.ts` holds the overview's lenses, the security page and the compliance page to two rules:
@@ -164,8 +190,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   chart page in Chromium where Playwright's Chromium is installed.
 - `docs/ux/chart-contrast-2026-10-11.md` records the first run over the overview's three lenses, the security page
   and the compliance page in both themes: every series mark measured 3.40:1 or higher, and every chart carried its
-  label and table control. The compliance page's trust score trend, drawn on a `dark:bg-gray-800` card instead of a
-  glass surface, has axis text at 4.05:1 in the dark theme.
+  label and table control. The compliance page's trust score trend, then drawn on a `dark:bg-gray-800` card instead
+  of a glass surface, had axis text at 4.05:1 in the dark theme; the entry above on the compliance page's charts
+  fixes it.
 
 ### Changed — every chart offers its values as a table, and the light theme draws four series darker
 

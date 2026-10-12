@@ -13,3 +13,30 @@
 # stronger invariant: .env (without the .example suffix) is in
 # .gitignore via .git/info/exclude and would never be committed.
 .env.example
+
+# Go test files whose test inputs match AST-CRED-003 in a full scan
+# (`secure . --ci --format json`). The literals it points at are made up
+# for the test and open nothing; for example, the alphabet-pattern
+# passwords the seed-log test checks are never logged, sample bearer
+# tokens built from the digits and a-f, the `aim_live_` prefix an API key
+# is asserted to start with, and a migration file name containing "key".
+# There is no per-file, per-check rule, so each file is named here and is
+# exempt from every check: a real credential added to one of them would
+# not be reported, so review literals in these files as fixtures. Delete
+# a line once the file stops matching.
+apps/backend/cmd/server/admin_seed_log_test.go
+apps/backend/cmd/server/bootstrap_token_routes_test.go
+apps/backend/cmd/server/metrics_wiring_test.go
+apps/backend/cmd/server/migrations_renumbered_row_integration_test.go
+apps/backend/internal/application/agent_service_test.go
+apps/backend/internal/application/api_key_service_test.go
+apps/backend/internal/application/device_auth_service_session_test.go
+apps/backend/internal/application/device_auth_service_single_use_test.go
+
+# A local smoke script a developer runs against a throwaway Postgres
+# container (DOCKERINJ-001, "docker exec with variable interpolation").
+# Its `docker exec` takes the container name and password from the
+# script's own defaults or the developer's environment, each quoted as
+# one argument, and no `sh -c` parses them again, so a value cannot add
+# a command.
+apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh

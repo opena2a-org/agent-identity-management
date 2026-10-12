@@ -74,9 +74,11 @@ export function MobileTabBar({ role, onOpenMenu }: MobileTabBarProps) {
       {renderTab(overview)}
       {renderTab(agents)}
 
+      {/* The link carries the raise, not its icon, so the link's box covers the raised icon
+          it draws (tested in components/mobile-tab-bar.test.tsx). */}
       {secure && (
-        <Link href={secure.href} className={cn(item, "p-0 text-ink-tertiary")}>
-          <span className="-mt-3.5 inline-flex h-[46px] w-[46px] items-center justify-center rounded-full bg-brand text-white shadow-[0_8px_20px_rgba(0,113,227,0.35)]">
+        <Link href={secure.href} className={cn(item, "-mt-3.5 p-0 text-ink-tertiary")}>
+          <span className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full bg-brand text-white shadow-[0_8px_20px_rgba(0,113,227,0.35)]">
             <ShieldPlus className="h-[22px] w-[22px]" strokeWidth={2.2} aria-hidden="true" />
           </span>
           {secure.name}
