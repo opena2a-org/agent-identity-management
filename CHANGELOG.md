@@ -15,9 +15,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - The server leaves an empty `POSTGRES_PASSWORD` out of its connection string, as the URL `aim-bootstrap` builds leaves
   it out. The driver (lib/pq 1.10.9) then takes the password from `PGPASSWORD` when that is set, otherwise from the
-  line that matches the login in the password file `PGPASSFILE` names, and sends an empty password when neither gives
-  one. `aim-server migrate` opens the database with the same string. A
-  `POSTGRES_PASSWORD` that is set is still the password sent, whatever `PGPASSWORD` and the password file hold.
+  line that matches the login in the password file `PGPASSFILE` names, or in `.pgpass` in the home directory when
+  `PGPASSFILE` is unset or empty, and sends an empty password when none of these gives one. `aim-server migrate` opens
+  the database with the same string. A `POSTGRES_PASSWORD` that is set is still the password sent, whatever
+  `PGPASSWORD` and the password file hold.
 - The server wrote an empty password as `password=''`. With that setting the driver sent an empty password in each of
   three cases a recording server measured on the previous connection string: `PGPASSWORD` set, a password file line
   for the login, and both.
