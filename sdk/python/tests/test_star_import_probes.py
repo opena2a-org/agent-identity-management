@@ -1,7 +1,7 @@
 """The star-import tests give the same answer when pytest is handed the probes.
 
-``python -m pytest tests/star_imports/detection.py tests/test_aim21_...py``
-failed the AC9 star-import test: pytest rewrote the probe because it was named
+``python -m pytest tests/star_imports/detection.py tests/test_release_203_...py``
+failed the star-import test: pytest rewrote the probe because it was named
 on the command line, and the rewrite bound ``@py_builtins`` and ``@pytest_ar``
 into the namespace the test reads.
 """
@@ -17,8 +17,8 @@ PROBES = sorted(
     p for p in (TESTS / "star_imports").glob("*.py") if p.name != "__init__.py"
 )
 STAR_IMPORT_TESTS = [
-    "tests/test_aim21_p2_p3_release_findings.py::"
-    "test_AIM_21_AC9_star_import_binds_no_stdlib_or_typing_name",
+    "tests/test_release_203_p2_p3_findings.py::"
+    "test_star_import_binds_no_stdlib_or_typing_name",
     "tests/test_cli_import_cost.py::"
     "test_star_import_and_submodule_attributes_still_work",
 ]

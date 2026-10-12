@@ -1,19 +1,21 @@
 """
-AIM-21 -- the three P2 findings and the seven P3 findings from the aim-sdk
-2.0.3 release test, re-measured at head. One test (or parametrized group) per
-acceptance criterion; every leaf test name carries its criterion id as the
-first token.
+The three P2 findings and the seven P3 findings from the aim-sdk 2.0.3 release
+test, re-measured at head. Each section below is headed with the label the
+finding's CHANGELOG.md entry carries, P2.2 to P3.7, and each test is named
+after the behaviour it pins.
 
 P2.1 (the `aim-sdk login` pre-flight and bounded callback wait) is not covered
-here: it is AIM-14.AC1, the same defect against the same lines, and it ships in
-this same [Unreleased] section.
+here: it is the same defect against the same lines as the first of the five P2
+findings from the 2.0.2 release test, which test_release_202_p2_findings.py
+covers, and it ships in this same [Unreleased] section.
 
 Everything here runs offline. HTTP goes only to loopback fakes these tests
 start themselves, or to a loopback port that was bound and closed so it refuses
 connections, or to a loopback socket that accepts and answers nothing. The only
 process any test spawns is the running interpreter on a script the test wrote
-into its own tmp_path (test_AIM_21_AC13 asserts both properties over this
-file's own source).
+into its own tmp_path
+(test_this_file_touches_only_loopback_and_its_own_fixture_script asserts both
+properties over this file's own source).
 """
 
 import contextlib
@@ -364,7 +366,7 @@ def no_protocol_indicators(monkeypatch):
 # AC1 -- protocol detection never scores what it did not find (P2.2)
 # ---------------------------------------------------------------------------
 
-def test_AIM_21_AC1_no_indicators_means_zero_confidence_and_no_indicators_found(
+def test_no_indicators_means_zero_confidence_and_no_indicators_found(
     no_protocol_indicators,
 ):
     detector = ProtocolDetector()
@@ -381,7 +383,7 @@ def test_AIM_21_AC1_no_indicators_means_zero_confidence_and_no_indicators_found(
     assert detector.get_detection_confidence(protocol) == 0.0
 
 
-def test_AIM_21_AC1_default_protocol_is_still_mcp(no_protocol_indicators):
+def test_default_protocol_is_still_mcp(no_protocol_indicators):
     """The committed test at tests/test_protocol_detection.py:100-122 pins this
     return value; only the score it was reported with changes."""
     assert ProtocolDetector().detect_protocol() == "mcp"
@@ -389,7 +391,7 @@ def test_AIM_21_AC1_default_protocol_is_still_mcp(no_protocol_indicators):
 
 
 @pytest.mark.parametrize("protocol", ["mcp", "a2a", "oauth", "saml", "did", "acp"])
-def test_AIM_21_AC1_every_known_protocol_scores_zero_with_no_indicators(
+def test_every_known_protocol_scores_zero_with_no_indicators(
     no_protocol_indicators, protocol
 ):
     detector = ProtocolDetector()
@@ -402,7 +404,7 @@ def test_AIM_21_AC1_every_known_protocol_scores_zero_with_no_indicators(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("unknown", ["bogus", "", "MCP ", "grpc", "not-a-protocol"])
-def test_AIM_21_AC2_unknown_protocol_name_scores_zero(no_protocol_indicators, unknown):
+def test_unknown_protocol_name_scores_zero(no_protocol_indicators, unknown):
     detector = ProtocolDetector()
     details = detector.get_protocol_details(unknown)
 
@@ -411,7 +413,7 @@ def test_AIM_21_AC2_unknown_protocol_name_scores_zero(no_protocol_indicators, un
     assert detector.get_detection_confidence(unknown) == 0.0
 
 
-def test_AIM_21_AC2_env_indicator_cells_keep_their_scores(no_protocol_indicators):
+def test_env_indicator_cells_keep_their_scores(no_protocol_indicators):
     """The positive control: the committed assertions at
     tests/test_protocol_detection.py:47 and :75 still hold."""
     no_protocol_indicators.setenv("MCP_SERVER_MODE", "true")
@@ -429,7 +431,7 @@ def test_AIM_21_AC2_env_indicator_cells_keep_their_scores(no_protocol_indicators
     assert detector.get_detection_confidence(protocol) >= 90
 
 
-def test_AIM_21_AC2_import_indicator_still_scores(no_protocol_indicators):
+def test_import_indicator_still_scores(no_protocol_indicators):
     """The import row, unchanged: a loaded protocol module scores 60+."""
     no_protocol_indicators.setattr(
         protocol_detection_module,
@@ -467,7 +469,7 @@ def _assert_transport_shape(message, host, url):
         ("register_mcp", ("mcp-server-id",)),
     ],
 )
-def test_AIM_21_AC3_connection_refused_has_one_shape(
+def test_connection_refused_has_one_shape(
     closed_port_url, method_name, args
 ):
     client = _api_key_client(closed_port_url, auto_retry=False)
@@ -481,7 +483,7 @@ def test_AIM_21_AC3_connection_refused_has_one_shape(
     assert "connection refused" in message.lower()
 
 
-def test_AIM_21_AC3_timeout_has_the_same_shape(silent_port_url):
+def test_timeout_has_the_same_shape(silent_port_url):
     client = _api_key_client(silent_port_url, timeout=0.75, auto_retry=False)
     host = silent_port_url.split("//", 1)[1]
 
@@ -493,7 +495,7 @@ def test_AIM_21_AC3_timeout_has_the_same_shape(silent_port_url):
     assert "timed out" in message.lower()
 
 
-def test_AIM_21_AC3_verification_path_builds_the_same_shape(
+def test_verification_path_builds_the_same_shape(
     closed_port_url, clean_verification_state
 ):
     clean_verification_state.setenv("AIM_STRICT_MODE", "true")
@@ -509,7 +511,7 @@ def test_AIM_21_AC3_verification_path_builds_the_same_shape(
     _assert_transport_shape(str(excinfo.value), host, closed_port_url)
 
 
-def test_AIM_21_AC3_reporting_and_verification_agree_word_for_word(
+def test_reporting_and_verification_agree_word_for_word(
     closed_port_url, clean_verification_state
 ):
     """The point of "one shape": the same closed port produces the same
@@ -524,7 +526,7 @@ def test_AIM_21_AC3_reporting_and_verification_agree_word_for_word(
     assert reporting_message == verification_reason
 
 
-def test_AIM_21_AC3_a_server_that_answered_is_not_called_unreachable(
+def test_a_server_that_answered_is_not_called_unreachable(
     fake_aim_factory,
 ):
     """
@@ -559,7 +561,7 @@ def _urllib3_chain_stub(*args, **kwargs):
 
 
 @pytest.mark.parametrize("chain_text", LIBRARY_CHAIN_TEXT)
-def test_AIM_21_AC4_raised_message_never_carries_the_library_chain(
+def test_raised_message_never_carries_the_library_chain(
     closed_port_url, chain_text
 ):
     """Driven with the exact text a urllib3-backed `requests` raises, so the
@@ -573,7 +575,7 @@ def test_AIM_21_AC4_raised_message_never_carries_the_library_chain(
 
 
 @pytest.mark.parametrize("chain_text", LIBRARY_CHAIN_TEXT)
-def test_AIM_21_AC4_returned_reason_never_carries_the_library_chain(
+def test_returned_reason_never_carries_the_library_chain(
     closed_port_url, clean_verification_state, chain_text
 ):
     client = _api_key_client(closed_port_url, auto_retry=False)
@@ -643,7 +645,7 @@ def _transport_messages_the_sdk_builds(url, monkeypatch=None):
 
 
 @pytest.mark.parametrize("chain_text", LIBRARY_CHAIN_TEXT)
-def test_AIM_21_AC4_no_composed_message_carries_the_library_chain(
+def test_no_composed_message_carries_the_library_chain(
     closed_port_url, clean_verification_state, chain_text
 ):
     messages = _transport_messages_the_sdk_builds(
@@ -656,7 +658,7 @@ def test_AIM_21_AC4_no_composed_message_carries_the_library_chain(
         )
 
 
-def test_AIM_21_AC4_every_composed_message_carries_the_one_shape(
+def test_every_composed_message_carries_the_one_shape(
     closed_port_url, clean_verification_state
 ):
     """The positive half of the sweep: each of those messages is the shape
@@ -667,7 +669,7 @@ def test_AIM_21_AC4_every_composed_message_carries_the_one_shape(
         assert "connection refused" in message.lower(), f"{origin}: {message}"
 
 
-def test_AIM_21_AC4_a_stubbed_chain_is_scrubbed_from_every_shape(closed_port_url):
+def test_a_stubbed_chain_is_scrubbed_from_every_shape(closed_port_url):
     """
     Driven with the exact text a urllib3-backed `requests` raises, on the branch
     that renders a failure which is NOT a transport failure -- the one place a
@@ -685,7 +687,7 @@ def test_AIM_21_AC4_a_stubbed_chain_is_scrubbed_from_every_shape(closed_port_url
 
 
 @pytest.mark.parametrize("entry_point", ["verify_capability", "verify_action"])
-def test_AIM_21_AC4_nothing_is_printed_beside_the_raise(
+def test_nothing_is_printed_beside_the_raise(
     closed_port_url, clean_verification_state, entry_point
 ):
     clean_verification_state.setenv("AIM_STRICT_MODE", "true")
@@ -701,7 +703,7 @@ def test_AIM_21_AC4_nothing_is_printed_beside_the_raise(
     )
 
 
-def test_AIM_21_AC4_the_permissive_path_still_warns(
+def test_the_permissive_path_still_warns(
     fake_aim_factory, clean_verification_state
 ):
     """
@@ -791,7 +793,7 @@ def without_mcp_client_library(monkeypatch):
 
 
 @pytest.mark.parametrize("server", ["ghost", "silent"])
-def test_AIM_21_AC5_discovery_error_names_the_command_and_never_the_wrapper(
+def test_discovery_error_names_the_command_and_never_the_wrapper(
     claude_config_with_broken_servers, server
 ):
     """Holds on whichever branch this runner takes."""
@@ -813,7 +815,7 @@ def test_AIM_21_AC5_discovery_error_names_the_command_and_never_the_wrapper(
     )
 
 
-def test_AIM_21_AC5_missing_command_reports_the_os_error(
+def test_missing_command_reports_the_os_error(
     claude_config_with_broken_servers,
 ):
     detections = MCPDetector().detect_with_tools(timeout_per_server=5.0)
@@ -825,7 +827,7 @@ def test_AIM_21_AC5_missing_command_reports_the_os_error(
     )
 
 
-def test_AIM_21_AC5_command_that_exits_immediately_reports_the_transport_failure(
+def test_command_that_exits_immediately_reports_the_transport_failure(
     claude_config_with_broken_servers,
 ):
     detections = MCPDetector().detect_with_tools(timeout_per_server=5.0)
@@ -840,7 +842,7 @@ def test_AIM_21_AC5_command_that_exits_immediately_reports_the_transport_failure
     )
 
 
-def test_AIM_21_AC5_a_working_server_is_not_reported_as_broken(
+def test_a_working_server_is_not_reported_as_broken(
     tmp_path, monkeypatch, without_mcp_client_library
 ):
     """
@@ -882,7 +884,7 @@ def test_AIM_21_AC5_a_working_server_is_not_reported_as_broken(
     )
 
 
-def test_AIM_21_AC5_discovery_writes_no_traceback_to_stderr(
+def test_discovery_writes_no_traceback_to_stderr(
     claude_config_with_broken_servers,
 ):
     with _captured_output() as buffer:
@@ -894,7 +896,7 @@ def test_AIM_21_AC5_discovery_writes_no_traceback_to_stderr(
     )
 
 
-def test_AIM_21_AC5_taskgroup_wrapper_is_unwrapped_to_its_cause():
+def test_taskgroup_wrapper_is_unwrapped_to_its_cause():
     """The MCP-client-installed path: a failed stdio session arrives as an
     exception group whose str() is the wrapper sentence."""
     assert describe_exception is not None, (
@@ -913,7 +915,7 @@ def test_AIM_21_AC5_taskgroup_wrapper_is_unwrapped_to_its_cause():
 
 
 @pytest.mark.parametrize("entry_point", ["detect_with_tools", "auto_detect_mcps"])
-def test_AIM_21_AC5_docstrings_say_the_server_commands_are_executed(entry_point):
+def test_docstrings_say_the_server_commands_are_executed(entry_point):
     documented = (
         MCPDetector.detect_with_tools.__doc__
         if entry_point == "detect_with_tools"
@@ -930,7 +932,7 @@ def test_AIM_21_AC5_docstrings_say_the_server_commands_are_executed(entry_point)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("timeout", [0, -1, "abc", None, 0.0])
-def test_AIM_21_AC6_bad_timeout_is_refused(timeout):
+def test_bad_timeout_is_refused(timeout):
     with pytest.raises(ConfigurationError) as excinfo:
         AIMClient(
             agent_id="agent-123",
@@ -942,7 +944,7 @@ def test_AIM_21_AC6_bad_timeout_is_refused(timeout):
 
 
 @pytest.mark.parametrize("max_retries", [-1, 1.5, "3"])
-def test_AIM_21_AC6_bad_max_retries_is_refused(max_retries):
+def test_bad_max_retries_is_refused(max_retries):
     with pytest.raises(ConfigurationError) as excinfo:
         AIMClient(
             agent_id="agent-123",
@@ -956,13 +958,13 @@ def test_AIM_21_AC6_bad_max_retries_is_refused(max_retries):
 @pytest.mark.parametrize(
     "aim_url", ["not a url", "aim.example.com", "ftp://aim.example.com", "http://"]
 )
-def test_AIM_21_AC6_bad_aim_url_is_refused(aim_url):
+def test_bad_aim_url_is_refused(aim_url):
     with pytest.raises(ConfigurationError) as excinfo:
         AIMClient(agent_id="agent-123", api_key="k", aim_url=aim_url)
     assert "aim_url" in str(excinfo.value)
 
 
-def test_AIM_21_AC6_good_arguments_are_accepted():
+def test_good_arguments_are_accepted():
     """Negative control, and the reason agent_id is not UUID-validated: 13
     committed tests construct clients with ids of exactly this shape."""
     client = AIMClient(
@@ -977,7 +979,7 @@ def test_AIM_21_AC6_good_arguments_are_accepted():
     assert client.aim_url == "http://localhost:8080"
 
 
-def test_AIM_21_AC6_mcp_detector_sdk_version_is_validated():
+def test_mcp_detector_sdk_version_is_validated():
     with pytest.raises(TypeError):
         MCPDetector(sdk_version=123)
     with pytest.raises(ValueError):
@@ -1023,7 +1025,7 @@ def corrupt_claude_config(tmp_path, monkeypatch):
     ],
     ids=["detect_from_claude_config", "detect_all", "detect_with_tools"],
 )
-def test_AIM_21_AC7_corrupt_config_returns_empty_and_warns_once(
+def test_corrupt_config_returns_empty_and_warns_once(
     corrupt_claude_config, call
 ):
     detector = MCPDetector()
@@ -1044,7 +1046,7 @@ def test_AIM_21_AC7_corrupt_config_returns_empty_and_warns_once(
     )
 
 
-def test_AIM_21_AC7_corrupt_config_never_raises(corrupt_claude_config):
+def test_corrupt_config_never_raises(corrupt_claude_config):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         detector = MCPDetector()
@@ -1067,7 +1069,7 @@ DOCUMENTED_SEARCH_PATHS = [
 NOT_SEARCHED_PATHS = ["~/.cursor/mcp.json", "./.cursor/mcp.json", "./mcp.json"]
 
 
-def test_AIM_21_AC8_docstring_lists_exactly_the_searched_paths_in_order():
+def test_docstring_lists_exactly_the_searched_paths_in_order():
     doc = MCPDetector.detect_from_claude_config.__doc__
     positions = []
     for path in DOCUMENTED_SEARCH_PATHS:
@@ -1083,7 +1085,7 @@ def test_AIM_21_AC8_docstring_lists_exactly_the_searched_paths_in_order():
     )
 
 
-def test_AIM_21_AC8_search_matches_the_documented_list_on_this_platform(
+def test_search_matches_the_documented_list_on_this_platform(
     tmp_path, monkeypatch
 ):
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -1111,7 +1113,7 @@ def test_AIM_21_AC8_search_matches_the_documented_list_on_this_platform(
     assert searched == expected
 
 
-def test_AIM_21_AC8_xdg_config_location_is_actually_searched(tmp_path, monkeypatch):
+def test_xdg_config_location_is_actually_searched(tmp_path, monkeypatch):
     """The functional half: a config only Claude Desktop's Linux location holds
     is found, where before the search never looked there."""
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -1130,7 +1132,7 @@ def test_AIM_21_AC8_xdg_config_location_is_actually_searched(tmp_path, monkeypat
     )
 
 
-def test_AIM_21_AC8_unsearched_locations_are_named_as_unsearched(tmp_path, monkeypatch):
+def test_unsearched_locations_are_named_as_unsearched(tmp_path, monkeypatch):
     doc = MCPDetector.detect_from_claude_config.__doc__
     for path in NOT_SEARCHED_PATHS:
         assert path in doc, f"{path} is neither searched nor documented as unsearched"
@@ -1157,7 +1159,7 @@ DETECTION_MODULES = [
 @pytest.mark.parametrize(
     "module", DETECTION_MODULES, ids=lambda m: m.__name__.rsplit(".", 1)[-1]
 )
-def test_AIM_21_AC9_module_defines_all_and_every_name_resolves(module):
+def test_module_defines_all_and_every_name_resolves(module):
     exported = getattr(module, "__all__", None)
     assert exported, f"{module.__name__} defines no __all__"
     for name in exported:
@@ -1171,7 +1173,7 @@ def test_AIM_21_AC9_module_defines_all_and_every_name_resolves(module):
     "module_path",
     ["aim_sdk.detection", "aim_sdk.protocol_detection", "aim_sdk.capability_detection"],
 )
-def test_AIM_21_AC9_star_import_binds_no_stdlib_or_typing_name(module_path):
+def test_star_import_binds_no_stdlib_or_typing_name(module_path):
     # tests/star_imports/<name>.py performs the real star import; see that package.
     bound = star_namespace(module_path.rsplit(".", 1)[1])
 
@@ -1184,7 +1186,7 @@ def test_AIM_21_AC9_star_import_binds_no_stdlib_or_typing_name(module_path):
     assert bound == set(sys.modules[module_path].__all__)
 
 
-def test_AIM_21_AC9_package_all_resolves_to_non_module_attributes():
+def test_package_all_resolves_to_non_module_attributes():
     for name in aim_sdk.__all__:
         assert hasattr(aim_sdk, name), f"aim_sdk.__all__ names {name!r}, absent"
         assert not isinstance(getattr(aim_sdk, name), types.ModuleType), (
@@ -1201,7 +1203,7 @@ def _run_cli(argv):
         return cli.main()
 
 
-def test_AIM_21_AC10_status_json_unauthenticated_is_one_object_and_exit_1(
+def test_status_json_unauthenticated_is_one_object_and_exit_1(
     isolated_home, capsys
 ):
     code = _run_cli(["status", "--json"])
@@ -1218,7 +1220,7 @@ def test_AIM_21_AC10_status_json_unauthenticated_is_one_object_and_exit_1(
     assert err == ""
 
 
-def test_AIM_21_AC10_status_json_authenticated_reports_the_credentials(
+def test_status_json_authenticated_reports_the_credentials(
     isolated_home, capsys
 ):
     aim_dir = isolated_home / ".aim"
@@ -1245,7 +1247,7 @@ def test_AIM_21_AC10_status_json_authenticated_reports_the_credentials(
     assert payload["tokenState"] == "unknown"
 
 
-def test_AIM_21_AC10_version_json_reports_the_installed_version(capsys):
+def test_version_json_reports_the_installed_version(capsys):
     code = _run_cli(["version", "--json"])
     out, _ = capsys.readouterr()
 
@@ -1253,7 +1255,7 @@ def test_AIM_21_AC10_version_json_reports_the_installed_version(capsys):
     assert json.loads(out) == {"version": aim_sdk.__version__}
 
 
-def test_AIM_21_AC10_help_verb_and_bare_invocation_both_exit_zero(capsys):
+def test_help_verb_and_bare_invocation_both_exit_zero(capsys):
     help_code = _run_cli(["help"])
     help_out, _ = capsys.readouterr()
 
@@ -1268,7 +1270,7 @@ def test_AIM_21_AC10_help_verb_and_bare_invocation_both_exit_zero(capsys):
         assert command in help_out
 
 
-def test_AIM_21_AC10_human_output_is_unchanged_without_the_flag(isolated_home, capsys):
+def test_human_output_is_unchanged_without_the_flag(isolated_home, capsys):
     """Negative control: --json adds a rendering, it does not replace one."""
     code = _run_cli(["status"])
     out, _ = capsys.readouterr()
@@ -1300,7 +1302,7 @@ def _smoke_matrix_rows():
     return rows
 
 
-def test_AIM_21_AC11_matrix_has_a_python_sdk_row_with_the_verbatim_run_command():
+def test_matrix_has_a_python_sdk_row_with_the_verbatim_run_command():
     rows = [r for r in _smoke_matrix_rows() if SMOKE_RUN_COMMAND in r[-1]]
     assert len(rows) == 1, (
         "expected exactly one component smoke row whose run command is the "
@@ -1315,7 +1317,7 @@ def test_AIM_21_AC11_matrix_has_a_python_sdk_row_with_the_verbatim_run_command()
     assert "installed" in verifies, verifies
 
 
-def test_AIM_21_AC11_the_asserted_expression_is_true_of_this_tree():
+def test_the_asserted_expression_is_true_of_this_tree():
     from aim_sdk import detection
 
     assert detection.MCPDetector().sdk_version == (
@@ -1342,7 +1344,7 @@ def _sent_sdk_version(fake):
     return body["detections"][0]["sdkVersion"]
 
 
-def test_AIM_21_AC12_omitted_sdk_version_sends_the_installed_version(
+def test_omitted_sdk_version_sends_the_installed_version(
     fake_aim_factory,
 ):
     fake = _report_fake(fake_aim_factory)
@@ -1353,7 +1355,7 @@ def test_AIM_21_AC12_omitted_sdk_version_sends_the_installed_version(
     assert _sent_sdk_version(fake) == f"aim-sdk-python@{aim_sdk.__version__}"
 
 
-def test_AIM_21_AC12_explicit_none_sends_the_installed_version(fake_aim_factory):
+def test_explicit_none_sends_the_installed_version(fake_aim_factory):
     fake = _report_fake(fake_aim_factory)
     client = _api_key_client(fake.url)
 
@@ -1363,7 +1365,7 @@ def test_AIM_21_AC12_explicit_none_sends_the_installed_version(fake_aim_factory)
 
 
 @pytest.mark.parametrize("style", ["positional", "keyword"])
-def test_AIM_21_AC12_explicit_version_is_sent_unchanged(fake_aim_factory, style):
+def test_explicit_version_is_sent_unchanged(fake_aim_factory, style):
     fake = _report_fake(fake_aim_factory)
     client = _api_key_client(fake.url)
     explicit = "aim-sdk-python@0.0.1-explicit"
@@ -1376,7 +1378,7 @@ def test_AIM_21_AC12_explicit_version_is_sent_unchanged(fake_aim_factory, style)
     assert _sent_sdk_version(fake) == explicit
 
 
-def test_AIM_21_AC12_signature_default_is_none():
+def test_signature_default_is_none():
     import inspect
 
     default = inspect.signature(
@@ -1385,7 +1387,7 @@ def test_AIM_21_AC12_signature_default_is_none():
     assert default is None
 
 
-def test_AIM_21_AC12_client_docstring_names_the_replacement_api():
+def test_client_docstring_names_the_replacement_api():
     doc = AIMClient.__doc__
     assert "verify_capability" in doc, doc
     assert "aim_sdk.decision.VerificationDecision" in doc, doc
@@ -1417,13 +1419,13 @@ def _section_above_2_0_3():
 
 
 @pytest.mark.parametrize("marker", CHANGELOG_MARKERS)
-def test_AIM_21_AC13_changelog_documents_each_fix_above_the_2_0_3_heading(marker):
+def test_changelog_documents_each_fix_above_the_2_0_3_heading(marker):
     assert marker in _section_above_2_0_3(), (
         f"no CHANGELOG entry above the [2.0.3] heading documents: {marker}"
     )
 
 
-def test_AIM_21_AC13_this_file_touches_only_loopback_and_its_own_fixture_script():
+def test_this_file_touches_only_loopback_and_its_own_fixture_script():
     hosts = set(re.findall(r"https?://([A-Za-z0-9.\-]+)", THIS_FILE))
     allowed = {"127.0.0.1", "localhost", "aim.example.com"}
     assert hosts <= allowed, f"non-loopback host in this test file: {hosts - allowed}"
@@ -1446,7 +1448,7 @@ CHANGED_STRINGS = [
 
 
 @pytest.mark.parametrize("needle", CHANGED_STRINGS)
-def test_AIM_21_AC13_no_pre_existing_test_asserts_on_a_string_this_batch_changes(
+def test_no_pre_existing_test_asserts_on_a_string_this_batch_changes(
     needle,
 ):
     offenders = []
@@ -1464,7 +1466,7 @@ def test_AIM_21_AC13_no_pre_existing_test_asserts_on_a_string_this_batch_changes
     )
 
 
-def test_AIM_21_AC13_the_committed_protocol_assertions_are_unchanged():
+def test_the_committed_protocol_assertions_are_unchanged():
     lines = (SDK_DIR / "tests" / "test_protocol_detection.py").read_text(
         encoding="utf-8"
     ).splitlines()

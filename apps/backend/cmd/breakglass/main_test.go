@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -174,4 +175,58 @@ func TestARefusedConnectionStringIsNotEchoed(t *testing.T) {
 	require.Contains(t, stderr.String(), "not one the driver accepts")
 	require.NotContains(t, stderr.String(), secret)
 	require.Empty(t, stdout.String())
+}
+
+// A connection string the driver would accept but for PGCLIENTENCODING or
+// PGDATESTYLE, which it reads from the environment, exits 2 with the name of
+// the variable, as aim-bootstrap answers it, and not as a refused connection
+// string. The answer holds neither the string nor the variable's value.
+func TestADriverVariableRefusedFromTheEnvironmentIsNamed(t *testing.T) {
+	const secret = "not-a-real-password-1234"
+	databaseURL := "postgres://aim:" + secret + "@db.internal:6543/aim?sslmode=disable"
+	serverVariables := map[string]string{
+		"POSTGRES_HOST": "db.internal", "POSTGRES_PORT": "6543", "POSTGRES_USER": "aim",
+		"POSTGRES_PASSWORD": secret, "POSTGRES_DB": "aim",
+	}
+	for _, tc := range []struct {
+		name   string
+		env    map[string]string
+		driver map[string]string
+		want   string
+	}{
+		{"PGCLIENTENCODING with DATABASE_URL", map[string]string{"DATABASE_URL": databaseURL},
+			map[string]string{"PGCLIENTENCODING": "LATIN1"}, "PGCLIENTENCODING must be unset or UTF8"},
+		{"PGCLIENTENCODING with the POSTGRES_* variables", serverVariables,
+			map[string]string{"PGCLIENTENCODING": "LATIN1"}, "PGCLIENTENCODING must be unset or UTF8"},
+		{"PGDATESTYLE with DATABASE_URL", map[string]string{"DATABASE_URL": databaseURL},
+			map[string]string{"PGDATESTYLE": "German"}, `PGDATESTYLE must be unset or "ISO, MDY"`},
+		{"both with DATABASE_URL", map[string]string{"DATABASE_URL": databaseURL},
+			map[string]string{"PGCLIENTENCODING": "LATIN1", "PGDATESTYLE": "German"},
+			`PGCLIENTENCODING must be unset or UTF8, and PGDATESTYLE must be unset or "ISO, MDY"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The driver reads these two from the process environment, not
+			// from the getenv run is given.
+			for _, name := range []string{"PGCLIENTENCODING", "PGDATESTYLE"} {
+				value, set := tc.driver[name]
+				t.Setenv(name, value)
+				if !set {
+					// The Setenv above restores the variable when the test ends.
+					require.NoError(t, os.Unsetenv(name))
+				}
+			}
+
+			var stdout, stderr bytes.Buffer
+			code := run(context.Background(),
+				[]string{"chain", "status", "--organization", "1b4e28ba-2fa1-11d2-883f-0016d3cca427"},
+				envOf(tc.env), &stdout, &stderr)
+			require.Equal(t, exitUsage, code, stderr.String())
+			require.Contains(t, stderr.String(), "aim-breakglass: the driver refuses a setting it reads from the environment, not from the database connection string: "+tc.want)
+			require.NotContains(t, stderr.String(), "not one the driver accepts")
+			for _, part := range []string{secret, "db.internal", "6543", "LATIN1", "German"} {
+				require.NotContains(t, stderr.String(), part)
+			}
+			require.Empty(t, stdout.String())
+		})
+	}
 }

@@ -178,6 +178,14 @@ that is set, and otherwise from the line that matches the login in the
 password file `PGPASSFILE` names, or in `.pgpass` in the home directory when
 `PGPASSFILE` is unset or empty. With none of these, an empty password is sent.
 
+The driver skips the password file, as if it were absent, when the group or
+others can read or write it, or when its owner or others can execute it. Make
+the file readable and writable by its owner only:
+
+```bash
+chmod 0600 ~/.pgpass
+```
+
 The driver also reads `PGCLIENTENCODING` and `PGDATESTYLE`. It accepts `UTF8`
 and `ISO, MDY` for them. When one holds a value the driver refuses, `LATIN1`
 for example, and the connection string does not set the same setting,

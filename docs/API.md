@@ -200,6 +200,8 @@ Authorization: Bearer YOUR_JWT_TOKEN
 - `agentType` (optional): Keep the agents whose type is exactly this value (for example `ai_agent` or `langchain`). The server reads `agent_type` when `agentType` is absent or empty.
 
 A filter value that no agent holds returns no agents. An empty filter value does not filter.
+A filter value that is not valid UTF-8 or holds a NUL character is answered `400 Bad Request` with an error that names
+the parameter, for example `{"error": "status must be UTF-8 text without a NUL character"}`.
 
 **Response:**
 

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -202,27 +204,43 @@ func agentResponse(agent *domain.Agent, capabilities []string, agentTags []*doma
 // agentListFilter reads the filter of an agent list from the query: status,
 // and the agent type as agentType or, when that is absent or empty, as
 // agent_type, the spelling the Python SDK sends. A parameter that is absent or
-// empty does not filter.
-func agentListFilter(c fiber.Ctx) domain.AgentListFilter {
-	agentType := c.Query("agentType")
+// empty does not filter. A value that is not valid UTF-8 or holds a NUL
+// character is an error that names the parameter: PostgreSQL refuses such a
+// value as text, so no agent could be compared with it.
+func agentListFilter(c fiber.Ctx) (domain.AgentListFilter, error) {
+	status := c.Query("status")
+	agentTypeParam, agentType := "agentType", c.Query("agentType")
 	if agentType == "" {
-		agentType = c.Query("agent_type")
+		agentTypeParam, agentType = "agent_type", c.Query("agent_type")
+	}
+	for _, param := range []struct{ name, value string }{
+		{"status", status},
+		{agentTypeParam, agentType},
+	} {
+		if !utf8.ValidString(param.value) || strings.ContainsRune(param.value, 0) {
+			return domain.AgentListFilter{}, fmt.Errorf("%s must be UTF-8 text without a NUL character", param.name)
+		}
 	}
 	return domain.AgentListFilter{
-		Status:    domain.AgentStatus(c.Query("status")),
+		Status:    domain.AgentStatus(status),
 		AgentType: domain.AgentType(agentType),
-	}
+	}, nil
 }
 
 // ListAgents returns agents for the organization. Optional limit/offset
 // query parameters page server-side; without them all agents are
 // returned (existing client behavior). Optional status and agentType query
 // parameters keep the agents whose status and type equal them; total then
-// counts the agents that pass, on every page.
+// counts the agents that pass, on every page. A filter value that is not
+// valid UTF-8 or holds a NUL character is answered 400.
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
 		return err
+	}
+	filter, err := agentListFilter(c)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	limit := 0
@@ -238,7 +256,7 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 		}
 	}
 
-	agents, total, err := h.agentService.ListAgentsFiltered(c.Context(), orgID, agentListFilter(c), limit, offset)
+	agents, total, err := h.agentService.ListAgentsFiltered(c.Context(), orgID, filter, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents",

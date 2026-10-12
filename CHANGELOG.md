@@ -11,12 +11,55 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `GET /api/v1/agents` answers 400 for a status or agent type that is not UTF-8 text or holds a NUL character (#716)
+
+- The handler answers `400` with `{"error": "<parameter> must be UTF-8 text without a NUL character"}`, naming
+  `status`, `agentType` or `agent_type`, and sends no statement to the database. PostgreSQL refuses such a value as a
+  text parameter.
+- Measured with the handler of the previous commit, wired to its agent service and repository over PostgreSQL 18.3:
+  `status=%00`, `status=a%00b`, `status=%ff`, `status=%c3%28`, `status=%ff&limit=5`, `agentType=%ff` and
+  `agent_type=%00` were each answered 500 `{"error":"Failed to fetch agents"}`. A value that is valid UTF-8, such as
+  `agentType=%e2%82%ac`, is still a filter, and was answered 200 with no agents before and after.
+- `docs/API.md` states the 400.
+- Tests: `TestListAgents_FilterValueThatIsNotUTF8TextIsABadRequest` and
+  `TestListAgents_FilterValueOutsideASCIIIsAPredicate` in
+  `apps/backend/internal/interfaces/http/handlers/agent_handler_list_filter_test.go`.
+
+### Fixed — `aim-breakglass` names `PGCLIENTENCODING` or `PGDATESTYLE` when the driver refuses it, as `aim-bootstrap` does (#716)
+
+- The two commands share one check, `DriverEnvironmentRefusal` in `apps/backend/internal/config`. When the driver
+  refuses the connection string only for one of the two variables, `aim-breakglass` exits 2 with `aim-breakglass: the
+  driver refuses a setting it reads from the environment, not from the database connection string:` followed by
+  `PGCLIENTENCODING must be unset or UTF8`, by `PGDATESTYLE must be unset or "ISO, MDY"`, or by both. Any other
+  refused string still ends the run with `the database connection string is not one the driver accepts`.
+- Measured with a binary built from the previous commit, with `DATABASE_URL` and again with the `POSTGRES_*`
+  variables naming a PostgreSQL 18.3 server: `PGCLIENTENCODING=LATIN1`, `PGDATESTYLE=German` and the two together
+  each ended `aim-breakglass chain status --organization <id>` with exit code 2 and
+  `aim-breakglass: the database connection string is not one the driver accepts`.
+- Test: `TestADriverVariableRefusedFromTheEnvironmentIsNamed` in `apps/backend/cmd/breakglass/main_test.go`.
+
+### Fixed — the bootstrap guide says which modes of the password file the driver reads (#716)
+
+- `docs/guides/BOOTSTRAP_GUIDE.md`, the #709 entry below and the comment on the server's connection string say that
+  the driver (lib/pq 1.10.9) skips the password file, as if it were absent, when the group or others can read or
+  write it, or when its owner or others can execute it, and that the file needs mode `0600`.
+- Measured with `aim-server migrate` built from the previous commit against PostgreSQL 18.3 with `scram-sha-256`
+  authentication, with `POSTGRES_PASSWORD`, `PGPASSWORD` and `PGPASSFILE` unset and the role's line in `.pgpass` in
+  the home directory: at modes `0600`, `0400` and `0610` the command exited 0; at `0644`, `0640`, `0660`, `0604`,
+  `0601` and `0700` it exited 1 with `pq: password authentication failed for user "aim"`. `aim-bootstrap --default
+  --yes` exited 1 with that error at mode `0644` and 0 at mode `0600`.
+- Tests: `TestEmptyPostgresPassword_ServerAndBootstrapSendThePasswordOfPgpassInTheHomeDirectory`, with `PGPASSFILE`
+  unset and with it set and empty, and `TestEmptyPostgresPassword_PgpassModeDecidesWhetherTheDriverReadsIt`, in
+  `apps/backend/cmd/server/database_conn_string_test.go`.
+
 ### Fixed — with `POSTGRES_PASSWORD` empty, the server takes the database password from `PGPASSWORD` or the password file, as `aim-bootstrap` does (#709)
 
 - The server leaves an empty `POSTGRES_PASSWORD` out of its connection string, as the URL `aim-bootstrap` builds leaves
   it out. The driver (lib/pq 1.10.9) then takes the password from `PGPASSWORD` when that is set, otherwise from the
   line that matches the login in the password file `PGPASSFILE` names, or in `.pgpass` in the home directory when
-  `PGPASSFILE` is unset or empty, and sends an empty password when none of these gives one. `aim-server migrate` opens
+  `PGPASSFILE` is unset or empty, and sends an empty password when none of these gives one. The driver skips a password
+  file, as if it were absent, when the group or others can read or write it, or when its owner or others can execute
+  it, so the file needs mode `0600` (`chmod 0600 ~/.pgpass`). `aim-server migrate` opens
   the database with the same string. A `POSTGRES_PASSWORD` that is set is still the password sent, whatever
   `PGPASSWORD` and the password file hold.
 - The server wrote an empty password as `password=''`. With that setting the driver sent an empty password in each of

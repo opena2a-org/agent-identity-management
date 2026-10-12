@@ -1,5 +1,5 @@
 """
-AIM-14 -- aim-sdk (Python): the five P2 findings from the 2.0.2 release test.
+aim-sdk (Python): the five P2 findings from the 2.0.2 release test.
 
 AC1  `aim-sdk login` fails fast and bounded on an unreachable server: a dead
      loopback port exits non-zero within a stated bound, names the URL, and
@@ -226,7 +226,7 @@ def _run_login_bounded(args, seconds):
     return (not thread.is_alive()), result.get("rc")
 
 
-def test_AIM_14_AC1_dead_url_exits_nonzero_fast_names_url_and_opens_no_browser(
+def test_dead_url_exits_nonzero_fast_names_url_and_opens_no_browser(
     monkeypatch, capsys, closed_port
 ):
     url = f"http://127.0.0.1:{closed_port}"
@@ -246,7 +246,7 @@ def test_AIM_14_AC1_dead_url_exits_nonzero_fast_names_url_and_opens_no_browser(
     assert opened == [], "webbrowser.open must not be called when the pre-flight probe fails"
 
 
-def test_AIM_14_AC1_device_login_wait_is_bounded_by_the_code_lifetime_and_times_out_nonzero(
+def test_device_login_wait_is_bounded_by_the_code_lifetime_and_times_out_nonzero(
     monkeypatch, capsys, server_factory
 ):
     # The server issues a device code that lives 2 s and never approves it: the
@@ -294,7 +294,7 @@ def _prose_of(section):
     return "\n".join(parts[0::2])
 
 
-def test_AIM_14_AC2_readme_manual_mode_example_carries_aim_url_and_states_it():
+def test_readme_manual_mode_example_carries_aim_url_and_states_it():
     section = _manual_mode_section()
     example_lines = [
         line for line in section.splitlines()
@@ -311,7 +311,7 @@ def test_AIM_14_AC2_readme_manual_mode_example_carries_aim_url_and_states_it():
     )
 
 
-def test_AIM_14_AC2_secure_with_api_key_and_no_aim_url_raises_the_documented_requirement(
+def test_secure_with_api_key_and_no_aim_url_raises_the_documented_requirement(
     monkeypatch,
 ):
     _no_stored_credentials(monkeypatch)
@@ -323,7 +323,7 @@ def test_AIM_14_AC2_secure_with_api_key_and_no_aim_url_raises_the_documented_req
 # --------------------------------------------------------------------------- #
 # AC3 -- the no-credentials error names the real fixes.
 # --------------------------------------------------------------------------- #
-def test_AIM_14_AC3_no_credentials_error_names_login_command_and_aim_url_requirement(
+def test_no_credentials_error_names_login_command_and_aim_url_requirement(
     monkeypatch,
 ):
     _no_stored_credentials(monkeypatch)
@@ -342,7 +342,7 @@ def test_AIM_14_AC3_no_credentials_error_names_login_command_and_aim_url_require
 # --------------------------------------------------------------------------- #
 # AC4 -- unreached is not DENIED, and an unverified run is recorded.
 # --------------------------------------------------------------------------- #
-def test_AIM_14_AC4_unreachable_check_is_not_denied_and_the_run_is_recorded(
+def test_unreachable_check_is_not_denied_and_the_run_is_recorded(
     closed_port, security_events
 ):
     client = _api_key_client(f"http://127.0.0.1:{closed_port}")
@@ -379,7 +379,7 @@ def test_AIM_14_AC4_unreachable_check_is_not_denied_and_the_run_is_recorded(
     assert executed[0].action == "db:read"
 
 
-def test_AIM_14_AC4_unverified_require_approval_run_is_recorded(
+def test_unverified_require_approval_run_is_recorded(
     closed_port, security_events, capsys
 ):
     client = _api_key_client(f"http://127.0.0.1:{closed_port}")
@@ -403,7 +403,7 @@ def test_AIM_14_AC4_unverified_require_approval_run_is_recorded(
 # --------------------------------------------------------------------------- #
 # AC5 -- a 401 on verification is not the policy-denial literal.
 # --------------------------------------------------------------------------- #
-def test_AIM_14_AC5_authentication_failure_result_is_distinguishable_from_denied(
+def test_authentication_failure_result_is_distinguishable_from_denied(
     server_factory, security_events
 ):
     server = server_factory(lambda method, path: (401, {}, '{"error":"bad key"}'))
@@ -421,7 +421,7 @@ def test_AIM_14_AC5_authentication_failure_result_is_distinguishable_from_denied
         )
 
 
-def test_AIM_14_AC5_a_real_policy_denial_still_renders_denied(
+def test_a_real_policy_denial_still_renders_denied(
     server_factory, security_events
 ):
     body = json.dumps(
@@ -464,7 +464,7 @@ def _registration_scenario(register_status, register_body):
     [(404, '{"error":"not found"}'), (401, '{"error":"bad key"}')],
     ids=["404", "401"],
 )
-def test_AIM_14_AC6_rejected_registration_prints_no_registered_line(
+def test_rejected_registration_prints_no_registered_line(
     server_factory, capsys, register_status, register_body
 ):
     server = server_factory(_registration_scenario(register_status, register_body))
@@ -482,7 +482,7 @@ def test_AIM_14_AC6_rejected_registration_prints_no_registered_line(
     )
 
 
-def test_AIM_14_AC6_500_registration_path_still_prints_only_a_warning(
+def test_500_registration_path_still_prints_only_a_warning(
     server_factory, capsys
 ):
     server = server_factory(_registration_scenario(500, '{"error":"boom"}'))
@@ -499,7 +499,7 @@ def test_AIM_14_AC6_500_registration_path_still_prints_only_a_warning(
     )
 
 
-def test_AIM_14_AC6_granted_registration_announces_exactly_once(
+def test_granted_registration_announces_exactly_once(
     server_factory, capsys
 ):
     granted = json.dumps({"status": "granted", "message": "ok"})
@@ -525,7 +525,7 @@ def test_AIM_14_AC6_granted_registration_announces_exactly_once(
 # --------------------------------------------------------------------------- #
 # AC7 -- the tree's own record of the batch is coherent.
 # --------------------------------------------------------------------------- #
-def test_AIM_14_AC7_changelog_documents_the_batch_under_a_post_2_0_2_section():
+def test_changelog_documents_the_batch_under_a_post_2_0_2_section():
     text = CHANGELOG.read_text(encoding="utf-8")
     headings = re.findall(r"^## \[(\d+)\.(\d+)\.(\d+)\]", text, re.M)
     assert headings, "CHANGELOG must keep its versioned sections"
@@ -555,7 +555,7 @@ def test_AIM_14_AC7_changelog_documents_the_batch_under_a_post_2_0_2_section():
         )
 
 
-def test_AIM_14_AC7_readme_credentials_guidance_matches_the_delivered_error(
+def test_readme_credentials_guidance_matches_the_delivered_error(
     monkeypatch,
 ):
     assert "aim-sdk login" in README.read_text(encoding="utf-8"), (
@@ -569,7 +569,7 @@ def test_AIM_14_AC7_readme_credentials_guidance_matches_the_delivered_error(
     )
 
 
-def test_AIM_14_AC7_this_file_touches_only_loopback():
+def test_this_file_touches_only_loopback():
     source = Path(__file__).read_text(encoding="utf-8")
     for host in re.findall(r"http://([\w\.\-:]+)", source):
         assert host.startswith("127.0.0.1") or host.startswith("localhost"), (

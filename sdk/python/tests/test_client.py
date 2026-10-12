@@ -3,7 +3,6 @@ Tests for AIMClient
 """
 
 import base64
-import json
 import warnings
 import pytest
 import responses
@@ -246,7 +245,6 @@ class TestVerifyAction:
         """
         import time as _time
         from nacl.signing import VerifyKey
-        from nacl.encoding import Base64Encoder
 
         responses.add(
             responses.POST,
@@ -313,7 +311,6 @@ class TestVerifyAction:
         server-returned verification_id is uppercase, the request must still
         verify server-side.
         """
-        import time as _time
         from nacl.signing import VerifyKey
 
         # Force uppercase on the client's stored agent_id.

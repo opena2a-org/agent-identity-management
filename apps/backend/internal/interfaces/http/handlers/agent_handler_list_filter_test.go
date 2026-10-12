@@ -180,6 +180,51 @@ func TestListAgents_FilterParametersBecomePredicates(t *testing.T) {
 	}
 }
 
+// A filter value that is not valid UTF-8 or holds a NUL character is answered
+// 400 with the name of its parameter, and no statement reaches the database.
+// PostgreSQL refuses such a value as a text parameter, and the handler
+// answered that refusal 500 "Failed to fetch agents".
+func TestListAgents_FilterValueThatIsNotUTF8TextIsABadRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		query string
+		param string
+	}{
+		{name: "status is a NUL character", query: "?status=%00", param: "status"},
+		{name: "status holds a NUL character", query: "?status=verified%00", param: "status"},
+		{name: "status is a byte that is not UTF-8", query: "?status=%ff", param: "status"},
+		{name: "status is a truncated UTF-8 sequence", query: "?status=%e2%82", param: "status"},
+		{name: "agentType is a byte that is not UTF-8", query: "?agentType=%ff", param: "agentType"},
+		{name: "agentType holds a NUL character", query: "?agentType=lang%00chain", param: "agentType"},
+		{name: "agent_type is a NUL character", query: "?agent_type=%00", param: "agent_type"},
+		{name: "an empty agentType leaves agent_type", query: "?agentType=&agent_type=%c3%28", param: "agent_type"},
+		{name: "with a limit and a valid agent type", query: "?limit=10&status=%ff&agentType=langchain", param: "status"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			status, body := listAgentsOverSQL(t, uuid.New(), "/agents"+tc.query, func(sqlmock.Sqlmock) {})
+
+			assert.Equal(t, fiber.StatusBadRequest, status)
+			assert.Equal(t, tc.param+" must be UTF-8 text without a NUL character", body["error"])
+		})
+	}
+}
+
+// A value that is valid UTF-8 outside ASCII is a predicate like any other.
+func TestListAgents_FilterValueOutsideASCIIIsAPredicate(t *testing.T) {
+	orgID := uuid.New()
+	const where = "organization_id = $1 AND agent_type = $2"
+
+	status, body := listAgentsOverSQL(t, orgID, "/agents?agentType=%e2%82%ac", func(mock sqlmock.Sqlmock) {
+		mock.ExpectQuery(agentListSQL(where)+`\s*$`).
+			WithArgs(orgID, "\xe2\x82\xac").
+			WillReturnRows(sqlmock.NewRows(agentListColumns))
+	})
+
+	assert.Equal(t, fiber.StatusOK, status)
+	assert.Empty(t, body["agents"])
+	assert.Equal(t, float64(0), body["total"])
+}
+
 // With a limit, the total of a filtered list counts the agents that pass the
 // filter, not the organization's agents and not the rows of the page.
 func TestListAgents_FilteredTotalCountsTheAgentsThatPass(t *testing.T) {

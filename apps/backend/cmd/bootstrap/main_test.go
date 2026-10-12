@@ -279,8 +279,8 @@ func TestOpenDatabase_NamesTheEnvironmentVariableTheDriverRefuses(t *testing.T) 
 				}
 				return
 			}
-			if !errors.Is(err, errDriverEnvironmentRefused) || errors.Is(err, errConnectionStringRefused) {
-				t.Errorf("openDatabase answered %q, want errDriverEnvironmentRefused: the driver accepts this string without the variable", err)
+			if !errors.Is(err, serverconfig.ErrDriverEnvironmentRefused) || errors.Is(err, errConnectionStringRefused) {
+				t.Errorf("openDatabase answered %q, want ErrDriverEnvironmentRefused: the driver accepts this string without the variable", err)
 			}
 			for _, name := range []string{"PGCLIENTENCODING", "PGDATESTYLE"} {
 				named := strings.Contains(err.Error(), name)
@@ -418,7 +418,7 @@ func TestMainNamesTheEnvironmentVariableTheDriverRefuses(t *testing.T) {
 		if code != 1 {
 			t.Errorf("%s: exit code %d, want 1", c.variable, code)
 		}
-		if want := "Failed to connect to database: " + errDriverEnvironmentRefused.Error() + ": " + c.want; !strings.Contains(output, want) {
+		if want := "Failed to connect to database: " + serverconfig.ErrDriverEnvironmentRefused.Error() + ": " + c.want; !strings.Contains(output, want) {
 			t.Errorf("%s: the output does not hold %q", c.variable, want)
 		}
 		if strings.Contains(output, errConnectionStringRefused.Error()) {

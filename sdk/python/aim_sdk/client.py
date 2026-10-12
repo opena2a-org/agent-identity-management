@@ -1844,7 +1844,7 @@ class AIMClient:
         Record locally that an action is executing WITHOUT a completed
         verification (the enforcement rule's monitoring / unresolved-mode
         leniency). Without this event the security log showed only the failed
-        check -- rendered DENIED before AIM-14 -- and nothing recording that
+        check -- once rendered DENIED -- and nothing recording that
         the action then ran, so "AIM said no" and "AIM was never asked, and
         the action executed anyway" were indistinguishable to a SOC. No request
         to the server can cover this case: in the unreachable-server scenario

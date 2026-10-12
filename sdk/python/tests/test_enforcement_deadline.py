@@ -1,5 +1,5 @@
 """
-AIM-06 -- one enforcement deadline over the whole verification call (Python).
+One enforcement deadline over the whole verification call (Python).
 
 AC1  `enforcement_timeout` constructor option: resolution order is constructor
      argument, then AIM_ENFORCEMENT_TIMEOUT_MS (integer milliseconds), then the
@@ -192,32 +192,32 @@ def signing_client(url, **kwargs):
 # --------------------------------------------------------------------------- #
 # AC1 -- option, environment variable, default; warn-once on an invalid value.
 # --------------------------------------------------------------------------- #
-def test_AIM_06_AC1_constructor_argument_wins_over_environment_and_default(monkeypatch):
+def test_constructor_argument_wins_over_environment_and_default(monkeypatch):
     monkeypatch.setenv(ENFORCEMENT_TIMEOUT_ENV_VAR, "2000")
     client = api_key_client("http://127.0.0.1:9", enforcement_timeout=1.5)
     assert client.enforcement_timeout == 1.5
 
 
-def test_AIM_06_AC1_environment_variable_wins_over_the_default(monkeypatch):
+def test_environment_variable_wins_over_the_default(monkeypatch):
     monkeypatch.setenv(ENFORCEMENT_TIMEOUT_ENV_VAR, "2500")
     client = api_key_client("http://127.0.0.1:9")
     assert client.enforcement_timeout == 2.5
 
 
-def test_AIM_06_AC1_default_is_the_five_second_module_constant():
+def test_default_is_the_five_second_module_constant():
     client = api_key_client("http://127.0.0.1:9")
     assert client.enforcement_timeout == DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS
     assert DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS == 5.0
 
 
 @pytest.mark.parametrize("raw", ["not-a-number", "2.5", "-100", "0"])
-def test_AIM_06_AC1_invalid_environment_value_falls_back_to_the_default(monkeypatch, raw):
+def test_invalid_environment_value_falls_back_to_the_default(monkeypatch, raw):
     monkeypatch.setenv(ENFORCEMENT_TIMEOUT_ENV_VAR, raw)
     client = api_key_client("http://127.0.0.1:9")
     assert client.enforcement_timeout == 5.0
 
 
-def test_AIM_06_AC1_invalid_environment_value_warns_exactly_once_across_two_constructions(monkeypatch):
+def test_invalid_environment_value_warns_exactly_once_across_two_constructions(monkeypatch):
     warnings_seen = []
     monkeypatch.setattr(
         client_module.console, "warning", lambda message: warnings_seen.append(message)
@@ -236,7 +236,7 @@ def test_AIM_06_AC1_invalid_environment_value_warns_exactly_once_across_two_cons
 # --------------------------------------------------------------------------- #
 # AC2 -- the deadline bounds the whole enforcement call.
 # --------------------------------------------------------------------------- #
-def test_AIM_06_AC2_default_deadline_bounds_a_stalled_verification_post(server_factory):
+def test_default_deadline_bounds_a_stalled_verification_post(server_factory):
     # (a) Defaults, no enforcement option anywhere: the 5.0s module default
     # applies. Base reading at origin/main 5405500a (contract intake, same
     # fixture): raised after 30.01s wall time with 1 accepted connection.
@@ -256,7 +256,7 @@ def test_AIM_06_AC2_default_deadline_bounds_a_stalled_verification_post(server_f
     assert decision.unknown_source is UnknownSource.TRANSPORT
 
 
-def test_AIM_06_AC2_environment_deadline_bounds_a_stalled_verification_post(server_factory, monkeypatch):
+def test_environment_deadline_bounds_a_stalled_verification_post(server_factory, monkeypatch):
     # (b) AIM_ENFORCEMENT_TIMEOUT_MS=2000 in the environment, no constructor
     # argument, `timeout` left at 30. Base reading at origin/main 5405500a
     # (contract intake, same fixture): 30.01s, 1 accepted connection.
@@ -275,7 +275,7 @@ def test_AIM_06_AC2_environment_deadline_bounds_a_stalled_verification_post(serv
     assert excinfo.value.decision.unknown_source is UnknownSource.TRANSPORT
 
 
-def test_AIM_06_AC2_deadline_bounds_the_approval_wait_polls(server_factory):
+def test_deadline_bounds_the_approval_wait_polls(server_factory):
     # (c) The POST answers pending; the following GET is never answered. The
     # deadline (2.0s), not the approval wait's own timeout_seconds (6s), must
     # end the call. Base reading (origin/main 5405500a, host run): 7.02s --
@@ -300,7 +300,7 @@ def test_AIM_06_AC2_deadline_bounds_the_approval_wait_polls(server_factory):
     assert decision.unknown_source is UnknownSource.TRANSPORT
 
 
-def test_AIM_06_AC2_a_429_delay_that_would_cross_the_deadline_is_not_slept(server_factory):
+def test_a_429_delay_that_would_cross_the_deadline_is_not_slept(server_factory):
     # (d) Every POST answers 429 with Retry-After: 4. Base reading
     # (origin/main 5405500a, host run): 8.02s -- two slept retries of 4s each.
     # Only the 3.0s bound is asserted.
@@ -320,7 +320,7 @@ def test_AIM_06_AC2_a_429_delay_that_would_cross_the_deadline_is_not_slept(serve
     assert server.connections == 1
 
 
-def test_AIM_06_AC2_a_timed_out_call_neither_refreshes_nor_evicts_the_cached_mode(server_factory):
+def test_a_timed_out_call_neither_refreshes_nor_evicts_the_cached_mode(server_factory):
     # The 300s mode TTL lives at sdk/python/aim_sdk/decision.py:49
     # (DEFAULT_MODE_TTL_SECONDS = 300, read by the module-level ModeCache).
     agent_id = fresh_agent_id()
@@ -361,11 +361,11 @@ def test_AIM_06_AC2_a_timed_out_call_neither_refreshes_nor_evicts_the_cached_mod
 # --------------------------------------------------------------------------- #
 # AC4 -- what must not have moved.
 # --------------------------------------------------------------------------- #
-def test_AIM_06_AC4_general_timeout_default_is_still_30():
+def test_general_timeout_default_is_still_30():
     assert inspect.signature(AIMClient.__init__).parameters["timeout"].default == 30
 
 
-def test_AIM_06_AC4_approval_wait_timeout_seconds_default_is_still_300():
+def test_approval_wait_timeout_seconds_default_is_still_300():
     assert (
         inspect.signature(AIMClient._decide_capability).parameters["timeout_seconds"].default
         == 300
@@ -376,12 +376,12 @@ def test_AIM_06_AC4_approval_wait_timeout_seconds_default_is_still_300():
     )
 
 
-def test_AIM_06_AC4_mode_ttl_is_still_300_seconds():
+def test_mode_ttl_is_still_300_seconds():
     assert DEFAULT_MODE_TTL_SECONDS == 300
     assert get_mode_cache().ttl_seconds == 300
 
 
-def test_AIM_06_AC4_no_seconds_spelled_environment_variable_exists_in_either_sdk():
+def test_no_seconds_spelled_environment_variable_exists_in_either_sdk():
     # The contract's negative grep: only the milliseconds-suffixed environment
     # variable may exist under sdk/ — no seconds-suffixed variant (short or
     # long form) and no bare assignment of the un-suffixed name. The patterns
@@ -411,7 +411,7 @@ def test_AIM_06_AC4_no_seconds_spelled_environment_variable_exists_in_either_sdk
     assert offenders == []
 
 
-def test_AIM_06_AC4_env_value_2000_is_a_two_second_deadline_not_2000_seconds(monkeypatch):
+def test_env_value_2000_is_a_two_second_deadline_not_2000_seconds(monkeypatch):
     monkeypatch.setenv(ENFORCEMENT_TIMEOUT_ENV_VAR, "2000")
     client = api_key_client("http://127.0.0.1:9")
     assert client.enforcement_timeout == 2.0
