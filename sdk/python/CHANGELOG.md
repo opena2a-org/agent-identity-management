@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/LANGCHAIN_INTEGRATION.md` says that no result is posted. At the repository root, the decorator example in
   `docs/sdk/python.md` and the capability verification pattern in `examples/README.md` no longer call the method.
 - Tests: `TestLogActionResult` and `TestPerformActionDecorator` in `tests/test_client.py`,
-  `test_no_entry_point_posts_to_the_result_route` in `tests/test_enforcement_matrix.py`, and the two
-  `test_AIM_16_AC5_*_issues_no_request` tests in `tests/test_aim16_p3_release_findings.py`.
+  `test_no_entry_point_posts_to_the_result_route` in `tests/test_enforcement_matrix.py`, and
+  `test_absent_verification_id_issues_no_request` and `test_present_verification_id_issues_no_request` in
+  `tests/test_release_202_p3_findings.py`.
 
 ### Fixed — `list_agents` writes each filter as one query value, and names the statuses and types the server filters by (#709)
 
@@ -301,7 +302,7 @@ What changed:
 ### Changed
 
 - **Console output no longer uses U+2713 CHECK MARK / U+2717 BALLOT X**
-  (AIM-15). The 52 lines across 10 modules (`console`, `client`, `oauth`,
+  (#479). The 52 lines across 10 modules (`console`, `client`, `oauth`,
   `credentials`, `secure_storage`, and the CrewAI, LangChain and MCP
   integrations) that printed those marks now print the plain-text markers
   `[OK]` and `[FAIL]` instead; where rich is available the markers keep the
@@ -431,8 +432,10 @@ The twelve P3 findings from the 2.0.2 fresh-user release test, each fixed
   the route.
 
 The three P2 findings and the seven P3 findings from the 2.0.3 release test
-(AIM-21). P2.1, the `aim-sdk login` pre-flight and bounded callback wait, is
-not repeated here: it is the same defect as AIM-14.AC1 and ships above.
+(#487). P2.1, the `aim-sdk login` pre-flight and bounded callback wait, is
+not repeated here: it is the same defect as the bounded, fail-fast
+`aim-sdk login` of the five P2 findings from the 2.0.2 release test, and ships
+above.
 
 - **Protocol detection never scores what it did not find** (P2.2). With none
   of the seven indicator environment variables set and no protocol module

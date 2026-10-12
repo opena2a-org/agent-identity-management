@@ -36,6 +36,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
+	serverconfig "github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record"
 	recordstore "github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
 )
@@ -146,9 +147,15 @@ func chainStatus(ctx context.Context, args []string, getenv func(string) string,
 	defer cancel()
 	// The driver parses a connection string at its first use otherwise, and
 	// its parse error quotes the string, password included. Parsing it here
-	// keeps that error out of every later one, and it is not passed on.
+	// keeps that error out of every later one, and it is not passed on. A
+	// string the driver refuses for a variable of the environment is answered
+	// with that variable's name, as aim-bootstrap answers it.
 	connector, err := pq.NewConnector(dsn)
 	if err != nil {
+		if envErr := serverconfig.DriverEnvironmentRefusal(dsn); envErr != nil {
+			fmt.Fprintf(stderr, "aim-breakglass: %v\n", envErr)
+			return exitUsage
+		}
 		fmt.Fprintln(stderr, "aim-breakglass: the database connection string is not one the driver accepts")
 		return exitUsage
 	}

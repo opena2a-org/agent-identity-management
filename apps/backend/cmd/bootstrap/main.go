@@ -340,77 +340,17 @@ func databaseURL(flagValue string) (string, error) {
 // string from and holds no part of it.
 var errConnectionStringRefused = errors.New("the database connection string is not one the driver accepts; it is the --database-url value when one is given, else built from the POSTGRES_* variables when POSTGRES_HOST is set, else DATABASE_URL")
 
-// errDriverEnvironmentRefused opens what openDatabase answers for a
-// connection string the driver would accept but for a variable of the
-// environment. The variables at fault follow it, by name and never by value.
-var errDriverEnvironmentRefused = errors.New("the driver refuses a setting it reads from the environment, not from the database connection string")
-
-// driverEnvironmentSettings are the settings the driver reads from the
-// environment and accepts one value of. Each is listed with the connection
-// string setting that carries the accepted value, and with that value as an
-// error names it. A setting in the connection string comes before the
-// variable of the same setting.
-var driverEnvironmentSettings = []struct {
-	variable string
-	setting  string
-	accepted string
-}{
-	{"PGCLIENTENCODING", "client_encoding='UTF8'", "UTF8"},
-	{"PGDATESTYLE", "datestyle='ISO, MDY'", `"ISO, MDY"`},
-}
-
-// environmentRefusal returns an error that names the environment variables
-// for which the driver refuses dsn, and nil when the driver refuses dsn
-// whatever those variables hold. It asks the driver: dsn is parsed again with
-// the accepted settings written before it, which override the variables and
-// which the settings of dsn itself still override. It reads no variable and
-// holds no part of dsn.
-func environmentRefusal(dsn string) error {
-	// The driver reads a URL as the key=value string ParseURL makes of it.
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		parsed, err := pq.ParseURL(dsn)
-		if err != nil {
-			return nil
-		}
-		dsn = parsed
-	}
-	// acceptedWithout parses dsn with every variable overridden but the one at
-	// index left, and with all of them overridden when left is -1.
-	acceptedWithout := func(left int) bool {
-		var settings []string
-		for i, s := range driverEnvironmentSettings {
-			if i != left {
-				settings = append(settings, s.setting)
-			}
-		}
-		_, err := pq.NewConnector(strings.Join(append(settings, dsn), " "))
-		return err == nil
-	}
-	if !acceptedWithout(-1) {
-		return nil
-	}
-	var refused []string
-	for i, s := range driverEnvironmentSettings {
-		if !acceptedWithout(i) {
-			refused = append(refused, s.variable+" must be unset or "+s.accepted)
-		}
-	}
-	if len(refused) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%w: %s", errDriverEnvironmentRefused, strings.Join(refused, ", and "))
-}
-
 // openDatabase opens the database a connection string names. The driver
 // parses the string at its first use otherwise, and its parse error can quote
 // the string, password included. Parsing it here keeps that error out of
 // every later one, and it is not passed on. A string the driver refuses for a
-// variable of the environment is answered with that variable's name, and any
-// other refused string with errConnectionStringRefused.
+// variable of the environment is answered with that variable's name (see
+// serverconfig.DriverEnvironmentRefusal), and any other refused string with
+// errConnectionStringRefused.
 func openDatabase(dsn string) (*sql.DB, error) {
 	connector, err := pq.NewConnector(dsn)
 	if err != nil {
-		if envErr := environmentRefusal(dsn); envErr != nil {
+		if envErr := serverconfig.DriverEnvironmentRefusal(dsn); envErr != nil {
 			return nil, envErr
 		}
 		return nil, errConnectionStringRefused

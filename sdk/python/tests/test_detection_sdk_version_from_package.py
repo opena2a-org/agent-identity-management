@@ -1,5 +1,5 @@
 """
-AIM-13 -- MCP detection payloads report the installed package version.
+MCP detection payloads report the installed package version (#464).
 
 AC1  Rows built through `auto_detect_mcps()`, `MCPDetector()` and
      `MCPDetector.get_runtime_detections()` with no `sdk_version` argument
@@ -75,7 +75,7 @@ def clean_call_tracker(monkeypatch):
 # AC1 -- default rows carry the installed package version
 # ---------------------------------------------------------------------------
 
-def test_AIM_13_AC1_auto_detect_mcps_default_row_carries_installed_version(planted_claude_config):
+def test_auto_detect_mcps_default_row_carries_installed_version(planted_claude_config):
     rows = auto_detect_mcps()
     config_rows = [r for r in rows if r["detectionMethod"] == "claude_config"]
     assert config_rows, "planted mcpServers entry should yield a claude_config row"
@@ -84,7 +84,7 @@ def test_AIM_13_AC1_auto_detect_mcps_default_row_carries_installed_version(plant
         assert row["sdkVersion"] == EXPECTED_SDK_VERSION
 
 
-def test_AIM_13_AC1_mcp_detector_default_row_carries_installed_version(planted_claude_config):
+def test_mcp_detector_default_row_carries_installed_version(planted_claude_config):
     rows = MCPDetector().detect_all()
     config_rows = [r for r in rows if r["detectionMethod"] == "claude_config"]
     assert config_rows, "planted mcpServers entry should yield a claude_config row"
@@ -92,7 +92,7 @@ def test_AIM_13_AC1_mcp_detector_default_row_carries_installed_version(planted_c
         assert row["sdkVersion"] == EXPECTED_SDK_VERSION
 
 
-def test_AIM_13_AC1_runtime_detections_default_row_carries_installed_version(clean_call_tracker):
+def test_runtime_detections_default_row_carries_installed_version(clean_call_tracker):
     MCPDetector.track_mcp_call("filesystem", "read_file")
     rows = MCPDetector.get_runtime_detections()
     runtime_rows = [r for r in rows if r["detectionMethod"] == "sdk_runtime"]
@@ -105,13 +105,13 @@ def test_AIM_13_AC1_runtime_detections_default_row_carries_installed_version(cle
 # AC2 -- no version-bearing default bound at module import
 # ---------------------------------------------------------------------------
 
-def test_AIM_13_AC2_all_three_sdk_version_defaults_are_none():
+def test_all_three_sdk_version_defaults_are_none():
     assert inspect.signature(MCPDetector.__init__).parameters["sdk_version"].default is None
     assert inspect.signature(MCPDetector.get_runtime_detections).parameters["sdk_version"].default is None
     assert inspect.signature(auto_detect_mcps).parameters["sdk_version"].default is None
 
 
-def test_AIM_13_AC2_each_entry_point_resolves_the_package_version_at_call_time(
+def test_each_entry_point_resolves_the_package_version_at_call_time(
     planted_claude_config, clean_call_tracker, monkeypatch
 ):
     # If the version were bound at import, mutating the package attribute now
@@ -164,7 +164,7 @@ _ALL_MODULE_FILES = sorted(p.relative_to(SDK_ROOT).as_posix() for p in SDK_ROOT.
 
 
 @pytest.mark.parametrize("module_file", _ALL_MODULE_FILES)
-def test_AIM_13_AC3_no_module_level_version_string_literal(module_file):
+def test_no_module_level_version_string_literal(module_file):
     hits = _module_scope_version_string_assignments(SDK_ROOT / module_file)
     assert hits == [], f"module-scope __version__ string literal at {hits}"
 
@@ -183,14 +183,14 @@ def _importable_submodules():
     return names
 
 
-def test_AIM_13_AC3_the_walk_covers_the_modules_that_carried_a_literal():
+def test_the_walk_covers_the_modules_that_carried_a_literal():
     names = _importable_submodules()
     for name in ("aim_sdk.detection", "aim_sdk.protocol_detection", "aim_sdk.capability_detection"):
         assert name in names
 
 
 @pytest.mark.parametrize("module_name", _importable_submodules())
-def test_AIM_13_AC3_any_surviving_version_attribute_equals_the_package_version(module_name):
+def test_any_surviving_version_attribute_equals_the_package_version(module_name):
     import importlib
 
     module = importlib.import_module(module_name)
@@ -225,7 +225,7 @@ def _call_target_name(func: ast.expr):
     return None
 
 
-def test_AIM_13_AC4_no_hardcoded_sdk_version_literal_or_argument_in_the_package():
+def test_no_hardcoded_sdk_version_literal_or_argument_in_the_package():
     entry_points = {"MCPDetector", "auto_detect_mcps", "get_runtime_detections"}
     offenders = []
 
@@ -262,7 +262,7 @@ def test_AIM_13_AC4_no_hardcoded_sdk_version_literal_or_argument_in_the_package(
 # AC5 -- release notes name the fix and the version moved past 2.0.2
 # ---------------------------------------------------------------------------
 
-def test_AIM_13_AC5_version_moved_past_2_0_2_and_changelog_names_the_fix():
+def test_version_moved_past_2_0_2_and_changelog_names_the_fix():
     version = (PYTHON_SDK_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     assert tuple(int(p) for p in version.split(".")) > (2, 0, 2)
 

@@ -1,7 +1,9 @@
 """
-AIM-01.AC2 / AC3 / AC4 -- the hard constraints on the ARP telemetry seam.
+AC2 / AC3 / AC4 -- the hard constraints on the ARP telemetry seam. AC1, the
+seam's schema parity with the TypeScript reference, is tested in
+test_arp_telemetry_seam_parity.py.
 
-AC2 (2026-06-07 CA decision): detection output is a telemetry PRODUCER only. It
+AC2: detection output is a telemetry PRODUCER only. It
 never enters ``verify_action`` or any PDP deny path, and the verification
 modules do not import the seam.
 
@@ -67,10 +69,8 @@ def _imported_roots(tree):
 # --------------------------------------------------------------------------- #
 # AC2 -- detection output never reaches a verify/deny path.
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize(
-    "module", VERIFICATION_MODULES, ids=[f"AIM-01.AC2-{m}" for m in VERIFICATION_MODULES]
-)
-def test_AIM_01_AC2_verification_modules_do_not_import_the_seam(module):
+@pytest.mark.parametrize("module", VERIFICATION_MODULES)
+def test_verification_modules_do_not_import_the_seam(module):
     path = AIM_SDK_DIR / module
 
     # Every form: `import aim_sdk.telemetry`, `from aim_sdk.telemetry import x`,
@@ -85,7 +85,7 @@ def test_AIM_01_AC2_verification_modules_do_not_import_the_seam(module):
                 assert alias.name != "telemetry", f"{module}: from . import {alias.name}"
 
 
-def test_AIM_01_AC2_only_the_telemetry_recorder_consumes_detection():
+def test_only_the_telemetry_recorder_consumes_detection():
     """Call-graph: exactly one function in the client touches the detection part."""
     tree = _parse(AIM_SDK_DIR / "client.py")
 
@@ -175,7 +175,7 @@ def _client(payload, joiner):
     return client
 
 
-def test_AIM_01_AC2_no_verify_or_deny_path_reads_the_detection_output():
+def test_no_verify_or_deny_path_reads_the_detection_output():
     touched = []
     seen = []
     joiner = _SentinelJoiner(seen, now=lambda: 0, on_record=lambda r: None)
@@ -194,7 +194,7 @@ def test_AIM_01_AC2_no_verify_or_deny_path_reads_the_detection_output():
     client.close()
 
 
-def test_AIM_01_AC2_detection_output_cannot_change_a_verdict():
+def test_detection_output_cannot_change_a_verdict():
     """A maximal-confidence injection cannot deny, and no detection cannot allow."""
     records = []
     allow_joiner = CorrelationJoiner(now=lambda: 0, on_record=records.append)
@@ -237,7 +237,7 @@ def test_AIM_01_AC2_detection_output_cannot_change_a_verdict():
 # --------------------------------------------------------------------------- #
 # AC3 -- stages 2 and 3 are not begun.
 # --------------------------------------------------------------------------- #
-def test_AIM_01_AC3_stage_boundary_is_documented():
+def test_stage_boundary_is_documented():
     doc = (seam.__doc__ or "").lower()
     assert "stage 1 of 3" in doc
     assert "guard-socket client" in doc          # stage 2, named
@@ -248,7 +248,7 @@ def test_AIM_01_AC3_stage_boundary_is_documented():
     assert "arp-python-sdk-parity" not in doc
 
 
-def test_AIM_01_AC3_no_guard_socket_client_in_the_seam():
+def test_no_guard_socket_client_in_the_seam():
     # No AF_UNIX client anywhere in the telemetry package (the guard socket is
     # stage 2). Checked on the AST, so the docstring naming it does not count.
     for path in _python_files(SEAM_DIR):
@@ -272,7 +272,7 @@ def test_AIM_01_AC3_no_guard_socket_client_in_the_seam():
         assert "interceptor" not in path.name.lower()
 
 
-def test_AIM_01_AC3_no_interceptor_patching_of_builtins_subprocess_or_socket():
+def test_no_interceptor_patching_of_builtins_subprocess_or_socket():
     patched_modules = {"builtins", "subprocess", "socket", "os"}
 
     for path in _python_files(AIM_SDK_DIR):
@@ -307,10 +307,8 @@ def test_AIM_01_AC3_no_interceptor_patching_of_builtins_subprocess_or_socket():
 # --------------------------------------------------------------------------- #
 # AC4 -- no dependency added: the seam is stdlib-only.
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize(
-    "module", SEAM_MODULES, ids=[f"AIM-01.AC4-{m}" for m in SEAM_MODULES]
-)
-def test_AIM_01_AC4_seam_modules_are_stdlib_only(module):
+@pytest.mark.parametrize("module", SEAM_MODULES)
+def test_seam_modules_are_stdlib_only(module):
     import sys
 
     stdlib = getattr(sys, "stdlib_module_names", None)

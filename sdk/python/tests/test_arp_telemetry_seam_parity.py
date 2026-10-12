@@ -1,6 +1,7 @@
 """
-AIM-01.AC1 -- ARP telemetry seam: cross-SDK schema parity with the TypeScript
-reference.
+AC1 -- ARP telemetry seam: cross-SDK schema parity with the TypeScript
+reference. AC2 to AC4, the seam's hard constraints, are tested in
+test_arp_telemetry_seam_isolation.py.
 
 The Python seam (``aim_sdk.telemetry``) and the TS seam
 (``sdk/typescript/src/telemetry``) must feed ONE local log format: the same
@@ -114,16 +115,16 @@ def _strip_volatile(emitted, fixture):
     return {k: v for k, v in emitted.items() if k not in fixture["volatileFields"]}
 
 
-@pytest.mark.parametrize("case", CASES, ids=[f"AIM-01.AC1-{c}" for c in CASES])
-def test_AIM_01_AC1_record_fields_match_the_ts_schema(case):
+@pytest.mark.parametrize("case", CASES)
+def test_record_fields_match_the_ts_schema(case):
     fixture = _load(case)
     emitted = _build_from_fixture(fixture).to_dict()
 
     assert _canonical(_strip_volatile(emitted, fixture)) == _canonical(fixture["expectedRecord"])
 
 
-@pytest.mark.parametrize("case", CASES, ids=[f"AIM-01.AC1-{c}" for c in CASES])
-def test_AIM_01_AC1_written_jsonl_line_matches_the_ts_schema(case, tmp_path):
+@pytest.mark.parametrize("case", CASES)
+def test_written_jsonl_line_matches_the_ts_schema(case, tmp_path):
     """The record as it actually lands in the shared local log."""
     fixture = _load(case)
     record = _build_from_fixture(fixture)
@@ -158,8 +159,8 @@ def test_AIM_01_AC1_written_jsonl_line_matches_the_ts_schema(case, tmp_path):
     assert back[0].correlation_id == fixture["input"]["correlationId"]
 
 
-@pytest.mark.parametrize("case", CASES, ids=[f"AIM-01.AC1-{c}" for c in CASES])
-def test_AIM_01_AC1_shared_indicator_reduction_matches_the_ts_schema(case):
+@pytest.mark.parametrize("case", CASES)
+def test_shared_indicator_reduction_matches_the_ts_schema(case):
     fixture = _load(case)
     record = _build_from_fixture(fixture)
     ctx = SharedIndicatorContext(
@@ -183,15 +184,15 @@ def test_AIM_01_AC1_shared_indicator_reduction_matches_the_ts_schema(case):
         ("SharedIndicator", lambda rec, ind: ind),
     ],
     ids=[
-        "AIM-01.AC1-CorrelatedRecord",
-        "AIM-01.AC1-EnforcementFact",
-        "AIM-01.AC1-IntentInference",
-        "AIM-01.AC1-DetectionInference",
-        "AIM-01.AC1-AssemblyMeta",
-        "AIM-01.AC1-SharedIndicator",
+        "CorrelatedRecord",
+        "EnforcementFact",
+        "IntentInference",
+        "DetectionInference",
+        "AssemblyMeta",
+        "SharedIndicator",
     ],
 )
-def test_AIM_01_AC1_emitted_field_names_match_the_ts_interfaces(interface, accessor):
+def test_emitted_field_names_match_the_ts_interfaces(interface, accessor):
     """Drift guard read straight off the TS reference in this repo.
 
     The fixtures pin the shapes; this pins them to the source they were derived

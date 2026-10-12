@@ -1,4 +1,4 @@
-# TS-reference telemetry fixtures (AIM-01.AC1)
+# TS-reference telemetry fixtures (tests/test_arp_telemetry_seam_parity.py)
 
 Cross-SDK schema fixtures for the ARP telemetry seam. Each file pins one
 representative input shape and the JSONL record the **TypeScript reference**

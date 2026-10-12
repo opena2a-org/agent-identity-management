@@ -1,12 +1,14 @@
 """
-AIM-16 -- the twelve P3 findings from the 2.0.2 fresh-user release test,
-re-measured at head. One test (or parametrized group) per acceptance
-criterion; every leaf test name carries its criterion id as the first token.
+The twelve P3 findings from the 2.0.2 fresh-user release test, re-measured at
+head. CHANGELOG.md lists them as items 1 to 12: the section headed ACn below
+tests item n, and the section headed AC13 tests that the tree's own record of
+the batch is coherent. Each test is named after the behaviour it pins.
 
 Everything here runs offline: HTTP goes only to loopback fakes started by the
 tests themselves, or to a loopback port that was bound and closed so it
 refuses connections. No test opens a socket to any address outside loopback
-(test_AIM_16_AC13 asserts that over this file's own source).
+(test_these_tests_touch_only_loopback_addresses asserts that over this file's
+own source).
 """
 
 import io
@@ -203,7 +205,7 @@ def _api_key_client(url, **kwargs):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("spelling", ["true", "1", "yes", "on", "TRUE", " On "])
-def test_AIM_16_AC1_true_spellings_install_the_stdout_handler(clean_logging_env, spelling):
+def test_true_spellings_install_the_stdout_handler(clean_logging_env, spelling):
     clean_logging_env.setenv("AIM_SECURITY_LOG_STDOUT", spelling)
     configure_security_logging()
     assert _stdout_handlers(), (
@@ -213,25 +215,25 @@ def test_AIM_16_AC1_true_spellings_install_the_stdout_handler(clean_logging_env,
 
 
 @pytest.mark.parametrize("spelling", ["false", "0", "no", "off", "OFF", " No "])
-def test_AIM_16_AC1_false_spellings_install_no_stdout_handler(clean_logging_env, spelling):
+def test_false_spellings_install_no_stdout_handler(clean_logging_env, spelling):
     clean_logging_env.setenv("AIM_SECURITY_LOG_STDOUT", spelling)
     configure_security_logging()
     assert not _stdout_handlers()
 
 
-def test_AIM_16_AC1_unset_installs_no_stdout_handler(clean_logging_env):
+def test_unset_installs_no_stdout_handler(clean_logging_env):
     configure_security_logging()
     assert not _stdout_handlers()
 
 
-def test_AIM_16_AC1_spellings_match_strict_mode_sets():
+def test_spellings_match_strict_mode_sets():
     from aim_sdk.strict_mode import TRUE_VALUES, FALSE_VALUES
 
     assert TRUE_VALUES == frozenset({"true", "1", "yes", "on"})
     assert FALSE_VALUES == frozenset({"false", "0", "no", "off"})
 
 
-def test_AIM_16_AC1_readme_passage_enumerates_the_true_spellings():
+def test_readme_passage_enumerates_the_true_spellings():
     passages = [
         line for line in README.splitlines() if "AIM_SECURITY_LOG_STDOUT" in line
     ]
@@ -248,7 +250,7 @@ def test_AIM_16_AC1_readme_passage_enumerates_the_true_spellings():
 # AC2 -- the README default-logging claim matches the installed handler
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC2_error_records_reach_stderr_under_defaults(clean_logging_env, capsys):
+def test_error_records_reach_stderr_under_defaults(clean_logging_env, capsys):
     configure_security_logging()
     security_logger.log_agent_event(
         AgentEventType.AGENT_REGISTRATION_FAILED,
@@ -262,7 +264,7 @@ def test_AIM_16_AC2_error_records_reach_stderr_under_defaults(clean_logging_env,
     assert captured.out == "", "nothing goes to stdout under the defaults"
 
 
-def test_AIM_16_AC2_warning_records_are_not_written_under_defaults(clean_logging_env, capsys):
+def test_warning_records_are_not_written_under_defaults(clean_logging_env, capsys):
     configure_security_logging()
     security_logger.warning("routine warning, nobody's business")
     captured = capsys.readouterr()
@@ -270,7 +272,7 @@ def test_AIM_16_AC2_warning_records_are_not_written_under_defaults(clean_logging
     assert captured.out == ""
 
 
-def test_AIM_16_AC2_readme_states_the_default_stderr_behaviour():
+def test_readme_states_the_default_stderr_behaviour():
     assert "under the SDK's own defaults nothing is written" not in README, (
         "the README claim contradicted the unconditional stderr handler"
     )
@@ -287,13 +289,13 @@ def test_AIM_16_AC2_readme_states_the_default_stderr_behaviour():
 # AC3 -- silenceable chatter; each unreachable verification says a thing once
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC3_set_quiet_is_importable_and_documented():
+def test_set_quiet_is_importable_and_documented():
     assert "set_quiet" in aim_sdk.__all__
     from aim_sdk import set_quiet as imported  # noqa: F401
     assert "set_quiet" in README, "the README must name the silencer"
 
 
-def test_AIM_16_AC3_quiet_secure_api_key_mode_prints_nothing(
+def test_quiet_secure_api_key_mode_prints_nothing(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     fake = fake_aim_factory({
@@ -318,7 +320,7 @@ def test_AIM_16_AC3_quiet_secure_api_key_mode_prints_nothing(
     )
 
 
-def test_AIM_16_AC3_quiet_auto_detection_pass_prints_nothing(capsys):
+def test_quiet_auto_detection_pass_prints_nothing(capsys):
     set_quiet(True)
     try:
         console.info("API Key Mode: Using API key authentication")
@@ -332,7 +334,7 @@ def test_AIM_16_AC3_quiet_auto_detection_pass_prints_nothing(capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_AIM_16_AC3_unreachable_verification_emits_pending_change_on_one_stream(
+def test_unreachable_verification_emits_pending_change_on_one_stream(
     closed_port_url, clean_logging_env, capsys
 ):
     client = _api_key_client(closed_port_url, timeout=2)
@@ -365,7 +367,7 @@ def test_AIM_16_AC3_unreachable_verification_emits_pending_change_on_one_stream(
 # AC4 -- typed actionable registration error; one class per HTTP condition
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC4_unreachable_registration_raises_actionable_untangled_error(
+def test_unreachable_registration_raises_actionable_untangled_error(
     closed_port_url, isolated_home, clean_logging_env, capsys
 ):
     with pytest.raises(ConfigurationError) as excinfo:
@@ -385,7 +387,7 @@ def test_AIM_16_AC4_unreachable_registration_raises_actionable_untangled_error(
     assert excinfo.value.__cause__ is None
 
 
-def test_AIM_16_AC4_registration_401_and_verification_401_raise_the_same_class(
+def test_registration_401_and_verification_401_raise_the_same_class(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     fake = fake_aim_factory({
@@ -424,7 +426,7 @@ def _recording_session(client):
 
 
 @pytest.mark.parametrize("absent", [None, ""])
-def test_AIM_16_AC5_absent_verification_id_issues_no_request(closed_port_url, absent):
+def test_absent_verification_id_issues_no_request(closed_port_url, absent):
     client = _api_key_client(closed_port_url)
     calls = _recording_session(client)
     with pytest.warns(DeprecationWarning):
@@ -435,7 +437,7 @@ def test_AIM_16_AC5_absent_verification_id_issues_no_request(closed_port_url, ab
     )
 
 
-def test_AIM_16_AC5_present_verification_id_issues_no_request(closed_port_url):
+def test_present_verification_id_issues_no_request(closed_port_url):
     """The server refuses every request to /verifications/{id}/result, so
     log_capability_result sends none for a verification id either. No result
     body is left to hold to the camelCase convention."""
@@ -455,7 +457,7 @@ def test_AIM_16_AC5_present_verification_id_issues_no_request(closed_port_url):
 EXPECTED_UA = f"AIM-Python-SDK/{aim_sdk.__version__}"
 
 
-def test_AIM_16_AC6_api_key_registration_carries_the_sdk_user_agent(
+def test_api_key_registration_carries_the_sdk_user_agent(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     fake = fake_aim_factory({
@@ -469,7 +471,7 @@ def test_AIM_16_AC6_api_key_registration_carries_the_sdk_user_agent(
     assert fake.header(0, "User-Agent") == EXPECTED_UA
 
 
-def test_AIM_16_AC6_oauth_check_and_registration_carry_the_sdk_user_agent(
+def test_oauth_check_and_registration_carry_the_sdk_user_agent(
     fake_aim_factory, isolated_home, clean_logging_env, monkeypatch, capsys
 ):
     name = "aim16-oauth-agent"
@@ -508,7 +510,7 @@ def test_AIM_16_AC6_oauth_check_and_registration_carry_the_sdk_user_agent(
         )
 
 
-def test_AIM_16_AC6_mcp_registration_carries_the_sdk_user_agent(
+def test_mcp_registration_carries_the_sdk_user_agent(
     fake_aim_factory, clean_logging_env, capsys
 ):
     agent_id = "44444444-4444-4444-4444-444444444444"
@@ -531,7 +533,7 @@ def test_AIM_16_AC6_mcp_registration_carries_the_sdk_user_agent(
     assert fake.header(0, "User-Agent") == EXPECTED_UA
 
 
-def test_AIM_16_AC6_credential_validation_probe_carries_the_sdk_user_agent(
+def test_credential_validation_probe_carries_the_sdk_user_agent(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     agent_id = "55555555-5555-5555-5555-555555555555"
@@ -552,7 +554,7 @@ def test_AIM_16_AC6_credential_validation_probe_carries_the_sdk_user_agent(
 PACKAGED_ROOT_FILES = {"README.md", "CHANGELOG.md", "LICENSE", "VERSION"}
 
 
-def test_AIM_16_AC7_no_readme_link_targets_a_path_outside_the_packaged_tree():
+def test_no_readme_link_targets_a_path_outside_the_packaged_tree():
     offenders = []
     for target in re.findall(r"\]\(([^)\s]+)\)", README):
         if target.startswith(("http://", "https://", "#", "mailto:")):
@@ -570,14 +572,14 @@ def test_AIM_16_AC7_no_readme_link_targets_a_path_outside_the_packaged_tree():
     )
 
 
-def test_AIM_16_AC7_version_pointer_resolves_for_a_wheel_only_install():
+def test_version_pointer_resolves_for_a_wheel_only_install():
     assert "see `VERSION` file" not in README, (
         "no VERSION file exists after a wheel install"
     )
     assert "aim_sdk.__version__" in README
 
 
-def test_AIM_16_AC7_classifiers_cover_every_minor_python_requires_admits():
+def test_classifiers_cover_every_minor_python_requires_admits():
     classifier_minors = {
         int(m) for m in re.findall(
             r"Programming Language :: Python :: 3\.(\d+)", SETUP_PY
@@ -605,7 +607,7 @@ def test_AIM_16_AC7_classifiers_cover_every_minor_python_requires_admits():
 # AC8 -- the login banner is rectangular
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC8_banner_lines_all_share_one_display_width(capsys):
+def test_banner_lines_all_share_one_display_width(capsys):
     from aim_sdk.cli import print_banner
 
     print_banner()
@@ -622,14 +624,14 @@ def test_AIM_16_AC8_banner_lines_all_share_one_display_width(capsys):
 # AC9 -- one importable spelling of configure_security_logging
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC9_the_public_spelling_is_importable_from_both_paths():
+def test_the_public_spelling_is_importable_from_both_paths():
     from aim_sdk import configure_security_logging as from_package
     from aim_sdk.security_logging import configure_security_logging as from_module
 
     assert from_package is from_module
 
 
-def test_AIM_16_AC9_module_docstring_usage_block_shows_the_public_spelling():
+def test_module_docstring_usage_block_shows_the_public_spelling():
     import aim_sdk.security_logging as security_logging_module
 
     docstring = security_logging_module.__doc__ or ""
@@ -642,7 +644,7 @@ def test_AIM_16_AC9_module_docstring_usage_block_shows_the_public_spelling():
 # AC10 -- a bounded, stated unreachable-AIM cost
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC10_decorated_call_returns_fast_when_aim_refuses_connections(
+def test_decorated_call_returns_fast_when_aim_refuses_connections(
     closed_port_url, clean_logging_env, capsys
 ):
     client = _api_key_client(closed_port_url, timeout=5)
@@ -665,7 +667,7 @@ def test_AIM_16_AC10_decorated_call_returns_fast_when_aim_refuses_connections(
     )
 
 
-def test_AIM_16_AC10_readme_states_the_unreachable_cost_and_the_lever():
+def test_readme_states_the_unreachable_cost_and_the_lever():
     assert "Cost of an unreachable AIM" in README
     section = README.split("Cost of an unreachable AIM", 1)[1].split("##", 1)[0]
     assert "single connection attempt" in section
@@ -677,7 +679,7 @@ def test_AIM_16_AC10_readme_states_the_unreachable_cost_and_the_lever():
 # AC11 -- a malformed 200 is named as malformed; paths agree on success
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC11_a_200_with_an_empty_body_is_reported_as_malformed(
+def test_a_200_with_an_empty_body_is_reported_as_malformed(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     fake = fake_aim_factory({
@@ -695,7 +697,7 @@ def test_AIM_16_AC11_a_200_with_an_empty_body_is_reported_as_malformed(
     )
 
 
-def test_AIM_16_AC11_both_registration_paths_accept_200_and_201(
+def test_both_registration_paths_accept_200_and_201(
     fake_aim_factory, isolated_home, clean_logging_env, capsys
 ):
     # The OAuth path accepted 200 at base; the API-key path required exactly
@@ -717,7 +719,7 @@ def test_AIM_16_AC11_both_registration_paths_accept_200_and_201(
 # AC12 -- PolicyCache's public status matches its documented reachability
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC12_policycache_is_absent_from_the_public_namespace():
+def test_policycache_is_absent_from_the_public_namespace():
     assert "PolicyCache" not in aim_sdk.__all__, (
         "no released AIM server serves the route PolicyCache fetches; it must "
         "not be offered as public API"
@@ -725,7 +727,7 @@ def test_AIM_16_AC12_policycache_is_absent_from_the_public_namespace():
     assert not hasattr(aim_sdk, "PolicyCache")
 
 
-def test_AIM_16_AC12_policycache_stays_importable_from_its_module():
+def test_policycache_stays_importable_from_its_module():
     from aim_sdk.auto_hooks import PolicyCache  # noqa: F401
 
 
@@ -733,7 +735,7 @@ def test_AIM_16_AC12_policycache_stays_importable_from_its_module():
 # AC13 -- the tree's own record of the batch is coherent
 # ---------------------------------------------------------------------------
 
-def test_AIM_16_AC13_changelog_carries_a_release_newer_than_2_0_2():
+def test_changelog_carries_a_release_newer_than_2_0_2():
     headings = re.findall(r"^## \[(\d+)\.(\d+)\.(\d+)\]", CHANGELOG, re.MULTILINE)
     assert headings, "the changelog has release headings"
     newest = tuple(int(part) for part in headings[0])
@@ -743,7 +745,7 @@ def test_AIM_16_AC13_changelog_carries_a_release_newer_than_2_0_2():
     )
 
 
-def test_AIM_16_AC13_the_new_section_names_all_twelve_dispositions():
+def test_the_new_section_names_all_twelve_dispositions():
     newest_section = re.sub(r"\s+", " ", CHANGELOG.split("## [", 2)[1])
     for item in range(1, 13):
         assert re.search(rf"\(item {item}[,)]", newest_section), (
@@ -752,10 +754,10 @@ def test_AIM_16_AC13_the_new_section_names_all_twelve_dispositions():
         )
 
 
-def test_AIM_16_AC13_these_tests_touch_only_loopback_addresses():
+def test_these_tests_touch_only_loopback_addresses():
     source = Path(__file__).read_text(encoding="utf-8")
     for host in re.findall(r"https?://([^/\s\"')]+)", source):
         hostname = host.split(":")[0]
         assert hostname in ("127.0.0.1", "localhost"), (
-            f"AIM-16 tests must not reference any non-loopback address: {host}"
+            f"these tests must not reference any non-loopback address: {host}"
         )

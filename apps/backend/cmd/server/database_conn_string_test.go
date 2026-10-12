@@ -372,6 +372,84 @@ func TestEmptyPostgresPassword_ServerAndBootstrapSendTheDriversPassword(t *testi
 	}
 }
 
+// withHomePassFile points HOME at a new directory whose .pgpass holds one line
+// for the login of databaseConfigForLoginTest on any port, with the given
+// password and at the given mode, and leaves PGPASSWORD unset. PGPASSFILE is
+// unset when passFileSet is false, and set and empty when it is true.
+func withHomePassFile(t *testing.T, password string, mode os.FileMode, passFileSet bool) {
+	t.Helper()
+	withDriverPasswordSources(t, "", "")
+	if !passFileSet {
+		// The Setenv of withDriverPasswordSources restores the variable.
+		require.NoError(t, os.Unsetenv("PGPASSFILE"))
+	} else {
+		t.Setenv("PGPASSFILE", "")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	passFile := filepath.Join(home, ".pgpass")
+	require.NoError(t, os.WriteFile(passFile, []byte("127.0.0.1:*:identity:aim:"+password+"\n"), 0o600))
+	// WriteFile's mode passes through the umask; Chmod sets the mode as given.
+	require.NoError(t, os.Chmod(passFile, mode))
+}
+
+// With POSTGRES_PASSWORD empty, PGPASSWORD unset and PGPASSFILE unset or
+// empty, the server and aim-bootstrap send the password of the line in
+// .pgpass in the home directory, as BOOTSTRAP_GUIDE.md says.
+func TestEmptyPostgresPassword_ServerAndBootstrapSendThePasswordOfPgpassInTheHomeDirectory(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		passFileSet bool
+	}{
+		{name: "PGPASSFILE unset", passFileSet: false},
+		{name: "PGPASSFILE set and empty", passFileSet: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withHomePassFile(t, "from-home-pgpass", 0o600, tc.passFileSet)
+			database := func(port int) config.DatabaseConfig {
+				database := databaseConfigForLoginTest(port)
+				database.Password = ""
+				return database
+			}
+
+			assert.Equal(t, "from-home-pgpass", loginSentBy(t, database).password, "the password the server sends")
+			assert.Equal(t, "from-home-pgpass", loginSentThroughURL(t, database).password, "the password aim-bootstrap sends")
+		})
+	}
+}
+
+// The driver skips a password file the group or others can read or write, or
+// its owner or others can execute, as if it were absent, so an empty password
+// is sent; BOOTSTRAP_GUIDE.md tells the operator to give the file mode 0600.
+func TestEmptyPostgresPassword_PgpassModeDecidesWhetherTheDriverReadsIt(t *testing.T) {
+	for _, tc := range []struct {
+		mode os.FileMode
+		want string
+	}{
+		{mode: 0o600, want: "from-home-pgpass"},
+		{mode: 0o400, want: "from-home-pgpass"},
+		{mode: 0o644, want: ""},
+		{mode: 0o640, want: ""},
+		{mode: 0o620, want: ""},
+		{mode: 0o604, want: ""},
+		{mode: 0o602, want: ""},
+		{mode: 0o601, want: ""},
+		{mode: 0o700, want: ""},
+	} {
+		t.Run(tc.mode.String(), func(t *testing.T) {
+			withHomePassFile(t, "from-home-pgpass", tc.mode, false)
+			database := func(port int) config.DatabaseConfig {
+				database := databaseConfigForLoginTest(port)
+				database.Password = ""
+				return database
+			}
+
+			assert.Equal(t, tc.want, loginSentBy(t, database).password, "the password the server sends")
+			assert.Equal(t, tc.want, loginSentThroughURL(t, database).password, "the password aim-bootstrap sends")
+		})
+	}
+}
+
 // A POSTGRES_PASSWORD that is set is the password sent, whatever PGPASSWORD
 // and the password file hold.
 func TestSetPostgresPassword_ComesBeforeTheDriversPassword(t *testing.T) {
