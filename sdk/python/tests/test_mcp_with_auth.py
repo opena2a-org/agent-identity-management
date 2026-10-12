@@ -16,7 +16,6 @@ and valid user credentials.
 import sys
 import os
 import requests
-from pathlib import Path
 
 import pytest
 
@@ -24,11 +23,6 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "aim_sdk"))
 
 from aim_sdk import AIMClient
-from aim_sdk.integrations.mcp import (
-    register_mcp_server,
-    list_mcp_servers,
-    verify_mcp_action,
-)
 
 AIM_URL = "http://localhost:8080"
 

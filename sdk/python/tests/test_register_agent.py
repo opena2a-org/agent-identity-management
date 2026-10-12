@@ -3,8 +3,7 @@ Tests for register_agent() function
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
-import json
+from unittest.mock import patch, MagicMock
 
 from aim_sdk import register_agent
 from aim_sdk.exceptions import ConfigurationError

@@ -5668,7 +5668,11 @@ def _get_cached_mcp_capabilities(
 
     for name in server_names:
         try:
-            endpoint = f"/api/v1/sdk-api/agents/{client.agent_id}/mcp-servers/by-name?name={name}"
+            # urlencode writes the name as one value: a name holding "&",
+            # "+" or "#" reaches the server unchanged, and the endpoint
+            # signed is the one sent.
+            query_string = urlencode({"name": name})
+            endpoint = f"/api/v1/sdk-api/agents/{client.agent_id}/mcp-servers/by-name?{query_string}"
             response = client._make_request("GET", endpoint)
 
             if response.get("hasCachedCapabilities"):

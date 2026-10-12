@@ -12,7 +12,7 @@ import pytest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from aim_sdk.credentials import (
     CredentialType,
@@ -25,8 +25,6 @@ from aim_sdk.credentials import (
     save_agent_credentials,
     list_agent_credentials,
     delete_agent_credentials,
-    AIM_DIR,
-    AGENTS_DIR,
 )
 
 

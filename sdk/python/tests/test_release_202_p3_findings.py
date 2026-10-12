@@ -11,7 +11,6 @@ refuses connections. No test opens a socket to any address outside loopback
 own source).
 """
 
-import io
 import json
 import logging
 import re

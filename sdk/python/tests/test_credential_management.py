@@ -16,7 +16,7 @@ import pytest
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "aim_sdk"))
 
-from aim_sdk import AIMClient, register_agent
+from aim_sdk import AIMClient
 
 AIM_URL = "http://localhost:8080"
 

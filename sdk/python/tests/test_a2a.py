@@ -12,8 +12,7 @@ Tests cover:
 
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import Mock, patch, MagicMock
-import json
+from unittest.mock import Mock, patch
 
 from aim_sdk.a2a import (
     A2AAgentCard,

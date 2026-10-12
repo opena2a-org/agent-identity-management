@@ -6,7 +6,6 @@ Tests the complete flow: agent registration, MCP registration, verification
 
 import sys
 import os
-import json
 
 import pytest
 

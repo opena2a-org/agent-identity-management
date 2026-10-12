@@ -13,8 +13,6 @@ Reproduced by execution, not by reading the code: with `except AIMError:` wrappe
 around the call, the pre-fix ValueError propagates uncaught.
 """
 
-import os
-
 import pytest
 
 from aim_sdk.decorators import aim_verify

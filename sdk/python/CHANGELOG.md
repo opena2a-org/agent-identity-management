@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the cached-capability lookup sends the MCP server name as one query value (#718)
+
+- The lookup that asks `GET /api/v1/sdk-api/agents/{id}/mcp-servers/by-name` for the capabilities the server holds
+  for an MCP server writes the name with `urllib.parse.urlencode`, as `list_agents` writes its filters. A name
+  holding `&`, `+`, `#`, `=` or a space reaches the server as that name, and the endpoint the client signs is the
+  encoded one it sends.
+- Tests: `test_the_server_name_is_sent_as_one_value` and `test_the_signed_endpoint_is_the_encoded_one_that_is_sent`
+  in `tests/test_cached_mcp_capabilities_by_name.py`.
+
+### Changed — the tests import only the names they use (#718)
+
+- `ruff check --isolated --select F401 tests` reported 57 unused imports in 28 test files. 55 are removed; `import
+  requests` and `import smtplib` in `tests/test_e2e.py` stay, marked `# noqa: F401`, because the capability detector
+  that test runs reads them from `sys.modules`. The same command now reports none.
+- `tests/test_tests_import_only_what_they_use.py` runs pyflakes, which the `dev` extra installs with flake8, over
+  the test directory and fails on an unused import.
+
 ### Fixed — `log_capability_result` and `log_action_result` send no request, and the decorators post no result (#709)
 
 - `AIMClient.log_capability_result` posted to `POST /api/v1/sdk-api/verifications/{id}/result` and discarded the

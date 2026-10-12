@@ -12,8 +12,6 @@ Run with: pytest -m integration tests/test_crewai_integration.py
 """
 
 import sys
-import os
-from pathlib import Path
 
 import pytest
 

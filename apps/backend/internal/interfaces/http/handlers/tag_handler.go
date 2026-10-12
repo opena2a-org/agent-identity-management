@@ -745,7 +745,8 @@ func (h *TagHandler) GetPopularTags(c fiber.Ctx) error {
 	return c.JSON(tags)
 }
 
-// SearchTags searches for tags by query string
+// SearchTags searches for tags by query string. A q or category value that is
+// not valid UTF-8 or holds a NUL character is answered 400.
 // @Summary Search tags
 // @Description Search tags by name (case-insensitive)
 // @Tags tags
@@ -775,6 +776,15 @@ func (h *TagHandler) SearchTags(c fiber.Ctx) error {
 
 	// Optional category filter
 	categoryFilter := c.Query("category", "")
+
+	for _, param := range []struct{ name, value string }{
+		{"q", query},
+		{"category", categoryFilter},
+	} {
+		if err := queryTextError(param.name, param.value); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{Error: err.Error()})
+		}
+	}
 
 	tags, err := h.tagService.SearchTags(c.Context(), orgID, query, categoryFilter)
 	if err != nil {

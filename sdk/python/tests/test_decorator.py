@@ -11,8 +11,6 @@ Run with: pytest -m integration tests/test_decorator.py
 
 import sys
 import os
-import time
-from pathlib import Path
 
 import pytest
 

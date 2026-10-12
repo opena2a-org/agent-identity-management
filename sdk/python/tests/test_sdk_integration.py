@@ -15,7 +15,6 @@ This test creates a real agent in AIM and verifies all features work.
 
 import os
 import sys
-import json
 import time
 from datetime import datetime
 

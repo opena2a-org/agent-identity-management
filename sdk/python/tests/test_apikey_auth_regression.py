@@ -12,23 +12,14 @@ import base64
 import json
 import pytest
 import responses
-from unittest.mock import patch, MagicMock
 from nacl.signing import SigningKey
 from nacl.encoding import Base64Encoder
 
 from aim_sdk import AIMClient
-from aim_sdk.exceptions import (
-    ConfigurationError,
-    AuthenticationError,
-    VerificationError,
-    ActionDeniedError,
-)
+from aim_sdk.exceptions import ConfigurationError
 from aim_sdk.security_logging import (
     SecurityLogger,
-    EventCategory,
-    EventSeverity,
     AuthnEventType,
-    security_logger,
 )
 
 

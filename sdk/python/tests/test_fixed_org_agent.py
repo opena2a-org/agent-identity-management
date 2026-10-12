@@ -10,7 +10,6 @@ This script:
 
 import sys
 import os
-import shutil
 
 # Add SDK to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "aim_sdk"))

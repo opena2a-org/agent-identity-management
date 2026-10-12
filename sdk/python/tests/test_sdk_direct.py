@@ -8,8 +8,6 @@ This bypasses OAuth authentication to focus on testing SDK functionality.
 
 import os
 import sys
-import json
-import time
 from datetime import datetime
 from nacl.signing import SigningKey
 from nacl.encoding import Base64Encoder

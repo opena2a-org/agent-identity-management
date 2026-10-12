@@ -13,7 +13,6 @@ import tempfile
 from pathlib import Path
 
 from aim_sdk.security_logging import (
-    SecurityLogger,
     EventCategory,
     EventSeverity,
     AuthnEventType,

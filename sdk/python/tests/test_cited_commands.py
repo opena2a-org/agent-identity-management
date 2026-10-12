@@ -11,16 +11,11 @@ NOT marked `integration` -- `pytest.ini` deselects that marker by default.
 """
 
 import ast
-import inspect
 import os
 import re
 
 import pytest
 
-import aim_sdk.client as client_module
-import aim_sdk.decorators as decorators_module
-import aim_sdk.enforcement as enforcement_module
-import aim_sdk.strict_mode as strict_mode_module
 from aim_sdk.decision import (
     EnforcementMode,
     ModeSource,

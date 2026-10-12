@@ -411,7 +411,8 @@ func connStringValue(v string) string {
 // when PGPASSFILE is unset or empty, from .pgpass in the home directory, and
 // sends an empty one when none of these gives it. The driver skips a password
 // file the group or others can read or write, or its owner or others can
-// execute, so the file needs mode 0600. A password setting with an empty value
+// execute, so it reads a file that only its owner may read or write and nobody
+// may execute (chmod 0600, for example). A password setting with an empty value
 // turns all of those off.
 func databaseConnString(database config.DatabaseConfig) string {
 	password := ""
