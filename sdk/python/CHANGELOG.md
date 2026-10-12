@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier in the path, on routes the server does not register.
 - The server answers the settings and violations routes for the organization of the caller's credentials.
   `organization_id` is optional in the three methods; when it is given and names another organization, they raise
-  `A2AError`, and `update_security_settings` writes nothing.
+  `A2AError`, and `update_security_settings` writes nothing. `get_security_violations` checks it against the settings
+  answer, with one more request, before it requests the violations: an answer with no violations names no
+  organization.
 - The server replaces every A2A security setting with the ones a `PUT` carries, so `update_security_settings` reads
   the current settings and writes them back with the given ones changed. It sends `requireRequestSigning`,
   `allowedAgentIds` and `blockedAgentIds`, the names the server reads, in place of `requireSigning`, `allowedAgents`
