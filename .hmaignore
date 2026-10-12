@@ -3,6 +3,8 @@
 #   - Bare path patterns exempt the file/directory from all checks.
 #   - Lines prefixed with `!` exempt a specific check ID globally
 #     (supports trailing `*` wildcard, e.g. `!SANDBOX-*`).
+#   - `<path>:<CHECK-ID> # <reason>` exempts one file or directory from one
+#     check only; the reason is required. Every other check still reads it.
 # See `src/hardening/scanner.ts:loadHmaIgnore` in hackmyagent for the parser.
 
 # .env.example is a template file by convention. The whole purpose is
@@ -20,23 +22,22 @@
 # passwords the seed-log test checks are never logged, sample bearer
 # tokens built from the digits and a-f, the `aim_live_` prefix an API key
 # is asserted to start with, and a migration file name containing "key".
-# There is no per-file, per-check rule, so each file is named here and is
-# exempt from every check: a real credential added to one of them would
-# not be reported, so review literals in these files as fixtures. Delete
-# a line once the file stops matching.
-apps/backend/cmd/server/admin_seed_log_test.go
-apps/backend/cmd/server/bootstrap_token_routes_test.go
-apps/backend/cmd/server/metrics_wiring_test.go
-apps/backend/cmd/server/migrations_renumbered_row_integration_test.go
-apps/backend/internal/application/agent_service_test.go
-apps/backend/internal/application/api_key_service_test.go
-apps/backend/internal/application/device_auth_service_session_test.go
-apps/backend/internal/application/device_auth_service_single_use_test.go
+# Each line exempts its file from AST-CRED-003 only; every other check,
+# including the other credential checks, still reads the file. Delete a
+# line once the file stops matching.
+apps/backend/cmd/server/admin_seed_log_test.go:AST-CRED-003 # alphabet-pattern passwords the test asserts are never logged
+apps/backend/cmd/server/bootstrap_token_routes_test.go:AST-CRED-003 # bootstrap tokens the test mints in-process and posts to its own app
+apps/backend/cmd/server/metrics_wiring_test.go:AST-CRED-003 # sample bearer tokens built from digits and a-f
+apps/backend/cmd/server/migrations_renumbered_row_integration_test.go:AST-CRED-003 # a migration file name containing "key"
+apps/backend/internal/application/agent_service_test.go:AST-CRED-003 # the placeholder string "encrypted-private-key"
+apps/backend/internal/application/api_key_service_test.go:AST-CRED-003 # the `aim_live_` prefix an API key is asserted to start with
+apps/backend/internal/application/device_auth_service_session_test.go:AST-CRED-003 # a labelled test-only JWT secret set with t.Setenv, and device codes minted in-process
+apps/backend/internal/application/device_auth_service_single_use_test.go:AST-CRED-003 # device codes minted in-process by the shared test helper
 
 # A local smoke script a developer runs against a throwaway Postgres
 # container (DOCKERINJ-001, "docker exec with variable interpolation").
 # Its `docker exec` takes the container name and password from the
 # script's own defaults or the developer's environment, each quoted as
 # one argument, and no `sh -c` parses them again, so a value cannot add
-# a command.
-apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh
+# a command. The line exempts the script from DOCKERINJ-001 only.
+apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh:DOCKERINJ-001 # each docker exec argument is quoted and no sh -c re-parses it
