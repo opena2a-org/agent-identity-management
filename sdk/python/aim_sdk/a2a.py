@@ -1084,7 +1084,9 @@ class A2AClient:
 
         Args:
             organization_id: Optional. The server answers for the organization
-                of the caller's credentials; when given, this must be it.
+                of the caller's credentials; when given, this must be it. It
+                is checked against the security settings, with one more
+                request, before the violations are requested.
             limit: Maximum number of results
             offset: Pagination offset
 
@@ -1099,6 +1101,10 @@ class A2AClient:
             >>> for v in violations:
             ...     print(f"{v['violationType']}: {v['actionTaken']}")
         """
+        if organization_id is not None:
+            # An answer with no violations names no organization, so the
+            # settings answer, which names the caller's, is checked first.
+            self.get_security_settings(organization_id)
         response = self._make_request(
             "GET",
             f"/api/v1/a2a/security/violations?{urlencode({'limit': limit, 'offset': offset})}"

@@ -231,3 +231,24 @@ def test_no_security_violations_is_an_empty_list(client):
     # A Go nil slice is encoded as null.
     with _serve(FakeAIM(violations=None)):
         assert client.get_security_violations() == []
+
+
+@pytest.mark.parametrize("answer", [None, []])
+def test_no_security_violations_for_another_organization_raises(client, answer):
+    # An answer with no violations names no organization, so the settings
+    # answer is what shows that organization_id is not the caller's.
+    fake = FakeAIM(violations=answer)
+    with _serve(fake):
+        with pytest.raises(A2AError, match="caller's organization"):
+            client.get_security_violations(OTHER_ORG_ID)
+        assert [path for _, path, _, _ in fake.requests] == ["/api/v1/a2a/security/settings"], (
+            "the violations of another organization must not be requested"
+        )
+
+        assert client.get_security_violations(ORG_ID) == []
+        assert client.get_security_violations() == []
+    assert [path for _, path, _, _ in fake.requests[1:]] == [
+        "/api/v1/a2a/security/settings",
+        "/api/v1/a2a/security/violations",
+        "/api/v1/a2a/security/violations",
+    ]
