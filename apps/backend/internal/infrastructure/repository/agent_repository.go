@@ -391,6 +391,13 @@ func (r *AgentRepository) GetByOrganizationFiltered(orgID uuid.UUID, filter doma
 		where += fmt.Sprintf(" AND agent_type = $%d", len(whereArgs))
 	}
 
+	args := append([]interface{}{}, whereArgs...)
+	page := ""
+	if limit > 0 {
+		page = fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
+		args = append(args, limit, offset)
+	}
+
 	query := `
 		SELECT id, organization_id, name, display_name, description, agent_type, status, version, public_key,
 		       certificate_url, repository_url, documentation_url, COALESCE(trust_score, 0), verified_at,
@@ -400,12 +407,7 @@ func (r *AgentRepository) GetByOrganizationFiltered(orgID uuid.UUID, filter doma
 		FROM agents
 		WHERE ` + where + `
 		ORDER BY created_at DESC, id
-	`
-	args := append([]interface{}{}, whereArgs...)
-	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)+1, len(args)+2)
-		args = append(args, limit, offset)
-	}
+	` + page
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
