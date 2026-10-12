@@ -328,20 +328,20 @@ function readLog(path: string): Invocation[] {
 // ── The stubs ─────────────────────────────────────────────────────────
 
 /**
- * Shared prelude. `qgf_log` records argv0, the cwd, the argv and any Go
- * escape-hatch variable in the process environment; `qgf_replay` replays a
+ * Shared prelude. `stub_log` records argv0, the cwd, the argv and any Go
+ * escape-hatch variable in the process environment; `stub_replay` replays a
  * per-attempt outcome planted in $STUB_DIR, so a retry can be made to fail
  * once and then succeed.
  */
 const STUB_PRELUDE = String.raw`
-qgf_log() {
+stub_log() {
   local argv_joined="" env_joined=""
   if [ "$#" -gt 0 ]; then argv_joined="$(printf '%s\037' "$@")"; fi
   env_joined="$(env | grep -E '^(GOFLAGS|GOSUMDB|GONOSUMDB|GONOSUMCHECK|GOPRIVATE|GOINSECURE)=' | tr '\n' '\037')"
   printf '%s\t%s\t%s\t%s\n' "$0" "$PWD" "$argv_joined" "$env_joined" >> "$STUB_LOG"
 }
 
-qgf_replay() {
+stub_replay() {
   local action="$1" counter n out rcf rc
   counter="$STUB_DIR/count.$action"
   n=1
@@ -366,11 +366,11 @@ qgf_replay() {
 const STUB_GO = `#!/usr/bin/env bash
 # Test stub for \`go\`. Not a toolchain.
 ${STUB_PRELUDE}
-qgf_log "$@"
+stub_log "$@"
 
 case "$1" in
   install)
-    qgf_replay install
+    stub_replay install
     rc="$?"
     if [ "$rc" -eq 0 ]; then
       cp "$STUB_DIR/go-licenses.stub" "$GOBIN/go-licenses"
@@ -397,8 +397,8 @@ exit 97
 const STUB_GO_LICENSES = `#!/usr/bin/env bash
 # Test stub for the go-licenses checker.
 ${STUB_PRELUDE}
-qgf_log "$@"
-qgf_replay "$1"
+stub_log "$@"
+stub_replay "$1"
 exit "$?"
 `;
 
@@ -488,7 +488,7 @@ function sandboxParent(): string {
     let probeDir: string | undefined;
     try {
       mkdirSync(candidate, { recursive: true });
-      probeDir = mkdtempSync(join(candidate, 'qgf-251-exec-probe-'));
+      probeDir = mkdtempSync(join(candidate, 'license-compliance-exec-probe-'));
       const probe = join(probeDir, 'probe');
       writeExecutable(probe, '#!/usr/bin/env bash\nexit 0\n');
       if (spawnSync(probe, [], { encoding: 'utf-8' }).status === 0) {
@@ -508,7 +508,7 @@ function sandboxParent(): string {
 }
 
 function runCheckScript(opts: SandboxOptions = {}): RunResult {
-  const root = mkdtempSync(join(sandboxParent(), 'qgf-251-license-'));
+  const root = mkdtempSync(join(sandboxParent(), 'license-compliance-sandbox-'));
   try {
     const stubDir = join(root, 'stub');
     const binDir = join(stubDir, 'bin');

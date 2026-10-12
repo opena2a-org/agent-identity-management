@@ -725,7 +725,7 @@ let caseCount = 0;
 function mintStubs(): void {
   const cacheRoot = join(SDK_ROOT, 'node_modules', '.cache');
   mkdirSync(cacheRoot, { recursive: true });
-  scratch = mkdtempSync(join(cacheRoot, 'qgf-273-'));
+  scratch = mkdtempSync(join(cacheRoot, 'docker-publish-release-guard-stubs-'));
   stubDir = join(scratch, 'bin');
   mkdirSync(stubDir);
   for (const [name, text] of [
