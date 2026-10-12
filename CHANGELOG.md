@@ -68,8 +68,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `pg_isready` on the published port, as `otel-demo/smoke-backend.sh` does, and stops before running any command when
   `SMOKE_PG_CONTAINER` holds a character outside `[A-Za-z0-9_.-]` or `SMOKE_PG_DB` one outside `[A-Za-z0-9_]`. Its
   pre-flight checks for `psql` and `pg_isready` too.
-- `hackmyagent@0.33.2 secure . --ci --static-only` reported `Docker exec with variable interpolation` (HIGH) at line 94
-  of the script and scored the tree 69/100 before this change, and reports no finding and 100/100 after it.
+- On a copy of the tree without the `.hmaignore` rule that exempts the script from DOCKERINJ-001,
+  `hackmyagent@0.33.2 secure . --ci --static-only` reported `Docker exec with variable interpolation` (HIGH) at line 94
+  of the script and scored the tree 69/100 before this change, and reports no finding and 100/100 after it. With the
+  rule, the same scan reported no finding and 100/100 before this change too.
 - Test: `apps/backend/deployments/smoke/smoke_script_test.go`.
 
 ### Fixed — the phone navigation drawer is a modal dialog, and the tab bar's Secure link covers its raised icon
