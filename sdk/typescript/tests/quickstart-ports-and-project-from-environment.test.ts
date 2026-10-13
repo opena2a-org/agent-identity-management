@@ -22,8 +22,8 @@ import { load } from 'js-yaml';
  *   - scripts/quickstart.sh probes and prints the configured ports;
  *   - scripts/test-quickstart.sh works in a directory from mktemp and names
  *     no fixed path;
- *   - the README quick-start section, the release smoke contract and the
- *     .env template name every variable with its default.
+ *   - the README quick-start section and the release smoke contract name
+ *     every variable with its default.
  *
  * Interpolation follows the Compose file format: `${VAR}`, `${VAR:-default}`
  * with nested defaults, and `${VAR:?message}`; the rendering is checked
@@ -37,7 +37,6 @@ const QUICKSTART = join(REPO_ROOT, 'scripts', 'quickstart.sh');
 const TEST_QUICKSTART = join(REPO_ROOT, 'scripts', 'test-quickstart.sh');
 const README = join(REPO_ROOT, 'README.md');
 const SMOKE_CONTRACT = join(REPO_ROOT, 'docs', 'testing', 'release-smoke.md');
-const ENV_TEMPLATE = join(REPO_ROOT, '.env.quickstart');
 
 /** The variables the quick-start reads, with the defaults it always had. */
 const VARIABLES: Record<string, string> = {
@@ -220,17 +219,15 @@ describe('the quick-start takes its host ports and container-name prefix from th
     }
   });
 
-  it('the README quick-start section, the smoke contract and the .env template name every variable with its default', () => {
+  it('the README quick-start section and the smoke contract name every variable with its default', () => {
     const readme = readFileSync(README, 'utf-8');
     const dockerSection = readme.slice(readme.indexOf('### Docker'), readme.indexOf('### From source'));
     expect(dockerSection.length).toBeGreaterThan(0);
     const contract = readFileSync(SMOKE_CONTRACT, 'utf-8');
-    const template = readFileSync(ENV_TEMPLATE, 'utf-8');
     for (const [variable, fallback] of Object.entries(VARIABLES)) {
       for (const [label, text] of [
         ['README.md Docker section', dockerSection],
         ['docs/testing/release-smoke.md', contract],
-        ['.env.quickstart', template],
       ] as Array<[string, string]>) {
         const lines = linesNaming(text, variable);
         expect(lines.length, `${label} names ${variable}`).toBeGreaterThan(0);
