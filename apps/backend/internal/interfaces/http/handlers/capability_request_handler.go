@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
@@ -250,6 +251,7 @@ func (h *CapabilityRequestHandlers) GetCapabilityRequest(c fiber.Ctx) error {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} map[string]interface{}
 // @Router /api/v1/admin/capability-requests/{id}/approve [post]
 func (h *CapabilityRequestHandlers) ApproveCapabilityRequest(c fiber.Ctx) error {
 	// Get user ID from context (admin user)
@@ -286,11 +288,17 @@ func (h *CapabilityRequestHandlers) ApproveCapabilityRequest(c fiber.Ctx) error 
 		return nil
 	}
 
+	// An approval grants the capability, so it is made only together with its audit
+	// record: a refusal of the record path answers 503 with its reason and Retry-After.
 	if err := h.service.ApproveRequest(c.Context(), id, userID); err != nil {
 		if err.Error() == "capability request not found" {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "capability request not found",
 			})
+		}
+		if refused, resp := respondRecordUnavailable(c, err); refused {
+			log.Printf("Approve capability request %s for org %s refused: %v", id, orgID, err)
+			return resp
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}

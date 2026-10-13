@@ -2647,7 +2647,8 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "POST",
         path: "/api/v1/admin/capability-requests/:id/approve",
-        description: "Approve capability request.",
+        description:
+          "Approve capability request. The approval and its grant are made only together with their audit record; when that record cannot be written, nothing is approved and the route answers 503 with Retry-After (seconds) and reasonCode recordUnavailable.",
         summary: "Approve capability",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,

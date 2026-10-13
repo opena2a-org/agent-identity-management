@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, type MouseEvent } from "react";
 import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter } from "next/navigation";
@@ -48,6 +48,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { RecordPathRefusalAlert } from "@/components/ui/record-path-refusal-alert";
+import { recordPathRefusal, type RecordPathRefusal } from "@/lib/record-path-refusal";
 
 interface CapabilityRequest {
   id: string;
@@ -122,6 +124,7 @@ export default function CapabilityRequestsPage() {
   const [feedback, setFeedback] = useState<
     { type: "success" | "error"; message: string } | null
   >(null);
+  const [recordRefusal, setRecordRefusal] = useState<RecordPathRefusal | null>(null);
   const [enforcementMode, setEnforcementMode] = useState<"strict" | "monitoring">("monitoring");
 
   useEffect(() => {
@@ -149,6 +152,7 @@ export default function CapabilityRequestsPage() {
     type: "approve" | "reject"
   ) => {
     setPendingAction({ type, request });
+    setRecordRefusal(null);
     setConfirmOpen(true);
   };
 
@@ -156,15 +160,19 @@ export default function CapabilityRequestsPage() {
     setConfirmOpen(false);
     setActionLoading(false);
     setPendingAction({ type: "approve", request: null });
+    setRecordRefusal(null);
   };
 
-  const handleConfirmAction = async () => {
-    if (!pendingAction.request) {
+  const handleConfirmAction = async (e: MouseEvent<HTMLButtonElement>) => {
+    // The action closes the dialog by default; it closes only once the server answers.
+    e.preventDefault();
+    if (!pendingAction.request || actionLoading) {
       return;
     }
 
     setActionLoading(true);
     setFeedback(null);
+    setRecordRefusal(null);
 
     try {
       if (pendingAction.type === "approve") {
@@ -187,13 +195,22 @@ export default function CapabilityRequestsPage() {
       resetModalState();
     } catch (error) {
       console.error("Failed to process request:", error);
+      // A decision the server refused because its audit record could not be written is
+      // stated once, inside the dialog where it was taken, with when to try again.
+      const refusal = recordPathRefusal(error, `${pendingAction.type} this capability request`);
+      if (refusal) {
+        setRecordRefusal(refusal);
+        setActionLoading(false);
+        return;
+      }
+      // Any other failure closes the dialog and is shown on the page.
+      resetModalState();
       setFeedback({
         type: "error",
         message: `Failed to ${
           pendingAction.type === "approve" ? "approve" : "reject"
         } capability request: ${(error as Error).message}`,
       });
-      setActionLoading(false);
     }
   };
 
@@ -525,7 +542,9 @@ export default function CapabilityRequestsPage() {
         <AlertDialog
           open={confirmOpen}
           onOpenChange={(open) => {
-            if (!open && !actionLoading) {
+            // A decision in flight cannot be cancelled, so the dialog stays until it answers.
+            if (!open && actionLoading) return;
+            if (!open) {
               resetModalState();
             }
             setConfirmOpen(open);
@@ -555,13 +574,17 @@ export default function CapabilityRequestsPage() {
                 )}
               </AlertDialogDescription>
             </AlertDialogHeader>
+            <RecordPathRefusalAlert refusal={recordRefusal} />
             <AlertDialogFooter>
               <AlertDialogCancel disabled={actionLoading}>
                 Cancel
               </AlertDialogCancel>
+              {/* aria-disabled rather than disabled while the request runs: a disabled
+                  button drops focus out of the dialog. */}
               <AlertDialogAction
                 onClick={handleConfirmAction}
-                disabled={actionLoading || !pendingAction.request}
+                aria-disabled={actionLoading || undefined}
+                disabled={!pendingAction.request}
                 className={
                   pendingAction.type === "reject"
                     ? "bg-red-600 hover:bg-red-700 focus:ring-red-600"

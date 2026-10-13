@@ -75,6 +75,17 @@ func TestRefusals_CarryReasonCodeEqualToCode(t *testing.T) {
 		assertReasonCode(t, body, "recordUnavailable")
 	})
 
+	t.Run("approval refused because its audit record could not be written", func(t *testing.T) {
+		approveApp, path, _ := approveCapabilityRequestApp(t)
+		resp, err := approveApp.Test(httptest.NewRequest("POST", path, nil))
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+		assertReasonCode(t, body, "recordUnavailable")
+	})
+
 	t.Run("registration error without a reason", func(t *testing.T) {
 		body := registrationErrorBody(fmt.Errorf("boom"), "Registration failed")
 		assert.NotContains(t, body, "reasonCode")
