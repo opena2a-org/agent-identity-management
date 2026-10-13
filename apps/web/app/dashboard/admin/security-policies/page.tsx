@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { minTrustScoreToPercent, percentToMinTrustScore } from "@/lib/mcp-policy-trust-score";
+import { describeAppliedTrustThreshold } from "@/lib/trust-score-policy-threshold";
 import {
   Dialog,
   DialogContent,
@@ -914,6 +915,12 @@ export default function SecurityPoliciesPage() {
                 <span className="font-medium">Severity threshold:</span>{" "}
                 <span className="capitalize">{policy.severityThreshold}</span>
               </div>
+              {policy.policyType === "trust_score_low" && (
+                <div>
+                  <span className="font-medium">Trust score below:</span>{" "}
+                  <span>{describeAppliedTrustThreshold(policy.rules)}</span>
+                </div>
+              )}
               {policy.rules && Object.keys(policy.rules).length > 0 && (
                 <div>
                   <span className="font-medium">Rules:</span>{" "}
