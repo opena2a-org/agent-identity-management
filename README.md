@@ -107,7 +107,7 @@ Local only mode keeps its own event format in `~/.opena2a/aim-core/audit.jsonl`,
 |---|---|---|---|
 | Python | `pip install aim-sdk` | Server | `secure("name")` + `@perform_action` |
 | Java | `cd sdk/java && mvn install` (from source) | Server | `AIMClient.secure("name")` + `@SecureAction` |
-| TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMCore({ agentName })` |
+| TypeScript | `npm install @opena2a/aim-core` | Local | `new AIMCore({ agentName })` |
 
 Each SDK's README: [Python](sdk/python/README.md), [Java](sdk/java/README.md), [TypeScript](sdk/typescript/README.md); examples for all three are in [`examples/`](examples/). The SDKs send requests only to the AIM server you signed in to; the causal-denial telemetry each SDK README describes is opt-in and off until you configure it.
 
