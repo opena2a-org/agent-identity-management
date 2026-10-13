@@ -67,7 +67,7 @@ aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violatio
 
 The decorator files a request for `db:write`, and the agent's audit log records the denial with the same reason. On a stack started from the quickstart defaults, the reason names the built-in `default_policy` instead of 'Capability Violation Detection'.
 
-The SDK built from this repository printed both captures; the release on PyPI prints `✓` where they show `[OK]`, and adds `✓ Registered db:write (medium)` after the refusal's first line.
+The SDK built from this repository printed the registration capture, and the release on PyPI printed the refusal; the release on PyPI prints `✓` where this repository's build prints `[OK]`, and adds `✓ Registered db:write (medium)` after the refusal's first line.
 
 The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
 
