@@ -397,6 +397,21 @@ Want to improve our documentation?
 
 ---
 
+## Demos
+
+Four runnable demos in [`examples/`](../examples/):
+
+| Demo | Shows | Stack |
+|---|---|---|
+| [`flight-search-agent`](../examples/flight-search-agent/) | Python SDK with three deterministic prompt-injection scenarios (`inject data-exfil`, `inject priv-esc`, `inject sandbox-escape`) | Python + AIM server |
+| [`langchain-crud-agent`](../examples/langchain-crud-agent/) | LangChain agent secured by `@perform_action` | Python + LangChain + AIM server |
+| [`mcp-server-demo`](../examples/mcp-server-demo/) | MCP server with Ed25519 signing | Python + Flask + PyNaCl |
+| [`a2a-multi-agent-demo`](../examples/a2a-multi-agent-demo/) | A2A collaboration: discovery, GDPR consent, request signing, skill attestation | Python + Java + AIM server |
+
+Same code, run twice, with and without AIM: the [RAGBot-AIM A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent) in [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent), the intentionally vulnerable agent platform, lands a prompt injection on both runs and shows AIM deny the outbound exfil on the protected one because `http:post` is outside the grant ([recording](images/aim-ab-demo.gif)).
+
+---
+
 <div align="center">
 
 **🛡️ Secure your agents. Ship with confidence. 🛡️**

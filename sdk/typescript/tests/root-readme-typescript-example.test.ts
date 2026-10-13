@@ -104,9 +104,17 @@ const RECORDED_SURFACE: Record<string, PackageSurface> = {
   },
 };
 
-/** Text of the `### TypeScript` section, up to the next heading. */
+/**
+ * Text of the local-mode section, up to the next heading. The root README's
+ * SDK table names the package; the example and the version it ran on moved to
+ * this package's README, which the root README links from its TypeScript
+ * sentence and its job list.
+ */
+const LOCAL_MODE_README = join(REPO_ROOT, 'sdk', 'typescript', 'README.md');
+const LOCAL_MODE_HEADING = /^## Local mode with `@opena2a\/aim-core`\s*$/m;
+
 function typescriptSection(text: string): string {
-  const start = text.search(/^### TypeScript\s*$/m);
+  const start = text.search(LOCAL_MODE_HEADING);
   if (start === -1) return '';
   const rest = text.slice(start).split('\n').slice(1);
   const end = rest.findIndex((line) => /^#{1,3} /.test(line));
@@ -180,14 +188,20 @@ function problems(code: string, surface: PackageSurface): string[] {
   return found;
 }
 
-const section = typescriptSection(readme);
+const section = typescriptSection(readFileSync(LOCAL_MODE_README, 'utf-8'));
 const example = firstTypescriptBlock(section);
 const tableRow = readme.split('\n').find((line) => /^\|\s*TypeScript\s*\|/.test(line)) ?? '';
 const namedVersion = new RegExp(`\`${PACKAGE}\` (\\d+\\.\\d+\\.\\d+)`).exec(section)?.[1];
 
 describe('root README TypeScript example', () => {
   it('C1 the SDK table row and the example name the same package and class, on a stated version', () => {
-    expect(example, 'the README has a "### TypeScript" section with a typescript block').not.toBe('');
+    expect(
+      example,
+      'sdk/typescript/README.md has a "## Local mode with `@opena2a/aim-core`" section with a typescript block'
+    ).not.toBe('');
+    expect(readme, 'the root README links the local-mode section').toContain(
+      'sdk/typescript/README.md#local-mode-with-opena2aaim-core'
+    );
     expect(tableRow, 'the SDKs table has a TypeScript row').toContain(`npm install ${PACKAGE}`);
 
     const imported = importedNames(example, PACKAGE);

@@ -291,8 +291,80 @@ def test_root_readme_shows_the_register_call_and_its_dated_output_in_its_first_3
         f"the captured output closes on line {output[3]}; the register call and all of its "
         f"output must fit in the first {FIRST_SCREEN} lines"
     )
-    assert re.search(r"\b20\d\d-\d\d-\d\d\b", prose), (
-        "the text before the captured output must say when it was captured"
+    assert "](docs/captures/quick-start.txt)" in prose, (
+        "the text before the captured output must link its sidecar, docs/captures/quick-start.txt"
+    )
+    assert re.fullmatch(r"20\d\d-\d\d-\d\d", register_capture()["capturedAt"]), (
+        "docs/captures/quick-start.json must say when the register output was captured"
+    )
+
+
+SIDECAR = REPO_ROOT / "docs" / "captures" / "quick-start.json"
+
+
+def register_capture():
+    """The sidecar's record of the register call's capture: the README keeps the
+    output and links the sidecar; the date and the SDK version live there."""
+    captures = json.loads(SIDECAR.read_text(encoding="utf-8"))["captures"]
+    return next(c for c in captures if "secure(" in c["command"])
+
+
+# "commit <hash>" in any case, with or without a backtick before the hash, or a
+# bare full-length hash.
+NAMED_COMMIT = re.compile(r"\bcommit\s+`?[0-9a-f]{7,40}\b|\b[0-9a-f]{40}\b", re.IGNORECASE)
+
+
+def test_root_readme_dates_its_captured_output_without_naming_a_commit():
+    """A commit hash in the capture sentence chases the branch it was captured on: the
+    hash exists only there until the branch lands, and lands under a different hash, so a
+    reader following it reaches a commit the repository does not have. The sentence names
+    the date and the repository, not a commit."""
+    _, _, prose = register_and_output(ROOT_README)
+    named = NAMED_COMMIT.findall(prose)
+    assert not named, (
+        f"the text before the captured output names a commit {named!r}; say when it was "
+        "captured and that the server and SDK were built from this repository"
+    )
+
+
+@pytest.mark.parametrize("sentence", [
+    "captured at commit abcdef1 on a self-hosted AIM",
+    "Commit abcdef1 was the build",
+    "captured at commit `abcdef1` on a self-hosted AIM",
+    "captured at COMMIT `ABCDEF1`",
+    "built from 0123456789abcdef0123456789abcdef01234567",
+])
+def test_the_named_commit_guard_catches_each_phrasing_of_a_hash(sentence):
+    assert NAMED_COMMIT.search(sentence), f"the guard misses a commit named as {sentence!r}"
+
+
+@pytest.mark.parametrize("sentence", [
+    "captured on 2026-10-09 with the server and SDK built from this repository",
+    "the SDK reports version 2.0.3",
+    "committed abcdef1",
+    "the commit message",
+])
+def test_the_named_commit_guard_passes_a_sentence_that_names_no_commit(sentence):
+    assert not NAMED_COMMIT.search(sentence), f"the guard flags {sentence!r}, which names no commit"
+
+
+def test_root_readme_names_the_sdk_version_its_captured_output_came_from():
+    """`pip install` fetches the release on PyPI, which can print the registration
+    differently from the SDK in this repository: the aim-sdk 2.0.3 release prints a check
+    mark where this repository's SDK prints [OK], under the same version number. The
+    sidecar names the version, so a reader can tell which SDK printed the lines in the
+    README, and a version bump fails here until the capture is checked again. The README
+    itself names no version: it says which SDK printed the output and how the release on
+    PyPI differs."""
+    section = quick_start(ROOT_README)
+    version = (SDK_DIR / "VERSION").read_text(encoding="utf-8").strip()
+    assert register_capture()["sdk"]["version"] == version, (
+        f"docs/captures/quick-start.json must name the SDK version the register output was "
+        f"captured with, {version} (sdk/python/VERSION)"
+    )
+    assert "built from this repository" in section and "PyPI" in section, (
+        "the text around the captured output must say which SDK printed it and how the "
+        "release on PyPI differs"
     )
 
 
@@ -703,12 +775,20 @@ def compose_services():
     return services
 
 
+DEPLOYMENT = REPO_ROOT / "docs" / "DEPLOYMENT.md"
+
+
 def test_minimal_dev_stack_command_names_services_the_compose_file_defines():
+    """The root README's Install section links docs/DEPLOYMENT.md for building from
+    source; the minimal dev stack command lives there."""
+    assert "](docs/DEPLOYMENT.md#install-from-this-repository)" in ROOT_README.read_text(encoding="utf-8"), (
+        "the README's Install section must link the from-source steps in docs/DEPLOYMENT.md"
+    )
     commands = re.findall(
-        r"^docker compose up -d (\S.*)$", ROOT_README.read_text(encoding="utf-8"), re.MULTILINE
+        r"^docker compose up -d (\S.*)$", DEPLOYMENT.read_text(encoding="utf-8"), re.MULTILINE
     )
     named = [s for c in commands for s in c.split()]
-    assert named, "the README must keep its minimal dev stack command"
+    assert named, "docs/DEPLOYMENT.md must keep the minimal dev stack command"
     services = compose_services()
     missing = [s for s in named if s not in services]
     assert not missing, (

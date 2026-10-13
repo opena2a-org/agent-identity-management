@@ -1,4 +1,4 @@
-# AIM Use Cases
+# AIM Use cases
 
 Practical guides organized by what you are trying to accomplish. Each guide includes exact commands, expected output, and estimated time.
 

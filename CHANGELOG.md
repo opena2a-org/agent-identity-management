@@ -49,7 +49,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `docker compose` in that directory keeps them. On an existing install the environment wins over
   `.env`, as it does for Compose itself. A `COMPOSE_PROJECT_NAME` given to a first run is recorded
   too. Two quick-starts run side by side on one host when each has its own directory (`AIM_DIR`),
-  `AIM_PROJECT` and ports; the README's Docker section shows the command.
+  `AIM_PROJECT` and ports; the Docker section of `docs/DEPLOYMENT.md` shows the command.
 - `scripts/test-quickstart.sh` works in a directory from `mktemp -d` under its own Compose project
   and container names, takes the host ports from the same variables, and prints the teardown
   command for the stack it started. It no longer uses a fixed directory under `/tmp`, so it never

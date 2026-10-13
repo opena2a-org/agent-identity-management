@@ -13,7 +13,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Then register an agent, in a Python session, with the capability it holds. The output below the code was captured on 2026-10-09 right after `aim-sdk login` to a self-hosted AIM, with the server and SDK built from this repository; one line that run printed depends on the server and is described below the output instead. That SDK reports version 2.0.3 and prints `[OK]` where the aim-sdk 2.0.3 release on PyPI prints `✓`:
+Then register an agent, in a Python session, with the capability it holds. What `secure()` prints, trimmed ([full output](docs/captures/quick-start.txt)):
 
 ```python
 from aim_sdk import secure
@@ -28,11 +28,13 @@ agent = secure("my-first-agent", capabilities=["db:read"])
   Capabilities: db:read
 ```
 
-`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`. Its first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records that token as revoked there and answers with a new one, and the SDK then prints one more line after the first: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. The 2026-10-09 run printed it, and the quickstart stack below starts Redis. A server without Redis, or one whose Redis refused the write, answers with the token it was given, and the SDK prints no such line; a server without Redis logs `Token revocation disabled (no Redis configured)` at startup, and one whose Redis could not be reached logs `Token revocation disabled (Redis unavailable)`. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
+The first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records it as revoked, answers with a new one, and the SDK prints a line: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. Without Redis the server logs `Token revocation disabled (no Redis configured)` and the SDK prints no such line.
 
-The agent starts `pending` until an administrator verifies it under Agents in the dashboard. On a new organization, which starts in monitoring mode (described below), a pending agent's call runs and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until the agent is verified. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
 
-Once it is verified, protect a function with the capability the agent holds and call it:
+The SDK built from this repository printed `[OK]` above where the release on PyPI prints `✓`. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
+
+The agent starts `pending` until an administrator verifies it under Agents in the dashboard; on a strict-mode organization every call is refused until then. Once it is verified, protect a function with the capability the agent holds and call it:
 
 ```python
 customers = {42: {"name": "Ada Lovelace", "plan": "team"}}
@@ -44,9 +46,9 @@ def get_customer(customer_id):
 get_customer(42)
 ```
 
-`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log. The 5-step Fine-Grained Authorization engine does not decide these calls; see [where it runs](#5-step-fine-grained-authorization).
+`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log.
 
-A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
+The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). On a new organization's default monitoring mode the `db:write` call runs and deletes the record.
 
 Now call something the agent was not granted. `my-first-agent` holds `db:read` only:
 
@@ -58,26 +60,37 @@ def delete_customer(customer_id):
 delete_customer(42)
 ```
 
-AIM refuses it before the function body runs, and says why:
+AIM refuses it before the function body runs. What the call prints, trimmed ([full output](docs/captures/quick-start.txt)):
 
 ```
 Capability 'db:write' pending admin approval (strict mode)
 aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
 ```
 
-Captured with aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. That SDK was the 2.0.3 release on PyPI, which also prints `✓ Registered db:write (medium)` after the first line. The SDK built from this repository prints no `Registered` line for a capability request the server leaves pending, so the output above omits it. A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'; the rest of the line is the same. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
+The decorator files a capability request for `db:write`, the server refuses the call, and the agent's audit log records the denial with the same reason. The release on PyPI also prints `✓ Registered db:write (medium)` after the first line; the SDK built from this repository does not.
 
-New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java). TypeScript has no `secure()` call: `@opena2a/aim-core` checks a capability against a local policy with no server, and the server client `@opena2a/aim-sdk` registers an agent and verifies each action with separate calls ([TypeScript](#typescript)).
+A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
-Auditing an existing codebase instead of integrating? The [opena2a CLI](#operations-the-opena2a-cli) provides a 6-phase review with no server required.
+The 9-factor trust score is calculated when an agent registers. It is recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes one of its capabilities, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
 
-## See it work
+A verification request (`POST /api/v1/verifications`) does not recalculate the score. From an SDK the same request goes to `POST /api/v1/sdk-api/verifications`; the two routes share a handler. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
 
-The two calls above are the whole model: every decorated call is checked against the agent's grant and logged; in strict mode a capability the agent was not granted is refused before the function body executes, with the reason. Nothing in your code changes between the two, only the grant.
+New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java). TypeScript has no `secure()` call: `@opena2a/aim-core` checks a capability against a local policy with no server, and the server client `@opena2a/aim-sdk` registers an agent and verifies each action with separate calls ([TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
 
-The agent's audit log in the dashboard records each decision: the denied `db:write` above appears with `denialReason` set to the same text, the capability, the risk level and the time (that row was read back through the API on the measured run). Open `http://localhost:3000` (self-hosted) or the AIM Cloud dashboard, then Agents, then your agent, then its activity. To permit `db:write`, grant it to the agent there.
+## What you can do
 
-Want to see the same boundary stop a real attack? The [Demos](#demos) below end with an intentionally vulnerable agent run with and without AIM.
+- Register an agent and protect its calls from Python: [Quick start](#quick-start).
+- Do the same from Java: [Java quick start](sdk/java/README.md#quick-start).
+- Check capabilities and keep an audit log on one machine, with no server: [local mode in TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core).
+- Audit an existing codebase with no server: the [opena2a CLI's commands](https://github.com/opena2a-org/opena2a#commands).
+- Register an agent from an application or the terminal: [Register an agent](docs/use-cases/register-my-agent.md).
+- Track what an agent does: [Audit agent actions](docs/use-cases/audit-agent-actions.md).
+- Restrict what an agent can do: [Enforce capabilities](docs/use-cases/enforce-capabilities.md).
+- Add identity to your own agent framework: [Embed in an app](docs/use-cases/embed-in-my-app.md).
+- Manage identity across many agents: [Fleet governance](docs/use-cases/fleet-governance.md).
+- Gate privileged actions, attest MCP servers and forward audit logs to Splunk from the server: [Server features](docs/server-features.md).
+- Run AIM on your own machines: [Install AIM (self-hosted)](#install-aim-self-hosted).
+- Watch the same boundary stop a prompt injection, with and without AIM: the [A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent).
 
 ## Three deployment modes
 
@@ -97,20 +110,7 @@ All three share the same audit-event schema. Local agents can push history to a 
 | Java | `cd sdk/java && mvn install` (from source) | Server | `AIMClient.secure("name")` + `@SecureAction` |
 | TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMCore({ agentName })` |
 
-Working examples for all three live in [`examples/`](examples/).
-
-### Python
-
-`secure()` auto-detects your framework from imports (`langchain`, `crewai`, `llama_index`, `anthropic`, `openai`). When both a framework and an LLM provider are present, the framework wins.
-
-`@agent.perform_action` signs each invocation, has the server check it against the agent's granted capabilities and the organization's security policies, and records the outcome. Risk level auto-detects from the capability string using two lookup tables in [`sdk/python/aim_sdk/risk_detector.py`](sdk/python/aim_sdk/risk_detector.py):
-
-- **Namespace prefix.** `payment:`, `admin:`, `system:`, `billing:`, `finance:` map to critical. `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` map to high. `db:`, `database:`, `file:`, `storage:`, `cache:` map to medium. `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` map to low.
-- **Action suffix.** `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` map to low. `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` map to medium. `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` map to high. `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` map to critical.
-
-When namespace and action disagree the higher risk wins. A `SPECIFIC_CAPABILITY_MAP` in the same file overrides both for known patterns (for example `user:delete` escalates to critical). Pass `risk_level="critical"` to override, and `jit_access=True` to pause execution until a human approves in the dashboard.
-
-Full example: [`examples/flight-search-agent/flight_agent.py`](examples/flight-search-agent/flight_agent.py).
+Working examples for all three live in [`examples/`](examples/). The SDKs send requests only to the AIM server you signed in to; the causal-denial telemetry each SDK README describes is opt-in and off until you configure it. Framework auto-detection and risk levels for Python: [`sdk/python/README.md`](sdk/python/README.md). Local mode and the server client for TypeScript: [`sdk/typescript/README.md`](sdk/typescript/README.md).
 
 ### Java
 
@@ -123,129 +123,9 @@ public User getCustomer(String customerId) {
 }
 ```
 
-Version 1.0.0, built from source. Same Ed25519 signing, same FGA flow, same audit trail. AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
-
-### TypeScript
-
-```typescript
-import { AIMCore } from "@opena2a/aim-core";
-
-const agent = new AIMCore({ agentName: "my-first-agent" });
-agent.getIdentity(); // creates the Ed25519 keypair on first use
-
-agent.loadPolicy({ allow: ["db:read"], default: "deny" });
-const allowed = agent.checkCapability("db:read"); // true; "db:write" is false
-agent.logEvent({
-  plugin: "my-first-agent",
-  action: "db:read",
-  target: "users_table",
-  result: allowed ? "allowed" : "denied",
-});
-```
-
-The only SDK that runs without a server today. Backs local mode: the example writes `identity.json` and one `audit.jsonl` line under `~/.opena2a/aim-core/`. It runs as written with `@opena2a/aim-core` 0.2.0 (measured 2026-10-04). Source: [`packages/aim-core`](https://github.com/opena2a-org/opena2a/tree/main/packages/aim-core).
-
-The client for an AIM server is a separate package, `@opena2a/aim-sdk`, documented in [`sdk/typescript/README.md`](sdk/typescript/README.md). In 1.3.1, the published version, `verifyAction` does not complete against a self-hosted server: it requests `/oauth/token` and then `/api/v1/verify` (measured 2026-10-04 on the published package), and the server registers neither path (it serves tokens at `/api/v1/oauth/token`). The source in this repository posts the action to `/api/v1/sdk-api/verifications`, signed with the agent's key, and makes no token request for it; it ships in the next release ([#662](https://github.com/opena2a-org/agent-identity-management/issues/662)).
-
-## Server features
-
-### 5-step Fine-Grained Authorization
-
-`POST /api/v1/agents/:id/authorize` runs an agent's request for a capability through the checks below, in order, and stops at the first one that denies. When the agent has no FGA policy for that capability, it runs step 1 only.
-
-| Step | Check | Latency budget |
-|---|---|---|
-| 1 | Capability | <10ms |
-| 2 | Attribute | <10ms |
-| 3 | Context | <10ms |
-| 4 | Chain | <10ms |
-| 5 | Intent (NanoMind) | not on the decision path |
-
-Step 5 runs only when the policy's risk level is HIGH or MEDIUM; it is skipped for LOW. It hands the request to a NanoMind daemon (`FGA_DAEMON_URL`, default `http://127.0.0.1:47200`) without holding the decision, records the daemon's classification, and never denies. Neither compose file in this repository starts that daemon.
-
-The SDKs do not call this route. `@perform_action` (Python) and `performAction()` (Java) post each call to `/api/v1/sdk-api/verifications`, where the server decides with the capabilities granted to the agent, the organization's enforcement mode and its security policies. That route records an `fga.authorize` span for its decision with one child, `fga.capability_check`. Routing SDK verifications through this engine is tracked for a fix.
-
-### Trust-gated capabilities
-
-The 9-factor trust score is calculated when an agent registers. It is recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes one of its capabilities, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
-
-A verification request (`POST /api/v1/verifications`) does not recalculate the score. From an SDK the same request goes to `POST /api/v1/sdk-api/verifications`; the two routes share a handler. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
-
-On a strict-mode organization, a score below the threshold of an enabled `trust_score_low` security policy can block a verification request for a granted capability; the policy's enforcement action decides whether it blocks or only raises an alert.
-
-### MCP attestation
-
-Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and reporting the same tool set, equals verified.
-
-### Privileged Access Management
-
-Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. Human approval gates, break-glass override, and certification campaigns.
-
-### CyberArk integration
-
-CCP for vaulted credential retrieval. PSM for privileged session recording.
-
-### SIEM adapters
-
-Splunk HEC. Set `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` and every audit log entry the server writes is forwarded: buffered batch delivery, retry, severity filtering. See [SIEM Forwarding](docs/DEPLOYMENT.md#siem-forwarding). The Microsoft Sentinel adapter is not loaded: the Data Collector API it targets was retired on 14 September 2026.
-
-### Web dashboard
-
-Available in Self-hosted and AIM Cloud modes.
-
-![Fleet overview](docs/images/dashboard-security.png)
-*Fleet overview: agents monitored, actions blocked, and risk by category.*
-
-![Agent registry](docs/images/agents.png)
-*Agent registry with trust scores and verification status per agent.*
-
-![Per-agent trust score breakdown](docs/images/agent-trust-score.png)
-*Per-agent 9-factor trust score breakdown with weighted signal contributions.*
-
-![MCP supply chain](docs/images/supply-chain.png)
-*MCP server dependencies with multi-agent attestation status.*
-
-## Operations: the opena2a CLI
-
-The [opena2a CLI](https://github.com/opena2a-org/opena2a) is a separate tool for SecOps workflows: auditing a codebase, hardening configs on disk, monitoring runtime events. Not required to integrate the SDK.
-
-```bash
-opena2a review                  # 6-phase audit of a codebase
-opena2a protect                 # migrate hardcoded credentials → env vars
-opena2a guard sign              # filesystem integrity signing
-opena2a runtime tail            # ARP event stream
-opena2a identity audit          # cross-tool audit log
-opena2a identity attach --all   # install cross-tool event bridges
-```
-
-Install:
-
-```bash
-brew install opena2a-org/tap/opena2a    # or
-npm install -g opena2a-cli
-```
-
-`opena2a identity attach --all` installs bridges that read other OpenA2A tools' event logs and re-emit each event into one unified JSONL:
-
-```text
-Secretless events    ──┐
-HMA scan findings    ──┤
-HMA ARP runtime      ──┼─→ ~/.opena2a/aim-core/audit.jsonl
-ConfigGuard events   ──┤
-Shield events        ──┘
-```
-
-No decorator. No library import in agent code. Run `attach --all` once, work normally, and after an incident the audit log holds a deduplicated, timestamp-ordered trail of credential injections, file accesses, network calls, config tampering, and scan findings.
-
-Capability authorization (deny-before-execute, FGA, intent classification) requires the server. See [Server features](#server-features).
+Built from source. Same Ed25519 signing, same audit trail; AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
 
 ## Install AIM (self-hosted)
-
-> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing.
-
-### Docker
-
-The quickstart script is fetched from `main`. On a first run it downloads [`docker-compose.quickstart.yml`](docker-compose.quickstart.yml), also from `main`, and starts `aim-server` and `aim-dashboard` at their `latest` tags. `latest` moves only when a platform release is published; merges to `main` do not move it. Until the first release after this change, `latest` names the last build of `main` published before this change landed, whose version label reads `edge`. PostgreSQL (the TimescaleDB image) and Redis start at floating upstream tags. Nothing on this path is pinned or verified: read [the script](scripts/quickstart.sh) and the compose file it fetches before running it. Published security advisories are on the repository's [security advisories page](https://github.com/opena2a-org/agent-identity-management/security/advisories).
 
 ```bash
 curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
@@ -254,158 +134,18 @@ bash quickstart.sh
 
 Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
 
-The host ports and the container names come from the environment, with the values below as defaults. Set a variable before `bash quickstart.sh` (or in the `.env` next to `docker-compose.quickstart.yml`) to run AIM beside another service on the same port, or to run a second AIM stack on one host. The script records the values it ran with in the install's `.env`, so a later `docker compose` in that directory keeps them.
+The script is fetched from `main` and starts the `aim-server` and `aim-dashboard` images at their `latest` tags. Nothing on this path is pinned or verified: read [the script](scripts/quickstart.sh) and [the compose file](docker-compose.quickstart.yml) it fetches before running it. New accounts wait for an administrator's approval; set `AIM_PLATFORM_ADMINS` before starting the backend to bootstrap the first one.
 
-| Variable | Default | Sets |
-|---|---|---|
-| `AIM_BACKEND_PORT` | `8080` | host port of the API (`aim-backend`) |
-| `AIM_FRONTEND_PORT` | `3000` | host port of the dashboard (`aim-frontend`) |
-| `AIM_POSTGRES_PORT` | `5432` | host port of PostgreSQL (`aim-postgres`), bound to `127.0.0.1` |
-| `AIM_REDIS_PORT` | `6379` | host port of Redis (`aim-redis`), bound to `127.0.0.1` |
-| `AIM_PROJECT` | `aim` | prefix of the four container names |
+Image tags and withdrawn tags, building from source, and the OpenTelemetry demo stack: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#install-from-this-repository). Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
 
-A second stack beside the default one, in its own directory and Compose project, with its own container names and ports:
+## Documentation
 
-```bash
-AIM_DIR=aim2 AIM_PROJECT=aim2 AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 AIM_POSTGRES_PORT=5433 AIM_REDIS_PORT=6380 bash quickstart.sh
-```
-
-Compose names the volumes and the network after its project (`COMPOSE_PROJECT_NAME`, or the install directory's name), so two stacks also need two projects; `AIM_DIR` gives each its own directory and project.
-
-Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
-
-Merges to `main` no longer publish images: only a push of a `platform-vX.Y.Z` tag does, and it publishes `X.Y.Z`, `X.Y`, `X` and `latest` for both images on both registries. The `edge` tag is frozen at the last build of `main` published before this change and will be removed; to follow `main`, build from source (next section). This change does not move `1`, `1.0` or `1.0.0`. A running image is identified by its digest and its revision label (`org.opencontainers.image.revision`), not by the tag it was pulled by.
-
-New accounts wait for an administrator's approval. To bootstrap the first administrator, set `AIM_PLATFORM_ADMINS` (comma-separated emails) before starting the backend: accounts on that list are approved automatically and approve everyone else from the dashboard's admin area. Until a listed address has registered, or some administrator exists, other sign-ups are refused with an error that says so; nothing is queued. The backend logs how the variable was read at startup, so a mistyped entry is visible there.
-
-The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0`, and the `aim-server` tags `1.22` and `1.22.0`, are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The images behind them bundle components with critical-rated vulnerabilities, described in [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) for the dashboard and [GHSA-fxfm-hhhw-3mgf](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-fxfm-hhhw-3mgf) for the server. The dashboard images are also affected by [GHSA-638x-gwq7-xfh7](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-638x-gwq7-xfh7), rated high. Each of these advisories lists the images it affects and shows how to check a deployment.
-
-### From source
-
-Prerequisites: Docker, Go 1.25+, Node.js 20.19+ or 22.13+, Python 3.11+.
-
-```bash
-git clone https://github.com/opena2a-org/agent-identity-management.git
-cd agent-identity-management
-
-# Generate local-dev secrets (one-time setup)
-./scripts/gen-dev-secrets.sh > .env
-
-# Minimal dev stack
-docker compose up -d postgres redis backend frontend
-
-# Health check
-curl -fsS localhost:8080/health
-
-# Python SDK editable for examples
-pip install -e sdk/python
-
-# Try the flight-search-agent demo
-cd examples/flight-search-agent && python3 flight_agent.py
-```
-
-The full `docker-compose.yml` also brings up Elasticsearch, MinIO, NATS, Prometheus, Grafana, and Loki. Skip those services with the minimal command above.
-
-### Verifying the `@opena2a/aim-core` package
-
-Version 0.2.0 was built by the `release.yml` workflow in `opena2a-org/opena2a` at tag `aim-core-v0.2.0` and published through npm Trusted Publishing with SLSA v1 provenance; versions 0.1.0 to 0.1.2 carry no provenance. To check the registry's 0.2.0 tarball against that provenance, run these in an empty directory (needs cosign, jq and openssl):
-
-```bash
-npm pack @opena2a/aim-core@0.2.0
-curl -s https://registry.npmjs.org/-/npm/v1/attestations/@opena2a%2faim-core@0.2.0 \
-  | jq '.attestations[] | select(.predicateType=="https://slsa.dev/provenance/v1") | .bundle' > aim-core.sigstore.json
-cosign verify-blob-attestation --bundle aim-core.sigstore.json --new-bundle-format --type slsaprovenance1 \
-  --certificate-identity https://github.com/opena2a-org/opena2a/.github/workflows/release.yml@refs/tags/aim-core-v0.2.0 \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --digestAlg sha512 --digest "$(openssl dgst -sha512 -r opena2a-aim-core-0.2.0.tgz | cut -d' ' -f1)"
-# Prints "Verified OK" (cosign v3.0.4, 2026-09-24); a changed tarball byte or a different signer exits non-zero.
-```
-
-Identity files (`~/.opena2a/aim-core/identity.json`) are written `mode 0600`. OAuth tokens live in the OS keychain by default. `~/.opena2a/auth.json` stores metadata only.
-
-## Trust scoring
-
-The local and server trust scores measure different things.
-
-**Local (8 factors)** answers "is the agent's security posture set up correctly?" Computed from local files. Source: [`packages/aim-core/src/trust.ts`](https://github.com/opena2a-org/opena2a/blob/main/packages/aim-core/src/trust.ts).
-
-| Factor | Weight | Signal |
-|---|---|---|
-| Identity | 20% | `identity.json` exists |
-| Capabilities | 15% | `policy.yaml` exists |
-| Audit log | 10% | `audit.jsonl` exists |
-| Secrets managed | 15% | Secretless integration active |
-| Config signed | 10% | ConfigGuard signatures present |
-| Skills verified | 10% | HMA verification on skills |
-| Network controlled | 10% | Egress policy detected |
-| Heartbeat monitored | 10% | ARP runtime heartbeat present |
-
-**Server (9 factors)** answers "is the agent behaving in a way that should still be trusted right now?" Recalculated on the events listed under [Trust-gated capabilities](#trust-gated-capabilities), not on each verification request. Source: [`apps/backend/internal/domain/trust_score.go`](apps/backend/internal/domain/trust_score.go).
-
-| Factor | Weight | Source |
-|---|---|---|
-| Verification status | 25% | Externally attested |
-| Uptime | 15% | Observed |
-| Action success rate | 15% | Observed |
-| Security alerts | 15% | NanoMind-modulated |
-| Compliance | 10% | Externally attested |
-| Execution isolation | 10% | Externally attested |
-| Agent age | 5% | Server-recorded |
-| Drift detection | 3% | Observed |
-| User feedback | 2% | Human input |
-
-Both can run for the same agent when local-to-server reporting is enabled.
-
-## Observability
-
-The backend emits OpenTelemetry traces, metrics, and logs. A hermetic demo stack lives at [`apps/backend/deployments/otel-demo/`](apps/backend/deployments/otel-demo/): OpenTelemetry Collector, Tempo, Prometheus, Loki, Grafana.
-
-```bash
-cd apps/backend/deployments/otel-demo
-docker compose up -d
-./smoke-backend.sh
-```
-
-Every `fga.authorize` decision lands as a parent span with one child span per FGA step it ran: up to five on `POST /api/v1/agents/:id/authorize` (up to four when the policy's risk level is LOW), and one, `fga.capability_check`, when the agent has no FGA policy for the capability or the decision is an SDK verification's. 9 SemConv attributes ride the parent: `agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`. The attribute set is proposed to the OpenTelemetry Semantic Conventions WG. Full design notes: [`apps/backend/docs/OBSERVABILITY.md`](apps/backend/docs/OBSERVABILITY.md).
-
-## Demos
-
-Four runnable demos in [`examples/`](examples/):
-
-| Demo | Shows | Stack |
-|---|---|---|
-| [`flight-search-agent`](examples/flight-search-agent/) | Python SDK with three deterministic prompt-injection scenarios (`inject data-exfil`, `inject priv-esc`, `inject sandbox-escape`) | Python + AIM server |
-| [`langchain-crud-agent`](examples/langchain-crud-agent/) | LangChain agent secured by `@perform_action` | Python + LangChain + AIM server |
-| [`mcp-server-demo`](examples/mcp-server-demo/) | MCP server with Ed25519 signing | Python + Flask + PyNaCl |
-| [`a2a-multi-agent-demo`](examples/a2a-multi-agent-demo/) | A2A collaboration: discovery, GDPR consent, request signing, skill attestation | Python + Java + AIM server |
-
-Same code, run twice, with and without AIM: the [RAGBot-AIM A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent) in [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent), the intentionally vulnerable agent platform, lands a prompt injection on both runs and shows AIM deny the outbound exfil on the protected one because `http:post` is outside the grant ([recording](docs/images/aim-ab-demo.gif)).
-
-## Use cases
-
-| Guide | Time |
-|---|---|
-| [Register an agent](docs/use-cases/register-my-agent.md) | 2 min |
-| [Audit agent actions](docs/use-cases/audit-agent-actions.md) | 5 min |
-| [Enforce capabilities](docs/use-cases/enforce-capabilities.md) | 5 min |
-| [Embed in an app](docs/use-cases/embed-in-my-app.md) | 10 min |
-| [Fleet governance](docs/use-cases/fleet-governance.md) | 30 min |
-
-Full index: [docs/USE-CASES.md](docs/USE-CASES.md).
-
-## Contributing
-
-Apache 2.0. PRs from outside the org welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the dev loop and the pull request process.
-
-Security issues: `info@opena2a.org`. Coordinated disclosure; see [SECURITY.md](SECURITY.md) for what to expect and when.
-
-## Links
-
-- [Documentation](https://opena2a.org/docs)
-- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration)
-- [Deployment Guide](infrastructure/DEPLOYMENT.md)
-- [Roadmap](ROADMAP.md)
-- [Research](https://research.opena2a.org)
+- [See it work](docs/quick-start.md#see-it-work): the audit log behind the two calls above, and where to grant `db:write`.
+- [Server features](docs/server-features.md): 5-step Fine-Grained Authorization, trust scoring, MCP attestation, Privileged Access Management, CyberArk, SIEM adapters, the web dashboard.
+- [Deployment](docs/DEPLOYMENT.md), [Verifying the `@opena2a/aim-core` package](docs/verifying-packages.md), [Use cases](docs/USE-CASES.md), [Demos](docs/DOCUMENTATION_INDEX.md#demos) and the [A/B recording](docs/images/aim-ab-demo.gif).
+- [opena2a CLI commands](https://github.com/opena2a-org/opena2a#commands): auditing a codebase, hardening configs, monitoring runtime events, with no server required.
+- [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart), [MCP registration](https://opena2a.org/docs/tutorials/mcp-registration), the [documentation site](https://opena2a.org/docs), [Roadmap](ROADMAP.md), [Research](https://research.opena2a.org).
+- [Contributing](CONTRIBUTING.md) has the dev loop and the pull request process. Security issues go to `info@opena2a.org` under coordinated disclosure; [SECURITY.md](SECURITY.md) says what to expect and when.
 
 ## License
 

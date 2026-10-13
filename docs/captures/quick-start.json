@@ -1,0 +1,37 @@
+{
+  "readme": "README.md",
+  "section": "Quick start",
+  "text": "docs/captures/quick-start.txt",
+  "captures": [
+    {
+      "command": "agent = secure(\"my-first-agent\", capabilities=[\"db:read\"])",
+      "capturedAt": "2026-10-09",
+      "sdk": {
+        "package": "aim-sdk",
+        "version": "2.0.3",
+        "builtFrom": "this repository",
+        "differsFromRelease": "prints [OK] where the aim-sdk 2.0.3 release on PyPI prints ✓"
+      },
+      "server": "self-hosted AIM built from this repository, with Redis, right after aim-sdk login",
+      "trimmedInReadme": "the line `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`, which prints only when the server rotates the refresh token",
+      "outputs": {
+        "capture": "  ○ Agent Type: using default 'ai_agent'\nToken rotated successfully — old refresh token revoked (new id: 461d130d...)\n\n[OK] Agent registered: my-first-agent\n  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0\n  Status: ○ pending  Trust: 59%\n  Capabilities: db:read\n"
+      }
+    },
+    {
+      "command": "delete_customer(42)",
+      "capturedAt": "2026-09-22",
+      "sdk": {
+        "package": "aim-sdk",
+        "version": "2.0.3",
+        "builtFrom": "the release on PyPI",
+        "differsFromRepository": "the release prints `  ✓ Registered db:write (medium)` after the first line; the SDK built from this repository prints no Registered line for a capability request the server leaves pending"
+      },
+      "server": "self-hosted AIM at server commit ce68f10, organization in strict mode, with the security policy 'Capability Violation Detection' configured; a stack started from the quickstart defaults names AIM's built-in default_policy instead",
+      "trimmedInReadme": "the line `  ✓ Registered db:write (medium)`",
+      "outputs": {
+        "capture": "Capability 'db:write' pending admin approval (strict mode)\n  ✓ Registered db:write (medium)\naim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.\n"
+      }
+    }
+  ]
+}
