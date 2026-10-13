@@ -83,7 +83,7 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 		"role":             user.Role,
 		"organizationId":   user.OrganizationID,
 		"organizationName": organizationName,
-		"lastLoginAt":      user.LastLoginAt,
+		"lastLoginAt":      utcTime(user.LastLoginAt),
 		"createdAt":        user.CreatedAt,
 		"status":           user.Status,
 	})

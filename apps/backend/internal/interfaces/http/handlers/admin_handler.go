@@ -227,7 +227,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 			Role:                  string(user.Role),
 			Status:                string(user.Status),
 			CreatedAt:             user.CreatedAt,
-			LastLoginAt:           user.LastLoginAt,
+			LastLoginAt:           utcTime(user.LastLoginAt),
 			IsRegistrationRequest: false,
 		})
 	}

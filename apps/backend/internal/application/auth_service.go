@@ -109,8 +109,10 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 
 	// Record the sign-in. Only last_login_at and updated_at are written: user was
 	// read before the password check, and writing the whole row back would undo a
-	// password change, deactivation or role change committed since then.
-	now := time.Now()
+	// password change, deactivation or role change committed since then. The
+	// instant is clocked in UTC: the caller's copy is what a sign-in response
+	// serialises, and a time.Time prints with the location it carries.
+	now := time.Now().UTC()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
 	if err := s.userRepo.UpdateLastLogin(user.ID, now); err != nil {
@@ -367,9 +369,10 @@ func (s *AuthService) ValidateAPIKey(ctx context.Context, apiKey string) (*Valid
 }
 
 // UpdateLastLogin updates a user's last_login_at timestamp. It writes only that
-// and updated_at, never the rest of the caller's copy of the row.
+// and updated_at, never the rest of the caller's copy of the row. The instant
+// is clocked in UTC, the form every response names a lastLoginAt in.
 func (s *AuthService) UpdateLastLogin(ctx context.Context, user *domain.User) error {
-	now := time.Now()
+	now := time.Now().UTC()
 	user.LastLoginAt = &now
 	user.UpdatedAt = now
 	if err := s.userRepo.UpdateLastLogin(user.ID, now); err != nil {
