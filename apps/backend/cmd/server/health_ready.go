@@ -19,7 +19,13 @@ import (
 // readiness body: the contract's value for a commit that is not known.
 var buildCommit string
 
-// buildVersion may be stamped the same way; empty serialises as JSON null.
+// buildVersion may be stamped the same way (-X main.buildVersion=<value>);
+// the Dockerfile takes it as the VERSION build argument, which the publish
+// workflow sets to the git ref name: the release tag, or the commit sha for a
+// build that is not a tag. GET /health/ready and GET /api/v1/status report it
+// through reportedVersion, so a release tag such as platform-v1.1.0 is
+// reported as the bare semver 1.1.0, the version the image tag carries.
+// Empty serialises as JSON null.
 var buildVersion string
 
 const (
@@ -172,10 +178,27 @@ func stampedCommit() *string {
 	return &commit
 }
 
-func stampedVersion() *string {
-	if buildVersion == "" {
+// releaseTagPattern matches a platform release tag (platform-v1.1.0, with an
+// optional pre-release or build suffix) and the legacy bare v1.1.0 form, and
+// captures the semver after the prefix. SDK tags (sdk-ts-v2.0.0) carry another
+// prefix and do not match: they never build the platform images.
+var releaseTagPattern = regexp.MustCompile(`^(?:platform-)?v([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]*)?)$`)
+
+// reportedVersion is the version both routes report for a stamped
+// buildVersion: the bare semver when the stamp is a release tag, the stamp as
+// it is otherwise (a commit sha, the Dockerfile's "dev" default), nil (JSON
+// null) for an unstamped build.
+func reportedVersion(stamped string) *string {
+	if stamped == "" {
 		return nil
 	}
-	version := buildVersion
+	version := stamped
+	if m := releaseTagPattern.FindStringSubmatch(stamped); m != nil {
+		version = m[1]
+	}
 	return &version
+}
+
+func stampedVersion() *string {
+	return reportedVersion(buildVersion)
 }

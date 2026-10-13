@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `GET /health/ready` and `GET /api/v1/status` report the bare semver the image tag carries
+
+- A server built from the platform release tag reports its version as the image tag reads: a build stamped with
+  `platform-v1.1.0` answers `"version": "1.1.0"` on both routes, so `curl -s localhost:8080/health/ready | jq -r .version`
+  equals the image tag. A build stamped with a commit sha or with the Dockerfile's `dev` default reports that value
+  unchanged; an unstamped build reports `null` on both routes. The rule lives in the server, not in the publish
+  workflow, so a local `docker build --build-arg VERSION=platform-v1.1.0` reports the same `1.1.0`.
+- Measured with the readiness handler of the previous commit, stamped with `platform-v1.1.0`: `GET /health/ready`
+  answered `"version": "platform-v1.1.0"`, the tag name rather than the image tag. The `GET /api/v1/status` handler
+  of the previous commit carried the literal `"version": "1.0.0"` in its source (`git grep` of `cmd/server/main.go`),
+  whatever was built; it now reports the stamped build version through the same rule as the readiness route.
+- Tests: `apps/backend/cmd/server/reported_version_test.go`.
+
 ### Changed — the Docker quick-start takes its host ports and container names from the environment
 
 - `docker-compose.quickstart.yml` reads the host ports from `AIM_BACKEND_PORT` (default `8080`),

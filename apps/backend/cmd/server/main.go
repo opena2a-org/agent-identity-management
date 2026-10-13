@@ -244,55 +244,13 @@ func main() {
 	// apps/backend/contracts/health-ready.schema.json.
 	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(cfg.Redis.Configured, redisClient)))
 
-	// System status endpoint (no auth required)
-	app.Get("/api/v1/status", func(c fiber.Ctx) error {
-		// Get environment (default to "development" if not set)
-		environment := os.Getenv("ENVIRONMENT")
-		if environment == "" {
-			environment = "development"
-		}
-
-		// Check database status
-		dbStatus := "healthy"
-		if err := db.Ping(); err != nil {
-			dbStatus = "unavailable"
-		}
-
-		// Check Redis status (optional)
-		redisStatus := "not configured"
-		if redisClient != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := redisClient.Ping(ctx).Err(); err != nil {
-				redisStatus = "unavailable"
-			} else {
-				redisStatus = "healthy"
-			}
-		}
-
-		// Check email service status
-		emailStatus := "unavailable"
-		if emailService != nil {
-			emailStatus = "healthy"
-		}
-
-		return c.JSON(fiber.Map{
-			"status":      "operational",
-			"version":     "1.0.0",
-			"environment": environment,
-			"uptime":      time.Since(startTime).Seconds(),
-			"services": fiber.Map{
-				"database": dbStatus,
-				"redis":    redisStatus,
-				"email":    emailStatus,
-			},
-			"features": fiber.Map{
-				"email_registration": true,
-				"mcp_auto_detection": true,
-				"trust_scoring":      true,
-			},
-		})
-	})
+	// System status endpoint (no auth required). Its version is the stamped
+	// build version, reported as GET /health/ready reports it.
+	var statusRedisPing func(context.Context) error
+	if redisClient != nil {
+		statusRedisPing = func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }
+	}
+	app.Get("/api/v1/status", newStatusHandler(db.Ping, statusRedisPing, emailService != nil, startTime))
 
 	// A2A Discovery endpoint at root (no auth required)
 	// Standard A2A protocol requires /.well-known/agent.json at the root
