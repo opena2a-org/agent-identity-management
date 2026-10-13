@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -163,6 +164,31 @@ func TestSeededCriticalTrustScoreBlockMatchesTheUpdateTimeSuspension(t *testing.
 	policy := seededCriticalTrustScoreBlock(t)
 	assert.Equal(t, TrustScoreThresholdCritical, trustScorePolicyThreshold(policy.Rules),
 		"the seeded block threshold and the suspension threshold must agree")
+}
+
+var (
+	dashboardRuleKey          = regexp.MustCompile(`(?m)^export const TRUST_THRESHOLD_RULE_KEY = "([^"]*)";$`)
+	dashboardDefaultThreshold = regexp.MustCompile(`(?m)^export const DEFAULT_TRUST_SCORE_POLICY_THRESHOLD = ([0-9.]+);$`)
+)
+
+// The dashboard's policy card states the trust score a trust_score_low policy
+// triggers below. It works that out from the policy's rules with its own copy
+// of the evaluator's key and default, so the copy must equal the constants
+// trustScorePolicyThreshold applies.
+func TestDashboardPolicyCardAppliesTheEvaluatorsThresholdKeyAndDefault(t *testing.T) {
+	path := filepath.Join(repoRoot(t), "apps", "web", "lib", "trust-score-policy-threshold.ts")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	key := dashboardRuleKey.FindStringSubmatch(string(content))
+	require.Len(t, key, 2, "%s declares TRUST_THRESHOLD_RULE_KEY as a string literal", path)
+	assert.Equal(t, TrustThresholdRuleKey, key[1], "the rules key the dashboard reads")
+
+	fallback := dashboardDefaultThreshold.FindStringSubmatch(string(content))
+	require.Len(t, fallback, 2, "%s declares DEFAULT_TRUST_SCORE_POLICY_THRESHOLD as a number literal", path)
+	value, err := strconv.ParseFloat(fallback[1], 64)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultTrustScorePolicyThreshold, value, "the threshold the dashboard shows when the rules set none")
 }
 
 // An evaluable agent at 0.40 is below the seeded 0.50 and is blocked. Before

@@ -1625,6 +1625,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   built-in `local-home-path` class does not match the unsplit file either. The concatenated IDAT bytes and every other
   chunk are byte-identical, so the decoded pixels are unchanged.
 
+### Added — the security policies page shows the trust score a low-trust policy triggers below
+
+- On `/dashboard/admin/security-policies`, the card of a `trust_score_low` policy carries a
+  `Trust score below:` line with the threshold the evaluator applies to that policy, as the
+  percentage the dashboard shows trust scores in. With the rules migration 015 seeds, 'Critical
+  Trust Score Block' reads `50%` and 'Low Trust Score Alert' reads `70%`.
+- When the rules carry no numeric `trust_threshold`, the line reads
+  `30% (default: these rules set no numeric trust_threshold)`. The evaluator reads no other key,
+  `threshold` included, and applies 0.3 in that case, so the line names the key to set.
+- A `trust_threshold` above 1 is shown as stored, with what it does: `{"trust_threshold": 70}` reads
+  `7000% (trust_threshold 70 is above the 0-1 scale: every score is below it)`. A value of 0
+  reads `0% (no score is below it)`, and a negative value carries the same note.
+- Measured on the page before this change, with two `trust_score_low` policies that differed in
+  name and rules only: one with `{"trust_threshold": 0.5, "auto_disable": true, "notify": [...]}`,
+  which the evaluator applies at 0.5, and one with
+  `{"threshold": 50, "auto_disable": true, "notify": [...]}`, which it applies at 0.3. Both cards
+  showed the same details row, `Applies to: all`, `Severity threshold: critical` and
+  `Rules: 3 configured`, and nothing worked out from the values in the rules.
+- The dashboard works the line out from the policy's `rules` with its own copy of the evaluator's
+  key and default. A backend test reads that copy and fails when either differs from the
+  evaluator's constants. No API answer and no stored policy changes.
+
 ### Security — the rate limits no longer loosen when ENVIRONMENT is development
 
 - The general rate limit (100 requests per minute per user, or per client IP when

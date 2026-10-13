@@ -120,3 +120,79 @@ describe("Security policies page, MCP policy editing", () => {
     expect(api.createSecurityPolicy.mock.calls[0][0].rules).toMatchObject({ minTrustScore: 0.7 });
   });
 });
+
+// A trust_score_low policy triggers below rules.trust_threshold on the [0,1] scale of a
+// trust score, and below 0.3 when the rules carry no numeric trust_threshold. The card
+// showed "Rules: 3 configured" for a policy evaluated at 0.5 and for one evaluated at the
+// default, so an admin could not read from it which score either applies.
+
+function agentPolicy(name: string, policyType: string, rules: Record<string, unknown>) {
+  return {
+    id: `policy-${name}`,
+    name,
+    description: "",
+    policyType,
+    enforcementAction: "block_and_alert",
+    severityThreshold: "critical",
+    rules,
+    appliesTo: "all",
+    isEnabled: true,
+    priority: 300,
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  };
+}
+
+// The text of each "Trust score below:" line, in the order the cards are listed.
+async function trustThresholdLines(firstPolicyName: string): Promise<(string | null | undefined)[]> {
+  render(<SecurityPoliciesPage />);
+  await screen.findByRole("heading", { name: firstPolicyName });
+  return screen.queryAllByText("Trust score below:").map((label) => label.parentElement?.textContent);
+}
+
+describe("Security policies page, trust score policy card", () => {
+  it("shows the trust score each trust_score_low policy triggers below", async () => {
+    api.getSecurityPolicies.mockResolvedValue([
+      agentPolicy("Critical Trust Score Block", "trust_score_low", {
+        trust_threshold: 0.5,
+        auto_disable: true,
+        notify: ["admin", "security"],
+      }),
+      agentPolicy("Low Trust Score Alert", "trust_score_low", {
+        trust_threshold: 0.7,
+        duration: "1h",
+        notify: ["admin"],
+      }),
+    ]);
+    expect(await trustThresholdLines("Critical Trust Score Block")).toEqual([
+      "Trust score below: 50%",
+      "Trust score below: 70%",
+    ]);
+  });
+
+  it("shows the default when the rules carry the threshold under a key the evaluator does not read", async () => {
+    api.getSecurityPolicies.mockResolvedValue([
+      agentPolicy("Unread key", "trust_score_low", { threshold: 50, auto_disable: true, notify: ["admin"] }),
+    ]);
+    expect(await trustThresholdLines("Unread key")).toEqual([
+      "Trust score below: 30% (default: these rules set no numeric trust_threshold)",
+    ]);
+  });
+
+  it("says when a stored percent puts every score below the threshold", async () => {
+    api.getSecurityPolicies.mockResolvedValue([
+      agentPolicy("Percent", "trust_score_low", { trust_threshold: 70 }),
+    ]);
+    expect(await trustThresholdLines("Percent")).toEqual([
+      "Trust score below: 7000% (trust_threshold 70 is above the 0-1 scale: every score is below it)",
+    ]);
+  });
+
+  it("shows no trust score line on a policy of another type", async () => {
+    api.getSecurityPolicies.mockResolvedValue([
+      agentPolicy("Block Capability Violations", "capability_violation", { trust_threshold: 0.5 }),
+      allowlistPolicy,
+    ]);
+    expect(await trustThresholdLines("Block Capability Violations")).toEqual([]);
+  });
+});
