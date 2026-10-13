@@ -19,6 +19,7 @@ README = REPO_ROOT / "README.md"
 SIDECAR = REPO_ROOT / "docs" / "captures" / "quick-start.json"
 
 WORD_BUDGET = 1716          # the short-form ceiling for this README
+WORD_TARGET = 885           # the short form's target, before the sentences below
 SECTION_BUDGET = 7          # H2 headings
 PARAGRAPH_CAP = 69          # words in the longest paragraph
 PARAGRAPHS_OVER_60 = 1      # paragraphs allowed over 60 words
@@ -67,6 +68,50 @@ def paragraphs():
 def test_readme_is_under_the_word_budget():
     words = len(text().split())
     assert words <= WORD_BUDGET, f"README.md has {words} words; the budget is {WORD_BUDGET}"
+
+
+# Sentences the short form keeps from the long form, so a reader meets no state the
+# README does not name: what pending means, the setting the refusal needs, where
+# secure() writes, how the release on PyPI prints the captures, where the self-hosted
+# login comes from, and that the install is unpinned.
+KEPT_SENTENCES = [
+    "until an administrator verifies it under Agents",
+    "needs strict mode",
+    "stores credentials at `~/.aim/`",
+    "the release on PyPI prints",
+    "Login credentials print at the end of the run",
+    "nothing on this path is pinned or verified",
+]
+
+# Text that other tests read from this README: the token-rotation line and its Redis
+# condition, the policy a quickstart-default stack names, and when the trust score is
+# recalculated. The last marker is held as a whole paragraph.
+PINNED_SENTENCES = [
+    "Token rotated successfully",
+    "`default_policy`",
+    "trust-score/recalculate",
+]
+PINNED_PARAGRAPH = "A verification request (`POST /api/v1/verifications`)"
+
+
+def only(found, marker):
+    assert len(found) == 1, f"README.md must say {marker!r} once, in one sentence or paragraph: {found}"
+    return len(found[0].split())
+
+
+def test_readme_is_under_its_target_plus_the_sentences_it_keeps():
+    """The target counts the short form alone; each kept or pinned sentence, and the
+    pinned paragraph, adds its own words and nothing more. Text added anywhere else, or
+    a kept sentence repeated, fails here."""
+    kept = sum(only([s for s in sentences() if m.lower() in s.lower()], m) for m in KEPT_SENTENCES)
+    pinned = sum(only([s for s in sentences() if m in s], m) for m in PINNED_SENTENCES)
+    pinned += only([p for p, _ in paragraphs() if PINNED_PARAGRAPH in p], PINNED_PARAGRAPH)
+    budget = WORD_TARGET + kept + pinned
+    words = len(text().split())
+    assert words <= budget, (
+        f"README.md has {words} words; the target is {WORD_TARGET} plus {kept} in kept sentences "
+        f"and {pinned} in pinned ones, {budget}; move the rest to docs/"
+    )
 
 
 def test_readme_has_at_most_seven_sections_in_the_short_form_order():
@@ -125,6 +170,7 @@ def test_capture_provenance_lives_in_the_sidecar_the_readme_links():
 
 @pytest.mark.parametrize("heading, destination", [
     ("See it work", "docs/quick-start.md"),
+    ("Notes on the root README's Quick start", "docs/quick-start.md"),
     ("Python", "sdk/python/README.md"),
     ("Java", "sdk/java/README.md"),
     ("TypeScript", "sdk/typescript/README.md"),
