@@ -264,7 +264,7 @@ that digest is not named here. The next publish run started at 02:22 UTC and fin
    curl -s http://localhost:8080/health/ready
    ```
 
-   `version` reads `platform-v1.1.0`.
+   `version` reads `1.1.0`.
 8. Sign in to the dashboard again, and give each SDK install that used credentials issued by 1.0.0 new ones.
 
 To roll back, restore the backup from step 2 and run the 1.0.0 images.
