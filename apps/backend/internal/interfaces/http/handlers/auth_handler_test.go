@@ -330,4 +330,3 @@ func TestAuthHandler_Logout_WithNilUserID(t *testing.T) {
 
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 }
-

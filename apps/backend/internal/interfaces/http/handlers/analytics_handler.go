@@ -19,10 +19,10 @@ type AnalyticsHandler struct {
 	auditService             *application.AuditService
 	mcpService               *application.MCPService
 	verificationEventService *application.VerificationEventService
-	authService              *application.AuthService    // ✅ For fetching user counts
-	alertService             *application.AlertService   // ✅ For fetching alert counts
+	authService              *application.AuthService     // ✅ For fetching user counts
+	alertService             *application.AlertService    // ✅ For fetching alert counts
 	securityService          *application.SecurityService // ✅ For fetching incident counts
-	db                       *sql.DB // Database connection for real analytics queries
+	db                       *sql.DB                      // Database connection for real analytics queries
 
 	// Interface fields for testability (used when set)
 	agentServicer             AgentServicer
@@ -140,7 +140,7 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	// Support both 'days' and 'period' parameters
 	daysStr := c.Query("days", "")
 	period := c.Query("period", "month")
-	
+
 	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -164,7 +164,7 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	// Calculate time range based on 'days' parameter or 'period'
 	var startTime time.Time
 	var periodLabel string
-	
+
 	if daysStr != "" {
 		// SECURITY: Validate days parameter to prevent DoS (max 365 days)
 		days := ParseDays(c, "days", 30, 365)
@@ -231,12 +231,12 @@ func (h *AnalyticsHandler) GetUsageStatistics(c fiber.Ctx) error {
 	}
 
 	stats := map[string]interface{}{
-		"period":        periodLabel,    // Human-readable period label
+		"period":       periodLabel, // Human-readable period label
 		"totalAgents":  totalAgents,
 		"activeAgents": activeAgents,
-		"apiCalls":     apiCalls,       // ✅ REAL DATA from database
-		"dataVolume":   dataVolumeMB,   // ✅ REAL DATA in MB
-		"uptime":        uptime,          // ✅ REAL DATA - calculated from verification events
+		"apiCalls":     apiCalls,     // ✅ REAL DATA from database
+		"dataVolume":   dataVolumeMB, // ✅ REAL DATA in MB
+		"uptime":       uptime,       // ✅ REAL DATA - calculated from verification events
 		"generatedAt":  time.Now().UTC(),
 	}
 
@@ -267,7 +267,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			"error": "Invalid organization ID type in context",
 		})
 	}
-	
+
 	// Support both days and weeks parameters for backward compatibility
 	// SECURITY: Validate time range parameters to prevent DoS
 	period := c.Query("period", "weeks")
@@ -318,7 +318,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		if h.db == nil || err != nil {
 			// Fallback: Generate trend data based on agent creation dates (weekly)
 			agents, _ := h.getAgentService().ListAgents(c.Context(), orgID)
-			
+
 			// Group agents by week and calculate average trust score
 			weekScores := make(map[string][]float64)
 			for _, agent := range agents {
@@ -327,7 +327,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 				weekKey := weekStart.Format("2006-01-02")
 				weekScores[weekKey] = append(weekScores[weekKey], agent.TrustScore)
 			}
-			
+
 			// Convert to sorted trends array
 			type weekTrend struct {
 				date     time.Time
@@ -348,23 +348,23 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 					count:    len(scores),
 				})
 			}
-			
+
 			// Sort by date
 			sort.Slice(sortedTrends, func(i, j int) bool {
 				return sortedTrends[i].date.Before(sortedTrends[j].date)
 			})
-			
+
 			// Build trends response
 			trendsData := []map[string]interface{}{}
 			for _, trend := range sortedTrends {
 				trendsData = append(trendsData, map[string]interface{}{
-					"date":        trend.date.Format("2006-01-02"),
+					"date":       trend.date.Format("2006-01-02"),
 					"weekStart":  trend.date.Format("2006-01-02"),
 					"avgScore":   trend.avgScore,
 					"agentCount": trend.count,
 				})
 			}
-			
+
 			// Calculate overall average
 			totalScore := 0.0
 			for _, agent := range agents {
@@ -376,8 +376,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			}
 
 			return c.JSON(fiber.Map{
-				"period":          fmt.Sprintf("Last %d weeks", weeks),
-				"trends":          trendsData,
+				"period":         fmt.Sprintf("Last %d weeks", weeks),
+				"trends":         trendsData,
 				"currentAverage": avgScore,
 				"dataType":       "weekly",
 			})
@@ -394,7 +394,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			}
 
 			trends = append(trends, map[string]interface{}{
-				"date":        weekStart.Format("2006-01-02"),
+				"date":       weekStart.Format("2006-01-02"),
 				"weekStart":  weekStart.Format("2006-01-02"),
 				"avgScore":   avgScore,
 				"agentCount": agentCount,
@@ -441,9 +441,9 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		}
 
 		return c.JSON(fiber.Map{
-			"period":     fmt.Sprintf("Last %d weeks", weeks),
-			"trends":     trends,
-			"dataType":  "weekly",
+			"period":   fmt.Sprintf("Last %d weeks", weeks),
+			"trends":   trends,
+			"dataType": "weekly",
 			"summary": fiber.Map{
 				"overallAvg":       currentAvg,
 				"trendDirection":   trendDirection,
@@ -481,14 +481,14 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		if h.db == nil || err != nil {
 			// Fallback: Generate trend data based on agent creation dates
 			agents, _ := h.getAgentService().ListAgents(c.Context(), orgID)
-			
+
 			// Group agents by creation date and calculate average trust score
 			dateScores := make(map[string][]float64)
 			for _, agent := range agents {
 				dateKey := agent.CreatedAt.Format("2006-01-02")
 				dateScores[dateKey] = append(dateScores[dateKey], agent.TrustScore)
 			}
-			
+
 			// Convert to sorted trends array
 			type dateTrend struct {
 				date     time.Time
@@ -509,22 +509,22 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 					count:    len(scores),
 				})
 			}
-			
+
 			// Sort by date
 			sort.Slice(sortedTrends, func(i, j int) bool {
 				return sortedTrends[i].date.Before(sortedTrends[j].date)
 			})
-			
+
 			// Build trends response
 			trendsData := []map[string]interface{}{}
 			for _, trend := range sortedTrends {
 				trendsData = append(trendsData, map[string]interface{}{
-					"date":        trend.date.Format("2006-01-02"),
+					"date":       trend.date.Format("2006-01-02"),
 					"avgScore":   trend.avgScore,
 					"agentCount": trend.count,
 				})
 			}
-			
+
 			// Calculate overall average
 			totalScore := 0.0
 			for _, agent := range agents {
@@ -536,8 +536,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			}
 
 			return c.JSON(fiber.Map{
-				"period":          fmt.Sprintf("Last %d days", days),
-				"trends":          trendsData,
+				"period":         fmt.Sprintf("Last %d days", days),
+				"trends":         trendsData,
 				"currentAverage": avgScore,
 				"dataType":       "daily",
 			})
@@ -554,7 +554,7 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 			}
 
 			trends = append(trends, map[string]interface{}{
-				"date":        date.Format("2006-01-02"),
+				"date":       date.Format("2006-01-02"),
 				"avgScore":   avgScore,
 				"agentCount": agentCount,
 				"scoresByRange": map[string]interface{}{
@@ -600,8 +600,8 @@ func (h *AnalyticsHandler) GetTrustScoreTrends(c fiber.Ctx) error {
 		}
 
 		return c.JSON(fiber.Map{
-			"period":    fmt.Sprintf("Last %d days", days),
-			"trends":    trends,
+			"period":   fmt.Sprintf("Last %d days", days),
+			"trends":   trends,
 			"dataType": "daily",
 			"summary": fiber.Map{
 				"overallAvg":       currentAvg,
@@ -1357,7 +1357,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		"verifiedAgents":   verifiedAgents,
 		"pendingAgents":    pendingAgents,
 		"verificationRate": verificationRate,
-		"avgTrustScore":   avgTrustScore,
+		"avgTrustScore":    avgTrustScore,
 
 		// MCP Server metrics
 		"totalMcpServers":  totalMCPServers,
@@ -1376,7 +1376,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 		"totalVerifications":      stats.TotalVerifications,
 		"successfulVerifications": stats.SuccessCount,
 		"failedVerifications":     stats.FailedCount,
-		"avgResponseTime":        stats.AvgDurationMs,
+		"avgResponseTime":         stats.AvgDurationMs,
 
 		// Organization
 		"organizationId": orgID.String(),
@@ -1495,13 +1495,13 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 
 	// Get recent activity events (last 20)
 	type RecentActivity struct {
-		ID            string    `json:"id"`
-		AgentID       string    `json:"agentId"`
-		AgentName     string    `json:"agentName"`
-		ActionType    string    `json:"actionType"`
-		Status        string    `json:"status"`
-		CreatedAt     time.Time `json:"createdAt"`
-		DurationMs    int       `json:"durationMs,omitempty"`
+		ID         string    `json:"id"`
+		AgentID    string    `json:"agentId"`
+		AgentName  string    `json:"agentName"`
+		ActionType string    `json:"actionType"`
+		Status     string    `json:"status"`
+		CreatedAt  time.Time `json:"createdAt"`
+		DurationMs int       `json:"durationMs,omitempty"`
 	}
 	recentActivity := make([]RecentActivity, 0)
 
@@ -1566,7 +1566,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 		"period": fiber.Map{
 			"startDate": startTime.Format("2006-01-02"),
 			"endDate":   time.Now().Format("2006-01-02"),
-			"days":       days,
+			"days":      days,
 		},
 		"summary": fiber.Map{
 			"totalAgents":         len(agents),
@@ -1575,8 +1575,8 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 			"attestationCount":    attestationCount,
 			"totalActivityEvents": verificationCount + attestationCount,
 		},
-		"activityByDay":   activityByDay,
-		"recentActivity":  recentActivity,
-		"generatedAt":     time.Now().UTC(),
+		"activityByDay":  activityByDay,
+		"recentActivity": recentActivity,
+		"generatedAt":    time.Now().UTC(),
 	})
 }

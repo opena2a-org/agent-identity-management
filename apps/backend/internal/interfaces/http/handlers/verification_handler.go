@@ -1506,10 +1506,28 @@ func (h *VerificationHandler) ListPendingVerifications(c fiber.Ctx) error {
 		pageSize = 100
 	}
 
-	status := strings.ToLower(c.Query("status", "pending"))
-	risk := strings.ToLower(c.Query("risk", "all"))
+	status := c.Query("status", "pending")
+	risk := c.Query("risk", "all")
 	search := c.Query("search", "")
-	searchField := strings.ToLower(c.Query("search_field", "all"))
+	searchField := c.Query("search_field", "all")
+
+	// risk and search reach the search statement as text parameters, and
+	// status and search_field are compared with fixed words; a value of any of
+	// them that is not text is refused the same way. The check reads the values
+	// as sent: strings.ToLower turns a byte that is not UTF-8 into U+FFFD.
+	for _, param := range []struct{ name, value string }{
+		{"status", status},
+		{"risk", risk},
+		{"search", search},
+		{"search_field", searchField},
+	} {
+		if err := queryTextError(param.name, param.value); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+	}
+	status = strings.ToLower(status)
+	risk = strings.ToLower(risk)
+	searchField = strings.ToLower(searchField)
 
 	params := domain.VerificationQueryParams{
 		Status:      status,

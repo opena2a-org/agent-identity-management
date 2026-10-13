@@ -208,9 +208,9 @@ func TestSecurityHandler_GetSecurityMetrics_Success(t *testing.T) {
 	mockSecurityService := &MockSecurityServiceExtendedImpl{
 		GetSecurityMetricsFunc: func(ctx context.Context, oID uuid.UUID) (*domain.SecurityMetrics, error) {
 			return &domain.SecurityMetrics{
-				SecurityScore:   85,
-				SecurityGrade:   "B",
-				ActionsBlocked:  10,
+				SecurityScore:  85,
+				SecurityGrade:  "B",
+				ActionsBlocked: 10,
 			}, nil
 		},
 	}

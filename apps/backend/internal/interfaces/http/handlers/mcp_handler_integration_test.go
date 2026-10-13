@@ -420,10 +420,10 @@ func TestMCPHandler_GetMCPServerByName_Success(t *testing.T) {
 	mockMCPService := &MockMCPServiceExtendedImpl{
 		GetMCPServerByNameFunc: func(ctx context.Context, oID uuid.UUID, name string) (*domain.MCPServer, error) {
 			return &domain.MCPServer{
-				ID:           serverID,
+				ID:             serverID,
 				OrganizationID: oID,
-				Name:         name,
-				Capabilities: []string{"tool1", "tool2"},
+				Name:           name,
+				Capabilities:   []string{"tool1", "tool2"},
 			}, nil
 		},
 	}

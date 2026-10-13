@@ -10,8 +10,8 @@ import (
 
 // MCPGraphHandler handles MCP-to-Agent connection graph endpoints
 type MCPGraphHandler struct {
-	mcpService              *application.MCPService
-	agentRepository         *repository.AgentRepository
+	mcpService               *application.MCPService
+	agentRepository          *repository.AgentRepository
 	mcpAttestationRepository domain.MCPAttestationRepository
 
 	// mcpServerByID replaces the mcpService read in tests; nil in production.
@@ -25,8 +25,8 @@ func NewMCPGraphHandler(
 	mcpAttestationRepository domain.MCPAttestationRepository,
 ) *MCPGraphHandler {
 	return &MCPGraphHandler{
-		mcpService:              mcpService,
-		agentRepository:         agentRepository,
+		mcpService:               mcpService,
+		agentRepository:          agentRepository,
 		mcpAttestationRepository: mcpAttestationRepository,
 	}
 }
@@ -34,7 +34,7 @@ func NewMCPGraphHandler(
 // GraphNode represents a node in the MCP-Agent connection graph
 type GraphNode struct {
 	ID         string  `json:"id"`
-	Type       string  `json:"type"`       // "mcp" or "agent"
+	Type       string  `json:"type"` // "mcp" or "agent"
 	Label      string  `json:"label"`
 	Size       int     `json:"size"`       // Based on connection count
 	Color      string  `json:"color"`      // Based on trust/confidence score

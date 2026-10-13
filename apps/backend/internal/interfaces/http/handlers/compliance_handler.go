@@ -161,15 +161,15 @@ func (h *ComplianceHandler) GetComplianceMetrics(c fiber.Ctx) error {
 		map[string]interface{}{
 			"startDate": startDate,
 			"endDate":   endDate,
-			"interval":   req.Interval,
+			"interval":  req.Interval,
 		},
 	)
 
 	return c.JSON(fiber.Map{
-		"metrics":    metrics,
+		"metrics":   metrics,
 		"startDate": startDate,
 		"endDate":   endDate,
-		"interval":   req.Interval,
+		"interval":  req.Interval,
 	})
 }
 

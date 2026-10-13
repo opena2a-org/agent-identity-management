@@ -36,7 +36,6 @@ func TestSupplyChainHandler_GetSupplyChainAnalytics_NoOrgContext(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 }
 
-
 // ===========================
 // SupplyChainHandler.GetCapabilityDriftAlerts Tests
 // ===========================

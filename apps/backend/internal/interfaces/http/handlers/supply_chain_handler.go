@@ -48,9 +48,9 @@ type ConnectionWithDetails struct {
 
 // SupplyChainAnalyticsResponse is the full response for supply chain dashboard
 type SupplyChainAnalyticsResponse struct {
-	Stats            *repository.SupplyChainStats         `json:"stats"`
-	AttestationTrend []repository.AttestationTrendEntry   `json:"attestationTrend"`
-	Connections      []ConnectionWithDetails              `json:"connections"`
+	Stats            *repository.SupplyChainStats       `json:"stats"`
+	AttestationTrend []repository.AttestationTrendEntry `json:"attestationTrend"`
+	Connections      []ConnectionWithDetails            `json:"connections"`
 }
 
 // GetSupplyChainAnalytics returns all data needed for the supply chain dashboard
@@ -162,8 +162,8 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 
 // CapabilityDriftResponse is the response for capability drift alerts
 type CapabilityDriftResponse struct {
-	Stats  *repository.CapabilityDriftStats   `json:"stats"`
-	Alerts []repository.CapabilityDriftAlert  `json:"alerts"`
+	Stats  *repository.CapabilityDriftStats  `json:"stats"`
+	Alerts []repository.CapabilityDriftAlert `json:"alerts"`
 }
 
 // GetCapabilityDriftAlerts returns capability drift alerts for the organization

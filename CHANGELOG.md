@@ -11,6 +11,40 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `POST /api/v1/agents/:id/pqc-key` answers the hybrid mode it stored (#720)
+
+- The `hybridModeEnabled` of the 200 answer is the request's `enableHybrid`, the value the handler stores with the key,
+  in place of the agent's hybrid mode as loaded before the store.
+- Measured on the handler of the previous commit, with the agent as loaded holding the opposite hybrid mode: a
+  manager's or admin's request with `"enableHybrid": true` was answered `"hybridModeEnabled": false` and stored hybrid
+  mode on, and a manager's or member's request with `"enableHybrid": false` was answered `"hybridModeEnabled": true`
+  and stored hybrid mode off.
+- Test: `TestRegisterPQCKeyAnswersTheHybridModeItStored` in
+  `apps/backend/internal/interfaces/http/handlers/pqc_register_hybrid_answer_test.go`.
+
+### Fixed — four more handlers answer 400 for a query value that is not UTF-8 text or holds a NUL character (#720)
+
+- `GET /api/v1/a2a/skills/search` (`q`), `GET /api/v1/mcp-servers/by-name` (`name`), `GET /api/v1/admin/alerts`
+  (`severity`, then `status`) and `GET /api/v1/admin/verifications/pending` (`status`, `risk`, `search`, then
+  `search_field`) answer `400` with `{"error": "<parameter> must be UTF-8 text without a NUL character"}`, naming the
+  first refused parameter in that order, and read nothing. `GET /api/v1/agents` and `GET /api/v1/tags/search` share
+  the check. A value that is UTF-8 text, such as `%e2%82%ac`, is read as before, and the verification list still
+  compares its four values in lower case.
+- Tests: `apps/backend/internal/interfaces/http/handlers/free_text_query_values_test.go`.
+
+### Changed — every Go file of the backend's HTTP handler package is gofmt-formatted (#720)
+
+- `TestHandlerFilesAreGofmtFormatted` in `apps/backend/internal/interfaces/http/handlers/gofmt_test.go` reads every
+  `.go` file of the package, tests included, in place of the three it named, and fails when that list does not hold
+  its own file. The 25 files `gofmt -l` listed there are formatted, which changes their spacing, alignment and blank
+  lines only.
+
+### Changed — the dashboard's token refresh comment says the lease narrows two tabs' overlap and does not rule it out (#720)
+
+- The comment on `withRefreshLock` in `apps/web/lib/api.ts` said it runs one refresh at a time across every tab. Under
+  the `localStorage` lease, two tabs whose claims take longer than the lease's wait to reach each other can both
+  refresh, as the entry below states; the comment now says so.
+
 ### Changed — turning on hybrid mode takes the manager or admin role
 
 - `POST /api/v1/agents/:id/pqc-key` with `"enableHybrid": true` and `POST /api/v1/agents/:id/hybrid-mode` with

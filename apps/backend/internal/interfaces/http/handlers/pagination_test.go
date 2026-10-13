@@ -61,12 +61,12 @@ func TestParsePagination(t *testing.T) {
 
 func TestParseDays(t *testing.T) {
 	tests := []struct {
-		name     string
-		query    string
-		param    string
-		defVal   int
-		maxVal   int
-		want     int
+		name   string
+		query  string
+		param  string
+		defVal int
+		maxVal int
+		want   int
 	}{
 		{"default", "", "days", 7, 365, 7},
 		{"normal", "?days=30", "days", 7, 365, 30},

@@ -656,10 +656,12 @@ class APIClient {
   private refreshQueue: Promise<unknown> = Promise.resolve();
 
   /**
-   * Runs one refresh at a time across every tab of the origin: under a Web
-   * Lock, or, where the browser has none, under a lease in the store the tabs
-   * share (lib/storage-lease.ts). `replaced` is what the store already answers
-   * for the caller, see pairStoredSince.
+   * Runs a refresh under a Web Lock, which holds every other tab of the origin
+   * back while it runs, or, where the browser has none, under a lease in the
+   * store the tabs share (lib/storage-lease.ts), which narrows the overlap and
+   * does not rule it out: two tabs whose claims take longer than the lease's
+   * wait to reach each other can both refresh. `replaced` is what the store
+   * already answers for the caller, see pairStoredSince.
    */
   private async withRefreshLock(
     work: () => Promise<TokenPair | null>,

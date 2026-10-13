@@ -18,8 +18,8 @@ import (
 // every other interface method panics if reached.
 type sdkTokenTestRepo struct {
 	domain.SDKTokenRepository
-	getByID    func(id uuid.UUID) (*domain.SDKToken, error)
-	revokeCh   chan struct{}
+	getByID  func(id uuid.UUID) (*domain.SDKToken, error)
+	revokeCh chan struct{}
 }
 
 func (r *sdkTokenTestRepo) GetByID(id uuid.UUID) (*domain.SDKToken, error) {

@@ -30,7 +30,7 @@ func TestComplianceHandler_GetComplianceStatus_Integration_Success(t *testing.T)
 		GetComplianceStatusFunc: func(ctx context.Context, org uuid.UUID) (interface{}, error) {
 			return map[string]interface{}{
 				"overallScore": 85.5,
-				"frameworks": []string{"aim"},
+				"frameworks":   []string{"aim"},
 			}, nil
 		},
 	}
