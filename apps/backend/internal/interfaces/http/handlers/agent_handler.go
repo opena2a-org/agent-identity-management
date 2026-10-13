@@ -341,13 +341,20 @@ func respondRegistrationError(c fiber.Ctx, err error) error {
 
 // respondAgentStatusActError answers a verify, suspend or reactivate failure. An act the
 // agent's status does not allow (domain.AgentStatusTransition) is a 409 that states the
-// refusal and the act that applies instead; anything else is a server error.
+// refusal and the act that applies instead. A reactivation or a verification lets the
+// agent act again, so it is made only together with its audit record: a refusal of the
+// record path answers 503 with its reason and Retry-After, and its cause stays in the
+// server log. Anything else is a server error.
 func respondAgentStatusActError(c fiber.Ctx, err error) error {
 	var refusal *domain.AgentStatusTransitionError
 	if errors.As(err, &refusal) {
 		return c.Status(fiber.StatusConflict).JSON(withReasonCode(fiber.Map{
 			"error": refusal.Message(),
 		}, "agentStatusTransitionRefused"))
+	}
+	if refused, resp := respondRecordUnavailable(c, err); refused {
+		log.Printf("%s %s refused: %v", c.Method(), c.Path(), err)
+		return resp
 	}
 	return respondServerError(c, fiber.StatusInternalServerError, err)
 }
@@ -2031,6 +2038,7 @@ func (h *AgentHandler) SuspendAgent(c fiber.Ctx) error {
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
 // @Failure 404 {object} ErrorResponse "Agent not found (also returned for cross-tenant access; see tenant_scope.go:41-46)"
 // @Failure 409 {object} ErrorResponse "The agent's status does not allow this act (reasonCode agentStatusTransitionRefused)"
+// @Failure 503 {object} ErrorResponse "The audit record of the reactivation could not be written, so nothing was changed (reasonCode recordUnavailable, with Retry-After)"
 // @Router /agents/{id}/reactivate [post]
 func (h *AgentHandler) ReactivateAgent(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
