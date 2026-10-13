@@ -91,7 +91,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `docs/testing/release-smoke.md` carries rows for `scripts/test-quickstart.sh` and
   `scripts/test-quickstart-orphan-volume.sh`, which now also checks the ports and the `.env`
   fallback against docker and curl stubs. A test renders the compose file with and without the
-  variables and checks that the README and the smoke contract name each variable with its default.
+  variables and checks that the Docker section of `docs/DEPLOYMENT.md` and the smoke contract name
+  each variable with its default.
 
 ### Fixed — sign-in responses give lastLoginAt in UTC, as /api/v1/auth/me does
 
