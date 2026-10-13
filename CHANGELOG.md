@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the A2A multi-agent demo's Java program follows `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
+
+- `examples/a2a-multi-agent-demo/java` `A2AMultiAgentDemo.java` used `localhost:8080` when `AIM_URL`
+  was not set, and printed its dashboard links on the backend URL, which serves no dashboard. Against
+  a stack started on other host ports it reached nothing, or, beside a default stack on the same
+  host, that stack. It now reads `AIM_BACKEND_PORT` (`8080`) and `AIM_FRONTEND_PORT` (`3000`) from
+  the environment, then the repository's `.env` (three levels above `java/`, the directory it runs
+  from), then the defaults, through the new `StackEnv.java`; `AIM_URL` still wins for the backend,
+  and the dashboard links use the dashboard port. The example's README lists the variables for both
+  demos.
+
 ### Changed — the A2A multi-agent demo's Python scripts follow `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
 
 - `examples/a2a-multi-agent-demo/python/run_demo.py` used `localhost:8080` when neither `--aim-url`
