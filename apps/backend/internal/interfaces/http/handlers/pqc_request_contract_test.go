@@ -66,11 +66,17 @@ func requireBodyIsRequestType(t *testing.T, fx pqcRequestFixture, target interfa
 // authenticated member of orgID, and sends body.
 func postPQCFixture(t *testing.T, fx pqcRequestFixture, handler fiber.Handler, orgID, agentID uuid.UUID, body []byte) (int, map[string]interface{}) {
 	t.Helper()
+	return postPQCFixtureAs(t, domain.RoleMember, fx, handler, orgID, agentID, body)
+}
+
+// postPQCFixtureAs is postPQCFixture for a principal holding role.
+func postPQCFixtureAs(t *testing.T, role domain.UserRole, fx pqcRequestFixture, handler fiber.Handler, orgID, agentID uuid.UUID, body []byte) (int, map[string]interface{}) {
+	t.Helper()
 	app := fiber.New()
 	app.Add([]string{fx.Method}, strings.Replace(fx.Path, "{id}", ":id", 1), func(c fiber.Ctx) error {
 		c.Locals("organization_id", orgID)
 		c.Locals("user_id", uuid.New())
-		c.Locals("role", string(domain.RoleMember))
+		c.Locals("role", string(role))
 		return handler(c)
 	})
 
@@ -174,7 +180,8 @@ func TestSetHybridModeReadsTheSDKRequestBody(t *testing.T) {
 	assert.Equal(t, false, out["hybridModeEnabled"])
 
 	// false is also what a member the server does not read decodes to, so send
-	// the fixture's member set to true and check the handler sees it.
+	// the fixture's member set to true and check the handler sees it. Turning
+	// hybrid mode on takes the manager or admin role, so a manager sends it.
 	var flipped map[string]interface{}
 	require.NoError(t, json.Unmarshal(fx.Body, &flipped))
 	for name := range flipped {
@@ -182,7 +189,7 @@ func TestSetHybridModeReadsTheSDKRequestBody(t *testing.T) {
 	}
 	body, err := json.Marshal(flipped)
 	require.NoError(t, err)
-	status, out = postPQCFixture(t, fx, h.SetHybridMode, orgID, agentID, body)
+	status, out = postPQCFixtureAs(t, domain.RoleManager, fx, h.SetHybridMode, orgID, agentID, body)
 	require.Equal(t, fiber.StatusOK, status, "response: %v", out)
 	assert.Equal(t, true, out["hybridModeEnabled"])
 

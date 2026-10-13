@@ -94,3 +94,42 @@ describe('the packed tarball does not embed the TypeScript source', () => {
     expect(carriers.map((c) => path.relative(packageDir, c))).toEqual([]);
   });
 });
+
+// The documentation of createHybridRequestHeaders said its headers were
+// compatible with the backend. AIM's request verification does not accept
+// them, and the sentence reached every install through the type declarations.
+// The same tarball is read here, so the package is built and packed once.
+describe('the packed tarball does not say createHybridRequestHeaders is accepted by AIM', () => {
+  const declarationsOfTheHelper = () =>
+    walk(packageDir)
+      .filter((f) => /\.d\.m?ts$/.test(f))
+      .filter((f) => fs.readFileSync(f, 'utf-8').includes('declare function createHybridRequestHeaders'));
+
+  it('no shipped file carries the compatibility sentence, the declarations included', () => {
+    // Non-vacuity: the declarations that carried the sentence still ship.
+    expect(declarationsOfTheHelper().length).toBeGreaterThan(0);
+
+    const carriers = walk(packageDir).filter((f) =>
+      fs.readFileSync(f, 'utf-8').includes('compatible with the Go backend'),
+    );
+    expect(carriers.map((c) => path.relative(packageDir, c))).toEqual([]);
+  });
+
+  it('every shipped declaration of the helper is deprecated and says AIM does not accept its headers', () => {
+    const declarations = declarationsOfTheHelper();
+    expect(declarations.length).toBeGreaterThan(0);
+
+    for (const file of declarations) {
+      const text = fs.readFileSync(file, 'utf-8');
+      const declaredAt = text.indexOf('declare function createHybridRequestHeaders');
+      const comment = text.slice(text.lastIndexOf('/**', declaredAt), declaredAt);
+      const where = path.relative(packageDir, file);
+      // The comment found is the helper's own: nothing but white space separates them.
+      expect(comment.slice(comment.indexOf('*/') + 2).trim(), where).toBe('');
+      expect(comment, where).toContain('@deprecated');
+      expect(comment.replace(/\s*\n\s*\*\s*/g, ' '), where).toContain(
+        "AIM's request verification does not accept these headers",
+      );
+    }
+  });
+});

@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { createHash } from 'crypto';
 import {
   isPQCAvailable,
   generateMLDSAKeyPair,
@@ -20,8 +21,10 @@ import {
   isHybridAlgorithm,
   isPQCAlgorithm,
   validateKeySize,
+  createHybridRequestHeaders,
   KEY_SIZES,
   type Algorithm,
+  type HybridSignature,
 } from './pqc';
 
 describe('PQC Module', () => {
@@ -425,6 +428,79 @@ describe('PQC Module', () => {
       const publicKey = getHybridPublicKey(keyPair);
       expect(await hybridVerify(publicKey, message, sig1)).toBe(true);
       expect(await hybridVerify(publicKey, message, sig2)).toBe(true);
+    });
+  });
+
+  // createHybridRequestHeaders is deprecated: its documentation says AIM's request
+  // verification does not accept its headers, because AIM verifies a signature over the
+  // method, path, timestamp and body joined by newlines. These cells pin the half of
+  // that sentence this package owns: what the helper signs and stamps.
+  describe('createHybridRequestHeaders (deprecated)', () => {
+    const encode = (text: string) => new TextEncoder().encode(text);
+    const sha256Hex = (text: string) => createHash('sha256').update(text).digest('hex');
+
+    // The helper's two signatures, as hybridVerify reads them.
+    const signatureOf = (headers: Record<string, string>): HybridSignature =>
+      decodeHybridSignature({
+        alg: headers['X-Algorithm'] as Algorithm,
+        ed25519Sig: headers['X-Signature-Ed25519'],
+        mldsaSig: headers['X-Signature-MLDSA'],
+        ts: Number(headers['X-Timestamp']),
+      });
+
+    for (const cell of [
+      { name: 'without a body', method: 'get', body: undefined },
+      { name: 'with a body', method: 'post', body: '{"name":"agent"}' },
+    ]) {
+      it(`signs timestamp:METHOD:path:sha256(body), not the message AIM verifies, ${cell.name}`, async () => {
+        if (!pqcAvailable) return;
+
+        const keyPair = await generateHybridKeyPair('ML-DSA-65');
+        const publicKey = getHybridPublicKey(keyPair);
+        const path = '/api/v1/detection/report';
+        const ts = 1760000000;
+
+        const headers = await createHybridRequestHeaders(keyPair, cell.method, path, cell.body, ts);
+        const signature = signatureOf(headers);
+        const method = cell.method.toUpperCase();
+
+        const bodyHash = cell.body ? sha256Hex(cell.body) : '';
+        const signed = encode(`${ts}:${method}:${path}:${bodyHash}`);
+        expect(await hybridVerify(publicKey, signed, signature)).toBe(true);
+
+        const verifiedByAIM = encode([method, path, String(ts), ...(cell.body ? [cell.body] : [])].join('\n'));
+        expect(await hybridVerify(publicKey, verifiedByAIM, signature)).toBe(false);
+      });
+    }
+
+    it('stamps the clock in milliseconds when the caller passes no timestamp', async () => {
+      if (!pqcAvailable) return;
+
+      const keyPair = await generateHybridKeyPair('ML-DSA-65');
+      const before = Date.now();
+      const headers = await createHybridRequestHeaders(keyPair, 'GET', '/api/v1/detection/report');
+      const after = Date.now();
+
+      const stamped = Number(headers['X-Timestamp']);
+      expect(stamped).toBeGreaterThanOrEqual(before);
+      expect(stamped).toBeLessThanOrEqual(after);
+    });
+
+    it('leaves X-Agent-ID empty and sends no single X-Signature header', async () => {
+      if (!pqcAvailable) return;
+
+      const keyPair = await generateHybridKeyPair('ML-DSA-65');
+      const headers = await createHybridRequestHeaders(keyPair, 'GET', '/api/v1/detection/report', undefined, 1760000000);
+
+      expect(Object.keys(headers).sort()).toEqual([
+        'X-Agent-ID',
+        'X-Algorithm',
+        'X-Signature-Ed25519',
+        'X-Signature-MLDSA',
+        'X-Timestamp',
+      ]);
+      expect(headers['X-Agent-ID']).toBe('');
+      expect(headers['X-Algorithm']).toBe('Ed25519+ML-DSA-65');
     });
   });
 });

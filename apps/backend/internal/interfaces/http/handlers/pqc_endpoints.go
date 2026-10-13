@@ -32,9 +32,25 @@ type EnableHybridModeRequest struct {
 	Enable bool `json:"enable"` // Enable or disable hybrid mode
 }
 
+// hybridModeOnRefusedMessage is the answer to a member who asks to turn hybrid mode on.
+const hybridModeOnRefusedMessage = "Manager or admin access required to turn on hybrid mode"
+
+// callerTurnsOnHybridMode reports whether the caller may turn hybrid mode on.
+//
+// SECURITY: hybrid mode marks the agent as requiring both an Ed25519 and an ML-DSA
+// signature on every request it signs, so turning it on changes what the agent must
+// present to authenticate. Both routes that can do it are mounted behind
+// MemberMiddleware, which admits a member for registering a key and for turning the
+// mode off; turning it on takes the manager or admin role. An allow-list, so an
+// absent or unrecognised role fails closed. Regression: pqc_hybrid_mode_role_test.go.
+func callerTurnsOnHybridMode(c fiber.Ctx) bool {
+	role, _ := c.Locals("role").(string)
+	return role == string(domain.RoleAdmin) || role == string(domain.RoleManager)
+}
+
 // RegisterPQCKey registers a post-quantum cryptographic public key for an agent
 // @Summary Register PQC public key
-// @Description Register an ML-DSA post-quantum public key for an agent. Supports ML-DSA-44, ML-DSA-65, and ML-DSA-87.
+// @Description Register an ML-DSA post-quantum public key for an agent. Supports ML-DSA-44, ML-DSA-65, and ML-DSA-87. enableHybrid true takes the manager or admin role.
 // @Tags agents,pqc
 // @Accept json
 // @Produce json
@@ -44,7 +60,7 @@ type EnableHybridModeRequest struct {
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 403 {object} ErrorResponse "Access denied, or enableHybrid true from a member"
 // @Router /agents/{id}/pqc-key [post]
 func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
@@ -66,6 +82,13 @@ func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+		})
+	}
+
+	if req.EnableHybrid && !callerTurnsOnHybridMode(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": hybridModeOnRefusedMessage,
+			"hint":  "Send enableHybrid false to register the key without hybrid mode",
 		})
 	}
 
@@ -288,7 +311,7 @@ func (h *AgentHandler) RotatePQCKey(c fiber.Ctx) error {
 
 // SetHybridMode enables or disables hybrid authentication mode for an agent
 // @Summary Set hybrid mode
-// @Description Enable or disable hybrid authentication mode (Ed25519 + ML-DSA) for an agent.
+// @Description Enable or disable hybrid authentication mode (Ed25519 + ML-DSA) for an agent. enable true takes the manager or admin role.
 // @Tags agents,pqc
 // @Accept json
 // @Produce json
@@ -298,7 +321,7 @@ func (h *AgentHandler) RotatePQCKey(c fiber.Ctx) error {
 // @Failure 400 {object} ErrorResponse "Invalid request or missing PQC key"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 403 {object} ErrorResponse "Access denied, or enable true from a member"
 // @Router /agents/{id}/hybrid-mode [post]
 func (h *AgentHandler) SetHybridMode(c fiber.Ctx) error {
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
@@ -320,6 +343,12 @@ func (h *AgentHandler) SetHybridMode(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+		})
+	}
+
+	if req.Enable && !callerTurnsOnHybridMode(c) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": hybridModeOnRefusedMessage,
 		})
 	}
 

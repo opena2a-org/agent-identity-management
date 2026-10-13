@@ -403,8 +403,12 @@ export function validateKeySize(algorithm: Algorithm, keyType: 'publicKey' | 'pr
 }
 
 /**
- * Create request signature headers for hybrid mode
- * Returns headers compatible with the Go backend
+ * Create hybrid Ed25519+ML-DSA signature headers for a request.
+ *
+ * @deprecated AIM's request verification does not accept these headers. AIM
+ * verifies a signature over the method, path, timestamp and body joined by
+ * newlines; these headers sign `timestamp:METHOD:path:sha256(body)`, so a
+ * request carrying them does not authenticate as the agent.
  */
 export async function createHybridRequestHeaders(
   keys: HybridKeyPair,
