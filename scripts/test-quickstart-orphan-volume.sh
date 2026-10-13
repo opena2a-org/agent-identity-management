@@ -163,8 +163,54 @@ expect_out "Backend did not become healthy"
 expect_out "docker volume ls"
 
 echo
+echo "== quickstart.sh host ports and container-name prefix from the environment =="
+
+# 9. A first run takes the host ports and AIM_PROJECT from the environment:
+#    the health probe and the printed URLs use them, and .env records them so a
+#    later `docker compose` in the directory keeps the same ports.
+PREPARE="" run_case ports-env STUB_VOLUMES="" AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000 AIM_POSTGRES_PORT=15432 AIM_REDIS_PORT=16379 AIM_PROJECT=lab
+expect_rc 0; dump 0
+expect_ran "curl -sf http://localhost:18080/health"
+expect_not_ran "curl -sf http://localhost:8080/health"
+expect_out "http://localhost:13000"
+expect_out "http://localhost:18080"
+for line in AIM_PROJECT=lab AIM_POSTGRES_PORT=15432 AIM_REDIS_PORT=16379 AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000; do
+  if grep -q -x -F -- "$line" "$CASE_DIR/aim/.env"; then pass ".env records $line"; else fail ".env lacks $line"; fi
+done
+if grep -q '^COMPOSE_PROJECT_NAME=' "$CASE_DIR/aim/.env"; then fail ".env records a COMPOSE_PROJECT_NAME that was not set"; else pass ".env records no COMPOSE_PROJECT_NAME"; fi
+
+# 10. Control: with nothing set, a first run records the defaults and probes 8080.
+PREPARE="" run_case ports-default STUB_VOLUMES=""
+expect_rc 0; dump 0
+expect_ran "curl -sf http://localhost:8080/health"
+expect_out "http://localhost:3000"
+for line in AIM_PROJECT=aim AIM_POSTGRES_PORT=5432 AIM_REDIS_PORT=6379 AIM_BACKEND_PORT=8080 AIM_FRONTEND_PORT=3000; do
+  if grep -q -x -F -- "$line" "$CASE_DIR/aim/.env"; then pass ".env records $line"; else fail ".env lacks $line"; fi
+done
+
+# 11. A COMPOSE_PROJECT_NAME given to a first run is recorded, so later compose
+#     commands in the directory address the same project.
+PREPARE="" run_case project-recorded STUB_VOLUMES="" COMPOSE_PROJECT_NAME=stack
+expect_rc 0; dump 0
+if grep -q -x -F -- "COMPOSE_PROJECT_NAME=stack" "$CASE_DIR/aim/.env"; then pass ".env records COMPOSE_PROJECT_NAME=stack"; else fail ".env lacks COMPOSE_PROJECT_NAME=stack"; fi
+
+# 12. An existing install is probed at the port its .env recorded, and the
+#     environment still wins over .env, as it does for Compose itself.
+PREPARE="mkdir aim && printf 'services: {}\n' > aim/docker-compose.quickstart.yml && printf 'AIM_BACKEND_PORT=18081\nAIM_FRONTEND_PORT=13001\n' > aim/.env" \
+  run_case existing-dotenv-port STUB_VOLUMES=""
+expect_rc 0; dump 0
+expect_ran "curl -sf http://localhost:18081/health"
+expect_out "http://localhost:13001"
+PREPARE="mkdir aim && printf 'services: {}\n' > aim/docker-compose.quickstart.yml && printf 'AIM_BACKEND_PORT=18081\n' > aim/.env" \
+  run_case existing-env-over-dotenv STUB_VOLUMES="" AIM_BACKEND_PORT=18082
+expect_rc 0; dump 0
+expect_ran "curl -sf http://localhost:18082/health"
+expect_not_ran "curl -sf http://localhost:18081/health"
+
+echo
 if (( FAILURES > 0 )); then
   echo "FAILED: $FAILURES assertion(s)."
   exit 1
 fi
-echo "PASSED: quickstart.sh stops before writing over an earlier install's database."
+echo "PASSED: quickstart.sh stops before writing over an earlier install's database,"
+echo "        and takes its host ports and container-name prefix from the environment."

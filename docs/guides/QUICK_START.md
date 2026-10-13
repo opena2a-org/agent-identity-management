@@ -183,6 +183,10 @@ lsof -i :3000
 
 # Kill the process if needed
 kill <PID>
+
+# Or run AIM on other ports (defaults: AIM_BACKEND_PORT=8080, AIM_FRONTEND_PORT=3000,
+# AIM_POSTGRES_PORT=5432, AIM_REDIS_PORT=6379; AIM_PROJECT=aim prefixes the container names)
+AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 bash quickstart.sh
 ```
 
 ### Database Connection Failed
