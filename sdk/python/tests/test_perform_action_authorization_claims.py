@@ -117,16 +117,24 @@ def test_readme_does_not_say_the_decorator_runs_through_the_five_step_engine(nam
     assert stated, f"{name} must say the server checks the call against grants and security policies"
 
 
-def _fga_section(readme):
-    start = readme.index("### 5-step Fine-Grained Authorization")
-    end = readme.index("\n### ", start + 1)
-    return readme[start:end]
+# The root README links these guides for the engine and for observability; the
+# passages that describe them live there.
+SERVER_FEATURES = REPO / "docs" / "server-features.md"
+DEPLOYMENT = REPO / "docs" / "DEPLOYMENT.md"
 
 
-def test_root_readme_names_the_route_the_five_step_engine_runs_on():
+def _fga_section(guide):
+    start = guide.index("## 5-step Fine-Grained Authorization")
+    end = guide.index("\n## ", start + 1)
+    return guide[start:end]
+
+
+def test_server_features_guide_names_the_route_the_five_step_engine_runs_on():
     readme = READMES["README.md"].read_text(encoding="utf-8")
-    section = _fga_section(readme)
+    guide = SERVER_FEATURES.read_text(encoding="utf-8")
+    section = _fga_section(guide)
     assert "Every privileged action runs through five checks" not in readme
+    assert "Every privileged action runs through five checks" not in guide
     assert "`POST /api/v1/agents/:id/authorize`" in section
     assert "it runs step 1 only" in section
     assert "never denies" in section
@@ -134,10 +142,12 @@ def test_root_readme_names_the_route_the_five_step_engine_runs_on():
     assert "`/api/v1/sdk-api/verifications`" in section
 
 
-def test_root_readme_does_not_say_every_decision_has_five_child_spans():
+def test_deployment_guide_does_not_say_every_decision_has_five_child_spans():
     readme = READMES["README.md"].read_text(encoding="utf-8")
+    guide = DEPLOYMENT.read_text(encoding="utf-8")
     assert "with 5 child spans" not in readme
-    assert "one child span per FGA step it ran" in readme
+    assert "with 5 child spans" not in guide
+    assert "one child span per FGA step it ran" in guide
 
 
 def test_the_sdk_posts_verifications_to_the_route_the_docs_name_and_never_to_authorize():

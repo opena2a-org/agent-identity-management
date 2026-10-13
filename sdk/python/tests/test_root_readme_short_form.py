@@ -105,12 +105,12 @@ KEPT_SENTENCES = [
     "nothing on this path is pinned or verified",
 ]
 
-# Text that other tests read from this README: the token-rotation line and its Redis
-# condition, the policy a quickstart-default stack names, what a pending agent's call
-# raises in monitoring mode and is refused with in strict mode, and when the trust
-# score is recalculated. The last marker is held as a whole paragraph.
+# Text that other tests read from this README: the policy a quickstart-default stack
+# names, what a pending agent's call raises in monitoring mode and is refused with in
+# strict mode, and when the trust score is recalculated. The last marker is held as a
+# whole paragraph. The token-rotation line and its Redis condition are in the notes
+# docs/quick-start.md holds, not here.
 PINNED_SENTENCES = [
-    "Token rotated successfully",
     "`default_policy`",
     "`Unverified Agent Action (Monitoring Mode)`",
     "`Agent not verified - all actions denied`",

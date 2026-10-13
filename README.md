@@ -28,8 +28,6 @@ agent = secure("my-first-agent", capabilities=["db:read"])
   Capabilities: db:read
 ```
 
-On a server with Redis, the SDK also prints `Token rotated successfully — old refresh token revoked (new id: 461d130d...)` on the first request after sign-in; without Redis the server logs `Token revocation disabled (no Redis configured)`.
-
 `aim-sdk login` prints a code you approve on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair and stores credentials at `~/.aim/`.
 
 The agent starts `pending` until an administrator verifies it under Agents in the dashboard. On a new organization, which starts in monitoring mode, a pending agent's call runs and raises an `Unverified Agent Action (Monitoring Mode)` alert. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until then.

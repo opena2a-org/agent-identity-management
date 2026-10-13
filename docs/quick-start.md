@@ -611,7 +611,7 @@ Want to see the same boundary stop a real attack? The [Demos](DOCUMENTATION_INDE
 
 ### Notes on the root README's Quick start
 
-The first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records it as revoked, answers with a new one, and the SDK prints a line: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. Without Redis the server logs `Token revocation disabled (no Redis configured)` and the SDK prints no such line.
+The first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records it as revoked, answers with a new one, and the SDK prints a line: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. Without Redis the server logs `Token revocation disabled (no Redis configured)` at startup, and one whose Redis could not be reached logs `Token revocation disabled (Redis unavailable)`; in both cases the server answers with the token it was given and the SDK prints no such line.
 
 `aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
 
