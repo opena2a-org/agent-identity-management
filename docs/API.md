@@ -282,6 +282,8 @@ Mark an agent in your organization as verified. A manager or administrator signs
 
 `changed` reports whether the request changed the agent's status.
 
+A verification is made only together with its audit record, and so is a reactivation (`POST /api/v1/agents/{id}/reactivate`). When that record cannot be written, the agent's status is unchanged and the route answers `503` with `Retry-After: 300` (seconds) and `{"error": "...", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. Retry after that time.
+
 ---
 
 #### PUT /api/v1/agents/{id}

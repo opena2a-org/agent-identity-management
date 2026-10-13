@@ -296,6 +296,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Changed
 
+- A reactivation or a verification of an agent refused because its audit record could not be written answers `503`
+  with `recordUnavailable` and `Retry-After`, and the agent page says nothing changed and when to try again.
+- Both let the agent act again, an expansion, made only together with its audit record; when the record path cannot
+  be used the service refuses the act whole and the agent's status is unchanged. `POST /api/v1/agents/:id/reactivate`
+  and `POST /api/v1/agents/:id/verify` now answer that refusal as the agent delete does: `503`, `Retry-After: 300` and
+  `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in the
+  server log. A suspension narrows what the agent can do and is never refused by the record path. Any other failure
+  of the three routes still answers as before.
+- Measured with the handlers of the previous commit, with the service returning the recorder's refusal: both routes
+  answered `500` with `{"error":"An internal error occurred. Please try again later."}`, no `reasonCode` and no
+  `Retry-After`, and the agent page showed its red failure alert, "AIM could not reactivate this agent."
+- The agent page now states this refusal once, beside the Verify and Reactivate buttons, in the same neutral
+  "Nothing was changed" alert as the delete dialog, with when to try again taken from `Retry-After`. Its text is the
+  dashboard's own, never the server's line. The next lifecycle action clears it, and it is never shown together with
+  the red failure alert.
+- `docs/API.md` states the `503`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_lifecycle_record_refusal_test.go`, the reason-code
+  census in `refusal_reason_code_test.go`, and `apps/web/app/dashboard/agents/[id]/page.lifecycle-outcomes.test.tsx`.
+
+### Changed
+
 - An approval of a capability request refused because its audit record could not be written answers `503` with
   `recordUnavailable` and `Retry-After`, and the approve dialog says nothing changed and when to try again.
 - The approval and its grant are an expansion, made only together with their audit record; when the record path

@@ -76,12 +76,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ActionOutcome } from "@/components/ui/action-outcome";
+import { RecordPathRefusalAlert } from "@/components/ui/record-path-refusal-alert";
 import {
   actionSuccess,
   describeActionFailure,
   type ActionFailureContext,
   type ActionOutcome as ActionOutcomeState,
 } from "@/lib/action-outcome";
+import { recordPathRefusal, type RecordPathRefusal } from "@/lib/record-path-refusal";
 import { AuthGuard } from "@/components/auth-guard";
 
 interface MCPServer {
@@ -100,7 +102,8 @@ interface MCPServer {
   capabilities?: string[];
 }
 
-// The lifecycle endpoints state no `code` yet, so a failure is described from its status.
+// A lifecycle failure is described from its status. The one stated `code` the page reads,
+// the record path's refusal, is shown in an alert of its own (reportLifecycleFailure).
 function lifecycleFailure(action: string): ActionFailureContext {
   return {
     action,
@@ -141,6 +144,7 @@ export default function AgentDetailsPage({
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
   const [showDetectDialog, setShowDetectDialog] = useState(false);
   const [lifecycleOutcome, setLifecycleOutcome] = useState<ActionOutcomeState | null>(null);
+  const [lifecycleRefusal, setLifecycleRefusal] = useState<RecordPathRefusal | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [agentActivity, setAgentActivity] = useState<any[]>([]);
   const [detectedMCPs, setDetectedMCPs] = useState<any[]>([]);
@@ -317,16 +321,34 @@ export default function AgentDetailsPage({
   const canEdit = ["admin", "manager", "member"].includes(userRole);
   const canManage = ["admin", "manager"].includes(userRole);
 
+  // Each lifecycle act starts with nothing stated beside the actions.
+  const clearLifecycleOutcome = () => {
+    setLifecycleOutcome(null);
+    setLifecycleRefusal(null);
+  };
+
+  // A reactivation or a verification the server refused because its audit record could not
+  // be written changed nothing, and the person did nothing wrong: it is stated in a neutral
+  // alert with when to try again. Any other failure is a reason and a next step.
+  const reportLifecycleFailure = (e: unknown, action: string) => {
+    const refusal = recordPathRefusal(e, action);
+    if (refusal) {
+      setLifecycleRefusal(refusal);
+    } else {
+      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure(action)));
+    }
+  };
+
   const handleVerify = async () => {
     if (!agentId) return;
     setVerifying(true);
-    setLifecycleOutcome(null);
+    clearLifecycleOutcome();
     try {
       await api.verifyAgent(agentId);
       setLifecycleOutcome(actionSuccess("Agent verified."));
       handleRefresh();
     } catch (e) {
-      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("verify this agent")));
+      reportLifecycleFailure(e, "verify this agent");
     } finally {
       setVerifying(false);
     }
@@ -335,7 +357,7 @@ export default function AgentDetailsPage({
   const handleSuspend = async () => {
     if (!agentId) return;
     setSuspending(true);
-    setLifecycleOutcome(null);
+    clearLifecycleOutcome();
     try {
       await api.suspendAgent(agentId);
       setLifecycleOutcome(
@@ -343,7 +365,7 @@ export default function AgentDetailsPage({
       );
       handleRefresh();
     } catch (e) {
-      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("suspend this agent")));
+      reportLifecycleFailure(e, "suspend this agent");
     } finally {
       setSuspending(false);
       setShowSuspendConfirm(false);
@@ -353,13 +375,13 @@ export default function AgentDetailsPage({
   const handleReactivate = async () => {
     if (!agentId) return;
     setReactivating(true);
-    setLifecycleOutcome(null);
+    clearLifecycleOutcome();
     try {
       await api.reactivateAgent(agentId);
       setLifecycleOutcome(actionSuccess("Agent reactivated. It can authenticate and act again."));
       handleRefresh();
     } catch (e) {
-      setLifecycleOutcome(describeActionFailure(e, lifecycleFailure("reactivate this agent")));
+      reportLifecycleFailure(e, "reactivate this agent");
     } finally {
       setReactivating(false);
     }
@@ -659,6 +681,7 @@ export default function AgentDetailsPage({
           onDismiss={() => setLifecycleOutcome(null)}
           className="mt-4"
         />
+        <RecordPathRefusalAlert refusal={lifecycleRefusal} className="mt-4" />
       </div>
 
       <Separator />

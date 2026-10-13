@@ -86,6 +86,18 @@ func TestRefusals_CarryReasonCodeEqualToCode(t *testing.T) {
 		assertReasonCode(t, body, "recordUnavailable")
 	})
 
+	t.Run("reactivation and verification refused because the audit record could not be written", func(t *testing.T) {
+		acts := map[string]domain.AgentStatus{
+			"reactivate": domain.AgentStatusSuspended,
+			"verify":     domain.AgentStatusPending,
+		}
+		for act, agentStatus := range acts {
+			status, _, body, _ := postRefusedLifecycleAct(t, agentStatus, act, recordRefusal)
+			assert.Equal(t, fiber.StatusServiceUnavailable, status, act)
+			assertReasonCode(t, body, "recordUnavailable")
+		}
+	})
+
 	t.Run("registration error without a reason", func(t *testing.T) {
 		body := registrationErrorBody(fmt.Errorf("boom"), "Registration failed")
 		assert.NotContains(t, body, "reasonCode")

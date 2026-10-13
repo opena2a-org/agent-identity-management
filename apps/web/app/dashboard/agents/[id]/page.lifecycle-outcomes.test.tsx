@@ -155,6 +155,64 @@ describe("agent page lifecycle outcomes", () => {
     expect(browserAlert).not.toHaveBeenCalled();
   });
 
+  // A reactivation and a verification are made only together with their audit record. The
+  // server refuses one whole when the record cannot be written (503 recordUnavailable).
+  it.each([
+    { act: "reactivate this agent", status: "suspended", button: "Reactivate", call: "reactivateAgent" },
+    { act: "verify this agent", status: "pending", button: "Verify agent", call: "verifyAgent" },
+  ])(
+    "states a refusal of the record path to $act once, in a neutral alert beside the actions, with when to try again",
+    async ({ act, status, button, call }) => {
+      mockAgentPage([], status);
+      mocked[call].mockRejectedValueOnce(
+        Object.assign(requestError("server line", 503), { code: "recordUnavailable", retryAfterSeconds: 300 })
+      );
+      await renderPage();
+
+      fireEvent.click(screen.getByRole("button", { name: button }));
+
+      const refusal = await screen.findByRole("alert");
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(refusal.querySelector("h5")?.textContent).toBe("Nothing was changed");
+      expect(refusal.textContent).toContain(`AIM did not ${act}`);
+      expect(refusal.textContent).toContain("the record could not be written");
+      expect(refusal.textContent).toContain("Nothing you entered caused this.");
+      expect(refusal.textContent).toContain("Try again in 5 minutes.");
+      expect(refusal.textContent).not.toContain(`AIM could not ${act}.`);
+      expect(refusal.textContent).not.toContain("server line");
+      // The default variant: the person did nothing wrong.
+      expect(refusal.className).not.toContain("destructive");
+      expect(refusal.className).not.toContain("danger");
+      // It is stated beside the button that was pressed, which is offered again.
+      expect(screen.getByRole("button", { name: button })).toBeTruthy();
+      expect(browserAlert).not.toHaveBeenCalled();
+
+      // The alert stays until the next attempt, which clears it.
+      mocked[call].mockResolvedValueOnce({ success: true });
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      await screen.findByRole("status");
+      expect(screen.queryByRole("alert")).toBeNull();
+    }
+  );
+
+  it("replaces a refusal of the record path with the reason of the next failure, never both", async () => {
+    mockAgentPage([], "suspended");
+    mocked.reactivateAgent.mockRejectedValueOnce(
+      Object.assign(requestError("server line", 503), { code: "recordUnavailable", retryAfterSeconds: 300 })
+    );
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reactivate" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Nothing was changed");
+
+    mocked.reactivateAgent.mockRejectedValueOnce(requestError("Insufficient permissions", 403));
+    fireEvent.click(screen.getByRole("button", { name: "Reactivate" }));
+
+    await screen.findByText("Your role does not allow you to reactivate this agent.");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByText("Nothing was changed")).toBeNull();
+  });
+
   it("reports a suspend that succeeded as a status beside the actions", async () => {
     mockAgentPage([]);
     mocked.suspendAgent.mockResolvedValue({ success: true, message: "Agent suspended successfully" });
