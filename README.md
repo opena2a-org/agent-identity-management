@@ -131,7 +131,7 @@ curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-manageme
 bash quickstart.sh
 ```
 
-Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
+It needs Docker running, `openssl` and `curl`, and writes the compose file and a `.env` of generated secrets to `./aim`. Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
 
 The script runs from `main` and starts the `aim-server` and `aim-dashboard` images at their `latest` tags; nothing on this path is pinned or verified, so read [the script](scripts/quickstart.sh) and [the compose file](docker-compose.quickstart.yml) first.
 
