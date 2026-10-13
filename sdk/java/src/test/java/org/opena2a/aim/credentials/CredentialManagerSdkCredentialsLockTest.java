@@ -250,6 +250,31 @@ class CredentialManagerSdkCredentialsLockTest {
     }
 
     @Test
+    @DisplayName("the shared access token is read and saved as the object the Python SDK writes")
+    void theSharedAccessTokenRoundTripsInThePythonSdkFormat() throws Exception {
+        Path path = credentialsPath();
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, "{\"refreshToken\": \"not-a-real-token-1\", \"sharedAccessToken\": "
+                + "{\"token\": \"not-a-real-access-token\", \"refreshTokenSha256\": \"not-a-real-digest\"}}");
+
+        Map<String, String> read = CredentialManager.readSdkCredentialsFile(path);
+        assertEquals("not-a-real-access-token", read.get(CredentialManager.SHARED_ACCESS_TOKEN));
+        assertEquals("not-a-real-digest", read.get(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256));
+
+        CredentialManager.saveSdkCredentials(read, path);
+        JsonNode saved = MAPPER.readTree(Files.readString(path));
+        assertEquals("not-a-real-access-token", saved.path("sharedAccessToken").path("token").asText());
+        assertEquals("not-a-real-digest", saved.path("sharedAccessToken").path("refreshTokenSha256").asText());
+        assertFalse(saved.has(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256),
+                () -> "the digest was saved beside the object: " + saved);
+
+        read.remove(CredentialManager.SHARED_ACCESS_TOKEN);
+        read.remove(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256);
+        CredentialManager.saveSdkCredentials(read, path);
+        assertFalse(MAPPER.readTree(Files.readString(path)).has("sharedAccessToken"));
+    }
+
+    @Test
     @DisplayName("the credentials file and its lock file are readable and writable by the owner only")
     void theCredentialsFileAndItsLockFileAreOwnerOnly() throws Exception {
         Assumptions.assumeTrue(tempDir.getFileSystem().supportedFileAttributeViews().contains("posix"));

@@ -24,6 +24,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -99,6 +101,13 @@ public class AIMClient implements AutoCloseable {
     private volatile String refreshToken;
     private String sdkTokenId;
     private Map<String, String> credentials;
+
+    // The SDK credentials file the credentials are saved to, shared with other processes
+    private final java.nio.file.Path sdkCredentialsPath = CredentialManager.getSdkCredentialsPath();
+
+    // The refresh token the server last refused in this process. A refused token stays
+    // refused, so it is not presented again.
+    private String refusedRefreshToken;
 
     private AIMClient(Builder builder) {
         this.agentName = builder.agentName;
@@ -876,7 +885,11 @@ public class AIMClient implements AutoCloseable {
      */
     private void authenticate() {
         if (refreshToken != null && !refreshToken.isEmpty()) {
-            authenticateWithRefreshToken();
+            if (credentials != null) {
+                refreshWithSharedCredentials();
+            } else {
+                authenticateWithRefreshToken();
+            }
         } else if (clientId != null && clientSecret != null) {
             authenticateWithClientCredentials();
         } else {
@@ -885,13 +898,96 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
+     * Refresh with the SDK credentials file, which other processes may share.
+     *
+     * <p>The server accepts each refresh token once, and treats a token presented again as
+     * reuse. So the refresh runs under the file's cross-process lock and starts by re-reading
+     * the file: an access token another process obtained with the stored refresh token is
+     * used as is, with no request, and a refresh token another process rotated is never
+     * presented. The lock is required: when it is not acquired, the refresh is not sent.</p>
+     */
+    private void refreshWithSharedCredentials() {
+        try {
+            CredentialManager.withSdkCredentialsLock(sdkCredentialsPath, () -> {
+                adoptStoredCredentials();
+                if (!useSharedAccessToken()) {
+                    authenticateWithRefreshToken();
+                }
+                return null;
+            });
+        } catch (CredentialException e) {
+            throw new AuthenticationException(
+                    "Token refresh skipped, the SDK credentials lock was not acquired: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Take the credentials file as it is now. Called under the credentials lock, so no other
+     * process using the lock changes the file until this refresh is saved.
+     */
+    private void adoptStoredCredentials() {
+        Map<String, String> stored = CredentialManager.readSdkCredentialsFile(sdkCredentialsPath);
+        String storedRefreshToken = stored.get("refreshToken");
+        if (storedRefreshToken == null || storedRefreshToken.isEmpty()) {
+            return;
+        }
+        if (!storedRefreshToken.equals(refreshToken)) {
+            // Another process rotated the refresh token since this one read it.
+            this.refreshToken = storedRefreshToken;
+            this.accessToken = null;
+            this.tokenExpiry = null;
+        }
+        Map<String, String> adopted = new HashMap<>(credentials);
+        adopted.remove(CredentialManager.SHARED_ACCESS_TOKEN);
+        adopted.remove(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256);
+        adopted.putAll(stored);
+        this.credentials = adopted;
+    }
+
+    /**
+     * Use the access token stored with the current refresh token, when it has not expired.
+     *
+     * @return whether it was used
+     */
+    private boolean useSharedAccessToken() {
+        String shared = credentials.get(CredentialManager.SHARED_ACCESS_TOKEN);
+        String issuedWith = credentials.get(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256);
+        if (shared == null || issuedWith == null || !issuedWith.equals(sha256Hex(refreshToken))) {
+            return false;
+        }
+        Instant expiry = expiryFromJWT(shared);
+        if (expiry == null || !Instant.now().isBefore(expiry)) {
+            return false;
+        }
+        this.accessToken = shared;
+        this.tokenExpiry = expiry;
+        logger.debug("Using the access token another process obtained with the stored refresh token");
+        return true;
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
+    }
+
+    /**
      * Authenticate using refresh token (SDK OAuth flow).
      * Uses authClient to avoid infinite loops from 401 handling.
      */
     private void authenticateWithRefreshToken() {
+        String presented = refreshToken;
+        if (presented.equals(refusedRefreshToken)) {
+            throw new AuthenticationException(
+                "The server refused this SDK refresh token, so it is not presented again. " +
+                "Download a fresh SDK from your AIM dashboard.");
+        }
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("refreshToken", refreshToken);
+            payload.put("refreshToken", presented);
 
             RequestBody body = RequestBody.create(payload.toString(), JSON);
 
@@ -923,6 +1019,9 @@ public class AIMClient implements AutoCloseable {
                         printTokenExpiredError();
                     }
 
+                    if (response.code() == 401) {
+                        this.refusedRefreshToken = presented;
+                    }
                     throw new AuthenticationException(
                         "SDK authentication failed. Download a fresh SDK from your AIM dashboard.");
                 }
@@ -937,7 +1036,6 @@ public class AIMClient implements AutoCloseable {
                     String newRefreshToken = json.get("refreshToken").asText();
                     if (!newRefreshToken.equals(this.refreshToken)) {
                         this.refreshToken = newRefreshToken;
-                        updateStoredCredentials(newRefreshToken);
                         extractAndSaveTokenId(newRefreshToken);
                         System.out.println("🔄 Token rotated successfully");
                         logger.debug("Refresh token rotated");
@@ -946,6 +1044,10 @@ public class AIMClient implements AutoCloseable {
 
                 // Decode token expiry from JWT
                 setTokenExpiryFromJWT(this.accessToken);
+
+                // Saved on every refresh, rotated or not, so another process sharing the
+                // file uses this access token instead of refreshing again.
+                updateStoredCredentials();
 
                 logger.debug("Authenticated successfully via refresh token");
             }
@@ -1013,6 +1115,17 @@ public class AIMClient implements AutoCloseable {
      * Set token expiry by decoding the JWT access token.
      */
     private void setTokenExpiryFromJWT(String token) {
+        Instant expiry = expiryFromJWT(token);
+        // Default: 15 minutes minus 60s buffer
+        this.tokenExpiry = expiry != null ? expiry : Instant.now().plusSeconds(840);
+    }
+
+    /**
+     * When a JWT access token is to be refreshed: 60 seconds before its expiry.
+     *
+     * @return that time, or null when the token carries no readable expiry
+     */
+    private Instant expiryFromJWT(String token) {
         try {
             String[] parts = token.split("\\.");
             if (parts.length == 3) {
@@ -1026,15 +1139,13 @@ public class AIMClient implements AutoCloseable {
                 JsonNode claims = objectMapper.readTree(decoded);
                 if (claims.has("exp")) {
                     long exp = claims.get("exp").asLong();
-                    this.tokenExpiry = Instant.ofEpochSecond(exp).minusSeconds(TOKEN_REFRESH_MARGIN_SECONDS);
-                    return;
+                    return Instant.ofEpochSecond(exp).minusSeconds(TOKEN_REFRESH_MARGIN_SECONDS);
                 }
             }
         } catch (Exception e) {
             logger.debug("Could not decode token expiry: {}", e.getMessage());
         }
-        // Default: 15 minutes minus 60s buffer
-        this.tokenExpiry = Instant.now().plusSeconds(840);
+        return null;
     }
 
     /**
@@ -1090,8 +1201,8 @@ public class AIMClient implements AutoCloseable {
 
                 if (accessToken != null && newRefreshToken != null) {
                     this.refreshToken = newRefreshToken;
-                    updateStoredCredentials(newRefreshToken);
                     this.tokenExpiry = Instant.now().plusSeconds(840); // 14 minutes
+                    updateStoredCredentials();
                     logger.info("Token recovered successfully");
                     return true;
                 }
@@ -1103,13 +1214,22 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Update stored credentials with new refresh token.
+     * Save the current refresh token, with the access token issued with it, to the SDK
+     * credentials file, so another process sharing the file uses this pair instead of
+     * refreshing again.
      */
-    private void updateStoredCredentials(String newRefreshToken) {
+    private void updateStoredCredentials() {
         if (credentials != null) {
-            credentials.put("refreshToken", newRefreshToken);
+            credentials.put("refreshToken", refreshToken);
+            if (accessToken != null) {
+                credentials.put(CredentialManager.SHARED_ACCESS_TOKEN, accessToken);
+                credentials.put(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256, sha256Hex(refreshToken));
+            } else {
+                credentials.remove(CredentialManager.SHARED_ACCESS_TOKEN);
+                credentials.remove(CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256);
+            }
             try {
-                CredentialManager.saveSdkCredentials(credentials, null);
+                CredentialManager.saveSdkCredentials(credentials, sdkCredentialsPath);
             } catch (Exception e) {
                 logger.warn("Failed to save updated credentials: {}", e.getMessage());
             }
@@ -3241,7 +3361,9 @@ public class AIMClient implements AutoCloseable {
         }
 
         /**
-         * Sets the credentials map for secure storage.
+         * Sets the SDK credentials the client was created from. With them, the client saves
+         * a rotated refresh token to {@code ~/.aim/sdk_credentials.json}, and refreshes under
+         * that file's cross-process lock, starting from what the file holds.
          *
          * @param credentials map of credential key-value pairs
          * @return this builder for chaining

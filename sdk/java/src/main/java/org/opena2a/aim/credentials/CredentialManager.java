@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,6 +70,21 @@ public class CredentialManager {
     private static final String SDK_CREDENTIALS_FILE = "sdk_credentials.json";
     private static final String CREDENTIALS_FILE = "credentials.json";
     private static final String SCHEMA_VERSION = "1.0";
+
+    /**
+     * Credentials key of the access token issued with the stored refresh token. A process
+     * that refreshes stores it, so another process sharing the file uses it instead of
+     * refreshing again. In the file it is written as an object, {@code "sharedAccessToken":
+     * {"token": ..., "refreshTokenSha256": ...}}, as the Python SDK writes it.
+     */
+    public static final String SHARED_ACCESS_TOKEN = "sharedAccessToken";
+
+    /**
+     * Credentials key of the SHA-256, in lowercase hex, of the refresh token the
+     * {@link #SHARED_ACCESS_TOKEN shared access token} was issued with. It is stored with the
+     * access token, as its {@code refreshTokenSha256} field.
+     */
+    public static final String SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256 = "sharedAccessTokenRefreshTokenSha256";
 
     /**
      * How long another holder of the SDK credentials lock is waited for before the save or
@@ -385,6 +401,13 @@ public class CredentialManager {
         if (json.has("organization_id")) creds.put("organizationId", json.get("organization_id").asText());
         if (json.has("orgId")) creds.put("organizationId", json.get("orgId").asText());
 
+        // Access token another process obtained with the stored refresh token
+        JsonNode shared = json.path(SHARED_ACCESS_TOKEN);
+        if (shared.path("token").isTextual() && shared.path("refreshTokenSha256").isTextual()) {
+            creds.put(SHARED_ACCESS_TOKEN, shared.get("token").asText());
+            creds.put(SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256, shared.get("refreshTokenSha256").asText());
+        }
+
         return creds;
     }
 
@@ -472,7 +495,25 @@ public class CredentialManager {
      * @see #withSdkCredentialsLock(Path, Duration, LockedAction)
      */
     public static <T, E extends Exception> T withSdkCredentialsLock(LockedAction<T, E> action) throws E {
-        return withSdkCredentialsLock(getSdkCredentialsPath(), Duration.ofMillis(defaultLockTimeoutMillis), action);
+        return withSdkCredentialsLock(getSdkCredentialsPath(), action);
+    }
+
+    /**
+     * Run an action while holding the cross-process lock on an SDK credentials file, waiting
+     * up to {@link #SDK_CREDENTIALS_LOCK_TIMEOUT_MILLIS} for another holder.
+     *
+     * @param credentialsPath the SDK credentials file
+     * @param action          what to run under the lock
+     * @param <T>             what the action returns
+     * @param <E>             the checked exception the action may throw
+     * @return the action's result
+     * @throws E                   when the action throws it
+     * @throws CredentialException when the lock is not acquired in time; the action is not run
+     * @see #withSdkCredentialsLock(Path, Duration, LockedAction)
+     */
+    public static <T, E extends Exception> T withSdkCredentialsLock(
+            Path credentialsPath, LockedAction<T, E> action) throws E {
+        return withSdkCredentialsLock(credentialsPath, Duration.ofMillis(defaultLockTimeoutMillis), action);
     }
 
     /**
@@ -610,9 +651,18 @@ public class CredentialManager {
             Files.createDirectories(target.toAbsolutePath().getParent());
 
             // Add schema info for future evolution
-            Map<String, String> toSave = new HashMap<>(credentials);
+            Map<String, Object> toSave = new HashMap<>(credentials);
             toSave.put("schemaVersion", SCHEMA_VERSION);
             toSave.put("type", CredentialType.SDK_OAUTH.getValue());
+
+            Object sharedToken = toSave.remove(SHARED_ACCESS_TOKEN);
+            Object sharedIssuedWith = toSave.remove(SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256);
+            if (sharedToken != null && sharedIssuedWith != null) {
+                Map<String, Object> shared = new LinkedHashMap<>();
+                shared.put("token", sharedToken);
+                shared.put("refreshTokenSha256", sharedIssuedWith);
+                toSave.put(SHARED_ACCESS_TOKEN, shared);
+            }
 
             byte[] json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(toSave);
             withSdkCredentialsLock(target, Duration.ofMillis(defaultLockTimeoutMillis), () -> {
