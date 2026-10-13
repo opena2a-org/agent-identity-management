@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `CredentialManager.withSdkCredentialsLock` runs an action while it holds a lock on the SDK credentials
+  file: `~/.aim/sdk_credentials.json.lock`, beside `~/.aim/sdk_credentials.json`, or the same name beside
+  another credentials file passed to the overload that also takes a timeout. The lock keeps processes of this
+  SDK apart, and threads of one process. It waits up to `CredentialManager.SDK_CREDENTIALS_LOCK_TIMEOUT_MILLIS`
+  (60 seconds) for another holder and, when the lock is not acquired in that time, throws `CredentialException`
+  without running the action. A thread that holds the lock takes it again without waiting. On a file system
+  with POSIX permissions the lock file is created readable and writable by the owner only.
+  `CredentialManager.readSdkCredentialsFile` reads the credentials file alone, without environment variables,
+  migration or discovery, so a process holding the lock reads the refresh token another process saved.
+  `AIMClient` presents its refresh token without taking this lock.
+
 ### Changed
 
+- `CredentialManager.saveSdkCredentials` holds that lock while it writes, waiting up to 60 seconds for
+  another holder, and throws `CredentialException` without writing when the lock is not acquired. It writes the
+  credentials to a temporary file in the same directory and moves it over the credentials file, so a process
+  reading the file reads the old credentials or the new ones. On a file system with POSIX permissions the
+  temporary file is created readable and writable by the owner only. On Windows, when another process has the
+  credentials file open and the move is refused, the file is written in place instead.
 - `registerPQCKey(..., true)` (both overloads) and `setHybridMode(true)` now throw `ConfigurationException`
   before sending anything. They sent `"enableHybrid": true` and `"enable": true`, which mark the agent as
   requiring both an Ed25519 and an ML-DSA signature, and no AIM SDK signs requests in that form yet. Register
