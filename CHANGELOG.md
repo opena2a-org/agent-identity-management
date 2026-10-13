@@ -11,6 +11,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the Docker quick-start takes its host ports and container names from the environment
+
+- `docker-compose.quickstart.yml` reads the host ports from `AIM_BACKEND_PORT` (default `8080`),
+  `AIM_FRONTEND_PORT` (`3000`), `AIM_POSTGRES_PORT` (`5432`) and `AIM_REDIS_PORT` (`6379`), and the
+  prefix of the four container names from `AIM_PROJECT` (`aim`, giving `aim-postgres`, `aim-redis`,
+  `aim-backend` and `aim-frontend`). Rendered with none of them set, the file yields the same ports
+  and names as before. The defaults of `FRONTEND_URL`, `ALLOWED_ORIGINS` and the dashboard's
+  `NEXT_PUBLIC_API_URL` follow the dashboard and backend host ports; an explicit value still wins.
+  PostgreSQL and Redis stay bound to `127.0.0.1`.
+- `scripts/quickstart.sh` waits for the backend and prints the dashboard and API URLs at the
+  configured ports, and records `AIM_PROJECT` and the four ports in the install's `.env`, so a later
+  `docker compose` in that directory keeps them. On an existing install the environment wins over
+  `.env`, as it does for Compose itself. A `COMPOSE_PROJECT_NAME` given to a first run is recorded
+  too. Two quick-starts run side by side on one host when each has its own directory (`AIM_DIR`),
+  `AIM_PROJECT` and ports; the README's Docker section shows the command.
+- `scripts/test-quickstart.sh` works in a directory from `mktemp -d` under its own Compose project
+  and container names, takes the host ports from the same variables, and prints the teardown
+  command for the stack it started. It no longer uses a fixed directory under `/tmp`, so it never
+  runs `down -v` on a directory another run created.
+- `.env.quickstart` lists the variables at their defaults; `docs/testing/release-smoke.md` carries
+  rows for `scripts/test-quickstart.sh` and `scripts/test-quickstart-orphan-volume.sh`, which now
+  also checks the ports and the `.env` fallback against docker and curl stubs. A test renders the
+  compose file with and without the variables and checks that the README, the smoke contract and
+  the template name each variable with its default.
+
 ### Fixed — sign-in responses give lastLoginAt in UTC, as /api/v1/auth/me does
 
 - `POST /api/v1/public/login` and `POST /api/v1/public/change-password` answer with the sign-in instant in UTC,

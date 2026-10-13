@@ -8,11 +8,19 @@
 #   sed -i.bak "s|CHANGE_ME_POSTGRES|$(openssl rand -hex 16)|; s|CHANGE_ME_REDIS|$(openssl rand -hex 16)|; s|CHANGE_ME_JWT|$(openssl rand -hex 32)|; s|CHANGE_ME_KEYVAULT|$(openssl rand -base64 32)|" .env && rm .env.bak
 #   docker compose -f docker-compose.quickstart.yml up -d
 #   open http://localhost:3000
+#
+# Host ports and container names come from the environment (or .env), with these defaults:
+#   AIM_POSTGRES_PORT=5432  AIM_REDIS_PORT=6379  AIM_BACKEND_PORT=8080  AIM_FRONTEND_PORT=3000
+#   AIM_PROJECT=aim   (prefix of the container names: aim-postgres, aim-redis,
+#                      aim-backend, aim-frontend)
+# Compose names the volumes and the network after its project, which is
+# COMPOSE_PROJECT_NAME when set and otherwise this file's directory. Two stacks
+# run side by side on one host when each has its own project, AIM_PROJECT and ports.
 
 services:
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: aim-postgres
+    container_name: ${AIM_PROJECT:-aim}-postgres
     environment:
       POSTGRES_DB: identity
       POSTGRES_USER: postgres
@@ -20,7 +28,7 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     # SECURITY: Bound to localhost only. Do not remove 127.0.0.1 prefix.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${AIM_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -33,11 +41,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: aim-redis
+    container_name: ${AIM_PROJECT:-aim}-redis
     command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     # SECURITY: Bound to localhost only. Do not remove 127.0.0.1 prefix.
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${AIM_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -50,7 +58,7 @@ services:
 
   backend:
     image: ghcr.io/opena2a-org/aim-server:latest
-    container_name: aim-backend
+    container_name: ${AIM_PROJECT:-aim}-backend
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
@@ -64,14 +72,15 @@ services:
       - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env}
       - KEYVAULT_MASTER_KEY=${KEYVAULT_MASTER_KEY:?Set KEYVAULT_MASTER_KEY in .env}
       # For non-localhost deployments, update FRONTEND_URL and ALLOWED_ORIGINS
-      # to match the actual URL where the dashboard is accessed.
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      # to match the actual URL where the dashboard is accessed. By default
+      # they follow the dashboard's host port.
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:${AIM_FRONTEND_PORT:-3000}}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:${AIM_FRONTEND_PORT:-3000}}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     ports:
-      - "8080:8080"
+      - "${AIM_BACKEND_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,12 +97,13 @@ services:
 
   frontend:
     image: ghcr.io/opena2a-org/aim-dashboard:latest
-    container_name: aim-frontend
+    container_name: ${AIM_PROJECT:-aim}-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:8080}
+      # The URL the browser reaches the API at; follows the backend's host port by default.
+      - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:${AIM_BACKEND_PORT:-8080}}
       - NODE_ENV=production
     ports:
-      - "3000:3000"
+      - "${AIM_FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy

@@ -254,6 +254,24 @@ bash quickstart.sh
 
 Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
 
+The host ports and the container names come from the environment, with the values below as defaults. Set a variable before `bash quickstart.sh` (or in the `.env` next to `docker-compose.quickstart.yml`) to run AIM beside another service on the same port, or to run a second AIM stack on one host. The script records the values it ran with in the install's `.env`, so a later `docker compose` in that directory keeps them.
+
+| Variable | Default | Sets |
+|---|---|---|
+| `AIM_BACKEND_PORT` | `8080` | host port of the API (`aim-backend`) |
+| `AIM_FRONTEND_PORT` | `3000` | host port of the dashboard (`aim-frontend`) |
+| `AIM_POSTGRES_PORT` | `5432` | host port of PostgreSQL (`aim-postgres`), bound to `127.0.0.1` |
+| `AIM_REDIS_PORT` | `6379` | host port of Redis (`aim-redis`), bound to `127.0.0.1` |
+| `AIM_PROJECT` | `aim` | prefix of the four container names |
+
+A second stack beside the default one, in its own directory and Compose project, with its own container names and ports:
+
+```bash
+AIM_DIR=aim2 AIM_PROJECT=aim2 AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 AIM_POSTGRES_PORT=5433 AIM_REDIS_PORT=6380 bash quickstart.sh
+```
+
+Compose names the volumes and the network after its project (`COMPOSE_PROJECT_NAME`, or the install directory's name), so two stacks also need two projects; `AIM_DIR` gives each its own directory and project.
+
 Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
 
 Merges to `main` no longer publish images: only a push of a `platform-vX.Y.Z` tag does, and it publishes `X.Y.Z`, `X.Y`, `X` and `latest` for both images on both registries. The `edge` tag is frozen at the last build of `main` published before this change and will be removed; to follow `main`, build from source (next section). This change does not move `1`, `1.0` or `1.0.0`. A running image is identified by its digest and its revision label (`org.opencontainers.image.revision`), not by the tag it was pulled by.

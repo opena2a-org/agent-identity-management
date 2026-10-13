@@ -33,6 +33,12 @@ compose_project() {
   printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[-_]*//'
 }
 
+# dotenv_value NAME FILE prints the last value FILE assigns to NAME, or nothing.
+dotenv_value() {
+  [ -f "$2" ] || return 0
+  sed -n "s/^$1=//p" "$2" | tail -n 1
+}
+
 # --- Validate install directory ---
 case "$INSTALL_DIR" in
   /*|*..*)  error "AIM_DIR must be a relative path without '..': $INSTALL_DIR" ;;
@@ -100,20 +106,32 @@ else
   kv_key=$(openssl rand -base64 32)
   admin_pass=$(openssl rand -base64 18)
 
-  # Write .env from variables (restricted permissions)
-  (umask 077 && printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\nADMIN_EMAIL=admin@opena2a.org\nADMIN_PASSWORD=%s\n' \
-    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" "$admin_pass" > .env)
+  # Write .env from variables (restricted permissions). The host ports and the
+  # container-name prefix are recorded with the compose file's defaults, so a
+  # later `docker compose` in this directory keeps the ports this run chose.
+  (umask 077 && printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\nADMIN_EMAIL=admin@opena2a.org\nADMIN_PASSWORD=%s\nAIM_PROJECT=%s\nAIM_POSTGRES_PORT=%s\nAIM_REDIS_PORT=%s\nAIM_BACKEND_PORT=%s\nAIM_FRONTEND_PORT=%s\n' \
+    "$pg_pass" "$redis_pass" "$jwt_secret" "$kv_key" "$admin_pass" \
+    "${AIM_PROJECT:-aim}" "${AIM_POSTGRES_PORT:-5432}" "${AIM_REDIS_PORT:-6379}" "${AIM_BACKEND_PORT:-8080}" "${AIM_FRONTEND_PORT:-3000}" > .env)
+  if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then
+    printf 'COMPOSE_PROJECT_NAME=%s\n' "$COMPOSE_PROJECT_NAME" >> .env
+  fi
 
   info "Generated .env with random secrets"
   info "Pulling images and starting services..."
   docker compose -f docker-compose.quickstart.yml up -d
 fi
 
+# --- Host ports: the environment first, then this install's .env, then the defaults ---
+backend_port="${AIM_BACKEND_PORT:-$(dotenv_value AIM_BACKEND_PORT .env)}"
+backend_port="${backend_port:-8080}"
+frontend_port="${AIM_FRONTEND_PORT:-$(dotenv_value AIM_FRONTEND_PORT .env)}"
+frontend_port="${frontend_port:-3000}"
+
 # --- Wait for backend health ---
 info "Waiting for backend to be ready..."
 retries=0
 max_retries=30
-until curl -sf http://localhost:8080/health >/dev/null 2>&1; do
+until curl -sf "http://localhost:$backend_port/health" >/dev/null 2>&1; do
   retries=$((retries + 1))
   if [ "$retries" -ge "$max_retries" ]; then
     printf '\033[1;31m[AIM]\033[0m %s\n' "Backend did not become healthy. Check logs: docker compose -f docker-compose.quickstart.yml logs backend" >&2
@@ -129,8 +147,8 @@ done
 printf '\n'
 info "AIM is running!"
 printf '\n'
-printf '  Dashboard:  \033[1;32mhttp://localhost:3000\033[0m\n'
-printf '  API:        \033[1;32mhttp://localhost:8080\033[0m\n'
+printf '  Dashboard:  \033[1;32mhttp://localhost:%s\033[0m\n' "$frontend_port"
+printf '  API:        \033[1;32mhttp://localhost:%s\033[0m\n' "$backend_port"
 if [ -n "${admin_pass:-}" ]; then
   printf '  Login:      admin@opena2a.org / %s\n' "$admin_pass"
   printf '              (change this password on first login)\n'
