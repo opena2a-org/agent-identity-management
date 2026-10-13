@@ -1364,6 +1364,14 @@ func (h *AdminHandler) GetPendingUsers(c fiber.Ctx) error {
 		},
 	)
 
+	// The users are answered as the service read them, so lastLoginAt is put
+	// in UTC here, as the other routes that name it do.
+	for _, user := range users {
+		if user != nil {
+			user.LastLoginAt = utcTime(user.LastLoginAt)
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"users": users,
 		"total": len(users),
@@ -1558,6 +1566,7 @@ func (h *AdminHandler) ApproveRegistrationRequest(c fiber.Ctx) error {
 		},
 	)
 
+	newUser.LastLoginAt = utcTime(newUser.LastLoginAt)
 	return c.JSON(fiber.Map{
 		"message": "Registration request approved successfully",
 		"user":    newUser,

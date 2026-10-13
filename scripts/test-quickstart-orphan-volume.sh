@@ -29,7 +29,8 @@ BIN="$WORK/bin"
 mkdir -p "$BIN"
 
 # docker stub: volumes in STUB_VOLUMES exist; STUB_CONTAINERS holds
-# <volume>:<container> pairs for containers that mount a volume.
+# <volume>:<container> pairs for containers that mount a volume. A compose
+# call also logs the quick-start variables it was started with.
 cat > "$BIN/docker" <<'STUB'
 #!/usr/bin/env bash
 printf 'docker %s\n' "$*" >> "$STUB_LOG"
@@ -46,7 +47,10 @@ case "${1:-}" in
       [ "${pair%%:*}" = "$vol" ] && printf '%s\n' "${pair#*:}"
     done
     exit 0 ;;
-  compose) exit 0 ;;
+  compose)
+    printf 'compose started with AIM_PROJECT=%s AIM_BACKEND_PORT=%s AIM_FRONTEND_PORT=%s\n' \
+      "${AIM_PROJECT:-}" "${AIM_BACKEND_PORT:-}" "${AIM_FRONTEND_PORT:-}" >> "$STUB_LOG"
+    exit 0 ;;
 esac
 exit 1
 STUB
@@ -206,6 +210,21 @@ PREPARE="mkdir aim && printf 'services: {}\n' > aim/docker-compose.quickstart.ym
 expect_rc 0; dump 0
 expect_ran "curl -sf http://localhost:18082/health"
 expect_not_ran "curl -sf http://localhost:18081/health"
+
+# 13. A run over an existing install starts Compose with the variables given
+#     for that run and writes nothing: the install's .env is byte for byte what
+#     it was, so the values hold for that run only. Control: the first run of
+#     case 9 wrote the same variables to the .env it created.
+EARLIER_ENV='POSTGRES_PASSWORD=earlier\nAIM_PROJECT=aim\nAIM_BACKEND_PORT=18081\nAIM_FRONTEND_PORT=13001\n'
+PREPARE="mkdir aim && printf 'services: {}\n' > aim/docker-compose.quickstart.yml && printf '$EARLIER_ENV' > aim/.env && cp aim/.env ../existing-env-not-recorded.before" \
+  run_case existing-env-not-recorded STUB_VOLUMES="" AIM_BACKEND_PORT=18082 AIM_FRONTEND_PORT=13002 AIM_PROJECT=lab
+expect_rc 0; dump 0
+expect_ran "docker compose -f docker-compose.quickstart.yml up -d"
+expect_ran "compose started with AIM_PROJECT=lab AIM_BACKEND_PORT=18082 AIM_FRONTEND_PORT=13002"
+expect_ran "curl -sf http://localhost:18082/health"
+expect_out "http://localhost:13002"
+if cmp -s "$CASE_DIR/aim/.env" "$WORK/existing-env-not-recorded.before"; then pass ".env unchanged"; else fail ".env was rewritten"; fi
+if grep -q -F -- "18082" "$CASE_DIR/aim/.env"; then fail ".env records the port given for this run"; else pass ".env does not record the port given for this run"; fi
 
 echo
 if (( FAILURES > 0 )); then

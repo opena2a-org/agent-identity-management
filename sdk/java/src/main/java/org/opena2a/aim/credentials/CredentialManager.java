@@ -530,6 +530,11 @@ public class CredentialManager {
      * apart; within one process it also keeps threads apart. A thread already holding it takes it
      * again without waiting, so a save made by the action does not wait on the action.</p>
      *
+     * <p>On Linux it does not keep a process of this SDK apart from a process of the Python
+     * SDK. That SDK locks the same file with {@code flock}, which Linux holds separately from
+     * the record lock {@code tryLock()} takes, so each takes its lock while the other holds
+     * its own. On macOS the two locks exclude each other.</p>
+     *
      * @param credentialsPath the SDK credentials file
      * @param timeout         how long to wait for another holder
      * @param action          what to run under the lock

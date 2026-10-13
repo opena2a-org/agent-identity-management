@@ -12,7 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CredentialManager.withSdkCredentialsLock` runs an action while it holds a lock on the SDK credentials
   file: `~/.aim/sdk_credentials.json.lock`, beside `~/.aim/sdk_credentials.json`, or the same name beside
   another credentials file passed to the overload that also takes a timeout. The lock keeps processes of this
-  SDK apart, and threads of one process. It waits up to `CredentialManager.SDK_CREDENTIALS_LOCK_TIMEOUT_MILLIS`
+  SDK apart, and threads of one process. On Linux it does not keep a process of the Java SDK apart from a
+  process of the Python SDK: the Python SDK locks the same file with `flock`, the Java SDK with a record lock
+  (`FileChannel.tryLock`), and Linux holds the two separately. Measured with the calls each SDK makes, on
+  Linux 7.0.12 with Java 21.0.12 and Python 3.12.15: each took its lock while the other held its own, in both
+  orders. On macOS 26.6.2, with Java 25.0.2 and Python 3.14.3, each was refused its lock while the other held
+  its own, in both orders (#722). It waits up to `CredentialManager.SDK_CREDENTIALS_LOCK_TIMEOUT_MILLIS`
   (60 seconds) for another holder and, when the lock is not acquired in that time, throws `CredentialException`
   without running the action. A thread that holds the lock takes it again without waiting. On a file system
   with POSIX permissions the lock file is created readable and writable by the owner only.

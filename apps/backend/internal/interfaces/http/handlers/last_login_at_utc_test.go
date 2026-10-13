@@ -54,7 +54,7 @@ func TestLastLoginAt_SignInAnswersInUTCLikeAuthMe(t *testing.T) {
 		// A forced password change answers with the stored value, not a new one.
 		{"public login, password change required", true, "/api/v1/public/login", jsonLogin},
 		{"public change-password", true, "/api/v1/public/change-password", func() string {
-			b, _ := json.Marshal(map[string]string{"email": "issuance@example.com", "oldPassword": issuancePassword, "newPassword": "Another-Cell-Passw0rd!"})
+			b, _ := json.Marshal(map[string]string{"email": "issuance@example.com", "oldPassword": issuancePassword, "newPassword": issuancePassword + "-2"})
 			return string(b)
 		}},
 	}
@@ -151,4 +151,110 @@ func TestLastLoginAt_AdminUserListAnswersInUTC(t *testing.T) {
 	require.Len(t, body.Users, 1)
 	at := lastLoginAtOf(t, body.Users[0], "the admin user list")
 	assert.True(t, at.Equal(lastLoginStored), "the admin user list names the stored instant: %s", at)
+}
+
+// GET /api/v1/admin/users/pending answers with the users as the service read
+// them, so the handler puts each lastLoginAt in UTC before it answers. A user
+// who has never signed in keeps a null lastLoginAt.
+func TestLastLoginAt_PendingUserListAnswersInUTC(t *testing.T) {
+	orgID := uuid.New()
+	adminID := uuid.New()
+	stored := lastLoginStored
+	adminService := &MockAdminServiceImpl{
+		GetPendingUsersFunc: func(ctx context.Context, id uuid.UUID) ([]*domain.User, error) {
+			return []*domain.User{
+				{
+					ID:             uuid.New(),
+					OrganizationID: orgID,
+					Email:          "pending@example.com",
+					Name:           "Pending User",
+					Role:           domain.RoleViewer,
+					Status:         domain.UserStatusPending,
+					LastLoginAt:    &stored,
+				},
+				{
+					ID:             uuid.New(),
+					OrganizationID: orgID,
+					Email:          "never-signed-in@example.com",
+					Name:           "Never Signed In",
+					Role:           domain.RoleViewer,
+					Status:         domain.UserStatusPending,
+				},
+			}, nil
+		},
+	}
+	handler := NewAdminHandlerWithInterfaces(nil, adminService, nil, nil, &MockAuditServiceImpl{}, nil, nil, nil, nil)
+
+	app := fiber.New()
+	app.Get("/api/v1/admin/users/pending", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("user_id", adminID)
+		return handler.GetPendingUsers(c)
+	})
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/v1/admin/users/pending", nil))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode, "the pending list answers: %s", string(raw))
+
+	var body struct {
+		Users []map[string]any `json:"users"`
+		Total int              `json:"total"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &body))
+	require.Len(t, body.Users, 2)
+	assert.Equal(t, 2, body.Total)
+	at := lastLoginAtOf(t, body.Users[0], "the pending user list")
+	assert.True(t, at.Equal(lastLoginStored), "the pending user list names the stored instant: %s", at)
+
+	neverSignedIn, named := body.Users[1]["lastLoginAt"]
+	assert.True(t, named, "a user who never signed in still carries the lastLoginAt key")
+	assert.Nil(t, neverSignedIn, "a user who never signed in has a null lastLoginAt")
+}
+
+// POST /api/v1/admin/registration-requests/:id/approve answers with the user
+// the approval created, and names its lastLoginAt in UTC like the other routes.
+func TestLastLoginAt_ApprovedRegistrationAnswersInUTC(t *testing.T) {
+	orgID := uuid.New()
+	adminID := uuid.New()
+	requestID := uuid.New()
+	stored := lastLoginStored
+	registration := &MockRegistrationServiceImpl{
+		GetRegistrationRequestFunc: func(ctx context.Context, id uuid.UUID) (*domain.UserRegistrationRequest, error) {
+			return &domain.UserRegistrationRequest{ID: id, Email: "approved@example.com", OrganizationID: &orgID}, nil
+		},
+		ApproveRegistrationRequestFunc: func(ctx context.Context, id, reviewer, org uuid.UUID) (*domain.User, error) {
+			return &domain.User{
+				ID:             uuid.New(),
+				OrganizationID: org,
+				Email:          "approved@example.com",
+				Name:           "Approved User",
+				Role:           domain.RoleViewer,
+				Status:         domain.UserStatusActive,
+				LastLoginAt:    &stored,
+			}, nil
+		},
+	}
+	handler := NewAdminHandlerWithInterfaces(nil, nil, nil, nil, &MockAuditServiceImpl{}, nil, registration, nil, nil)
+
+	app := fiber.New()
+	app.Post("/api/v1/admin/registration-requests/:id/approve", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("user_id", adminID)
+		return handler.ApproveRegistrationRequest(c)
+	})
+
+	resp, err := app.Test(httptest.NewRequest("POST", "/api/v1/admin/registration-requests/"+requestID.String()+"/approve", nil))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	require.Equal(t, fiber.StatusOK, resp.StatusCode, "the approval answers: %s", string(raw))
+
+	var body struct {
+		User map[string]any `json:"user"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &body))
+	at := lastLoginAtOf(t, body.User, "the approval response")
+	assert.True(t, at.Equal(lastLoginStored), "the approval response names the stored instant: %s", at)
 }
