@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../sdk/python'
 
 from aim_sdk import AIMClient, register_agent
 from aim_sdk.a2a import A2AClient
+from stack_env import BACKEND_URL
 
 
 def register_agent_via_api(name: str, aim_url: str, api_token: str,
@@ -112,7 +113,7 @@ class AnalysisAgent:
         if api_token:
             self.aim_client = register_agent_via_api(
                 name=self.agent_name,
-                aim_url=aim_url or "http://localhost:8080",
+                aim_url=aim_url or BACKEND_URL,
                 api_token=api_token,
                 display_name="Analysis Agent",
                 description="Analysis agent providing sentiment analysis, summarization, and trend detection",
