@@ -38,14 +38,16 @@ python3 flight_agent.py
 
 On first run the agent will register with AIM, generate an Ed25519 keypair, and drop a credentials file under `~/.aim/`. The same OAuth/SDK-token flow used by external SDK consumers — exercising every path the dashboard-bundle flow exercises.
 
-The stage scripts `reset-demo.sh` (wipe the agent, set the organization to monitoring) and `prep-stage.sh` (reset, register, verify and seed the agent before a talk) reach the stack through the variables the compose files read, so they follow a stack started with other container names or ports:
+The example's scripts reach the stack through the variables the compose files read, so they follow a stack started with other container names or ports: the stage scripts `reset-demo.sh` (wipe the agent, set the organization to monitoring) and `prep-stage.sh` (reset, register, verify and seed the agent before a talk), the helpers `get_fresh_sdk.py`, `verify_qa_complete.py` and `check_sdk_token.sh`, and the dashboard links that `demo_search.py` and `test_flight_agent.py` print.
 
 | Variable | Default | Used for |
 |---|---|---|
 | `AIM_PROJECT` | `aim` | the PostgreSQL container, `$AIM_PROJECT-postgres` |
 | `AIM_BACKEND_PORT` | `8080` | the backend, `http://localhost:$AIM_BACKEND_PORT` |
+| `AIM_FRONTEND_PORT` | `3000` | the dashboard links, `http://localhost:$AIM_FRONTEND_PORT` |
+| `AIM_POSTGRES_PORT` | `5432` | the port `check_sdk_token.sh` gives `psql` |
 
-Each comes from the environment first, then from the repository's `.env`, then the default. For a stack started with `AIM_PROJECT=lab AIM_BACKEND_PORT=18080`:
+Each comes from the environment first, then from the repository's `.env`, then the default (`stack-env.sh` reads them for the shell scripts, `stack_env.py` for the Python ones). The agent itself calls the backend URL stored with its SDK credentials, and names that URL in its health-check hint. For a stack started with `AIM_PROJECT=lab AIM_BACKEND_PORT=18080`:
 
 ```bash
 AIM_PROJECT=lab AIM_BACKEND_PORT=18080 ./prep-stage.sh

@@ -25,7 +25,9 @@ sys.path.insert(0, os.path.join(_AGENT_DIR, 'aim-sdk-python'))
 
 from aim_sdk import secure
 
-API_URL = "http://localhost:8080"
+# The backend and dashboard follow AIM_BACKEND_PORT and AIM_FRONTEND_PORT;
+# see stack_env.py.
+from stack_env import BACKEND_URL as API_URL, FRONTEND_URL
 
 def print_section(title):
     """Print formatted section header"""
@@ -253,7 +255,7 @@ def print_final_summary(results):
         print("   - Trust History (confidence timeline)")
         print("   - Capabilities (auto-detected)")
         print("   - Graph View (agent relationships)")
-        print("\n💡 Navigate to: http://localhost:3000/dashboard/agents")
+        print(f"\n💡 Navigate to: {FRONTEND_URL}/dashboard/agents")
         return True
     else:
         print("⚠️  SOME CHECKS FAILED - Review Issues Above")

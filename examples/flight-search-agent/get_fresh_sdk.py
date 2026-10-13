@@ -11,7 +11,9 @@ import io
 import os
 from pathlib import Path
 
-API_URL = "http://localhost:8080"
+# The backend and dashboard follow AIM_BACKEND_PORT and AIM_FRONTEND_PORT;
+# see stack_env.py.
+from stack_env import BACKEND_URL as API_URL, FRONTEND_URL
 
 print("="*80)
 print("GETTING FRESH SDK WITH PROPER OAUTH")
@@ -22,7 +24,7 @@ print("="*80 + "\n")
 print("Step 1: OAuth Login Required")
 print("-" * 80)
 print("To get fresh credentials, we need to log in via OAuth.")
-print("Please navigate to: http://localhost:3000/auth/login")
+print(f"Please navigate to: {FRONTEND_URL}/auth/login")
 print("And log in with Microsoft.")
 print()
 print("After logging in, the portal will have fresh tokens.")
@@ -125,9 +127,9 @@ try:
             print("MANUAL OAUTH LOGIN REQUIRED")
             print("="*80)
             print()
-            print("1. Open browser: http://localhost:3000/auth/login")
+            print(f"1. Open browser: {FRONTEND_URL}/auth/login")
             print("2. Log in with Microsoft")
-            print("3. Navigate to: http://localhost:3000/dashboard/sdk")
+            print(f"3. Navigate to: {FRONTEND_URL}/dashboard/sdk")
             print("4. Click 'Download SDK' for Python")
             print("5. Extract downloaded ZIP to ./fresh-sdk/")
             print()

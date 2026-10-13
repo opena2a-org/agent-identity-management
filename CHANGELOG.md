@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the flight-search demo's helper scripts follow `AIM_BACKEND_PORT`, `AIM_FRONTEND_PORT` and `AIM_POSTGRES_PORT`
+
+- `examples/flight-search-agent/get_fresh_sdk.py` and `verify_qa_complete.py` called the backend on
+  `localhost:8080` and printed dashboard links on `localhost:3000`, `demo_search.py` and
+  `test_flight_agent.py` printed the dashboard on `localhost:3000`, and `check_sdk_token.sh` ran
+  `psql` on the default port 5432. Against a stack started on other host ports they reached nothing,
+  or, beside a default stack on the same host, that stack. They now read `AIM_BACKEND_PORT`
+  (`8080`), `AIM_FRONTEND_PORT` (`3000`) and `AIM_POSTGRES_PORT` (`5432`) from the environment, then
+  the repository's `.env`, then the defaults, through `stack_env.py` for the Python scripts and
+  `stack-env.sh` for the shell script. The example's README lists the new variables.
+- When a deny does not land, `flight_agent.py` told the operator to run
+  `curl localhost:8080/healthz`, a path the backend does not serve, whatever URL the agent used. It
+  now prints `curl -sf <the agent's backend URL>/health`.
+
 ### Changed — the flight-search demo's stage scripts reach the stack through `AIM_PROJECT` and `AIM_BACKEND_PORT`
 
 - `examples/flight-search-agent/reset-demo.sh` and `prep-stage.sh` ran every query in the fixed

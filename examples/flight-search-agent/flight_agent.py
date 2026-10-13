@@ -445,7 +445,7 @@ class FlightAgent:
         print()
         print("⚠️  AIM returned a non-terminal status. The deny did not land cleanly.")
         print("   Likely cause: AIM backend unreachable, or policy still pending.")
-        print("   Check `curl localhost:8080/healthz` and try again.")
+        print(f"   Check `curl -sf {self.client.aim_url}/health` and try again.")
         return False
 
     def interactive_mode(self):

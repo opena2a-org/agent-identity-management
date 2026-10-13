@@ -7,19 +7,24 @@
 # is active, when it was last used, and when it expires. Run this when
 # the agent reports "SDK TOKEN EXPIRED" or registration fails.
 #
-# Requires: jq, psql, a local AIM Postgres running on localhost:5432
-# with database `identity` and user `postgres` (the dev compose default).
+# Requires: jq, psql, a local AIM Postgres published on the host port the
+# compose files read from AIM_POSTGRES_PORT (default 5432), with database
+# `identity` and user `postgres` (the dev compose default).
 #
 # Configuration via env vars (override anything you've changed locally):
 #   AIM_CREDENTIALS_FILE  default ${HOME}/.aim/credentials.json
 #   AIM_PG_HOST           default localhost
+#   AIM_POSTGRES_PORT     default 5432, or the value in the repository's .env
+#                         (see stack-env.sh)
 #   AIM_PG_USER           default postgres
 #   AIM_PG_PASSWORD       default postgres
 #   AIM_PG_DB             default identity
 set -euo pipefail
+source "$(dirname "$0")/stack-env.sh"
 
 CREDENTIALS_FILE="${AIM_CREDENTIALS_FILE:-${HOME}/.aim/credentials.json}"
 PG_HOST="${AIM_PG_HOST:-localhost}"
+PG_PORT="$AIM_POSTGRES_PORT"
 PG_USER="${AIM_PG_USER:-postgres}"
 PG_PASSWORD="${AIM_PG_PASSWORD:-postgres}"
 PG_DB="${AIM_PG_DB:-identity}"
@@ -56,6 +61,7 @@ echo ""
 # -v keeps the query injection-safe regardless of how the file got there.
 PGPASSWORD="$PG_PASSWORD" psql \
     -h "$PG_HOST" \
+    -p "$PG_PORT" \
     -U "$PG_USER" \
     -d "$PG_DB" \
     -v sdk_token_id="$SDK_TOKEN_ID" <<'EOF'
