@@ -1,0 +1,104 @@
+# Every line under src/main/java/org/opena2a/aim that declares or reads a floating-point value
+# (Double, double, Float, float, BigDecimal, Number, or a JsonNode/JsonParser read such as
+# asDouble or doubleValue). FloatingPointCensusTest fails when a line appears that is not
+# listed here, or a listed line is gone.
+#
+# Columns, separated by " | ": the file under org/opena2a/aim, how the line is covered, and the
+# trimmed source line. The source line is last, so it may itself contain "|".
+#
+# Cover:
+#   C1 <cell>   a cell of A2ATrustNumberStringTest drives this field from JSON through a public method
+#   C6 <cell>   a cell of TrustNumberStringOutsideA2ATest does the same outside the A2A client
+#   - <reason>  the line binds no number from JSON
+#
+# A new line that binds a number from JSON needs a cell before it can be listed with C1 or C6.
+
+a2a/A2AClient.java | - method parameter, written into a request | String attestationType, double confidence,
+a2a/A2AClient.java | - method parameter, written into a request | public A2ATrustScore updateTrustScore(String targetAgentId, double score, double confidence,
+a2a/A2AClient.java | - method parameter, written into a request | Map<String, Double> factors) throws A2AException {
+a2a/A2AClient.java | - method parameter, written into a request | public List<Map<String, Object>> routeByIntent(String intent, double minTrustScore) throws A2AException {
+a2a/A2AClient.java | - method parameter, written into a request | public List<Map<String, Object>> getCapableAgents(List<String> skillIds, double minTrustScore)
+a2a/A2AConsensusResult.java | C1 getConsensusStatus confidenceScore | private double confidenceScore;
+a2a/A2AConsensusResult.java | - accessor | public double getConfidenceScore() { return confidenceScore; }
+a2a/A2AConsensusResult.java | C1 getConsensusStatus confidenceScore | public void setConfidenceScore(double confidenceScore) { this.confidenceScore = confidenceScore; }
+a2a/A2APeerTrust.java | C1 getPeerTrust peerTrustScore | private Double peerTrustScore;
+a2a/A2APeerTrust.java | C1 getPeerTrust successRate | private Double successRate;
+a2a/A2APeerTrust.java | - accessor | public Double getPeerTrustScore() {
+a2a/A2APeerTrust.java | - accessor | public Double getSuccessRate() { return successRate; }
+a2a/A2APeerTrust.java | C1 getPeerTrust peerTrustScore | public void setPeerTrustScore(Double peerTrustScore) { this.peerTrustScore = peerTrustScore; }
+a2a/A2APeerTrust.java | C1 getPeerTrust successRate | public void setSuccessRate(Double successRate) { this.successRate = successRate; }
+a2a/A2ASecurityCheckResult.java | C1 checkSecurity requesterTrustScore | private Double requesterTrustScore;
+a2a/A2ASecurityCheckResult.java | - accessor | public Double getRequesterTrustScore() { return requesterTrustScore; }
+a2a/A2ASecurityCheckResult.java | C1 checkSecurity requesterTrustScore | public void setRequesterTrustScore(Double requesterTrustScore) { this.requesterTrustScore = requesterTrustScore; }
+a2a/A2ASecuritySettings.java | C1 getSecuritySettings minTrustScore | private double minTrustScore;
+a2a/A2ASecuritySettings.java | - accessor | public double getMinTrustScore() { return minTrustScore; }
+a2a/A2ASecuritySettings.java | C1 getSecuritySettings minTrustScore | public void setMinTrustScore(double minTrustScore) { this.minTrustScore = minTrustScore; }
+a2a/A2ASecuritySettings.java | - builder method | public Builder minTrustScore(double minTrustScore) { settings.minTrustScore = minTrustScore; return this; }
+a2a/A2ATrustScore.java | C1 getTrustScore score | private double score;
+a2a/A2ATrustScore.java | C1 getTrustScore a2aTrustScore | private Double a2aTrustScoreFromBackend;
+a2a/A2ATrustScore.java | C1 getTrustScore peerTrustAverage | private Double peerTrustAverage;
+a2a/A2ATrustScore.java | C1 getTrustScore confidence | private double confidence;
+a2a/A2ATrustScore.java | C1 getTrustScore factors | private Map<String, Double> factors;
+a2a/A2ATrustScore.java | - accessor | public double getScore() {
+a2a/A2ATrustScore.java | - accessor | public Double getPeerTrustAverage() { return peerTrustAverage; }
+a2a/A2ATrustScore.java | - accessor | public double getConfidence() { return confidence; }
+a2a/A2ATrustScore.java | - accessor | public Map<String, Double> getFactors() { return factors; }
+a2a/A2ATrustScore.java | C1 getTrustScore score | public void setScore(double score) { this.score = score; }
+a2a/A2ATrustScore.java | C1 getTrustScore a2aTrustScore | public void setA2aTrustScoreFromBackend(Double a2aTrustScore) { this.a2aTrustScoreFromBackend = a2aTrustScore; }
+a2a/A2ATrustScore.java | C1 getTrustScore peerTrustAverage | public void setPeerTrustAverage(Double peerTrustAverage) { this.peerTrustAverage = peerTrustAverage; }
+a2a/A2ATrustScore.java | C1 getTrustScore confidence | public void setConfidence(double confidence) { this.confidence = confidence; }
+a2a/A2ATrustScore.java | C1 getTrustScore factors | public void setFactors(Map<String, Double> factors) { this.factors = factors; }
+a2a/A2ATrustScore.java | - computed from the interaction counts | public double getSuccessRate() {
+a2a/A2ATrustScore.java | - computed from the interaction counts | return (double) successfulInteractions / interactionCount * 100.0;
+a2a/A2ATrustScore.java | - builder method | public Builder score(double scoreValue) { score.score = scoreValue; return this; }
+a2a/A2ATrustScore.java | - builder method | public Builder confidence(double confidence) { score.confidence = confidence; return this; }
+a2a/A2ATrustScore.java | - builder method | public Builder factors(Map<String, Double> factors) { score.factors = factors; return this; }
+atx/Atx.java | C6 LocalAtxVerifier.verify trustScore | public double trustScore;
+atx/AtxCanonicalizer.java | - writes the signing form's "%.6f" string and parses nothing | import java.math.BigDecimal;
+atx/AtxCanonicalizer.java | - writes the signing form's "%.6f" string and parses nothing | private static String formatTrustScore(double trustScore) {
+atx/AtxCanonicalizer.java | - writes the signing form's "%.6f" string and parses nothing | if (!Double.isFinite(trustScore)) {
+atx/AtxCanonicalizer.java | - writes the signing form's "%.6f" string and parses nothing | return new BigDecimal(trustScore).setScale(6, RoundingMode.HALF_EVEN).toPlainString();
+atx/AtxCanonicalizer.java | - integer read of an untyped map value; a JSON string stays a String and reads as 0 | return v instanceof Number n ? n.longValue() : 0L;
+atx/ResolutionContext.java | - record component the verifier fills from Atx.trustScore | double trustScore,
+client/AIMClient.java | - local, from a discovery result's latency | double latencyMs = 0.0;
+client/AIMClient.java | - method parameter, written into a request | public Map<String, Object> registerMcp(String mcpServerId, String detectionMethod, double confidence) {
+client/AIMClient.java | - method parameter, written into a request | List<String> capabilitiesFound, double latencyMs) {
+client/AIMClient.java | - writes an outgoing value as JSON | } else if (value instanceof Number || value instanceof Boolean) {
+client/AIMClient.java | - writes an outgoing value as JSON | } else if (value instanceof Number || value instanceof Boolean) {
+crypto/pqc/HybridSignature.java | - integer read of a caller-supplied map; a String value throws ClassCastException | long timestamp = ((Number) encoded.get("ts")).longValue();
+demo/DemoAgent.java | - demo: parses console input | double amount = amountStr.isEmpty() ? 99.99 : Double.parseDouble(amountStr);
+demo/DemoAgent.java | - demo: untyped map value; a JSON string stays a String and the cast throws ClassCastException | ((Number) details.getOrDefault("trustScore", 0.0)).doubleValue() * 100,
+integration/langchain4j/AIMAgentCallback.java | - computed from local counters | (double) successfulExecutions.get() / totalExecutions.get());
+integration/langchain4j/AIMAgentCallback.java | - computed from local counters | (double) totalSteps.get() / totalExecutions.get());
+integration/langchain4j/AIMAgentCallback.java | - computed from local counters | (double) totalToolCalls.get() / totalExecutions.get());
+integration/langchain4j/AIMChatModelListener.java | - computed from local counters | map.put("errorRate", (double) errorCount.get() / count);
+integration/langchain4j/AIMToolExecutor.java | - computed from local counters | map.put("successRate", (double) successCount.get() / total);
+integration/spring/AIMChatClientInterceptor.java | - computed from local counters | metrics.put("errorRate", (double) errorCount.get() / calls);
+integration/spring/AIMFunctionCallingAdvisor.java | - computed from local counters | map.put("successRate", (double) successCount.get() / total);
+integrations/mcp/AttestationResult.java | - built in code; no SDK path reads it from JSON | private final double confidenceScore;
+integrations/mcp/AttestationResult.java | - built in code; no SDK path reads it from JSON | public double getConfidenceScore() {
+integrations/mcp/AttestationResult.java | - built in code; no SDK path reads it from JSON | private double confidenceScore;
+integrations/mcp/AttestationResult.java | - built in code; no SDK path reads it from JSON | public Builder confidenceScore(double confidenceScore) {
+integrations/mcp/discovery/MCPDiscoveryCache.java | - integer read of an untyped value from the local cache file; a JSON string stays a String, the cast throws, and get() answers a cache miss | long cachedAt = ((Number) cached.get("cachedAt")).longValue();
+integrations/mcp/discovery/MCPDiscoveryCache.java | - integer read of an untyped value from the local cache file; a JSON string stays a String, the cast throws, and get() answers a cache miss | .connectionLatencyMs(((Number) cached.get("connectionLatencyMs")).longValue())
+integrations/mcp/discovery/MCPDiscoveryCache.java | - integer read of an untyped value from the local cache file; a JSON string stays a String, the cast throws, and get() answers a cache miss | .discoveryTimeMs(((Number) cached.get("discoveryTimeMs")).longValue());
+integrations/mcp/MCPIntegration.java | C6 MCPIntegration.registerServer trustScore | .trustScore(json.has("trustScore") ? json.get("trustScore").asDouble() : 50.0)
+integrations/mcp/MCPIntegration.java | - method parameter, written into a request | double connectionLatencyMs
+integrations/mcp/MCPIntegration.java | C6 MCPIntegration.listServers trustScore | .trustScore(node.has("trustScore") ? node.get("trustScore").asDouble() : 0.0)
+integrations/mcp/MCPServerInfo.java | - filled by the MCPIntegration tree reads listed above; never bound by a mapper | private final double trustScore;
+integrations/mcp/MCPServerInfo.java | - filled by the MCPIntegration tree reads listed above; never bound by a mapper | public double getTrustScore() {
+integrations/mcp/MCPServerInfo.java | - filled by the MCPIntegration tree reads listed above; never bound by a mapper | private double trustScore;
+integrations/mcp/MCPServerInfo.java | - filled by the MCPIntegration tree reads listed above; never bound by a mapper | public Builder trustScore(double trustScore) {
+isolation/IsolationScorer.java | - constant or computed locally | private static final Map<SandboxType, Double> SANDBOX_SCORES = Map.of(
+isolation/IsolationScorer.java | - constant or computed locally | private static final Map<NetworkIsolation, Double> NETWORK_SCORES = Map.of(
+isolation/IsolationScorer.java | - constant or computed locally | private static final Map<FilesystemIsolation, Double> FILESYSTEM_SCORES = Map.of(
+isolation/IsolationScorer.java | - constant or computed locally | private static final Map<ProcessIsolation, Double> PROCESS_SCORES = Map.of(
+isolation/IsolationScorer.java | - constant or computed locally | public static double score(SandboxType sandbox, NetworkIsolation network,
+isolation/IsolationScorer.java | - constant or computed locally | double result = SANDBOX_SCORES.getOrDefault(sandbox, 0.0)
+json/SdkObjectMappers.java | - registers the guard | import java.math.BigDecimal;
+json/SdkObjectMappers.java | - registers the guard | guard(module, Double.class);
+json/SdkObjectMappers.java | - registers the guard | guard(module, Double.TYPE);
+json/SdkObjectMappers.java | - registers the guard | guard(module, Float.class);
+json/SdkObjectMappers.java | - registers the guard | guard(module, Float.TYPE);
+json/SdkObjectMappers.java | - registers the guard | guard(module, BigDecimal.class);
+json/SdkObjectMappers.java | - registers the guard | guard(module, Number.class);
