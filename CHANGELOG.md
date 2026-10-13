@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the A2A multi-agent demo's Python scripts follow `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
+
+- `examples/a2a-multi-agent-demo/python/run_demo.py` used `localhost:8080` when neither `--aim-url`
+  nor `AIM_URL` was given, and printed its dashboard links on the backend URL, which serves no
+  dashboard. `research_agent.py` and `analysis_agent.py` fell back to `localhost:8080` when given an
+  API token and no URL. Against a stack started on other host ports they reached nothing, or, beside
+  a default stack on the same host, that stack. They now read `AIM_BACKEND_PORT` (`8080`) and
+  `AIM_FRONTEND_PORT` (`3000`) from the environment, then the repository's `.env`, then the
+  defaults, through the new `stack_env.py`; `--aim-url` and then `AIM_URL` still win for the
+  backend, and the dashboard links use the dashboard port. The example's README lists the variables
+  with their defaults. The Java demo still reads `AIM_URL` only.
+
 ### Changed — the LangChain CRUD and MCP server demos follow `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
 
 - `examples/langchain-crud-agent/run-langchain-crud.sh` checked the backend's health on

@@ -15,6 +15,10 @@ using all A2A features:
 Run with:
     python run_demo.py [--aim-url http://localhost:8080]
 
+Without --aim-url the backend is AIM_URL, else http://localhost on the
+AIM_BACKEND_PORT the stack was started with (8080); the dashboard links use
+AIM_FRONTEND_PORT (3000). See stack_env.py.
+
 The SDK handles authentication automatically via bundled credentials.
 """
 import os
@@ -26,6 +30,7 @@ from datetime import datetime
 # Import agents
 from research_agent import ResearchAgent
 from analysis_agent import AnalysisAgent
+from stack_env import BACKEND_URL, FRONTEND_URL
 
 
 def load_sample_data() -> dict:
@@ -75,7 +80,6 @@ def print_step(step_num: int, title: str):
 
 
 def print_summary(
-    aim_url: str,
     research_agent: ResearchAgent,
     analysis_agent: AnalysisAgent,
     results: dict
@@ -94,7 +98,7 @@ def print_summary(
     print(f"    - Trend Result: {results.get('trend', {}).get('trend', 'N/A')}")
 
     # Dashboard links
-    base_url = aim_url.replace('/api', '')
+    base_url = FRONTEND_URL
     print("\n  Verify in Dashboard:")
     print(f"    - A2A Overview:    {base_url}/dashboard/a2a")
     print(f"    - Agent Cards:     {base_url}/dashboard/a2a?tab=cards")
@@ -273,7 +277,7 @@ def run_demo(aim_url: str, api_token: str = None):
     print("  [x] Skill Attestation")
     print("  [x] Consensus Verification")
 
-    print_summary(aim_url, research_agent, analysis_agent, results)
+    print_summary(research_agent, analysis_agent, results)
 
 
 def main():
@@ -283,8 +287,8 @@ def main():
     )
     parser.add_argument(
         '--aim-url',
-        default=os.environ.get('AIM_URL', 'http://localhost:8080'),
-        help='AIM platform URL (default: http://localhost:8080)'
+        default=os.environ.get('AIM_URL') or BACKEND_URL,
+        help=f'AIM backend URL (default: AIM_URL, else {BACKEND_URL} from AIM_BACKEND_PORT)'
     )
     parser.add_argument(
         '--api-token',
