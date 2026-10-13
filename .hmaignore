@@ -47,3 +47,11 @@ apps/backend/internal/application/device_auth_service_single_use_test.go:AST-CRE
 # one argument, and no `sh -c` parses them again, so a value cannot add
 # a command. The line exempts the script from DOCKERINJ-001 only.
 apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh:DOCKERINJ-001 # each docker exec argument is quoted and no sh -c re-parses it
+
+# The TypeScript SDK release smoke runs the same kind of throwaway Postgres
+# container. Its `docker exec` calls take the container name, database
+# name and admin email from the script's own defaults or the developer's
+# environment, each quoted as one argument; no `sh -c` parses them again,
+# and psql receives the email as a variable that `:'email'` quotes as one
+# SQL literal. The line exempts the script from DOCKERINJ-001 only.
+sdk/typescript/scripts/release-smoke.sh:DOCKERINJ-001 # each docker exec argument is quoted, no sh -c re-parses it, and psql quotes the email

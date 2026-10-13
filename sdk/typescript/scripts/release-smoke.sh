@@ -221,10 +221,13 @@ if [ -z "$EXTERNAL_BASE_URL" ]; then
         "$WORK/bootstrap.bin" --default --admin-email="$ADMIN_EMAIL" --yes >>"$BACKEND_LOG" 2>&1
     ) || { echo "FAIL: bootstrap --default"; tail -40 "$BACKEND_LOG"; exit 4; }
     # psql inside the container signs in over the local socket, so no password
-    # crosses a command line.
-    docker exec "$SMOKE_PG_CONTAINER" \
-        psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 \
-        -c "UPDATE users SET force_password_change = FALSE WHERE email = '${ADMIN_EMAIL}';" >/dev/null
+    # crosses a command line. The email reaches psql as the variable email,
+    # which :'email' quotes as one SQL literal; the statement is read from
+    # standard input because psql does not expand variables in a -c command.
+    docker exec -i "$SMOKE_PG_CONTAINER" \
+        psql -U postgres -d "$SMOKE_PG_DB" -v ON_ERROR_STOP=1 -v email="$ADMIN_EMAIL" >/dev/null <<'SQL'
+UPDATE users SET force_password_change = FALSE WHERE email = :'email';
+SQL
 fi
 
 TOKEN=$(ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
