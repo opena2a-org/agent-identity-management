@@ -696,21 +696,21 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 }
 
 // checkAndApplyConsensusVerification checks if an MCP server has reached multi-agent consensus
-// and automatically updates its status to "verified" if all criteria are met
+// and automatically updates its status to "verified" if all criteria are met. A server that
+// consensus already verified loses that status when its attestations stop agreeing.
 func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 	ctx context.Context,
 	mcpServerID uuid.UUID,
 	confidenceScore float64,
 ) error {
-	// Check current MCP status - skip if already verified
 	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
 	if err != nil {
 		return fmt.Errorf("failed to get MCP server: %w", err)
 	}
 
 	if mcpServer.Status == domain.MCPServerStatusVerified {
-		// Already verified - nothing to do
-		return nil
+		_, err := s.withdrawConsensusVerificationOnDisagreement(mcpServerID)
+		return err
 	}
 
 	// Get consensus thresholds
@@ -782,6 +782,75 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 
 	fmt.Printf("✅ MCP server %s automatically verified via multi-agent consensus\n", mcpServerID)
 	return nil
+}
+
+// withdrawConsensusVerificationOnDisagreement returns a verified server to pending when multi-agent
+// consensus verified it and its attestations no longer agree: the latest attestation of an attesting
+// agent reports a failed connection, or the agents report different tool sets. It reports whether
+// the verification was withdrawn.
+//
+// A server verified through SDK registration or challenge-response verification keeps its status,
+// because that verification does not rest on the attestations. A server with no valid agent
+// attestation left keeps its status too: expired or revoked attestations are not a disagreement.
+// Consensus can verify the server again when a later attestation finds the attestations agreeing
+// and the thresholds met.
+func (s *MCPAttestationService) withdrawConsensusVerificationOnDisagreement(mcpServerID uuid.UUID) (bool, error) {
+	attestations, err := s.attestationRepo.GetValidAttestationsByMCP(mcpServerID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get attestations: %w", err)
+	}
+	agreement := evaluateAttestationAgreement(attestations)
+	if agreement.Agents == 0 || agreement.agree() {
+		return false, nil
+	}
+
+	withdrawn, err := s.attestationRepo.WithdrawConsensusVerification(mcpServerID)
+	if err != nil {
+		return false, err
+	}
+	if withdrawn {
+		fmt.Printf("🔐 MCP %s: consensus verification withdrawn - attestations disagree (%d of %d agents agree, %d failed connections, %d tool sets)\n",
+			mcpServerID, agreement.AgreeingAgents, agreement.Agents, agreement.ConnectionFailures, agreement.DistinctToolSets)
+	}
+	return withdrawn, nil
+}
+
+// ConsensusRecheckResult reports what one run of RecheckConsensusVerifications did.
+type ConsensusRecheckResult struct {
+	Checked   int
+	Withdrawn int
+	// Failed lists the servers that could not be rechecked. Their status is unchanged.
+	Failed []uuid.UUID
+}
+
+// RecheckConsensusVerifications withdraws the verification of every server that multi-agent
+// consensus verified and whose attestations no longer agree. A server is rechecked whenever one of
+// its attestations is recorded or revoked; this pass covers the servers that see neither, including
+// servers verified before verification compared what the attestations report. Running it again is
+// harmless: a server whose attestations agree is left as it is.
+func (s *MCPAttestationService) RecheckConsensusVerifications(ctx context.Context) (*ConsensusRecheckResult, error) {
+	ids, err := s.attestationRepo.ListConsensusVerifiedMCPServerIDs()
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ConsensusRecheckResult{}
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("consensus recheck stopped after %d of %d servers: %w", result.Checked+len(result.Failed), len(ids), err)
+		}
+		withdrawn, err := s.withdrawConsensusVerificationOnDisagreement(id)
+		if err != nil {
+			fmt.Printf("⚠️  Consensus recheck: failed to recheck MCP server %s, status left unchanged: %v\n", id, err)
+			result.Failed = append(result.Failed, id)
+			continue
+		}
+		result.Checked++
+		if withdrawn {
+			result.Withdrawn++
+		}
+	}
+	return result, nil
 }
 
 // attestationAgreement compares what the agents attesting an MCP server report. Only each agent's

@@ -640,7 +640,9 @@ func (r *MCPAttestationRepository) UpdateMCPConfidenceScore(
 }
 
 // UpdateMCPVerificationStatus updates the MCP server status when multi-agent consensus is reached
-// This is called when enough unique agents have attested to the server's authenticity
+// This is called when enough unique agents have attested to the server's authenticity.
+// consensus_verified_at records that the verification came from consensus, which is what lets
+// WithdrawConsensusVerification take it back when the attestations stop agreeing.
 func (r *MCPAttestationRepository) UpdateMCPVerificationStatus(
 	mcpServerID uuid.UUID,
 	status string,
@@ -652,6 +654,7 @@ func (r *MCPAttestationRepository) UpdateMCPVerificationStatus(
 			status = $1,
 			is_verified = $2,
 			last_verified_at = CASE WHEN $2 = true THEN $4 ELSE last_verified_at END,
+			consensus_verified_at = CASE WHEN $2 = true THEN $4 ELSE NULL END,
 			updated_at = $4
 		WHERE id = $3
 	`
@@ -674,6 +677,73 @@ func (r *MCPAttestationRepository) UpdateMCPVerificationStatus(
 	}
 
 	return nil
+}
+
+// WithdrawConsensusVerification returns a server that multi-agent consensus verified to pending.
+// It reports false and changes nothing when the server is not verified, or when its verification
+// came from SDK registration or challenge-response verification: only consensus sets
+// consensus_verified_at, and those verifications do not rest on what the attestations report.
+func (r *MCPAttestationRepository) WithdrawConsensusVerification(mcpServerID uuid.UUID) (bool, error) {
+	query := `
+		UPDATE mcp_servers
+		SET
+			status = $1,
+			is_verified = false,
+			consensus_verified_at = NULL,
+			updated_at = $2
+		WHERE id = $3
+		  AND status = $4
+		  AND consensus_verified_at IS NOT NULL
+	`
+
+	result, err := r.db.Exec(
+		query,
+		string(domain.MCPServerStatusPending),
+		time.Now().UTC(),
+		mcpServerID,
+		string(domain.MCPServerStatusVerified),
+	)
+	if err != nil {
+		return false, fmt.Errorf("failed to withdraw consensus verification: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to read withdrawn consensus verification: %w", err)
+	}
+	return rows > 0, nil
+}
+
+// ListConsensusVerifiedMCPServerIDs returns every MCP server, across all organizations, that is
+// verified through multi-agent consensus. Rechecking those servers is a system task, not a tenant
+// request.
+func (r *MCPAttestationRepository) ListConsensusVerifiedMCPServerIDs() ([]uuid.UUID, error) {
+	query := `
+		SELECT id
+		FROM mcp_servers
+		WHERE status = $1
+		  AND consensus_verified_at IS NOT NULL
+		ORDER BY id
+	`
+
+	rows, err := r.db.Query(query, string(domain.MCPServerStatusVerified))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list consensus-verified MCP servers: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan consensus-verified MCP server: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to list consensus-verified MCP servers: %w", err)
+	}
+	return ids, nil
 }
 
 // GetUniqueAttestingAgentCount returns the number of unique agents that have attested an MCP server

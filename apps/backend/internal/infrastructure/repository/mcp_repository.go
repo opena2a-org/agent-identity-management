@@ -650,13 +650,16 @@ func (r *MCPServerRepository) AddPublicKey(ctx context.Context, serverID uuid.UU
 
 // VerifyServer performs cryptographic verification of an MCP server
 func (r *MCPServerRepository) VerifyServer(ctx context.Context, serverID uuid.UUID) error {
-	// Update server verification status
+	// Update server verification status. The verification now rests on the server's signed
+	// challenge, so the consensus marker is cleared: attestations that later disagree do not
+	// withdraw it.
 	query := `
 		UPDATE mcp_servers
 		SET
 			is_verified = true,
 			last_verified_at = $1,
 			status = $2,
+			consensus_verified_at = NULL,
 			updated_at = $1
 		WHERE id = $3
 	`

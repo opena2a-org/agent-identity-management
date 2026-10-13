@@ -328,6 +328,11 @@ func main() {
 	stopActionRequestNoncePurge := startActionRequestNoncePurgeJob(services.ActionRequestNonces, domain.ActionRequestNoncePurgeInterval)
 	defer stopActionRequestNoncePurge()
 
+	// Withdraw the verification of MCP servers that multi-agent consensus
+	// verified and whose attestations no longer agree. Runs in the background
+	// so startup does not wait on it.
+	startConsensusVerificationRecheck(services.MCPAttestation)
+
 	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
 	if services.RegistryBridge != nil {
 		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
@@ -2467,6 +2472,23 @@ func clearExpiredPasswordResetTokens(db *sql.DB) (int64, error) {
 		return 0, fmt.Errorf("password reset token cleanup failed: %w", err)
 	}
 	return result.RowsAffected()
+}
+
+// startConsensusVerificationRecheck runs
+// MCPAttestationService.RecheckConsensusVerifications in a background
+// goroutine, once per start.
+func startConsensusVerificationRecheck(attestations *application.MCPAttestationService) {
+	if attestations == nil {
+		return
+	}
+	go func() {
+		result, err := attestations.RecheckConsensusVerifications(context.Background())
+		if err != nil {
+			log.Printf("MCP consensus recheck did not complete: %v", err)
+			return
+		}
+		log.Printf("MCP consensus recheck complete: %d server(s) checked, %d withdrawn, %d left unchanged after a failure", result.Checked, result.Withdrawn, len(result.Failed))
+	}()
 }
 
 // expireOldVerifications marks old pending and approved verifications as expired
