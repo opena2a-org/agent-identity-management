@@ -98,6 +98,12 @@ func TestRefusals_CarryReasonCodeEqualToCode(t *testing.T) {
 		}
 	})
 
+	t.Run("talks_to addition refused because its audit record could not be written", func(t *testing.T) {
+		status, _, body, _ := putRefusedTalksToAdd(t, talksToAddRecordRefusal)
+		assert.Equal(t, fiber.StatusServiceUnavailable, status)
+		assertReasonCode(t, body, "recordUnavailable")
+	})
+
 	t.Run("registration error without a reason", func(t *testing.T) {
 		body := registrationErrorBody(fmt.Errorf("boom"), "Registration failed")
 		assert.NotContains(t, body, "reasonCode")

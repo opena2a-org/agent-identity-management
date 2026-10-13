@@ -536,6 +536,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Changed
 
+- An addition of MCP servers to an agent refused because its audit record could not be written answers `503` with
+  `recordUnavailable` and `Retry-After`, and the Add MCP servers dialog says nothing changed and when to try again.
+- An addition widens what the agent may reach, an expansion, made only together with its audit record; when the record
+  path cannot be used the service refuses it whole and the agent's talks_to list is unchanged.
+  `PUT /api/v1/agents/:id/mcp-servers` now answers that refusal as the agent delete does: `503`, `Retry-After: 300`
+  and `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in
+  the server log. Any other failure still answers as before.
+- Measured with the handler of the previous commit, with the service returning the recorder's refusal: the route
+  answered `500` with `{"error":"An internal error occurred. Please try again later."}`, no `reasonCode` and no
+  `Retry-After`, and the dialog showed "An internal error occurred. Please try again later." in its red error box.
+- The dialog now states this refusal once, inside the dialog, in the same neutral "Nothing was changed" alert as the
+  delete dialog, with when to try again taken from `Retry-After`. Its text is the dashboard's own, never the server's
+  line. The selection is kept, so the next attempt is one click, and that attempt or closing the dialog clears the
+  alert. While the addition runs the Add button is `aria-disabled` rather than `disabled`, so focus stays in the
+  dialog, and the dialog does not close until the server answers. Any other failure is shown as before.
+- The dashboard's API reference states the `503`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_talks_to_record_refusal_test.go`, the reason-code census
+  in `refusal_reason_code_test.go`, and `apps/web/components/agents/mcp-server-selector.test.tsx`.
+
+### Changed
+
 - A reactivation or a verification of an agent refused because its audit record could not be written answers `503`
   with `recordUnavailable` and `Retry-After`, and the agent page says nothing changed and when to try again.
 - Both let the agent act again, an expansion, made only together with its audit record; when the record path cannot
