@@ -386,3 +386,39 @@ def test_every_job_in_the_list_links_where_it_is_done():
     assert len(jobs) >= 5, "the job list names the jobs AIM does"
     without_link = [job for job in jobs if not re.search(r"\]\([^)]+\)", job)]
     assert not without_link, f"job-list entries with nowhere to go: {without_link}"
+
+
+UNBACKED_CLAIMS = [
+    # The server registers no route under /v1/, so no local history reaches it this way.
+    "enableReporting",
+    "local-to-server reporting",
+    "Both can run for the same agent",
+    "share the same audit-event schema",
+    # Nothing writes the TME evaluations the trust calculator reads, so the factor is never modulated.
+    "NanoMind-modulated",
+]
+
+
+def test_the_deployment_section_says_local_only_keeps_its_own_event_format():
+    """Local-only mode writes its own audit file; the server's audit log is a different
+    store, and nothing in the TypeScript SDK pushes one into the other."""
+    lines = text().split("\n")
+    start = lines.index("## Deployment")
+    end = next(i for i, line in enumerate(lines) if i > start and line.startswith("## "))
+    section = "\n".join(lines[start:end])
+    assert ("Local only mode keeps its own event format in `~/.opena2a/aim-core/audit.jsonl`, "
+            "separate from the server's audit log.") in section
+
+
+@pytest.mark.parametrize("path", ["README.md", "docs/server-features.md"])
+def test_the_readme_and_the_server_features_guide_claim_no_integration_that_does_not_exist(path):
+    body = (REPO_ROOT / path).read_text(encoding="utf-8")
+    found = [claim for claim in UNBACKED_CLAIMS if claim in body]
+    assert not found, f"{path} still claims: {found}"
+
+
+def test_the_security_alerts_trust_factor_row_says_what_feeds_it():
+    """The server's security-alerts factor is scored from the agent's unacknowledged alerts."""
+    rows = [line for line in (REPO_ROOT / "docs" / "server-features.md").read_text(encoding="utf-8").split("\n")
+            if line.startswith("| Security alerts |")]
+    assert rows == ["| Security alerts | 15% | Observed |"]

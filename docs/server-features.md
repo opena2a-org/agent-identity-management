@@ -82,11 +82,9 @@ The local and server trust scores measure different things.
 | Verification status | 25% | Externally attested |
 | Uptime | 15% | Observed |
 | Action success rate | 15% | Observed |
-| Security alerts | 15% | NanoMind-modulated |
+| Security alerts | 15% | Observed |
 | Compliance | 10% | Externally attested |
 | Execution isolation | 10% | Externally attested |
 | Agent age | 5% | Server-recorded |
 | Drift detection | 3% | Observed |
 | User feedback | 2% | Human input |
-
-Both can run for the same agent when local-to-server reporting is enabled.
