@@ -1,8 +1,13 @@
 package handlers
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 
@@ -145,24 +150,25 @@ func TestSDKHandler_generateSetupInstructions(t *testing.T) {
 	handler := &SDKHandler{}
 
 	// Test Python instructions
-	pythonInstructions := handler.generateSetupInstructions("python", "aim-sdk-test")
+	pythonInstructions := handler.generateSetupInstructions("python", "aim-sdk-test", "7.8.9")
 	assert.Contains(t, pythonInstructions, "python")
 
 	// Test Java instructions
-	javaInstructions := handler.generateSetupInstructions("java", "aim-sdk-test")
+	javaInstructions := handler.generateSetupInstructions("java", "aim-sdk-test", "7.8.9")
 	assert.Contains(t, javaInstructions, "java")
+	assert.Contains(t, javaInstructions, "<version>7.8.9</version>")
 
 	// The repository carries no Go SDK, so Go gets the generic text and no
 	// sample that imports a module nobody can fetch.
-	goInstructions := handler.generateSetupInstructions("go", "aim-sdk-test")
-	assert.Equal(t, handler.generateSetupInstructions("unknown", "aim-sdk-test"), goInstructions)
+	goInstructions := handler.generateSetupInstructions("go", "aim-sdk-test", "7.8.9")
+	assert.Equal(t, handler.generateSetupInstructions("unknown", "aim-sdk-test", "7.8.9"), goInstructions)
 
 	// Test JavaScript instructions
-	jsInstructions := handler.generateSetupInstructions("javascript", "aim-sdk-test")
+	jsInstructions := handler.generateSetupInstructions("javascript", "aim-sdk-test", "7.8.9")
 	assert.Contains(t, jsInstructions, "javascript")
 
 	// Test unknown SDK (default case)
-	unknownInstructions := handler.generateSetupInstructions("unknown", "aim-sdk-test")
+	unknownInstructions := handler.generateSetupInstructions("unknown", "aim-sdk-test", "7.8.9")
 	assert.Contains(t, unknownInstructions, "SDK documentation")
 }
 
@@ -173,9 +179,44 @@ func TestSDKHandler_generateSetupInstructionsNameNoOpena2aAccountPath(t *testing
 	handler := &SDKHandler{}
 	link := regexp.MustCompile(`(?i)github\.com[/:]opena2a/`)
 	for _, sdkType := range []string{"python", "java", "go", "javascript", "unknown"} {
-		instructions := handler.generateSetupInstructions(sdkType, "aim-sdk-"+sdkType)
+		instructions := handler.generateSetupInstructions(sdkType, "aim-sdk-"+sdkType, "7.8.9")
 		assert.Empty(t, link.FindAllString(instructions, -1), "%s: the setup README names a path under the opena2a GitHub account", sdkType)
 	}
+}
+
+// The Java download's QUICKSTART.md tells the reader to add the version that the
+// SDK's VERSION file states: the version the download is named after and the one
+// `mvn install` of the SDK's pom places in the local Maven repository.
+func TestSDKHandler_createSDKZip_JavaQuickstartNamesTheVersionFileVersion(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "java"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "java", "VERSION"), []byte("7.8.9\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "java", "pom.xml"), []byte("<project/>\n"), 0o644))
+	t.Setenv("SDK_BASE_DIR", dir)
+
+	zipData, version, err := (&SDKHandler{}).createSDKZip(SDKCredentials{}, "java")
+	require.NoError(t, err)
+	assert.Equal(t, "7.8.9", version, "the download is named after the VERSION file")
+
+	reader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	require.NoError(t, err)
+	quickstart := ""
+	for _, file := range reader.File {
+		if file.Name != "aim-sdk-java/QUICKSTART.md" {
+			continue
+		}
+		rc, err := file.Open()
+		require.NoError(t, err)
+		data, err := io.ReadAll(rc)
+		require.NoError(t, rc.Close())
+		require.NoError(t, err)
+		quickstart = string(data)
+	}
+	require.NotEmpty(t, quickstart, "the zip carries aim-sdk-java/QUICKSTART.md")
+
+	assert.Contains(t, quickstart,
+		"<groupId>org.opena2a</groupId>\n       <artifactId>aim-sdk</artifactId>\n       <version>7.8.9</version>")
+	assert.NotContains(t, quickstart, "1.0.0", "no version other than the VERSION file's")
 }
 
 func TestGetSDKDisplayName(t *testing.T) {

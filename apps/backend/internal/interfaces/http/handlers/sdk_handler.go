@@ -366,7 +366,7 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	}
 
 	// Add README with SDK-specific setup instructions
-	setupInstructions := h.generateSetupInstructions(sdkType, zipPrefix)
+	setupInstructions := h.generateSetupInstructions(sdkType, zipPrefix, version)
 
 	readmePath := filepath.Join(zipPrefix, "QUICKSTART.md")
 	readmeFile, err := zipWriter.Create(readmePath)
@@ -480,13 +480,14 @@ func getSDKDisplayName(sdkType string) string {
 }
 
 // generateSetupInstructions creates SDK-specific setup instructions. The
-// repository carries no Go SDK, so Go gets the generic text.
-func (h *SDKHandler) generateSetupInstructions(sdkType, zipPrefix string) string {
+// repository carries no Go SDK, so Go gets the generic text. version is the SDK
+// version the download is named after, read from the SDK's VERSION file.
+func (h *SDKHandler) generateSetupInstructions(sdkType, zipPrefix, version string) string {
 	switch sdkType {
 	case "python":
 		return h.generatePythonInstructions(zipPrefix)
 	case "java":
-		return h.generateJavaInstructions(zipPrefix)
+		return h.generateJavaInstructions(zipPrefix, version)
 	case "javascript":
 		return h.generateJavaScriptInstructions(zipPrefix)
 	default:
@@ -553,8 +554,9 @@ For more examples, see the included test files.
 `
 }
 
-// generateJavaInstructions creates Java-specific setup instructions
-func (h *SDKHandler) generateJavaInstructions(zipPrefix string) string {
+// generateJavaInstructions creates Java-specific setup instructions. The dependency
+// it tells the reader to add names version, the one `mvn install` of the SDK installs.
+func (h *SDKHandler) generateJavaInstructions(zipPrefix, version string) string {
 	return `# AIM Java SDK - Quick Start
 
 This SDK is pre-configured with your credentials!
@@ -568,7 +570,7 @@ This SDK is pre-configured with your credentials!
    ` + "```bash\n   mvn install -DskipTests\n   ```" + `
 
 3. Add to your project's pom.xml:
-   ` + "```xml\n   <dependency>\n       <groupId>org.opena2a</groupId>\n       <artifactId>aim-sdk</artifactId>\n       <version>1.0.0</version>\n   </dependency>\n   ```" + `
+   ` + "```xml\n   <dependency>\n       <groupId>org.opena2a</groupId>\n       <artifactId>aim-sdk</artifactId>\n       <version>" + version + "</version>\n   </dependency>\n   ```" + `
 
 ## Usage
 
