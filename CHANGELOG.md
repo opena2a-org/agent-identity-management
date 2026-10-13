@@ -11,6 +11,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the backend integration suite signs in within the strict rate limit of the public routes
+
+- `apps/backend/tests/integration` signs in as admin once per run and reuses the token. Before, each test that
+  needed the admin signed in on its own: one run made 99 `POST /api/v1/public/login` requests and 126 requests to
+  `/api/v1/public/` in 20 seconds (counted in the backend's request log, against a backend built from this tree
+  with the strict limit at 100 a minute), 26 of them answered 429, and 25 tests failed on that answer. A run now
+  makes 34 login requests and 62 requests to `/api/v1/public/`.
+- Every request the package sends to a route under `/api/v1/public/`, `/api/v1/auth/` or `/api/v1/oauth/`, the
+  three groups the server limits with `StrictRateLimitMiddleware`, passes through a gate. The gate reads the
+  limiter's `X-RateLimit-Remaining` and `X-RateLimit-Reset` headers from each response and holds the next request
+  to that group until the window resets, instead of letting the server answer 429. A refusal from a window spent
+  before the run began (a dashboard login from the same address, for example) is retried once after the
+  `Retry-After` the server names. The time a request is held does not count against the caller's client timeout.
+  Against the production limit of ten a minute a run takes about six minutes; against a backend started with
+  `ENVIRONMENT=test` (one hundred a minute) it does not wait and takes under twenty seconds.
+- `TestLoginEndpointRateLimiting` reads the limiter's headers from one login response instead of sending twenty
+  login attempts, which spent the public group's window for every test that ran after it.
+- Seven tests prove the gate against a local fixed-window limiter without a backend: eight requests at three a
+  window all answered 200, a refusal from a spent window followed by one retry that carries the request body, a
+  hold longer than the client's timeout, each group tracked on its own, other routes passed through unchanged.
+- Two tests that read a field of a login or token response with an unchecked type assertion now fail with the
+  response body instead of ending the whole run with a panic; both responses were hidden behind the 429 before.
+
 ### Fixed — `POST /api/v1/agents/:id/pqc-key` answers the hybrid mode it stored (#720)
 
 - The `hybridModeEnabled` of the 200 answer is the request's `enableHybrid`, the value the handler stores with the key,

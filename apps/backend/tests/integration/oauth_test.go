@@ -364,5 +364,7 @@ func TestOAuthTokenResponseFormat(t *testing.T) {
 	assert.Contains(t, result, "token_type", "Response must contain token_type")
 	assert.Contains(t, result, "expires_in", "Response must contain expires_in")
 	assert.Equal(t, "Bearer", result["token_type"])
-	assert.Greater(t, result["expires_in"].(float64), float64(0))
+	expiresIn, ok := result["expires_in"].(float64)
+	require.True(t, ok, "expires_in is a number: %s", string(respBody))
+	assert.Greater(t, expiresIn, float64(0))
 }

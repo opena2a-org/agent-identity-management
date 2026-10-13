@@ -2,6 +2,7 @@ package integration
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -191,31 +192,27 @@ func TestOAuthEndpointRateLimiting(t *testing.T) {
 	}
 }
 
-// TestLoginEndpointRateLimiting verifies login endpoint has rate limiting
+// TestLoginEndpointRateLimiting verifies the login route carries the strict
+// rate limiter. The limiter writes X-RateLimit-Limit and X-RateLimit-Remaining
+// on every response it admits, so one request is enough to read them. Twenty
+// login attempts, which this test used to send, spent the public group's
+// window for every test that ran after it.
 func TestLoginEndpointRateLimiting(t *testing.T) {
 	ensureAIMBackendRunning(t)
 	baseURL := getBaseURL()
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	var rateLimitHit bool
+	resp, err := client.Post(baseURL+"/api/v1/public/login", "application/json", nil)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	// Try multiple failed logins to trigger rate limiting
-	for i := 0; i < 20; i++ {
-		resp, err := client.Post(baseURL+"/api/v1/public/login", "application/json", nil)
-		if err != nil {
-			continue
-		}
-
-		if resp.StatusCode == http.StatusTooManyRequests {
-			rateLimitHit = true
-			t.Log("Login endpoint correctly rate limits after multiple attempts")
-			resp.Body.Close()
-			break
-		}
-		resp.Body.Close()
-	}
-
-	if !rateLimitHit {
-		t.Log("Note: Login endpoint rate limit not triggered (may have high limit)")
-	}
+	require.NotEqual(t, http.StatusTooManyRequests, resp.StatusCode,
+		"this package paces its requests to the public group, so a login attempt is never refused for rate")
+	limit, err := strconv.Atoi(resp.Header.Get("X-RateLimit-Limit"))
+	require.NoError(t, err, "a login response carries X-RateLimit-Limit")
+	remaining, err := strconv.Atoi(resp.Header.Get("X-RateLimit-Remaining"))
+	require.NoError(t, err, "a login response carries X-RateLimit-Remaining")
+	assert.Greater(t, limit, 0)
+	assert.Less(t, remaining, limit, "this attempt counted against the window")
+	t.Logf("Login endpoint rate limit: %d per window, %d remaining", limit, remaining)
 }
