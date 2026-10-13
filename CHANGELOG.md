@@ -2696,11 +2696,12 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 
 ### Fixed — a 4xx response states its reason instead of carrying an error's text
 
-- 59 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and two 200 fallbacks) put the text of a Go
+- 61 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and two 200 fallbacks) put the text of a Go
   error in the body. Most passed a library or service message through: a UUID or JSON decoding error, a wrapped repository
   error behind a 400 (`failed to update password: ...` on a password change, the repository error on an API key
-  delete or a device-code approval), or every reason a secrets resolve was refused, agent and namespace names
-  included. Each now answers a line written for the caller.
+  delete or a device-code approval), a password-policy error (`password validation failed: ...`) through the helper
+  the registration and access-request handlers share, or every reason a secrets resolve was refused, agent and
+  namespace names included. Each now answers a line written for the caller.
 - A refusal the caller can fix names the request member and the rule it breaks: `newPassword must be at least 8
   characters long`, `id must be a UUID`, `signupProfile.role must be one of the listed values`,
   `sandbox is not a recognized sandbox type`, `encryptedBlob must decode to at most 1048576 bytes`. The services
