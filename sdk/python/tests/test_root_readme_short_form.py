@@ -10,6 +10,7 @@ Everything here runs offline and reads only files in this repository.
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,26 @@ def text():
 
 def h2_headings():
     return [line[3:].strip() for line in text().split("\n") if line.startswith("## ")]
+
+
+def heading_anchors(path):
+    """The anchors GitHub gives a markdown file's headings: the heading's text with link
+    targets and punctuation dropped, lower-cased, spaces as hyphens, and -1, -2 after a
+    repeat. Lines inside fenced code are not headings."""
+    anchors, seen, in_fence = set(), {}, False
+    for line in path.read_text(encoding="utf-8").split("\n"):
+        if re.match(r"^\s*```", line):
+            in_fence = not in_fence
+            continue
+        m = None if in_fence else re.match(r"^#{1,6}\s+(.*\S)\s*$", line)
+        if not m:
+            continue
+        title = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", m.group(1))
+        slug = re.sub(r"[^\w\- ]", "", title.lower()).replace(" ", "-")
+        repeat = seen.get(slug, 0)
+        seen[slug] = repeat + 1
+        anchors.add(slug if repeat == 0 else f"{slug}-{repeat}")
+    return anchors
 
 
 def paragraphs():
@@ -203,11 +224,71 @@ def test_readme_links_resolve_inside_the_repository():
         if not (REPO_ROOT / target).exists():
             missing.append(target)
     assert not missing, f"README links to paths the repository does not have: {missing}"
-    anchors = {re.sub(r"[^a-z0-9 -]", "", h.lower()).replace(" ", "-") for h in h2_headings()}
-    anchors |= {re.sub(r"[^a-z0-9 -]", "", line[4:].strip().lower()).replace(" ", "-")
-                for line in text().split("\n") if line.startswith("### ")}
+    anchors = heading_anchors(README)
     dead = [a for a in set(re.findall(r"\]\(#([^)]+)\)", text())) if a not in anchors]
     assert not dead, f"README links to headings it does not have: {dead}"
+
+
+def test_readme_links_to_other_files_land_on_their_headings():
+    """A link such as docs/quick-start.md#see-it-work names a heading in that file; when
+    the heading there is renamed, the README's link lands at the top of the page."""
+    dead = [
+        f"{target}#{anchor}"
+        for target, anchor in sorted(set(re.findall(r"\]\(([^)#\s:]+\.md)#([^)\s]+)\)", text())))
+        if anchor not in heading_anchors(REPO_ROOT / target)
+    ]
+    assert not dead, f"README links to headings those files do not have: {dead}"
+
+
+# The README as GitHub serves it, by absolute URL, at the repository page or at the file.
+README_URL_ANCHOR = re.compile(
+    r"github\.com/opena2a-org/agent-identity-management(?:/blob/[^/\s#)]+/README\.md)?/?#([\w-]+)"
+)
+# GitHub gives the README on a repository page the anchor #readme; it is no heading.
+REPOSITORY_PAGE_ANCHORS = {"readme"}
+# Headings linked from outside this repository, where no test here can see the link:
+# copies of sdk/python/README.md elsewhere keep linking the self-hosted install after
+# the file here changes. Keep the heading, or repoint every copy in the same change.
+LINKED_FROM_OUTSIDE = ["install-aim-self-hosted"]
+
+
+def links_to_readme_headings():
+    """(file, anchor) for each link in a tracked file to a heading of the root README: a
+    relative link from markdown, or the README's URL on GitHub from any text file."""
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, check=True,
+    ).stdout.decode().split("\0")
+    links = []
+    for name in filter(None, tracked):
+        path = REPO_ROOT / name
+        if name == "README.md" or not path.is_file():
+            continue
+        try:
+            body = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        links += [(name, anchor) for anchor in README_URL_ANCHOR.findall(body)]
+        if name.endswith(".md"):
+            links += [
+                (name, anchor)
+                for target, anchor in re.findall(r"\]\(([^)#\s:]*README\.md)#([^)\s]+)\)", body)
+                if (path.parent / target).resolve() == README.resolve()
+            ]
+    return links
+
+
+def test_links_to_readme_headings_land_on_a_heading_it_has():
+    """The short form moved most of the long README's sections to docs/. A heading the
+    README removes or renames breaks every link to it, in this repository and outside it."""
+    links = links_to_readme_headings()
+    for found in [("sdk/python/README.md", "install-aim-self-hosted"),   # by URL
+                  ("sdk/java/README.md", "install-aim-self-hosted")]:    # by relative path
+        assert found in links, f"the scan no longer finds {found[0]}'s link to #{found[1]}"
+    anchors = heading_anchors(README)
+    dead = sorted({f"{name} -> #{anchor}" for name, anchor in links
+                   if anchor not in anchors and anchor not in REPOSITORY_PAGE_ANCHORS})
+    dead += [f"outside this repository -> #{anchor}" for anchor in LINKED_FROM_OUTSIDE if anchor not in anchors]
+    assert not dead, "links to README headings it does not have:\n" + "\n".join(dead)
 
 
 def test_every_job_in_the_list_links_where_it_is_done():
