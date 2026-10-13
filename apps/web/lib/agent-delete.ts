@@ -7,6 +7,7 @@ import {
   type ActionFailure,
   type ActionFailureContext,
 } from "@/lib/action-outcome";
+import { recordPathRefusal, type RecordPathRefusal } from "@/lib/record-path-refusal";
 
 // What DELETE /api/v1/agents/:id reaches. Every per-agent table cascades from agents(id).
 // The audit log, API call records, A2A security violations and MCP servers keep their rows
@@ -33,6 +34,12 @@ export const AGENT_DELETE_FAILURE_CONTEXT: ActionFailureContext = {
 
 export function agentDeleteFailure(err: unknown): ActionFailure {
   return describeActionFailure(err, AGENT_DELETE_FAILURE_CONTEXT);
+}
+
+// A delete the server refused because its audit record could not be written (503
+// recordUnavailable): nothing was removed, and the person did nothing wrong.
+export function agentDeleteRecordRefusal(err: unknown): RecordPathRefusal | null {
+  return recordPathRefusal(err, AGENT_DELETE_FAILURE_CONTEXT.action);
 }
 
 export function agentDeletedNotice(agentName: string): string {

@@ -7,8 +7,27 @@ import { normalizeViolation, type SecurityViolation } from "./violations";
 import { SERVER_ERROR_MESSAGE, isServerErrorStatus } from "./error-messages";
 import { withStorageLease } from "./storage-lease";
 
-/** An Error thrown for a non-2xx response, carrying the status and the backend's code when it sent one. */
-export type ApiRequestError = Error & { status?: number; code?: string };
+/**
+ * An Error thrown for a non-2xx response, carrying the status, the backend's code when it
+ * sent one, and the seconds its Retry-After header asked the client to wait.
+ */
+export type ApiRequestError = Error & { status?: number; code?: string; retryAfterSeconds?: number };
+
+/**
+ * The seconds a Retry-After header asks for: its delay-seconds form, or the time until its
+ * HTTP-date form (0 once that has passed). Undefined when the header is absent or is
+ * neither form.
+ */
+export function retryAfterSeconds(header: string | null, now: number = Date.now()): number | undefined {
+  const value = header?.trim();
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value);
+  // Every HTTP-date form begins with the day's name; Date.parse alone reads "-5" as a year.
+  if (!/^[A-Za-z]/.test(value)) return undefined;
+  const at = Date.parse(value);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, Math.ceil((at - now) / 1000));
+}
 
 /** The error a 5xx answer becomes: SERVER_ERROR_MESSAGE, whatever the body said. */
 function serverError(status: number): ApiRequestError {
@@ -872,6 +891,10 @@ class APIClient {
       requestError.status = response.status;
       if (reasonCode) {
         requestError.code = reasonCode;
+      }
+      const retryAfter = retryAfterSeconds(response.headers.get("Retry-After"));
+      if (retryAfter !== undefined) {
+        requestError.retryAfterSeconds = retryAfter;
       }
       throw requestError;
     }

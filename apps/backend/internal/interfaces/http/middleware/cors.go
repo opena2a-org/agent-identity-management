@@ -23,9 +23,11 @@ func vercelPreviewOriginAllowed(origin string) bool {
 }
 
 var (
-	corsAllowMethods  = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
-	corsAllowHeaders  = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Agent-ID", "X-Signature", "X-Timestamp", "X-Public-Key", "X-API-Key"}
-	corsExposeHeaders = []string{"Content-Disposition", "Content-Length"}
+	corsAllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	corsAllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Agent-ID", "X-Signature", "X-Timestamp", "X-Public-Key", "X-API-Key"}
+	// Retry-After is not a CORS-safelisted response header, so the dashboard on its own
+	// origin reads it only when it is listed here.
+	corsExposeHeaders = []string{"Content-Disposition", "Content-Length", "Retry-After"}
 )
 
 // ValidateAndSanitizeCORSOrigins validates CORS origins and rejects dangerous configurations

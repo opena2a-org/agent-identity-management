@@ -202,6 +202,8 @@ func TestCORSMiddleware_ExposesHeaders(t *testing.T) {
 	exposedHeaders := resp.Header.Get("Access-Control-Expose-Headers")
 	assert.Contains(t, exposedHeaders, "Content-Disposition")
 	assert.Contains(t, exposedHeaders, "Content-Length")
+	// A refusal's Retry-After tells the dashboard when to try again.
+	assert.Contains(t, exposedHeaders, "Retry-After")
 }
 
 func TestCORSMiddleware_DefaultsToLocalhostForInvalidConfig(t *testing.T) {

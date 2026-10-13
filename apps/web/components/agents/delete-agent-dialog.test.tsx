@@ -97,6 +97,41 @@ describe("DeleteAgentDialog", () => {
     );
   });
 
+  it("states a delete the record path refused once, in a neutral alert inside the dialog, with when to try again", async () => {
+    vi.mocked(api.deleteAgent).mockRejectedValueOnce(
+      Object.assign(requestError("server line", 503), {
+        code: "recordUnavailable",
+        retryAfterSeconds: 300,
+      })
+    );
+    const { onOpenChange, onDeleted } = renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    const dialog = screen.getByRole("alertdialog");
+    const refusal = await screen.findByRole("alert");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(dialog.contains(refusal)).toBe(true);
+    expect(refusal.querySelector("h5")?.textContent).toBe("Nothing was changed");
+    expect(refusal.textContent).toContain("AIM did not delete this agent");
+    expect(refusal.textContent).toContain("the record could not be written");
+    expect(refusal.textContent).toContain("Try again in 5 minutes.");
+    expect(refusal.textContent).not.toContain("AIM could not delete this agent.");
+    expect(refusal.textContent).not.toContain("server line");
+    // The default variant: the person did nothing wrong.
+    expect(refusal.className).not.toContain("destructive");
+    expect(refusal.className).not.toContain("danger");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(onDeleted).not.toHaveBeenCalled();
+
+    // The alert stays until the next attempt, which clears it.
+    vi.mocked(api.deleteAgent).mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith(agent));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("hands the deleted agent to the caller after a success", async () => {
     vi.mocked(api.deleteAgent).mockResolvedValue(undefined);
     const { onDeleted } = renderDialog();

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
@@ -9,6 +11,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // assertReasonCode requires a refusal body to carry want in reasonCode, the API's
@@ -58,6 +61,18 @@ func TestRefusals_CarryReasonCodeEqualToCode(t *testing.T) {
 			map[string]interface{}{"executed": false})
 		assert.Equal(t, fiber.StatusServiceUnavailable, status)
 		assertReasonCode(t, body, "enforcementModeUnavailable")
+	})
+
+	t.Run("delete refused because its audit record could not be written", func(t *testing.T) {
+		audited := 0
+		deleteApp, path := deleteAgentApp(t, recordRefusal, &audited)
+		resp, err := deleteApp.Test(httptest.NewRequest("DELETE", path, nil))
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		assert.Equal(t, fiber.StatusServiceUnavailable, resp.StatusCode)
+		assertReasonCode(t, body, "recordUnavailable")
 	})
 
 	t.Run("registration error without a reason", func(t *testing.T) {
