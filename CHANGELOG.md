@@ -294,6 +294,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   with neither says "No user or agent recorded".
 - A test cell in `apps/web/lib/audit-records.test.ts` covers a record that carries both an agent id and a user id.
 
+### Changed
+
+- An approval of a capability request refused because its audit record could not be written answers `503` with
+  `recordUnavailable` and `Retry-After`, and the approve dialog says nothing changed and when to try again.
+- The approval and its grant are an expansion, made only together with their audit record; when the record path
+  cannot be used the service refuses the approval whole and nothing is approved or granted.
+  `POST /api/v1/admin/capability-requests/:id/approve` now answers that refusal as the agent delete does: `503`,
+  `Retry-After: 300` and `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`.
+  The cause stays in the server log. Any other failure still answers as before.
+- Measured with the handler of the previous commit, with the read of the request's record failing on a lock timeout:
+  the route answered `500` with `{"error":"An internal error occurred. Please try again later."}`, no `reasonCode`
+  and no `Retry-After`, and the dashboard closed the dialog and showed a destructive "Action Failed" alert on the
+  page that quoted the server's line.
+- The approve dialog now stays open while the decision runs and states this refusal once, inside the dialog, in the
+  same neutral "Nothing was changed" alert as the delete dialog, with when to try again taken from `Retry-After`.
+  Focus stays in the dialog. The next attempt, or closing the dialog, clears it. Any other failure still closes the
+  dialog and is shown on the page. A rejection narrows nothing and is never refused by the record path.
+- Tests: `apps/backend/internal/interfaces/http/handlers/capability_request_record_refusal_test.go`, the reason-code
+  census in `refusal_reason_code_test.go`, and `apps/web/app/dashboard/admin/capability-requests/page.test.tsx`.
+
 ### Changed — a delete refused because its audit record could not be written answers 503 with `recordUnavailable` and `Retry-After`, and the delete dialog says nothing changed and when to try again
 
 - An agent's deletion is made only together with its audit record; when the record cannot be written the service
