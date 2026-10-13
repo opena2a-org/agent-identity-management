@@ -1076,10 +1076,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   policies; they said each call ran through Fine-Grained Authorization (FGA). The SDKs post each call to
   `/api/v1/sdk-api/verifications`, which decides with those. The 5-step engine runs on
   `POST /api/v1/agents/:id/authorize`, which no SDK in this repository calls.
-- The README's Fine-Grained Authorization section names that route and says it runs step 1 only when the agent has
-  no FGA policy for the capability. It says step 5 runs for HIGH- and MEDIUM-risk policies without holding the
-  decision, never denies, and needs a NanoMind daemon (`FGA_DAEMON_URL`) that neither compose file starts. The
-  observability section says a decision carries one child span per step it ran, where it said five.
+- The Fine-Grained Authorization section, now in `docs/server-features.md`, names that route and says it runs step 1
+  only when the agent has no FGA policy for the capability. It says step 5 runs for HIGH- and MEDIUM-risk policies
+  without holding the decision, never denies, and needs a NanoMind daemon (`FGA_DAEMON_URL`) that neither compose
+  file starts. The observability section, now in `docs/DEPLOYMENT.md`, says a decision carries one child span per
+  step it ran, where it said five.
 - Routing SDK verifications through the 5-step engine is still open.
 - Test: `sdk/python/tests/test_perform_action_authorization_claims.py`.
 
