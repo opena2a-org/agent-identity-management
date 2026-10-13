@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the Java SDK download's QUICKSTART.md names the version the download is named after
+
+- `GET /api/v1/sdk/download?sdk=java` names the zip `aim-sdk-java-v<version>.zip` after `sdk/java/VERSION`. The
+  `QUICKSTART.md` inside it now tells the reader to add `org.opena2a:aim-sdk` at that same version. The version is
+  read on every download, so a server built from a tree with a new `sdk/java/VERSION` needs no other change.
+- Two backend tests, `TestJavaSDKVersionFileStatesThePomVersion` and `TestJavaSDKVersionStatementsAgreeWithThePom`,
+  fail when `sdk/java/VERSION`, the Java SDK's own version strings (its User-Agent, the `sdkVersion` it sends, its
+  SBOM component) or a document that names `org.opena2a:aim-sdk` states a version other than the one
+  `sdk/java/pom.xml` declares, and list each file and line that does. The backend CI job runs them for every change
+  under `apps/backend/` or `sdk/`.
+
 ### Fixed — `GET /health/ready` and `GET /api/v1/status` report the bare semver the image tag carries
 
 - A server built from the platform release tag reports its version as the image tag reads: a build stamped with
