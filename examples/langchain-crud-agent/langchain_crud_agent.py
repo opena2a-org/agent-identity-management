@@ -15,7 +15,8 @@ Features:
 - Security alerts for dangerous operations
 
 Prerequisites:
-    - AIM backend running (http://localhost:8080)
+    - AIM backend running (http://localhost:8080, or the AIM_BACKEND_PORT
+      the stack was started with; see stack_env.py)
     - API key from dashboard
     - pip install langchain langchain-google-genai
 
@@ -39,6 +40,7 @@ sys.path.insert(0, os.path.join(_AGENT_DIR, '../../sdk/python'))
 sys.path.insert(0, os.path.join(_AGENT_DIR, 'aim-sdk-python'))
 
 from aim_sdk import secure
+from stack_env import BACKEND_URL, FRONTEND_URL
 
 # LangChain imports
 try:
@@ -53,14 +55,14 @@ except ImportError:
 
 # Configuration
 AIM_API_KEY = os.getenv('AIM_API_KEY')
-AIM_API_URL = os.getenv('AIM_API_URL', 'http://localhost:8080')
+AIM_API_URL = os.getenv('AIM_API_URL') or BACKEND_URL
 
 # Validate required environment variables
 if not AIM_API_KEY:
     print("❌ Error: AIM_API_KEY environment variable is required!")
     print("   Please set it before running:")
     print("   export AIM_API_KEY='your-api-key-here'")
-    print("\n   Get your API key from: http://localhost:3000/dashboard/settings/api-keys")
+    print(f"\n   Get your API key from: {FRONTEND_URL}/dashboard/settings/api-keys")
     sys.exit(1)
 
 # In-memory database (simulating a real database)
@@ -455,7 +457,7 @@ print('   • +3 points for verified DELETE ALL (critical risk)')
 print('   • Total: ~11 trust score points earned')
 print('')
 print(f'📊 View in Dashboard:')
-print(f'   {AIM_API_URL.replace("8080", "3000")}/dashboard/agents/{agent_client.agent_id}')
+print(f'   {FRONTEND_URL}/dashboard/agents/{agent_client.agent_id}')
 print('')
 print('📚 Check these tabs:')
 print('   • Verifications → See all 9 verified operations')

@@ -21,6 +21,19 @@ export AIM_API_KEY='your-aim-api-key'
 export GOOGLE_API_KEY='your-google-api-key'
 ```
 
+The agent and `run-langchain-crud.sh` reach the stack through the host ports the compose files read, so they follow a stack started on other ports:
+
+| Variable | Default | Used for |
+|---|---|---|
+| `AIM_BACKEND_PORT` | `8080` | the backend, `http://localhost:$AIM_BACKEND_PORT`, unless `AIM_API_URL` is set |
+| `AIM_FRONTEND_PORT` | `3000` | the dashboard links, `http://localhost:$AIM_FRONTEND_PORT` |
+
+Each comes from the environment first, then from the repository's `.env`, then the default (`stack_env.py` reads them for the agent, `run-langchain-crud.sh` for itself). `AIM_API_URL` in the environment (or, for `run-langchain-crud.sh`, in this directory's `.env`) wins over `AIM_BACKEND_PORT`. For a stack started with `AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000`:
+
+```bash
+AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000 ./run-langchain-crud.sh
+```
+
 ## Setup
 
 Two supported SDK layouts — `flight_agent.py:34-39` prepends both paths so either works:
@@ -43,13 +56,14 @@ The agent presents a LangChain REPL. Sample prompts:
 - `mark todo 1 as done`
 - `delete todo 2`
 
-Each tool call routes through AIM. If you've configured a tool with a capability the agent doesn't hold, the call denies before the tool runs. Watch the AIM dashboard at `http://localhost:3000/dashboard/agents/<agent-id>` — verification requests, audit events, and trust-score changes appear as the agent runs.
+Each tool call routes through AIM. If you've configured a tool with a capability the agent doesn't hold, the call denies before the tool runs. Watch the AIM dashboard at `http://localhost:3000/dashboard/agents/<agent-id>` (the agent prints this link with the port from `AIM_FRONTEND_PORT`): verification requests, audit events, and trust-score changes appear as the agent runs.
 
 ## Files in this directory
 
 - `langchain_crud_agent.py` — the agent (~500 lines)
 - `requirements.txt` — pinned dependencies
 - `run-langchain-crud.sh` — convenience launcher
+- `stack_env.py`: the backend and dashboard URLs, from `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
 - `COMPLETE_CHANGES_DOCUMENTATION.md` — internal change-log from the October 2025 implementation; kept for historical context but not required reading to run the demo
 
 ## Related demos

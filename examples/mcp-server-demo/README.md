@@ -13,7 +13,7 @@ This is the server side of the MCP attestation story shown on Talk 1, Slide 12 (
 ## Prerequisites
 
 - Python 3.11+
-- AIM dashboard running at `http://localhost:3000` (so you can register the server)
+- AIM dashboard running at `http://localhost:3000`, or on the `AIM_FRONTEND_PORT` the stack was started with (so you can register the server)
 
 ## Setup
 
@@ -47,7 +47,7 @@ The test starts its own copy of the server on port 5151 (stop any copy that is a
 
 ## Register with AIM
 
-1. Open `http://localhost:3000/dashboard/mcp`
+1. Open the link the server prints on its `Open:` line, `http://localhost:3000/dashboard/mcp` by default. Its port comes from `AIM_FRONTEND_PORT` in the environment, then from the repository's `.env` (the file docker compose reads for `docker-compose.yml`), then the default `3000`, so it follows a stack started on another dashboard port.
 2. Click **Register MCP server**
 3. Fill in:
    - **Server name**: `test-mcp-local`

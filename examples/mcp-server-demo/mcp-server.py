@@ -30,7 +30,8 @@ The server listens on port 5151 and displays its public key. Use this
 to register the MCP server in the AIM dashboard.
 
 Registration in AIM Dashboard (see README.md):
-    1. Go to: http://localhost:3000/dashboard/mcp
+    1. Go to: http://localhost:3000/dashboard/mcp (the server prints this
+       link with the dashboard's host port, AIM_FRONTEND_PORT)
     2. Click "Register MCP server"
     3. Server name: test-mcp-local
     4. Server URL: http://localhost:5151/mcp
@@ -46,9 +47,32 @@ from flask import Flask, request, jsonify
 from nacl.signing import SigningKey
 from nacl.encoding import Base64Encoder
 import json
+import os
 import sys
+from pathlib import Path
 
 app = Flask(__name__)
+
+
+def aim_frontend_port():
+    """The AIM dashboard's host port: AIM_FRONTEND_PORT from the environment,
+    then from the repository's .env (the file docker compose reads for
+    docker-compose.yml), then the compose files' default, 3000."""
+    port = os.environ.get('AIM_FRONTEND_PORT')
+    if port:
+        return port
+    dotenv = Path(__file__).resolve().parent.parent.parent / '.env'
+    try:
+        lines = dotenv.read_text().splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        if line.startswith('AIM_FRONTEND_PORT='):
+            port = line[len('AIM_FRONTEND_PORT='):]
+    return port or '3000'
+
+
+AIM_DASHBOARD_URL = f"http://localhost:{aim_frontend_port()}"
 
 # Generate Ed25519 key pair for this MCP server
 signing_key = SigningKey.generate()
@@ -86,6 +110,7 @@ print("=" * 70)
 print("")
 print("✅ REGISTER IN AIM DASHBOARD:")
 print("")
+print(f"   Open: {AIM_DASHBOARD_URL}/dashboard/mcp")
 print("   Name: test-mcp-local")
 print("   URL: http://localhost:5151/mcp")
 print(f"   Public Key: {PUBLIC_KEY}")

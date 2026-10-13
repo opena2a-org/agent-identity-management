@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the LangChain CRUD and MCP server demos follow `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
+
+- `examples/langchain-crud-agent/run-langchain-crud.sh` checked the backend's health on
+  `localhost:8080` whatever `AIM_API_URL` said, and printed dashboard links on `localhost:3000`.
+  `langchain_crud_agent.py` defaulted to `localhost:8080` and built its dashboard link by replacing
+  `8080` with `3000` in the backend URL, so with `AIM_API_URL=http://localhost:18999` it linked
+  `localhost:18999`. Against a stack started on other host ports they reached nothing, or, beside a
+  default stack on the same host, that stack. Both now read `AIM_BACKEND_PORT` (`8080`) and
+  `AIM_FRONTEND_PORT` (`3000`) from the environment, then the repository's `.env`, then the defaults
+  (the agent through the new `stack_env.py`); an `AIM_API_URL` that is set still wins for the
+  backend. When the backend does not answer, the launcher prints the health check it tried.
+- `examples/mcp-server-demo/mcp-server.py` prints the dashboard page to register it on, with the
+  port from `AIM_FRONTEND_PORT` read the same way. Both example READMEs name the variables with
+  their defaults.
+
 ### Changed — the flight-search demo's helper scripts follow `AIM_BACKEND_PORT`, `AIM_FRONTEND_PORT` and `AIM_POSTGRES_PORT`
 
 - `examples/flight-search-agent/get_fresh_sdk.py` and `verify_qa_complete.py` called the backend on
