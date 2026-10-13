@@ -91,15 +91,16 @@ def test_readme_is_under_the_word_budget():
     assert words <= WORD_BUDGET, f"README.md has {words} words; the budget is {WORD_BUDGET}"
 
 
-# Sentences the short form keeps from the long form, so a reader meets no state the
-# README does not name: what pending means, the setting the refusal needs, where
-# secure() writes, how the release on PyPI prints the captures, where the self-hosted
-# login comes from, and that the install is unpinned.
+# Sentences the short form keeps, so a reader meets no state the README does not name:
+# what pending means, the setting the refusal needs, where secure() writes, how the
+# release on PyPI prints the captures, what the self-hosted install needs and writes,
+# where its login comes from, and that it is unpinned.
 KEPT_SENTENCES = [
     "until an administrator verifies it under Agents",
     "needs strict mode",
     "stores credentials at `~/.aim/`",
     "the release on PyPI prints",
+    "of generated secrets to `./aim`",
     "Login credentials print at the end of the run",
     "nothing on this path is pinned or verified",
 ]
@@ -207,6 +208,43 @@ def test_the_pending_paragraph_says_what_a_pending_agents_call_does_in_each_mode
     assert len(strict) == 1, f"the paragraph must quote the strict-mode refusal: {found[0]!r}"
     assert "strict-mode organization" in strict[0], (
         f"the sentence quoting the refusal must say it needs a strict-mode organization: {strict[0]!r}"
+    )
+
+
+QUICKSTART_SCRIPT = REPO_ROOT / "scripts" / "quickstart.sh"
+
+
+def test_the_install_section_says_what_the_quickstart_script_needs_and_writes():
+    """The script stops with exit 1 when a command its pre-flight loop checks is missing or
+    the Docker daemon is not running, and on a first run writes its compose file and a
+    .env of generated secrets, the login among them, to its install directory. A reader
+    meets each before the dashboard, so the Install section says so in one sentence."""
+    script = QUICKSTART_SCRIPT.read_text(encoding="utf-8")
+    required = re.search(r"^for cmd in ([\w ]+); do\n\s+command -v ", script, re.MULTILINE)
+    assert required, "scripts/quickstart.sh no longer checks its required commands in one loop"
+    assert re.search(r'^docker info .*\|\| error "Docker daemon is not running"', script, re.MULTILINE), (
+        "scripts/quickstart.sh no longer stops when the Docker daemon is not running"
+    )
+    install_dir = re.search(r'^INSTALL_DIR="\$\{AIM_DIR:-([\w.-]+)\}"', script, re.MULTILINE)
+    assert install_dir, "scripts/quickstart.sh no longer names its default install directory"
+    assert '-o docker-compose.quickstart.yml' in script and "> .env)" in script, (
+        "scripts/quickstart.sh no longer writes the compose file and .env this test describes"
+    )
+
+    lines = text().split("\n")
+    start = lines.index("## Install AIM (self-hosted)")
+    end = next(i for i, line in enumerate(lines) if i > start and line.startswith("## "))
+    section = " ".join(lines[start:end])
+    said = [s for s in sentences() if f"`./{install_dir.group(1)}`" in s and s in section]
+    assert len(said) == 1, (
+        f"the Install section must say once, in one sentence, what the script writes to "
+        f"`./{install_dir.group(1)}`: {said}"
+    )
+    missing = [cmd for cmd in required.group(1).split() if cmd.lower() not in said[0].lower()]
+    assert not missing, f"the sentence must name each command the script needs, missing {missing}: {said[0]!r}"
+    assert "Docker running" in said[0], f"the sentence must say Docker has to be running: {said[0]!r}"
+    assert "compose file" in said[0] and "`.env`" in said[0], (
+        f"the sentence must name the compose file and the `.env` the script writes: {said[0]!r}"
     )
 
 
