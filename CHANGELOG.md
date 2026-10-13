@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the flight-search demo's stage scripts reach the stack through `AIM_PROJECT` and `AIM_BACKEND_PORT`
+
+- `examples/flight-search-agent/reset-demo.sh` and `prep-stage.sh` ran every query in the fixed
+  container `aim-postgres` and called the backend on `localhost:8080`. Against a stack started with
+  another `AIM_PROJECT` or `AIM_BACKEND_PORT` they failed with `No such container`, or, beside a
+  default stack on the same host, reset and seeded that stack instead. They now use the container
+  `$AIM_PROJECT-postgres` and the backend at `http://localhost:$AIM_BACKEND_PORT`, each read from the
+  environment, then the repository's `.env`, then the defaults (`aim`, `8080`). The strict-mode
+  command `prep-stage.sh` prints names the same container, and the example's README lists both
+  variables with their defaults.
+- When the backend does not answer the admin login, `prep-stage.sh` prints the URL it tried and the
+  health check to run, where it used to stop on a Python traceback.
+
 ### Security — webhook, MCP server and agent card requests refuse eight more special-purpose address ranges
 
 - The address policy that the URL check and the connection check share also refuses 192.88.99.0/24 (6to4 relay

@@ -11,9 +11,13 @@
 #   flightagent> inject data-exfil  # Beat 4 - still allowed in monitoring
 #   # (operator clicks Strict Mode in dashboard - Beat 5)
 #   flightagent> inject data-exfil  # Beat 6 - now DENIED
+#
+# Reaches the stack through AIM_PROJECT (container $AIM_PROJECT-postgres) and
+# AIM_BACKEND_PORT (backend on localhost:$AIM_BACKEND_PORT); see stack-env.sh.
 
 set -e
 cd "$(dirname "$0")"
+source ./stack-env.sh
 
 # Per-run scratch dir under $TMPDIR (defaults to /tmp). Avoids hardcoded
 # /tmp paths so two operators on the same host can't collide and so an
@@ -31,17 +35,20 @@ echo "Minting a fresh SDK refresh token (the existing one may have been rotated)
 # environment when the dev stack has been rotated.
 ADMIN_PASSWORD="${AIM_ADMIN_PASSWORD:-AIM2025!Secure}"
 LOGIN_PAYLOAD=$(ADMIN_PASSWORD="$ADMIN_PASSWORD" python3 -c "import json,os; print(json.dumps({'email':'admin@opena2a.org','password':os.environ['ADMIN_PASSWORD']}))")
-TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/public/login \
+# A backend that does not answer, or answers without a token, leaves TOKEN
+# empty so the message below names the URL that was tried.
+TOKEN=$(curl -s -X POST "$AIM_BACKEND_URL/api/v1/public/login" \
   -H "Content-Type: application/json" \
   -d "$LOGIN_PAYLOAD" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])")
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['accessToken'])" 2>/dev/null) || TOKEN=""
 if [ -z "$TOKEN" ]; then
-  echo "ERROR: admin login failed. Check backend health on localhost:8080."
+  echo "ERROR: admin login failed at $AIM_BACKEND_URL. Check backend health: curl -sf $AIM_BACKEND_URL/health"
+  echo "       (set AIM_BACKEND_PORT if the backend listens on another host port)"
   exit 1
 fi
 curl -s -o "$WORKDIR/aim-sdk-fresh.zip" \
   -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/sdk/download?sdk=python"
+  "$AIM_BACKEND_URL/api/v1/sdk/download?sdk=python"
 unzip -q "$WORKDIR/aim-sdk-fresh.zip" -d "$WORKDIR/aim-sdk-fresh"
 cp "$WORKDIR/aim-sdk-fresh/aim-sdk-python/.aim/sdk_credentials.json" ~/.aim/sdk_credentials.json
 # The bundled-SDK-side copy is optional — the SDK falls back to the home-dir
@@ -70,7 +77,7 @@ print(f'Registered agent_id={agent.agent_id}')
 }
 
 echo "Promoting agent to verified, trust 0.92, syncing both trust stores..."
-docker exec aim-postgres psql -U postgres -d identity -c \
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c \
   "UPDATE agents SET status='verified', trust_score=0.92, verified_at=NOW(), last_active=NOW() WHERE name='flight-search-agent';
    UPDATE trust_scores SET score=0.92, last_calculated=NOW() WHERE agent_id=(SELECT id FROM agents WHERE name='flight-search-agent');
    SELECT 'agents.trust_score' AS source, trust_score::text AS value FROM agents WHERE name='flight-search-agent'
@@ -87,7 +94,7 @@ print('Cached creds updated: status=verified, trust_score=0.92')
 "
 
 echo "Clearing registration-time noise from all activity surfaces (clean stage start)..."
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 DELETE FROM audit_logs           WHERE agent_id=(SELECT id FROM agents WHERE name='flight-search-agent');
 DELETE FROM alerts               WHERE resource_id=(SELECT id FROM agents WHERE name='flight-search-agent');
 DELETE FROM capability_violations WHERE agent_id=(SELECT id FROM agents WHERE name='flight-search-agent');
@@ -102,7 +109,7 @@ FROM agents WHERE name='flight-search-agent';
 echo "Activity feed reset: 0 audit logs, 0 alerts, 0 violations, 0 verification events, 0 trust history."
 
 echo "Attaching MCP servers (github, slack, google-calendar) for Beat 2 richness..."
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 WITH org AS (SELECT 'a0000000-0000-0000-0000-000000000001'::uuid AS id),
      usr AS (SELECT 'a0000000-0000-0000-0000-000000000002'::uuid AS id),
      gh  AS (INSERT INTO mcp_servers (organization_id, name, description, url, version, status, is_verified, capabilities, created_by, last_verified_at)
@@ -122,7 +129,7 @@ SET talks_to = jsonb_build_array((SELECT id::text FROM gh), (SELECT id::text FRO
 WHERE name='flight-search-agent';
 " > /dev/null
 
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 INSERT INTO agent_mcp_connections (agent_id, mcp_server_id, connection_type, first_connected_at, last_attested_at, attestation_count, is_active)
 SELECT a.id, m.id, 'user_registered', NOW() - INTERVAL '3 days', NOW() - INTERVAL '5 minutes', 12, true
 FROM agents a, mcp_servers m
@@ -130,15 +137,15 @@ WHERE a.name='flight-search-agent' AND m.name IN ('github','slack','google-calen
 ON CONFLICT (agent_id, mcp_server_id) DO UPDATE SET is_active=true, last_attested_at=EXCLUDED.last_attested_at, attestation_count=EXCLUDED.attestation_count;
 " > /dev/null
 
-mcp_count=$(docker exec aim-postgres psql -U postgres -d identity -t -c "SELECT count(*) FROM agent_mcp_connections WHERE agent_id=(SELECT id FROM agents WHERE name='flight-search-agent') AND is_active=true;" | tr -d ' ')
+mcp_count=$(docker exec "$PG_CONTAINER" psql -U postgres -d identity -t -c "SELECT count(*) FROM agent_mcp_connections WHERE agent_id=(SELECT id FROM agents WHERE name='flight-search-agent') AND is_active=true;" | tr -d ' ')
 echo "MCP servers attached: $mcp_count (github, slack, google-calendar)."
 
 echo "Populating MCP capabilities, attestations, and trust scores..."
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 DELETE FROM mcp_server_capabilities WHERE mcp_server_id IN (SELECT id FROM mcp_servers WHERE organization_id='a0000000-0000-0000-0000-000000000001' AND name IN ('github','slack','google-calendar'));
 DELETE FROM mcp_trust_scores       WHERE mcp_server_id IN (SELECT id FROM mcp_servers WHERE organization_id='a0000000-0000-0000-0000-000000000001' AND name IN ('github','slack','google-calendar'));
 " > /dev/null
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 WITH gh AS (SELECT id FROM mcp_servers WHERE name='github' AND organization_id='a0000000-0000-0000-0000-000000000001'),
      sl AS (SELECT id FROM mcp_servers WHERE name='slack' AND organization_id='a0000000-0000-0000-0000-000000000001'),
      gc AS (SELECT id FROM mcp_servers WHERE name='google-calendar' AND organization_id='a0000000-0000-0000-0000-000000000001')
@@ -159,7 +166,7 @@ SELECT gh.id, name, 'tool', description, NOW() FROM gh, (VALUES
 ) AS t(name, description);
 " > /dev/null
 
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 WITH sl AS (SELECT id FROM mcp_servers WHERE name='slack' AND organization_id='a0000000-0000-0000-0000-000000000001')
 INSERT INTO mcp_server_capabilities (mcp_server_id, name, capability_type, description, last_verified_at)
 SELECT sl.id, name, 'tool', description, NOW() FROM sl, (VALUES
@@ -172,7 +179,7 @@ SELECT sl.id, name, 'tool', description, NOW() FROM sl, (VALUES
 ) AS t(name, description);
 " > /dev/null
 
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 WITH gc AS (SELECT id FROM mcp_servers WHERE name='google-calendar' AND organization_id='a0000000-0000-0000-0000-000000000001')
 INSERT INTO mcp_server_capabilities (mcp_server_id, name, capability_type, description, last_verified_at)
 SELECT gc.id, name, 'tool', description, NOW() FROM gc, (VALUES
@@ -194,7 +201,7 @@ SELECT gc.id, name, 'tool', description, NOW() FROM gc, (VALUES
 #   community:    ~0.6  (small ecosystem-recognition bonus for well-known names)
 # Resulting scores are intentionally below the agent's 92% — MCPs accrue trust
 # through usage history, and these have none yet on this deployment.
-docker exec aim-postgres psql -U postgres -d identity -c "
+docker exec "$PG_CONTAINER" psql -U postgres -d identity -c "
 INSERT INTO mcp_trust_scores (mcp_server_id, score, confidence, factors, last_calculated)
 SELECT id, 0.68, 0.55, jsonb_build_object('verification', 1.0, 'uptime', 0.5, 'attestations', 0.0, 'community', 0.65), NOW()
 FROM mcp_servers WHERE name='github' AND organization_id='a0000000-0000-0000-0000-000000000001';
@@ -218,7 +225,7 @@ UPDATE mcp_servers SET trust_score=0.62 WHERE name='google-calendar' AND organiz
 # doesn't exercise an MCP tool call anyway, so "Attestations: 0" on the MCP
 # detail page is the truthful state.
 
-caps_total=$(docker exec aim-postgres psql -U postgres -d identity -t -c "SELECT count(*) FROM mcp_server_capabilities WHERE mcp_server_id IN (SELECT id FROM mcp_servers WHERE organization_id='a0000000-0000-0000-0000-000000000001' AND name IN ('github','slack','google-calendar'));" | tr -d ' ')
+caps_total=$(docker exec "$PG_CONTAINER" psql -U postgres -d identity -t -c "SELECT count(*) FROM mcp_server_capabilities WHERE mcp_server_id IN (SELECT id FROM mcp_servers WHERE organization_id='a0000000-0000-0000-0000-000000000001' AND name IN ('github','slack','google-calendar'));" | tr -d ' ')
 echo "MCP enrichment complete: $caps_total capabilities (10 github + 6 slack + 5 calendar), trust scores set (github 68%, slack 60%, calendar 62% — intentionally below the agent's 92% because MCPs have no usage history yet). Attestations left at 0 (SDK creates them at runtime)."
 
 echo ""
@@ -227,6 +234,6 @@ echo "  source .venv/bin/activate"
 echo "  python flight_agent.py"
 echo ""
 echo "Mid-demo strict-mode flip (Beat 5):"
-echo "  docker exec aim-postgres psql -U postgres -d identity -c \\"
+echo "  docker exec $PG_CONTAINER psql -U postgres -d identity -c \\"
 echo "    \"UPDATE organizations SET enforcement_mode='strict' WHERE id='a0000000-0000-0000-0000-000000000001';\""
 echo "  (or click the Global Strict Mode toggle in the dashboard)"

@@ -38,6 +38,19 @@ python3 flight_agent.py
 
 On first run the agent will register with AIM, generate an Ed25519 keypair, and drop a credentials file under `~/.aim/`. The same OAuth/SDK-token flow used by external SDK consumers — exercising every path the dashboard-bundle flow exercises.
 
+The stage scripts `reset-demo.sh` (wipe the agent, set the organization to monitoring) and `prep-stage.sh` (reset, register, verify and seed the agent before a talk) reach the stack through the variables the compose files read, so they follow a stack started with other container names or ports:
+
+| Variable | Default | Used for |
+|---|---|---|
+| `AIM_PROJECT` | `aim` | the PostgreSQL container, `$AIM_PROJECT-postgres` |
+| `AIM_BACKEND_PORT` | `8080` | the backend, `http://localhost:$AIM_BACKEND_PORT` |
+
+Each comes from the environment first, then from the repository's `.env`, then the default. For a stack started with `AIM_PROJECT=lab AIM_BACKEND_PORT=18080`:
+
+```bash
+AIM_PROJECT=lab AIM_BACKEND_PORT=18080 ./prep-stage.sh
+```
+
 ### Option 2: Dashboard-bundle SDK (for AIM Cloud users)
 
 ```bash
