@@ -18,7 +18,7 @@ Before upgrading a running agent, check whether anything it does is currently be
 
 ## Quick start
 
-Install the SDK, with the `rich` extra for its compact console output, and authenticate:
+Install the SDK, with the optional `rich` extra for its compact console output (plain `pip install aim-sdk` also works), and authenticate:
 
 ```bash
 pip install "aim-sdk[rich]"

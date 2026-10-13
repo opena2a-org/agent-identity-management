@@ -425,6 +425,20 @@ def test_root_readme_installs_the_rich_extra_its_captured_output_shows():
     )
 
 
+def test_root_readme_says_the_rich_extra_is_optional_and_the_plain_install_works():
+    # setup.py lists rich only under extras_require, and console.py falls back to a
+    # plain-text panel without it, so the bracket is a formatting choice, not a
+    # requirement. A first-time reader learns that on the page, before installing.
+    prose = re.sub(r"^```\w*\n.*?^```\s*$", "", quick_start(ROOT_README), flags=re.MULTILINE | re.DOTALL)
+    sentence = next((s for s in re.split(r"(?<=[.;:])\s+", prose) if "`[rich]`" in s), None)
+    assert sentence and "optional" in sentence, (
+        "the Quick start prose must say that the `[rich]` extra is optional"
+    )
+    assert "`pip install aim-sdk`" in prose, (
+        "the Quick start prose must say that plain `pip install aim-sdk` works"
+    )
+
+
 class MarkupStrippingConsole:
     """Prints what rich prints for this SDK's console markup, without colour:
     style tags such as [dim] and [/] dropped, an escaped \\[ printed as [. The

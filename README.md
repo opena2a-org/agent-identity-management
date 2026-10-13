@@ -13,7 +13,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Then register an agent, in a Python session, with the capability it holds. What `secure()` prints, trimmed ([full output](docs/captures/quick-start.txt)):
+The `[rich]` extra is optional and formats the output shown below; plain `pip install aim-sdk` works and prints the same fields in a panel. Then register an agent, in a Python session, with the capability it holds. What `secure()` prints, trimmed ([full output](docs/captures/quick-start.txt)):
 
 ```python
 from aim_sdk import secure
