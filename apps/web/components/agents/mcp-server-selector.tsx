@@ -15,7 +15,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { RecordPathRefusalAlert } from '@/components/ui/record-path-refusal-alert'
 import { api } from '@/lib/api'
+import { recordPathRefusal, type RecordPathRefusal } from '@/lib/record-path-refusal'
 
 interface MCPServer {
   id: string
@@ -56,6 +58,7 @@ export function MCPServerSelector({
   const [selectedServers, setSelectedServers] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [recordRefusal, setRecordRefusal] = useState<RecordPathRefusal | null>(null)
 
   // Filter MCP servers based on search query
   const filteredServers = useMemo(() => {
@@ -125,6 +128,7 @@ export function MCPServerSelector({
   }
 
   const handleAddServers = async () => {
+    if (isSaving) return
     if (selectedServers.size === 0) {
       setError('Please select at least one MCP server')
       return
@@ -132,6 +136,7 @@ export function MCPServerSelector({
 
     setIsSaving(true)
     setError(null)
+    setRecordRefusal(null)
 
     try {
       await api.addMCPServersToAgent(agentId, {
@@ -148,17 +153,35 @@ export function MCPServerSelector({
       }
     } catch (err: any) {
       console.error('Failed to add MCP servers:', err)
-      setError(err.message || 'Failed to add MCP servers to agent')
+      // An addition the server refused because its audit record could not be written is
+      // stated once, inside this dialog, with when to try again. The selection is kept.
+      const refusal = recordPathRefusal(err, 'add the selected MCP servers to this agent')
+      if (refusal) {
+        setRecordRefusal(refusal)
+      } else {
+        setError(err.message || 'Failed to add MCP servers to agent')
+      }
     } finally {
       setIsSaving(false)
     }
   }
 
   const handleClose = () => {
+    // An addition in flight cannot be cancelled, so the dialog stays until it answers.
+    if (isSaving) return
     setIsOpen(false)
     setSelectedServers(new Set())
     setSearchQuery('')
     setError(null)
+    setRecordRefusal(null)
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    if (open) {
+      setIsOpen(true)
+    } else {
+      handleClose()
+    }
   }
 
   return (
@@ -173,7 +196,7 @@ export function MCPServerSelector({
         Add MCP servers
       </Button>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -229,6 +252,8 @@ export function MCPServerSelector({
                 )}
               </div>
             )}
+
+            <RecordPathRefusalAlert refusal={recordRefusal} />
 
             {/* Error Display */}
             {error && (
@@ -366,12 +391,19 @@ export function MCPServerSelector({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={handleClose} disabled={isSaving}>
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              aria-disabled={isSaving || undefined}
+            >
               Cancel
             </Button>
+            {/* aria-disabled rather than disabled while the request runs: a disabled
+                button drops focus out of the dialog. */}
             <Button
               onClick={handleAddServers}
-              disabled={isSaving || selectedServers.size === 0}
+              aria-disabled={isSaving || undefined}
+              disabled={selectedServers.size === 0}
             >
               {isSaving ? (
                 <>

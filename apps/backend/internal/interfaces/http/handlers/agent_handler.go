@@ -1220,6 +1220,7 @@ func getAIMBaseURL(c fiber.Ctx) string {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 404 {object} ErrorResponse "Agent not found"
+// @Failure 503 {object} ErrorResponse "The audit record of the addition could not be written, so nothing was changed (reasonCode recordUnavailable, with Retry-After)"
 // @Router /api/v1/agents/{id}/mcp-servers [put]
 func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
@@ -1264,13 +1265,20 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Add MCP servers to agent's talks_to list
+	// Add MCP servers to agent's talks_to list. An addition widens what the agent may
+	// reach, so it is made only together with its audit record: a refusal of the record
+	// path answers 503 with its reason and Retry-After, and its cause stays in the server
+	// log.
 	updatedAgent, addedServers, err := h.agentService.AddMCPServers(
 		withTransitionActor(c),
 		agentID,
 		req.MCPServerIDs,
 	)
 	if err != nil {
+		if refused, resp := respondRecordUnavailable(c, err); refused {
+			log.Printf("%s %s refused: %v", c.Method(), c.Path(), err)
+			return resp
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
