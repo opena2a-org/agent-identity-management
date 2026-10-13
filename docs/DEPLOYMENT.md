@@ -729,6 +729,87 @@ docker compose up -d postgres redis
 
 ---
 
+## Install from this repository
+
+> The `docker pull` command shown in the box on the `aim-dashboard` and `aim-server` package pages names a `sha256-<hex>` tag that holds the build's SLSA provenance attestation, not the image; with Docker 29.2 that pull fails with `unsupported media type application/vnd.oci.empty.v1+json` and installs nothing (measured 2026-09-24). Install through the Docker steps below; they pin and verify nothing.
+
+### Docker
+
+The quickstart script is fetched from `main`. On a first run it downloads [`docker-compose.quickstart.yml`](../docker-compose.quickstart.yml), also from `main`, and starts `aim-server` and `aim-dashboard` at their `latest` tags. `latest` moves only when a platform release is published; merges to `main` do not move it. Until the first release after this change, `latest` names the last build of `main` published before this change landed, whose version label reads `edge`. PostgreSQL (the TimescaleDB image) and Redis start at floating upstream tags. Nothing on this path is pinned or verified: read [the script](../scripts/quickstart.sh) and the compose file it fetches before running it. Published security advisories are on the repository's [security advisories page](https://github.com/opena2a-org/agent-identity-management/security/advisories).
+
+```bash
+curl -sSLO https://raw.githubusercontent.com/opena2a-org/agent-identity-management/main/scripts/quickstart.sh
+bash quickstart.sh
+```
+
+Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
+
+The host ports and the container names come from the environment, with the values below as defaults. Set a variable before `bash quickstart.sh` (or in the `.env` next to `docker-compose.quickstart.yml`) to run AIM beside another service on the same port, or to run a second AIM stack on one host. The script records the values it ran with in the install's `.env`, so a later `docker compose` in that directory keeps them.
+
+| Variable | Default | Sets |
+|---|---|---|
+| `AIM_BACKEND_PORT` | `8080` | host port of the API (`aim-backend`) |
+| `AIM_FRONTEND_PORT` | `3000` | host port of the dashboard (`aim-frontend`) |
+| `AIM_POSTGRES_PORT` | `5432` | host port of PostgreSQL (`aim-postgres`), bound to `127.0.0.1` |
+| `AIM_REDIS_PORT` | `6379` | host port of Redis (`aim-redis`), bound to `127.0.0.1` |
+| `AIM_PROJECT` | `aim` | prefix of the four container names |
+
+A second stack beside the default one, in its own directory and Compose project, with its own container names and ports:
+
+```bash
+AIM_DIR=aim2 AIM_PROJECT=aim2 AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 AIM_POSTGRES_PORT=5433 AIM_REDIS_PORT=6380 bash quickstart.sh
+```
+
+Compose names the volumes and the network after its project (`COMPOSE_PROJECT_NAME`, or the install directory's name), so two stacks also need two projects; `AIM_DIR` gives each its own directory and project.
+
+Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](../infrastructure/DEPLOYMENT.md).
+
+Merges to `main` no longer publish images: only a push of a `platform-vX.Y.Z` tag does, and it publishes `X.Y.Z`, `X.Y`, `X` and `latest` for both images on both registries. The `edge` tag is frozen at the last build of `main` published before this change and will be removed; to follow `main`, build from source (next section). This change does not move `1`, `1.0` or `1.0.0`. A running image is identified by its digest and its revision label (`org.opencontainers.image.revision`), not by the tag it was pulled by.
+
+New accounts wait for an administrator's approval. To bootstrap the first administrator, set `AIM_PLATFORM_ADMINS` (comma-separated emails) before starting the backend: accounts on that list are approved automatically and approve everyone else from the dashboard's admin area. Until a listed address has registered, or some administrator exists, other sign-ups are refused with an error that says so; nothing is queued. The backend logs how the variable was read at startup, so a mistyped entry is visible there.
+
+The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0`, and the `aim-server` tags `1.22` and `1.22.0`, are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The images behind them bundle components with critical-rated vulnerabilities, described in [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) for the dashboard and [GHSA-fxfm-hhhw-3mgf](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-fxfm-hhhw-3mgf) for the server. The dashboard images are also affected by [GHSA-638x-gwq7-xfh7](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-638x-gwq7-xfh7), rated high. Each of these advisories lists the images it affects and shows how to check a deployment.
+
+### From source
+
+Prerequisites: Docker, Go 1.25+, Node.js 20.19+ or 22.13+, Python 3.11+.
+
+```bash
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management
+
+# Generate local-dev secrets (one-time setup)
+./scripts/gen-dev-secrets.sh > .env
+
+# Minimal dev stack
+docker compose up -d postgres redis backend frontend
+
+# Health check
+curl -fsS localhost:8080/health
+
+# Python SDK editable for examples
+pip install -e sdk/python
+
+# Try the flight-search-agent demo
+cd examples/flight-search-agent && python3 flight_agent.py
+```
+
+The full `docker-compose.yml` also brings up Elasticsearch, MinIO, NATS, Prometheus, Grafana, and Loki. Skip those services with the minimal command above.
+
+## Observability
+
+The backend emits OpenTelemetry traces, metrics, and logs. A hermetic demo stack lives at [`apps/backend/deployments/otel-demo/`](../apps/backend/deployments/otel-demo/): OpenTelemetry Collector, Tempo, Prometheus, Loki, Grafana.
+
+```bash
+cd apps/backend/deployments/otel-demo
+docker compose up -d
+./smoke-backend.sh
+```
+
+Every `fga.authorize` decision lands as a parent span with one child span per FGA step it ran: up to five on `POST /api/v1/agents/:id/authorize` (up to four when the policy's risk level is LOW), and one, `fga.capability_check`, when the agent has no FGA policy for the capability or the decision is an SDK verification's. 9 SemConv attributes ride the parent: `agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`. The attribute set is proposed to the OpenTelemetry Semantic Conventions WG. Full design notes: [`apps/backend/docs/OBSERVABILITY.md`](../apps/backend/docs/OBSERVABILITY.md).
+
+---
+
 ## 📞 Support
 
 - **Documentation**: https://opena2a.org/docs

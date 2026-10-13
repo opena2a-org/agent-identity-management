@@ -597,6 +597,20 @@ agent = secure("Weather Agent")  # ❌ Wrong (spaces, capitals)
 
 ---
 
+## See it work
+
+The two calls in the root README's Quick start, one allowed `db:read` and one refused `db:write`, are the whole model: every decorated call is checked against the agent's grant and logged; in strict mode a capability the agent was not granted is refused before the function body executes, with the reason. Nothing in your code changes between the two, only the grant.
+
+Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected). On a new organization, which starts in monitoring mode, a pending agent's call runs and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it; on a strict-mode organization every call is refused with `Agent not verified - all actions denied` until the agent is verified.
+
+Check the mode before the refused call: the Global Enforcement Mode badge under Security, then Policies, reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
+
+The agent's audit log in the dashboard records each decision: the denied `db:write` appears with `denialReason` set to the same text the SDK printed, the capability, the risk level and the time (that row was read back through the API on the measured run of 2026-09-22). Open `http://localhost:3000` (self-hosted) or the AIM Cloud dashboard, then Agents, then your agent, then its activity. To permit `db:write`, grant it to the agent there.
+
+Want to see the same boundary stop a real attack? The [Demos](DOCUMENTATION_INDEX.md#demos) end with an intentionally vulnerable agent run with and without AIM.
+
+---
+
 <div align="center">
 
 **Next**: [Weather Agent Example →](./examples/weather-agent.md)

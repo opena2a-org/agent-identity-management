@@ -22,8 +22,8 @@ import { load } from 'js-yaml';
  *   - scripts/quickstart.sh probes and prints the configured ports;
  *   - scripts/test-quickstart.sh works in a directory from mktemp and names
  *     no fixed path;
- *   - the README quick-start section and the release smoke contract name
- *     every variable with its default.
+ *   - the Docker section of docs/DEPLOYMENT.md and the release smoke contract
+ *     name every variable with its default.
  *
  * Interpolation follows the Compose file format: `${VAR}`, `${VAR:-default}`
  * with nested defaults, and `${VAR:?message}`; the rendering is checked
@@ -35,7 +35,7 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 const COMPOSE_FILE = join(REPO_ROOT, 'docker-compose.quickstart.yml');
 const QUICKSTART = join(REPO_ROOT, 'scripts', 'quickstart.sh');
 const TEST_QUICKSTART = join(REPO_ROOT, 'scripts', 'test-quickstart.sh');
-const README = join(REPO_ROOT, 'README.md');
+const DEPLOYMENT_GUIDE = join(REPO_ROOT, 'docs', 'DEPLOYMENT.md');
 const SMOKE_CONTRACT = join(REPO_ROOT, 'docs', 'testing', 'release-smoke.md');
 
 /** The variables the quick-start reads, with the defaults it always had. */
@@ -219,14 +219,14 @@ describe('the quick-start takes its host ports and container-name prefix from th
     }
   });
 
-  it('the README quick-start section and the smoke contract name every variable with its default', () => {
-    const readme = readFileSync(README, 'utf-8');
-    const dockerSection = readme.slice(readme.indexOf('### Docker'), readme.indexOf('### From source'));
+  it('the deployment guide Docker section and the smoke contract name every variable with its default', () => {
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const dockerSection = guide.slice(guide.indexOf('### Docker\n'), guide.indexOf('### From source'));
     expect(dockerSection.length).toBeGreaterThan(0);
     const contract = readFileSync(SMOKE_CONTRACT, 'utf-8');
     for (const [variable, fallback] of Object.entries(VARIABLES)) {
       for (const [label, text] of [
-        ['README.md Docker section', dockerSection],
+        ['docs/DEPLOYMENT.md Docker section', dockerSection],
         ['docs/testing/release-smoke.md', contract],
       ] as Array<[string, string]>) {
         const lines = linesNaming(text, variable);

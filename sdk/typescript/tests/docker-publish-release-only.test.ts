@@ -1419,10 +1419,18 @@ describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a p
     for (const f of AC9_FILES) {
       for (const phrase of AC9_FORBIDDEN) expect(texts[f], `${f} contains ${JSON.stringify(phrase)}`).not.toContain(phrase);
     }
-    const sdkLine = texts['README.md'].split('\n').find((l) => l.includes('aim-sdk 2.0.3 against a self-hosted stack'));
-    expect(sdkLine, 'README.md names the measured stack line').toBeDefined();
-    expect(sdkLine as string).toMatch(/commit [0-9a-f]{7}/);
-    expect(sdkLine as string).not.toMatch(/`edge`/);
+    // The README's capture provenance lives in its sidecar: the refusal was
+    // measured against a self-hosted stack named by its server commit, not by
+    // the retired `edge` image.
+    const sidecar = JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'captures', 'quick-start.json'), 'utf-8')) as {
+      captures: Array<{ command: string; sdk: { package: string; version: string }; server: string }>;
+    };
+    const refusal = sidecar.captures.find((c) => c.command === 'delete_customer(42)');
+    expect(refusal, 'docs/captures/quick-start.json records the refused call').toBeDefined();
+    expect(`${refusal!.sdk.package} ${refusal!.sdk.version}`).toBe('aim-sdk 2.0.3');
+    expect(refusal!.server).toMatch(/self-hosted AIM at server commit [0-9a-f]{7}/);
+    expect(refusal!.server).not.toMatch(/`edge`/);
+    expect(texts['README.md']).toContain('](docs/captures/quick-start.txt)');
     expect(texts['infrastructure/DEPLOYMENT.md']).toContain('1.0.0');
     expect(texts['infrastructure/DEPLOYMENT.md']).not.toContain('0.5.2');
     expect(texts['docs/demo/stack/images.env']).toContain('ghcr.io/opena2a-org/aim-server:latest');

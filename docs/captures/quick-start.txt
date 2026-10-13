@@ -1,0 +1,18 @@
+>>> from aim_sdk import secure
+>>> agent = secure("my-first-agent", capabilities=["db:read"])
+  ○ Agent Type: using default 'ai_agent'
+Token rotated successfully — old refresh token revoked (new id: 461d130d...)
+
+[OK] Agent registered: my-first-agent
+  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0
+  Status: ○ pending  Trust: 59%
+  Capabilities: db:read
+
+>>> @agent.perform_action(capability="db:write")
+... def delete_customer(customer_id):
+...     del customers[customer_id]
+...
+>>> delete_customer(42)
+Capability 'db:write' pending admin approval (strict mode)
+  ✓ Registered db:write (medium)
+aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
