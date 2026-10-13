@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — two dashboard tabs share one token refresh in a browser without Web Locks
+
+- A browser has no Web Locks API on a dashboard served over plain HTTP from a host other than `localhost`. There the
+  dashboard's tabs now take the refresh turn through a lease in `localStorage`, under the key `token_refresh_lease`. A
+  tab writes its claim, waits 50 ms for a claim another tab wrote at the same moment to arrive, and refreshes only if
+  its own claim is still the stored one. The other tab waits, then reads the stored session again and uses the tokens
+  the first tab obtained instead of posting its own. The same turn is taken when the browser's lock manager refuses the
+  request. A browser with Web Locks keeps the Web Lock.
+- The lease lasts 10 seconds and its holder renews it every 2.5 seconds while its refresh is under way, so a tab closed
+  in the middle of a refresh holds the others back for at most 10 seconds.
+- `localStorage` has no compare-and-set, so this narrows the collision and does not rule it out: two tabs whose claims
+  take longer than those 50 ms to reach each other can still both refresh.
+- Measured with the dashboard of the previous commit in headless Chromium 147 with `navigator.locks` removed, against
+  the backend with a revocation store (Redis) and PostgreSQL 18.3, three runs: two tabs of one browser context whose
+  access token the API refused together each posted the stored refresh token to `POST /api/v1/auth/refresh`. The API
+  answered 200 to one and 401 to the other and revoked the sign-in's token family. Measured against that API directly:
+  after one refresh token was presented twice, the refresh token the first presentation returned was answered 401
+  `Token has been revoked or is invalid`. With this change the same two tabs sent one refresh in each of three runs,
+  stayed on the page, and held the pair it returned.
+- Tests: `apps/web/lib/storage-lease.test.ts`, the cases under "token refresh where the browser has no Web Locks" in
+  `apps/web/lib/api.refresh-single-flight.test.ts`, and `apps/web/tests/e2e/token-refresh-tabs.spec.ts`, which opens two
+  tabs against the real backend, with Web Locks and without, and runs with the Playwright suite. A backend without a
+  revocation store hands the presented refresh token back unchanged; the browser test asserts one refresh either way.
+
 ### Fixed — `GET /api/v1/tags/search` answers 400 for a `q` or `category` that is not UTF-8 text or holds a NUL character (#718)
 
 - The handler answers `400` with `{"error": "<parameter> must be UTF-8 text without a NUL character"}`, naming `q` or
@@ -2780,8 +2804,8 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - The dashboard now refreshes one at a time across all of its tabs (the Web Locks API). A tab that
   waited its turn reads the stored session again and uses the tokens another tab already obtained
   instead of posting its own. In a browser without Web Locks, which includes a dashboard served
-  over plain HTTP from a host other than `localhost`, the refresh is one at a time within each tab
-  only, so two tabs can still collide there.
+  over plain HTTP from a host other than `localhost`, the turn across tabs is the lease described
+  in the entry "two dashboard tabs share one token refresh in a browser without Web Locks" above.
 - A refused or failed refresh clears the stored session only while it still holds the refresh token
   that was presented; a session another tab stored in the meantime is kept.
 
