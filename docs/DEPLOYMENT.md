@@ -744,7 +744,7 @@ bash quickstart.sh
 
 Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
 
-The host ports and the container names come from the environment, with the values below as defaults. Set a variable before `bash quickstart.sh` (or in the `.env` next to `docker-compose.quickstart.yml`) to run AIM beside another service on the same port, or to run a second AIM stack on one host. The script records the values it ran with in the install's `.env`, so a later `docker compose` in that directory keeps them.
+The host ports and the container names come from the environment, with the values below as defaults. Set a variable before `bash quickstart.sh` (or in the `.env` next to `docker-compose.quickstart.yml`) to run AIM beside another service on the same port, or to run a second AIM stack on one host. A first run records the values it ran with in the install's `.env`, so a later `docker compose` in that directory keeps them. A run over an existing install starts the stack with the variables set for that run and leaves that `.env` as it is, so a later `docker compose` in that directory reads the values `.env` holds; to keep a new value, change it in that `.env`.
 
 | Variable | Default | Sets |
 |---|---|---|

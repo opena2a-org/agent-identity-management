@@ -357,6 +357,53 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `sdk/java/pom.xml` declares, and list each file and line that does. The backend CI job runs them for every change
   under `apps/backend/` or `sdk/`.
 
+### Fixed — the pending user list and the approval of a registration request give lastLoginAt in UTC (#722)
+
+- `GET /api/v1/admin/users/pending` answers with each user as the service read it, and
+  `POST /api/v1/admin/registration-requests/:id/approve` with the user the approval created. Both pass
+  `lastLoginAt` through the helper the public sign-in routes, `/api/v1/auth/me` and `/api/v1/admin/users` use,
+  so the value is RFC 3339 with a `Z` suffix whatever location it carried. A user who has never signed in keeps
+  `"lastLoginAt": null`.
+- Measured with the two handlers of the previous commit, each handed by its service a user whose `lastLoginAt`
+  carried a UTC-6 location: both answered `"lastLoginAt": "2026-10-11T06:25:44.184309-06:00"`.
+- The comment on the helper (`apps/backend/internal/interfaces/http/handlers/utc_time.go`) said every response
+  that names a `lastLoginAt` passes through it. It now says which do: every handler of the package that answers
+  with the `lastLoginAt` of a user a service handed it.
+- Tests: `TestLastLoginAt_PendingUserListAnswersInUTC` and `TestLastLoginAt_ApprovedRegistrationAnswersInUTC` in
+  `apps/backend/internal/interfaces/http/handlers/last_login_at_utc_test.go`. The change-password row of that
+  file builds its new password from the suite's test password: `scripts/lint-token-literals.mjs` reported the
+  line, which the previous commit carried unchanged, and now reports 0 findings.
+
+### Fixed — the deployment guide says a quick-start run over an existing install leaves its `.env` as it is (#722)
+
+- The Docker section of `docs/DEPLOYMENT.md` said the script records the values it ran with in the install's `.env`. A first
+  run does. A run over an existing install starts the stack with the variables set for that run and leaves that
+  `.env` as it is, so a later `docker compose` in that directory reads the values `.env` holds; the section now
+  says so, and says to change the value in that `.env` to keep it. The `quickstart.sh` row of
+  `docs/testing/release-smoke.md` says the same. `scripts/quickstart.sh` is unchanged.
+- Measured against docker and curl stubs, in `scripts/test-quickstart-orphan-volume.sh`: over an install whose
+  `.env` held `AIM_BACKEND_PORT=18081`, a run with `AIM_BACKEND_PORT=18082` started Compose with `18082`, waited
+  for `localhost:18082`, and left `.env` byte for byte as it was. With Compose 5.5.1, `docker-compose config` on
+  the quick-start file beside a `.env` holding `AIM_BACKEND_PORT=18081` rendered the backend's host port as
+  `18081` with no variable set, and as `18082` with `AIM_BACKEND_PORT=18082` in the environment.
+
+### Fixed — the two quick-start rows of the release smoke contract are rows of its table (#722)
+
+- In `docs/testing/release-smoke.md` a blank line stood between the component smoke matrix and its rows for
+  `scripts/test-quickstart.sh` and `scripts/test-quickstart-orphan-volume.sh`. A blank line ends a Markdown
+  table, so the line is removed and the two rows belong to the table.
+- A test checks that no pipe row of the file follows a blank line unless a delimiter row follows it.
+
+### Changed — the TypeScript SDK release smoke names its PostgreSQL image by digest (#722)
+
+- `sdk/typescript/scripts/release-smoke.sh` started its throwaway PostgreSQL from `timescale/timescaledb:latest-pg16`,
+  a tag that moves. It now names the image by the digest that tag had on 2026-10-13, a multi-platform index with
+  `linux/amd64` and `linux/arm64`, so every run starts the same image; a comment beside it gives the command that
+  reads the tag's current digest. The hermetic smoke passed with it: `db:read` allowed, `db:write` denied in
+  strict mode.
+- The two compose files and the two backend smokes still name the tag.
+- Test: `sdk/typescript/tests/release-smoke-image-digest.test.ts`.
+
 ### Fixed — `GET /health/ready` and `GET /api/v1/status` report the bare semver the image tag carries
 
 - A server built from the platform release tag reports its version as the image tag reads: a build stamped with
@@ -380,9 +427,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `NEXT_PUBLIC_API_URL` follow the dashboard and backend host ports; an explicit value still wins.
   PostgreSQL and Redis stay bound to `127.0.0.1`.
 - `scripts/quickstart.sh` waits for the backend and prints the dashboard and API URLs at the
-  configured ports, and records `AIM_PROJECT` and the four ports in the install's `.env`, so a later
+  configured ports, and a first run records `AIM_PROJECT` and the four ports in the install's `.env`, so a later
   `docker compose` in that directory keeps them. On an existing install the environment wins over
-  `.env`, as it does for Compose itself. A `COMPOSE_PROJECT_NAME` given to a first run is recorded
+  `.env` for that run, as it does for Compose itself, and the script leaves that `.env` as it is. A `COMPOSE_PROJECT_NAME` given to a first run is recorded
   too. Two quick-starts run side by side on one host when each has its own directory (`AIM_DIR`),
   `AIM_PROJECT` and ports; the Docker section of `docs/DEPLOYMENT.md` shows the command.
 - `scripts/test-quickstart.sh` works in a directory from `mktemp -d` under its own Compose project

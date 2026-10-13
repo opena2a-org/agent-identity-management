@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths computed at import time point into it, and that SDK credentials in a `.aim` folder above the working
   directory are not adopted.
 
+### Changed — the `sdk_credentials_lock` docstring says the lock does not serialize the Python SDK with the Java SDK on Linux (#722)
+
+- `sdk_credentials_lock` keeps processes of the Python SDK apart, and nothing in the code changes. On Linux it
+  does not keep a process of the Java SDK apart from a process of the Python SDK: the Python SDK locks the same
+  file with `flock`, the Java SDK with a record lock (`FileChannel.tryLock`), and Linux holds the two separately.
+  Measured with the calls each SDK makes, on Linux 7.0.12 with Java 21.0.12 and Python 3.12.15: each took its lock
+  while the other held its own, in both orders. On macOS 26.6.2, with Java 25.0.2 and Python 3.14.3, each was
+  refused its lock while the other held its own, in both orders (#722).
+
 ### Fixed — the cached-capability lookup sends the MCP server name as one query value (#718)
 
 - The lookup that asks `GET /api/v1/sdk-api/agents/{id}/mcp-servers/by-name` for the capabilities the server holds

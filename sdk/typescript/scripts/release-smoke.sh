@@ -163,11 +163,16 @@ if [ -n "$EXTERNAL_BASE_URL" ]; then
 else
     echo "==> [4/7] Throwaway Postgres and a backend built from this tree"
     docker rm -f "$SMOKE_PG_CONTAINER" >/dev/null 2>&1 || true
+    # The image is named by digest, so every run starts the same PostgreSQL:
+    # the multi-platform index the latest-pg16 tag named on 2026-10-13. To move
+    # to a newer one, read the tag's digest with
+    #   docker buildx imagetools inspect timescale/timescaledb:latest-pg16
+    # and put it here.
     POSTGRES_PASSWORD="$SMOKE_PG_PASSWORD" docker run -d --name "$SMOKE_PG_CONTAINER" \
         -e POSTGRES_PASSWORD \
         -e POSTGRES_DB="$SMOKE_PG_DB" \
         -p "127.0.0.1:${SMOKE_POSTGRES_PORT}:5432" \
-        timescale/timescaledb:latest-pg16 >/dev/null || { echo "FAIL: docker run postgres"; exit 2; }
+        timescale/timescaledb:latest-pg16@sha256:6f139d56042989bd35f50ba5986e492cd32e35cc6778c50be2659add298dc09f >/dev/null || { echo "FAIL: docker run postgres"; exit 2; }
     attempt=0
     while [ $attempt -lt 30 ]; do
         if docker exec "$SMOKE_PG_CONTAINER" pg_isready -U postgres -d "$SMOKE_PG_DB" >/dev/null 2>&1; then

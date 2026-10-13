@@ -186,6 +186,12 @@ def sdk_credentials_lock(timeout: Optional[float] = None):
     once. The lock is reentrant within a thread, so a save made while it is held
     does not wait on itself.
 
+    The lock keeps processes of this SDK apart. On Linux it does not keep a
+    process of this SDK apart from a process of the Java SDK. That SDK locks the
+    same file with a record lock (``FileChannel.tryLock``), which Linux holds
+    separately from the ``flock`` taken here, so each takes its lock while the
+    other holds its own. On macOS the two locks exclude each other.
+
     Raises:
         SDKCredentialsLockTimeout: another holder kept the lock past ``timeout``
             seconds (default ``SDK_CREDENTIALS_LOCK_TIMEOUT``).

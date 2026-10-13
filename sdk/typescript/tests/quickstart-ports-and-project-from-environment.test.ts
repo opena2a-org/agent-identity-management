@@ -239,4 +239,51 @@ describe('the quick-start takes its host ports and container-name prefix from th
     }
     expect(dockerSection).toContain('aim-backend');
   });
+
+  it('the deployment guide says a run over an existing install leaves its .env as it is', () => {
+    // scripts/test-quickstart-orphan-volume.sh measures both halves against
+    // docker and curl stubs: a first run writes the variables to .env, and a
+    // run over an existing install starts Compose with them and writes nothing.
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const dockerSection = guide.slice(guide.indexOf('### Docker\n'), guide.indexOf('### From source'));
+    expect(dockerSection.length).toBeGreaterThan(0);
+    expect(dockerSection, 'recording is not claimed for every run').not.toContain('The script records the values it ran with');
+    expect(dockerSection).toContain("A first run records the values it ran with in the install's `.env`");
+    expect(dockerSection).toMatch(/over an existing install[^.]*leaves that `\.env` as it is/);
+
+    const stubTest = readFileSync(join(REPO_ROOT, 'scripts', 'test-quickstart-orphan-volume.sh'), 'utf-8');
+    expect(stubTest, 'the stub test runs the case the deployment guide describes').toContain('run_case existing-env-not-recorded');
+  });
+
+  it('the smoke contract rows for the quick-start are rows of the component smoke matrix', () => {
+    const lines = readFileSync(SMOKE_CONTRACT, 'utf-8').split('\n');
+    const header = lines.findIndex((line) => line.startsWith('| Component | What ships |'));
+    expect(header, 'the component smoke matrix has its header row').toBeGreaterThan(-1);
+    let end = header;
+    while (end + 1 < lines.length && lines[end + 1].startsWith('|')) end++;
+    const matrix = lines.slice(header, end + 1);
+    for (const component of ['**Docker quick-start**', '**quickstart.sh without Docker**']) {
+      expect(
+        matrix.some((row) => row.startsWith(`| ${component} |`)),
+        `${component} is a row of the table that starts at docs/testing/release-smoke.md:${header + 1}`,
+      ).toBe(true);
+    }
+  });
+
+  it('no pipe row of the smoke contract follows a blank line unless it opens a table', () => {
+    // GitHub renders a pipe row as a table row only while the table runs on:
+    // after a blank line it is a paragraph of pipes, unless a delimiter row
+    // follows it and it opens a new table.
+    const lines = readFileSync(SMOKE_CONTRACT, 'utf-8').split('\n');
+    const strays: string[] = [];
+    let fenced = false;
+    lines.forEach((line, i) => {
+      if (line.startsWith('```')) fenced = !fenced;
+      if (fenced || !line.startsWith('|')) return;
+      const continuesTable = i > 0 && lines[i - 1].startsWith('|');
+      const opensTable = /^\|(\s*:?-{3,}:?\s*\|)+\s*$/.test(lines[i + 1] ?? '');
+      if (!continuesTable && !opensTable) strays.push(`docs/testing/release-smoke.md:${i + 1}: ${line.slice(0, 48)}`);
+    });
+    expect(strays).toEqual([]);
+  });
 });
