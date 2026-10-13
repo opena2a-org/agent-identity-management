@@ -280,8 +280,10 @@ README_URL_ANCHOR = re.compile(
 REPOSITORY_PAGE_ANCHORS = {"readme"}
 # Headings linked from outside this repository, where no test here can see the link:
 # copies of sdk/python/README.md elsewhere keep linking the self-hosted install after
-# the file here changes. Keep the heading, or repoint every copy in the same change.
-LINKED_FROM_OUTSIDE = ["install-aim-self-hosted"]
+# the file here changes, and the AIM page on opena2a.org links #deployment as the
+# deployment documentation's setup instructions. Keep the heading, or repoint every
+# copy in the same change.
+LINKED_FROM_OUTSIDE = ["install-aim-self-hosted", "deployment"]
 
 
 def links_to_readme_headings():
@@ -321,6 +323,21 @@ def test_links_to_readme_headings_land_on_a_heading_it_has():
                    if anchor not in anchors and anchor not in REPOSITORY_PAGE_ANCHORS})
     dead += [f"outside this repository -> #{anchor}" for anchor in LINKED_FROM_OUTSIDE if anchor not in anchors]
     assert not dead, "links to README headings it does not have:\n" + "\n".join(dead)
+
+
+def test_the_deployment_section_links_where_each_mode_is_set_up():
+    """The AIM page on opena2a.org sends a reader to #deployment for setup instructions;
+    each mode in the section's table links the place that mode is set up."""
+    lines = text().split("\n")
+    start = lines.index("## Deployment")
+    end = next(i for i, line in enumerate(lines) if i > start and line.startswith("## "))
+    rows = {re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", row.split("|")[1]).strip(" *"): row
+            for row in lines[start:end] if row.startswith("| ")}
+    for mode, setup in [("AIM Cloud", "https://aim.opena2a.org/get-started"),
+                        ("Self-hosted", "#install-aim-self-hosted"),
+                        ("Local-only", "sdk/typescript/README.md#local-mode-with-opena2aaim-core")]:
+        assert mode in rows, f"the Deployment table has no {mode!r} row: {list(rows)}"
+        assert f"]({setup})" in rows[mode], f"the {mode!r} row does not link {setup}: {rows[mode]}"
 
 
 def test_every_job_in_the_list_links_where_it_is_done():
