@@ -67,7 +67,7 @@ aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violatio
 
 Captured with aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. That SDK was the 2.0.3 release on PyPI, which also prints `✓ Registered db:write (medium)` after the first line. The SDK built from this repository prints no `Registered` line for a capability request the server leaves pending, so the output above omits it. A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'; the rest of the line is the same. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
-New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java) and [TypeScript](#typescript).
+New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java). TypeScript has no `secure()` call: `@opena2a/aim-core` checks a capability against a local policy with no server, and the server client `@opena2a/aim-sdk` registers an agent and verifies each action with separate calls ([TypeScript](#typescript)).
 
 Auditing an existing codebase instead of integrating? The [opena2a CLI](#operations-the-opena2a-cli) provides a 6-phase review with no server required.
 
