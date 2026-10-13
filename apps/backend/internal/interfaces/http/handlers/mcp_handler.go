@@ -24,13 +24,13 @@ type MCPHandler struct {
 	attestationService          *application.MCPAttestationService // ✅ For rich audit trail with attestations
 
 	// Interface fields for testability (used when set)
-	mcpServicer                  MCPServicerExtended
-	mcpCapabilityServicer        MCPCapabilityServicer
-	auditServicer                AuditServicer
-	agentRepositoryer            AgentRepositoryer
+	mcpServicer                   MCPServicerExtended
+	mcpCapabilityServicer         MCPCapabilityServicer
+	auditServicer                 AuditServicer
+	agentRepositoryer             AgentRepositoryer
 	verificationEventRepositoryer VerificationEventRepositoryer
-	tagServicer                  TagServicer
-	attestationServicer          MCPAttestationServicerExtended
+	tagServicer                   TagServicer
+	attestationServicer           MCPAttestationServicerExtended
 }
 
 func NewMCPHandler(
@@ -193,9 +193,9 @@ func mcpServerResponse(server *domain.MCPServer, serverTags []*domain.Tag) fiber
 		"lastVerifiedAt":      server.LastVerifiedAt,
 		"verificationCount":   server.VerificationCount,
 		"registeredByAgent":   server.RegisteredByAgent,
-		"attestationCount":    server.AttestationCount,    // ✅ MCP attestation count
-		"confidenceScore":     server.ConfidenceScore,     // ✅ MCP confidence score
-		"lastAttestedAt":      server.LastAttestedAt,      // ✅ Last attestation timestamp
+		"attestationCount":    server.AttestationCount, // ✅ MCP attestation count
+		"confidenceScore":     server.ConfidenceScore,  // ✅ MCP confidence score
+		"lastAttestedAt":      server.LastAttestedAt,   // ✅ Last attestation timestamp
 	}
 }
 
@@ -443,6 +443,10 @@ func (h *MCPHandler) GetMCPServerByName(c fiber.Ctx) error {
 			"error": "Name query parameter is required",
 		})
 	}
+	// name reaches the lookup as a text parameter.
+	if err := queryTextError("name", name); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
 
 	mcpSvc := h.getMCPService()
 	server, err := mcpSvc.GetMCPServerByName(c.Context(), orgID, name)
@@ -651,9 +655,9 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"serverName":  server.Name,
-			"trustScore":  server.TrustScore,
-			"challenge":    challenge,
+			"serverName": server.Name,
+			"trustScore": server.TrustScore,
+			"challenge":  challenge,
 		},
 	)
 
@@ -936,11 +940,11 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	agentSummaries := make([]fiber.Map, 0, len(agents))
 	for _, agent := range agents {
 		agentSummaries = append(agentSummaries, fiber.Map{
-			"id":           agent.ID,
-			"name":         agent.Name,
+			"id":          agent.ID,
+			"name":        agent.Name,
 			"displayName": agent.DisplayName,
 			"agentType":   agent.AgentType,
-			"status":       agent.Status,
+			"status":      agent.Status,
 		})
 	}
 
@@ -1196,10 +1200,10 @@ func (h *MCPHandler) GetMCPServerAuditLogs(c fiber.Ctx) error {
 	// Build unified timeline from multiple sources
 	type TimelineEvent struct {
 		ID          string                 `json:"id"`
-		EventType   string                 `json:"eventType"`   // "audit", "attestation", "capability"
-		Action      string                 `json:"action"`      // create, update, verify, attest, revoke, etc.
+		EventType   string                 `json:"eventType"` // "audit", "attestation", "capability"
+		Action      string                 `json:"action"`    // create, update, verify, attest, revoke, etc.
 		Timestamp   interface{}            `json:"timestamp"`
-		ActorType   string                 `json:"actorType"`   // "user", "agent", "system"
+		ActorType   string                 `json:"actorType"` // "user", "agent", "system"
 		ActorID     *string                `json:"actorId,omitempty"`
 		ActorName   string                 `json:"actorName,omitempty"`
 		Description string                 `json:"description"`

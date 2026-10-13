@@ -187,7 +187,7 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentName":       agent.Name,
+			"agentName":        agent.Name,
 			"results_returned": len(logs),
 			"limit":            limit,
 			"offset":           offset,
@@ -197,9 +197,9 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"agentId":   agentID.String(),
 		"agentName": agent.Name,
-		"logs":       auditLogsForCaller(c, logs),
-		"total":      total,
-		"limit":      limit,
-		"offset":     offset,
+		"logs":      auditLogsForCaller(c, logs),
+		"total":     total,
+		"limit":     limit,
+		"offset":    offset,
 	})
 }

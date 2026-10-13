@@ -317,10 +317,10 @@ func (h *MCPAttestationHandler) GetMCPAttestations(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"attestations":       attestations,
-		"total":              len(attestations),
-		"confidence_score":   confidenceScore,
-		"last_attested_at":   lastAttestedAt,
+		"attestations":     attestations,
+		"total":            len(attestations),
+		"confidence_score": confidenceScore,
+		"last_attested_at": lastAttestedAt,
 	})
 }
 
@@ -413,7 +413,7 @@ func (h *MCPAttestationHandler) GetAgentMCPServers(c fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"mcpServers": mcpServers,
-		"total":       len(mcpServers),
+		"total":      len(mcpServers),
 	})
 }
 
@@ -458,10 +458,10 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 
 	// Parse request body
 	type ManualAttestationRequest struct {
-		Notes                string   `json:"notes"`                 // Optional notes from user
-		CapabilitiesVerified []string `json:"capabilitiesVerified"`  // Capabilities user verified
-		ConnectionTested     bool     `json:"connectionTested"`      // Did user test connection?
-		HealthCheckPassed    bool     `json:"healthCheckPassed"`     // Did health check pass?
+		Notes                string   `json:"notes"`                // Optional notes from user
+		CapabilitiesVerified []string `json:"capabilitiesVerified"` // Capabilities user verified
+		ConnectionTested     bool     `json:"connectionTested"`     // Did user test connection?
+		HealthCheckPassed    bool     `json:"healthCheckPassed"`    // Did health check pass?
 	}
 
 	var req ManualAttestationRequest
@@ -518,12 +518,12 @@ func (h *MCPAttestationHandler) ManualAttestMCP(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		fiber.Map{
-			"attestation_id":      response.AttestationID,
-			"confidence_score":    response.MCPConfidenceScore,
-			"attestation_count":   response.AttestationCount,
-			"attestation_type":    "manual",
+			"attestation_id":        response.AttestationID,
+			"confidence_score":      response.MCPConfidenceScore,
+			"attestation_count":     response.AttestationCount,
+			"attestation_type":      "manual",
 			"capabilities_verified": req.CapabilitiesVerified,
-			"connection_tested":   req.ConnectionTested,
+			"connection_tested":     req.ConnectionTested,
 		},
 	)
 
@@ -627,10 +627,10 @@ func (h *MCPAttestationHandler) RevokeAttestation(c fiber.Ctx) error {
 	// SECURITY: No logging of revocation events to prevent information leakage
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"success":        true,
+		"success":       true,
 		"attestationId": attestationID,
-		"message":        "Attestation revoked successfully",
-		"reason":         req.Reason,
+		"message":       "Attestation revoked successfully",
+		"reason":        req.Reason,
 	})
 }
 
@@ -732,20 +732,20 @@ func (h *MCPAttestationHandler) RevokeAllAttestationsByAgent(c fiber.Ctx) error 
 		c.IP(),
 		c.Get("User-Agent"),
 		fiber.Map{
-			"agentId":       agentID,
+			"agentId":      agentID,
 			"revokedCount": revokedCount,
-			"reason":        req.Reason,
+			"reason":       req.Reason,
 		},
 	)
 
 	// SECURITY: No logging of revocation events to prevent information leakage
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"success":       true,
+		"success":      true,
 		"agentId":      agentID,
 		"revokedCount": revokedCount,
-		"message":       fmt.Sprintf("Successfully revoked %d attestations", revokedCount),
-		"reason":        req.Reason,
+		"message":      fmt.Sprintf("Successfully revoked %d attestations", revokedCount),
+		"reason":       req.Reason,
 	})
 }
 
@@ -873,18 +873,18 @@ func (h *MCPAttestationHandler) RecordMCPConnection(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		fiber.Map{
-			"connection_id":      connection.ID,
-			"mcp_server_id":      mcpServerID,
-			"tool_name":          req.ToolName,
-			"connection_type":    connection.ConnectionType,
-			"attestation_count":  connection.AttestationCount,
+			"connection_id":     connection.ID,
+			"mcp_server_id":     mcpServerID,
+			"tool_name":         req.ToolName,
+			"connection_type":   connection.ConnectionType,
+			"attestation_count": connection.AttestationCount,
 		},
 	)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":           true,
 		"connection_id":     connection.ID,
-		"agentId":          connection.AgentID,
+		"agentId":           connection.AgentID,
 		"mcp_server_id":     connection.MCPServerID,
 		"connection_type":   connection.ConnectionType,
 		"attestation_count": connection.AttestationCount,
@@ -1040,9 +1040,9 @@ func (h *MCPAttestationHandler) RecordMCPUsageReport(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		fiber.Map{
-			"servers_reported":   serversReported,
-			"total_invocations":  totalInvocations,
-			"reported_at":        req.ReportedAt,
+			"servers_reported":  serversReported,
+			"total_invocations": totalInvocations,
+			"reported_at":       req.ReportedAt,
 		},
 	)
 

@@ -4,18 +4,24 @@ import (
 	"bytes"
 	"go/format"
 	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 )
 
-// The handler files named here are gofmt-formatted: format.Source, which
-// formats as gofmt does, leaves each one unchanged. Other files of the package
-// are not formatted yet; a file joins the list when it is.
+// Every Go file of the package, tests included, is gofmt-formatted:
+// format.Source, which formats as gofmt does, leaves each one unchanged.
 func TestHandlerFilesAreGofmtFormatted(t *testing.T) {
-	for _, name := range []string{
-		"agent_handler.go",
-		"query_text.go",
-		"tag_handler.go",
-	} {
+	names, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("list the package's Go files: %v", err)
+	}
+	// The list holds this file, so a run from another directory fails here
+	// instead of checking nothing.
+	if !slices.Contains(names, "gofmt_test.go") {
+		t.Fatalf("the package's Go files were not found from this directory: %v", names)
+	}
+	for _, name := range names {
 		src, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)

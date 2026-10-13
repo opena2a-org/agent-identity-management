@@ -96,9 +96,9 @@ func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 	alg := pqc.Algorithm(req.Algorithm)
 	if !pqc.IsPQCAlgorithm(alg) && !pqc.IsHybridAlgorithm(alg) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":             "Invalid PQC algorithm",
-			"supportedValues":   []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"},
-			"recommendedValue":  "ML-DSA-65",
+			"error":            "Invalid PQC algorithm",
+			"supportedValues":  []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"},
+			"recommendedValue": "ML-DSA-65",
 		})
 	}
 
@@ -143,8 +143,8 @@ func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 	// Check if agent already has a PQC key
 	if agent.PQCPublicKey != nil && *agent.PQCPublicKey != "" {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error":   "Agent already has a PQC key registered",
-			"hint":    "Use PUT /agents/{id}/pqc-key to rotate the existing key",
+			"error": "Agent already has a PQC key registered",
+			"hint":  "Use PUT /agents/{id}/pqc-key to rotate the existing key",
 		})
 	}
 
@@ -169,16 +169,18 @@ func (h *AgentHandler) RegisterPQCKey(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentName":   agent.Name,
-			"algorithm":   algStr,
-			"hybridMode":  req.EnableHybrid,
+			"agentName":  agent.Name,
+			"algorithm":  algStr,
+			"hybridMode": req.EnableHybrid,
 		},
 	)
 
+	// UpdateAgentPQCKey stored the request's enableHybrid. agent was loaded
+	// before that, so its HybridModeEnabled is the value the store replaced.
 	return c.JSON(fiber.Map{
 		"agentId":           agentID.String(),
 		"pqcKeyAlgorithm":   algStr,
-		"hybridModeEnabled": agent.HybridModeEnabled,
+		"hybridModeEnabled": req.EnableHybrid,
 		"pqcKeyCreatedAt":   now,
 		"message":           "PQC key registered successfully",
 	})
@@ -225,8 +227,8 @@ func (h *AgentHandler) RotatePQCKey(c fiber.Ctx) error {
 	alg := pqc.Algorithm(req.Algorithm)
 	if !pqc.IsPQCAlgorithm(alg) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":            "Invalid PQC algorithm",
-			"supportedValues":  []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"},
+			"error":           "Invalid PQC algorithm",
+			"supportedValues": []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"},
 		})
 	}
 
@@ -301,11 +303,11 @@ func (h *AgentHandler) RotatePQCKey(c fiber.Ctx) error {
 	)
 
 	return c.JSON(fiber.Map{
-		"agentId":              agentID.String(),
-		"pqcKeyAlgorithm":      algStr,
-		"pqcKeyCreatedAt":      now,
-		"hasPreviousPqcKey":    true,
-		"message":              "PQC key rotated successfully",
+		"agentId":           agentID.String(),
+		"pqcKeyAlgorithm":   algStr,
+		"pqcKeyCreatedAt":   now,
+		"hasPreviousPqcKey": true,
+		"message":           "PQC key rotated successfully",
 	})
 }
 
@@ -405,9 +407,9 @@ func (h *AgentHandler) SetHybridMode(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"agentName":   agent.Name,
-			"hybridMode":  req.Enable,
-			"action":      action,
+			"agentName":  agent.Name,
+			"hybridMode": req.Enable,
+			"action":     action,
 		},
 	)
 
@@ -429,12 +431,12 @@ func (h *AgentHandler) GetSupportedAlgorithms(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"classical": []fiber.Map{
 			{
-				"algorithm":   "Ed25519",
-				"type":        "classical",
-				"description": "Edwards-curve Digital Signature Algorithm (EdDSA) using Curve25519",
-				"keySize":     32,
+				"algorithm":     "Ed25519",
+				"type":          "classical",
+				"description":   "Edwards-curve Digital Signature Algorithm (EdDSA) using Curve25519",
+				"keySize":       32,
 				"signatureSize": 64,
-				"status":      "recommended",
+				"status":        "recommended",
 			},
 		},
 		"postQuantum": []fiber.Map{
@@ -560,17 +562,17 @@ func (h *AgentHandler) GetPQCKeyVault(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"agentId":              agentID.String(),
-		"agentName":            agent.Name,
-		"pqcStatus":            pqcStatus,
-		"pqcPublicKey":         agent.PQCPublicKey,
-		"pqcKeyAlgorithm":      agent.PQCKeyAlgorithm,
-		"hybridModeEnabled":    agent.HybridModeEnabled,
-		"pqcKeyCreatedAt":      agent.PQCKeyCreatedAt,
-		"pqcKeyExpiresAt":      agent.PQCKeyExpiresAt,
-		"hasPreviousPqcKey":    agent.PreviousPQCPublicKey != nil && *agent.PreviousPQCPublicKey != "",
+		"agentId":           agentID.String(),
+		"agentName":         agent.Name,
+		"pqcStatus":         pqcStatus,
+		"pqcPublicKey":      agent.PQCPublicKey,
+		"pqcKeyAlgorithm":   agent.PQCKeyAlgorithm,
+		"hybridModeEnabled": agent.HybridModeEnabled,
+		"pqcKeyCreatedAt":   agent.PQCKeyCreatedAt,
+		"pqcKeyExpiresAt":   agent.PQCKeyExpiresAt,
+		"hasPreviousPqcKey": agent.PreviousPQCPublicKey != nil && *agent.PreviousPQCPublicKey != "",
 		// Classical key info for reference
-		"hasClassicalKey":      agent.PublicKey != nil && *agent.PublicKey != "",
+		"hasClassicalKey":       agent.PublicKey != nil && *agent.PublicKey != "",
 		"classicalKeyAlgorithm": agent.KeyAlgorithm,
 	})
 }

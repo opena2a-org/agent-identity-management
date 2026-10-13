@@ -771,6 +771,10 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 			"error": "Query parameter 'q' is required",
 		})
 	}
+	// q reaches the skill search as a text parameter.
+	if err := queryTextError("q", query); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
 
 	limit := 20
 	if limitStr := c.Query("limit"); limitStr != "" {

@@ -275,9 +275,9 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"totalUsers":            len(users),
-			"pendingRegistrations":  len(pendingRequests),
-			"totalCombined":         len(allUsers),
+			"totalUsers":           len(users),
+			"pendingRegistrations": len(pendingRequests),
+			"totalCombined":        len(allUsers),
 		},
 	)
 
@@ -807,8 +807,8 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 	logs, total, err := h.getAuditService().GetAuditLogs(
 		c.Context(),
 		orgID,
-		"", // action filter
-		"", // entity type filter
+		"",  // action filter
+		"",  // entity type filter
 		nil, // entity ID
 		nil, // user ID filter
 		startDate,
@@ -916,9 +916,18 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		})
 	}
 
-	// Parse filters
+	// Parse filters. Both are written to the audit log's metadata, and status
+	// selects the alerts.
 	severity := c.Query("severity")
 	status := c.Query("status")
+	for _, param := range []struct{ name, value string }{
+		{"severity", severity},
+		{"status", status},
+	} {
+		if err := queryTextError(param.name, param.value); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+		}
+	}
 
 	// Parse limit and offset with defaults (Fiber v3 compatibility)
 	limit := 100
@@ -1290,12 +1299,12 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"totalAgents":      len(agents),
-			"verifiedAgents":   verifiedAgents,
+			"totalAgents":     len(agents),
+			"verifiedAgents":  verifiedAgents,
 			"totalMcpServers": len(mcpServersList),
-			"totalUsers":       len(users),
-			"activeAlerts":     total,
-			"criticalAlerts":   criticalAlerts,
+			"totalUsers":      len(users),
+			"activeAlerts":    total,
+			"criticalAlerts":  criticalAlerts,
 		},
 	)
 
@@ -1305,7 +1314,7 @@ func (h *AdminHandler) GetDashboardStats(c fiber.Ctx) error {
 		"verifiedAgents":   verifiedAgents,
 		"pendingAgents":    pendingAgents,
 		"verificationRate": verificationRate,
-		"avgTrustScore":   avgTrustScore,
+		"avgTrustScore":    avgTrustScore,
 
 		// MCP Server metrics
 		"totalMcpServers":  len(mcpServersList),

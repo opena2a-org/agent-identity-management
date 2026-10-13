@@ -274,10 +274,10 @@ func (h *SecurityHandler) GetSecurityDashboard(c fiber.Ctx) error {
 			"unacknowledged": unacknowledgedAlerts,
 		},
 		"agents": fiber.Map{
-			"total":      len(agents),
-			"verified":   verifiedAgents,
-			"suspended":  suspendedAgents,
-			"pending":    pendingAgents,
+			"total":     len(agents),
+			"verified":  verifiedAgents,
+			"suspended": suspendedAgents,
+			"pending":   pendingAgents,
 			"lowTrust":  lowTrustAgents,
 		},
 	})

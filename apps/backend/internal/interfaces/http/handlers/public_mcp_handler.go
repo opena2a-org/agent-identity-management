@@ -186,8 +186,8 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"serverName":  server.Name,
-			"serverUrl":   server.URL,
+			"serverName":          server.Name,
+			"serverUrl":           server.URL,
 			"registered_by_agent": agent.Name,
 		},
 	)
@@ -276,7 +276,7 @@ func (h *PublicMCPHandler) ListMCPServersForAgent(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"mcpServers": servers,
-		"total":       len(servers),
+		"total":      len(servers),
 	})
 }
 
@@ -403,7 +403,7 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 		// (In future, this would use AlertService)
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":              "Agent not authorized to access this MCP server",
-			"agentId":           agentID.String(),
+			"agentId":            agentID.String(),
 			"mcp_server_id":      serverID.String(),
 			"mcp_server_name":    mcpServer.Name,
 			"violation_type":     "unauthorized_mcp_access",
@@ -416,14 +416,14 @@ func (h *PublicMCPHandler) VerifyMCPAction(c fiber.Ctx) error {
 	verificationID := uuid.New()
 
 	return c.JSON(fiber.Map{
-		"verificationId":    verificationID.String(),
-		"status":            "approved",
-		"mcpServerId":       serverID.String(),
-		"mcpServerName":     mcpServer.Name,
-		"agentId":           agentID.String(),
-		"actionType":        req.ActionType,
-		"timestamp":         req.Timestamp,
-		"trustScoreImpact":  0.5,
+		"verificationId":   verificationID.String(),
+		"status":           "approved",
+		"mcpServerId":      serverID.String(),
+		"mcpServerName":    mcpServer.Name,
+		"agentId":          agentID.String(),
+		"actionType":       req.ActionType,
+		"timestamp":        req.Timestamp,
+		"trustScoreImpact": 0.5,
 	})
 }
 

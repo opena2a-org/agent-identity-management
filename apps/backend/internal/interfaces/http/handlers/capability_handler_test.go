@@ -547,4 +547,3 @@ func TestCapabilityHandler_getCapabilityService_NilInterfaceReturnsNil(t *testin
 	result := handler.getCapabilityService()
 	assert.Nil(t, result)
 }
-

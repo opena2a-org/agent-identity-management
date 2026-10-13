@@ -68,8 +68,8 @@ func TestMCPGraph_getNodeSize(t *testing.T) {
 	}{
 		{"No connections", 0, 15},
 		{"1 connection", 1, 20},
-		{"5 connections", 5, 20},  // > 0 but not > 5
-		{"6 connections", 6, 25},  // > 5 but not > 10
+		{"5 connections", 5, 20}, // > 0 but not > 5
+		{"6 connections", 6, 25}, // > 5 but not > 10
 		{"10 connections", 10, 25},
 		{"11 connections", 11, 30}, // > 10
 	}

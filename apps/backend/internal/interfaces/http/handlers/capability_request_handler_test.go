@@ -169,4 +169,3 @@ func TestCapabilityRequestHandlers_ListAgentCapabilityRequests_InvalidAgentID(t 
 
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
-

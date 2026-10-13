@@ -195,10 +195,10 @@ func (h *PublicAgentHandler) Register(c fiber.Ctx) error {
 		// normalizeAIMURL forces https for any public host (see sdk_handler.go):
 		// behind a TLS-terminating ingress c.BaseURL() reports http, and an agent
 		// that POSTs to http first gets a 301 that drops the request body.
-		AIMURL:      normalizeAIMURL(c.BaseURL()),
-		Status:      string(agent.Status),
-		TrustScore:  trustScore,
-		Message:     h.buildRegistrationMessage(agent.Status),
+		AIMURL:     normalizeAIMURL(c.BaseURL()),
+		Status:     string(agent.Status),
+		TrustScore: trustScore,
+		Message:    h.buildRegistrationMessage(agent.Status),
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(response)

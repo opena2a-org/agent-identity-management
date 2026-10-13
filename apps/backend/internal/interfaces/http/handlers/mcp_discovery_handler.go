@@ -30,22 +30,22 @@ func NewMCPDiscoveryHandler(
 // DiscoveredMCP represents an MCP server detected by agents but not yet registered
 type DiscoveredMCP struct {
 	Name            string    `json:"name"`
-	URL             string    `json:"url"`             // URL if detected from URL format
-	DetectedBy      []string  `json:"detectedBy"`      // Agent display names
-	DetectedByCount int       `json:"detectedByCount"` // Number of agents
-	DetectionMethod string    `json:"detectionMethod"` // talks_to, sdk_import, runtime
-	FirstDetectedAt time.Time `json:"firstDetectedAt"` // Earliest detection
-	LastDetectedAt  time.Time `json:"lastDetectedAt"`  // Most recent detection
-	IsRegistered    bool      `json:"isRegistered"`    // If already registered
+	URL             string    `json:"url"`                        // URL if detected from URL format
+	DetectedBy      []string  `json:"detectedBy"`                 // Agent display names
+	DetectedByCount int       `json:"detectedByCount"`            // Number of agents
+	DetectionMethod string    `json:"detectionMethod"`            // talks_to, sdk_import, runtime
+	FirstDetectedAt time.Time `json:"firstDetectedAt"`            // Earliest detection
+	LastDetectedAt  time.Time `json:"lastDetectedAt"`             // Most recent detection
+	IsRegistered    bool      `json:"isRegistered"`               // If already registered
 	MatchingServer  *string   `json:"matchingServerId,omitempty"` // Registered server ID if match found
 }
 
 // MCPDiscoveryResponse is the response for discovered MCPs
 type MCPDiscoveryResponse struct {
-	Discovered       []DiscoveredMCP `json:"discovered"`
-	TotalUnmapped    int             `json:"totalUnmapped"`    // MCPs in talks_to not mapped to registered servers
-	TotalAgents      int             `json:"totalAgents"`      // Total agents checked
-	RegisteredServers int            `json:"registeredServers"` // Total registered MCP servers
+	Discovered        []DiscoveredMCP `json:"discovered"`
+	TotalUnmapped     int             `json:"totalUnmapped"`     // MCPs in talks_to not mapped to registered servers
+	TotalAgents       int             `json:"totalAgents"`       // Total agents checked
+	RegisteredServers int             `json:"registeredServers"` // Total registered MCP servers
 }
 
 // GetDiscoveredMCPs returns MCPs detected by agents but not yet registered
