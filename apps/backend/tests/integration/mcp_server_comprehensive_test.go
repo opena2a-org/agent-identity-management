@@ -794,7 +794,8 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 
 	var loginResult map[string]interface{}
 	require.NoError(t, json.Unmarshal(loginRespBody, &loginResult))
-	crossOrgToken := loginResult["accessToken"].(string)
+	crossOrgToken, ok := loginResult["accessToken"].(string)
+	require.True(t, ok, "login response carries accessToken: %s", string(loginRespBody))
 	require.NotEmpty(t, crossOrgToken)
 
 	// Cross-org user should NOT be able to access admin's MCP server (expect 403 or 404)

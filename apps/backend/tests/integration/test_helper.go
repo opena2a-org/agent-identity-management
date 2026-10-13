@@ -79,11 +79,21 @@ func NewTestContext(t *testing.T) *TestContext {
 	return &TestContext{
 		Config: GetTestConfig(),
 		Client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:   30 * time.Second,
+			Transport: strictGate,
 		},
 		T: t,
 	}
 }
+
+// adminTokens holds the admin access token each backend address and admin
+// email has issued to this run, so the package signs in as admin once per run
+// and not once per test. The token is good for the server's access-token
+// lifetime (two hours by default), which outlasts a run of this package.
+var (
+	adminTokensMu sync.Mutex
+	adminTokens   = map[string]string{}
+)
 
 // WaitForBackend waits for backend to be ready
 // This validates that the AIM backend is actually running (not some other service)
@@ -112,8 +122,20 @@ func (tc *TestContext) WaitForBackend() error {
 	return nil
 }
 
-// LoginAsAdmin logs in as admin and stores token
+// LoginAsAdmin stores the admin access token on tc. The first call in a run
+// signs in through POST /api/v1/public/login; later calls for the same
+// backend and admin email reuse that token, so one run of this package spends
+// one login on the admin against the strict rate limit of the public group.
 func (tc *TestContext) LoginAsAdmin() error {
+	key := tc.Config.BaseURL + "\n" + tc.Config.AdminEmail
+
+	adminTokensMu.Lock()
+	defer adminTokensMu.Unlock()
+	if token, ok := adminTokens[key]; ok {
+		tc.AdminToken = token
+		return nil
+	}
+
 	body := map[string]interface{}{
 		"email":    tc.Config.AdminEmail,
 		"password": tc.Config.AdminPassword,
@@ -135,6 +157,7 @@ func (tc *TestContext) LoginAsAdmin() error {
 		return fmt.Errorf("no access token in admin login response")
 	}
 
+	adminTokens[key] = token
 	tc.AdminToken = token
 	return nil
 }
