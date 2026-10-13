@@ -2696,7 +2696,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 
 ### Fixed — a 4xx response states its reason instead of carrying an error's text
 
-- 51 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and three 200 fallbacks) put the text of a Go
+- 59 handler response bodies below 500 (400, 401, 403, 404, 409, 413 and two 200 fallbacks) put the text of a Go
   error in the body. Most passed a library or service message through: a UUID or JSON decoding error, a wrapped repository
   error behind a 400 (`failed to update password: ...` on a password change, the repository error on an API key
   delete or a device-code approval), or every reason a secrets resolve was refused, agent and namespace names
