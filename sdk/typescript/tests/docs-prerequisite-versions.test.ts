@@ -27,7 +27,14 @@ import { join } from 'path';
  *   C4  the pre-fix statements, kept as literals, are refused and the fixed
  *       forms pass, through the same predicates as C1 and C2, against ranges
  *       kept as literals;
- *   C5  the range check itself, over literal versions and ranges.
+ *   C5  the range check itself, over literal versions and ranges;
+ *   C6  a line stating Go 1.22+ and Node.js 18+, a pnpm command and a line
+ *       stating npm 8+, added to the text of README.md or of a guide, one
+ *       file at a time, are refused through the function C1 to C3 call.
+ *
+ * C1 to C3 read README.md as well as the guides. The first cell does not
+ * require README.md to state a version: the prerequisites line is in
+ * docs/DEPLOYMENT.md.
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -41,6 +48,9 @@ const GUIDES = [
   'docs/guides/QUICK_START.md',
   'docs/guides/SETUP_GUIDE.md',
 ];
+
+// The files C1 to C3 read.
+const READ = ['README.md', ...GUIDES];
 
 const VERSION = String.raw`\d+(?:\.\d+){0,2}`;
 const LABEL_END = String.raw`(?:\*\*)?:?(?:\*\*)?\s+`;
@@ -175,12 +185,39 @@ const nodeRanges: NamedRange[] = [
   ...lockfileNodeRanges('package-lock.json'),
   ...lockfileNodeRanges('apps/web/package-lock.json'),
 ];
-const guideText = new Map(GUIDES.map((g) => [g, readFileSync(join(REPO_ROOT, g), 'utf-8')]));
+// Listed apart from READ, so C6 holds README.md's text when READ does not list it.
+const onDisk = new Map(['README.md', ...GUIDES].map((f) => [f, readFileSync(join(REPO_ROOT, f), 'utf-8')]));
+
+interface Problems {
+  go: string[];
+  node: string[];
+  pnpm: string[];
+  npm: string[];
+}
+
+/** What C1 to C3 refuse in the files of READ, given each file's text. */
+function problemsIn(textOf: (file: string) => string): Problems {
+  const out: Problems = { go: [], node: [], pnpm: [], npm: [] };
+  for (const file of READ) {
+    const text = textOf(file);
+    out.go.push(...goProblems(text, goDirective!).map((p) => `${file} ${p}`));
+    out.node.push(...nodeProblems(text, nodeRanges).map((p) => `${file} ${p}`));
+    text.split(/\r?\n/).forEach((line, i) => {
+      if (/\bpnpm\b/.test(line)) out.pnpm.push(`${file}:${i + 1}: ${line.trim()}`);
+    });
+    for (const { line, versions } of statements(text, NPM_STATEMENT)) {
+      for (const v of versions) {
+        if (!satisfies(v, rootPackage.engines.npm)) out.npm.push(`${file}:${line}: npm ${v}`);
+      }
+    }
+  }
+  return out;
+}
 
 describe('prerequisite versions in the setup and contributing guides', () => {
   it('every guide states a Go or Node.js version the checks read', () => {
     const silent = GUIDES.filter((g) => {
-      const text = guideText.get(g)!;
+      const text = onDisk.get(g)!;
       return statements(text, GO_STATEMENT).length + statements(text, NODE_STATEMENT).length === 0;
     });
     expect(silent).toEqual([]);
@@ -188,32 +225,18 @@ describe('prerequisite versions in the setup and contributing guides', () => {
 
   it('C1: every Go version stated is at least the go directive of apps/backend/go.mod', () => {
     expect(goDirective, 'apps/backend/go.mod has no go directive').toBeDefined();
-    const problems = GUIDES.flatMap((g) => goProblems(guideText.get(g)!, goDirective!).map((p) => `${g} ${p}`));
-    expect(problems).toEqual([]);
+    expect(problemsIn((f) => onDisk.get(f)!).go).toEqual([]);
   });
 
   it('C2: every Node.js version stated satisfies every engines.node range the dashboard installs', () => {
     expect(nodeRanges.length).toBeGreaterThan(1);
-    const problems = GUIDES.flatMap((g) => nodeProblems(guideText.get(g)!, nodeRanges).map((p) => `${g} ${p}`));
-    expect(problems).toEqual([]);
+    expect(problemsIn((f) => onDisk.get(f)!).node).toEqual([]);
   });
 
-  it('C3: no guide names pnpm, and stated npm versions satisfy engines.npm', () => {
-    const pnpm: string[] = [];
-    const npm: string[] = [];
-    for (const g of GUIDES) {
-      const text = guideText.get(g)!;
-      text.split(/\r?\n/).forEach((line, i) => {
-        if (/\bpnpm\b/.test(line)) pnpm.push(`${g}:${i + 1}: ${line.trim()}`);
-      });
-      for (const { line, versions } of statements(text, NPM_STATEMENT)) {
-        for (const v of versions) {
-          if (!satisfies(v, rootPackage.engines.npm)) npm.push(`${g}:${line}: npm ${v}`);
-        }
-      }
-    }
-    expect(pnpm).toEqual([]);
-    expect(npm).toEqual([]);
+  it('C3: neither README.md nor a guide names pnpm, and stated npm versions satisfy engines.npm', () => {
+    const found = problemsIn((f) => onDisk.get(f)!);
+    expect(found.pnpm).toEqual([]);
+    expect(found.npm).toEqual([]);
     expect(existsSync(join(REPO_ROOT, 'package-lock.json'))).toBe(true);
     expect(existsSync(join(REPO_ROOT, 'pnpm-lock.yaml'))).toBe(false);
   });
@@ -288,5 +311,22 @@ describe('prerequisite versions in the setup and contributing guides', () => {
       expect(satisfies(version, range), `${version} in "${range}"`).toBe(expected);
     }
     expect(() => satisfies('20.19.0', '1.2.3 - 2.3.4')).toThrow(/not read/);
+  });
+
+  it('C6: a stale Go, Node.js, pnpm or npm line added to README.md or to a guide is refused', () => {
+    expect(goDirective, 'apps/backend/go.mod has no go directive').toBeDefined();
+    const stale = ['Prerequisites: Docker, Go 1.22+, Node.js 18+, Python 3.11+.', 'pnpm install', '- npm 8+'];
+    for (const file of ['README.md', ...GUIDES]) {
+      const text = onDisk.get(file)!;
+      const first = text.split(/\r?\n/).length + 1;
+      const found = problemsIn((f) => (f === file ? `${text}\n${stale.join('\n')}\n` : onDisk.get(f)!));
+      expect(found.go, file).toContain(`${file} line ${first}: Go 1.22 is below go ${goDirective}`);
+      expect(
+        found.node.filter((p) => p.startsWith(`${file} line ${first}: Node.js 18 is outside `)),
+        file,
+      ).toHaveLength(1);
+      expect(found.pnpm, file).toContain(`${file}:${first + 1}: pnpm install`);
+      expect(found.npm, file).toContain(`${file}:${first + 2}: npm 8`);
+    }
   });
 });
