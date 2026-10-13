@@ -105,11 +105,14 @@ KEPT_SENTENCES = [
 ]
 
 # Text that other tests read from this README: the token-rotation line and its Redis
-# condition, the policy a quickstart-default stack names, and when the trust score is
-# recalculated. The last marker is held as a whole paragraph.
+# condition, the policy a quickstart-default stack names, what a pending agent's call
+# raises in monitoring mode and is refused with in strict mode, and when the trust
+# score is recalculated. The last marker is held as a whole paragraph.
 PINNED_SENTENCES = [
     "Token rotated successfully",
     "`default_policy`",
+    "`Unverified Agent Action (Monitoring Mode)`",
+    "`Agent not verified - all actions denied`",
     "trust-score/recalculate",
 ]
 PINNED_PARAGRAPH = "A verification request (`POST /api/v1/verifications`)"
@@ -175,6 +178,35 @@ def test_each_kept_quick_start_sentence_is_short(marker):
     words = len(found[0].split())
     assert words <= KEPT_SENTENCE_CAP, (
         f"{words} words, over {KEPT_SENTENCE_CAP}: {found[0]!r}; the rest belongs in sdk/python/README.md"
+    )
+
+
+AGENT_SERVICE = REPO_ROOT / "apps" / "backend" / "internal" / "application" / "agent_service.go"
+PENDING_MONITORING_ALERT = "Unverified Agent Action (Monitoring Mode)"
+PENDING_STRICT_REFUSAL = "Agent not verified - all actions denied"
+
+
+def test_the_pending_paragraph_says_what_a_pending_agents_call_does_in_each_mode():
+    """A reader who calls the agent before it is verified meets one of two states: on a
+    new organization, in monitoring mode, the call runs and raises an alert; on a
+    strict-mode organization it is refused. The paragraph names each in the words the
+    server uses."""
+    server = AGENT_SERVICE.read_text(encoding="utf-8")
+    assert f'"{PENDING_MONITORING_ALERT}: %s"' in server, "the server no longer titles the alert this way"
+    assert f'"{PENDING_STRICT_REFUSAL}"' in server, "the server no longer refuses with this reason"
+
+    found = [p for p, _ in paragraphs() if p.startswith("The agent starts `pending`")]
+    assert len(found) == 1, f"the Quick start must say once that the agent starts pending: {found}"
+    said = re.split(r"(?<=[.!?])\s+", found[0])
+    monitoring = [s for s in said if f"`{PENDING_MONITORING_ALERT}`" in s]
+    assert len(monitoring) == 1, f"the paragraph must name the monitoring-mode alert: {found[0]!r}"
+    assert "monitoring mode" in monitoring[0] and "runs" in monitoring[0], (
+        f"the sentence naming the alert must say the call runs in monitoring mode: {monitoring[0]!r}"
+    )
+    strict = [s for s in said if f"`{PENDING_STRICT_REFUSAL}`" in s]
+    assert len(strict) == 1, f"the paragraph must quote the strict-mode refusal: {found[0]!r}"
+    assert "strict-mode organization" in strict[0], (
+        f"the sentence quoting the refusal must say it needs a strict-mode organization: {strict[0]!r}"
     )
 
 
