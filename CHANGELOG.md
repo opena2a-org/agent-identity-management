@@ -49,6 +49,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `secure('<name>', auto_detect_mcp=True)` finds the agent by name and sends
   `PUT /api/v1/agents/{id}/keys` with the new public key.
 
+### Fixed — an MCP server loses consensus verification when its attesting agents stop agreeing
+
+- A server that multi-agent consensus verified returns to `pending` when its attestations stop
+  agreeing: the latest attestation of an attesting agent reports a failed connection, or the
+  attesting agents report different tool sets. The server is rechecked each time one of its
+  attestations is recorded or revoked, and once at every backend start. When an attestation is
+  recorded after that and the attestations agree again, consensus verifies it again under the same
+  agent, owner and confidence thresholds.
+- A server verified through SDK registration or through `POST /api/v1/mcp-servers/:id/verify`
+  keeps its status when attestations disagree, because that verification does not rest on the
+  attestations. Running `POST /api/v1/mcp-servers/:id/verify` on a server that consensus verified
+  moves it into this group.
+- A server with no valid agent attestation left keeps its status: expired or revoked attestations
+  are not a disagreement.
+- Migration 129 adds `mcp_servers.consensus_verified_at`, set when consensus verifies a server. It
+  marks a server verified before this change as verified by consensus when no agent registered it,
+  an agent attestation was recorded at or before its last verification, and it has no successful
+  challenge-response verification event. The recheck at the first start after the migration
+  withdraws the verification of every marked server whose attestations disagree.
+
 ### Security — sign-in failure and lock alert log lines name no email address
 
 - The server log lines a password sign-in writes name no account email address. The account-locked
@@ -2503,8 +2523,8 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - Manifest drift recording from attestations still starts at the agent, owner and confidence
   thresholds, so an attestation that reports a different tool set is recorded as drift rather
   than switching drift recording off.
-- A server verified before this change keeps its verified status; the rule applies the next time
-  a pending server is evaluated.
+- Servers verified before this change, and servers whose attestations disagree after they are
+  verified, are covered by the entry on withdrawn consensus verification above.
 
 ### Fixed — an agent heartbeat stores the heartbeat time and writes nothing else to the agent
 

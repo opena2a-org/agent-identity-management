@@ -28,7 +28,7 @@ On a strict-mode organization, a score below the threshold of an enabled `trust_
 
 ## MCP attestation
 
-Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and reporting the same tool set, equals verified.
+Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and reporting the same tool set, equals verified. A server verified this way returns to pending when its attesters stop agreeing.
 
 ## Privileged Access Management
 
