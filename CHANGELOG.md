@@ -3111,6 +3111,15 @@ reason: the score is measured, not asserted. No migration: the column was alread
   GHSA-7hhh-6rmp-j9qf (CVE-2026-89425) and GHSA-p6pp-m3f8-5c89 (CVE-2026-89407) in
   `jackson-core`. It is also outside the range of GHSA-q4xh-88c3-wmh7 (CVE-2026-68497), which
   contains 2.18.8. (#560)
+- Java SDK: a JSON string is refused wherever the SDK binds a `Double`, `double`, `Float`, `float`,
+  `BigDecimal` or `Number` from JSON, at any length and including a numeric string such as `"0.75"`;
+  a JSON number still binds. This covers the A2A trust and confidence fields and the ATX credential's
+  `trustScore`. `A2AClient` throws `A2AException` and `LocalAtxVerifier.verify` rejects the credential
+  as `MALFORMED`; either way the message names the field and the string's length, says a JSON number
+  is expected, and never contains the string. The MCP server trust scores `MCPIntegration` reads from
+  the JSON tree are unchanged. `FloatingPointCensusTest` lists every floating-point declaration and
+  read in the SDK, and fails on a new one until it is listed with the test that drives it from JSON
+  or the reason it binds no number from JSON.
 - Earlier dependency bumps in this cycle. Java SDK (`sdk/java/pom.xml`): jackson 2.16.1 to 2.18.8
   (CVE-2026-54512, CVE-2026-54513) (#340); bouncycastle 1.79 to 1.84 (CVE-2026-5598) (#294), then
   to 1.85 (CVE-2026-8763, CVE-2026-13506) (#500). The Java demo under

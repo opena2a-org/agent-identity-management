@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON tree, rather than mapping them, are unchanged. The method throws its usual exception (`A2AException` from `A2AClient`) with a `MismatchedInputException` as
   its cause, whose message names the field and the string's length and never the string:
   `Field "/score": a JSON string of 4 characters was refused where a number is bound; a JSON number is expected`.
-  A JSON number reads as before. AIM servers send these fields as JSON numbers; a proxy, mock or other server
+  `LocalAtxVerifier.verify` throws nothing for a credential whose `trustScore` is a string: it rejects it as
+  `MALFORMED`, with that message in its reason. A JSON number reads as before. AIM servers send these fields as JSON numbers; a proxy, mock or other server
   that sends them as strings needs to send numbers.
 - `MCPIntegration.attestServer` (both overloads) now throws `AIMException` before sending anything. It sent
   the Base64 of the attestation in the `signature` member, where the server verifies an Ed25519 signature
