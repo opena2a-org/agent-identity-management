@@ -5,6 +5,7 @@ import { derivedBackendHost } from "./backend-host";
 import { forgetOnboardingViewed } from "./onboarding-viewed";
 import { normalizeViolation, type SecurityViolation } from "./violations";
 import { SERVER_ERROR_MESSAGE, isServerErrorStatus } from "./error-messages";
+import { withStorageLease } from "./storage-lease";
 
 /** An Error thrown for a non-2xx response, carrying the status and the backend's code when it sent one. */
 export type ApiRequestError = Error & { status?: number; code?: string };
@@ -20,6 +21,9 @@ const SESSION_EXPIRED_TOAST_ID = "session-expired";
 
 // The Web Lock every tab of this origin takes before it refreshes the session.
 const TOKEN_REFRESH_LOCK = "aim:token-refresh";
+
+// Where the browser has no Web Locks, the localStorage key whose lease is taken instead.
+const TOKEN_REFRESH_LEASE = "token_refresh_lease";
 
 type TokenPair = { accessToken: string; refreshToken: string };
 
@@ -652,11 +656,14 @@ class APIClient {
   private refreshQueue: Promise<unknown> = Promise.resolve();
 
   /**
-   * Runs one refresh at a time. With Web Locks the turn is taken across every
-   * tab of the origin; without them it is taken within this tab only.
+   * Runs one refresh at a time across every tab of the origin: under a Web
+   * Lock, or, where the browser has none, under a lease in the store the tabs
+   * share (lib/storage-lease.ts). `replaced` is what the store already answers
+   * for the caller, see pairStoredSince.
    */
   private async withRefreshLock(
-    work: () => Promise<TokenPair | null>
+    work: () => Promise<TokenPair | null>,
+    replaced: () => TokenPair | null | undefined
   ): Promise<TokenPair | null> {
     const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
     if (locks && typeof locks.request === "function") {
@@ -668,10 +675,18 @@ class APIClient {
         });
       } catch (error) {
         if (started) throw error;
-        // The lock manager refused the request itself: take the turn in this tab.
+        // The lock manager refused the request itself: take the turn as a
+        // browser without Web Locks does.
       }
     }
-    const run = this.refreshQueue.then(work, work);
+    // The callers of this tab queue here and ask for the lease one at a time. A
+    // caller that queued behind a refresh finds its answer in the store, and
+    // takes no lease for it.
+    const turn = async (): Promise<TokenPair | null> => {
+      const pair = replaced();
+      return pair !== undefined ? pair : withStorageLease(TOKEN_REFRESH_LEASE, work);
+    };
+    const run = this.refreshQueue.then(turn, turn);
     this.refreshQueue = run.catch(() => undefined);
     return run;
   }
@@ -699,8 +714,9 @@ class APIClient {
     const seenAccessToken =
       rejectedAccessToken !== undefined ? rejectedAccessToken : this.getToken();
 
-    return this.withRefreshLock(() =>
-      this.refreshUnlessRotated(seenAccessToken, seenRefreshToken)
+    return this.withRefreshLock(
+      () => this.refreshUnlessRotated(seenAccessToken, seenRefreshToken),
+      () => this.pairStoredSince(seenAccessToken, seenRefreshToken)
     );
   }
 
@@ -711,12 +727,16 @@ class APIClient {
     return accessToken && refreshToken ? { accessToken, refreshToken } : null;
   }
 
-  private async refreshUnlessRotated(
+  /**
+   * What a caller that saw this pair uses instead of refreshing: the pair
+   * another caller stored since, or null when the session is gone. Undefined
+   * while the store still holds what the caller saw.
+   */
+  private pairStoredSince(
     seenAccessToken: string | null,
     seenRefreshToken: string
-  ): Promise<TokenPair | null> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) {
+  ): TokenPair | null | undefined {
+    if (!this.getRefreshToken()) {
       // Signed out, or refused, while this caller waited.
       return null;
     }
@@ -728,6 +748,18 @@ class APIClient {
     ) {
       // Another caller already replaced the pair: use it.
       return stored;
+    }
+    return undefined;
+  }
+
+  private async refreshUnlessRotated(
+    seenAccessToken: string | null,
+    seenRefreshToken: string
+  ): Promise<TokenPair | null> {
+    const replaced = this.pairStoredSince(seenAccessToken, seenRefreshToken);
+    const refreshToken = this.getRefreshToken();
+    if (replaced !== undefined || !refreshToken) {
+      return replaced ?? null;
     }
 
     // A refusal speaks only for the token that was presented. If the store

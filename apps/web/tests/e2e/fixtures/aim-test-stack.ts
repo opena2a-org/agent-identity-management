@@ -17,6 +17,9 @@ type TestFixtures = {
   registerAgent: (overrides?: { displayName?: string }) => Promise<Resource>;
   registerMcpServer: (overrides?: { url?: string }) => Promise<Resource>;
   authedPage: Page;
+  // A sign-in of the test's own. A test that refreshes the session rotates the
+  // refresh token, so it must not spend the pair the worker's other tests share.
+  ownSession: { accessToken: string; refreshToken: string };
 };
 
 function freshSuffix(): string {
@@ -108,6 +111,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       } catch {}
     }, { accessToken: adminAuth.accessToken, refreshToken: adminAuth.refreshToken });
     await use(page);
+  },
+
+  ownSession: async ({ request }, use) => {
+    await use(await login(request));
   },
 });
 

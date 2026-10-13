@@ -176,9 +176,74 @@ describe("token refresh across tabs", () => {
   });
 });
 
+// A dashboard served over plain HTTP from a host other than localhost has no
+// Web Locks. Its tabs take the turn through a lease in the localStorage they
+// share, under this key.
+const LEASE_KEY = "token_refresh_lease";
+
+/** The lease another tab would hold, expiring `ms` from now. */
+const leaseOfAnotherTab = (ms: number) => `another-tab.1:${Date.now() + ms}`;
+
 describe("token refresh where the browser has no Web Locks", () => {
   beforeEach(() => {
     setLocks(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("two tabs refused with the same expired token send one refresh and both carry on", async () => {
+    const server = startServer();
+    const first = await openTab();
+    const second = await openTab();
+
+    const users = await Promise.all([first.getCurrentUser(), second.getCurrentUser()]);
+
+    expect(server.refreshPosts().map((c) => c.body)).toEqual([{ refreshToken: "r1" }]);
+    expect(users).toEqual([{ id: "user-1" }, { id: "user-1" }]);
+    expect(server.state.ended).toBe(false);
+    expect(storedPair()).toEqual({ accessToken: "a2", refreshToken: "r2" });
+    expect(localStorage.getItem(LEASE_KEY)).toBeNull();
+  });
+
+  it("a tab waits while another tab refreshes and uses the pair that tab stored", async () => {
+    const server = startServer();
+    const tab = await openTab();
+    localStorage.setItem(LEASE_KEY, leaseOfAnotherTab(10_000));
+
+    const pending = tab.refreshAccessToken();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(server.refreshPosts()).toHaveLength(0);
+
+    // The other tab stores the pair it was given and gives the turn up.
+    localStorage.setItem("auth_token", "a2");
+    localStorage.setItem("refresh_token", "r2");
+    localStorage.removeItem(LEASE_KEY);
+
+    await expect(pending).resolves.toEqual({ accessToken: "a2", refreshToken: "r2" });
+    expect(server.refreshPosts()).toHaveLength(0);
+  });
+
+  it("a turn left by a tab that was closed does not stop the refresh", async () => {
+    const server = startServer();
+    const tab = await openTab();
+    localStorage.setItem(LEASE_KEY, leaseOfAnotherTab(-1));
+
+    await expect(tab.refreshAccessToken()).resolves.toEqual({ accessToken: "a2", refreshToken: "r2" });
+    expect(server.refreshPosts().map((c) => c.body)).toEqual([{ refreshToken: "r1" }]);
+    expect(localStorage.getItem(LEASE_KEY)).toBeNull();
+  });
+
+  it("requests refused together in one tab take the turn once", async () => {
+    const server = startServer();
+    const tab = await openTab();
+    const setItem = vi.spyOn(Object.getPrototypeOf(localStorage), "setItem");
+
+    await Promise.all([tab.getCurrentUser(), tab.getCurrentOrganization(), tab.getCurrentUser()]);
+
+    expect(setItem.mock.calls.filter(([key]) => key === LEASE_KEY)).toHaveLength(1);
+    expect(server.refreshPosts()).toHaveLength(1);
   });
 
   it("one tab sends one refresh for requests refused together", async () => {
