@@ -327,6 +327,8 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 **Response:** 204 No Content.
 
+A delete is made only together with its audit record. When that record cannot be written, nothing is deleted and the route answers `503` with `Retry-After: 300` (seconds) and `{"error": "...", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. Retry after that time.
+
 ---
 
 ### Onboarding Endpoints

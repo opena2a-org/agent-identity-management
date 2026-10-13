@@ -294,6 +294,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   with neither says "No user or agent recorded".
 - A test cell in `apps/web/lib/audit-records.test.ts` covers a record that carries both an agent id and a user id.
 
+### Changed — a delete refused because its audit record could not be written answers 503 with `recordUnavailable` and `Retry-After`, and the delete dialog says nothing changed and when to try again
+
+- An agent's deletion is made only together with its audit record; when the record cannot be written the service
+  refuses the delete whole and nothing is removed. `DELETE /api/v1/agents/:id` now answers that refusal with `503`,
+  `Retry-After: 300` (the seconds a failed record write keeps the server's record path unavailable) and
+  `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in the
+  server log. Any other delete failure still answers `500` with the route's own line and no `Retry-After`.
+- Measured with the handler of the previous commit, for the recorder's refusal and for the same refusal wrapped once
+  more: both were answered `500` with `{"error":"The agent was not deleted and nothing was removed. Try again, and if
+  it fails again, contact your administrator."}`, no `reasonCode` and no `Retry-After`.
+- The API sends `Retry-After` in `Access-Control-Expose-Headers`, so the dashboard on its own origin can read it, and
+  the dashboard's API client keeps it on the refusal as `retryAfterSeconds`.
+- The delete dialog states this refusal once, inside the dialog, in an alert of the default variant (the person did
+  nothing wrong) titled "Nothing was changed", with when to try again taken from `Retry-After`. Its text is the
+  dashboard's own, never the server's line. The next attempt clears it.
+- `docs/API.md` states the `503`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/record_unavailable_refusal_test.go`, the reason-code census in
+  `refusal_reason_code_test.go`, `TestCORSMiddleware_ExposesHeaders`, and `apps/web/lib/api.retry-after.test.ts`,
+  `apps/web/lib/record-path-refusal.test.ts` and `apps/web/components/agents/delete-agent-dialog.test.tsx`.
+
 ### Security — webhook, MCP server and agent card requests refuse eight more special-purpose address ranges
 
 - The address policy that the URL check and the connection check share also refuses 192.88.99.0/24 (6to4 relay

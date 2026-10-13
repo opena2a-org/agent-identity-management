@@ -587,9 +587,13 @@ func (h *AgentHandler) DeleteAgent(c fiber.Ctx) error {
 
 	// The cause stays in the server log. The dashboard shows `error` to the person who
 	// pressed Delete, and a database error names tables, constraints and key values they
-	// can do nothing with.
+	// can do nothing with. A delete refused because its audit record could not be written
+	// answers 503 with its reason and Retry-After.
 	if err := h.agentService.DeleteAgent(transition.WithActor(c.Context(), transition.User(userID)), agentID); err != nil {
 		log.Printf("Delete agent %s for org %s failed: %v", agentID, orgID, err)
+		if refused, resp := respondRecordUnavailable(c, err); refused {
+			return resp
+		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": agentDeleteFailedMessage,
 		})

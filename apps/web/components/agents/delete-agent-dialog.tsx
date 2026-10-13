@@ -15,13 +15,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ActionOutcome } from "@/components/ui/action-outcome";
+import { RecordPathRefusalAlert } from "@/components/ui/record-path-refusal-alert";
 import type { ActionFailure } from "@/lib/action-outcome";
 import {
   AGENT_DELETE_IRREVERSIBLE_TEXT,
   AGENT_DELETE_KEPT_TEXT,
   agentDeleteFailure,
+  agentDeleteRecordRefusal,
   agentDeleteRemovesText,
 } from "@/lib/agent-delete";
+import type { RecordPathRefusal } from "@/lib/record-path-refusal";
 
 export interface DeleteAgentTarget {
   id: string;
@@ -38,7 +41,9 @@ interface DeleteAgentDialogProps {
 
 // The one delete dialog for an agent, used by the agent list and the agent page. A failed
 // delete keeps the dialog open and states the reason and next step inside it, in an alert,
-// so focus stays in the dialog and assistive technology reads the reason.
+// so focus stays in the dialog and assistive technology reads the reason. A delete the
+// server refused because its audit record could not be written is stated in a neutral
+// alert of its own, with when to try again.
 export function DeleteAgentDialog({
   agent,
   open,
@@ -47,9 +52,13 @@ export function DeleteAgentDialog({
 }: DeleteAgentDialogProps) {
   const [deleting, setDeleting] = useState(false);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [recordRefusal, setRecordRefusal] = useState<RecordPathRefusal | null>(null);
 
   useEffect(() => {
-    if (open) setFailure(null);
+    if (open) {
+      setFailure(null);
+      setRecordRefusal(null);
+    }
   }, [open, agent?.id]);
 
   const handleOpenChange = (next: boolean) => {
@@ -64,13 +73,19 @@ export function DeleteAgentDialog({
     if (!agent || deleting) return;
     setDeleting(true);
     setFailure(null);
+    setRecordRefusal(null);
     try {
       await api.deleteAgent(agent.id);
       setDeleting(false);
       onDeleted(agent);
     } catch (err) {
       console.error("Failed to delete agent:", err);
-      setFailure(agentDeleteFailure(err));
+      const refusal = agentDeleteRecordRefusal(err);
+      if (refusal) {
+        setRecordRefusal(refusal);
+      } else {
+        setFailure(agentDeleteFailure(err));
+      }
       setDeleting(false);
     }
   };
@@ -88,6 +103,7 @@ export function DeleteAgentDialog({
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
+        <RecordPathRefusalAlert refusal={recordRefusal} />
         <ActionOutcome outcome={failure} />
         <AlertDialogFooter>
           <AlertDialogCancel
