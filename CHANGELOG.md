@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — sign-in responses give lastLoginAt in UTC, as /api/v1/auth/me does
+
+- `POST /api/v1/public/login` and `POST /api/v1/public/change-password` answer with the sign-in instant in UTC,
+  as `2026-10-11T12:25:44.426584Z`. Before, the instant was clocked with the server's local offset and
+  serialised with it: with the server in a UTC-6 zone, a sign-in with a password that is accepted answered
+  `"lastLoginAt": "2026-10-11T06:25:44.426584-06:00"` (measured in the handler tests and in the release test of
+  the `platform-v1.1.0` candidate). In that release test, which read the value back from PostgreSQL in a UTC
+  session, `GET /api/v1/auth/me` for the same session named the same instant as `2026-10-11T12:25:44.426584Z`.
+- `GET /api/v1/auth/me`, `GET /api/v1/admin/users` and a `POST /api/v1/public/login` that answers "You must
+  change your password before continuing" name the stored `lastLoginAt` in UTC whatever time zone the value was
+  read with. Before, they answered with the value as read: in the handler tests, a stored value in a UTC-6
+  location was answered as `2026-10-11T06:25:44.184309-06:00`.
+- A new handler test signs in with a stored `lastLoginAt` in a non-UTC location at each of the three public
+  routes and checks the response and `/api/v1/auth/me` both end in `Z` and name the same instant; a second one
+  lists the organization's users and checks the same form.
+
 ### Fixed — the backend integration suite signs in within the strict rate limit of the public routes
 
 - `apps/backend/tests/integration` signs in as admin once per run and reuses the token. Before, each test that

@@ -362,6 +362,9 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 	}
 	recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{"method": "password"})
 
+	// The whole user row is serialised: name the sign-in instant in UTC, as
+	// /api/v1/auth/me does.
+	user.LastLoginAt = utcTime(user.LastLoginAt)
 	response := &LoginResponse{
 		Success:      true,
 		User:         user,
@@ -391,6 +394,7 @@ func (h *PublicRegistrationHandler) generatePasswordChangeRequiredResponse(c fib
 	}
 	recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{"method": "password"})
 
+	user.LastLoginAt = utcTime(user.LastLoginAt)
 	response := &LoginResponse{
 		Success:                true,
 		User:                   user,
