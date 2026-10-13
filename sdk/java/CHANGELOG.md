@@ -18,7 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with POSIX permissions the lock file is created readable and writable by the owner only.
   `CredentialManager.readSdkCredentialsFile` reads the credentials file alone, without environment variables,
   migration or discovery, so a process holding the lock reads the refresh token another process saved.
-  `AIMClient` presents its refresh token without taking this lock.
+  `CredentialManager.withSdkCredentialsLock(Path, LockedAction)` takes the lock on another credentials file
+  with the same 60-second wait.
+- `CredentialManager.SHARED_ACCESS_TOKEN` and `CredentialManager.SHARED_ACCESS_TOKEN_REFRESH_TOKEN_SHA256`: the
+  credentials keys of the access token a refresh obtained and the SHA-256 of the refresh token it was issued
+  with. They are read from and saved to the file as `"sharedAccessToken": {"token": ..., "refreshTokenSha256":
+  ...}`, as the Python SDK writes them.
 
 ### Changed
 
@@ -62,6 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Processes sharing `~/.aim/sdk_credentials.json` refresh it once. The server accepts each refresh token once,
+  and an `AIMClient` created from SDK credentials (`AIMClient.secure`, or `Builder.credentials`) presented the
+  token it read at startup, so when two processes refreshed together the second presented a token the first
+  had already rotated and was refused. The refresh now runs under the credentials lock and starts by re-reading
+  the file. When another process already refreshed, the client uses the access token that process saved with
+  the stored refresh token and sends no request; otherwise it presents the refresh token the file holds now.
+  Every refresh saves the access token with the refresh token, rotated or not. When the lock is not acquired
+  within 60 seconds the refresh is not sent and `AuthenticationException` is thrown. A refresh token the server
+  refused with 401 is not presented again by the same client. A client built with only `Builder.refreshToken`
+  does not read or write the file, as before.
 - `MCPIntegration.registerServer`, `listServers`, `recordToolUsage` and `verifyAction` send the AIM client's
   access token in the `Authorization` header. They sent `Bearer ` with an empty token. Without an access token
   to send they now throw `AIMException` before any request is sent; `verifyAction` returns false, as it does on
