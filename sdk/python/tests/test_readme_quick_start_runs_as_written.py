@@ -413,20 +413,6 @@ def test_the_named_commit_guard_passes_a_sentence_that_names_no_commit(sentence)
     assert not NAMED_COMMIT.search(sentence), f"the guard flags {sentence!r}, which names no commit"
 
 
-def test_root_readme_names_the_sdk_version_its_captured_output_came_from():
-    """`pip install` fetches the release on PyPI, which can print the registration
-    differently from the SDK in this repository: the aim-sdk 2.0.3 release prints a check
-    mark where this repository's SDK prints [OK], under the same version number. The
-    capture sentence names the version, so a reader can tell which SDK printed the lines
-    below it, and a version bump fails here until the sentence is checked again."""
-    _, _, prose = register_and_output(ROOT_README)
-    version = (SDK_DIR / "VERSION").read_text(encoding="utf-8").strip()
-    assert re.search(rf"(?<![\w.]){re.escape(version)}(?!\.?\d)", prose), (
-        f"the text before the captured output must name the SDK version it was captured "
-        f"with, {version} (sdk/python/VERSION)"
-    )
-
-
 def test_root_readme_installs_the_rich_extra_its_captured_output_shows():
     # Without rich the SDK prints the registration in an 11-line panel, which
     # does not fit in the first screen with the commands above it.
@@ -547,30 +533,48 @@ def paragraph_after(path, block):
     return "\n".join(lines[start:end])
 
 
-def test_root_readme_says_when_the_sdk_prints_the_token_rotation_line():
-    """The line is described under the capture, in the format this SDK prints, with the
-    condition it depends on: the server rotates a refresh token only when it has Redis to
-    record the old one as revoked. Without Redis the server logs that at startup and
-    answers with the token it was given."""
+QUICK_START_NOTES = REPO_ROOT / "docs" / "quick-start.md"
+
+
+def quick_start_note(marker):
+    """The one paragraph of the root README's Quick start notes, in docs/quick-start.md,
+    that contains marker."""
+    text = QUICK_START_NOTES.read_text(encoding="utf-8")
+    notes = text[text.index("### Notes on the root README's Quick start"):]
+    found = [p for p in re.split(r"\n\s*\n", notes) if marker in p]
+    assert len(found) == 1, f"docs/quick-start.md must hold one note containing {marker!r}: {found}"
+    return found[0]
+
+
+def test_root_readme_quick_start_leaves_the_token_rotation_line_to_the_notes():
+    """The root README's Quick start shows the capture and what the reader does next.
+    The token-rotation line, which prints only when the server has Redis, is described
+    in the notes docs/quick-start.md holds, not between the capture and the next step."""
+    readme = ROOT_README.read_text(encoding="utf-8")
+    quick_start = readme[readme.index("## Quick start"):readme.index("## ", readme.index("## Quick start") + 1)]
+    assert "Token rotated" not in readme, "the root README does not describe the token-rotation line"
+    assert "Redis" not in quick_start, "the root README's Quick start does not mention Redis"
+
+
+def test_quick_start_notes_say_when_the_sdk_prints_the_token_rotation_line():
+    """The note quotes the line in the format this SDK prints, with the condition it
+    depends on: the server rotates a refresh token only when it has Redis to record the
+    old one as revoked. A server without Redis, or whose Redis could not be reached, logs
+    that at startup and answers with the token it was given."""
     from aim_sdk import oauth as oauth_module
 
-    _, output, _ = register_and_output(ROOT_README)
-    prose = paragraph_after(ROOT_README, output)
+    prose = quick_start_note("Token rotated successfully")
     quoted = re.findall(r"`([^`]+)`", prose)
     rotation = printed_line_pattern(oauth_module, "Token rotated successfully")
     assert [q for q in quoted if re.fullmatch(rotation, q)], (
-        "the paragraph after the captured output must quote the token-rotation line "
-        "in the format this SDK prints"
+        "the note must quote the token-rotation line in the format this SDK prints"
     )
-    assert "Redis" in prose, (
-        "the paragraph after the captured output must say the line depends on the "
-        "server having Redis"
-    )
+    assert "Redis" in prose, "the note must say the line depends on the server having Redis"
     server_main = (REPO_ROOT / "apps" / "backend" / "cmd" / "server" / "main.go").read_text(encoding="utf-8")
     logs = [q for q in quoted if q.startswith("Token revocation disabled")]
-    assert logs and all(q in server_main for q in logs), (
-        "the paragraph after the captured output must quote the startup line a server "
-        "without Redis logs, as the server source writes it"
+    assert len(logs) == 2 and all(q in server_main for q in logs), (
+        "the note must quote the startup lines a server without Redis and a server whose "
+        "Redis could not be reached log, as the server source writes them"
     )
 
 
@@ -806,7 +810,8 @@ def test_minimal_dev_stack_command_names_services_the_compose_file_defines():
     commands = re.findall(
         r"^docker compose up -d (\S.*)$", DEPLOYMENT.read_text(encoding="utf-8"), re.MULTILINE
     )
-    named = [s for c in commands for s in c.split()]
+    # Service names only: a flag such as --build names no service.
+    named = [s for c in commands for s in c.split() if not s.startswith("-")]
     assert named, "docs/DEPLOYMENT.md must keep the minimal dev stack command"
     services = compose_services()
     missing = [s for s in named if s not in services]

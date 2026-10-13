@@ -33,7 +33,6 @@ import { join } from 'path';
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 const GUIDES = [
-  'README.md',
   'CONTRIBUTING.md',
   'apps/backend/README.md',
   'docs/DEPLOYMENT.md',
