@@ -43,11 +43,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   and container names, takes the host ports from the same variables, and prints the teardown
   command for the stack it started. It no longer uses a fixed directory under `/tmp`, so it never
   runs `down -v` on a directory another run created.
-- `.env.quickstart` lists the variables at their defaults; `docs/testing/release-smoke.md` carries
-  rows for `scripts/test-quickstart.sh` and `scripts/test-quickstart-orphan-volume.sh`, which now
-  also checks the ports and the `.env` fallback against docker and curl stubs. A test renders the
-  compose file with and without the variables and checks that the README, the smoke contract and
-  the template name each variable with its default.
+- `docs/testing/release-smoke.md` carries rows for `scripts/test-quickstart.sh` and
+  `scripts/test-quickstart-orphan-volume.sh`, which now also checks the ports and the `.env`
+  fallback against docker and curl stubs. A test renders the compose file with and without the
+  variables and checks that the README and the smoke contract name each variable with its default.
 
 ### Fixed — sign-in responses give lastLoginAt in UTC, as /api/v1/auth/me does
 
