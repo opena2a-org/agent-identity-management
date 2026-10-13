@@ -99,7 +99,7 @@ The same one-line shape works in [Java](#java); TypeScript has no `secure()` cal
 | [**Self-hosted**](#install-aim-self-hosted) | Your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor trust score, MCP attestation, PAM, SIEM adapters. |
 | [**Local-only**](sdk/typescript/README.md#local-mode-with-opena2aaim-core) | One machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score. Local mode is in the TypeScript SDK only. |
 
-All three share the same audit-event schema. Local agents can push history to a server via `AIMCore.enableReporting()`.
+Local only mode keeps its own event format in `~/.opena2a/aim-core/audit.jsonl`, separate from the server's audit log.
 
 ## SDKs
 

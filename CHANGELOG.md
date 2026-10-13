@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the README and the server features guide describe only the integrations the platform has
+
+- The README's deployment section says that local-only mode keeps its own event format in
+  `~/.opena2a/aim-core/audit.jsonl`, separate from the server's audit log. Before, it said all three modes
+  share one audit-event schema and that local agents push history to a server through
+  `AIMCore.enableReporting()`; the server registers no route that call could reach.
+- The security-alerts row of the server trust-score table in `docs/server-features.md` names its source as
+  `Observed`: the factor is scored from the agent's unacknowledged alerts. Before, the row read
+  `NanoMind-modulated`; the calculator does read a threat-model-evaluation score when one is stored, but
+  nothing in this repository writes one, so the modulation never applies.
+- The sentence after that table, "Both can run for the same agent when local-to-server reporting is
+  enabled.", is removed.
+- A test reads the README and `docs/server-features.md` and fails when either names one of these
+  claims again, when the deployment section loses the local-only sentence, or when the security-alerts row
+  names another source.
+
 ### Fixed — the Java SDK download's QUICKSTART.md names the version the download is named after
 
 - `GET /api/v1/sdk/download?sdk=java` names the zip `aim-sdk-java-v<version>.zip` after `sdk/java/VERSION`. The
