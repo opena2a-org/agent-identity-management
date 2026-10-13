@@ -20,6 +20,7 @@ def test_flight_agent():
 
     # Import the agent
     from flight_agent import FlightAgent
+    from stack_env import FRONTEND_URL  # follows AIM_FRONTEND_PORT
 
     # Create and initialize agent (this triggers registration)
     print("Step 1: Creating Flight Agent (will auto-register)...")
@@ -49,7 +50,7 @@ def test_flight_agent():
     print("ALL TESTS PASSED!")
     print("="*60)
     print("\nNext steps:")
-    print("1. Check dashboard at http://localhost:3000/dashboard")
+    print(f"1. Check dashboard at {FRONTEND_URL}/dashboard")
     print("2. Verify agent appears in Agents page")
     print("3. Verify verification requests appear")
     print("4. Verify activity logs in Analytics\n")

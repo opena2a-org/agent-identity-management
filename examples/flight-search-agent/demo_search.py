@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(_AGENT_DIR, 'aim-sdk-python'))
 def main():
     """Run demo flight searches"""
     from flight_agent import FlightAgent
+    from stack_env import FRONTEND_URL  # follows AIM_FRONTEND_PORT
 
     print("\n" + "="*80)
     print("FLIGHT AGENT DEMO - Searching for Flights to NYC")
@@ -45,7 +46,7 @@ def main():
     print("   2. Requested verification for flight search")
     print("   3. Executed flight search")
     print("   4. Logged results to AIM")
-    print("\n💡 Check the dashboard at http://localhost:3000/dashboard")
+    print(f"\n💡 Check the dashboard at {FRONTEND_URL}/dashboard")
     print("   - Agent appears in Agents list")
     print("   - Verification requests visible")
     print("   - Activity logged\n")
