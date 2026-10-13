@@ -23,7 +23,7 @@ agent = secure("my-first-agent", capabilities=["db:read"])
   ○ Agent Type: using default 'ai_agent'
 
 [OK] Agent registered: my-first-agent
-  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0
+  ...
   Status: ○ pending  Trust: 59%
   Capabilities: db:read
 ```
@@ -48,7 +48,7 @@ get_customer(42)
 
 `@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log.
 
-The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). On a new organization's default monitoring mode the `db:write` call runs and deletes the record.
+The refusal below needs strict mode (dashboard: Security, then Policies, Global Enforcement Mode: Strict); in the default monitoring mode, `db:write` runs and deletes the record.
 
 Now call something the agent was not granted. `my-first-agent` holds `db:read` only:
 
@@ -73,7 +73,7 @@ A stack started from the quickstart defaults has no security policy configured, 
 
 The 9-factor trust score is calculated when an agent registers. It is recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes one of its capabilities, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
 
-A verification request (`POST /api/v1/verifications`) does not recalculate the score. From an SDK the same request goes to `POST /api/v1/sdk-api/verifications`; the two routes share a handler. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
+A verification request (`POST /api/v1/verifications`) does not recalculate the score. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
 
 New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java). TypeScript has no `secure()` call: `@opena2a/aim-core` checks a capability against a local policy with no server, and the server client `@opena2a/aim-sdk` registers an agent and verifies each action with separate calls ([TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
 

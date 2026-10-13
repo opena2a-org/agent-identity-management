@@ -22,10 +22,7 @@ WORD_BUDGET = 1716          # the short-form ceiling for this README
 SECTION_BUDGET = 7          # H2 headings
 PARAGRAPH_CAP = 69          # words in the longest paragraph
 PARAGRAPHS_OVER_60 = 1      # paragraphs allowed over 60 words
-
-# Pinned verbatim by the backend's TestRootReadme_StatesWhenTheTrustScoreIsRecalculated,
-# so it is held to that test, not to the paragraph cap.
-PINNED_PARAGRAPH = "A verification request (`POST /api/v1/verifications`)"
+KEPT_SENTENCE_CAP = 25      # words in each Quick start sentence kept from the long form
 
 VERSION_OR_DATE = re.compile(r"v?[0-9]+\.[0-9]+\.[0-9]+|20[0-9]{2}-[0-9]{2}-[0-9]{2}")
 
@@ -83,23 +80,36 @@ def test_readme_has_at_most_seven_sections_in_the_short_form_order():
 
 
 def test_readme_names_no_version_or_date():
-    """Outside fenced code: a captured output keeps every token it printed (the agent's
-    own `Version: 1.0.0` field), and the sidecar carries the capture's provenance."""
-    hits, in_fence = [], False
-    for n, line in enumerate(text().split("\n"), 1):
-        if re.match(r"^\s*```", line):
-            in_fence = not in_fence
-            continue
-        if not in_fence and VERSION_OR_DATE.search(line):
-            hits.append(f"{n}: {line}")
+    """Anywhere in the file, captured output included: a capture line that carries a
+    version or a date is elided in place, never edited, and the untrimmed text and the
+    capture's provenance live in the sidecar."""
+    hits = [f"{n}: {line}" for n, line in enumerate(text().split("\n"), 1) if VERSION_OR_DATE.search(line)]
     assert not hits, "versions and dates belong in docs/ and the capture sidecar, not the README:\n" + "\n".join(hits)
 
 
 def test_readme_paragraphs_stay_under_the_cap():
-    long = [(p[:60], n) for p, n in paragraphs() if n > PARAGRAPH_CAP and PINNED_PARAGRAPH not in p]
+    long = [(p[:60], n) for p, n in paragraphs() if n > PARAGRAPH_CAP]
     assert not long, f"paragraphs over {PARAGRAPH_CAP} words: {long}"
-    over_60 = [(p[:60], n) for p, n in paragraphs() if n > 60 and PINNED_PARAGRAPH not in p]
+    over_60 = [(p[:60], n) for p, n in paragraphs() if n > 60]
     assert len(over_60) <= PARAGRAPHS_OVER_60, f"paragraphs over 60 words: {over_60}"
+
+
+def sentences():
+    """The sentences of the README's paragraphs, split after '.', '!' or '?' and a space."""
+    return [s for p, _ in paragraphs() for s in re.split(r"(?<=[.!?])\s+", p)]
+
+
+@pytest.mark.parametrize("marker", [
+    "until an administrator verifies it under Agents",  # the pending state and what clears it
+    "needs strict mode",                                 # the setting the refusal depends on
+])
+def test_each_kept_quick_start_sentence_is_short(marker):
+    found = [s for s in sentences() if marker in s]
+    assert len(found) == 1, f"the Quick start must say once, in one sentence, {marker!r}: {found}"
+    words = len(found[0].split())
+    assert words <= KEPT_SENTENCE_CAP, (
+        f"{words} words, over {KEPT_SENTENCE_CAP}: {found[0]!r}; the rest belongs in sdk/python/README.md"
+    )
 
 
 def test_capture_provenance_lives_in_the_sidecar_the_readme_links():

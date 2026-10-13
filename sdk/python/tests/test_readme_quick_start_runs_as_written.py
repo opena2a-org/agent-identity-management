@@ -229,7 +229,7 @@ def test_steps_come_in_the_order_a_reader_can_follow(path):
     register = section.index("secure(")
     verify = section.index("until an administrator verifies it under Agents")
     allowed = section.index("get_customer(42)")
-    strict = section.index('{"enforcementMode": "strict"}')
+    strict = section.index("Global Enforcement Mode")
     refused = section.index("delete_customer(42)")
     assert register < verify < allowed < strict < refused, (
         f"{path.name}: the Quick start must read register, verify, allowed call, "
@@ -307,6 +307,12 @@ def register_capture():
     output and links the sidecar; the date and the SDK version live there."""
     captures = json.loads(SIDECAR.read_text(encoding="utf-8"))["captures"]
     return next(c for c in captures if "secure(" in c["command"])
+
+
+# The registration line that carries the agent's version, and the line that stands in
+# for it where the README elides it.
+ID_LINE = re.compile(r"  ID: (?P<id>\S+)  Type: (?P<type>\S+)  Version: (?P<version>\S+)")
+ELIDED = "  ..."
 
 
 # "commit <hash>" in any case, with or without a backtick before the hash, or a
@@ -458,6 +464,7 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
     the ID, type, version and trust score, are read from the capture and printed back
     through this SDK's console, so they are not checked: the trust score is computed by the
     server, and changing "Trust: 59%" to "Trust: 95%" keeps this test green by design.
+    Where the README elides the ID line, its values come from the sidecar's untrimmed capture.
     The token-rotation line is not part of the capture: it prints only when the server
     rotates the refresh token (see the test after this one)."""
     from aim_sdk import console as console_module
@@ -488,7 +495,7 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
     )
     shown = re.fullmatch(
         r"\n\[OK\] Agent registered: (?P<name>.+)\n"
-        r"  ID: (?P<id>\S+)  Type: (?P<type>\S+)  Version: (?P<version>\S+)\n"
+        rf"(?P<id_line>{ID_LINE.pattern}|{re.escape(ELIDED)})\n"
         r"  Status: ○ (?P<status>\S+)  Trust: (?P<trust>\d+)%\n"
         r"  Capabilities: (?P<capabilities>.+?)\n*",
         "\n".join(lines[1:]),
@@ -500,20 +507,32 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
     )
     assert shown["status"] == "pending", "a newly registered agent is pending until verified"
 
+    # The README elides the ID line in place, since it carries the agent's version;
+    # the sidecar's untrimmed capture keeps it, and the line printed here must equal it.
+    fields = ID_LINE.fullmatch(shown["id_line"]) or next(
+        (m for m in map(ID_LINE.fullmatch, register_capture()["outputs"]["capture"].split("\n")) if m), None
+    )
+    assert fields, "docs/captures/quick-start.json must keep the ID line the README elides"
+
     printer = console_module.AIMConsole()
     printer.console = MarkupStrippingConsole()
     monkeypatch.setattr(console_module, "RICH_AVAILABLE", True)
     printer.detection_none("Agent Type", fallback=detection.group(1))
     printer.agent_registered(
         name=name,
-        agent_id=shown["id"].replace("...", "-00000000-"),  # shortened back to the captured ID
-        agent_type=shown["type"],
-        version=shown["version"],
+        agent_id=fields["id"].replace("...", "-00000000-"),  # shortened back to the captured ID
+        agent_type=fields["type"],
+        version=fields["version"],
         trust_score=int(shown["trust"]),
         status=shown["status"],
         capabilities=capabilities,
     )
     printed = capsys.readouterr().out
+    if shown["id_line"] == ELIDED:
+        assert fields.group(0) in printed.split("\n"), (
+            "the ID line in docs/captures/quick-start.json is no longer what this SDK prints; capture it again"
+        )
+        printed = printed.replace(fields.group(0), ELIDED)
     assert printed.rstrip("\n") == output[1].rstrip("\n"), (
         "the README's captured register output no longer matches what this SDK prints; "
         "capture it again"
