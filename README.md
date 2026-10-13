@@ -28,13 +28,11 @@ agent = secure("my-first-agent", capabilities=["db:read"])
   Capabilities: db:read
 ```
 
-The first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records it as revoked, answers with a new one, and the SDK prints a line: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. Without Redis the server logs `Token revocation disabled (no Redis configured)` and the SDK prints no such line.
+On a server with Redis, the SDK also prints `Token rotated successfully — old refresh token revoked (new id: 461d130d...)` on the first request after sign-in; without Redis the server logs `Token revocation disabled (no Redis configured)`.
 
-`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
+`aim-sdk login` prints a code you approve on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair and stores credentials at `~/.aim/`.
 
-The SDK built from this repository printed `[OK]` above where the release on PyPI prints `✓`. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
-
-The agent starts `pending` until an administrator verifies it under Agents in the dashboard; on a strict-mode organization every call is refused until then. Once it is verified, protect a function with the capability the agent holds and call it:
+The agent starts `pending` until an administrator verifies it under Agents in the dashboard; on a strict-mode organization every call is refused until then. Once it is verified, protect a function with that capability and call it:
 
 ```python
 customers = {42: {"name": "Ada Lovelace", "plan": "team"}}
@@ -46,7 +44,7 @@ def get_customer(customer_id):
 get_customer(42)
 ```
 
-`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log.
+`@perform_action` signs each call, has the server check it against the agent's granted capabilities and the organization's security policies, and logs the outcome.
 
 The refusal below needs strict mode (dashboard: Security, then Policies, Global Enforcement Mode: Strict); in the default monitoring mode, `db:write` runs and deletes the record.
 
@@ -67,38 +65,37 @@ Capability 'db:write' pending admin approval (strict mode)
 aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'Capability Violation Detection': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.
 ```
 
-The decorator files a capability request for `db:write`, the server refuses the call, and the agent's audit log records the denial with the same reason. The release on PyPI also prints `✓ Registered db:write (medium)` after the first line; the SDK built from this repository does not.
+The decorator files a request for `db:write`, and the agent's audit log records the denial with the same reason. On a stack started from the quickstart defaults, the reason names the built-in `default_policy` instead of 'Capability Violation Detection'.
 
-A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
+The SDK built from this repository printed both captures; the release on PyPI prints `✓` where they show `[OK]`, and adds `✓ Registered db:write (medium)` after the refusal's first line.
 
-The 9-factor trust score is calculated when an agent registers. It is recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes one of its capabilities, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
+The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
 
 A verification request (`POST /api/v1/verifications`) does not recalculate the score. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
 
-New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](#java). TypeScript has no `secure()` call: `@opena2a/aim-core` checks a capability against a local policy with no server, and the server client `@opena2a/aim-sdk` registers an agent and verifies each action with separate calls ([TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
+The same one-line shape works in [Java](#java); TypeScript has no `secure()` call ([local mode](sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
 
 ## What you can do
 
-- Register an agent and protect its calls from Python: [Quick start](#quick-start).
-- Do the same from Java: [Java quick start](sdk/java/README.md#quick-start).
-- Check capabilities and keep an audit log on one machine, with no server: [local mode in TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core).
-- Audit an existing codebase with no server: the [opena2a CLI's commands](https://github.com/opena2a-org/opena2a#commands).
-- Register an agent from an application or the terminal: [Register an agent](docs/use-cases/register-my-agent.md).
+- Protect an agent's calls in Python: [Quick start](#quick-start).
+- Protect them in Java: [Java quick start](sdk/java/README.md#quick-start).
+- Check capabilities and keep an audit log with no server: [local mode in TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core).
+- Audit a codebase: the [opena2a CLI's commands](https://github.com/opena2a-org/opena2a#commands).
+- Register an agent from an app or the terminal: [Register an agent](docs/use-cases/register-my-agent.md).
 - Track what an agent does: [Audit agent actions](docs/use-cases/audit-agent-actions.md).
 - Restrict what an agent can do: [Enforce capabilities](docs/use-cases/enforce-capabilities.md).
-- Add identity to your own agent framework: [Embed in an app](docs/use-cases/embed-in-my-app.md).
-- Manage identity across many agents: [Fleet governance](docs/use-cases/fleet-governance.md).
-- Gate privileged actions, attest MCP servers and forward audit logs to Splunk from the server: [Server features](docs/server-features.md).
+- Add identity to your agent framework: [Embed in an app](docs/use-cases/embed-in-my-app.md).
+- Govern many agents: [Fleet governance](docs/use-cases/fleet-governance.md).
+- Gate privileged actions, attest MCP servers and forward audit logs to Splunk: [Server features](docs/server-features.md).
 - Run AIM on your own machines: [Install AIM (self-hosted)](#install-aim-self-hosted).
-- Watch the same boundary stop a prompt injection, with and without AIM: the [A/B demo](https://github.com/opena2a-org/damn-vulnerable-ai-agent#aim-protected-agent).
 
 ## Three deployment modes
 
 | Mode | When | Includes |
 |---|---|---|
-| **AIM Cloud** | Managed, fastest path | Production-managed at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Python and Java SDKs work out of the box. |
-| **Self-hosted** | Team or fleet, your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor trust score, MCP attestation, PAM, SIEM adapters. |
-| **Local-only** | Solo developer, single machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score, cross-tool event bridges. Local mode is in the TypeScript SDK only. |
+| **AIM Cloud** | Managed | Hosted at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Python and Java SDKs work out of the box. |
+| **Self-hosted** | Your infrastructure | All AIM Cloud features. PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor trust score, MCP attestation, PAM, SIEM adapters. |
+| **Local-only** | One machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score. Local mode is in the TypeScript SDK only. |
 
 All three share the same audit-event schema. Local agents can push history to a server via `AIMCore.enableReporting()`.
 
@@ -106,11 +103,11 @@ All three share the same audit-event schema. Local agents can push history to a 
 
 | SDK | Install | Mode | API |
 |---|---|---|---|
-| Python | `pip install aim-sdk` | Server (today) | `secure("name")` + `@perform_action` |
+| Python | `pip install aim-sdk` | Server | `secure("name")` + `@perform_action` |
 | Java | `cd sdk/java && mvn install` (from source) | Server | `AIMClient.secure("name")` + `@SecureAction` |
 | TypeScript | `npm install @opena2a/aim-core` | Local or server | `new AIMCore({ agentName })` |
 
-Working examples for all three live in [`examples/`](examples/). The SDKs send requests only to the AIM server you signed in to; the causal-denial telemetry each SDK README describes is opt-in and off until you configure it. Framework auto-detection and risk levels for Python: [`sdk/python/README.md`](sdk/python/README.md). Local mode and the server client for TypeScript: [`sdk/typescript/README.md`](sdk/typescript/README.md).
+Each SDK's README: [Python](sdk/python/README.md), [Java](sdk/java/README.md), [TypeScript](sdk/typescript/README.md); examples for all three are in [`examples/`](examples/). The SDKs send requests only to the AIM server you signed in to; the causal-denial telemetry each SDK README describes is opt-in and off until you configure it.
 
 ### Java
 
@@ -123,7 +120,7 @@ public User getCustomer(String customerId) {
 }
 ```
 
-Built from source. Same Ed25519 signing, same audit trail; AspectJ wraps `@SecureAction` invocations. See [`sdk/java/README.md`](sdk/java/README.md).
+AspectJ wraps each `@SecureAction` invocation with the same Ed25519 signing and audit trail.
 
 ## Install AIM (self-hosted)
 
@@ -134,18 +131,18 @@ bash quickstart.sh
 
 Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
 
-The script is fetched from `main` and starts the `aim-server` and `aim-dashboard` images at their `latest` tags. Nothing on this path is pinned or verified: read [the script](scripts/quickstart.sh) and [the compose file](docker-compose.quickstart.yml) it fetches before running it. New accounts wait for an administrator's approval; set `AIM_PLATFORM_ADMINS` before starting the backend to bootstrap the first one.
+The script runs from `main` and starts the `aim-server` and `aim-dashboard` images at their `latest` tags; nothing on this path is pinned or verified, so read [the script](scripts/quickstart.sh) and [the compose file](docker-compose.quickstart.yml) first.
 
-Image tags and withdrawn tags, building from source, and the OpenTelemetry demo stack: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#install-from-this-repository). Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
+Image tags, building from source, observability and the first administrator on other setups: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#install-from-this-repository). Production on Azure, GCP or AWS: [infrastructure/DEPLOYMENT.md](infrastructure/DEPLOYMENT.md).
 
 ## Documentation
 
-- [See it work](docs/quick-start.md#see-it-work): the audit log behind the two calls above, and where to grant `db:write`.
-- [Server features](docs/server-features.md): 5-step Fine-Grained Authorization, trust scoring, MCP attestation, Privileged Access Management, CyberArk, SIEM adapters, the web dashboard.
-- [Deployment](docs/DEPLOYMENT.md), [Verifying the `@opena2a/aim-core` package](docs/verifying-packages.md), [Use cases](docs/USE-CASES.md), [Demos](docs/DOCUMENTATION_INDEX.md#demos) and the [A/B recording](docs/images/aim-ab-demo.gif).
-- [opena2a CLI commands](https://github.com/opena2a-org/opena2a#commands): auditing a codebase, hardening configs, monitoring runtime events, with no server required.
-- [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart), [MCP registration](https://opena2a.org/docs/tutorials/mcp-registration), the [documentation site](https://opena2a.org/docs), [Roadmap](ROADMAP.md), [Research](https://research.opena2a.org).
-- [Contributing](CONTRIBUTING.md) has the dev loop and the pull request process. Security issues go to `info@opena2a.org` under coordinated disclosure; [SECURITY.md](SECURITY.md) says what to expect and when.
+- [See it work](docs/quick-start.md#see-it-work): the audit log behind the two calls above, where to grant `db:write`, and the Quick start's notes in full.
+- [Server features](docs/server-features.md), [Deployment](docs/DEPLOYMENT.md), [Verifying the `@opena2a/aim-core` package](docs/verifying-packages.md), [Use cases](docs/USE-CASES.md), [Demos](docs/DOCUMENTATION_INDEX.md#demos) and the [A/B recording](docs/images/aim-ab-demo.gif).
+- [opena2a CLI commands](https://github.com/opena2a-org/opena2a#commands): harden configs and monitor runtime events, with no server.
+- [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart), [MCP registration](https://opena2a.org/docs/tutorials/mcp-registration), the [documentation site](https://opena2a.org/docs), [Research](https://research.opena2a.org).
+- [Roadmap](ROADMAP.md)
+- [Contributing](CONTRIBUTING.md): the dev loop and pull requests. Report security issues to `info@opena2a.org`; [SECURITY.md](SECURITY.md) says what to expect.
 
 ## License
 

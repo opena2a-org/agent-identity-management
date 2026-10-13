@@ -223,7 +223,7 @@ def test_how_to_follow_is_the_fixed_text_and_ends_with_the_reporting_path():
 
 def test_entry_points_read_as_written():
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8").split("\n")
-    links = readme[readme.index("## Links"):]
+    links = readme[readme.index("## Documentation"):]
     links = links[: next((i for i, l in enumerate(links[1:], 1) if l.startswith("## ")), len(links))]
     assert "- [Roadmap](ROADMAP.md)" in links
     assert any(l.endswith("Local mode is in the TypeScript SDK only. |") for l in readme)

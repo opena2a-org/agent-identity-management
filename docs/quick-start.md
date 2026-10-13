@@ -609,6 +609,20 @@ The agent's audit log in the dashboard records each decision: the denied `db:wri
 
 Want to see the same boundary stop a real attack? The [Demos](DOCUMENTATION_INDEX.md#demos) end with an intentionally vulnerable agent run with and without AIM.
 
+### Notes on the root README's Quick start
+
+The first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records it as revoked, answers with a new one, and the SDK prints a line: `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`. Without Redis the server logs `Token revocation disabled (no Redis configured)` and the SDK prints no such line.
+
+`aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
+
+The SDK built from this repository printed `[OK]` above where the release on PyPI prints `✓`. Without the `rich` extra (`pip install aim-sdk`), the same fields print in a panel.
+
+The decorator files a capability request for `db:write`, the server refuses the call, and the agent's audit log records the denial with the same reason. The release on PyPI also prints `✓ Registered db:write (medium)` after the first line; the SDK built from this repository does not.
+
+A stack started from the quickstart defaults has no security policy configured, so there the reason names AIM's built-in `default_policy` where the output above reads 'Capability Violation Detection'. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
+
+New to AIM? The [SDK quickstart tutorial](https://opena2a.org/docs/tutorials/sdk-quickstart) walks through this end to end. The same one-line shape works in [Java](../sdk/java/README.md). TypeScript has no `secure()` call: `@opena2a/aim-core` checks a capability against a local policy with no server, and the server client `@opena2a/aim-sdk` registers an agent and verifies each action with separate calls ([TypeScript](../sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
+
 ---
 
 <div align="center">
