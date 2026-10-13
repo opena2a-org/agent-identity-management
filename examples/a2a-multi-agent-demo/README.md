@@ -78,7 +78,8 @@ a2a-multi-agent-demo/
     └── src/main/java/org/opena2a/demo/
         ├── AnalysisAgent.java
         ├── ResearchAgent.java
-        └── A2AMultiAgentDemo.java
+        ├── A2AMultiAgentDemo.java
+        └── StackEnv.java          # Backend and dashboard URLs, from AIM_BACKEND_PORT and AIM_FRONTEND_PORT
 ```
 
 ## Demo Flow
@@ -131,7 +132,7 @@ After running the demo, verify results in the AIM Dashboard:
 | **Trust** | Peer trust relationship visible |
 | **Skills** | Search "sentiment" finds analysis skills |
 
-Access the dashboard at: `http://localhost:3000/dashboard/a2a` (the Python demo prints these links with the port from `AIM_FRONTEND_PORT`)
+Access the dashboard at: `http://localhost:3000/dashboard/a2a` (both demos print these links with the port from `AIM_FRONTEND_PORT`)
 
 ## Sample Data
 
@@ -162,17 +163,19 @@ The demo uses sample data from `shared/sample-data/research-data.json`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AIM_URL` | `http://localhost:$AIM_BACKEND_PORT` (Python), `http://localhost:8080` (Java) | the backend URL (optional); `--aim-url` wins over it |
-| `AIM_BACKEND_PORT` | `8080` | the backend, `http://localhost:$AIM_BACKEND_PORT`, unless `AIM_URL` is set (Python) |
-| `AIM_FRONTEND_PORT` | `3000` | the dashboard links, `http://localhost:$AIM_FRONTEND_PORT` (Python) |
+| `AIM_URL` | `http://localhost:$AIM_BACKEND_PORT` | the backend URL (optional); the Python demo's `--aim-url` wins over it |
+| `AIM_BACKEND_PORT` | `8080` | the backend, `http://localhost:$AIM_BACKEND_PORT`, unless `AIM_URL` is set |
+| `AIM_FRONTEND_PORT` | `3000` | the dashboard links, `http://localhost:$AIM_FRONTEND_PORT` |
 
-The Python demo reads `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT` from the environment first, then from the repository's `.env`, then the default (`python/stack_env.py`). For a stack started with `AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000`:
+Both demos read `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT` from the environment first, then from the repository's `.env`, then the default (`python/stack_env.py`, `java/src/main/java/org/opena2a/demo/StackEnv.java`). The Java demo finds the `.env` three levels above the directory it runs from, so run it from `java/`. For a stack started with `AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000`:
 
 ```bash
+# Python, from python/
 AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000 python run_demo.py
-```
 
-The Java demo reads `AIM_URL` only.
+# Java, from java/
+AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000 mvn exec:java -Dexec.mainClass="org.opena2a.demo.A2AMultiAgentDemo"
+```
 
 > **Note**: Authentication is handled automatically by the SDK via bundled credentials. No API key environment variable needed.
 

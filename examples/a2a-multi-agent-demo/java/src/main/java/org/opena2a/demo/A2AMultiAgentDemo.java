@@ -27,6 +27,10 @@ import java.util.*;
  * Run with:
  *     mvn exec:java -Dexec.mainClass="org.opena2a.demo.A2AMultiAgentDemo"
  *
+ * The backend is AIM_URL, else http://localhost on the AIM_BACKEND_PORT the
+ * stack was started with (8080); the dashboard links use AIM_FRONTEND_PORT
+ * (3000). See StackEnv.
+ *
  * The SDK handles authentication automatically via bundled credentials.
  */
 public class A2AMultiAgentDemo {
@@ -34,7 +38,8 @@ public class A2AMultiAgentDemo {
     private static final Gson gson = new Gson();
 
     public static void main(String[] args) {
-        String aimUrl = System.getenv().getOrDefault("AIM_URL", "http://localhost:8080");
+        String aimUrl = System.getenv("AIM_URL");
+        if (aimUrl == null || aimUrl.isEmpty()) aimUrl = StackEnv.BACKEND_URL;
 
         try {
             runDemo(aimUrl);
@@ -207,7 +212,7 @@ public class A2AMultiAgentDemo {
         System.out.println("  [x] Skill Attestation");
         System.out.println("  [x] Consensus Verification");
 
-        printSummary(aimUrl, researchAgent, analysisAgent, results);
+        printSummary(researchAgent, analysisAgent, results);
     }
 
     private static Map<String, Object> loadSampleData() {
@@ -257,7 +262,6 @@ public class A2AMultiAgentDemo {
     }
 
     private static void printSummary(
-            String aimUrl,
             ResearchAgent researchAgent,
             AnalysisAgent analysisAgent,
             Map<String, Object> results
@@ -281,7 +285,7 @@ public class A2AMultiAgentDemo {
         System.out.println("    - Trend Result: " + (trend != null ? trend.get("trend") : "N/A"));
 
         // Dashboard links
-        String baseUrl = aimUrl.replace("/api", "");
+        String baseUrl = StackEnv.FRONTEND_URL;
         System.out.println("\n  Verify in Dashboard:");
         System.out.println("    - A2A Overview:    " + baseUrl + "/dashboard/a2a");
         System.out.println("    - Agent Cards:     " + baseUrl + "/dashboard/a2a?tab=cards");
