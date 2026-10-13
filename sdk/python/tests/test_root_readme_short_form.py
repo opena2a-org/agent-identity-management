@@ -422,3 +422,36 @@ def test_the_security_alerts_trust_factor_row_says_what_feeds_it():
     rows = [line for line in (REPO_ROOT / "docs" / "server-features.md").read_text(encoding="utf-8").split("\n")
             if line.startswith("| Security alerts |")]
     assert rows == ["| Security alerts | 15% | Observed |"]
+
+
+AIM_CORE_GUIDES = [
+    "docs/use-cases/audit-agent-actions.md",
+    "docs/use-cases/embed-in-my-app.md",
+    "docs/use-cases/fleet-governance.md",
+]
+
+# `@opena2a/aim-core` keeps identities, policies and events on the machine it runs on. Its one way
+# out, the reporter its `serverUrl` option starts, posts to /v1/audit/events, and the server
+# registers no route under /v1/.
+AIM_CORE_SERVER_CLAIMS = [
+    "serverUrl",
+    "fleet reporting",
+    "registered on the server",
+    "sent to the central server",
+    "server-side with history",
+]
+
+
+@pytest.mark.parametrize("path", AIM_CORE_GUIDES)
+def test_no_use_case_guide_says_aim_core_reaches_an_aim_server(path):
+    body = (REPO_ROOT / path).read_text(encoding="utf-8")
+    found = [claim for claim in AIM_CORE_SERVER_CLAIMS if claim in body]
+    assert not found, f"{path} still says @opena2a/aim-core reaches an AIM server: {found}"
+
+
+def test_the_sdk_table_gives_aim_core_the_one_mode_it_has():
+    rows = [row for row in text().split("\n") if row.startswith("| TypeScript |")]
+    assert len(rows) == 1, f"the SDK table has {len(rows)} TypeScript rows"
+    cells = [cell.strip() for cell in rows[0].split("|")[1:-1]]
+    assert cells[1] == "`npm install @opena2a/aim-core`", rows[0]
+    assert cells[2] == "Local", f"the @opena2a/aim-core row names a mode it does not have: {cells[2]!r}"

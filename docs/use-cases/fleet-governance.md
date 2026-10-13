@@ -271,82 +271,11 @@ At first sign-in the dashboard asks you to set a new password. The dashboard sho
 
 ## Option B: SDK Approach
 
-If you prefer to manage fleet identities programmatically instead of through the CLI, use the TypeScript or Python SDKs with the `server` parameter.
+If you prefer to manage fleet identities programmatically instead of through the CLI, use the Python or Java SDK pointed at your AIM Server.
 
 ### TypeScript
 
-```bash
-npm install @opena2a/aim-core
-```
-
-```typescript
-import { AIMCore } from '@opena2a/aim-core';
-
-// Connect to your AIM Server
-const dataProcessor = new AIMCore({
-  agentName: 'data-processor',
-  serverUrl: 'http://localhost:8080'
-});
-
-const codeReviewer = new AIMCore({
-  agentName: 'code-reviewer',
-  serverUrl: 'http://localhost:8080'
-});
-
-// Create identities (registered on the server)
-const dpIdentity = dataProcessor.getIdentity();
-console.log('Data Processor:', dpIdentity.agentId);
-
-const crIdentity = codeReviewer.getIdentity();
-console.log('Code Reviewer:', crIdentity.agentId);
-
-// Save policies per agent
-dataProcessor.savePolicy({
-  version: '1.0',
-  defaultAction: 'deny',
-  rules: [
-    { capability: 'db:read', action: 'allow' },
-    { capability: 'api:call', action: 'allow' },
-    { capability: 'db:delete', action: 'deny' },
-    { capability: 'file:execute', action: 'deny' }
-  ]
-});
-
-codeReviewer.savePolicy({
-  version: '1.0',
-  defaultAction: 'deny',
-  rules: [
-    { capability: 'file:read', action: 'allow' },
-    { capability: 'api:call', action: 'allow' },
-    { capability: 'db:write', action: 'deny' },
-    { capability: 'db:delete', action: 'deny' }
-  ]
-});
-
-// Log events (sent to the central server)
-dataProcessor.logEvent({
-  action: 'db:read',
-  target: 'customers',
-  result: 'allowed',
-  plugin: 'data-processor'
-});
-
-// Calculate trust (server-side with history)
-const dpTrust = dataProcessor.calculateTrust();
-console.log(`Data Processor Trust: ${dpTrust.overall}`);
-
-const crTrust = codeReviewer.calculateTrust();
-console.log(`Code Reviewer Trust: ${crTrust.overall}`);
-```
-
-Expected output:
-
-```
-Data Processor: aim_9c4b2e1f
-Code Reviewer: aim_2d8f5a3c
-Data Processor Trust: 0.72
-Code Reviewer Trust: 0.68
-```
+`@opena2a/aim-core` runs in local-only mode: identities, policies and the audit log stay in `~/.opena2a/aim-core/` on the machine it runs on, and it registers no agent with an AIM Server and adds nothing to the server's audit log. The TypeScript client for an AIM Server is `@opena2a/aim-sdk`; the [TypeScript SDK README](../../sdk/typescript/README.md) shows how to register an agent with it.
 
 ### Python
 
@@ -435,7 +364,7 @@ Data Processor: aim_9c4b2e1f
 Code Reviewer: aim_2d8f5a3c
 ```
 
-When the `serverUrl` (TypeScript), `aim_url` (Python), or `baseUrl` (Java) parameter is set, identities and audit events are routed through the AIM Server and stored in the central PostgreSQL database. The SDKs handle authentication and local key caching automatically.
+When the `aim_url` (Python) or `baseUrl` (Java) parameter is set, identities and audit events are routed through the AIM Server and stored in the central PostgreSQL database. The SDKs handle authentication and local key caching automatically.
 
 ## Architecture
 

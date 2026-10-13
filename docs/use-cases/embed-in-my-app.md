@@ -218,7 +218,6 @@ Delete operation blocked by policy
 |-----------|------|---------|-------------|
 | `agentName` | string | required | Name for the agent identity |
 | `dataDir` | string | `~/.opena2a/aim-core/` | Where keys, logs, and policies are stored |
-| `serverUrl` | string | undefined | Optional AIM server URL for fleet reporting |
 
 ### TypeScript: Methods
 

@@ -111,7 +111,7 @@ aim.logEvent({ action: 'db:write', target: 'customers', result: 'allowed', plugi
 aim.logEvent({ action: 'file:write', target: '/tmp/report', result: 'denied', plugin: 'my-agent' });
 
 // Each event is appended to the local audit log with a SHA-256 hash chain.
-// When connected to an AIM Server (via serverUrl), events are also sent to the central database.
+// These events stay on this machine, separate from the AIM server's audit log.
 ```
 
 ### Python

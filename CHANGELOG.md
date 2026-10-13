@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
+
+- The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The
+  package keeps identities, policies and the audit log on the machine it runs on; its one server path, the
+  reporter its `serverUrl` option starts, posts to `/v1/audit/events`, and the server registers no route
+  under `/v1/`.
+- The fleet governance guide's SDK approach no longer shows a TypeScript example that passes `serverUrl` to
+  `AIMCore` and says the identities are registered on the server, the events sent to it and the trust score
+  computed there. It says `@opena2a/aim-core` runs in local-only mode and names `@opena2a/aim-sdk` as the
+  TypeScript client for an AIM Server, linking the TypeScript SDK README. The sentence on which parameters
+  route identities and events through the server names the Python and Java parameters only.
+- The audit guide's TypeScript example says its events stay on the machine, separate from the server's audit
+  log. Before, it said they are also sent to the central database when `serverUrl` is set.
+- The embedding guide's `AIMCore` constructor table no longer lists `serverUrl` as an AIM server URL for fleet
+  reporting.
+- A test fails when one of these three guides names `serverUrl` or one of these server claims again, or when
+  the SDK table gives `@opena2a/aim-core` another mode.
+
 ### Changed — the README and the server features guide describe only the integrations the platform has
 
 - The README's deployment section says that local-only mode keeps its own event format in
