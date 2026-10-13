@@ -201,7 +201,7 @@ export {
   isHybridAlgorithm,
   isPQCAlgorithm,
   validateKeySize,
-  // Hybrid request headers
+  // Hybrid request headers (deprecated: AIM's request verification does not accept them)
   createHybridRequestHeaders,
   // Constants
   KEY_SIZES,

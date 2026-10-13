@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — turning on hybrid mode takes the manager or admin role
+
+- `POST /api/v1/agents/:id/pqc-key` with `"enableHybrid": true` and `POST /api/v1/agents/:id/hybrid-mode` with
+  `"enable": true` answer a member 403, `{"error":"Manager or admin access required to turn on hybrid mode"}`, and
+  store nothing. The register route adds a `hint`: `Send enableHybrid false to register the key without hybrid mode`.
+  Hybrid mode marks the agent as requiring both an Ed25519 and an ML-DSA signature on each request it signs, so
+  turning it on changes what the agent must present to authenticate.
+- Measured on the handlers of the previous commit, behind the member gate both routes are mounted behind, with a
+  well-formed ML-DSA-65 key on the register route and an agent holding both keys on the hybrid mode route: a member's
+  request to turn hybrid mode on was answered 200 on each route and stored hybrid mode on.
+- Measured the same way on both commits and unchanged: a manager or admin turns hybrid mode on through either route,
+  and a member registers a key with `"enableHybrid": false` and turns hybrid mode off with `"enable": false`.
+
 ### Fixed — two dashboard tabs share one token refresh in a browser without Web Locks
 
 - A browser has no Web Locks API on a dashboard served over plain HTTP from a host other than `localhost`. There the

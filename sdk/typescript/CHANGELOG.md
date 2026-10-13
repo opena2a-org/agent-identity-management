@@ -37,6 +37,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   https://opena2a.org/agent-identity-management. They pointed at the repository README and at the hosted sign-up
   page. The repository stays linked as the package's `repository`.
 
+### Deprecated
+
+- `createHybridRequestHeaders`. AIM's request verification does not accept these headers: it verifies a signature
+  over the method, path, timestamp and body joined by newlines, and these headers sign
+  `timestamp:METHOD:path:sha256(body)`. Its documentation said the headers were compatible with the AIM backend; it
+  now says they are not accepted, in the package's type declarations too. The function itself is unchanged.
+
 ### Added
 
 - `createAgentRequestHeaders` signs a request as an agent with `agent-request-v1`, the Ed25519 request signature AIM
