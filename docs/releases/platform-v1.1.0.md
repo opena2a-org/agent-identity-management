@@ -1,0 +1,309 @@
+# AIM Platform 1.1.0 release notes
+
+Draft notes for the `platform-v1.1.0` tag of the AIM platform (backend and dashboard). They are written from
+`CHANGELOG.md`, section `[Unreleased]`, at commit `47432ed5`; an entry added after that commit is not in these notes.
+Each item names the [CHANGELOG.md](../../CHANGELOG.md) heading that carries its detail.
+
+Three values exist only once the tag is published. They appear below as named placeholders:
+
+| Placeholder | Value |
+|-------------|-------|
+| `<RELEASE_URL>` | the release page of the `platform-v1.1.0` tag |
+| `<AIM_SERVER_DIGEST>` | the index digest of `aim-server:1.1.0` |
+| `<AIM_DASHBOARD_DIGEST>` | the index digest of `aim-dashboard:1.1.0` |
+
+## Artifacts
+
+- Release page: `<RELEASE_URL>`.
+- Container images for `linux/amd64` and `linux/arm64`, built and signed by the publish workflow from the tag:
+  - `ghcr.io/opena2a-org/aim-server:1.1.0` and `docker.io/opena2a/aim-server:1.1.0`, index digest `<AIM_SERVER_DIGEST>`
+  - `ghcr.io/opena2a-org/aim-dashboard:1.1.0` and `docker.io/opena2a/aim-dashboard:1.1.0`, index digest `<AIM_DASHBOARD_DIGEST>`
+
+To check an image's signature and its build provenance attestation:
+
+```bash
+cosign verify ghcr.io/opena2a-org/aim-server@<AIM_SERVER_DIGEST> \
+  --certificate-identity https://github.com/opena2a-org/agent-identity-management/.github/workflows/docker-publish.yml@refs/tags/platform-v1.1.0 \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+curl -s https://api.github.com/repos/opena2a-org/agent-identity-management/attestations/<AIM_SERVER_DIGEST>
+```
+
+The SDKs release on their own tags and are not part of this release. The Java SDK is built from source in `sdk/java`;
+see [For Java SDK users](#for-java-sdk-users).
+
+## What changed for operators
+
+### Changes that need action
+
+A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.0; see [Pinned tags](#pinned-tags).
+
+- **Prometheus scrapes.** `/metrics` leaves the API port for its own listener at `METRICS_LISTEN_ADDR`, default
+  `127.0.0.1:9464`. A scrape job that reads `/metrics` on port 8080, or through the dashboard without a token, stops
+  receiving data. A listener on any address other than loopback requires `METRICS_AUTH_TOKEN`, and without it the
+  backend refuses to start. CHANGELOG: *Changed — breaking: `/metrics` moves off the API port to its own listener,
+  loopback by default*.
+- **Secrets the server checks at start.** The API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT`
+  is `development` or `test`, refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes, and refuses the `JWT_SECRET`
+  placeholder from `.env.example`. Agent private keys are encrypted under `KEYVAULT_MASTER_KEY`, so set the value 1.0.0
+  ran with. A 1.0.0 server that ran without the variable outside `production` generated a new key at every start, and
+  agent keys stored under an earlier generated key cannot be decrypted; rotating those agents' credentials replaces
+  them. CHANGELOG: *Changed — the API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is
+  `development` or `test`*; *Security — the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes*; *Security — the
+  server refuses to start with the `JWT_SECRET` placeholder from `.env.example`*.
+- **Rate limits in development.** The general and strict rate limits now apply when `ENVIRONMENT` is `development`.
+  CHANGELOG: *Security — the rate limits no longer loosen when ENVIRONMENT is development*.
+- **Stored agent private keys.** At its first start, 1.1.0 re-encrypts each stored agent private key bound to its own
+  agent row, and the request path refuses the earlier format. Stop every 1.0.0 instance before the first 1.1.0
+  instance starts. 1.0.0 cannot read the new format, so rolling back after that start leaves server-generated agent
+  keys unreadable until the agents' credentials are rotated; take a database backup first. CHANGELOG: *Security — a
+  stored agent private key decrypts only in the agent row it was written for*, and
+  [Database migrations and the application role](../DEPLOYMENT.md#database-migrations-and-the-application-role).
+- **Sessions and SDK credentials issued by 1.0.0.** 1.1.0 accepts only session and refresh tokens that carry a token
+  type, and 1.0.0 mints none. After the upgrade every dashboard user signs in again, and an SDK install that holds
+  credentials issued by 1.0.0 needs new ones. CHANGELOG: the `### Security` list entry that begins "Session tokens
+  carry a type".
+- **Sign-in through the `Authorization` header only.** Sign-in no longer sets `access_token` or `refresh_token`
+  cookies, and the API no longer accepts them in place of the header. A sign-in ends 8 hours after it began by default
+  (`JWT_SESSION_MAX_AGE`), however often it is refreshed. CHANGELOG: *Security — the API no longer uses cookies for
+  sign-in*; *Security — the API accepts a sign-in only from the Authorization header*; *Security — a sign-in ends a
+  fixed time after it began, however often it is refreshed*.
+- **Verification events are written by the server.** `POST /api/v1/verification-events` answers every authenticated
+  member with 403 and the code `verificationEventWriteNotAccepted`. The server's own verification paths still record
+  events, and the read routes and `DELETE` are unchanged. CHANGELOG: the `### Security` list entry that begins
+  "`POST /api/v1/verification-events` accepted a verification outcome reported by the caller".
+- **Agent credentials.** A JWT is no longer accepted as an agent's ATC; the server accepts the CBOR ATC only. An agent
+  credential acts only on its own agent ID on the SDK-API, detection and A2A agent and card write routes. CHANGELOG:
+  *Removed — a JWT is no longer accepted as an agent's ATC*; *Security — an agent credential acts only on its own
+  agent ID on the SDK-API, detection and A2A agent and card write routes*.
+- **First administrator.** `ADMIN_PASSWORD` seeds the first administrator and no longer resets a password that was
+  changed. CHANGELOG: *Changed — `ADMIN_PASSWORD` seeds the first administrator and no longer resets a changed
+  password*.
+- **Dashboard addresses.** Compliance is at `/dashboard/compliance`, and `/dashboard/admin/compliance` answers with a
+  308 redirect to it. API keys and SDK tokens are listed at `/dashboard/credentials`. CHANGELOG: *Changed — the
+  dashboard's Compliance and Credentials pages have new addresses*.
+
+### Added for operators
+
+- `aim-server migrate` applies the pending migrations and exits, and can provision a database role for the server that
+  is not a superuser. CHANGELOG: *Added — `aim-server migrate` applies the migrations and can provision a role that is
+  not a superuser*.
+- Each server signing purpose has its own key, set by `AIM_SIGNING_KEY_CARD_ATTESTATION` and
+  `AIM_SIGNING_KEY_ATC_ISSUER` or derived from `KEYVAULT_MASTER_KEY` when unset, and the public keys are published at
+  `/.well-known/jwks.json`. CHANGELOG: *Changed — each server signing purpose has its own key, and the public keys are
+  published*.
+- Audit record chains: admins can read the state of their organization's chain, and `aim-breakglass chain status`
+  reads it for the operator. CHANGELOG: *Added — admins can read the state of their organization's audit record
+  chain*; *Added — `aim-breakglass chain status`, the operator's read of an organization's audit record chain*.
+- CHANGELOG: *Added — the server forwards every audit log entry it writes to a Splunk HTTP Event Collector (#657)*.
+- CHANGELOG: *Added — the agent and API key services send agent, trust score and API key webhook events (#672)*.
+- `GET /health/ready` reports the `version` and `commit` the image was built from. CHANGELOG: *Fixed — the backend
+  image stamps the version and commit that `/health/ready` reports*.
+- With `POSTGRES_PASSWORD` empty, the server reads the database password from `PGPASSWORD` or the password file. An
+  empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off. CHANGELOG: *Fixed — with
+  `POSTGRES_PASSWORD` empty, the server takes the database password from `PGPASSWORD` or the password file, as
+  `aim-bootstrap` does (#709)*; *Fixed — an empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off
+  (#688)*.
+
+The other `[Unreleased]` entries of `CHANGELOG.md` are fixes and documentation corrections that need no action.
+
+## Security fixes
+
+Every fix below is in platform 1.1.0, the `aim-server` and `aim-dashboard` 1.1.0 images, except where the table says
+otherwise. Advisories this repository has published are listed at
+<https://github.com/opena2a-org/agent-identity-management/security/advisories>.
+
+**Advisory pending, 2026-10-12.** As of 2026-10-12 the advisory for the `POST /api/v1/verification-events` fix is not
+published. Platform 1.0.0 carries the affected route, and 1.1.0 is the fixed version. The advisory's link is added to
+this line when it is published.
+
+### Entries with their own heading
+
+| `CHANGELOG.md` heading | Fixed in |
+|------------------------|----------|
+| Security — every dashboard page is served with a Content-Security-Policy | 1.1.0 |
+| Security — a stored agent private key decrypts only in the agent row it was written for | 1.1.0 |
+| Security — a check fails on token-shaped literals in tracked files | repository check at `platform-v1.1.0` |
+| Security — the rate limits no longer loosen when ENVIRONMENT is development | 1.1.0 |
+| Security — a reused SDK-download token ends the chain that grew from it | 1.1.0 |
+| Security — `/metrics` was readable without authentication on the API port and the dashboard origin | 1.1.0 |
+| Security — an agent credential acts only on its own agent ID on the SDK-API, detection and A2A agent and card write routes | 1.1.0 |
+| Security — agent-signature authentication reads an agent's status only after the signature verifies | 1.1.0 |
+| Security — the Java SDK and the Java A2A example use jackson 2.18.11 | `sdk/java` source at `platform-v1.1.0` |
+| Security — the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes | 1.1.0 |
+| Security — the server refuses to start with the `JWT_SECRET` placeholder from `.env.example` | 1.1.0 |
+| Security — MCP server and tag routes answer only for the caller's organization | 1.1.0 |
+| Security — a reused refresh token is recorded as the same client or a different one | 1.1.0 |
+| Security — the API no longer uses cookies for sign-in | 1.1.0 |
+| Security — the API accepts a sign-in only from the Authorization header | 1.1.0 |
+| Security — the SDK credential recovery route mints only for the account that is signed in | 1.1.0 |
+| Security — a revoked session cannot mint a new credential with its still-valid access token | 1.1.0 |
+| Security — two presentations of one refresh token in the same instant no longer both rotate | 1.1.0 |
+| Security — a sign-in ends a fixed time after it began, however often it is refreshed | 1.1.0 |
+| Security — a reused refresh token ends the sign-in, and logout ends the whole session | 1.1.0 |
+
+### Entries in the `### Security` list
+
+These entries sit under the plain `### Security` heading near the end of `[Unreleased]`. Each is named by the subject
+its entry begins with.
+
+| Entry | Fixed in |
+|-------|----------|
+| `POST /api/v1/auth/refresh` and `POST /api/v1/auth/sdk/recover` minted access tokens from the refresh token's own claims instead of the user record | 1.1.0 |
+| `GET /api/v1/a2a/cards` returned every organization's agent cards to any authenticated caller | 1.1.0 |
+| `GET /api/v1/a2a/consents` and `GET /api/v1/a2a/trust-scores` returned every organization's rows, and their counts | 1.1.0 |
+| `GET /api/v1/a2a/consent/check` answered for consent records of any organization | 1.1.0 |
+| `POST /api/v1/a2a/consent` accepted a grantor agent the caller does not own | 1.1.0 |
+| `GET /api/v1/revocations` always returned an empty list, and the list no longer carries revoked agents' names | 1.1.0 |
+| Java SDK: `CrlCache` and `LocalAtxVerifier` read a revocation list with null entries as one that revokes nothing | `sdk/java` source at `platform-v1.1.0` |
+| A NULL in a nullable column failed the whole row on most agent read paths | 1.1.0 |
+| Dependency updates: dashboard `next` 16.3.5, `sharp`, `postcss` and `nanoid`; backend `golang.org/x/crypto`, `golang.org/x/net`, `golang.org/x/text`, `google.golang.org/grpc` and `go-jose`; dashboard runtime base alpine 3.21.8 | 1.1.0 |
+| Java SDK dependency updates: jackson and bouncycastle | `sdk/java` source at `platform-v1.1.0` |
+| The dashboard's self-hosted image optimizer is closed, and `/_next/image` returns 404 | 1.1.0 |
+| Java SDK: `LocalAtxVerifier` accepted a forged ML-DSA-65 signature when the Ed25519 signature was intact | `sdk/java` source at `platform-v1.1.0` |
+| Java SDK: `LocalAtxVerifier` took the authorities allowed to sign a credential from the credential's own `issuerChain` without requiring them to be trusted issuers | `sdk/java` source at `platform-v1.1.0` |
+| Java SDK: `LocalAtxVerifier` rejects a duplicate object member before any field is read | `sdk/java` source at `platform-v1.1.0` |
+| `POST /api/v1/verification-events` accepted a verification outcome reported by the caller | 1.1.0 |
+| `POST /api/v1/sdk-api/verifications/:id/result` and `.../execution-status` served unauthenticated writes | 1.1.0 |
+| `POST /api/v1/oauth/token` minted service tokens for a revoked agent | 1.1.0 |
+| Secrets namespaces took the agent ID from the request with no owner check | 1.1.0 |
+| A revoked or suspended agent authenticated on the Ed25519, post-quantum signature and API-key paths | 1.1.0 |
+| OAuth service tokens reached every member-gated route | 1.1.0 |
+| `GET /api/v1/agents/:id/credentials` and `GET /api/v1/agents/:id/sdk` were reachable with an organization-scoped API key | 1.1.0 |
+| `POST /api/v1/agents/:id/mcp-servers/detect` opened a file path from the request body without validation | 1.1.0 |
+| Session tokens carry a type, and a refresh token is no longer accepted as an access token | 1.1.0 |
+| The public `did:aip` resolver answers a pending agent as it answers an unknown DID | 1.1.0 |
+| The device grant's token endpoint minted a session for an account suspended, deactivated or deleted after approval | 1.1.0 |
+| Dashboard: after sign-in the browser follows only a same-origin return path | 1.1.0 |
+| Dashboard: the landing page no longer adopts a `token=` query parameter as the session | 1.1.0 |
+| The FGA context check no longer fails open | 1.1.0 |
+| `GET /metrics` served the full Prometheus scrape without authentication | 1.1.0 |
+
+## Upgrading from 1.0.0
+
+### Pinned tags
+
+Measured on 2026-10-12, with the same digests on `ghcr.io` and `docker.io`:
+
+| Tag | `aim-server` | `aim-dashboard` |
+|-----|--------------|-----------------|
+| `1.0.0`, `1.0`, `1` | `sha256:c13d7f3cb2785ba141bfe70ea522cac1d7073719cd96b281e710e7ee296397e5` | `sha256:0c176ac9c927b0f794185d547088ff3cbb1502615cc50d191c3988d8f0b41a96` |
+| `latest`, `edge` | `sha256:464fcfe00d026458216e1df18cc1223b8d3b43a8241db72b365b4c4a4a98ebd7` | `sha256:65e0fb56b96213de1215fa0bc8b1a546838e075b858a04866c0900083887da58` |
+
+The `1.0.0`, `1.0` and `1` tags name the 1.0.0 images. `latest` and `edge` name builds of `main` at commit `3ab8285e`,
+made on 2026-10-02. The publish workflow now builds images only from a `platform-v*` tag, and it writes `1.1.0`, `1.1`,
+`1` and `latest` for this release:
+
+- A deployment that pulls `1` or `latest` runs 1.1.0 after its next pull, with every item under
+  [Changes that need action](#changes-that-need-action). Both compose files at the repository root,
+  `docker-compose.yml` and `docker-compose.quickstart.yml`, name the `aim-server` and `aim-dashboard` images by
+  `latest`, so `docker compose pull` fetches 1.1.0.
+- `1.0.0` and `1.0` stay on 1.0.0.
+- `edge` is no longer written, and stays on the 2026-10-02 build.
+- To choose when the upgrade happens, pin each image by digest: `ghcr.io/opena2a-org/aim-server@<AIM_SERVER_DIGEST>`
+  and `ghcr.io/opena2a-org/aim-dashboard@<AIM_DASHBOARD_DIGEST>`.
+
+To read the digest a tag names now:
+
+```bash
+docker buildx imagetools inspect ghcr.io/opena2a-org/aim-server:1
+```
+
+### An unsigned image on `latest` and `edge` in August 2026
+
+From 16:37 UTC on 2026-08-12 until 12:32 UTC on 2026-08-13, the `latest` and `edge` tags of `aim-server` on both
+registries named `sha256:9299a4b2e9c9264e4cf00f3bd3a293fb5c2dbf1e5d9b0eec430206c3b48bd002`, a build of `main` that
+carries no cosign signature and no build provenance attestation: its
+[publish run](https://github.com/opena2a-org/agent-identity-management/actions/runs/31617620055) pushed the tags and
+stopped before the signing step. The next publish run moved both tags to a signed build. To check whether a host
+pulled that image, and that the digest has no attestation:
+
+```bash
+docker image ls --digests ghcr.io/opena2a-org/aim-server
+docker image ls --digests opena2a/aim-server
+curl -s https://api.github.com/repos/opena2a-org/agent-identity-management/attestations/sha256:9299a4b2e9c9264e4cf00f3bd3a293fb5c2dbf1e5d9b0eec430206c3b48bd002
+```
+
+The last command answers `"message": "Not Found"`. Replace that image with a pinned 1.1.0 digest. An earlier
+[publish run](https://github.com/opena2a-org/agent-identity-management/actions/runs/26201603961), on 2026-05-21 at
+02:20 UTC, also pushed `aim-server` `latest` and `edge` and then failed at its signing step; its log has expired, so
+that digest is not named here. The next publish run started at 02:22 UTC and finished with a signed build.
+
+### Upgrade steps
+
+1. Read [Changes that need action](#changes-that-need-action). Set `KEYVAULT_MASTER_KEY` to the value 1.0.0 ran with,
+   set `JWT_SECRET` to a generated value if it still holds the `.env.example` placeholder, and set
+   `METRICS_LISTEN_ADDR` and `METRICS_AUTH_TOKEN` if Prometheus scrapes the backend from another host.
+2. Back up the database:
+
+   ```bash
+   pg_dump --format=custom --file aim-1.0.0.dump --host <host> --username <user> <database>
+   ```
+
+3. Stop every 1.0.0 instance of `aim-server`.
+4. Point each deployment at the 1.1.0 images, pinned by digest, and pull them. With the root `docker-compose.yml`,
+   whose images are named by `latest`:
+
+   ```bash
+   docker compose pull
+   ```
+
+5. Apply the migrations as the role that owns the schema, with the 1.1.0 image. With the root `docker-compose.yml`:
+
+   ```bash
+   docker compose run --rm backend ./aim-server migrate
+   ```
+
+   The server also applies pending migrations when it starts, so this step can be left to the first start. A 1.0.0
+   image has no `migrate` command: run it only after step 4.
+6. Start the 1.1.0 server and dashboard. At its first start the server converts the stored agent private keys; its log
+   line that begins `Agent private key migration` reports `failures=0` and `recorded=true` when every key converted.
+7. Check the running version:
+
+   ```bash
+   curl -s http://localhost:8080/health/ready
+   ```
+
+   `version` reads `platform-v1.1.0`.
+8. Sign in to the dashboard again, and give each SDK install that used credentials issued by 1.0.0 new ones.
+
+To roll back, restore the backup from step 2 and run the 1.0.0 images.
+
+### Measured migration time
+
+Upgrading from 1.0.0 applies 30 migrations, `098_mcp_manifest_baselines.sql` to
+`128_reissue_isolation_attestation_verified_comment.sql`. Measured on 2026-10-12 on an Apple M4 Max laptop with
+PostgreSQL 18.3: a database was migrated with the 97 migration files of `platform-v1.0.0`, then `aim-server migrate`,
+built from commit `47432ed5`, was timed against it with `/usr/bin/time -p`, three runs on separate copies:
+
+| 1.0.0 database | Wall time, three runs |
+|----------------|-----------------------|
+| only the rows the migrations write | 0.13 s, 0.07 s, 0.06 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 1124 MB | 1.44 s, 2.50 s, 1.44 s |
+
+The time grows with the size of the tables the migrations alter or index. The agent private key conversion runs at the
+server's first start, not in `aim-server migrate`, and is not in these times; it reads every agent row that holds a
+stored private key.
+
+### For Java SDK users
+
+The Java SDK is built from source in `sdk/java` and keeps the coordinates `org.opena2a:aim-sdk:1.0.0` in this release,
+so the version number does not tell a build from the 1.0.0 source from one from the 1.1.0 source. The 1.0.0 source
+sets `jackson.version` to 2.16.1, and the 1.1.0 source sets 2.18.11. CHANGELOG: *Security — the Java SDK and the Java
+A2A example use jackson 2.18.11*.
+
+Check the source you build from; this prints `2.18.11` for the 1.1.0 source:
+
+```bash
+mvn -q -f sdk/java/pom.xml help:evaluate -Dexpression=jackson.version -DforceStdout
+```
+
+Check what your application resolves, from its own directory; `jackson-databind`, `jackson-core` and
+`jackson-annotations` should read 2.18.11:
+
+```bash
+mvn dependency:tree -Dincludes=com.fasterxml.jackson.core
+```
+
+To fix an older version, run `mvn install` in `sdk/java` from the 1.1.0 source and rebuild your application. If your
+build sets the jackson version itself, through a BOM or its own `jackson.version` property, set it to 2.18.11.
