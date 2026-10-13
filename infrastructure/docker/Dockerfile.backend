@@ -18,8 +18,11 @@ COPY apps/backend/ ./
 
 # Build the application for the target platform.
 # GET /health/ready reports main.buildCommit as `commit` and main.buildVersion
-# as `version`. COMMIT is the full 40-character sha of the commit the image is
-# built from; a build that passes none reports "commit": null.
+# as `version`; GET /api/v1/status reports the same `version`. COMMIT is the
+# full 40-character sha of the commit the image is built from; a build that
+# passes none reports "commit": null. VERSION is the git ref name of the build:
+# a release tag such as platform-v1.1.0 is reported as 1.1.0, the version the
+# image tag carries; a commit sha or the default below is reported as passed.
 ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT
