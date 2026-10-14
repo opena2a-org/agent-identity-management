@@ -50,7 +50,7 @@ export function SDKTestResults() {
                 </div>
               </div>
               <div className="bg-green-100 px-4 py-2 rounded-full">
-                <span className="text-lg font-bold text-green-700">100%</span>
+                <span className="text-xl font-bold text-green-700">100%</span>
               </div>
             </div>
           </CardHeader>

@@ -886,7 +886,7 @@ export default function SecurityPoliciesPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold text-lg">{policy.name}</h3>
+                  <h3 className="font-semibold text-xl">{policy.name}</h3>
                   <Badge
                     className={`${enforcementColors[policy.enforcementAction] || "bg-gray-100 text-gray-800 border-gray-300"} border`}
                   >
@@ -1023,7 +1023,7 @@ export default function SecurityPoliciesPage() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold text-lg">{policy.name}</h3>
+                  <h3 className="font-semibold text-xl">{policy.name}</h3>
                   <Badge
                     className={`${enforcementColors[policy.enforcementAction] || "bg-gray-100 text-gray-800 border-gray-300"} border`}
                   >
@@ -1300,7 +1300,7 @@ export default function SecurityPoliciesPage() {
                 )}
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">Global Enforcement Mode</h3>
+                    <h3 className="text-xl font-semibold">Global Enforcement Mode</h3>
                     <Badge variant={globalEnforcementMode === 'strict' ? 'destructive' : 'secondary'}>
                       {globalEnforcementMode === 'strict' ? 'STRICT' : 'MONITORING'}
                     </Badge>
@@ -1421,7 +1421,7 @@ export default function SecurityPoliciesPage() {
             {policies.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">No security policies configured</p>
+                <p className="text-xl font-medium">No security policies configured</p>
                 <p className="text-sm mt-1">Default policies are created automatically for new organizations.</p>
               </div>
             )}
@@ -1442,7 +1442,7 @@ export default function SecurityPoliciesPage() {
                   {agentPolicies.length === 0 && (
                     <div className="text-center py-12 text-muted-foreground">
                       <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium">No agent policies configured</p>
+                      <p className="text-xl font-medium">No agent policies configured</p>
                       <p className="text-sm mt-1">Default policies are created automatically for new organizations.</p>
                     </div>
                   )}
@@ -1483,7 +1483,7 @@ export default function SecurityPoliciesPage() {
                         {mcpPolicies.filter((p) => tab === "all" || p.policyType === tab).length === 0 && (
                           <div className="text-center py-12">
                             <Server className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                            <p className="text-lg font-medium text-muted-foreground">No MCP policies found</p>
+                            <p className="text-xl font-medium text-muted-foreground">No MCP policies found</p>
                             <p className="text-sm text-muted-foreground mt-1">
                               Create a new MCP policy to get started
                             </p>

@@ -54,7 +54,7 @@ export function MobileTabBar({ role, onOpenMenu }: MobileTabBarProps) {
     return exact ? pathname === path : pathname === path || pathname.startsWith(path + "/");
   };
 
-  const item = "flex min-w-[44px] flex-col items-center gap-1 py-1 text-[10px] font-semibold";
+  const item = "flex min-w-[44px] flex-col items-center gap-1 py-1 text-xs font-semibold";
   const renderTab = ({ name, href, icon: Icon, exact }: MobileTab) => {
     const active = isActive(href, exact);
     return (

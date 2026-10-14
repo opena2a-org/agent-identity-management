@@ -36,7 +36,7 @@ export function HubTabs({ role }: { role?: UserRole }) {
             href={tab.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-pill px-3.5 py-1.5 text-[13px] font-semibold transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-pill px-3.5 py-1.5 text-sm font-semibold transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               isActive && "bg-[var(--segment-active)] font-bold text-ink shadow-[var(--segment-active-shadow)]"
             )}
           >

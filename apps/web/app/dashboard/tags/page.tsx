@@ -231,7 +231,7 @@ export default function TagsPage() {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg font-medium text-ink">
+          <CardTitle className="text-xl font-medium text-ink">
             Filter tags
           </CardTitle>
           <CardDescription className="text-sm text-ink-secondary">

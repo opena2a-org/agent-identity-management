@@ -737,7 +737,7 @@ export default function AgentDetailsPage({
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList aria-label="Agent sections" className="flex w-full sm:w-auto sm:inline-flex">
           {AGENT_DETAIL_TAB_GROUPS.map((group) => (
-            <TabsTrigger key={group.value} value={group.value} className="flex-1 px-2 text-xs sm:flex-none sm:px-3.5 sm:text-[13px]">
+            <TabsTrigger key={group.value} value={group.value} className="flex-1 px-2 text-xs sm:flex-none sm:px-3.5 sm:text-sm">
               {group.label}
             </TabsTrigger>
           ))}
@@ -1301,7 +1301,7 @@ export default function AgentDetailsPage({
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
                       <ExternalLink className="h-8 w-8 text-muted-foreground" />
                     </div>
-                    <h3 className="text-lg font-semibold mb-2">No MCP servers detected</h3>
+                    <h3 className="text-xl font-semibold mb-2">No MCP servers detected</h3>
                     <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
                       This agent has no MCP servers connected or detected. Use the buttons above to add servers manually or install the AIM SDK to enable auto-detection.
                     </p>

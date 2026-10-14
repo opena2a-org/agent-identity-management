@@ -242,7 +242,7 @@ export function TrustTrends({ defaultDays = 30 }: TrustTrendsProps) {
       {/* Score Distribution */}
       {data.trends.length > 0 && (
         <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+          <h3 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-4">
             Latest Score Distribution
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

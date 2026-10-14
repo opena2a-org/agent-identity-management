@@ -334,7 +334,7 @@ function ComplianceSummaryCard({
               <Icon className={`h-6 w-6 ${colors.icon}`} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-ink">{title}</h3>
+              <h3 className="text-xl font-semibold text-ink">{title}</h3>
               <p className="text-sm text-ink-secondary">{description}</p>
             </div>
           </div>
@@ -442,7 +442,7 @@ function AlertActivityItem({ alert }: { alert: AlertEntry }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium text-ink truncate">{alert.title}</p>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full uppercase ${style.badge}`}>
+          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full uppercase ${style.badge}`}>
             {alert.severity}
           </span>
         </div>
@@ -1117,7 +1117,7 @@ export default function CompliancePage() {
         {checkResults && checkResults.length > 0 && (
           <div>
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-ink">Compliance Status</h2>
+              <h2 className="text-xl font-semibold text-ink">Compliance Status</h2>
               <p className="text-sm text-ink-secondary">Real-time security and operational health checks</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1156,7 +1156,7 @@ export default function CompliancePage() {
             <div className="glass p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-ink">Trust Score Trend</h3>
+                  <h3 className="text-xl font-semibold text-ink">Trust Score Trend</h3>
                   <p className="text-sm text-ink-secondary">30-day compliance score history</p>
                 </div>
                 <TrendingUp className="h-5 w-5 text-ink-tertiary" />
@@ -1178,7 +1178,7 @@ export default function CompliancePage() {
               {/* Risk Distribution */}
               <div className="glass p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-ink">Risk Distribution</h3>
+                  <h3 className="text-xl font-semibold text-ink">Risk Distribution</h3>
                   <BarChart3 className="h-5 w-5 text-ink-tertiary" />
                 </div>
                 <RiskDistributionChart agents={agents} mcpServers={mcpServers} />
@@ -1187,7 +1187,7 @@ export default function CompliancePage() {
               {/* Compliance Checks */}
               <div className="glass p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-ink">Compliance Checks</h3>
+                  <h3 className="text-xl font-semibold text-ink">Compliance Checks</h3>
                   {runningCheck ? (
                     <Loader2 className="h-5 w-5 text-brand animate-spin" />
                   ) : (
@@ -1266,7 +1266,7 @@ export default function CompliancePage() {
           <div className="p-6 border-b border-divider">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-ink">Access Review</h3>
+                <h3 className="text-xl font-semibold text-ink">Access Review</h3>
                 <p className="text-sm text-ink-secondary">Review user access patterns and permissions</p>
               </div>
               <Users className="h-5 w-5 text-ink-tertiary" />
@@ -1336,7 +1336,7 @@ export default function CompliancePage() {
                   )}
                 </button>
                 <div className="min-w-0">
-                  <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                  <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                     <Clock className="h-5 w-5 text-brand-text" />
                     Audit Trail
                   </h3>

@@ -308,7 +308,7 @@ export default function ViolationsPage() {
             <div className="p-4 rounded-pill bg-success-fill inline-block mb-4">
               <CheckCircle className="h-8 w-8 text-success-text" />
             </div>
-            <h3 className="text-lg font-medium text-ink">No violations found</h3>
+            <h3 className="text-xl font-medium text-ink">No violations found</h3>
             <p className="text-sm text-ink-secondary mt-1">
               {searchQuery || filterBlocked !== "all"
                 ? "No violations match your filters"

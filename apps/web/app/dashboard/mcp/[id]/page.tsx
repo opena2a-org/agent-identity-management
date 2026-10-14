@@ -512,7 +512,7 @@ export default function MCPServerDetailsPage({
                     <Shield className="h-6 w-6 text-brand-text" />
                   </div>
                   <div>
-                    <CardTitle className="text-lg font-semibold">
+                    <CardTitle className="text-xl font-semibold">
                       Confidence score
                     </CardTitle>
                     <CardDescription className="text-sm">
@@ -523,7 +523,7 @@ export default function MCPServerDetailsPage({
                 </div>
                 <div className="text-right">
                   <div
-                    className={`text-4xl font-bold ${
+                    className={`text-3xl font-bold ${
                       getConfidenceColor(server.confidenceScore ?? 0).split(" ")[0]
                     }`}
                   >
@@ -592,7 +592,7 @@ export default function MCPServerDetailsPage({
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg font-semibold">
+                  <CardTitle className="text-xl font-semibold">
                     Trust score
                   </CardTitle>
                   <CardDescription className="text-sm">
@@ -601,7 +601,7 @@ export default function MCPServerDetailsPage({
                 </div>
                 <div className="text-right">
                   <div
-                    className={`text-4xl font-bold ${
+                    className={`text-3xl font-bold ${
                       getTrustColor(trustScorePercent(server.trustScore)).split(" ")[0]
                     }`}
                   >
@@ -905,7 +905,7 @@ export default function MCPServerDetailsPage({
                       <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-brand-soft mb-3">
                         <Shield className="h-6 w-6 text-brand-text" />
                       </div>
-                      <h3 className="text-lg font-semibold text-ink">
+                      <h3 className="text-xl font-semibold text-ink">
                         No attestations yet
                       </h3>
                       <p className="text-sm text-ink-secondary mt-1 max-w-sm mx-auto">

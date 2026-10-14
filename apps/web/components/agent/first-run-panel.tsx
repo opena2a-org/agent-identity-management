@@ -107,7 +107,7 @@ export function FirstRunPanel({ agent }: { agent: Agent }) {
 
         <div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <h3 className="flex items-center gap-2 text-base font-bold text-ink">
               <Book className="h-5 w-5" />
               Quick start
             </h3>

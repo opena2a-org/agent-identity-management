@@ -138,7 +138,7 @@ export function APIKeysTab({ agentId }: APIKeysTabProps) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Key className="h-5 w-5" />
-            <h3 className="text-lg font-semibold">API Keys</h3>
+            <h3 className="text-xl font-semibold">API Keys</h3>
             <span className="px-2 py-0.5 text-xs bg-muted rounded-full">
               {apiKeys.filter(k => k.isActive).length} active
             </span>

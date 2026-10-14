@@ -69,7 +69,7 @@ export default function ForgotPasswordPage() {
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-success-fill text-success-text">
               <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
             </span>
-            <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Check your email</h1>
+            <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Check your email</h1>
             <p className="mt-1 text-sm text-ink-secondary">
               If an account exists for <span className="font-semibold text-ink">{email}</span>, a reset link is on its way.
             </p>
@@ -108,7 +108,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
-          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Forgot your password?</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Forgot your password?</h1>
           <p className="mt-1 text-sm text-ink-secondary">Enter your email and we will send a reset link.</p>
         </div>
 

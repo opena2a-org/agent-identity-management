@@ -251,7 +251,7 @@ export function AlertDetailPanel({
                 {alert.alertType.replace(/_/g, " ")}
               </Badge>
             </div>
-            <h2 className="text-lg font-semibold text-ink truncate">{alert.title}</h2>
+            <h2 className="text-xl font-semibold text-ink truncate">{alert.title}</h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="ml-2">
             <X className="h-5 w-5" />

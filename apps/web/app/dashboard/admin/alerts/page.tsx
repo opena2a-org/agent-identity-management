@@ -754,7 +754,7 @@ function AlertsPageContent() {
             {filteredAlerts.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-600" />
-                <p className="text-lg font-medium">No alerts to display</p>
+                <p className="text-xl font-medium">No alerts to display</p>
                 <p className="text-sm">
                   {statusFilter === "unacknowledged"
                     ? "All alerts have been acknowledged"

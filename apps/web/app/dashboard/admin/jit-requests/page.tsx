@@ -572,7 +572,7 @@ export default function PendingVerificationsPage() {
             {verifications.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <ShieldCheck className="h-12 w-12 mx-auto mb-4 text-green-600" />
-                <p className="text-lg font-semibold">No pending JIT requests</p>
+                <p className="text-xl font-semibold">No pending JIT requests</p>
                 <p className="text-sm">
                   High-risk actions requiring approval will appear here in real time.
                 </p>
@@ -593,7 +593,7 @@ export default function PendingVerificationsPage() {
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-semibold">
+                          <h3 className="text-xl font-semibold">
                             {verification.capability}
                           </h3>
                           <Badge className={riskMeta.badge}>

@@ -88,6 +88,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/web/components/agent/key-vault-tab.test.tsx` renders the tab with a mocked key vault and fails when either
   heading appears or when the "Agent Public Key" card no longer copies its key. It fails on the previous commit.
 
+### Changed — the dashboard sets its type from one six-step ramp, 12px for captions and 14px upward for reading text
+
+- `apps/web/tailwind.config.js` replaces Tailwind's font-size scale with six steps, each a size over a line
+  height: `text-xs` 12/16, `text-sm` 14/20, `text-base` 16/22, `text-xl` 20/26, `text-2xl` 24/32 and
+  `text-3xl` 32/40. The 10.5px `text-2xs` step is removed, and Tailwind's `text-lg`, `text-4xl` and larger
+  steps are not generated: the built stylesheet carries those six size rules and no rule for `text-lg`,
+  `text-2xs` or `text-4xl`.
+- In the dashboard source every `text-2xs` is now `text-xs`, every `text-lg` is `text-xl`, every `text-4xl`
+  is `text-3xl`, and every arbitrary pixel size outside the MCP network graph is a step of the ramp: 9px and
+  10px became 12px; 13px, 13.5px and 14px became 14px; 15px, 16px and 17px became 16px; 20px and 22px became
+  20px; 26px and 28px became 24px; 30px and 32px became 32px. The `text-overline` and `glass-segment-item`
+  classes in `globals.css` are 12px; before they were 10.5px and 11.5px.
+- A test fails on a `text-2xs`, `text-lg`, `text-4xl` or larger, or arbitrary-length `text-[...]` class in
+  `app/`, `components/`, `lib/` or `hooks/`; it proves itself on a seeded file first, holds the readability
+  and target-size helpers to the config's six steps, and lists the network graph as the one file still
+  carrying such classes until the graph has a sizing rule of its own. That list can only shrink: the test
+  also fails when a listed file carries none. On the commit before this one the test listed 174 sites.
+- The target-size check skips a link or button that is `hidden` at 375px, where it has no target.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The

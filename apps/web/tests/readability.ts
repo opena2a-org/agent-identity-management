@@ -17,29 +17,23 @@ export const HIT_AREA_FLOOR_PX = 44;
 const ROOT_FONT_SIZE_PX = 16;
 const SPACING_STEP_PX = 4;
 
-const TAILWIND_FONT_SIZES: Record<string, number> = {
-  "2xs": 10.5, // tailwind.config.js theme.extend.fontSize
+// The six steps of tailwind.config.js theme.fontSize; a text-* class outside
+// them sets no size (tests/type-scale.test.ts keeps the source free of those).
+export const TAILWIND_FONT_SIZES: Record<string, number> = {
   xs: 12,
   sm: 14,
   base: 16,
-  lg: 18,
   xl: 20,
   "2xl": 24,
-  "3xl": 30,
-  "4xl": 36,
-  "5xl": 48,
-  "6xl": 60,
-  "7xl": 72,
-  "8xl": 96,
-  "9xl": 128,
+  "3xl": 32,
 };
 
 /** Component classes in app/globals.css that declare a font-size, in px. */
 export const GLOBAL_CSS_FONT_SIZES: Record<string, number> = {
-  "glass-segment-item": 11.5,
+  "glass-segment-item": 12,
   "code-block": 12,
   "text-headline": 24,
-  "text-overline": 10.5,
+  "text-overline": 12,
   "text-kpi": 32,
 };
 
@@ -63,7 +57,7 @@ export function ownFontSizePx(el: Element): number | null {
   let smallest: number | null = null;
   for (const cls of classesAt375(el)) {
     let px: number | null = null;
-    const named = /^text-(2xs|xs|sm|base|lg|[2-9]?xl)(?:\/\S+)?$/.exec(cls);
+    const named = /^text-(xs|sm|base|xl|2xl|3xl)(?:\/\S+)?$/.exec(cls);
     const arbitrary = /^text-\[([^\]]+)\]$/.exec(cls);
     if (cls in GLOBAL_CSS_FONT_SIZES) px = GLOBAL_CSS_FONT_SIZES[cls];
     else if (named) px = TAILWIND_FONT_SIZES[named[1]];

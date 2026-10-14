@@ -375,14 +375,14 @@ export default function MCPDiscoveryPage() {
                           {mcp.detectedBy.slice(0, 3).map((agent, i) => (
                             <div
                               key={i}
-                              className="w-6 h-6 rounded-full bg-brand flex items-center justify-center text-[10px] text-white font-medium border-2 border-glass-border"
+                              className="w-6 h-6 rounded-full bg-brand flex items-center justify-center text-xs text-white font-medium border-2 border-glass-border"
                               title={agent}
                             >
                               {agent.charAt(0).toUpperCase()}
                             </div>
                           ))}
                           {mcp.detectedByCount > 3 && (
-                            <div className="w-6 h-6 rounded-full bg-track flex items-center justify-center text-[10px] text-ink-body font-medium border-2 border-glass-border">
+                            <div className="w-6 h-6 rounded-full bg-track flex items-center justify-center text-xs text-ink-body font-medium border-2 border-glass-border">
                               +{mcp.detectedByCount - 3}
                             </div>
                           )}

@@ -18,10 +18,10 @@ export default function ForbiddenPage() {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
             403 Forbidden
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
+          <p className="text-xl text-gray-600 dark:text-gray-400">
             You don't have permission to access this resource.
           </p>
         </div>

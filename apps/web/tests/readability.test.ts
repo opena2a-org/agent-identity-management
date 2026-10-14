@@ -15,9 +15,9 @@ function mount(html: string): HTMLElement {
 describe("textBelowFloor", () => {
   it("flags each class that renders text below 14px", () => {
     const root = mount(
-      `<p class="text-xs">a</p><p class="text-[13px]">b</p><p class="text-2xs">c</p><p class="text-overline">d</p><p class="text-xs/5">e</p>`,
+      `<p class="text-xs">a</p><p class="text-[13px]">b</p><p class="text-overline">c</p><p class="text-xs/5">d</p>`,
     );
-    expect(textBelowFloor(root).map((t) => t.text)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(textBelowFloor(root).map((t) => t.text)).toEqual(["a", "b", "c", "d"]);
   });
 
   it("passes 14px and larger, and unclassed text at the 16px default", () => {

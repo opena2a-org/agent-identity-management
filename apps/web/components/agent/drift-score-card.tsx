@@ -195,7 +195,7 @@ export function DriftScoreCard({ agentId }: DriftScoreCardProps) {
           <div className="flex items-center justify-between">
             <div>
               <div
-                className={`text-4xl font-bold ${meta.scoreClass}`}
+                className={`text-3xl font-bold ${meta.scoreClass}`}
                 aria-label={baseline ? 'No drift data available' : `Drift score ${driftPct} percent`}
               >
                 {displayValue}

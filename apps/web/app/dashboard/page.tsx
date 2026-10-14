@@ -185,7 +185,7 @@ function SdkQuickstart({
               setLang(t.key);
             }}
             className={cn(
-              "min-h-6 rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
+              "min-h-6 rounded-pill px-3 py-1 text-xs font-bold transition-colors",
               lang === t.key
                 ? "bg-brand text-white shadow-glow"
                 : dark
@@ -223,7 +223,7 @@ function SdkQuickstart({
 function Quickstart({ compact = false }: { compact?: boolean }) {
   return (
     <div className={cn("glass-contrast flex min-w-0 flex-col gap-3 overflow-hidden p-5", compact && "p-4")}>
-      <h3 className="text-[13.5px] font-bold">Quickstart</h3>
+      <h3 className="text-sm font-bold">Quickstart</h3>
       <SdkQuickstart dark>
         <Link href="/dashboard/developers" className="inline-flex h-9 items-center gap-1.5 rounded-pill bg-white/10 px-4 text-xs font-bold text-ink-inverse hover:bg-white/15">
           Developer guide <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -237,9 +237,9 @@ function VerificationActivityCard({ activity }: { activity: VerificationActivity
   return (
     <div className="glass flex flex-col p-5">
       <div className="flex items-center justify-between">
-        <h3 className="text-[13.5px] font-bold text-ink">Verification activity</h3>
+        <h3 className="text-sm font-bold text-ink">Verification activity</h3>
         {activity.length > 0 && (
-          <span className="text-2xs text-ink-tertiary">last {activity.length} {activity.length === 1 ? "month" : "months"}</span>
+          <span className="text-xs text-ink-tertiary">last {activity.length} {activity.length === 1 ? "month" : "months"}</span>
         )}
       </div>
       {activity.length === 0 ? (
@@ -247,7 +247,7 @@ function VerificationActivityCard({ activity }: { activity: VerificationActivity
       ) : (
         <>
           <VerificationsPerMonthChart activity={activity} axes={false} className="mt-3 h-[108px]" />
-          <div className="mt-2 flex justify-between text-2xs text-ink-tertiary">
+          <div className="mt-2 flex justify-between text-xs text-ink-tertiary">
             <span>{activity[0]?.month}</span>
             <span>{activity[activity.length - 1]?.month}</span>
           </div>
@@ -261,7 +261,7 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
   return (
     <div className="glass flex flex-col p-5">
       <div className="flex items-center justify-between">
-        <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Agents</h3>
+        <h3 className="text-base font-bold tracking-[-0.02em] text-ink">Agents</h3>
         <Link href="/dashboard/agents" className="inline-flex min-h-6 items-center text-xs font-semibold text-brand-text hover:underline">
           See all {total > agents.length ? `(${total})` : ""}
         </Link>
@@ -274,11 +274,11 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
           return (
             <li key={a.id}>
               <Link href={`/dashboard/agents/${a.id}`} className="flex items-center gap-3.5 py-3 hover:opacity-90">
-                <span className={cn("inline-flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-avatar text-[13px] font-bold", AVATAR_TINTS[i % AVATAR_TINTS.length])}>
+                <span className={cn("inline-flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-avatar text-sm font-bold", AVATAR_TINTS[i % AVATAR_TINTS.length])}>
                   {(a.displayName || a.name || "?").slice(0, 1).toLowerCase()}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] font-bold text-ink">{a.displayName || a.name}</span>
+                  <span className="block truncate text-sm font-bold text-ink">{a.displayName || a.name}</span>
                   <span className={cn("block truncate text-xs", attention ? "font-semibold text-danger-text" : "text-ink-tertiary")}>
                     {a.status}
                     {a.updatedAt ? ` · updated ${relative(a.updatedAt)}` : ""}
@@ -286,7 +286,7 @@ function AgentsCard({ agents, total }: { agents: Agent[]; total: number }) {
                 </span>
                 {score !== null && (
                   <>
-                    <span className={cn("text-[13px] font-bold", attention ? "text-danger-text" : "text-brand-text")}>{pct}</span>
+                    <span className={cn("text-sm font-bold", attention ? "text-danger-text" : "text-brand-text")}>{pct}</span>
                     <span className="hidden h-[5px] w-[90px] overflow-hidden rounded-[3px] bg-track sm:block" aria-hidden="true">
                       <span className={cn("block h-full rounded-[3px]", attention ? "bg-danger" : "bg-bar")} style={{ width: `${pct}%` }} />
                     </span>
@@ -314,7 +314,7 @@ function FirstAgentCard() {
           <ShieldPlus className="h-5 w-5" aria-hidden="true" />
         </span>
         <div>
-          <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Secure your first agent</h3>
+          <h3 className="text-base font-bold tracking-[-0.02em] text-ink">Secure your first agent</h3>
           <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
             Install the SDK, sign in once, wrap your agent. It appears here on its own the moment it checks in.
           </p>
@@ -505,7 +505,7 @@ function DashboardContent() {
           )}
         </div>
         {!zero && (
-          <Link href="/dashboard/agents?register=1" className="hidden h-10 items-center gap-2 rounded-pill bg-brand px-5 text-[13.5px] font-bold text-white shadow-glow hover:bg-brand-hover sm:inline-flex">
+          <Link href="/dashboard/agents?register=1" className="hidden h-10 items-center gap-2 rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover sm:inline-flex">
             <ShieldPlus className="h-4 w-4" aria-hidden="true" />
             Secure an agent
           </Link>
@@ -562,7 +562,7 @@ function DashboardContent() {
           <Link href="/dashboard/mcp" className="glass flex items-start gap-3 p-5 hover:-translate-y-0.5 transition-transform">
             <Server className="mt-0.5 h-4 w-4 text-ink-tertiary" aria-hidden="true" />
             <span>
-              <span className="block text-[13.5px] font-bold text-ink">MCP servers</span>
+              <span className="block text-sm font-bold text-ink">MCP servers</span>
               <span className="block text-xs text-ink-secondary">
                 {stats.totalMcpServers.toLocaleString()} registered · {stats.activeMcpServers.toLocaleString()} active
               </span>
@@ -573,7 +573,7 @@ function DashboardContent() {
           <Link href="/dashboard/security" className="glass flex items-start gap-3 p-5 hover:-translate-y-0.5 transition-transform">
             <ShieldCheck className="mt-0.5 h-4 w-4 text-ink-tertiary" aria-hidden="true" />
             <span>
-              <span className="block text-[13.5px] font-bold text-ink">Security</span>
+              <span className="block text-sm font-bold text-ink">Security</span>
               <span className="block text-xs text-ink-secondary">
                 {stats.securityIncidents.toLocaleString()} {stats.securityIncidents === 1 ? "incident" : "incidents"} · {stats.activeAlerts.toLocaleString()} open {stats.activeAlerts === 1 ? "alert" : "alerts"}
               </span>
@@ -584,7 +584,7 @@ function DashboardContent() {
           <Link href="/dashboard/admin/alerts" className="glass flex items-start gap-3 p-5 hover:-translate-y-0.5 transition-transform">
             <Bell className="mt-0.5 h-4 w-4 text-ink-tertiary" aria-hidden="true" />
             <span>
-              <span className="block text-[13.5px] font-bold text-ink">Alerts</span>
+              <span className="block text-sm font-bold text-ink">Alerts</span>
               <span className="block text-xs text-ink-secondary">{stats.criticalAlerts.toLocaleString()} critical waiting for review</span>
             </span>
           </Link>

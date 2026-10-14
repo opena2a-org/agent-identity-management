@@ -8,6 +8,19 @@ module.exports = {
     './lib/**/*.{ts,tsx}',
   ],
   theme: {
+    // The whole type ramp: six steps, each a font size over a line height in px.
+    // 12px is the caption step; reading text starts at 14px. This block replaces
+    // Tailwind's default scale rather than extending it, so a class outside these
+    // six keys (text-lg, text-4xl, an arbitrary text-[13px]) sets no size, and
+    // tests/type-scale.test.ts fails on any such class in app/, components/ or lib/.
+    fontSize: {
+      xs: ['12px', { lineHeight: '16px' }],
+      sm: ['14px', { lineHeight: '20px' }],
+      base: ['16px', { lineHeight: '22px' }],
+      xl: ['20px', { lineHeight: '26px' }],
+      '2xl': ['24px', { lineHeight: '32px' }],
+      '3xl': ['32px', { lineHeight: '40px' }],
+    },
     container: {
       center: true,
       padding: '2rem',
@@ -153,9 +166,6 @@ module.exports = {
         logo: 'var(--gradient-logo)',
         bar: 'var(--gradient-bar)',
         'page-gradient': 'var(--bg-page)',
-      },
-      fontSize: {
-        '2xs': ['10.5px', { lineHeight: '1.3' }],
       },
       keyframes: {
         'accordion-down': {

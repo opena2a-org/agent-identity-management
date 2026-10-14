@@ -26,18 +26,15 @@ const LINKS = new Set(["a", "Link"]);
 const DISPLAYS = new Set(["block", "inline-block", "flex", "inline-flex", "grid", "inline-grid", "flow-root", "table"]);
 const SPACING_STEP_PX = 4;
 
-// Font size and line height of each text size: Tailwind's defaults, and text-2xs
-// from tailwind.config.js (10.5px at a line height of 1.3).
-const TEXT_SIZES: Record<string, [fontPx: number, linePx: number]> = {
-  "2xs": [10.5, 13.65],
+// Font size and line height of each text size: the six steps of
+// tailwind.config.js theme.fontSize (type-scale.test.ts holds them equal).
+export const TEXT_SIZES: Record<string, [fontPx: number, linePx: number]> = {
   xs: [12, 16],
   sm: [14, 20],
-  base: [16, 24],
-  lg: [18, 28],
-  xl: [20, 28],
+  base: [16, 22],
+  xl: [20, 26],
   "2xl": [24, 32],
-  "3xl": [30, 36],
-  "4xl": [36, 40],
+  "3xl": [32, 40],
 };
 const LEADING: Record<string, number> = { none: 1, tight: 1.25, snug: 1.375, normal: 1.5, relaxed: 1.625, loose: 2 };
 
@@ -86,7 +83,7 @@ export function minHeightPx(classes: string[], inline = false): number | null {
       if (px !== null) pad[(m[1] || "all") as "t" | "b" | "y" | "all"].push(px);
       continue;
     }
-    m = /^text-(2xs|xs|sm|base|lg|xl|2xl|3xl|4xl)$/.exec(c);
+    m = /^text-(xs|sm|base|xl|2xl|3xl)$/.exec(c);
     if (m) {
       const [font, line] = TEXT_SIZES[m[1]];
       fonts.push(font);
@@ -125,6 +122,8 @@ export function undersizedControls(file: string, text: string): UndersizedContro
     const name = tag.tagName.getText(source);
     if (!CONTROLS.has(name)) return;
     const classes = classNameOf(tag);
+    // `hidden` without a variant is display: none at 375px: no box, no target.
+    if (unvaried(classes).includes("hidden")) return;
     const inline = LINKS.has(name) && !unvaried(classes).some((c) => DISPLAYS.has(c));
     const height = minHeightPx(classes, inline);
     if (height === null || height >= TARGET_MIN_PX || inRunningText(tag)) return;

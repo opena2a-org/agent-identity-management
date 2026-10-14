@@ -20,7 +20,7 @@ type ColourTree = { [name: string]: string | ColourTree };
 
 const require = createRequire(import.meta.url);
 const tailwind = require("../tailwind.config.js") as {
-  theme: { extend: { colors: ColourTree; fontSize: Record<string, unknown> } };
+  theme: { fontSize: Record<string, unknown>; extend: { colors: ColourTree } };
 };
 const css = readFileSync(join(__dirname, "..", "app", "globals.css"), "utf8");
 
@@ -34,11 +34,9 @@ function flatten(tree: ColourTree, prefix = ""): Array<[string, string]> {
 // The theme colours Tailwind generates a `text-*` utility for, by the utility's suffix.
 const THEME_COLOURS = new Map(flatten(tailwind.theme.extend.colors));
 
-// `text-*` utilities that set no colour: the font sizes, a set size, alignment and wrapping.
-const SIZES = new Set([
-  ...["xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl", "8xl", "9xl"],
-  ...Object.keys(tailwind.theme.extend.fontSize),
-]);
+// `text-*` utilities that set no colour: the font sizes (theme.fontSize is the
+// whole scale), a set size, alignment and wrapping.
+const SIZES = new Set(Object.keys(tailwind.theme.fontSize));
 const NOT_A_COLOUR = /^text-(?:\[\d*\.?\d+(?:px|rem|em)\]|left|center|right|justify|start|end|wrap|nowrap|balance|pretty|ellipsis|clip)$/;
 
 function describe(el: Element): string {

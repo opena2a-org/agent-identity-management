@@ -307,7 +307,7 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Task State Distribution */}
         <div className="glass p-6">
-          <h3 className="text-lg font-medium text-ink mb-4">
+          <h3 className="text-xl font-medium text-ink mb-4">
             Task state distribution
           </h3>
           <div className="h-64">
@@ -324,7 +324,7 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
 
         {/* Trust Score Distribution */}
         <div className="glass p-6">
-          <h3 className="text-lg font-medium text-ink mb-4">
+          <h3 className="text-xl font-medium text-ink mb-4">
             Trust score distribution
           </h3>
           <div className="h-64">
@@ -348,7 +348,7 @@ function OverviewTab({ agentCards, tasks, trustScores, cardsLoading, tasksLoadin
             <Network className="h-6 w-6 text-brand-text" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-ink">
+            <h3 className="text-xl font-semibold text-ink">
               A2A protocol with AIM security
             </h3>
             <p className="mt-2 text-sm text-ink-body">
@@ -795,7 +795,7 @@ function TrustTab({ trustScores, agentCards, loading }: {
       {/* Agent Trust Scores Table */}
       <div className="glass overflow-hidden">
         <div className="px-6 py-4 border-b border-divider">
-          <h3 className="text-lg font-medium text-ink">Agent A2A trust scores</h3>
+          <h3 className="text-xl font-medium text-ink">Agent A2A trust scores</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-divider">

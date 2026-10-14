@@ -107,7 +107,7 @@ function LoginPageContent() {
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
-          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Welcome back</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Welcome back</h1>
           <p className="mt-1 text-sm text-ink-secondary">Sign in to manage your agents and MCP servers.</p>
         </div>
 

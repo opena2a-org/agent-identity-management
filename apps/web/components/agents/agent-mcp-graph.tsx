@@ -84,7 +84,7 @@ export function AgentMCPGraph({ agents, mcpServers, highlightAgentId }: AgentMCP
         <CardContent>
           <div className="text-center py-12">
             <Network className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Relationships Yet</h3>
+            <h3 className="text-xl font-semibold mb-2">No Relationships Yet</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
               Connect agents to MCP servers to see the relationship graph here.
             </p>

@@ -263,7 +263,7 @@ export function ActivityTimeline({ defaultLimit = 50 }: ActivityTimelineProps) {
 
       {/* Timeline */}
       <div className="glass p-6">
-        <h3 className="text-lg font-medium text-ink mb-4">
+        <h3 className="text-xl font-medium text-ink mb-4">
           Recent activity
         </h3>
         {data.activities.length === 0 ? (

@@ -404,7 +404,7 @@ export function APIKeysSection({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 id={headingId} className="text-lg font-semibold text-ink">
+          <h2 id={headingId} className="text-xl font-semibold text-ink">
             API keys
           </h2>
         </div>

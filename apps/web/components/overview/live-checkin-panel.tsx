@@ -66,7 +66,7 @@ export function LiveCheckinPanel({ arrived, onArrived }: { arrived: Agent | null
             {(arrived.displayName || arrived.name || "?").slice(0, 1).toLowerCase()}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-[13.5px] font-bold text-ink">
+            <p className="text-sm font-bold text-ink">
               {arrived.status === "verified" ? "Your agent checked in and is verified." : "Your agent checked in."}
             </p>
             <p className="truncate text-xs text-ink-secondary">
@@ -95,17 +95,17 @@ export function LiveCheckinPanel({ arrived, onArrived }: { arrived: Agent | null
               </span>
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-bold tracking-[-0.02em] text-ink">
+              <p className="text-sm font-bold tracking-[-0.02em] text-ink">
                 {pollError ? "Cannot reach the API right now; retrying." : "Listening for the first check-in"}
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-ink-secondary">
                 Run the install commands below — the moment your agent calls in, it appears here with its identity and trust score, and this page fills in on its own.
               </p>
             </div>
-            <p className="hidden flex-shrink-0 text-2xs text-ink-tertiary sm:block">Checks every {CHECKIN_POLL_MS / 1000} seconds.</p>
+            <p className="hidden flex-shrink-0 text-xs text-ink-tertiary sm:block">Checks every {CHECKIN_POLL_MS / 1000} seconds.</p>
           </div>
           {waitedLong && (
-            <p className="rounded-inset-sm bg-glass-inset-gray p-2.5 text-2xs leading-relaxed text-ink-secondary">
+            <p className="rounded-inset-sm bg-glass-inset-gray p-2.5 text-xs leading-relaxed text-ink-secondary">
               Nothing has checked in yet. This panel keeps listening; you can also{" "}
               <Link href="/dashboard/agents?register=1" className="font-semibold text-brand-text hover:underline">
                 secure it in the browser

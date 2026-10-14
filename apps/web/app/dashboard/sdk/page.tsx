@@ -188,7 +188,7 @@ export default function SDKDownloadPage() {
         <h1 className="text-3xl font-bold text-ink mb-2">
           Open source agent security
         </h1>
-        <p className="text-ink-secondary text-lg">
+        <p className="text-ink-secondary text-xl">
           Offline install path: download the SDK package for machines without registry access.
           The supported path is <code className="font-mono text-base">pip install aim-sdk</code>.
         </p>
@@ -295,7 +295,7 @@ export default function SDKDownloadPage() {
         <div className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Terminal className="h-5 w-5 text-ink-body" />
-            <h3 className="text-lg font-semibold text-ink">Quick start</h3>
+            <h3 className="text-xl font-semibold text-ink">Quick start</h3>
           </div>
 
           {/* Language Tabs - Applies to all steps */}

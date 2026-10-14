@@ -324,7 +324,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
             onClick={() => setMobileOpen(false)}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] transition-colors",
+              "flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-sm transition-colors",
               active
                 ? "bg-nav-active font-bold text-nav-active-text"
                 : "font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
@@ -338,7 +338,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
             <span className="flex-1 truncate">{item.name}</span>
             {item.badge ? (
               <span
-                className="inline-flex min-w-[20px] items-center justify-center rounded-pill bg-danger px-1.5 py-0.5 text-2xs font-bold text-white"
+                className="inline-flex min-w-[20px] items-center justify-center rounded-pill bg-danger px-1.5 py-0.5 text-xs font-bold text-white"
                 aria-label={`${item.badge} pending`}
               >
                 {item.badge}
@@ -392,7 +392,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-bold text-ink">{user.display_name}</span>
-              <span className="block truncate text-2xs text-ink-tertiary">{user.email}</span>
+              <span className="block truncate text-xs text-ink-tertiary">{user.email}</span>
             </span>
           </div>
         )}
@@ -400,7 +400,7 @@ export function Sidebar({ mobileOpen: mobileOpenProp, onMobileOpenChange }: Side
           type="button"
           onClick={handleLogout}
           disabled={isLoggingOut}
-          className="flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-[13px] font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink disabled:opacity-60"
+          className="flex items-center gap-2.5 rounded-nav px-[11px] py-[7px] text-sm font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink disabled:opacity-60"
         >
           {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4 text-ink-tertiary" />}
           <span>{isLoggingOut ? "Signing out..." : "Sign out"}</span>

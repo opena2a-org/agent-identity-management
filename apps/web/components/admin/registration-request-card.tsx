@@ -137,13 +137,13 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
           <div className="min-w-0 flex-grow">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="truncate text-[15px] font-bold tracking-[-0.02em] text-ink">{fullName}</h3>
+                <h3 className="truncate text-base font-bold tracking-[-0.02em] text-ink">{fullName}</h3>
                 <p className="flex items-center gap-1.5 text-xs text-ink-secondary">
                   <Mail className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
                   <span className="truncate">{request.email}</span>
                 </p>
               </div>
-              <span className="inline-flex rounded-pill border border-glass-inset-border bg-glass-inset-gray px-2.5 py-0.5 text-2xs font-bold text-ink-body">
+              <span className="inline-flex rounded-pill border border-glass-inset-border bg-glass-inset-gray px-2.5 py-0.5 text-xs font-bold text-ink-body">
                 {providerLabel}
               </span>
             </div>
@@ -169,7 +169,7 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
             {profileEntries.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {profileEntries.map((entry) => (
-                  <span key={entry.label} className="inline-flex items-center gap-1.5 rounded-pill bg-glass-inset-gray px-2.5 py-1 text-2xs">
+                  <span key={entry.label} className="inline-flex items-center gap-1.5 rounded-pill bg-glass-inset-gray px-2.5 py-1 text-xs">
                     <span className="text-ink-tertiary">{entry.label}</span>
                     <span className="font-bold text-ink">{entry.value}</span>
                   </span>
@@ -231,7 +231,7 @@ export function RegistrationRequestCard({ request, onApproved, onRejected }: Reg
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="reject-title">
           <div className="glass-chrome w-full max-w-md p-6">
-            <h3 id="reject-title" className="text-[17px] font-bold tracking-[-0.02em] text-ink">Reject this request</h3>
+            <h3 id="reject-title" className="text-base font-bold tracking-[-0.02em] text-ink">Reject this request</h3>
             <p className="mt-1 text-xs text-ink-secondary">
               Give a reason for rejecting {fullName}. A reason is required and is kept with the request.
             </p>
