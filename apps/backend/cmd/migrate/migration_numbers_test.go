@@ -20,6 +20,8 @@ var sharedMigrationNumbers = map[string][]string{
 // Every migration file starts with a number no other file uses. Two files with
 // one number both apply, but their order then rests on the rest of the name.
 func TestMigrationNumbersAreUnique(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	migrations, err := readMigrationFiles(filepath.Join("..", "..", "migrations"))
 	require.NoError(t, err)
 	require.NotEmpty(t, migrations, "the scan must find the migrations directory")

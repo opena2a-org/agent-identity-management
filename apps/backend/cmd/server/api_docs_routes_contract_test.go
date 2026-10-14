@@ -213,6 +213,8 @@ func documentedRoutes(file, src string, rootPaths map[string]bool) []docReferenc
 // /api/v1/audit-logs and /debug/pprof/heap, none of which the server registers,
 // so a reader following them had no route to call.
 func TestEveryDocumentedAPIPathIsARegisteredRoute(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	table := serverRouteTable(t)
 	rootPaths := map[string]bool{}
 	for _, r := range table {

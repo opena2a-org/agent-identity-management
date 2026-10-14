@@ -110,6 +110,8 @@ func TestDocumentedHealthURLsAreServed(t *testing.T) {
 // TestSetupGuideHealthOutputIsTheHandlers pins the response the setup guide
 // shows for its health check to the fields the GET /health handler returns.
 func TestSetupGuideHealthOutputIsTheHandlers(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := aim03ReadRepoFile(t, "docs/guides/SETUP_GUIDE.md")
 	start := strings.Index(guide, "### 1. Check Backend Health")
 	require.NotEqual(t, -1, start, "the setup guide has no backend health step")

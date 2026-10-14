@@ -291,6 +291,8 @@ func TestAIM07HealthReadyContract(t *testing.T) {
 }
 
 func TestAIM07CommitStamping(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	schema := aim07LoadSchema(t)
 
 	t.Run("AIM-07.AC2 40-hex buildCommit is echoed verbatim", func(t *testing.T) {

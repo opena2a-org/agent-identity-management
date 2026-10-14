@@ -143,6 +143,8 @@ func serviceEnv(t *testing.T, name string, svc deployStepService, envFile map[st
 // it showed was not the server's. A guide or a server that drifts apart on any
 // of these fails here.
 func TestFleetGovernanceDeployStepStartsTheServer(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := aim03ReadRepoFile(t, "docs/use-cases/fleet-governance.md")
 	step := guideSection(t, guide, "## Step 1")
 
@@ -279,6 +281,8 @@ func TestFleetGovernanceDeployStepStartsTheServer(t *testing.T) {
 // lower-case letters, a digit and a special character. The step used to set
 // neither, so its stack had no account to sign in with.
 func TestFleetGovernanceDeployStepSeedsAnAdministrator(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := aim03ReadRepoFile(t, "docs/use-cases/fleet-governance.md")
 	step := guideSection(t, guide, "## Step 1")
 

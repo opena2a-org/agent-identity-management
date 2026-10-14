@@ -108,6 +108,8 @@ func TestAgentService_VerifyCapability_PendingAgent_FollowsEnforcementMode(t *te
 // a new organization (monitoring mode), and is refused with the reason above
 // only on a strict-mode organization.
 func TestQuickStartReadmes_StateWhichModeRefusesAPendingAgent(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	root := filepath.Join("..", "..", "..", "..")
 	for _, rel := range []string{"README.md", filepath.Join("sdk", "python", "README.md")} {
 		t.Run(rel, func(t *testing.T) {

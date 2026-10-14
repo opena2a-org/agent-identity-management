@@ -229,6 +229,8 @@ func TestRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
 // The token rotation guide quotes the revocation line for each case as the
 // server writes it, after the log prefix.
 func TestTokenRotationGuideQuotesTheRevocationStartupLines(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "docs", "security", "token-rotation.md"))
 	require.NoError(t, err)
 	block := regexp.MustCompile("(?s)The backend's startup log says which applies, in one of these lines:\n```\n(.*?)\n```").FindSubmatch(guide)

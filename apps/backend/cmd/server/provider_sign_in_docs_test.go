@@ -231,6 +231,8 @@ func TestProviderSignInDocFilesWithAGlobalExcludesFile(t *testing.T) {
 // No guide, README or environment template tells a reader to configure or use
 // provider sign-in.
 func TestDocsDescribeNoProviderSignIn(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	root := aim03RepoRoot(t)
 
 	var findings []string
@@ -251,6 +253,8 @@ func TestDocsDescribeNoProviderSignIn(t *testing.T) {
 // The API guides that listed the provider routes list the email and password
 // login, the sign-in route the server mounts.
 func TestAPIGuidesNameTheLocalLogin(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	for _, rel := range []string{
 		"docs/guides/API_REFERENCE.md",
 		"docs/guides/API_ENDPOINT_SUMMARY.md",
@@ -264,6 +268,8 @@ func TestAPIGuidesNameTheLocalLogin(t *testing.T) {
 // "oauth" feature computed from GOOGLE_CLIENT_ID. No source file of this
 // package reads a provider setting; the config package still reads them.
 func TestServerPackageReadsNoProviderSetting(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	entries, err := os.ReadDir(".")
 	require.NoError(t, err)
 

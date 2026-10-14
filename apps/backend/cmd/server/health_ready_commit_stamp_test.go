@@ -282,6 +282,8 @@ func stampRequireNullCommit(t *testing.T, body []byte) {
 }
 
 func TestHealthReadyCommitStamp(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	schema := aim07LoadSchema(t)
 
 	t.Run("the publish workflow passes its commit sha to every build of the published backend image", func(t *testing.T) {

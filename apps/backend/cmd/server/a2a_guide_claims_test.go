@@ -168,6 +168,8 @@ func backendDelegationTrustReaders(t *testing.T) []string {
 // guide now names the call, attest_mcp(), the routes it signs against, the
 // fields it signs, and the one SDK method that attests on its own.
 func TestA2AGuideAttestationIsAnExplicitCall(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := aim03ReadRepoFile(t, "docs/guides/A2A.md")
 	section := guideSubsection(t, guide, "### Attesting an MCP Server")
 
@@ -277,6 +279,8 @@ func TestA2AGuideAttestationIsAnExplicitCall(t *testing.T) {
 // server change that starts reading the fields fails here until the guide says
 // what it does.
 func TestA2AGuideDelegationAttenuationNamesWhereItApplies(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := aim03ReadRepoFile(t, "docs/guides/A2A.md")
 	section := guideSubsection(t, guide, "### Delegation Trust Attenuation")
 

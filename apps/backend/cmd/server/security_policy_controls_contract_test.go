@@ -29,6 +29,8 @@ func securityPolicyText(t *testing.T) string {
 // that required secrets fell back to weak defaults, and that all personal data
 // was encrypted at rest.
 func TestSecurityPolicyNamesNoControlTheCodeLacks(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	policy := securityPolicyText(t)
 	for _, claim := range []struct{ pattern, fact string }{
 		{`(?i)token-based CSRF`, "the server issues and checks no CSRF token"},
@@ -46,6 +48,8 @@ func TestSecurityPolicyNamesNoControlTheCodeLacks(t *testing.T) {
 // in place of a CSRF token: no server code reads a credential from a cookie or
 // installs a CSRF middleware.
 func TestSecurityPolicyCSRFStatementHoldsForTheServer(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	require.Contains(t, securityPolicyText(t), "The server reads no credential from a cookie")
 
 	backend := filepath.Join(aim03RepoRoot(t), "apps", "backend")
@@ -77,6 +81,8 @@ func TestSecurityPolicyCSRFStatementHoldsForTheServer(t *testing.T) {
 // SECURITY.md says about the Python SDK's credential files: one writer stores
 // both the login tokens and the agent keys as JSON and sets file mode 0600.
 func TestSecurityPolicySDKCredentialStatementHoldsForThePythonSDK(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	require.Contains(t, securityPolicyText(t), "as plain JSON with file mode 0600")
 
 	src, err := os.ReadFile(filepath.Join(aim03RepoRoot(t), "sdk", "python", "aim_sdk", "credentials.py"))
@@ -100,6 +106,8 @@ func TestSecurityPolicySDKCredentialStatementHoldsForThePythonSDK(t *testing.T) 
 // a missing KEYVAULT_MASTER_KEY outside development and test, and a weak
 // POSTGRES_PASSWORD for a remote host in production.
 func TestSecurityPolicyConfigurationStatementHoldsForTheServer(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	policy := securityPolicyText(t)
 	require.Contains(t, policy, "The server refuses to start without `JWT_SECRET`, with one shorter than 32 characters")
 	require.Contains(t, policy, "it also refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is `development` or `test`")
@@ -137,6 +145,8 @@ func TestSecurityPolicyConfigurationStatementHoldsForTheServer(t *testing.T) {
 // SECURITY.md says about personal data at rest: the users table keeps email
 // and name in plain VARCHAR columns, and no migration changes either column.
 func TestSecurityPolicyPersonalDataStatementHoldsForTheSchema(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	require.Contains(t, securityPolicyText(t), "Users' email addresses and names are stored in plain database columns")
 
 	migrations := filepath.Join(aim03RepoRoot(t), "apps", "backend", "migrations")
