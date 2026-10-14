@@ -81,6 +81,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The tenant-scope helpers these settings serve, `WithTenant` and `WithServiceScope`, are added
   in `apps/backend/internal/infrastructure/database`. No request path calls them in this release.
 
+### Security — webhook test deliveries are sent, recorded and logged like event deliveries, and a refused webhook URL is a 400 with a fixed reason
+
+- `POST /api/v1/webhooks/{id}/test` sends the headers an event delivery sends: `Content-Type`,
+  `X-Webhook-Signature`, `X-Webhook-Event`, `X-Webhook-ID` and `User-Agent: AIM-Webhook/1.0`. Its
+  delivery record carries the webhook's organization, a `success` or `failed` status (with
+  `HTTP <code>` as the error of a non-2xx answer), the duration, the attempt and completion times,
+  and at most 1 KB of the endpoint's answer. A test delivery that gets no answer (the connection is
+  refused, or the egress client refuses the address) is recorded as a failed delivery with the
+  connection error. A record that cannot be stored is written to the server log and leaves the
+  test's result unchanged.
+- A failed test is reported as `Webhook test failed: the endpoint responded with status <code>` or
+  `Webhook test failed: the endpoint could not be reached`. The delivery error is not in the
+  answer; it is written to the server log and kept in the delivery record.
+- `POST /api/v1/webhooks` and `PUT /api/v1/webhooks/{id}` answer a URL the server refuses (one that
+  does not parse, is not http or https, has no host, names a blocked host or a host the resolver
+  reports does not exist, or resolves to an address the egress policy refuses) with
+  `400 {"error":"url must be a public http or https URL"}`, and write the reason to the server log.
+  A host lookup that fails for another reason, such as a resolver that answers SERVFAIL, says
+  nothing about the URL and is answered with the fixed 5xx line, as any other service error is.
+  `ValidateExternalURL` keeps its `URL hostname could not be resolved` text and now keeps the
+  resolver's error for `errors.As`.
+
 ### Security — an access token ends with the sign-in it belongs to
 
 - The access token issued with a login pair, and the one each refresh of that login issues, now

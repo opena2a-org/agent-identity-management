@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
+	"log"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -62,6 +64,25 @@ func (h *WebhookHandler) getAuditService() AuditServicer {
 	return h.auditService
 }
 
+// webhookURLRefusedMessage answers a webhook URL the server refuses. It names
+// no host or address: the service's reason says why the URL was refused, and
+// that stays in the server log.
+const webhookURLRefusedMessage = "url must be a public http or https URL"
+
+// respondWebhookServiceError answers a webhook create or update error. A URL
+// the server refuses is a problem with the caller's input, so it is answered
+// with 400 and a fixed reason; any other error is answered by
+// respondServerError. Both keep the service's reason in the server log only.
+func respondWebhookServiceError(c fiber.Ctx, err error) error {
+	if errors.Is(err, application.ErrWebhookURLRefused) {
+		log.Printf("webhook: URL refused: %v", err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": webhookURLRefusedMessage,
+		})
+	}
+	return respondServerError(c, fiber.StatusInternalServerError, err)
+}
+
 // CreateWebhook creates a new webhook subscription
 // @Summary Create webhook
 // @Description Create a new webhook subscription for event notifications
@@ -93,7 +114,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 
 	webhook, err := h.getWebhookService().CreateWebhook(c.Context(), &req, orgID, userID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondWebhookServiceError(c, err)
 	}
 
 	// Log audit
@@ -291,7 +312,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	// Update webhook
 	webhook, err := h.getWebhookService().UpdateWebhook(c.Context(), webhookID, &req)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondWebhookServiceError(c, err)
 	}
 
 	// Log audit
@@ -374,7 +395,14 @@ func (h *WebhookHandler) TestWebhook(c fiber.Ctx) error {
 	// Always return 200 to frontend with the actual webhook response details
 	message := fmt.Sprintf("Webhook responded with status %d", result.StatusCode)
 	if !result.Success {
-		message = fmt.Sprintf("Webhook test failed: %s", result.ErrorMessage)
+		// The answer says only whether the endpoint answered and with which
+		// status; the delivery error stays in the server log.
+		log.Printf("webhook %s: test delivery failed: %s", webhookID, result.ErrorMessage)
+		if result.StatusCode != 0 {
+			message = fmt.Sprintf("Webhook test failed: the endpoint responded with status %d", result.StatusCode)
+		} else {
+			message = "Webhook test failed: the endpoint could not be reached"
+		}
 	}
 
 	return c.JSON(fiber.Map{
