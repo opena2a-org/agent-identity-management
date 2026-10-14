@@ -49,6 +49,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `secure('<name>', auto_detect_mcp=True)` finds the agent by name and sends
   `PUT /api/v1/agents/{id}/keys` with the new public key.
 
+### Changed — the dev stack takes its host ports and container names from the environment
+
+- `docker-compose.yml` reads `AIM_PROJECT` (`aim`, the prefix of all eleven container names) and the
+  quick-start's `AIM_BACKEND_PORT` (`8080`), `AIM_FRONTEND_PORT` (`3000`), `AIM_POSTGRES_PORT`
+  (`5432`) and `AIM_REDIS_PORT` (`6379`) with the same defaults, plus one host port per other
+  service: `AIM_ELASTICSEARCH_PORT` (`9200`), `AIM_ELASTICSEARCH_TRANSPORT_PORT` (`9300`),
+  `AIM_MINIO_PORT` (`9000`), `AIM_MINIO_CONSOLE_PORT` (`9001`), `AIM_NATS_PORT` (`4222`),
+  `AIM_NATS_MONITOR_PORT` (`8222`), `AIM_PROMETHEUS_PORT` (`9090`), `AIM_GRAFANA_PORT` (`3003`) and
+  `AIM_LOKI_PORT` (`3100`). Rendered with none of them set, the file yields the same ports and names
+  as before. The defaults of `FRONTEND_URL`, `ALLOWED_ORIGINS`, the dashboard's `NEXT_PUBLIC_API_URL`
+  and Grafana's `GF_SERVER_ROOT_URL` follow the host ports. Every service other than the backend and
+  the dashboard stays bound to `127.0.0.1`.
+- The "From source" section of `docs/DEPLOYMENT.md` and `.env.example` list every variable with its
+  default.
+
 ### Fixed — an MCP server loses consensus verification when its attesting agents stop agreeing
 
 - A server that multi-agent consensus verified returns to `pending` when its attestations stop

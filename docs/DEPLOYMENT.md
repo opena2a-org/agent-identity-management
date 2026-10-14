@@ -796,6 +796,8 @@ cd examples/flight-search-agent && python3 flight_agent.py
 
 The full `docker-compose.yml` also brings up Elasticsearch, MinIO, NATS, Prometheus, Grafana, and Loki. Skip those services with the minimal command above.
 
+`docker-compose.yml` takes `AIM_PROJECT` (`aim`, the prefix of every container name) and the quick-start's `AIM_BACKEND_PORT` (`8080`), `AIM_FRONTEND_PORT` (`3000`), `AIM_POSTGRES_PORT` (`5432`) and `AIM_REDIS_PORT` (`6379`) with the same defaults, plus one host port per other service: `AIM_ELASTICSEARCH_PORT` (`9200`), `AIM_ELASTICSEARCH_TRANSPORT_PORT` (`9300`), `AIM_MINIO_PORT` (`9000`), `AIM_MINIO_CONSOLE_PORT` (`9001`), `AIM_NATS_PORT` (`4222`), `AIM_NATS_MONITOR_PORT` (`8222`), `AIM_PROMETHEUS_PORT` (`9090`), `AIM_GRAFANA_PORT` (`3003`), `AIM_LOKI_PORT` (`3100`). Set them in `.env` to run the dev stack beside a quick-start or another checkout on one host; each stack also needs its own Compose project (`COMPOSE_PROJECT_NAME`, or the checkout directory's name).
+
 ## Observability
 
 The backend emits OpenTelemetry traces, metrics, and logs. A hermetic demo stack lives at [`apps/backend/deployments/otel-demo/`](../apps/backend/deployments/otel-demo/): OpenTelemetry Collector, Tempo, Prometheus, Loki, Grafana.
