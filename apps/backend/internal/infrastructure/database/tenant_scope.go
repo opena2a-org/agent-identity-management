@@ -97,14 +97,16 @@ type TenantScopedTable struct {
 	// carry no organization of their own. Empty when TenantColumn is set.
 	AgentColumn string
 
-	// LintParamKeys are the cmd/tenantscope-lint paramKeys entries that reach
-	// this table, which is what makes it a table the lint enumerates as
-	// tenant-scoped.
+	// LintParamKeys are names from cmd/tenantscope-lint's paramKeys that this
+	// manifest pairs with the table. paramKeys is a set of URL parameter
+	// names, not of tables, and the lint does not read this field.
 	LintParamKeys []string
 }
 
-// TenantScopedTables is the set of tables whose rows belong to one tenant: the
-// eleven tables that cmd/tenantscope-lint's paramKeys reach.
+// TenantScopedTables lists the eleven tables the row security census looks
+// for: it counts the statements that name one of them. It is not every table
+// whose rows belong to one tenant: webhooks, sdk_tokens and security_policies,
+// for example, each carry an organization_id column and are not in it.
 var TenantScopedTables = []TenantScopedTable{
 	{Table: "organizations", TenantColumn: "id", LintParamKeys: []string{"orgId"}},
 	{Table: "users", TenantColumn: "organization_id", LintParamKeys: []string{"userId"}},
