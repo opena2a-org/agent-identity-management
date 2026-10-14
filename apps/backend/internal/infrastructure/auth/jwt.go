@@ -186,18 +186,31 @@ func (s *JWTService) CheckFamilyRevoked(ctx context.Context, family string) (rev
 // slack. Reports true only when the key was written; a missing revoker or a
 // token with no family is a no-op reported as false with no error.
 func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool, error) {
-	if s.revoker == nil || claims == nil {
+	if claims == nil {
 		return false, nil
 	}
-	family := claims.FamilyID()
-	if family == "" {
+	var lifetime time.Duration
+	if claims.ExpiresAt != nil && claims.IssuedAt != nil {
+		lifetime = claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+	}
+	return s.RevokeFamilyFor(ctx, claims.FamilyID(), lifetime)
+}
+
+// RevokeFamilyFor ends the token family named by family, whose longest-lived
+// member was minted for lifetime, under the same rule as RevokeFamily: the key
+// lasts for the longer of the configured refresh lifetime and lifetime, plus a
+// minute. It is the entry point for a caller that holds a family's id and
+// lifetime from a stored row rather than from a presented token (the
+// dashboard's SDK token revoke). Reports true only when the key was written;
+// a missing revoker or an empty family is a no-op reported as false with no
+// error.
+func (s *JWTService) RevokeFamilyFor(ctx context.Context, family string, lifetime time.Duration) (bool, error) {
+	if s == nil || s.revoker == nil || family == "" {
 		return false, nil
 	}
 	ttl := s.refreshExpiry
-	if claims.ExpiresAt != nil && claims.IssuedAt != nil {
-		if lifetime := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time); lifetime > ttl {
-			ttl = lifetime
-		}
+	if lifetime > ttl {
+		ttl = lifetime
 	}
 	if err := s.revoker.RevokeFamily(ctx, family, ttl+familyRevocationSlack); err != nil {
 		return false, err

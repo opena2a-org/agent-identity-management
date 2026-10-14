@@ -1314,6 +1314,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		),
 		SDKToken: handlers.NewSDKTokenHandler(
 			services.SDKToken,
+			jwtService,
 		),
 		BootstrapToken: handlers.NewBootstrapTokenHandler(
 			services.BootstrapToken,

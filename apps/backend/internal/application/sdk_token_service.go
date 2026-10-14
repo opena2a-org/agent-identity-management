@@ -49,19 +49,66 @@ func (s *SDKTokenService) GetOrganizationTokens(ctx context.Context, organizatio
 // user" from "doesn't exist". Both branches now collapse to the
 // sentinel and the handler emits a fixed 404 body.
 func (s *SDKTokenService) RevokeToken(ctx context.Context, tokenID uuid.UUID, userID uuid.UUID, reason string) error {
+	_, err := s.RevokeTokenRow(ctx, tokenID, userID, reason)
+	return err
+}
+
+// RevokeTokenRow is RevokeToken reporting the row it revoked, as it was read
+// before the revoke, so the caller can end the row's token family too.
+func (s *SDKTokenService) RevokeTokenRow(ctx context.Context, tokenID uuid.UUID, userID uuid.UUID, reason string) (*domain.SDKToken, error) {
 	// Get token to verify ownership
 	token, err := s.sdkTokenRepo.GetByID(tokenID)
 	if err != nil || token == nil {
-		return ErrSDKTokenNotFound
+		return nil, ErrSDKTokenNotFound
 	}
 
 	// Verify user owns this token
 	if token.UserID != userID {
-		return ErrSDKTokenNotFound
+		return nil, ErrSDKTokenNotFound
 	}
 
 	// Revoke token
-	return s.sdkTokenRepo.Revoke(tokenID, reason)
+	if err := s.sdkTokenRepo.Revoke(tokenID, reason); err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
+// ErrSDKTokenFamilyUnknown is returned by FamilyOf when a row's rotation
+// lineage cannot be followed to the download row that names its family.
+var ErrSDKTokenFamilyUnknown = errors.New("sdk token family unknown")
+
+// FamilyOf returns the token family of the row: the token ID of the download
+// row its rotation lineage grew from. An SDK-download token's family is the
+// download token's jti (sid is set to it at download and copied on every
+// rotation), and the download's row stores that jti as its token ID; each
+// rotated row names the row it replaced in its parent_token metadata, so the
+// family is found by walking the lineage to the row with no parent. A row
+// whose lineage cannot be read to its root (a parent row the repository no
+// longer holds, or an unreadable parent id) gives ErrSDKTokenFamilyUnknown.
+func (s *SDKTokenService) FamilyOf(ctx context.Context, row *domain.SDKToken) (string, error) {
+	if row == nil {
+		return "", ErrSDKTokenFamilyUnknown
+	}
+	seen := map[uuid.UUID]bool{row.ID: true}
+	for {
+		parent, _ := row.Metadata["parent_token"].(string)
+		if parent == "" {
+			if row.TokenID == "" {
+				return "", ErrSDKTokenFamilyUnknown
+			}
+			return row.TokenID, nil
+		}
+		parentID, err := uuid.Parse(parent)
+		if err != nil || seen[parentID] {
+			return "", ErrSDKTokenFamilyUnknown
+		}
+		seen[parentID] = true
+		row, err = s.sdkTokenRepo.GetByID(parentID)
+		if err != nil || row == nil {
+			return "", ErrSDKTokenFamilyUnknown
+		}
+	}
 }
 
 // RevokeByTokenHash revokes a token using its hash (for token rotation)
@@ -79,6 +126,20 @@ func (s *SDKTokenService) RotateToken(ctx context.Context, oldTokenHash string, 
 // RevokeAllUserTokens revokes all SDK tokens for a user
 func (s *SDKTokenService) RevokeAllUserTokens(ctx context.Context, userID uuid.UUID, reason string) error {
 	return s.sdkTokenRepo.RevokeAllForUser(userID, reason)
+}
+
+// RevokeAllUserTokenRows is RevokeAllUserTokens reporting the user's rows
+// that were active when it ran, as they were read before the revoke, so the
+// caller can end each row's token family too.
+func (s *SDKTokenService) RevokeAllUserTokenRows(ctx context.Context, userID uuid.UUID, reason string) ([]*domain.SDKToken, error) {
+	rows, err := s.sdkTokenRepo.GetByUserID(userID, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.sdkTokenRepo.RevokeAllForUser(userID, reason); err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // RevokeFamily revokes every active SDK token row of a user's token family

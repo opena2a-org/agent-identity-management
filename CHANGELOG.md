@@ -88,6 +88,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/web/components/agent/key-vault-tab.test.tsx` renders the tab with a mocked key vault and fails when either
   heading appears or when the "Agent Public Key" card no longer copies its key. It fails on the previous commit.
 
+### Fixed — revoking an SDK token in the dashboard ends its token family, so the family's access token is refused at once
+
+- `POST /api/v1/users/me/sdk-tokens/{id}/revoke` and `POST /api/v1/users/me/sdk-tokens/revoke-all` now write the
+  family key (`revoked:fam:<family>`) for each token family among the rows they revoke, as the refresh route does
+  after a reuse and logout does for a sign-in. Before this change the two routes revoked the rows only: in the
+  backend's handler test, a download made with the access token the SDK refresh had minted for the family was
+  answered 200 right after the dashboard revoke, and no family key was written. Now that download is answered
+  401 (`Token has been revoked or is invalid`), and so is a refresh with the family's live refresh token.
+- A row's family is read from its rotation lineage: each rotated row names the row it replaced in its
+  `parent_token` metadata, and the download row at the top holds the family's id as its token ID. The key lasts for
+  the longer of `JWT_REFRESH_TTL` and the row's own lifetime, plus one minute, the rule the refresh route's family
+  write uses. A row whose lineage cannot be followed to its download row, or a key the revocation store refuses,
+  is logged with identifiers only; the rows are revoked and the route answers as before. With no revocation store
+  configured the routes revoke the rows and answer 200 as before.
+- `SDKTokenHandler` now takes the JWT service as a second constructor argument.
+
 ### Changed — the dashboard sets its type from one six-step ramp, 12px for captions and 14px upward for reading text
 
 - `apps/web/tailwind.config.js` replaces Tailwind's font-size scale with six steps, each a size over a line
