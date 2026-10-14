@@ -8,8 +8,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -85,11 +88,33 @@ type CreateWebhookRequest struct {
 	IsActive *bool                 `json:"isActive,omitempty"` // Pointer to distinguish between false and not provided
 }
 
+// ErrWebhookURLRefused is wrapped by a webhook create or update whose URL the
+// server refuses: a URL that does not parse, is not http or https or has no
+// host, a host the resolver reports does not exist, or an address the egress
+// address policy refuses. The rest of the error says why; it is for the server
+// log, not for the caller.
+var ErrWebhookURLRefused = errors.New("invalid webhook URL")
+
+// checkWebhookURL checks a webhook URL with ValidateExternalURL. A lookup that
+// failed for any reason but the name not existing (a timeout, a resolver that
+// did not answer) says nothing about the URL, so it is not a refusal.
+func checkWebhookURL(rawURL string) error {
+	err := utils.ValidateExternalURL(rawURL)
+	if err == nil {
+		return nil
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && !dnsErr.IsNotFound {
+		return fmt.Errorf("webhook URL host lookup failed: %w", err)
+	}
+	return fmt.Errorf("%w: %w", ErrWebhookURLRefused, err)
+}
+
 // CreateWebhook creates a new webhook subscription
 func (s *WebhookService) CreateWebhook(ctx context.Context, req *CreateWebhookRequest, orgID, userID uuid.UUID) (*domain.Webhook, error) {
 	// SECURITY: Validate URL to prevent SSRF attacks
-	if err := utils.ValidateExternalURL(req.URL); err != nil {
-		return nil, fmt.Errorf("invalid webhook URL: %w", err)
+	if err := checkWebhookURL(req.URL); err != nil {
+		return nil, err
 	}
 
 	// Generate secret for webhook signature
@@ -137,8 +162,8 @@ func (s *WebhookService) DeleteWebhook(ctx context.Context, id uuid.UUID) error 
 // UpdateWebhook updates an existing webhook
 func (s *WebhookService) UpdateWebhook(ctx context.Context, id uuid.UUID, req *CreateWebhookRequest) (*domain.Webhook, error) {
 	// SECURITY: Validate URL to prevent SSRF attacks
-	if err := utils.ValidateExternalURL(req.URL); err != nil {
-		return nil, fmt.Errorf("invalid webhook URL: %w", err)
+	if err := checkWebhookURL(req.URL); err != nil {
+		return nil, err
 	}
 
 	// Get existing webhook
@@ -222,40 +247,83 @@ func (s *WebhookService) sendWebhookWithResult(webhook *domain.Webhook, event st
 		return 0, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Webhook-Signature", signature)
-	req.Header.Set("X-Webhook-Event", event)
+	setDeliveryHeaders(req, webhook, event, signature)
 
+	// SECURITY: The webhook URL was checked when the webhook was saved. The
+	// egress client judges the address again when it connects and does not
+	// follow redirects, so neither a changed DNS answer nor a 3xx from the
+	// endpoint sends the delivery to an address that check refuses.
+	start := time.Now()
 	client := s.httpClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
+		// An event delivery that gets no answer is recorded with the error,
+		// so a test delivery that gets no answer is recorded too, as failed.
+		failedAt := time.Now().UTC()
+		s.recordTestDelivery(&domain.WebhookDelivery{
+			ID:             uuid.New(),
+			WebhookID:      webhook.ID,
+			OrganizationID: webhook.OrganizationID,
+			Event:          domain.WebhookEvent(event),
+			Payload:        string(jsonData),
+			Status:         domain.DeliveryStatusFailed,
+			ErrorMessage:   err.Error(),
+			AttemptCount:   1,
+			DurationMs:     failedAt.Sub(start).Milliseconds(),
+			LastAttemptAt:  &failedAt,
+			CreatedAt:      start.UTC(),
+			CompletedAt:    &failedAt,
+		})
 		return 0, err
 	}
 	defer resp.Body.Close()
 
 	// Read response (limited, as for every delivery)
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxStoredResponseBody))
+	completedAt := time.Now().UTC()
 
 	// Record delivery
 	delivery := &domain.WebhookDelivery{
-		ID:           uuid.New(),
-		WebhookID:    webhook.ID,
-		Event:        domain.WebhookEvent(event),
-		Payload:      string(jsonData),
-		StatusCode:   resp.StatusCode,
-		ResponseBody: string(body),
-		Success:      resp.StatusCode >= 200 && resp.StatusCode < 300,
-		AttemptCount: 1,
-		CreatedAt:    time.Now().UTC(),
+		ID:             uuid.New(),
+		WebhookID:      webhook.ID,
+		OrganizationID: webhook.OrganizationID,
+		Event:          domain.WebhookEvent(event),
+		Payload:        string(jsonData),
+		Status:         domain.DeliveryStatusSuccess,
+		StatusCode:     resp.StatusCode,
+		ResponseBody:   string(body),
+		Success:        resp.StatusCode >= 200 && resp.StatusCode < 300,
+		AttemptCount:   1,
+		DurationMs:     completedAt.Sub(start).Milliseconds(),
+		LastAttemptAt:  &completedAt,
+		CreatedAt:      start.UTC(),
+		CompletedAt:    &completedAt,
+	}
+	if !delivery.Success {
+		delivery.Status = domain.DeliveryStatusFailed
+		delivery.ErrorMessage = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
 
-	s.webhookRepo.RecordDelivery(delivery)
+	s.recordTestDelivery(delivery)
 
 	if !delivery.Success {
 		return resp.StatusCode, fmt.Errorf("webhook delivery failed with status %d", resp.StatusCode)
 	}
 
 	return resp.StatusCode, nil
+}
+
+// recordTestDelivery stores the record of a test delivery. A record that
+// cannot be stored leaves the test's result unchanged and is written to the
+// server log. A service built without a repository, as a test that only
+// watches the connection builds it, stores nothing.
+func (s *WebhookService) recordTestDelivery(delivery *domain.WebhookDelivery) {
+	if s.webhookRepo == nil {
+		return
+	}
+	if err := s.webhookRepo.RecordDelivery(delivery); err != nil {
+		log.Printf("webhook %s: failed to record test delivery %s: %v", delivery.WebhookID, delivery.ID, err)
+	}
 }
 
 // sendWebhook sends a webhook payload
@@ -265,6 +333,17 @@ func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payl
 }
 
 // Helper functions
+
+// setDeliveryHeaders sets the headers of a webhook delivery. A test delivery
+// and an event delivery send the same set, so a receiver that routes or
+// filters on them treats both alike.
+func setDeliveryHeaders(req *http.Request, webhook *domain.Webhook, event, signature string) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Signature", signature)
+	req.Header.Set("X-Webhook-Event", event)
+	req.Header.Set("X-Webhook-ID", webhook.ID.String())
+	req.Header.Set("User-Agent", "AIM-Webhook/1.0")
+}
 
 func generateSecret() (string, error) {
 	b := make([]byte, 32)
@@ -434,13 +513,10 @@ func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, event domain.W
 		return 0, "", time.Since(start), err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Webhook-Signature", signature)
-	req.Header.Set("X-Webhook-Event", string(event))
-	req.Header.Set("X-Webhook-ID", webhook.ID.String())
-	req.Header.Set("User-Agent", "AIM-Webhook/1.0")
+	setDeliveryHeaders(req, webhook, string(event), signature)
 
-	// Send request
+	// Send request. SECURITY: see sendWebhookWithResult for why delivery
+	// goes through the egress client.
 	client := s.httpClient(timeout)
 	resp, err := client.Do(req)
 	duration := time.Since(start)
