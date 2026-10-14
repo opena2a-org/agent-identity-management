@@ -32,6 +32,11 @@
     "version": {
       "type": ["string", "null"]
     },
+    "syncedFrom": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "The agent-identity-management commit the latest merged sync on the deploying branch was pulled from; protected paths may lag it, and the sync pull request's \"Not carried\" report is the record of what a sync did not carry."
+    },
     "checkedAt": {
       "type": "string",
       "format": "date-time"

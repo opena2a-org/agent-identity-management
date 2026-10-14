@@ -50,6 +50,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - A test fails when the key vault response leaves out `serverHoldsPrivateKey` or carries `encryptedPrivateKey`,
   and when the Algorithm row shows `Ed25519` for a key with no stored algorithm.
 
+### Added — `GET /health/ready` can report the commit a hosted build was synced from
+
+- The readiness body may carry an optional `syncedFrom` key: the agent-identity-management commit, as a full
+  lowercase 40-hex sha, that the latest merged sync on the deploying branch was pulled from. Protected paths
+  may lag that commit; the sync pull request's "Not carried" report is the record of what a sync did not
+  carry. A build sets it with `-X main.buildSyncedFrom=<40-hex>`; a build that sets nothing, or a value that
+  is not a full lowercase sha, leaves the key out of the body. The image this repository publishes does not
+  set it.
+- `apps/backend/contracts/health-ready.schema.json` declares `syncedFrom` as an optional string with the
+  pattern `^[0-9a-f]{40}$`.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The

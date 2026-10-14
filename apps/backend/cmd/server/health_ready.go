@@ -28,6 +28,14 @@ var buildCommit string
 // Empty serialises as JSON null.
 var buildVersion string
 
+// buildSyncedFrom is set by -X main.buildSyncedFrom=<40-hex> and names the
+// agent-identity-management commit the latest merged sync on the deploying
+// branch was pulled from; protected paths may lag it, and the sync pull
+// request's "Not carried" report is the record of what a sync did not carry.
+// A build that sets nothing, or anything other than a full lowercase 40-hex
+// sha, leaves "syncedFrom" out of the readiness body.
+var buildSyncedFrom string
+
 const (
 	healthReadyService = "agent-identity-management"
 
@@ -68,6 +76,7 @@ type healthReadyBody struct {
 	Service      string                           `json:"service"`
 	Commit       *string                          `json:"commit"`
 	Version      *string                          `json:"version"`
+	SyncedFrom   *string                          `json:"syncedFrom,omitempty"`
 	CheckedAt    string                           `json:"checkedAt"`
 	Degraded     bool                             `json:"degraded"`
 	Dependencies map[string]healthReadyDependency `json:"dependencies"`
@@ -161,6 +170,7 @@ func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error) fibe
 			Service:      healthReadyService,
 			Commit:       stampedCommit(),
 			Version:      stampedVersion(),
+			SyncedFrom:   stampedSyncedFrom(),
 			CheckedAt:    time.Now().UTC().Format(time.RFC3339),
 			Degraded:     degraded,
 			Dependencies: deps,
@@ -176,6 +186,17 @@ func stampedCommit() *string {
 	}
 	commit := buildCommit
 	return &commit
+}
+
+// stampedSyncedFrom returns the build-time sync source when it is a full
+// 40-hex SHA, nil otherwise; the field's omitempty then leaves the key out of
+// the body rather than serialising null or an empty string.
+func stampedSyncedFrom() *string {
+	if !buildCommitPattern.MatchString(buildSyncedFrom) {
+		return nil
+	}
+	syncedFrom := buildSyncedFrom
+	return &syncedFrom
 }
 
 // releaseTagPattern matches a platform release tag (platform-v1.1.0, with an
