@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — webhook, MCP server and agent card requests refuse eight more special-purpose address ranges
+
+- The address policy that the URL check and the connection check share also refuses 192.88.99.0/24 (6to4 relay
+  anycast), ::/96 (IPv4-compatible), ::ffff:0:0:0/96 (IPv4-translated), 2001:2::/48 (benchmarking), 2001:10::/28
+  (ORCHID), 2001:20::/28 (ORCHIDv2), 3fff::/20 (documentation) and 5f00::/16 (segment routing). A refusal names the
+  class, for example `destination address is not allowed (6to4 relay anycast)`.
+- The IPv4-compatible and IPv4-translated forms are refused whatever IPv4 address they carry. IPv4-mapped, NAT64 and
+  6to4 addresses are judged on the IPv4 address they carry.
+- A URL whose host lookup returns an answer that is not a plain IP address, such as the zoned literal
+  `http://[fe80::1%25lo0]/`, is refused when it is checked, with the class `unparseable address`, the class the
+  connection check gives such an address.
+- A test passes 43 addresses the policy refuses and 7 public addresses through the URL check as IP literals, and
+  fails when one of the first is admitted or one of the second is refused.
+
 ### Security — every message the SMTP mail service sends asks the relay not to track it
 
 - The SMTP mail service, which `EMAIL_PROVIDER=smtp` selects, writes one `X-SMTPAPI` header on every message it
