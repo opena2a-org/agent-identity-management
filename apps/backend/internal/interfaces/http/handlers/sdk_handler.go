@@ -56,13 +56,13 @@ type SDKCredentials struct {
 }
 
 // DownloadSDK generates a pre-configured SDK with embedded credentials
-// @Summary Download pre-configured Python SDK
-// @Description Downloads production-ready Python SDK with embedded OAuth credentials for zero-config usage. Go and JavaScript SDKs planned for Q1-Q2 2026.
+// @Summary Download a pre-configured SDK
+// @Description Downloads the Python or Java SDK with embedded OAuth credentials for zero-config usage.
 // @Tags sdk
 // @Produce application/zip
-// @Param sdk query string false "SDK type (only 'python' supported)" default(python)
+// @Param sdk query string false "SDK type ('python' or 'java')" default(python)
 // @Success 200 {file} binary "SDK zip file"
-// @Failure 400 {object} ErrorResponse "Invalid SDK type - only Python supported"
+// @Failure 400 {object} ErrorResponse "Invalid SDK type - only 'python' and 'java' are served"
 // @Failure 401 {object} ErrorResponse "Unauthorized"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v1/sdk/download [get]
@@ -71,8 +71,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// Get SDK type from query parameter (default to python for backward compatibility)
 	sdkType := c.Query("sdk", "python")
 
-	// Validate SDK type - Python and Java SDKs are production-ready
-	// Go and JavaScript SDKs planned for Q1-Q2 2026 release
+	// Validate SDK type: the download serves the Python and Java SDKs only
 	validSDKs := map[string]bool{
 		"python": true,
 		"java":   true,
@@ -80,7 +79,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 
 	if !validSDKs[sdkType] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": fmt.Sprintf("Invalid SDK type '%s'. Available SDKs: 'python', 'java'. Go and JavaScript SDKs planned for Q1-Q2 2026.", sdkType),
+			"error": fmt.Sprintf("Invalid SDK type '%s'. Available SDKs: 'python', 'java'.", sdkType),
 		})
 	}
 
@@ -256,6 +255,37 @@ func isLoopbackHost(host string) bool {
 	return strings.HasSuffix(strings.ToLower(host), ".localhost")
 }
 
+// sdkDevelopmentPaths are paths, relative to an SDK's root, that hold the SDK's
+// own tests and development tooling: the Python SDK's tests, maintenance scripts,
+// smoke tools, root-level test module, pytest configuration and development
+// requirements, and the Java SDK's test sources.
+var sdkDevelopmentPaths = map[string]bool{
+	"tests":                     true,
+	"scripts":                   true,
+	"tools":                     true,
+	"conftest.py":               true,
+	"pytest.ini":                true,
+	"requirements-dev.txt":      true,
+	"test_sdk_comprehensive.py": true,
+	"src/test":                  true,
+}
+
+// isSDKDevelopmentPath reports whether relPath, a slash-separated path inside an
+// SDK's root, is test or tooling content the download leaves out. The download is
+// for using the SDK, so it carries neither the SDK's tests nor the tools used to
+// build and check it: a path in sdkDevelopmentPaths, a tests directory at any
+// depth, and a pytest conftest.py or test_*.py module at any depth.
+func isSDKDevelopmentPath(relPath string, isDir bool) bool {
+	if sdkDevelopmentPaths[relPath] {
+		return true
+	}
+	name := relPath[strings.LastIndex(relPath, "/")+1:]
+	if isDir {
+		return name == "tests"
+	}
+	return name == "conftest.py" || (strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py"))
+}
+
 // createSDKZip creates a zip file with SDK and embedded credentials
 // Returns: (zipData []byte, version string, error)
 func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([]byte, string, error) {
@@ -291,6 +321,20 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 			return err
 		}
 
+		// Calculate relative path within zip
+		relPath, err := filepath.Rel(sdkRoot, path)
+		if err != nil {
+			return err
+		}
+
+		// Leave out the SDK's own tests and development tooling
+		if isSDKDevelopmentPath(filepath.ToSlash(relPath), info.IsDir()) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		// Skip certain directories and files
 		if info.IsDir() {
 			dirName := filepath.Base(path)
@@ -318,12 +362,6 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 		}
 		if fileName == ".DS_Store" || fileName == "Thumbs.db" {
 			return nil
-		}
-
-		// Calculate relative path within zip
-		relPath, err := filepath.Rel(sdkRoot, path)
-		if err != nil {
-			return err
 		}
 
 		// Create zip entry with SDK-specific prefix
@@ -550,7 +588,7 @@ Agent credentials (after registration) are stored separately in ` + "`~/.aim/age
 - Revoke tokens from dashboard if compromised
 - Tokens can be revoked at any time from your dashboard
 
-For more examples, see the included test files.
+For more examples, see the ` + "`examples/`" + ` directory.
 `
 }
 

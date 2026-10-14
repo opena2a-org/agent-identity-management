@@ -19,6 +19,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   in it replaced by `[address]`, and the warning for failures not cleared after a sign-in names the
   user ID. The alert records keep the address in their title, description and metadata.
 
+### Security — the SDK download leaves out the SDK's tests and tooling and states no schedule
+
+- `GET /api/v1/sdk/download` builds its zip from the SDK's tree without the SDK's own tests and
+  development tooling: for Python, `tests/`, `scripts/`, `tools/`, `conftest.py`, `pytest.ini`,
+  `requirements-dev.txt` and `test_sdk_comprehensive.py`; for Java, `src/test/`. A `tests`
+  directory, a `conftest.py` and a `test_*.py` module are left out at any depth. The SDK's
+  sources, packaging, README and `examples/` still ship, beside `QUICKSTART.md` and the embedded
+  `.aim/sdk_credentials.json`.
+- The Python `QUICKSTART.md` points at the `examples/` directory for more examples.
+- A request for an SDK the endpoint does not serve is answered
+  `400 {"error":"Invalid SDK type '<sdk>'. Available SDKs: 'python', 'java'."}`, and the
+  endpoint's API description names the Python and Java SDKs it serves and gives no release date
+  for any other.
+
 ### Security — an access token ends with the sign-in it belongs to
 
 - The access token issued with a login pair, and the one each refresh of that login issues, now
