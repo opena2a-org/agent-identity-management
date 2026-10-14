@@ -167,8 +167,9 @@ func (h *DeviceAuthHandler) ApproveDevice(c fiber.Ctx) error {
 		})
 	}
 
-	// A revoked browser session cannot approve a new sign-in for a command line.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "device_approve") {
+	// A revoked browser session cannot approve a new sign-in for a command
+	// line, and neither can an access token minted from an SDK-download token.
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, "device_approve") {
 		return nil
 	}
 

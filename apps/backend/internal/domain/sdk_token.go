@@ -7,11 +7,20 @@ import (
 )
 
 // Revoke reasons the server writes on its own. A row retired by rotation and
-// presented again is a reuse; a row revoked with its family was ended by one.
+// presented again is a reuse; a row revoked with its family was ended by one;
+// a row revoked for its family's age was presented past the family's maximum
+// age (SDK_TOKEN_FAMILY_MAX_AGE).
 const (
 	SDKTokenRevokeReasonRotation      = "token_rotation"
 	SDKTokenRevokeReasonFamilyRevoked = "token_family_revoked"
+	SDKTokenRevokeReasonFamilyMaxAge  = "family_max_age"
 )
+
+// SDKTokenMetadataFamilyCreatedAt is the metadata key under which a row
+// carries its family's birth, the created_at of the row the download wrote,
+// as an RFC 3339 time. A rotation copies it to the successor row, so the
+// birth survives the root row; a row without it is its family's root.
+const SDKTokenMetadataFamilyCreatedAt = "familyCreatedAt"
 
 // SDKToken represents a tracked SDK refresh token for security and revocation
 type SDKToken struct {
@@ -48,6 +57,27 @@ func (t *SDKToken) IsActive() bool {
 // RevokedFor reports whether the row was revoked with the given reason.
 func (t *SDKToken) RevokedFor(reason string) bool {
 	return t.RevokedAt != nil && t.RevokeReason != nil && *t.RevokeReason == reason
+}
+
+// FamilyCreatedAt is the birth of the family the row belongs to: the
+// familyCreatedAt its metadata carries, or the row's own created_at when the
+// metadata carries none or an unreadable value (the row is then read as its
+// family's root, so an absent value never lengthens the family's life).
+func (t *SDKToken) FamilyCreatedAt() time.Time {
+	if raw, ok := t.Metadata[SDKTokenMetadataFamilyCreatedAt].(string); ok {
+		if born, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			return born
+		}
+	}
+	return t.CreatedAt
+}
+
+// SetFamilyCreatedAt writes the family's birth into the row's metadata.
+func (t *SDKToken) SetFamilyCreatedAt(born time.Time) {
+	if t.Metadata == nil {
+		t.Metadata = map[string]interface{}{}
+	}
+	t.Metadata[SDKTokenMetadataFamilyCreatedAt] = born.UTC().Format(time.RFC3339Nano)
 }
 
 // Revoke marks the token as revoked with a reason

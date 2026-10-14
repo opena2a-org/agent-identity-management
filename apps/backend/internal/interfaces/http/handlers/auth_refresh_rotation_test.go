@@ -112,7 +112,7 @@ func sdkRotationApp(t *testing.T, repo *rotationSDKRepo) (*fiber.App, *auth.JWTS
 		return activeUser(userID, orgID, domain.RoleAdmin, "sdk@example.com"), nil
 	}}
 	repo.token = &domain.SDKToken{
-		ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+		ID: uuid.New(), UserID: userID, OrganizationID: orgID, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 	app, jwtSvc := newRefreshTestApp(t, users, repo)
 	old, err := jwtSvc.GenerateSDKRefreshToken(userID.String(), orgID.String(), "sdk@example.com", "admin")
@@ -251,7 +251,7 @@ func TestRefreshToken_SDKTokenPathUnchanged(t *testing.T) {
 		return activeUser(userID, orgID, domain.RoleAdmin, "sdk@example.com"), nil
 	}}
 	sdkRepo := &rotationSDKRepo{token: &domain.SDKToken{
-		ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+		ID: uuid.New(), UserID: userID, OrganizationID: orgID, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
 	}}
 	app, jwtSvc := newRefreshTestApp(t, users, sdkRepo)
 	store := &rotationStore{}
@@ -284,7 +284,7 @@ func TestRefreshToken_SDKRowRevokeFailureDoesNotRotate(t *testing.T) {
 	}}
 	sdkRepo := &rotationSDKRepo{
 		token: &domain.SDKToken{
-			ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+			ID: uuid.New(), UserID: userID, OrganizationID: orgID, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
 		},
 		revokeErr: errors.New("database unavailable"),
 	}
@@ -389,7 +389,7 @@ func TestRefreshToken_RecoveredTokenRowFollowsTheDenylist(t *testing.T) {
 		return activeUser(userID, orgID, domain.RoleAdmin, "rotate@example.com"), nil
 	}}
 	sdkRepo := &rotationSDKRepo{token: &domain.SDKToken{
-		ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+		ID: uuid.New(), UserID: userID, OrganizationID: orgID, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
 	}}
 	app, jwtSvc := newRefreshTestApp(t, users, sdkRepo)
 	store := &rotationStore{setErr: errors.New("store unavailable")}

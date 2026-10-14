@@ -177,6 +177,7 @@ func newSDKFamilyFixture(t *testing.T, store *rotationStore) *sdkFamilyFixture {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "python", "VERSION"), []byte("0.0.0-fixture\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "python", "aim_sdk", "__init__.py"), []byte("# fixture\n"), 0o644))
 	t.Setenv("SDK_BASE_DIR", dir)
+	// acting sets what AuthMiddleware sets for a sign-in's access token.
 	acting := func(next fiber.Handler) fiber.Handler {
 		return func(c fiber.Ctx) error {
 			c.Locals("user_id", f.userID)
@@ -184,6 +185,7 @@ func newSDKFamilyFixture(t *testing.T, store *rotationStore) *sdkFamilyFixture {
 			c.Locals("email", "sdkfam@example.com")
 			c.Locals("role", "admin")
 			c.Locals("sid", f.actingFamily)
+			c.Locals("auth_time", time.Now().Add(-time.Minute))
 			return next(c)
 		}
 	}

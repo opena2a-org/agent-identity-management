@@ -87,6 +87,11 @@ func (c *JWTClaims) SignedInAt() time.Time {
 // defaultSessionMaxAge bounds a sign-in when JWT_SESSION_MAX_AGE is unset or unreadable.
 const defaultSessionMaxAge = 8 * time.Hour
 
+// defaultSDKTokenFamilyMaxAge bounds an SDK-download token family when
+// SDK_TOKEN_FAMILY_MAX_AGE is unset or unreadable: 365 days, the lifetime one
+// SDK-download token had before it was reduced to 90 days.
+const defaultSDKTokenFamilyMaxAge = 365 * 24 * time.Hour
+
 // FamilyID returns the token family a login refresh token or an SDK-download
 // token belongs to: its sid claim, or its own jti for a token minted before
 // sid existed (such a token is the root of its own family, and its first
@@ -126,11 +131,12 @@ const familyRevocationSlack = time.Minute
 
 // JWTService handles JWT operations
 type JWTService struct {
-	secret        []byte
-	accessExpiry  time.Duration
-	refreshExpiry time.Duration
-	sessionMaxAge time.Duration
-	revoker       *TokenRevoker
+	secret          []byte
+	accessExpiry    time.Duration
+	refreshExpiry   time.Duration
+	sessionMaxAge   time.Duration
+	sdkFamilyMaxAge time.Duration
+	revoker         *TokenRevoker
 }
 
 // SessionMaxAge is the longest a login sign-in lasts, however often it is
@@ -141,6 +147,18 @@ func (s *JWTService) SessionMaxAge() time.Duration {
 		return defaultSessionMaxAge
 	}
 	return s.sessionMaxAge
+}
+
+// SDKTokenFamilyMaxAge is the longest an SDK-download token family lives,
+// however often it rotates (SDK_TOKEN_FAMILY_MAX_AGE, 8760h by default),
+// measured from the family's birth: the created_at of the sdk_tokens row the
+// download wrote. The refresh route enforces it from the row, since the birth
+// is not a claim. No value switches it off.
+func (s *JWTService) SDKTokenFamilyMaxAge() time.Duration {
+	if s.sdkFamilyMaxAge <= 0 {
+		return defaultSDKTokenFamilyMaxAge
+	}
+	return s.sdkFamilyMaxAge
 }
 
 // SessionExpired reports whether a login refresh token's sign-in is older
@@ -388,12 +406,19 @@ func NewJWTService() *JWTService {
 		log.Printf("WARNING: JWT_SESSION_MAX_AGE must be a positive duration, using default 8h")
 		sessionMaxAge = defaultSessionMaxAge
 	}
+	sdkFamilyMaxAge, err := time.ParseDuration(getEnv("SDK_TOKEN_FAMILY_MAX_AGE", "8760h"))
+	if err != nil || sdkFamilyMaxAge <= 0 {
+		log.Printf("WARNING: SDK_TOKEN_FAMILY_MAX_AGE must be a positive duration, using default 8760h")
+		sdkFamilyMaxAge = defaultSDKTokenFamilyMaxAge
+	}
+	log.Printf("SDK-download token families live at most %s (SDK_TOKEN_FAMILY_MAX_AGE)", sdkFamilyMaxAge)
 
 	return &JWTService{
-		secret:        []byte(secret),
-		accessExpiry:  accessExpiry,
-		refreshExpiry: refreshExpiry,
-		sessionMaxAge: sessionMaxAge,
+		secret:          []byte(secret),
+		accessExpiry:    accessExpiry,
+		refreshExpiry:   refreshExpiry,
+		sessionMaxAge:   sessionMaxAge,
+		sdkFamilyMaxAge: sdkFamilyMaxAge,
 	}
 }
 

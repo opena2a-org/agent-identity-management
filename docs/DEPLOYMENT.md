@@ -202,6 +202,7 @@ JWT_SECRET=your-super-secret-jwt-key-change-in-production
 JWT_ACCESS_TTL=2h            # Access token lifetime
 JWT_REFRESH_TTL=168h         # A refresh token unused this long expires; each refresh issues a new one
 JWT_SESSION_MAX_AGE=8h       # Longest a sign-in lasts, however often it is refreshed
+SDK_TOKEN_FAMILY_MAX_AGE=8760h  # Longest a downloaded SDK's credential lasts from its download, however often it is refreshed
 
 # Key Vault master key: base64-encoded 32 bytes that encrypt agent private keys.
 # Required in every environment except development. Generate it once with

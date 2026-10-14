@@ -135,6 +135,8 @@ Exchange a refresh token for a new access token. The refresh token travels in th
 
 `expiresIn` is the access token's lifetime in seconds (`JWT_ACCESS_TTL`, 2 hours by default). `rotated` is `true` when the presented refresh token was retired and a new one issued; `false` means `refreshToken` is the token presented, unchanged.
 
+A downloaded SDK's refresh token is refreshed the same way, into a new 90-day token each time, for at most `SDK_TOKEN_FAMILY_MAX_AGE` after the download (`8760h` by default). Past that the refresh is answered `401` `Invalid or expired refresh token` and the SDK is downloaded again with a sign-in. The access token such a refresh yields is a valid bearer, but it records no sign-in (it carries no `auth_time`), so `GET /api/v1/sdk/download`, `POST /api/v1/auth/sdk/recover` and `POST /api/v1/oauth/device/approve` refuse it with `401`.
+
 ---
 
 #### POST /api/v1/auth/reauth

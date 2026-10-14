@@ -376,9 +376,10 @@ func TestConfigSource_DoesNotReadTokenLifetimes(t *testing.T) {
 	}
 
 	owned := map[string]struct{}{
-		"JWT_ACCESS_TTL":      {},
-		"JWT_REFRESH_TTL":     {},
-		"JWT_SESSION_MAX_AGE": {},
+		"JWT_ACCESS_TTL":           {},
+		"JWT_REFRESH_TTL":          {},
+		"JWT_SESSION_MAX_AGE":      {},
+		"SDK_TOKEN_FAMILY_MAX_AGE": {},
 	}
 
 	ast.Inspect(file, func(n ast.Node) bool {

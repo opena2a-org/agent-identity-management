@@ -11,6 +11,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — a downloaded SDK's credential ends `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token
+
+- Each refresh of an SDK-download token issues a new 90-day token. The chain now ends: `SDK_TOKEN_FAMILY_MAX_AGE`
+  (a Go duration, `8760h` by default, 365 days) bounds a downloaded SDK's credential from the download, however
+  often it is refreshed. The value is read once at boot beside `JWT_SESSION_MAX_AGE` and the value in force is
+  logged; a value that is not a positive duration logs a warning and the default applies, and no value switches
+  the bound off. A refresh past the bound is answered `401` `{"error":"Invalid or expired refresh token"}`, the
+  expired token's answer, before the account is looked up; the presented `sdk_tokens` row is revoked with reason
+  `family_max_age`, nothing is minted, and the refusal is recorded once as a `refresh_family_max_age` audit row
+  and a `SECURITY` log line, identifiers and the family's birth only. The holder downloads a new SDK with a sign-in.
+- The chain's birth travels with it: the row a rotation writes carries the presented row's `familyCreatedAt` in its
+  metadata, or the presented row's own `created_at` when it carries none, so the birth survives a purge of the
+  download's row and a rotation never makes a chain younger. A chain that exists when this change is deployed is
+  read from its current row, so it ends between `SDK_TOKEN_FAMILY_MAX_AGE` minus 90 days and
+  `SDK_TOKEN_FAMILY_MAX_AGE` after the deploy. The row `POST /api/v1/auth/sdk/recover` writes carries its own
+  `created_at` as its birth. Sign-ins and their `JWT_SESSION_MAX_AGE`, and each SDK-download token's own 90-day
+  lifetime, are unchanged. The variable is listed in `apps/backend/.env.example` and `docs/DEPLOYMENT.md`.
+- `GET /api/v1/sdk/download`, `POST /api/v1/auth/sdk/recover` and `POST /api/v1/oauth/device/approve` mint only for
+  an access token that records a sign-in: one carrying `auth_time`, as a sign-in's access token and the ones its
+  refreshes mint do. An access token minted by refreshing an SDK-download token carries the download's session and
+  no `auth_time`; it is refused at the three routes with their existing `401` `Token has been revoked or is
+  invalid` and recorded once as a `credential_mint_refused` audit row whose `cause` is `noSignIn`. A revoked
+  session's refusal, at these three routes and at the API key, agent key, secret rotation and webhook routes that
+  check the session, now records `cause` `sessionRevoked` on its row and its `SECURITY` line. A downloaded SDK's
+  credential therefore cannot download, recover or approve a new credential; that takes a sign-in. The API key,
+  agent key, secret rotation and webhook routes do not check for a sign-in. An access token minted before this
+  release carries no `auth_time` and is refused at the three routes until its sign-in is refreshed; an access
+  token lives `JWT_ACCESS_TTL` (`2h` by default).
+
 ### Added — `POST /api/v1/auth/reauth` re-authenticates a signed-in user with their password
 
 - `POST /api/v1/auth/reauth` takes the signed-in user's password and the refresh token of the session the bearer
