@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — an access token ends with the sign-in it belongs to
+
+- The access token issued with a login pair, and the one each refresh of that login issues, now
+  carries the sign-in's time (the registered `auth_time` claim, the same value as its refresh
+  token's). A request on a user-authenticated route whose access token's sign-in is older than
+  `JWT_SESSION_MAX_AGE` (8 hours by default) is answered with the existing
+  `401 {"error":"Invalid or expired token"}`, by comparing that claim with the clock and with no
+  read of the revocation store, so the dashboard asks the user to sign in again. Until now the
+  middleware read no sign-in time, so a login access token that was within its own expiry and not
+  revoked was accepted whatever the age of its sign-in; the last one a refresh issued before the
+  limit therefore stayed usable for up to `JWT_ACCESS_TTL` (2 hours by default) past it.
+- Access tokens without `auth_time` are not checked and live at most `JWT_ACCESS_TTL` from their
+  issue: those issued before this release, those exchanged from an SDK-download token (which has
+  no maximum session age), and standalone ones. Routes with optional authentication treat a
+  request carrying an ended sign-in as anonymous. Tokens stay opaque to clients and no client
+  changes.
+
 ### Changed — the A2A multi-agent demo's Java program follows `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
 
 - `examples/a2a-multi-agent-demo/java` `A2AMultiAgentDemo.java` used `localhost:8080` when `AIM_URL`
@@ -3371,9 +3388,7 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - The limit holds with or without a revocation store. Refresh tokens issued before this release
   count from the time they were issued, so every existing sign-in ends within
   `JWT_SESSION_MAX_AGE` of the upgrade.
-- SDK-download tokens keep their 90-day lifetime and rotation. Access tokens are unchanged: the
-  last one issued before the limit stays valid until its own expiry (`JWT_ACCESS_TTL`, 2 hours by
-  default).
+- SDK-download tokens keep their 90-day lifetime and rotation.
 - `JWT_SESSION_MAX_AGE` takes a duration such as `8h` or `24h`. A missing, unreadable or
   non-positive value uses 8 hours and logs a warning; the value in effect is logged at startup.
 - `apps/backend/.env.example` and `docs/DEPLOYMENT.md` listed `JWT_EXPIRY` and `JWT_EXPIRATION`,

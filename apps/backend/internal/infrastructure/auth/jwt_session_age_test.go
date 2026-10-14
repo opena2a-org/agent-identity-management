@@ -13,8 +13,9 @@ import (
 // A sign-in ends a fixed time after it began, however often it is refreshed.
 // A login refresh token carries the sign-in's time (the registered auth_time
 // claim), every rotation copies it unchanged, and a token minted before the
-// claim existed counts from its own iat. Only login refresh tokens have a
-// maximum session age; access, SDK-download and service tokens do not.
+// claim existed counts from its own iat. Only login refresh tokens are
+// checked here; SDK-download and service tokens have no maximum session age,
+// and the login access token's check is in jwt_access_session_age_test.go.
 
 func sessionAgeService(t *testing.T, maxAge string) *JWTService {
 	t.Helper()
@@ -46,7 +47,8 @@ func loginRefreshClaims(userID, orgID, sid string, signedIn, issued time.Time) J
 	return c
 }
 
-// A1: a login refresh token carries auth_time equal to its iat; no other kind does.
+// A1: a login refresh token carries auth_time equal to its iat, and its
+// access token the same value; SDK-download and service tokens carry none.
 func TestSessionAge_LoginRefreshTokenCarriesAuthTime(t *testing.T) {
 	svc := sessionAgeService(t, "8h")
 	userID, orgID := uuid.New().String(), uuid.New().String()
@@ -59,11 +61,10 @@ func TestSessionAge_LoginRefreshTokenCarriesAuthTime(t *testing.T) {
 	assert.Equal(t, float64(int64(at)), at, "auth_time is whole seconds")
 	assert.Equal(t, p["iat"], p["auth_time"], "at sign-in auth_time equals iat")
 
-	_, has := payloadOf(t, access)["auth_time"]
-	assert.False(t, has, "access tokens carry no auth_time")
+	assert.Equal(t, p["auth_time"], payloadOf(t, access)["auth_time"], "the login access token carries the same auth_time")
 	sdk, err := svc.GenerateSDKRefreshToken(userID, orgID, "age@example.com", "admin")
 	require.NoError(t, err)
-	_, has = payloadOf(t, sdk)["auth_time"]
+	_, has := payloadOf(t, sdk)["auth_time"]
 	assert.False(t, has, "SDK-download tokens carry no auth_time")
 	service, err := svc.GenerateServiceToken(uuid.New().String(), orgID)
 	require.NoError(t, err)

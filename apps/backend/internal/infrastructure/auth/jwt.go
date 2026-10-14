@@ -59,7 +59,9 @@ type JWTClaims struct {
 	SessionID string `json:"sid,omitempty"`
 	// AuthTime (the IANA-registered auth_time claim, seconds since the epoch)
 	// is the time of the sign-in a login refresh token belongs to: set at
-	// sign-in, copied unchanged on every rotation. Absent on access,
+	// sign-in, copied unchanged on every rotation. The access token minted
+	// with or from a login refresh token carries the same value. Absent on
+	// access tokens minted from an SDK-download token or standalone, and on
 	// SDK-download and service tokens.
 	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
@@ -153,6 +155,21 @@ func (s *JWTService) SessionExpired(c *JWTClaims, now time.Time) bool {
 		return true
 	}
 	return now.Sub(at) > s.SessionMaxAge()
+}
+
+// AccessSessionExpired reports whether a login access token's sign-in is
+// older than SessionMaxAge: its auth_time claim (the value its login pair
+// carries) compared with now, and nothing else, so a bearer whose sign-in
+// has ended is refused without a store read. An access token that carries
+// no auth_time is not checked: it was minted from an SDK-download token
+// (no maximum session age), standalone, or before the claim reached access
+// tokens, and it lives at most JWT_ACCESS_TTL from its iat. Refresh,
+// SDK-download and service tokens are never checked here.
+func (s *JWTService) AccessSessionExpired(c *JWTClaims, now time.Time) bool {
+	if c == nil || c.TokenType != TokenTypeAccess || c.Issuer != IssuerUser || c.AuthTime == nil {
+		return false
+	}
+	return now.Sub(c.AuthTime.Time) > s.SessionMaxAge()
 }
 
 // SetRevoker attaches a token-revocation store. Optional: if never set,
@@ -419,19 +436,20 @@ func (s *JWTService) generateSDKRefreshToken(userID, orgID, email, role, family 
 }
 
 // GenerateTokenPair generates a login pair. The refresh token starts a new
-// family (its sid is its own jti) and the access token carries that same
-// family, so a credential-minting route can refuse an access token whose
-// session was revoked.
+// family (its sid is its own jti) and records the sign-in's time (auth_time,
+// its own iat); the access token carries that same family and sign-in time,
+// so a credential-minting route can refuse an access token whose session
+// was revoked, and AuthMiddleware one whose sign-in is past SessionMaxAge.
 func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (accessToken, refreshToken string, err error) {
 	refreshToken, err = s.GenerateRefreshToken(userID, orgID)
 	if err != nil {
 		return "", "", err
 	}
-	family, err := s.GetTokenID(refreshToken)
+	claims, err := s.ValidateToken(refreshToken)
 	if err != nil {
 		return "", "", err
 	}
-	accessToken, err = s.generateAccessToken(userID, orgID, email, role, family)
+	accessToken, err = s.generateAccessToken(userID, orgID, email, role, claims.FamilyID(), claims.SignedInAt())
 	if err != nil {
 		return "", "", err
 	}
@@ -439,16 +457,23 @@ func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (acces
 }
 
 // GenerateAccessToken generates a standalone access token that belongs to no
-// family (sid absent). Access tokens minted with a login pair carry the pair's
-// family through generateAccessToken.
+// family (sid absent) and carries no sign-in time (auth_time absent). Access
+// tokens minted with a login pair carry the pair's family and sign-in time
+// through generateAccessToken.
 func (s *JWTService) GenerateAccessToken(userID, orgID, email, role string) (string, error) {
-	return s.generateAccessToken(userID, orgID, email, role, "")
+	return s.generateAccessToken(userID, orgID, email, role, "", time.Time{})
 }
 
 // generateAccessToken mints an access token in the given family; an empty
-// family mints one that belongs to no family.
-func (s *JWTService) generateAccessToken(userID, orgID, email, role, family string) (string, error) {
+// family mints one that belongs to no family. signedIn is the time of the
+// sign-in the token belongs to, carried as auth_time; the zero time leaves
+// the claim out (an SDK-download family or a standalone token).
+func (s *JWTService) generateAccessToken(userID, orgID, email, role, family string, signedIn time.Time) (string, error) {
 	now := time.Now()
+	var authTime *jwt.NumericDate
+	if !signedIn.IsZero() {
+		authTime = jwt.NewNumericDate(signedIn)
+	}
 	claims := JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
@@ -456,6 +481,7 @@ func (s *JWTService) generateAccessToken(userID, orgID, email, role, family stri
 		Role:           role,
 		TokenType:      TokenTypeAccess,
 		SessionID:      family,
+		AuthTime:       authTime,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessExpiry)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -604,8 +630,13 @@ func (s *JWTService) RefreshTokenPair(refreshToken, email, role string) (string,
 	var newAccessToken, newRefreshToken string
 
 	// Generate new access token from the supplied principal, in the presented
-	// token's family
-	newAccessToken, err = s.generateAccessToken(claims.UserID, claims.OrganizationID, email, role, claims.FamilyID())
+	// token's family; a login family's sign-in time comes with it, an
+	// SDK-download family has none.
+	signedIn := time.Time{}
+	if !isSDKToken {
+		signedIn = claims.SignedInAt()
+	}
+	newAccessToken, err = s.generateAccessToken(claims.UserID, claims.OrganizationID, email, role, claims.FamilyID(), signedIn)
 	if err != nil {
 		return "", "", err
 	}
