@@ -65,7 +65,9 @@ func ValidateExternalURL(rawURL string) error {
 	for _, ipStr := range ips {
 		ip := net.ParseIP(ipStr)
 		if ip == nil {
-			continue
+			// The lookup returns a zoned IPv6 literal (fe80::1%lo0) as given,
+			// and net.ParseIP cannot read it. What cannot be judged is refused.
+			return &EgressRefusedError{Class: "unparseable address"}
 		}
 
 		if class, denied := DeniedAddressClass(ip); denied {
@@ -103,6 +105,7 @@ var deniedIPv4 = classes(
 	"172.16.0.0/12", "private",
 	"192.0.0.0/24", "IETF protocol assignments",
 	"192.0.2.0/24", "documentation",
+	"192.88.99.0/24", "6to4 relay anycast",
 	"192.168.0.0/16", "private",
 	"198.18.0.0/15", "benchmarking",
 	"198.51.100.0/24", "documentation",
@@ -112,13 +115,22 @@ var deniedIPv4 = classes(
 	"240.0.0.0/4", "reserved",
 )
 
-// deniedIPv6 lists the IPv6 ranges that are not public destinations.
+// deniedIPv6 lists the IPv6 ranges that are not public destinations. The
+// IPv4-compatible and IPv4-translated forms are refused whatever IPv4 address
+// they carry.
 var deniedIPv6 = classes(
 	"::/128", "unspecified",
 	"::1/128", "loopback",
+	"::/96", "IPv4-compatible",
+	"::ffff:0:0:0/96", "IPv4-translated",
 	"100::/64", "discard-only",
 	"2001::/32", "Teredo",
+	"2001:2::/48", "benchmarking",
+	"2001:10::/28", "ORCHID",
+	"2001:20::/28", "ORCHIDv2",
 	"2001:db8::/32", "documentation",
+	"3fff::/20", "documentation",
+	"5f00::/16", "segment routing",
 	"fc00::/7", "private",
 	"fe80::/10", "link-local",
 	"fec0::/10", "site-local",
