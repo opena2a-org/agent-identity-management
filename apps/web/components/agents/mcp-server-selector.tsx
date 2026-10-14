@@ -170,7 +170,7 @@ export function MCPServerSelector({
         className="gap-2"
       >
         <Plus className="h-4 w-4" />
-        Add MCP Servers
+        Add MCP servers
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -178,7 +178,7 @@ export function MCPServerSelector({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5" />
-              Add MCP Servers to Agent
+              Add MCP servers to agent
             </DialogTitle>
             <DialogDescription>
               Select MCP servers to add to this agent's talks_to list.

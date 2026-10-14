@@ -116,7 +116,7 @@ export function AgentMCPGraph({ agents, mcpServers, highlightAgentId }: AgentMCP
           </div>
           <div className="p-3 rounded-lg bg-muted">
             <div className="text-2xl font-bold text-foreground">{stats.totalMCPServers}</div>
-            <div className="text-xs text-muted-foreground">MCP Servers</div>
+            <div className="text-xs text-muted-foreground">MCP servers</div>
           </div>
           <div className="p-3 rounded-lg bg-muted">
             <div className="text-2xl font-bold text-blue-600">{stats.totalConnections}</div>
