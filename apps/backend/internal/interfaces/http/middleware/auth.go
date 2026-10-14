@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -103,6 +104,18 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 			})
 		}
 
+		// SECURITY: a sign-in lasts at most JWT_SESSION_MAX_AGE however often
+		// it is refreshed. A login access token carries the sign-in's time
+		// (auth_time); past the limit it is answered like an expired token, by
+		// comparing that claim with the clock, before the revocation store is
+		// read. Without this the last access token a refresh issued before the
+		// limit stayed valid until its own expiry (JWT_ACCESS_TTL).
+		if jwtService.AccessSessionExpired(claims, time.Now()) {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Invalid or expired token",
+			})
+		}
+
 		// SECURITY: reject tokens revoked server-side (e.g. on logout). No-op when
 		// revocation is not configured; fails closed on a store outage by default.
 		if jwtService.IsRevoked(c.Context(), claims.ID) {
@@ -188,6 +201,12 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		// retired (see AuthMiddleware): an empty type here is a legacy refresh token,
 		// so continue unauthenticated rather than trusting it.
 		if claims.TokenType != auth.TokenTypeAccess {
+			return c.Next()
+		}
+
+		// SECURITY: a sign-in past JWT_SESSION_MAX_AGE must not authenticate,
+		// even optionally (see AuthMiddleware). Continue unauthenticated.
+		if jwtService.AccessSessionExpired(claims, time.Now()) {
 			return c.Next()
 		}
 
