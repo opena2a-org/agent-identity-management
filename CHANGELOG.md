@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — every message the SMTP mail service sends asks the relay not to track it
+
+- The SMTP mail service, which `EMAIL_PROVIDER=smtp` selects, writes one `X-SMTPAPI` header on every message it
+  sends, the password reset mail included. Its value is a fixed JSON constant, `trackingOffSMTPAPIHeader` in
+  `apps/backend/internal/infrastructure/email/smtp_email_service.go`, that asks a SendGrid relay to turn off click
+  tracking for HTML and plain-text links (`clicktrack`: `enable` 0, `enable_text` false), open tracking
+  (`opentrack`: `enable` 0) and Google Analytics link parameters (`ganalytics`: `enable` 0). The header is written
+  whatever the SMTP host, template or environment; relays other than SendGrid ignore it.
+- Tests: `apps/backend/internal/infrastructure/email/smtp_tracking_test.go` builds the welcome, user-approved,
+  password reset and verification reminder mails through the service's template renderer, and a raw HTML and a raw
+  plain-text body, and fails unless each message carries exactly one `X-SMTPAPI` header whose value parses as JSON,
+  turns all three filters off and keeps the header line under SendGrid's 1,000-character limit. It also fails when
+  a rendered template contains `<img` or `url(`, either of which can act as an open-tracking image.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The

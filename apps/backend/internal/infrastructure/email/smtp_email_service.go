@@ -11,6 +11,14 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
+// trackingOffSMTPAPIHeader asks a SendGrid SMTP relay not to track the message:
+// no click tracking (which rewrites every link, a password reset link included,
+// to pass through the relay's redirector), no open-tracking pixel and no Google
+// Analytics link rewriting. It is written on every message whatever the relay;
+// other relays ignore it. Keep it a fixed constant: SendGrid bounces a message
+// whose filter header does not parse.
+const trackingOffSMTPAPIHeader = `{"filters":{"clicktrack":{"settings":{"enable":0,"enable_text":false}},"opentrack":{"settings":{"enable":0}},"ganalytics":{"settings":{"enable":0}}}}`
+
 // SMTPEmailService implements email sending using standard SMTP
 type SMTPEmailService struct {
 	host             string
@@ -261,6 +269,7 @@ func (s *SMTPEmailService) buildMessage(from, to, subject, body string, isHTML b
 	builder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
 	builder.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
 	builder.WriteString("MIME-Version: 1.0\r\n")
+	builder.WriteString(fmt.Sprintf("X-SMTPAPI: %s\r\n", trackingOffSMTPAPIHeader))
 
 	if isHTML {
 		builder.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
