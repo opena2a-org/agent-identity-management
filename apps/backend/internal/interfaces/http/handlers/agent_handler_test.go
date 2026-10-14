@@ -750,7 +750,7 @@ func TestAgentHandler_GetAgentByIdentifier_EmptyIdentifier(t *testing.T) {
 // ===========================
 
 func TestNewAgentHandler_AllNilDeps(t *testing.T) {
-	handler := NewAgentHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAgentHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

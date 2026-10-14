@@ -25,7 +25,7 @@ func withWebhookContext(handler func(c fiber.Ctx) error) fiber.Handler {
 // ===========================
 
 func TestNewWebhookHandler_NilDeps(t *testing.T) {
-	handler := NewWebhookHandler(nil, nil)
+	handler := NewWebhookHandler(nil, nil, nil)
 	assert.NotNil(t, handler)
 }
 

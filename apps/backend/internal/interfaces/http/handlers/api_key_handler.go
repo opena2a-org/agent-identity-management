@@ -7,11 +7,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 type APIKeyHandler struct {
 	apiKeyService *application.APIKeyService
 	auditService  *application.AuditService
+	// jwtService reads the acting session's revocation before a key is created.
+	jwtService *auth.JWTService
 
 	// Repository handle for handler-layer tenant scoping. Used by
 	// DisableAPIKey / DeleteAPIKey to LoadOwned the target key
@@ -27,11 +30,13 @@ func NewAPIKeyHandler(
 	apiKeyService *application.APIKeyService,
 	auditService *application.AuditService,
 	apiKeyRepo domain.APIKeyRepository,
+	jwtService *auth.JWTService,
 ) *APIKeyHandler {
 	return &APIKeyHandler{
 		apiKeyService: apiKeyService,
 		auditService:  auditService,
 		apiKeyRepo:    apiKeyRepo,
+		jwtService:    jwtService,
 	}
 }
 
@@ -116,6 +121,11 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Invalid user ID type in context",
 		})
+	}
+
+	// A revoked session cannot create an API key with its still-valid access token.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "api_key_create") {
+		return nil
 	}
 
 	var req struct {

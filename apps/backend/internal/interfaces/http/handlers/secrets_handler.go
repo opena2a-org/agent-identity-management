@@ -15,6 +15,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 // SecretsHandler handles HTTP requests for the identity-native secrets
@@ -32,12 +33,18 @@ import (
 type SecretsHandler struct {
 	secretsService *application.SecretsService
 	agentRepo      domain.AgentRepository
+	// jwtService reads the acting session's revocation before a credential is
+	// rotated; auditService records a refused rotation.
+	jwtService   *auth.JWTService
+	auditService *application.AuditService
 }
 
-func NewSecretsHandler(secretsService *application.SecretsService, agentRepo domain.AgentRepository) *SecretsHandler {
+func NewSecretsHandler(secretsService *application.SecretsService, agentRepo domain.AgentRepository, jwtService *auth.JWTService, auditService *application.AuditService) *SecretsHandler {
 	return &SecretsHandler{
 		secretsService: secretsService,
 		agentRepo:      agentRepo,
+		jwtService:     jwtService,
+		auditService:   auditService,
 	}
 }
 
@@ -359,6 +366,11 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
 		return err
+	}
+
+	// A revoked session cannot rotate a credential with its still-valid access token.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "secret_rotate") {
+		return nil
 	}
 
 	nsID, err := uuid.Parse(c.Params("id"))

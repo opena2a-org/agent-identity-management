@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 type WebhookHandler struct {
@@ -17,15 +18,21 @@ type WebhookHandler struct {
 	// Interface fields for testability (used when set)
 	webhookServicer WebhookServicer
 	auditServicer   AuditServicer
+
+	// jwtService reads the acting session's revocation before a webhook is
+	// created or updated.
+	jwtService *auth.JWTService
 }
 
 func NewWebhookHandler(
 	webhookService *application.WebhookService,
 	auditService *application.AuditService,
+	jwtService *auth.JWTService,
 ) *WebhookHandler {
 	return &WebhookHandler{
 		webhookService: webhookService,
 		auditService:   auditService,
+		jwtService:     jwtService,
 	}
 }
 
@@ -71,6 +78,11 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 		return err
 	}
 	userID := c.Locals("user_id").(uuid.UUID)
+
+	// A revoked session cannot have the organization's events delivered to an address it chooses.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), "webhook_create") {
+		return nil
+	}
 
 	var req application.CreateWebhookRequest
 	if err := c.Bind().JSON(&req); err != nil {
@@ -243,6 +255,12 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 		return err
 	}
 	userID := c.Locals("user_id").(uuid.UUID)
+
+	// A revoked session cannot point a webhook's deliveries at a new address.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), "webhook_update") {
+		return nil
+	}
+
 	webhookID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

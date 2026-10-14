@@ -1211,11 +1211,13 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Tag,            // ✅ For fetching agent tags in responses
 			repos.Organization,      // ✅ For enforcement mode lookup in verify-capability
 			services.MCPAttestation, // ✅ For getting MCP connections via attestations
+			jwtService,              // a revoked session cannot read, rotate or replace an agent's key
 		),
 		APIKey: handlers.NewAPIKeyHandler(
 			services.APIKey,
 			services.Audit,
 			repos.APIKey,
+			jwtService, // a revoked session cannot create an API key
 		),
 		TrustScore: handlers.NewTrustScoreHandler(
 			services.Trust,
@@ -1276,6 +1278,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Webhook: handlers.NewWebhookHandler(
 			services.Webhook,
 			services.Audit,
+			jwtService, // a revoked session cannot create or update a webhook
 		),
 		Verification: handlers.NewVerificationHandler(
 			services.Agent,
@@ -1392,6 +1395,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		Secrets: handlers.NewSecretsHandler(
 			services.Secrets,
 			repos.Agent, // A3d-iii: namespace-path-id handlers verify namespace.AgentID -> agent.OrganizationID via LoadOwnedViaAgent
+			jwtService,
+			services.Audit, // a revoked session cannot rotate a credential; the refusal is recorded here
 		),
 		Authorize: handlers.NewAuthorizeHandler(services.FGA, repos.Agent),
 		ATCIssuance: handlers.NewATCIssuanceHandler(
