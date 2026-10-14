@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — sign-in failure and lock alert log lines name no email address
+
+- The server log lines a password sign-in writes name no account email address. The account-locked
+  and auth-failure-pattern alert lines name the organization ID. The warnings for a failed lockout
+  check, failure record, failure count or lockout insert print the store's error with each address
+  in it replaced by `[address]`, and the warning for failures not cleared after a sign-in names the
+  user ID. The alert records keep the address in their title, description and metadata.
+
 ### Security — an access token ends with the sign-in it belongs to
 
 - The access token issued with a login pair, and the one each refresh of that login issues, now

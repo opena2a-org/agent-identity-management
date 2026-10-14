@@ -1337,7 +1337,7 @@ func (s *SecurityPolicyService) EvaluateAuthFailures(email string, orgID uuid.UU
 		if err := s.alertRepo.Create(alert); err != nil {
 			fmt.Printf("⚠️  Failed to create account locked alert: %v\n", err)
 		} else {
-			fmt.Printf("🔒 Account locked alert created for %s (after %d failures)\n", email, failureCount)
+			fmt.Printf("🔒 Account locked alert created for organization %s (after %d failures)\n", orgID, failureCount)
 		}
 	} else {
 		// Multiple failures but not yet locked - warning alert
@@ -1360,7 +1360,7 @@ func (s *SecurityPolicyService) EvaluateAuthFailures(email string, orgID uuid.UU
 		if err := s.alertRepo.Create(alert); err != nil {
 			fmt.Printf("⚠️  Failed to create auth failure pattern alert: %v\n", err)
 		} else {
-			fmt.Printf("⚠️  Auth failure pattern alert created for %s (%d failures)\n", email, failureCount)
+			fmt.Printf("⚠️  Auth failure pattern alert created for organization %s (%d failures)\n", orgID, failureCount)
 		}
 	}
 }
