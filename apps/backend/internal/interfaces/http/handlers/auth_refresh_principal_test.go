@@ -146,6 +146,7 @@ func TestRefreshToken_SDKTokenRoleComesFromDB(t *testing.T) {
 			ID:             uuid.New(),
 			UserID:         userID,
 			OrganizationID: orgID,
+			CreatedAt:      time.Now(),
 			ExpiresAt:      time.Now().Add(24 * time.Hour),
 		}, nil
 	}}

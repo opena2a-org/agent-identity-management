@@ -150,11 +150,20 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		c.Locals("organization_id", organizationID)
 		c.Locals("email", claims.Email)
 		c.Locals("role", claims.Role)
-		// The acting token's session (family) and id: a credential-minting route
-		// refuses a revoked session before it mints. Empty for a token minted
-		// before sessions carried a family.
+		// The acting token's session (family), id and sign-in time: a
+		// credential-minting route refuses a revoked session before it mints,
+		// and a session that records no sign-in (an access token minted from
+		// an SDK-download token carries the download's family and no
+		// auth_time). The family is empty for a token minted before sessions
+		// carried one; the sign-in time is the zero time when the token
+		// carries no auth_time.
 		c.Locals("sid", claims.AccessFamilyID())
 		c.Locals("jti", claims.ID)
+		var signedIn time.Time
+		if claims.AuthTime != nil {
+			signedIn = claims.AuthTime.Time
+		}
+		c.Locals("auth_time", signedIn)
 
 		return c.Next()
 	}

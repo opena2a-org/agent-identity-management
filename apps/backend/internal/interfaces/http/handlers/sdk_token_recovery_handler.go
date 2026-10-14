@@ -62,8 +62,11 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
-	// A revoked session cannot recover an SDK credential with its still-valid access token.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "sdk_recover") {
+	// A revoked session cannot recover an SDK credential with its still-valid
+	// access token, and neither can an access token minted from an
+	// SDK-download token: a recovery starts a new family, and that needs a
+	// sign-in.
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, "sdk_recover") {
 		return nil
 	}
 
@@ -165,7 +168,9 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 	ipAddress := c.IP()
 	userAgent := c.Get("User-Agent")
 
-	// Create new SDK token entry
+	// Create new SDK token entry. The recovered credential is the root of a
+	// new family, so its row's birth is its own creation time.
+	now := time.Now()
 	newSDKToken := &domain.SDKToken{
 		ID:                uuid.New(),
 		UserID:            oldToken.UserID,
@@ -176,14 +181,15 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		DeviceFingerprint: oldToken.DeviceFingerprint,
 		IPAddress:         &ipAddress,
 		UserAgent:         &userAgent,
-		CreatedAt:         time.Now(),
-		ExpiresAt:         time.Now().Add(90 * 24 * time.Hour), // 90 days
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(90 * 24 * time.Hour), // 90 days
 		Metadata: map[string]interface{}{
 			"source":         "token_recovery",
 			"recoveredFrom":  tokenID,
 			"recoveryReason": "token_revoked",
 		},
 	}
+	newSDKToken.SetFamilyCreatedAt(now)
 
 	// Save new token to database
 	if err := h.sdkTokenService.CreateToken(c.Context(), newSDKToken); err != nil {

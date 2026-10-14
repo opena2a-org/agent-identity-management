@@ -20,12 +20,20 @@ const (
 	// AuditActionRefreshSessionRevoked: a member of a revoked session was
 	// presented and refused.
 	AuditActionRefreshSessionRevoked AuditAction = "refresh_session_revoked"
+	// AuditActionRefreshFamilyMaxAge: an SDK-download token was presented past
+	// its family's maximum age (SDK_TOKEN_FAMILY_MAX_AGE, counted from the
+	// download) and refused; its row was revoked.
+	AuditActionRefreshFamilyMaxAge AuditAction = "refresh_family_max_age"
 	// AuditActionCredentialMintRefused: an access token whose session was
 	// revoked was refused at a route that hands out a credential, sets one the
 	// caller then holds, or chooses where webhook deliveries go (an SDK
 	// download, a device sign-in approval, an SDK credential recovery, an API
 	// key's creation, an agent's key read, rotated or replaced, a secret's
-	// rotation, a webhook's creation or update). The row's route names which.
+	// rotation, a webhook's creation or update), or an access token minted
+	// from an SDK-download token, and so recording no sign-in, was refused at
+	// an SDK download, a device sign-in approval or an SDK credential
+	// recovery. The row's route names which, and its cause why
+	// (sessionRevoked or noSignIn).
 	AuditActionCredentialMintRefused AuditAction = "credential_mint_refused"
 	// AuditActionVerificationRefused: an agent signed a verification request
 	// with its registered key and was refused because its status does not

@@ -296,7 +296,7 @@ func TestRefreshToken_SDKOwnerRevokedRowIsNotAReuse(t *testing.T) {
 		return activeUser(userID, orgID, domain.RoleAdmin, "sdk@example.com"), nil
 	}}
 	sdkRepo := &rotationSDKRepo{token: &domain.SDKToken{
-		ID: uuid.New(), UserID: userID, OrganizationID: orgID, ExpiresAt: time.Now().Add(24 * time.Hour),
+		ID: uuid.New(), UserID: userID, OrganizationID: orgID, CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
 	}}
 	audit := &familyAuditRepo{}
 	app, jwtSvc := newRefreshTestAppAudit(t, users, sdkRepo, audit)

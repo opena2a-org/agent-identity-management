@@ -23,8 +23,10 @@ import (
 // the download token's jti, which the row's rotation lineage leads to, so the
 // access token the SDK path minted for that family is refused at once instead
 // of until it expires (on this instance by the session middleware, which
-// reads the family before a credential-minting route such as /sdk/download
-// does), and the family's refresh token is refused at /auth/refresh.
+// reads the family before a route that checks the session, such as
+// /sdk/download, does), and the family's refresh token is refused at
+// /auth/refresh. /sdk/download refuses that access token before the revoke
+// as well: it records no sign-in.
 
 // sessionRefusal is the session middleware's answer to a revoked token, the
 // same for a token revoked by its own id and for one whose family is revoked.
@@ -65,11 +67,14 @@ func (r *sdkFamilyRepo) RevokeAllForUser(userID uuid.UUID, reason string) error 
 }
 
 // dashboardRevokeApps wires the dashboard's two revoke routes, acting as the
-// fixture's user, and a download route behind the real auth middleware, so a
-// download is made with a bearer access token as an SDK client makes it.
+// fixture's user, a download route behind the real auth middleware, so a
+// download is made with a bearer access token as an SDK client makes it, and
+// behind the same middleware a route that makes only the session check the
+// API key, agent key, secret rotation and webhook routes make.
 type dashboardRevokeApps struct {
 	dashboard *fiber.App
 	download  *fiber.App
+	session   *fiber.App
 }
 
 func newDashboardRevokeApps(t *testing.T, f *sdkFamilyFixture) *dashboardRevokeApps {
@@ -89,7 +94,29 @@ func newDashboardRevokeApps(t *testing.T, f *sdkFamilyFixture) *dashboardRevokeA
 	download := fiber.New()
 	download.Use(middleware.AuthMiddleware(f.svc))
 	download.Get("/sdk/download", dh.DownloadSDK)
-	return &dashboardRevokeApps{dashboard: dashboard, download: download}
+
+	session := fiber.New()
+	session.Use(middleware.AuthMiddleware(f.svc))
+	session.Get("/session-checked", func(c fiber.Ctx) error {
+		if !refuseIfFamilyRevoked(c, f.svc, nil, "session_checked") {
+			return nil
+		}
+		return c.SendStatus(fiber.StatusOK)
+	})
+	return &dashboardRevokeApps{dashboard: dashboard, download: download, session: session}
+}
+
+// sessionCheckedWith calls the session-checked route with a bearer access
+// token and returns the status and the body.
+func (a *dashboardRevokeApps) sessionCheckedWith(t *testing.T, accessToken string) (int, string) {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/session-checked", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	resp, err := a.session.Test(req, fiber.TestConfig{Timeout: 10 * time.Second})
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
 }
 
 // revokeRow posts the dashboard revoke of the row that holds refreshToken.
@@ -134,8 +161,8 @@ func sdkAccessToken(t *testing.T, f *sdkFamilyFixture, refreshToken string) (acc
 // D1 (Done-when 1): a dashboard revoke of one SDK token row writes the
 // family key from the row's lineage (the row revoked is the rotated row, so
 // the family is read from the download row it descends from), and the
-// family's access token, which downloaded before the revoke, is refused at
-// /sdk/download right after it; the family's live refresh token is refused
+// family's access token, which passed the session check before the revoke,
+// is refused by it right after it; the family's live refresh token is refused
 // at /auth/refresh.
 func TestSDKTokenHandler_RevokeToken_EndsTheRowsFamily(t *testing.T) {
 	f := newSDKFamilyFixture(t, &rotationStore{})
@@ -144,11 +171,15 @@ func TestSDKTokenHandler_RevokeToken_EndsTheRowsFamily(t *testing.T) {
 	family := jtiOfToken(t, f.svc, s1)
 	a1, s2 := sdkAccessToken(t, f, s1)
 
-	status, _ := apps.downloadWith(t, a1)
-	require.Equal(t, fiber.StatusOK, status, "control: before the revoke the family's access token downloads")
+	status, body := apps.sessionCheckedWith(t, a1)
+	require.Equal(t, fiber.StatusOK, status, "control: before the revoke the family's access token passes the session check: %s", body)
+	status, body = apps.downloadWith(t, a1)
+	require.Equal(t, fiber.StatusUnauthorized, status, "control: an access token minted from an SDK-download token records no sign-in and does not download")
+	require.Contains(t, body, familyRefusal)
+	require.Len(t, refusedRows(f.audit.rows), 1, "control: the route records the refusal once")
 	before := f.repo.activeRows()
 
-	status, body := apps.revokeRow(t, f, s2)
+	status, body = apps.revokeRow(t, f, s2)
 	require.Equal(t, fiber.StatusOK, status, body)
 	assert.NotNil(t, f.repo.row(s2).RevokedAt, "the row is revoked")
 	assert.Equal(t, before-1, f.repo.activeRows(), "only the revoked row left the active set")
@@ -156,10 +187,13 @@ func TestSDKTokenHandler_RevokeToken_EndsTheRowsFamily(t *testing.T) {
 	assert.True(t, f.store.data["revoked:fam:"+family], "the family key is written under the download token's jti")
 	assert.Equal(t, 1, familyKeyWrites(f.store), "one family key is written")
 
+	status, body = apps.sessionCheckedWith(t, a1)
+	assert.Equal(t, fiber.StatusUnauthorized, status, "the family's access token is refused by the session check right after the revoke")
+	assert.JSONEq(t, sessionRefusal, body, "by the session middleware of the instance that wrote the revocation")
 	status, body = apps.downloadWith(t, a1)
 	assert.Equal(t, fiber.StatusUnauthorized, status, "the family's access token is refused at /sdk/download right after the revoke")
 	assert.JSONEq(t, sessionRefusal, body, "by the session middleware of the instance that wrote the revocation")
-	assert.Empty(t, refusedRows(f.audit.rows), "the refused request does not reach the route's own family read")
+	assert.Len(t, refusedRows(f.audit.rows), 1, "the refused requests do not reach the route's own checks: the one row is the control's")
 
 	body, status = postRefreshRaw(t, f.refresh, s2)
 	assert.Equal(t, fiber.StatusUnauthorized, status, "the family's refresh token is refused")
@@ -167,8 +201,8 @@ func TestSDKTokenHandler_RevokeToken_EndsTheRowsFamily(t *testing.T) {
 }
 
 // D2 (Done-when 1): revoke-all writes one family key per family among the
-// user's active rows, and every family's access token is refused at
-// /sdk/download right after it.
+// user's active rows, and every family's access token is refused by the
+// session check, and at /sdk/download, right after it.
 func TestSDKTokenHandler_RevokeAllTokens_EndsEveryFamily(t *testing.T) {
 	f := newSDKFamilyFixture(t, &rotationStore{})
 	apps := newDashboardRevokeApps(t, f)
@@ -189,7 +223,10 @@ func TestSDKTokenHandler_RevokeAllTokens_EndsEveryFamily(t *testing.T) {
 	assert.Equal(t, 2, familyKeyWrites(f.store), "one key per family")
 
 	for name, access := range map[string]string{"first family": a1, "second family": b1} {
-		status, body := apps.downloadWith(t, access)
+		status, body := apps.sessionCheckedWith(t, access)
+		assert.Equal(t, fiber.StatusUnauthorized, status, "%s: the access token is refused by the session check", name)
+		assert.JSONEq(t, sessionRefusal, body, name)
+		status, body = apps.downloadWith(t, access)
 		assert.Equal(t, fiber.StatusUnauthorized, status, "%s: the access token is refused at /sdk/download", name)
 		assert.JSONEq(t, sessionRefusal, body, name)
 	}

@@ -54,7 +54,8 @@ func newMintFixture(t *testing.T, store *rotationStore, failOpen bool) *mintFixt
 	return &mintFixture{svc: svc, store: store, audit: &familyAuditRepo{}, userID: uuid.New(), orgID: uuid.New(), family: uuid.New().String(), jti: uuid.New().String()}
 }
 
-// acting sets what AuthMiddleware sets: the principal, and the acting token's family and id.
+// acting sets what AuthMiddleware sets for a sign-in's access token: the
+// principal, and the acting token's family, id and sign-in time.
 func (f *mintFixture) acting(family string, next fiber.Handler) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		c.Locals("user_id", f.userID)
@@ -63,6 +64,7 @@ func (f *mintFixture) acting(family string, next fiber.Handler) fiber.Handler {
 		c.Locals("role", "admin")
 		c.Locals("sid", family)
 		c.Locals("jti", f.jti)
+		c.Locals("auth_time", time.Now().Add(-time.Minute))
 		return next(c)
 	}
 }

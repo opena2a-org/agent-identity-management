@@ -85,8 +85,10 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 
 	// Get authenticated user from context (set by AuthMiddleware)
 	// A revoked session cannot turn its still-valid access token into a
-	// 90-day SDK credential.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "sdk_download") {
+	// 90-day SDK credential, and neither can an access token minted from an
+	// SDK-download token: a download starts a new family, and that needs a
+	// sign-in.
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, "sdk_download") {
 		return nil
 	}
 

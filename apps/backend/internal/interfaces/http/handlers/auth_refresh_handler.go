@@ -87,16 +87,7 @@ func presenter(c fiber.Ctx) auth.Client {
 // classification (sameClient, differentClient or unknown). nil-safe on the
 // audit service for handlers built by struct literal.
 func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, action domain.AuditAction, familyRevoked *bool, clientMatch string) {
-	family, jti := claims.FamilyID(), claims.ID
-	client := presenter(c)
-	ip, ua := client.Address, client.UserAgent
-	// A trusted proxy's address header is recorded only when it parses as an
-	// address; otherwise the connecting address is, so a forwarded value can
-	// never add fields to the log line or overflow the audit column.
-	if net.ParseIP(ip) == nil {
-		ip = c.IP()
-	}
-	meta := map[string]interface{}{"familyId": family, "jti": jti}
+	meta := map[string]interface{}{}
 	extra := ""
 	if familyRevoked != nil {
 		meta["familyRevoked"] = *familyRevoked
@@ -106,6 +97,23 @@ func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, 
 		meta["clientMatch"] = clientMatch
 		extra += " clientMatch=" + clientMatch
 	}
+	h.recordRefusalWith(c, claims, action, meta, extra)
+}
+
+// recordRefusalWith is recordRefusal with the record's own fields: meta joins
+// the audit row's identifiers, extra the log line's.
+func (h *AuthRefreshHandler) recordRefusalWith(c fiber.Ctx, claims *auth.JWTClaims, action domain.AuditAction, meta map[string]interface{}, extra string) {
+	family, jti := claims.FamilyID(), claims.ID
+	client := presenter(c)
+	ip, ua := client.Address, client.UserAgent
+	// A trusted proxy's address header is recorded only when it parses as an
+	// address; otherwise the connecting address is, so a forwarded value can
+	// never add fields to the log line or overflow the audit column.
+	if net.ParseIP(ip) == nil {
+		ip = c.IP()
+	}
+	meta["familyId"] = family
+	meta["jti"] = jti
 	log.Printf("SECURITY %s user=%s org=%s family=%s jti=%s%s ip=%s ua=%q", action, claims.UserID, claims.OrganizationID, family, jti, extra, ip, ua)
 	if h.audit == nil {
 		return
@@ -208,7 +216,12 @@ func (h *AuthRefreshHandler) rotateSDKTokenRow(c fiber.Ctx, oldToken *domain.SDK
 		}
 	}
 
-	// IMPORTANT: Carry forward the parent token's usage count so it's cumulative
+	// IMPORTANT: Carry forward the parent token's usage count so it's cumulative.
+	// The family's birth travels with the chain: the successor carries the
+	// presented row's familyCreatedAt, or that row's own created_at when it
+	// carries none (the row is then the root, or a row from before the birth
+	// was carried), so the birth survives a purge of the root row and a
+	// rotation never makes a family younger.
 	now := time.Now()
 	next := &domain.SDKToken{
 		ID:                uuid.New(),
@@ -231,7 +244,30 @@ func (h *AuthRefreshHandler) rotateSDKTokenRow(c fiber.Ctx, oldToken *domain.SDK
 			"parent_token":  oldToken.ID.String(), // Track token lineage
 		},
 	}
+	next.SetFamilyCreatedAt(oldToken.FamilyCreatedAt())
 	return h.sdkTokenService.RotateToken(c.Context(), oldTokenHash, "token_rotation", next)
+}
+
+// familyPastMaxAge refuses an SDK-download token presented past its family's
+// maximum age (SDK_TOKEN_FAMILY_MAX_AGE, counted from the row the download
+// wrote): the presented row is revoked for the family's age, so nothing of the
+// chain stays live, the refusal is recorded once (an audit row and a SECURITY
+// line, identifiers only), and the token is answered as an expired token is.
+// Reports false, with nothing written, for every other token.
+func (h *AuthRefreshHandler) familyPastMaxAge(c fiber.Ctx, claims *auth.JWTClaims, row *domain.SDKToken, tokenHash string, now time.Time) bool {
+	if claims.Issuer != auth.IssuerSDK || row == nil {
+		return false
+	}
+	born := row.FamilyCreatedAt()
+	if now.Sub(born) <= h.jwtService.SDKTokenFamilyMaxAge() {
+		return false
+	}
+	if err := h.sdkTokenService.RevokeByTokenHash(c.Context(), tokenHash, domain.SDKTokenRevokeReasonFamilyMaxAge); err != nil {
+		log.Printf("⚠️  Refresh: sdk_tokens row of family %s past its maximum age could not be revoked: %v", claims.FamilyID(), err)
+	}
+	bornAt := born.UTC().Format(time.RFC3339)
+	h.recordRefusalWith(c, claims, domain.AuditActionRefreshFamilyMaxAge, map[string]interface{}{"familyCreatedAt": bornAt}, " familyCreatedAt="+bornAt)
+	return true
 }
 
 // RefreshToken godoc
@@ -284,11 +320,16 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		}
 	}
 
+	// The presented token's active sdk_tokens row, when it has one (an
+	// SDK-download token, or a recovered credential), and the hash it is
+	// found by; the family's maximum age is read from the row below.
+	var sdkRow *domain.SDKToken
+	var tokenHash string
 	if err == nil && tokenID != "" {
 		// Hash the token to check if it's tracked and revoked
 		hasher := sha256.New()
 		hasher.Write([]byte(req.RefreshToken))
-		tokenHash := hex.EncodeToString(hasher.Sum(nil))
+		tokenHash = hex.EncodeToString(hasher.Sum(nil))
 
 		// Check if token is tracked in SDK tokens table
 		sdkToken, err := h.sdkTokenService.GetByTokenHash(c.Context(), tokenHash)
@@ -300,6 +341,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 					"error": "Token has been revoked or is invalid",
 				})
 			}
+			sdkRow = sdkToken
 		} else {
 			// Token NOT found in SDK table - check if it was issued as an SDK token.
 			// SDK tokens have issuer "agent-identity-management-sdk". If a token claims
@@ -345,9 +387,19 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	// Past it the presented token is answered like an expired token, before
 	// the account lookup, so an ended sign-in learns nothing about the
 	// account; the refusal is logged with identifiers only.
-	if h.jwtService.SessionExpired(claims, time.Now()) {
+	now := time.Now()
+	if h.jwtService.SessionExpired(claims, now) {
 		log.Printf("Refresh: sign-in past the maximum session age refused user=%s org=%s family=%s signedIn=%s ip=%s ua=%q",
 			claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt().UTC().Format(time.RFC3339), c.IP(), c.Get("User-Agent"))
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid or expired refresh token",
+		})
+	}
+	// An SDK-download token family lives at most SDK_TOKEN_FAMILY_MAX_AGE
+	// from the download, however often it rotates. Past it the presented
+	// token is answered as above, before the account lookup, and its row is
+	// revoked; the holder downloads a new SDK with a sign-in.
+	if h.familyPastMaxAge(c, claims, sdkRow, tokenHash, now) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid or expired refresh token",
 		})
