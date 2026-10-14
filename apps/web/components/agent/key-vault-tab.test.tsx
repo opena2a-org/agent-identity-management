@@ -40,6 +40,24 @@ async function renderLoaded(canManage: boolean) {
   await waitFor(() => expect(screen.getByText('Post-Quantum Companion Key')).toBeTruthy());
 }
 
+describe('KeyVaultTab — what the tab draws', () => {
+  it('draws the Agent Public Key card and its copy button, and no future use cases or key management practices block', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    vi.mocked(api.getAgentKeyVault).mockResolvedValue(makeKeyVault());
+    await renderLoaded(false);
+
+    expect(screen.queryByText(/future use cases/i)).toBeNull();
+    expect(screen.queryByText(/key management best practices/i)).toBeNull();
+
+    const card = screen.getByRole('heading', { name: 'Agent Public Key' }).closest<HTMLElement>('.glass');
+    expect(card).toBeTruthy();
+    expect(within(card!).getByText('ed25519-public-key')).toBeTruthy();
+    fireEvent.click(within(card!).getByRole('button'));
+    expect(writeText).toHaveBeenCalledWith('ed25519-public-key');
+  });
+});
+
 describe('KeyVaultTab — who is offered the hybrid mode turn-off', () => {
   it('offers it to an admin or manager when hybrid mode is on', async () => {
     vi.mocked(api.getAgentKeyVault).mockResolvedValue(makeKeyVault());

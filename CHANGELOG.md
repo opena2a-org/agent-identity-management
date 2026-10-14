@@ -75,6 +75,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `AutoDetectButton` and `DetectionStatus` components. The server's `POST /api/v1/agents/:id/mcp-servers/detect`
   route is unchanged.
 
+### Removed — the agent Security tab's "Future Use Cases" and "Key Management Best Practices" blocks
+
+- On an agent's Security tab, the section below the violations now starts with the "Agent Public Key" card and ends
+  with the "Post-Quantum Companion Key" card. The purple "Future Use Cases" block above them and the "Key Management
+  Best Practices" block below them are removed, and no text replaces them.
+- The first block listed request signing as a future use; the Python, TypeScript and Java SDKs already sign requests
+  and send the signature in the `X-AIM-Signature` header. The second said the agent's private key exists only on the
+  agent and is never transmitted or stored elsewhere. The dashboard registers an agent without a public key, and for
+  such an agent the server generates the key pair and stores the private key encrypted
+  (`apps/backend/internal/application/agent_service.go`).
+- `apps/web/components/agent/key-vault-tab.test.tsx` renders the tab with a mocked key vault and fails when either
+  heading appears or when the "Agent Public Key" card no longer copies its key. It fails on the previous commit.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The
