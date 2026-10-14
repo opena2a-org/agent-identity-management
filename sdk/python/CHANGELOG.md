@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the tests run against an empty temporary home, not the stored credentials of the machine (#726)
+
+- `aim_sdk.credentials` computes `AIM_DIR` and the files under it from `Path.home()` when it is imported, and
+  `load_sdk_credentials()` also adopts SDK credentials from a `.aim` folder in the working directory, in the folder
+  that holds the `aim_sdk` package, or in the nearest folder above the working directory that has one. With the
+  checkout inside a folder whose `.aim/sdk_credentials.json` held SDK credentials, and that folder as `HOME`,
+  `test_logout_removes_legacy_sdk_credentials_so_status_stays_signed_out` and
+  `test_logout_without_credentials_posts_nothing_and_exits_zero` failed: the CLI adopted those credentials, and the
+  logout request the second test captured carried their access and refresh tokens.
+- An autouse fixture in `tests/conftest.py` gives each test a new empty directory under the pytest base temp as
+  `HOME` and `USERPROFILE`, points the `aim_sdk.credentials` paths and the default broker socket and token paths of
+  `aim_sdk.grant_client` into it, and turns the `.aim` folder discovery off. The CLI child process in
+  `tests/test_aim410_console_transport_polish.py` turns the discovery off as well and runs from the test's temporary
+  home instead of the checkout. In the same layout both tests pass.
+- `tests/test_isolated_home.py` checks that the home is an empty directory under the pytest base temp, that the
+  paths computed at import time point into it, and that SDK credentials in a `.aim` folder above the working
+  directory are not adopted.
+
 ### Fixed — the cached-capability lookup sends the MCP server name as one query value (#718)
 
 - The lookup that asks `GET /api/v1/sdk-api/agents/{id}/mcp-servers/by-name` for the capabilities the server holds

@@ -5,8 +5,8 @@ Some CI/verification containers run this suite with no package index, so the
 SDK's third-party dependencies (`requests`, `PyNaCl`, `cryptography`, `PyJWT`)
 may be absent. When — and only when — a dependency is missing, this conftest
 installs a minimal functional stand-in into ``sys.modules`` before test
-collection imports ``aim_sdk``. When the real package is installed, nothing
-here runs and the suite behaves exactly as before.
+collection imports ``aim_sdk``. When the real package is installed, no shim
+is installed and the suite behaves exactly as before.
 
 The `requests` stand-in is a real HTTP client over ``http.client`` with the
 same exception taxonomy, so tests against loopback fakes and closed loopback
@@ -17,6 +17,9 @@ The `nacl`/`cryptography`/`jwt` stand-ins implement NO real cryptography —
 deterministic digests stand in for signatures, which is sufficient because the
 offline suite only ever talks to its own fakes, which do not verify
 signatures. They exist to satisfy imports and produce byte-shaped values.
+
+The ``isolated_home`` fixture at the end of this file runs every test against
+an empty temporary home directory.
 """
 
 import base64
@@ -29,6 +32,8 @@ import sys
 import types
 import urllib.parse
 from pathlib import Path
+
+import pytest
 
 
 def _module(name):
@@ -432,3 +437,37 @@ if _UNSHIMMED_MARKERS:
         _source = _test_file.read_text(encoding="utf-8", errors="replace")
         if any(marker in _source for marker in _UNSHIMMED_MARKERS):
             collect_ignore.append(_test_file.name)
+
+
+# ---------------------------------------------------------------------------
+# Isolation: every test starts from an empty temporary home
+# ---------------------------------------------------------------------------
+# aim_sdk.credentials computes AIM_DIR and the files under it from Path.home()
+# when it is imported, and grant_client computes its broker socket and token
+# paths from "~" the same way, so a later change to HOME does not reach them.
+# load_sdk_credentials() also adopts SDK credentials from a `.aim` folder in the
+# working directory, in the folder that holds the aim_sdk package, or in the
+# nearest folder above the working directory that has one; a checkout inside a
+# home directory that holds `aim-sdk login` credentials reaches that home's
+# `.aim` that way (#726). A test that needs stored credentials writes them under
+# the temporary home, or patches these names itself.
+
+@pytest.fixture(autouse=True)
+def isolated_home(monkeypatch, tmp_path_factory):
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+
+    from aim_sdk import credentials, grant_client
+
+    aim_dir = home / ".aim"
+    monkeypatch.setattr(credentials, "AIM_DIR", aim_dir)
+    monkeypatch.setattr(credentials, "SDK_CREDENTIALS_FILE", aim_dir / "sdk_credentials.json")
+    monkeypatch.setattr(credentials, "AGENTS_DIR", aim_dir / "agents")
+    monkeypatch.setattr(credentials, "LEGACY_CREDENTIALS_FILE", aim_dir / "credentials.json")
+    monkeypatch.setattr(credentials, "_find_sdk_package_credentials", lambda: None)
+
+    broker_dir = home / ".secretless-ai"
+    monkeypatch.setattr(grant_client, "DEFAULT_SOCKET_PATH", str(broker_dir / "broker.sock"))
+    monkeypatch.setattr(grant_client, "DEFAULT_TOKEN_PATH", str(broker_dir / "broker.token"))
+    return home
