@@ -2282,36 +2282,6 @@ class APIClient {
     );
   }
 
-  // Auto-detect MCP servers from Claude Desktop config
-  async detectAndMapMCPServers(
-    agentId: string,
-    data: {
-      configPath: string;
-      autoRegister?: boolean;
-      dryRun?: boolean;
-    }
-  ): Promise<{
-    detectedServers: Array<{
-      name: string;
-      command: string;
-      args: string[];
-      env?: Record<string, string>;
-      confidence: number;
-      source: string;
-      metadata?: Record<string, any>;
-    }>;
-    registeredCount: number;
-    mappedCount: number;
-    totalTalksTo: number;
-    dryRun: boolean;
-    errorsEncountered?: string[];
-  }> {
-    return this.request(`/api/v1/agents/${agentId}/mcp-servers/detect`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  }
-
   // ========================================
   // Single Agent Activity (Audit Trail)
   // ========================================

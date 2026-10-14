@@ -61,6 +61,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/backend/contracts/health-ready.schema.json` declares `syncedFrom` as an optional string with the
   pattern `^[0-9a-f]{40}$`.
 
+### Changed — the agent page detects MCP servers from a More menu, with the command to run where the agent runs
+
+- The agent page's header has a `More` menu after `Edit`. Its one entry, `Detect MCP servers`, opens a
+  dialog with the commands to run on the machine where the agent runs: `aim-sdk login` (with `--url` and the
+  dashboard's address), then `python -c "from aim_sdk import secure; secure('<agent name>',
+  auto_detect_mcp=True)"` with the agent's name filled in. The SDK reads the MCP servers from that machine's
+  Claude Desktop configuration and registers them to the agent. The dialog asks for no file path.
+- While the dialog is open it reads the agent every 5 seconds. When the agent gains MCP servers, the dialog
+  names them in place of `Waiting for the command to report.`, and closing it reloads the page. A failed read
+  leaves the dialog waiting and shows no text from the response.
+- The dashboard's API client no longer has `detectAndMapMCPServers`, and the dashboard no longer carries the
+  `AutoDetectButton` and `DetectionStatus` components. The server's `POST /api/v1/agents/:id/mcp-servers/detect`
+  route is unchanged.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The
