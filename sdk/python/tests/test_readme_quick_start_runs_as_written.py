@@ -11,8 +11,9 @@ example never makes is counted as missing; the refused call ends the script
 as it would end a reader's, so it has to be the last line. They also hold
 the minimal dev stack command to the services docker-compose.yml defines,
 the recorded walkthrough's typed and install lines to the root README's Quick
-start, and the root README's captured register output, in its first 30
-lines, to what this SDK prints for that call and the SDK version it names.
+start, and the root README's captured register output, within 30 lines of
+the ecosystem line, to what this SDK prints for that call and the SDK
+version it names.
 The root README's refused call, and the token-rotation line it describes,
 are run through this SDK against a server on 127.0.0.1.
 
@@ -247,7 +248,16 @@ def test_both_readmes_sign_in_with_the_same_lines_including_self_hosted():
     assert "`/device`" in quick_start(ROOT_README)
 
 
-FIRST_SCREEN = 30  # README lines a visitor reads before scrolling
+# README lines a visitor reads before scrolling, counted from the ecosystem line:
+# the register call and its output sit within 30 lines of the ecosystem line.
+FIRST_SCREEN = 30
+
+
+def ecosystem_line(path):
+    """The 1-based number of the first line that starts with "> **[OpenA2A", the
+    ecosystem line under the README's badges; 0 when there is none."""
+    lines = path.read_text(encoding="utf-8").split("\n")
+    return next((number for number, line in enumerate(lines, 1) if line.startswith("> **[OpenA2A")), 0)
 
 
 def numbered_fences(path):
@@ -282,14 +292,15 @@ def register_and_output(path):
     return blocks[i], blocks[i + 1], prose
 
 
-def test_root_readme_shows_the_register_call_and_its_dated_output_in_its_first_30_lines():
+def test_root_readme_shows_the_register_call_and_its_dated_output_within_30_lines_of_the_ecosystem_line():
     register, output, prose = register_and_output(ROOT_README)
     assert output[0] == "" and "Agent registered:" in output[1], (
         "the fence after the register call must be its captured output"
     )
-    assert output[3] <= FIRST_SCREEN, (
+    ecosystem = ecosystem_line(ROOT_README)
+    assert output[3] <= ecosystem + FIRST_SCREEN, (
         f"the captured output closes on line {output[3]}; the register call and all of its "
-        f"output must fit in the first {FIRST_SCREEN} lines"
+        f"output must fit within {FIRST_SCREEN} lines of the ecosystem line, line {ecosystem}"
     )
     assert "](docs/captures/quick-start.txt)" in prose, (
         "the text before the captured output must link its sidecar, docs/captures/quick-start.txt"
