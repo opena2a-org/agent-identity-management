@@ -2,23 +2,29 @@ package handlers
 
 import (
 	"errors"
+	"log"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
 // SDKTokenHandler handles SDK token management operations
 type SDKTokenHandler struct {
 	sdkTokenService *application.SDKTokenService
+	jwtService      *auth.JWTService
 }
 
-// NewSDKTokenHandler creates a new SDK token handler
-func NewSDKTokenHandler(sdkTokenService *application.SDKTokenService) *SDKTokenHandler {
+// NewSDKTokenHandler creates a new SDK token handler. jwtService writes the
+// family key when a revoke ends an SDK token's family; nil leaves the revoke
+// to the rows.
+func NewSDKTokenHandler(sdkTokenService *application.SDKTokenService, jwtService *auth.JWTService) *SDKTokenHandler {
 	return &SDKTokenHandler{
 		sdkTokenService: sdkTokenService,
+		jwtService:      jwtService,
 	}
 }
 
@@ -144,7 +150,7 @@ func (h *SDKTokenHandler) RevokeToken(c fiber.Ctx) error {
 		req.Reason = "User-initiated revocation"
 	}
 
-	err = h.sdkTokenService.RevokeToken(c.Context(), tokenID, userID, req.Reason)
+	row, err := h.sdkTokenService.RevokeTokenRow(c.Context(), tokenID, userID, req.Reason)
 	if err != nil {
 		// SECURITY: the service collapses "not found" and
 		// "wrong user" to ErrSDKTokenNotFound. The handler maps
@@ -160,10 +166,46 @@ func (h *SDKTokenHandler) RevokeToken(c fiber.Ctx) error {
 			"error": "Failed to revoke token",
 		})
 	}
+	h.endFamilies(c, "sdk_token_revoke", row)
 
 	return c.JSON(fiber.Map{
 		"message": "Token revoked successfully",
 	})
+}
+
+// endFamilies writes the family key of every token family among the revoked
+// rows, so the access token the SDK path minted for a family is refused at
+// the credential-minting routes (/sdk/download, a recovery) at once rather
+// than until it expires, and the family's refresh token at /auth/refresh, as
+// after a reuse or a logout. A row's family is read from its rotation lineage
+// (SDKTokenService.FamilyOf) and the key lasts for the longer of the refresh
+// lifetime and the row's own lifetime, plus a minute (JWTService.
+// RevokeFamilyFor). The rows are revoked whatever happens here: a family
+// that cannot be read or a key that cannot be written is logged with
+// identifiers only, and the revoke is answered as before. Nothing is written
+// without a jwt service or a revocation store.
+func (h *SDKTokenHandler) endFamilies(c fiber.Ctx, route string, rows ...*domain.SDKToken) {
+	if h.jwtService == nil {
+		return
+	}
+	done := map[string]bool{}
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		family, err := h.sdkTokenService.FamilyOf(c.Context(), row)
+		if err != nil {
+			log.Printf("⚠️  %s: family of sdk token row %s not found, its family key is not written: %v", route, row.ID, err)
+			continue
+		}
+		if done[family] {
+			continue
+		}
+		done[family] = true
+		if _, err := h.jwtService.RevokeFamilyFor(c.Context(), family, row.ExpiresAt.Sub(row.CreatedAt)); err != nil {
+			log.Printf("⚠️  %s: family %s could not be revoked: %v", route, family, err)
+		}
+	}
 }
 
 // RevokeAllTokens godoc
@@ -196,12 +238,13 @@ func (h *SDKTokenHandler) RevokeAllTokens(c fiber.Ctx) error {
 		req.Reason = "User revoked all SDK tokens"
 	}
 
-	err := h.sdkTokenService.RevokeAllUserTokens(c.Context(), userID, req.Reason)
+	rows, err := h.sdkTokenService.RevokeAllUserTokenRows(c.Context(), userID, req.Reason)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to revoke tokens",
 		})
 	}
+	h.endFamilies(c, "sdk_token_revoke_all", rows...)
 
 	return c.JSON(fiber.Map{
 		"message": "All SDK tokens revoked successfully",

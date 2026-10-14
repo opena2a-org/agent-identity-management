@@ -23,7 +23,7 @@ func withSDKTokenContext(handler func(c fiber.Ctx) error) fiber.Handler {
 // ===========================
 
 func TestNewSDKTokenHandler_NilDeps(t *testing.T) {
-	handler := NewSDKTokenHandler(nil)
+	handler := NewSDKTokenHandler(nil, nil)
 	assert.NotNil(t, handler)
 }
 
