@@ -599,25 +599,33 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 		})
 	}
 
+	mcpSvc := h.getMCPService()
+	auditSvc := h.getAuditService()
+
 	// Verify server belongs to organization first
-	server := LoadOwned(c, h.mcpServerLoader(c, h.getMCPService()), serverID, orgID, mcpServerOrgID)
+	server := LoadOwned(c, h.mcpServerLoader(c, mcpSvc), serverID, orgID, mcpServerOrgID)
 	if server == nil {
 		return nil
 	}
 
 	// Generate verification challenge
-	challenge, err := h.mcpService.GenerateVerificationChallenge(c.Context(), serverID)
+	challenge, err := mcpSvc.GenerateVerificationChallenge(c.Context(), serverID)
 	if err != nil {
+		log.Printf("mcp server %s: failed to generate verification challenge: %v", serverID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to generate verification challenge",
 		})
 	}
 
 	// Perform verification with user context
-	if err := h.mcpService.VerifyMCPServer(c.Context(), serverID, userID, c.IP()); err != nil {
+	if err := mcpSvc.VerifyMCPServer(c.Context(), serverID, userID, c.IP()); err != nil {
 		// Verification failed (e.g. DNS resolution, unreachable server) -- return
 		// structured failure response instead of 500 so callers can inspect the result.
-		h.auditService.LogAction(
+		// The reason can name the address a refused connection was aimed at, and
+		// the organization's members read the audit log, so the reason stays in
+		// the server log.
+		log.Printf("mcp server %s: verification failed: %v", serverID, err)
+		auditSvc.LogAction(
 			c.Context(),
 			orgID,
 			userID,
@@ -629,7 +637,6 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 			map[string]interface{}{
 				"serverName": server.Name,
 				"status":     "unreachable",
-				"error":      err.Error(),
 			},
 		)
 
@@ -642,10 +649,10 @@ func (h *MCPHandler) VerifyMCPServer(c fiber.Ctx) error {
 	}
 
 	// Get updated server to return in response
-	server, _ = h.mcpService.GetMCPServer(c.Context(), serverID)
+	server, _ = mcpSvc.GetMCPServer(c.Context(), serverID)
 
 	// Log audit
-	h.auditService.LogAction(
+	auditSvc.LogAction(
 		c.Context(),
 		orgID,
 		userID,
@@ -846,14 +853,17 @@ func (h *MCPHandler) DetectCapabilities(c fiber.Ctx) error {
 		return nil
 	}
 
+	capabilitySvc := h.getMCPCapabilityService()
+
 	// Trigger capability detection
-	if err := h.mcpCapabilityService.DetectCapabilities(c.Context(), serverID); err != nil {
+	if err := capabilitySvc.DetectCapabilities(c.Context(), serverID); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	// Fetch the newly detected capabilities
-	capabilities, err := h.mcpCapabilityService.GetCapabilities(c.Context(), serverID)
+	capabilities, err := capabilitySvc.GetCapabilities(c.Context(), serverID)
 	if err != nil {
+		log.Printf("mcp server %s: failed to fetch capabilities after detection: %v", serverID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch capabilities after detection",
 		})

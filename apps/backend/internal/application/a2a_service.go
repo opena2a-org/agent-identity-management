@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -32,6 +33,16 @@ import (
 // answer whether an arbitrary agent id exists, for agents the caller cannot
 // otherwise see.
 var ErrConsentGrantorNotOwned = errors.New("grantor agent not found in this organization")
+
+// ErrAgentCardURLRefused is wrapped by a card fetch the server refuses by
+// policy before any card is read: a URL that does not parse, is not http or
+// https, has no host or names a host the check refuses by name, a host the
+// resolver reports does not exist, or an address the egress address policy
+// refuses, whether it is found when the URL is checked or when the client
+// connects. A lookup that fails for another
+// reason, such as a timeout, is a fault on the server's side and does not wrap
+// it. The rest of the error is for the server log, not for the caller.
+var ErrAgentCardURLRefused = errors.New("invalid agent card URL")
 
 // MaxA2ANonceLength is the longest nonce, in characters, a verified A2A request
 // may carry: the width of a2a_request_nonces.nonce, VARCHAR(64).
@@ -1627,11 +1638,25 @@ func (s *A2AService) RefreshExpiredCards(ctx context.Context) (int, error) {
 func (s *A2AService) fetchAgentCard(url string) ([]byte, error) {
 	// SECURITY: Validate URL to prevent SSRF attacks
 	if err := utils.ValidateExternalURL(url); err != nil {
-		return nil, fmt.Errorf("invalid agent card URL: %w", err)
+		// A lookup that failed for any reason but the name not existing (a
+		// timeout, a resolver that did not answer) says nothing about the
+		// caller's URL.
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) && !dnsErr.IsNotFound {
+			return nil, fmt.Errorf("card URL host lookup failed: %w", err)
+		}
+		return nil, fmt.Errorf("%w: %w", ErrAgentCardURLRefused, err)
 	}
 
 	resp, err := s.httpClient.Get(url)
 	if err != nil {
+		// The egress client refuses an address the policy denies when it
+		// connects, so a host that resolves to such an address only after
+		// the check above is refused here.
+		var refused *utils.EgressRefusedError
+		if errors.As(err, &refused) {
+			return nil, fmt.Errorf("%w: %w", ErrAgentCardURLRefused, err)
+		}
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
