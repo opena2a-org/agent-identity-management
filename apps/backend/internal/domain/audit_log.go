@@ -21,9 +21,11 @@ const (
 	// presented and refused.
 	AuditActionRefreshSessionRevoked AuditAction = "refresh_session_revoked"
 	// AuditActionCredentialMintRefused: an access token whose session was
-	// revoked asked a credential-minting route (an SDK download, a device
-	// sign-in approval, an SDK credential recovery) for a new credential and
-	// was refused.
+	// revoked was refused at a route that hands out a credential, sets one the
+	// caller then holds, or chooses where webhook deliveries go (an SDK
+	// download, a device sign-in approval, an SDK credential recovery, an API
+	// key's creation, an agent's key read, rotated or replaced, a secret's
+	// rotation, a webhook's creation or update). The row's route names which.
 	AuditActionCredentialMintRefused AuditAction = "credential_mint_refused"
 	// AuditActionVerificationRefused: an agent signed a verification request
 	// with its registered key and was refused because its status does not

@@ -361,6 +361,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the `localStorage` lease, two tabs whose claims take longer than the lease's wait to reach each other can both
   refresh, as the entry below states; the comment now says so.
 
+### Security — a revoked session's access token cannot create an API key, take or replace an agent's key, rotate a secret, or create or change a webhook
+
+- `POST /api/v1/api-keys`, `POST /api/v1/agents/:id/rotate-credentials`, `GET /api/v1/agents/:id/credentials`,
+  `GET /api/v1/agents/:id/sdk`, `PUT /api/v1/agents/:id/keys`, `POST /api/v1/secrets/namespaces/:id/rotate`,
+  `POST /api/v1/webhooks` and `PUT /api/v1/webhooks/:id` now read the acting session's revocation from the revocation
+  store (no cache) and refuse an access token whose session was revoked with the 401
+  `{"error":"Token has been revoked or is invalid"}`; a refused request reaches none of the route's service or
+  repository calls. These routes hand out an API key or an agent's private key, register an agent public key of the
+  caller's choosing, rotate a namespace's stored secret, or set the address a webhook delivers the organization's
+  events to.
+- A confirmed refusal is recorded in the organization's audit log as `credential_mint_refused`, with the route's label
+  in its metadata (`api_key_create`, `agent_rotate_credentials`, `agent_credentials`, `agent_sdk_download`,
+  `agent_keys_update`, `secret_rotate`, `webhook_create` or `webhook_update`), and as one `SECURITY` log line,
+  identifiers only. As on `GET /api/v1/sdk/download`, `POST /api/v1/oauth/device/approve` and
+  `POST /api/v1/auth/sdk/recover`, when the revocation store does not answer the request is refused, or served with
+  `AUTH_REVOCATION_FAIL_OPEN=true`, and no refusal is recorded; an access token that carries no `sid` is not checked.
+- Measured with the handlers of the previous commit, sending each route an otherwise valid request with an access
+  token whose session was revoked in the revocation store: `POST /api/v1/api-keys` and `POST /api/v1/webhooks` were
+  answered 201 and the other six routes 200, the answers a live session got; each route created, returned or changed
+  what it acts on, and no refusal was recorded. A live session is answered as before.
+- This change does not add the check to other routes, among them `POST /api/v1/secrets/namespaces/:id/credentials`
+  and `POST` and `PUT /api/v1/agents/:id/pqc-key`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/credential_routes_family_test.go`.
+
 ### Changed — turning on hybrid mode takes the manager or admin role
 
 - `POST /api/v1/agents/:id/pqc-key` with `"enableHybrid": true` and `POST /api/v1/agents/:id/hybrid-mode` with

@@ -45,7 +45,7 @@ func resolveOverHTTP(t *testing.T, agentID uuid.UUID, registered ed25519.PublicK
 	}
 	audit := &secretsTestAuditRepo{}
 	svc := application.NewSecretsService(nil, audit, agentRepo, nil, nil, nil)
-	handler := NewSecretsHandler(svc, agentRepo)
+	handler := NewSecretsHandler(svc, agentRepo, nil, nil)
 
 	app := fiber.New()
 	app.Post("/secrets/resolve", func(c fiber.Ctx) error {

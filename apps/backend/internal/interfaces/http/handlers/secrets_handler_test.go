@@ -86,7 +86,7 @@ func TestSecretsHandler_NamespaceScoped_CrossOrgReturns404(t *testing.T) {
 	// guard that touches them would panic (which the test harness
 	// reports as failure). This is the regression-proofing signal.
 	svc := application.NewSecretsService(nsRepo, nil, nil, nil, nil, nil)
-	handler := NewSecretsHandler(svc, agentRepo)
+	handler := NewSecretsHandler(svc, agentRepo, nil, nil)
 
 	tests := []struct {
 		name        string

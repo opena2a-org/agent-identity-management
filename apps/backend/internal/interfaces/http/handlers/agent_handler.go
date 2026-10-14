@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/sdkgen"
@@ -29,6 +30,9 @@ type AgentHandler struct {
 	orgRepo                  domain.OrganizationRepository // ✅ For enforcement mode lookup
 	attestationService       MCPAttestationServicer        // ✅ For getting MCP connections via attestations
 	mcpServiceConcrete       *application.MCPService       // Needed for DetectMCPServersFromConfig
+	// jwtService reads the acting session's revocation before an agent's key
+	// is read, rotated or replaced.
+	jwtService *auth.JWTService
 }
 
 func NewAgentHandler(
@@ -43,6 +47,7 @@ func NewAgentHandler(
 	tagService *application.TagService,
 	orgRepo domain.OrganizationRepository, // ✅ For enforcement mode lookup
 	attestationService *application.MCPAttestationService, // ✅ For MCP connections via attestations
+	jwtService *auth.JWTService,
 ) *AgentHandler {
 	return &AgentHandler{
 		agentService:             agentService,
@@ -57,6 +62,7 @@ func NewAgentHandler(
 		orgRepo:                  orgRepo,
 		attestationService:       attestationService,
 		mcpServiceConcrete:       mcpService, // Store concrete for DetectMCPServersFromConfig
+		jwtService:               jwtService,
 	}
 }
 
@@ -997,6 +1003,11 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 		return err
 	}
 
+	// The SDK carries the agent's private key: a revoked session cannot download it.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_sdk_download") {
+		return nil
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1111,6 +1122,11 @@ func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
 		return err
+	}
+
+	// A revoked session cannot read an agent's private key with its still-valid access token.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_credentials") {
+		return nil
 	}
 
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -2162,6 +2178,11 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 		return err
 	}
 
+	// A revoked session cannot rotate an agent's key and take the new private key.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_rotate_credentials") {
+		return nil
+	}
+
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -2237,6 +2258,11 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 	orgID, userID, err := RequireOrgAndUserID(c)
 	if err != nil {
 		return err
+	}
+
+	// A revoked session cannot replace an agent's key with one it holds.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_keys_update") {
+		return nil
 	}
 
 	agentID, err := uuid.Parse(c.Params("id"))
