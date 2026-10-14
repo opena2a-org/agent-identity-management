@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a verification event logged for an unknown or unreadable agent answers the same error as a foreign agent
+
+- `LogVerificationEvent` answers `agent not found` when the agent lookup fails, whether the agent
+  does not exist or the read itself failed, the same error it answers for an agent of another
+  organization and the same rule `CreateVerificationEvent` applies. The lookup's cause is written
+  to the server log as `Verification event refused: agent <agent id> could not be read: <cause>`
+  and is not part of the returned error.
+
 ### Fixed — the dialog Close button is a 44x44 px target (#731)
 
 - The Close button `DialogContent` draws in a dialog's top-right corner

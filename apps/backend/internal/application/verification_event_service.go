@@ -63,7 +63,11 @@ func (s *VerificationEventService) LogVerificationEvent(
 	// on that. An organization of uuid.Nil is refused on either side.
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrVerificationEventAgentNotFound, err)
+		// The cause stays on the server: an unknown agent, an agent of another
+		// organization and a failed lookup all answer the same error, as
+		// CreateVerificationEvent does.
+		log.Printf("Verification event refused: agent %s could not be read: %v", agentID, err)
+		return nil, ErrVerificationEventAgentNotFound
 	}
 	if agent == nil || orgID == uuid.Nil || agent.OrganizationID != orgID {
 		return nil, ErrVerificationEventAgentNotFound

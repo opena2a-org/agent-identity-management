@@ -255,13 +255,17 @@ func TestLogVerificationEvent_AgentOfAnotherOrganization(t *testing.T) {
 		assertNothingChanged(t, f, event, err)
 	})
 
-	t.Run("unknown agent keeps the cause in the error", func(t *testing.T) {
+	t.Run("unknown agent answers the bare error and logs the cause", func(t *testing.T) {
 		f := newOwnershipFixture()
+		unknown := uuid.New()
+		logged := captureLog(t)
 
-		event, err := logEvent(f.svc, uuid.New(), uuid.New())
+		event, err := logEvent(f.svc, uuid.New(), unknown)
 
 		assertNothingChanged(t, f, event, err)
-		assert.Contains(t, err.Error(), "sql: no rows in result set")
+		assert.Equal(t, ErrVerificationEventAgentNotFound.Error(), err.Error(), "the returned error must not carry the cause")
+		assert.Contains(t, logged.String(), "Verification event refused: agent "+unknown.String())
+		assert.Contains(t, logged.String(), "sql: no rows in result set")
 	})
 
 	t.Run("control: agent of the event's organization is recorded", func(t *testing.T) {
@@ -276,6 +280,45 @@ func TestLogVerificationEvent_AgentOfAnotherOrganization(t *testing.T) {
 		assert.Len(t, f.events.created, 1)
 		assert.Equal(t, org, f.events.created[0].OrganizationID)
 	})
+}
+
+// LogVerificationEvent refuses an unknown agent and an agent of another
+// organization with the same error, so the result does not reveal whether the
+// id exists elsewhere.
+func TestLogVerificationEvent_UnknownAndForeignAgentAreIndistinguishable(t *testing.T) {
+	callerOrg := uuid.New()
+	foreign := registeredAgent(uuid.New(), 0)
+	f := newOwnershipFixture(foreign)
+
+	event, err := logEvent(f.svc, callerOrg, foreign.ID)
+
+	assert.Nil(t, event)
+	assert.ErrorIs(t, err, ErrVerificationEventAgentNotFound)
+	assert.NotContains(t, err.Error(), foreign.DisplayName)
+	assert.Empty(t, f.events.created, "no verification-event row may be written")
+
+	_, errUnknown := logEvent(newOwnershipFixture().svc, callerOrg, uuid.New())
+	require.Error(t, errUnknown)
+	assert.Equal(t, errUnknown.Error(), err.Error(), "a foreign agent and an unknown agent must be indistinguishable")
+}
+
+// A failed agent read (a lost database connection, say) is refused by
+// LogVerificationEvent with the same error as an unknown agent, and its cause
+// is written to the server log only.
+func TestLogVerificationEvent_FailedAgentReadLogsItsCause(t *testing.T) {
+	const cause = "dial tcp 10.0.0.5:5432: connect: connection refused"
+	org := uuid.New()
+	agent := registeredAgent(org, 0)
+	f := newOwnershipFixture(agent)
+	f.agents.readErr = errors.New(cause)
+	logged := captureLog(t)
+
+	event, err := logEvent(f.svc, org, agent.ID)
+
+	assertNothingChanged(t, f, event, err)
+	assert.NotContains(t, err.Error(), cause, "the cause stays on the server")
+	assert.Contains(t, logged.String(), cause)
+	assert.Contains(t, logged.String(), agent.ID.String())
 }
 
 // The refusal of a failed agent read and a failed drift detection are written
