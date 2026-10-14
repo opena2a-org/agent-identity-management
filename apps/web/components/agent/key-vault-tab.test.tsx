@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 import { KeyVaultTab } from './key-vault-tab';
 import { api } from '@/lib/api';
 
@@ -81,6 +81,27 @@ describe('KeyVaultTab — who is offered the hybrid mode turn-off', () => {
     vi.mocked(api.getAgentKeyVault).mockResolvedValue(makeKeyVault({ hybridModeEnabled: false }));
     await renderLoaded(true);
     expect(screen.queryByRole('button', { name: /turn on hybrid mode|enable hybrid mode/i })).toBeNull();
+  });
+});
+
+// The first Algorithm label is the classical key's; the second is the post-quantum key's.
+function classicalAlgorithmRow() {
+  return screen.getAllByText('Algorithm')[0].parentElement as HTMLElement;
+}
+
+describe('KeyVaultTab — the Algorithm row', () => {
+  it('shows the stored algorithm', async () => {
+    vi.mocked(api.getAgentKeyVault).mockResolvedValue(makeKeyVault({ keyAlgorithm: 'Ed25519' }));
+    await renderLoaded(false);
+    expect(within(classicalAlgorithmRow()).getByText('Ed25519')).toBeTruthy();
+  });
+
+  it('says Not recorded when no algorithm is stored, never Ed25519', async () => {
+    vi.mocked(api.getAgentKeyVault).mockResolvedValue(makeKeyVault({ keyAlgorithm: '' }));
+    await renderLoaded(false);
+    const row = classicalAlgorithmRow();
+    expect(within(row).getByText('Not recorded')).toBeTruthy();
+    expect(row.textContent).not.toContain('Ed25519');
   });
 });
 
