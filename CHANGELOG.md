@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — `POST /api/v1/auth/reauth` re-authenticates a signed-in user with their password
+
+- `POST /api/v1/auth/reauth` takes the signed-in user's password and the refresh token of the session the bearer
+  access token belongs to. The password is checked as at sign-in: a wrong password is recorded as a failed attempt
+  and counts toward the lockout, and a locked account, an account without a password and a suspended, deactivated
+  or deleted account are refused with `401`. A refresh token of another session, of another user, or of another
+  kind (an access token, an SDK-download token) is refused with `401` before the password is read, and so is an
+  access token minted from an SDK-download token used as the bearer.
+- The presented refresh token is retired as at `POST /api/v1/auth/refresh`: a token already retired by a rotation,
+  or one that loses the retirement to a concurrent refresh, is a reuse and ends the session. The successor pair stays
+  in the session and both tokens carry an `auth_time` of the time of the re-authentication; the answer has the
+  refresh route's shape, and without a revocation store the presented refresh token comes back unchanged
+  (`rotated: false`) with an access token that carries the new `auth_time`. The session's maximum age
+  (`JWT_SESSION_MAX_AGE`) counts from the re-authentication; a session already past it is not re-authenticated, since
+  its access token is refused with `401` as on every route. A recovered SDK credential's `sdk_tokens` row follows
+  the rotation. The re-authentication is recorded as a `login` audit row with `method` `reauthentication`.
+- The route shares the strict rate limit of the other `/api/v1/auth` routes (10 requests a minute).
+- `docs/API.md` documents the route and lists it among the credential routes of the rate limit.
+- Tests: `apps/backend/internal/interfaces/http/handlers/auth_reauth_handler_test.go`,
+  `apps/backend/internal/infrastructure/auth/jwt_auth_time_test.go` and
+  `TestStrictRateLimiterCoversExactlyTheCredentialRoutes`.
+
 ### Fixed — the backend integration suite passes against a fresh backend with the production rate limits (#688)
 
 - Measured with the suite and a backend built from the previous commit, on a fresh database with
