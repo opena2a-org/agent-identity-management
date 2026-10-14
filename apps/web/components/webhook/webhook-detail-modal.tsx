@@ -185,7 +185,7 @@ export function WebhookDetailModal({
             {/* Status Card */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Status & Performance</CardTitle>
+                <CardTitle className="text-xl">Status & Performance</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -227,7 +227,7 @@ export function WebhookDetailModal({
             {/* Configuration Card */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Configuration</CardTitle>
+                <CardTitle className="text-xl">Configuration</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -304,7 +304,7 @@ export function WebhookDetailModal({
           <TabsContent value="events">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Subscribed Events</CardTitle>
+                <CardTitle className="text-xl">Subscribed Events</CardTitle>
                 <CardDescription>
                   Events that will trigger this webhook ({webhook.events.length} events)
                 </CardDescription>
@@ -331,7 +331,7 @@ export function WebhookDetailModal({
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg">Delivery History</CardTitle>
+                    <CardTitle className="text-xl">Delivery History</CardTitle>
                     <CardDescription>
                       Recent webhook delivery attempts and their outcomes
                     </CardDescription>

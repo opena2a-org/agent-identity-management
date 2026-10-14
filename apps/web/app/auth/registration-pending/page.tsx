@@ -16,7 +16,7 @@ function RegistrationPendingContent() {
       <div className="w-full max-w-xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
-          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Your request is in.</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Your request is in.</h1>
           <p className="mt-1 text-sm text-ink-secondary">An administrator reviews new accounts before they can sign in.</p>
         </div>
 
@@ -33,7 +33,7 @@ function RegistrationPendingContent() {
             </div>
           </div>
 
-          <h2 className="mt-6 text-[15px] font-bold tracking-[-0.02em] text-ink">What happens next</h2>
+          <h2 className="mt-6 text-base font-bold tracking-[-0.02em] text-ink">What happens next</h2>
           <ol className="mt-3 space-y-3">
             <li className="flex items-start gap-3">
               <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-text">

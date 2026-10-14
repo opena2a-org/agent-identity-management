@@ -94,7 +94,7 @@ print(f"Total Attestations: {result['attestation_count']}")`;
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Terminal className="h-5 w-5 text-amber-600" />
-            <CardTitle className="text-lg">Query via cURL (Read-Only)</CardTitle>
+            <CardTitle className="text-xl">Query via cURL (Read-Only)</CardTitle>
           </div>
           <CardDescription>
             View MCP details & attestations — requires an <a href="/dashboard/credentials#api-keys" className="text-amber-700 dark:text-amber-400 underline hover:no-underline">Agent API Key</a>. Creating attestations requires the SDK.

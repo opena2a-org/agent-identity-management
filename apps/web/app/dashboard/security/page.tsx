@@ -520,7 +520,7 @@ export default function SecurityPage() {
           <div className="glass p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-ink">Protection timeline</h3>
+                <h3 className="text-xl font-semibold text-ink">Protection timeline</h3>
                 <p className="text-sm text-ink-secondary">Last 30 days</p>
               </div>
               <Activity className="h-5 w-5 text-ink-tertiary" />
@@ -550,7 +550,7 @@ export default function SecurityPage() {
           <div className="glass p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-ink">Risk by category</h3>
+                <h3 className="text-xl font-semibold text-ink">Risk by category</h3>
                 <p className="text-sm text-ink-secondary">Blocked actions by type</p>
               </div>
               <Shield className="h-5 w-5 text-ink-tertiary" />
@@ -593,7 +593,7 @@ export default function SecurityPage() {
           <div className="p-6 border-b border-divider">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                   <Shield className="h-5 w-5 text-success-text" />
                   Denied actions
                 </h3>
@@ -623,7 +623,7 @@ export default function SecurityPage() {
                 <div className="p-4 rounded-full bg-success-fill mb-4">
                   <CheckCircle className="h-8 w-8 text-success-text" />
                 </div>
-                <h4 className="text-lg font-medium text-ink">All clear</h4>
+                <h4 className="text-xl font-medium text-ink">All clear</h4>
                 <p className="text-sm text-ink-secondary mt-1">
                   No unauthorized actions have been blocked recently
                 </p>
@@ -641,7 +641,7 @@ export default function SecurityPage() {
             <div className="p-6 border-b border-divider">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                  <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                     <Bell className="h-5 w-5 text-warning" />
                     Requires your attention
                   </h3>
@@ -734,7 +734,7 @@ export default function SecurityPage() {
             <div className="p-6 border-b border-divider">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+                  <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-danger" />
                     Security alerts
                   </h3>

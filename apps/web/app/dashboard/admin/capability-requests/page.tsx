@@ -509,7 +509,7 @@ export default function CapabilityRequestsPage() {
               {filteredRequests.length === 0 && (
                 <div className="text-center py-12 text-muted-foreground">
                   <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg font-medium">
+                  <p className="text-xl font-medium">
                     No capability requests found
                   </p>
                   <p className="text-sm mt-1">

@@ -144,7 +144,7 @@ export function SDKTokensSection({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 id={headingId} className="text-lg font-semibold text-ink">
+          <h2 id={headingId} className="text-xl font-semibold text-ink">
             SDK tokens
           </h2>
         </div>
@@ -220,7 +220,7 @@ export function SDKTokensSection({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Key className="h-12 w-12 text-ink-tertiary mb-4" />
-            <p className="text-lg font-medium text-ink mb-2">No SDK tokens found</p>
+            <p className="text-xl font-medium text-ink mb-2">No SDK tokens found</p>
             <p className="text-sm text-ink-secondary text-center max-w-md mb-4">
               Download the SDK to automatically generate an authentication token
             </p>
@@ -245,7 +245,7 @@ export function SDKTokensSection({
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <CardTitle className="text-lg font-medium text-ink">
+                        <CardTitle className="text-xl font-medium text-ink">
                           {token.deviceName || "Unknown device"}
                         </CardTitle>
                         <Badge variant={status.color}>{status.label}</Badge>

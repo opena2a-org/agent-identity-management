@@ -80,7 +80,7 @@ describe("chart screens", () => {
 describe("control heights", () => {
   it("are the larger of a set height and one line of text with its padding", () => {
     expect(minHeightPx(["text-xs", "font-semibold"])).toBe(16);
-    expect(minHeightPx(["rounded-pill", "px-3", "py-1", "text-2xs"])).toBeCloseTo(21.65, 2);
+    expect(minHeightPx(["rounded-pill", "px-3", "py-0.5", "text-xs"])).toBe(20);
     expect(minHeightPx(["inline-flex", "min-h-6", "items-center", "text-xs"])).toBe(24);
     expect(minHeightPx(["h-11", "px-2", "text-sm"])).toBe(44);
     expect(minHeightPx(["px-4", "py-2", "text-sm"])).toBe(36);
@@ -105,18 +105,20 @@ describe("control heights", () => {
       "    <div>",
       '      <p>Read the <a href="/g" className="text-xs underline">guide</a> first.</p>',
       '      <Link href="/a" className="text-xs font-semibold">See all</Link>',
-      '      <button className={cn("rounded-pill px-3 py-1 text-2xs", on ? "bg-brand" : "")}>Python</button>',
+      '      <button className={cn("rounded-pill px-3 py-0.5 text-xs", on ? "bg-brand" : "")}>Python</button>',
       '      <Link href="/b" className="inline-flex min-h-6 items-center text-xs">Open</Link>',
       '      <Link href="/c" className="mt-1 min-h-6 text-xs">Investigate</Link>',
       '      <button className="min-h-6 text-xs">Reset page</button>',
+      '      <Link href="/d" className="hidden h-10 items-center text-sm sm:inline-flex">Wide only</Link>',
       "    </div>",
       "  );",
       "}",
     ].join("\n");
     // A link with no display class is inline and ignores min-h-6; a button does not.
+    // A link hidden at 375px has no target there and is not read.
     expect(undersizedControls("card.tsx", text).map((c) => [c.line, c.heightPx])).toEqual([
       [5, 16],
-      [6, 21.65],
+      [6, 20],
       [8, 16],
     ]);
   });

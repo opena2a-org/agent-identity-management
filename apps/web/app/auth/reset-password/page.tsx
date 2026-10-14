@@ -124,7 +124,7 @@ function ResetPasswordPageContent() {
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-danger-fill text-danger-text">
               <XCircle className="h-6 w-6" aria-hidden="true" />
             </span>
-            <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">This reset link no longer works</h1>
+            <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">This reset link no longer works</h1>
             <p className="mt-1 text-sm text-ink-secondary">Reset links expire 24 hours after they are sent and work once.</p>
           </div>
           <div className="glass-chrome p-6 sm:p-8">
@@ -156,7 +156,7 @@ function ResetPasswordPageContent() {
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-success-fill text-success-text">
               <CheckCircle2 className="h-6 w-6" aria-hidden="true" />
             </span>
-            <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Password updated</h1>
+            <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Password updated</h1>
             <p className="mt-1 text-sm text-ink-secondary">You can sign in with the new password now.</p>
           </div>
           <div className="glass-chrome p-6 text-center sm:p-8" role="status" aria-live="polite">
@@ -217,7 +217,7 @@ function ResetPasswordPageContent() {
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
-          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Choose a new password</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Choose a new password</h1>
           <p className="mt-1 text-sm text-ink-secondary">At least 8 characters with an uppercase letter, a lowercase letter, a number and a special character.</p>
         </div>
 

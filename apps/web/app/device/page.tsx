@@ -136,7 +136,7 @@ function DevicePageContent() {
         <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-success-fill text-success-text">
           <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
         </span>
-        <h1 className="mt-4 text-[22px] font-bold tracking-[-0.03em] text-ink">Command line signed in</h1>
+        <h1 className="mt-4 text-xl font-bold tracking-[-0.03em] text-ink">Command line signed in</h1>
         <p className="mt-1 text-sm text-ink-secondary">
           The terminal that showed code {userCode} now holds your credentials. You can close this tab.
         </p>
@@ -153,7 +153,7 @@ function DevicePageContent() {
         <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-warning-fill text-warning-text">
           <XCircle className="h-7 w-7" aria-hidden="true" />
         </span>
-        <h1 className="mt-4 text-[22px] font-bold tracking-[-0.03em] text-ink">Code expired</h1>
+        <h1 className="mt-4 text-xl font-bold tracking-[-0.03em] text-ink">Code expired</h1>
         <p className="mt-1 text-sm text-ink-secondary">
           This code is no longer valid. Run{" "}
           <code className="rounded bg-glass-inset px-1.5 py-0.5 font-mono text-ink">aim-sdk login</code> again
@@ -167,7 +167,7 @@ function DevicePageContent() {
     <>
       <div className="mb-6 flex flex-col items-center text-center">
         <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
-        <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Sign in a command line</h1>
+        <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Sign in a command line</h1>
         <p className="mt-1 inline-flex items-center gap-2 text-sm text-ink-secondary">
           <Terminal className="h-4 w-4" aria-hidden="true" />
           A command line is asking to act as your account.
@@ -177,7 +177,7 @@ function DevicePageContent() {
       <div className="glass-chrome p-6 sm:p-8">
         {deviceState === "enter_code" ? (
           <>
-            <h2 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Enter the code from your terminal</h2>
+            <h2 className="text-base font-bold tracking-[-0.02em] text-ink">Enter the code from your terminal</h2>
             <p className="mt-1 text-sm text-ink-secondary">
               <code className="font-mono">aim-sdk login</code> prints it as XXXX-XXXX.
             </p>
@@ -206,7 +206,7 @@ function DevicePageContent() {
           </>
         ) : (
           <>
-            <h2 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Confirm the code</h2>
+            <h2 className="text-base font-bold tracking-[-0.02em] text-ink">Confirm the code</h2>
             <p className="mt-1 text-sm text-ink-secondary">
               {clientLabel ? <>Requested by {clientLabel}.</> : <>Looking up the request…</>}
             </p>

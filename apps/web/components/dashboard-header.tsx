@@ -156,7 +156,7 @@ export function DashboardHeader() {
           >
             <Bell className="h-4 w-4" aria-hidden="true" />
             {priorityAlertCount > 0 && (
-              <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-pill bg-danger px-1 text-[10px] font-bold leading-[18px] text-white">
+              <span className="absolute -right-1 -top-1 inline-flex min-w-[18px] items-center justify-center rounded-pill bg-danger px-1 text-xs font-bold leading-[18px] text-white">
                 {priorityAlertCount > 99 ? "99+" : priorityAlertCount}
               </span>
             )}
@@ -189,9 +189,9 @@ export function DashboardHeader() {
               <div role="menu" className="overlay-surface absolute right-0 z-50 mt-2 max-h-[calc(100dvh-var(--mobile-tab-bar-height)-5rem)] w-64 max-w-[calc(100vw-2rem)] overflow-y-auto p-1.5">
                 <div className="px-3 py-2.5">
                   <p className="truncate text-sm font-bold text-ink">{user?.displayName || "Account"}</p>
-                  <p className="truncate text-2xs text-ink-tertiary">{user?.email || "Loading..."}</p>
+                  <p className="truncate text-xs text-ink-tertiary">{user?.email || "Loading..."}</p>
                   {roleLabel && (
-                    <span className="mt-1.5 inline-flex rounded-pill bg-brand-soft px-2 py-0.5 text-2xs font-bold text-brand-text">
+                    <span className="mt-1.5 inline-flex rounded-pill bg-brand-soft px-2 py-0.5 text-xs font-bold text-brand-text">
                       {roleLabel}
                     </span>
                   )}

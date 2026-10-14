@@ -393,7 +393,7 @@ export function MCPDetailModal({
               <span className="text-sm text-ink-secondary block mb-1">
                 Capabilities
               </span>
-              <span className="text-lg font-semibold text-ink">
+              <span className="text-xl font-semibold text-ink">
                 {mcp.capabilities?.length || 0}
               </span>
             </div>
@@ -775,7 +775,7 @@ export function MCPDetailModal({
             <div className="border-t border-divider pt-6">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="h-5 w-5 text-brand-text" />
-                <h3 className="text-lg font-semibold text-ink">
+                <h3 className="text-xl font-semibold text-ink">
                   Cryptographic identity
                 </h3>
               </div>

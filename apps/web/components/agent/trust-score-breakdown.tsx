@@ -267,7 +267,7 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
           <CardContent>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <div className={`text-4xl font-bold ${getScoreColor(breakdown.overall)}`}>
+                <div className={`text-3xl font-bold ${getScoreColor(breakdown.overall)}`}>
                   {Math.round(breakdown.overall * 100)}%
                 </div>
                 <p className="text-sm text-ink-secondary mt-1">

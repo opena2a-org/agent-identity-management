@@ -161,7 +161,7 @@ export function OnboardingBaselinePanel() {
               aria-pressed={range === key}
               onClick={() => setRange(key)}
               className={cn(
-                "rounded-pill px-3 py-1 text-2xs font-bold transition-colors",
+                "rounded-pill px-3 py-1 text-xs font-bold transition-colors",
                 range === key ? "bg-brand text-white shadow-glow" : "bg-glass-inset-gray text-ink-secondary hover:text-ink"
               )}
             >
@@ -184,7 +184,7 @@ export function OnboardingBaselinePanel() {
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
         <div className="glass p-5">
-          <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Distribution</h3>
+          <h3 className="text-base font-bold tracking-[-0.02em] text-ink">Distribution</h3>
           <p className="mb-4 mt-1 text-xs text-ink-secondary">Organizations by how long their first agent took.</p>
           <Distribution stats={stats} />
           {stats.excludedNegative > 0 && (
@@ -196,7 +196,7 @@ export function OnboardingBaselinePanel() {
         </div>
 
         <div className="glass p-5">
-          <h3 className="text-[15px] font-bold tracking-[-0.02em] text-ink">Onboarding events</h3>
+          <h3 className="text-base font-bold tracking-[-0.02em] text-ink">Onboarding events</h3>
           <p className="mb-3 mt-1 text-xs text-ink-secondary">Last {data.windowDays} days, every organization.</p>
           <table className="w-full text-xs">
             <thead>

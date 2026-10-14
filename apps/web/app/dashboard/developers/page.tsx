@@ -452,7 +452,7 @@ function DevelopersPageContent() {
         <div className="lg:col-span-4 xl:col-span-3">
           <Card className="sticky top-20 max-h-[calc(100vh-8rem)] overflow-y-auto">
             <CardHeader>
-              <CardTitle className="text-lg">Categories</CardTitle>
+              <CardTitle className="text-xl">Categories</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {filteredData.map((category) => {
@@ -543,7 +543,7 @@ function DevelopersPageContent() {
                     >
                       {selectedEndpoint.method}
                     </Badge>
-                    <code className="text-lg font-mono">
+                    <code className="text-xl font-mono">
                       {selectedEndpoint.path}
                     </code>
                   </div>

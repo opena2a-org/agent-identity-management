@@ -477,7 +477,7 @@
   .glass-segment-item {
     padding: 6px 12px;
     border-radius: 980px;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--segment-inactive-text);
     transition: background-color 120ms ease, color 120ms ease;
@@ -510,7 +510,7 @@
     color: var(--text-primary);
   }
   .text-overline {
-    font-size: 10.5px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;

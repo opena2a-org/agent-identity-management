@@ -194,7 +194,7 @@ function ErrorDisplay({
     <div className="flex items-center justify-center min-h-[400px]">
       <div className="flex flex-col items-center gap-4 max-w-md text-center">
         <AlertCircle className="h-12 w-12 text-danger-text" />
-        <h3 className="text-lg font-semibold text-ink">
+        <h3 className="text-xl font-semibold text-ink">
           Failed to load agents
         </h3>
         <p className="text-sm text-ink-secondary">{message}</p>

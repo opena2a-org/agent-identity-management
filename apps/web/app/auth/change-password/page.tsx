@@ -188,7 +188,7 @@ export default function ChangePasswordPage() {
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           <AimLogo size={48} className="shadow-[0_10px_26px_rgba(56,189,248,0.35)]" />
-          <h1 className="mt-4 text-[26px] font-bold tracking-[-0.03em] text-ink">Set a new password</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-[-0.03em] text-ink">Set a new password</h1>
           <p className="mt-1 text-sm text-ink-secondary">
             Your account{userEmail ? ` (${userEmail})` : ""} needs a new password before you continue.
           </p>

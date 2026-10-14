@@ -130,7 +130,7 @@ export function MCPServerList({
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
           <ExternalLink className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold mb-2">No MCP Servers Connected</h3>
+        <h3 className="text-xl font-semibold mb-2">No MCP Servers Connected</h3>
         <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
           This agent is not currently connected to any MCP servers. Use the buttons above to add
           MCP servers manually or auto-detect from Claude Desktop config.

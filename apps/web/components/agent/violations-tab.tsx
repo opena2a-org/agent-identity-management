@@ -115,7 +115,7 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
     <Card className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h3 className="text-lg font-semibold">Capability Violations</h3>
+          <h3 className="text-xl font-semibold">Capability Violations</h3>
           <p className="text-sm text-muted-foreground">
             Total violations: {total}
           </p>

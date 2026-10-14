@@ -130,7 +130,7 @@ export function ExecutiveLens({
           {m ? (
             <>
               <p className="mt-2 flex items-baseline gap-1.5">
-                <span className="text-[30px] font-bold tracking-[-0.03em] text-ink">{m.securityScore}</span>
+                <span className="text-3xl font-bold tracking-[-0.03em] text-ink">{m.securityScore}</span>
                 <span className="text-xs font-semibold text-ink-tertiary">/ 100 posture</span>
               </p>
               <dl className="mt-auto pt-3 text-xs">
@@ -154,7 +154,7 @@ export function ExecutiveLens({
         <div className="glass flex flex-col p-4">
           <CardTitle>MCP servers</CardTitle>
           <p className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-[30px] font-bold tracking-[-0.03em] text-ink">{stats.totalMcpServers.toLocaleString()}</span>
+            <span className="text-3xl font-bold tracking-[-0.03em] text-ink">{stats.totalMcpServers.toLocaleString()}</span>
             <span className="text-xs font-semibold text-ink-tertiary">registered</span>
           </p>
           {m && m.mcpServersTotal > m.mcpServersVerified ? (
@@ -179,7 +179,7 @@ export function ExecutiveLens({
           <CardTitle>Compliance</CardTitle>
           {c ? (
             <>
-              <p className="mt-2 text-[22px] font-bold capitalize tracking-[-0.02em] text-ink">{c.complianceLevel.replace(/[_-]/g, " ")}</p>
+              <p className="mt-2 text-xl font-bold capitalize tracking-[-0.02em] text-ink">{c.complianceLevel.replace(/[_-]/g, " ")}</p>
               <p className="text-xs font-semibold text-ink-secondary">{Math.round(c.verificationRate)}% of agents verified</p>
               <dl className="mt-auto pt-3 text-xs">
                 {[
@@ -205,7 +205,7 @@ export function ExecutiveLens({
           <CardTitle>Recommended action</CardTitle>
           {recommended ? (
             <>
-              <p className="mt-2 text-[15px] font-bold tracking-[-0.02em] text-ink">{recommended.text}</p>
+              <p className="mt-2 text-base font-bold tracking-[-0.02em] text-ink">{recommended.text}</p>
               {recommended.href && (
                 <Link href={recommended.href} className="mt-auto inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-pill bg-brand px-4 text-xs font-bold text-white shadow-glow hover:bg-brand-hover">
                   Open <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -224,7 +224,7 @@ export function ExecutiveLens({
                   <span className="mt-1.5 h-[7px] w-[7px] flex-shrink-0 rounded-full bg-danger" aria-hidden="true" />
                   <span className="min-w-0">
                     <span className="block truncate text-ink"><b>{b.agentName || b.agentId}</b> blocked from {b.attemptedCapability}</span>
-                    <span className={cn("block text-2xs text-ink-tertiary")}>{relativeTime(b.createdAt)}{b.details ? ` · ${b.details}` : ""}</span>
+                    <span className={cn("block text-xs text-ink-tertiary")}>{relativeTime(b.createdAt)}{b.details ? ` · ${b.details}` : ""}</span>
                   </span>
                 </li>
               ))}

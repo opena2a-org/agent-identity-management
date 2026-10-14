@@ -23,7 +23,7 @@ export function IdleTimeoutGuard() {
       <div className="w-full max-w-sm rounded-lg bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 p-6">
         <h2
           id="idle-timeout-title"
-          className="text-lg font-semibold text-gray-900 dark:text-white"
+          className="text-xl font-semibold text-gray-900 dark:text-white"
         >
           Still there?
         </h2>

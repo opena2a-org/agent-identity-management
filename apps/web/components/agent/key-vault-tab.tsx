@@ -117,7 +117,7 @@ export function KeyVaultTab({ agentId, canManage = false }: KeyVaultTabProps) {
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-6">
           <Key className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Agent Public Key</h3>
+          <h3 className="text-xl font-semibold">Agent Public Key</h3>
           <span className="ml-auto px-2 py-1 text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded-full flex items-center gap-1">
             <Shield className="h-3 w-3" />
             Server-side (read-only)
@@ -192,7 +192,7 @@ export function KeyVaultTab({ agentId, canManage = false }: KeyVaultTabProps) {
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-6 flex-wrap">
           <ShieldCheck className="h-5 w-5" />
-          <h3 className="text-lg font-semibold">Post-Quantum Companion Key</h3>
+          <h3 className="text-xl font-semibold">Post-Quantum Companion Key</h3>
           {keyVault.pqcPublicKey ? (
             <Badge variant="secondary" className="ml-2">
               {keyVault.hybridModeEnabled ? 'Hybrid mode enabled' : 'Registered'}

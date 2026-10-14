@@ -111,7 +111,7 @@ export default function RegistrationsPage() {
           ].map((t) => (
             <div key={t.label} className="glass p-4">
               <p className="text-xs font-semibold text-ink-secondary">{t.label}</p>
-              <p className={`mt-1.5 text-[28px] font-bold leading-none tracking-[-0.03em] ${t.tone}`}>{t.value}</p>
+              <p className={`mt-1.5 text-2xl font-bold leading-none tracking-[-0.03em] ${t.tone}`}>{t.value}</p>
             </div>
           ))}
         </div>
@@ -154,7 +154,7 @@ export default function RegistrationsPage() {
             {filteredRequests.length === 0 ? (
               <div className="glass p-10 text-center">
                 <UserPlus className="mx-auto mb-3 h-8 w-8 text-ink-tertiary" aria-hidden="true" />
-                <h3 className="text-[15px] font-bold text-ink">No {filter !== "all" ? filter : ""} registration requests</h3>
+                <h3 className="text-base font-bold text-ink">No {filter !== "all" ? filter : ""} registration requests</h3>
                 <p className="mt-1 text-xs text-ink-secondary">
                   {filter === "pending" ? "Nobody is waiting for approval right now." : `There are no requests with status ${filter}.`}
                 </p>

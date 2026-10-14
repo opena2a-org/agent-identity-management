@@ -74,8 +74,8 @@ export function DonutChart({
       center={
         center ? (
           <>
-            <span className="text-[22px] font-bold leading-none text-ink">{center.value}</span>
-            <span className="mt-1 text-2xs text-ink-tertiary">{center.caption}</span>
+            <span className="text-xl font-bold leading-none text-ink">{center.value}</span>
+            <span className="mt-1 text-xs text-ink-tertiary">{center.caption}</span>
           </>
         ) : undefined
       }

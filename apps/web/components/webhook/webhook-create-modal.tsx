@@ -186,7 +186,7 @@ export function WebhookCreateModal({ isOpen, onClose, onSuccess }: WebhookCreate
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">Event Selection *</CardTitle>
+                  <CardTitle className="text-xl">Event Selection *</CardTitle>
                   <CardDescription>
                     Choose which events should trigger this webhook
                   </CardDescription>
@@ -243,7 +243,7 @@ export function WebhookCreateModal({ isOpen, onClose, onSuccess }: WebhookCreate
           {/* Payload Example */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Webhook Payload Example</CardTitle>
+              <CardTitle className="text-xl">Webhook Payload Example</CardTitle>
               <CardDescription>
                 Your endpoint will receive POST requests with this structure
               </CardDescription>

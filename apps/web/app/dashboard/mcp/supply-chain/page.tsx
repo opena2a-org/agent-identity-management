@@ -136,7 +136,7 @@ function StatCard({
               <div className={`text-2xl font-semibold ${valueColor}`}>
                 {value}
                 {suffix && (
-                  <span className="text-lg font-normal text-ink-secondary ml-1">
+                  <span className="text-xl font-normal text-ink-secondary ml-1">
                     {suffix}
                   </span>
                 )}
@@ -991,7 +991,7 @@ function SupplyChainPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Attestation Trend Chart */}
         <div className="glass p-6">
-          <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
+          <h3 className="text-xl font-semibold text-ink mb-4 flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-brand-text" />
             Attestation activity (7 days)
           </h3>
@@ -1007,7 +1007,7 @@ function SupplyChainPage() {
 
         {/* Confidence Distribution Chart */}
         <div className="glass p-6">
-          <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
+          <h3 className="text-xl font-semibold text-ink mb-4 flex items-center gap-2">
             <Shield className="h-5 w-5 text-success-text" />
             Confidence score distribution
           </h3>
@@ -1028,7 +1028,7 @@ function SupplyChainPage() {
         <div className="px-6 py-4 border-b border-divider">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                 <Server className="h-5 w-5 text-brand-indigo" />
                 MCP server dependencies
                 <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
@@ -1102,7 +1102,7 @@ function SupplyChainPage() {
                     className="px-6 py-12 text-center text-ink-secondary"
                   >
                     <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">
+                    <p className="text-xl font-medium">
                       {mcpSearchFilter || mcpStatusFilter !== "all"
                         ? "No servers match your filters"
                         : "No MCP servers found"}
@@ -1212,7 +1212,7 @@ function SupplyChainPage() {
         <div className="px-6 py-4 border-b border-divider">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                 <Link2 className="h-5 w-5 text-brand-sky" />
                 Agent-MCP connections
                 <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
@@ -1287,7 +1287,7 @@ function SupplyChainPage() {
                     className="px-6 py-12 text-center text-ink-secondary"
                   >
                     <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">
+                    <p className="text-xl font-medium">
                       {connSearchFilter || connStatusFilter !== "all"
                         ? "No connections match your filters"
                         : "No connections found"}
@@ -1403,7 +1403,7 @@ function SupplyChainPage() {
       {driftAlerts.length > 0 && (
         <div className="glass overflow-hidden mt-8">
           <div className="px-6 py-4 border-b border-divider">
-            <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+            <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-warning-text" />
               Capability drift alerts
               <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-warning-fill text-warning-text rounded-pill">
@@ -1644,7 +1644,7 @@ function SupplyChainPage() {
           {/* Agents Inventory */}
           <div className="glass overflow-hidden">
             <div className="px-6 py-4 border-b border-divider">
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                 <Bot className="h-5 w-5 text-ink-secondary" />
                 Agents inventory
                 <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
@@ -1673,7 +1673,7 @@ function SupplyChainPage() {
                     <tr>
                       <td colSpan={7} className="px-6 py-12 text-center text-ink-secondary">
                         <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p className="text-lg font-medium">No agents registered</p>
+                        <p className="text-xl font-medium">No agents registered</p>
                         <p className="text-sm mt-1">Agents will appear here when registered with AIM</p>
                       </td>
                     </tr>
@@ -1800,7 +1800,7 @@ function SupplyChainPage() {
           {/* MCP Tools & Servers */}
           <div className="glass overflow-hidden">
             <div className="px-6 py-4 border-b border-divider">
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                 <Server className="h-5 w-5 text-ink-secondary" />
                 MCP servers & tools
                 <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
@@ -1831,7 +1831,7 @@ function SupplyChainPage() {
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-ink-secondary">
                         <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p className="text-lg font-medium">No MCP servers discovered</p>
+                        <p className="text-xl font-medium">No MCP servers discovered</p>
                         <p className="text-sm mt-1">MCP servers will appear here when agents attest their usage</p>
                       </td>
                     </tr>
@@ -1904,7 +1904,7 @@ function SupplyChainPage() {
           {/* Agent-MCP Connections Map */}
           <div className="glass overflow-hidden">
             <div className="px-6 py-4 border-b border-divider">
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2">
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2">
                 <Link2 className="h-5 w-5 text-ink-secondary" />
                 Agent-MCP connection map
                 <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
@@ -1918,7 +1918,7 @@ function SupplyChainPage() {
             {connections.length === 0 ? (
               <div className="px-6 py-12 text-center text-ink-secondary">
                 <Link2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium">No connections observed</p>
+                <p className="text-xl font-medium">No connections observed</p>
                 <p className="text-sm mt-1">Connections will appear here when agents attest MCP server usage</p>
               </div>
             ) : (
@@ -1966,7 +1966,7 @@ function SupplyChainPage() {
           {/* Data Categories */}
           {abomData.summary.dataCategories.length > 0 && (
             <div className="glass p-6">
-              <h3 className="text-lg font-semibold text-ink flex items-center gap-2 mb-4">
+              <h3 className="text-xl font-semibold text-ink flex items-center gap-2 mb-4">
                 <Database className="h-5 w-5 text-ink-secondary" />
                 Data access categories
                 <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-glass-inset-gray text-ink-secondary rounded-pill">
@@ -2020,7 +2020,7 @@ function SupplyChainPage() {
                       <Bot className="h-6 w-6 text-ink-secondary" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-ink">{selectedAgent.name}</h3>
+                      <h3 className="text-xl font-semibold text-ink">{selectedAgent.name}</h3>
                       <p className="text-sm text-ink-secondary">Agent ABOM details</p>
                     </div>
                   </div>

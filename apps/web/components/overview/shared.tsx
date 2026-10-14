@@ -52,11 +52,11 @@ export function KpiTile({
 }) {
   const body = (
     <>
-      <p className={cn("font-semibold", size === "sm" ? "text-2xs" : "text-xs", tone === "alert" ? "text-danger-text" : "text-ink-secondary")}>{label}</p>
+      <p className={cn("text-xs font-semibold", tone === "alert" ? "text-danger-text" : "text-ink-secondary")}>{label}</p>
       <p
         className={cn(
           "font-bold tracking-[-0.03em] leading-none",
-          size === "sm" ? "mt-1.5 text-[28px]" : "mt-2 text-[32px]",
+          size === "sm" ? "mt-1.5 text-2xl" : "mt-2 text-3xl",
           tone === "accent" && "text-brand-text",
           tone === "alert" && "text-danger-text",
           tone === "success" && "text-success-text",
@@ -65,7 +65,7 @@ export function KpiTile({
       >
         {value}
       </p>
-      {delta ? <p className={cn("mt-1 font-semibold text-ink-secondary", size === "sm" ? "text-2xs" : "text-xs")}>{delta}</p> : null}
+      {delta ? <p className="mt-1 text-xs font-semibold text-ink-secondary">{delta}</p> : null}
     </>
   );
   const cls = cn(tone === "alert" ? "glass-alert" : "glass", "block transition-transform", size === "sm" ? "rounded-card-sm p-4" : "p-5", href && "hover:-translate-y-0.5");
@@ -82,7 +82,7 @@ export function StatusChip({ kind, children }: { kind: "pass" | "deny" | "pendin
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-2xs font-bold",
+        "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-0.5 text-xs font-bold",
         kind === "pass" && "border-success-border bg-success-fill text-success-text",
         kind === "deny" && "border-danger-border bg-danger-fill text-danger-text",
         kind === "pending" && "border-warning-border bg-warning-fill text-warning-text",
@@ -98,7 +98,7 @@ export function CardTitle({ children, sub, action }: { children: React.ReactNode
   return (
     <div className="flex items-start justify-between gap-3">
       <div>
-        <h3 className="text-[14px] font-bold tracking-[-0.02em] text-ink">{children}</h3>
+        <h3 className="text-sm font-bold tracking-[-0.02em] text-ink">{children}</h3>
         {sub ? <p className="mt-0.5 text-xs text-ink-tertiary">{sub}</p> : null}
       </div>
       {action}

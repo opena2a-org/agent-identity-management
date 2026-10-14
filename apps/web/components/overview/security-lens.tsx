@@ -45,15 +45,15 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
         <div className="flex min-w-0 flex-col gap-4">
           {hero ? (
             <div className="glass-alert flex flex-col gap-4 p-5 sm:p-6">
-              <p className="inline-flex items-center gap-2 text-2xs font-bold uppercase tracking-[0.06em] text-danger-text">
+              <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.06em] text-danger-text">
                 <AlertTriangle className="h-4 w-4" aria-hidden="true" /> Most recent violation
               </p>
               <div className="flex flex-wrap items-center gap-4">
-                <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-inset bg-danger-fill text-lg font-bold text-danger-text">
+                <span className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-inset bg-danger-fill text-xl font-bold text-danger-text">
                   {(hero.agentName || "?").slice(0, 1).toLowerCase()}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-lg font-bold tracking-[-0.02em] text-ink">{hero.agentName || hero.agentId}</p>
+                  <p className="truncate text-xl font-bold tracking-[-0.02em] text-ink">{hero.agentName || hero.agentId}</p>
                   <p className="truncate text-xs font-semibold text-danger-text">
                     capability violation: {hero.attemptedCapability}
                     {hero.registeredCapabilities?.length ? ` (registered: ${hero.registeredCapabilities.join(", ")})` : ""}
@@ -61,7 +61,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
                 </div>
                 {heroAgent && typeof heroAgent.trustScore === "number" && (
                   <div className="text-right">
-                    <p className="text-[16px] font-bold tracking-[-0.02em] text-danger-text">{trustDisplay(heroAgent.trustScore)}</p>
+                    <p className="text-base font-bold tracking-[-0.02em] text-danger-text">{trustDisplay(heroAgent.trustScore)}</p>
                     <p className="text-overline">Trust</p>
                   </div>
                 )}
@@ -74,7 +74,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-inset-sm border border-glass-inset-border bg-glass-inset-gray px-3 py-2.5">
                     <p className="text-overline">{k}</p>
-                    <p className={cn("mt-0.5 text-[13px] font-bold", k === "Severity" && "capitalize", v === "Contained" ? "text-success-text" : "text-ink")}>{v}</p>
+                    <p className={cn("mt-0.5 text-sm font-bold", k === "Severity" && "capitalize", v === "Contained" ? "text-success-text" : "text-ink")}>{v}</p>
                   </div>
                 ))}
               </div>
@@ -84,7 +84,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
                   {typeof hero.trustScoreImpact === "number" && Math.round(Math.abs(hero.trustScoreImpact) * 100) > 0 ? ` Trust impact ${hero.trustScoreImpact > 0 ? "+" : "-"}${Math.round(Math.abs(hero.trustScoreImpact) * 100)} points.` : ""}
                 </p>
                 {canOpenSecurity && (
-                  <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-[13px] font-bold text-white shadow-glow hover:bg-brand-hover">
+                  <Link href="/dashboard/security/violations" className="inline-flex h-9 items-center rounded-pill bg-brand px-5 text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
                     Review
                   </Link>
                 )}
@@ -111,8 +111,8 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
                 ].map((t) => (
                   <div key={t.label} className="rounded-inset border border-glass-inset-border bg-glass-inset-gray p-3.5">
                     <p className="text-xs font-semibold text-ink-secondary">{t.label}</p>
-                    <p className={cn("mt-1 text-[20px] font-bold tracking-[-0.02em]", t.ok ? "text-success-text" : "text-danger-text")}>
-                      {t.value} <span className="text-2xs font-semibold text-ink-secondary">{t.unit}</span>
+                    <p className={cn("mt-1 text-xl font-bold tracking-[-0.02em]", t.ok ? "text-success-text" : "text-danger-text")}>
+                      {t.value} <span className="text-xs font-semibold text-ink-secondary">{t.unit}</span>
                     </p>
                   </div>
                 ))}
@@ -142,7 +142,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
         <div className="glass flex min-w-0 flex-col p-5">
           <CardTitle
             action={
-              <span className="inline-flex items-center gap-1.5 text-2xs font-semibold text-ink-secondary">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-secondary">
                 <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_6px_rgba(52,199,89,0.7)]" aria-hidden="true" />
                 last 60 minutes
               </span>
@@ -160,10 +160,10 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
                 const deny = e.status === "failed" || e.status === "denied" || e.status === "timeout";
                 return (
                   <li key={e.id} className={cn("flex items-center gap-3 py-2.5", deny && "-mx-2 rounded-avatar bg-danger-fill px-2")}>
-                    <span className={cn("w-12 text-2xs font-semibold", deny ? "text-danger-text" : "text-ink-tertiary")}>{shortTime(e.startedAt || e.createdAt)}</span>
+                    <span className={cn("w-12 text-xs font-semibold", deny ? "text-danger-text" : "text-ink-tertiary")}>{shortTime(e.startedAt || e.createdAt)}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-bold text-ink">{e.agentName || e.agentId}</span>
-                      {deny && <span className="block truncate text-2xs font-semibold text-danger-text">{e.verificationType} failed</span>}
+                      <span className="block truncate text-sm font-bold text-ink">{e.agentName || e.agentId}</span>
+                      {deny && <span className="block truncate text-xs font-semibold text-danger-text">{e.verificationType} failed</span>}
                     </span>
                     <StatusChip kind={deny ? "deny" : e.status === "pending" ? "pending" : "pass"}>{deny ? "Deny" : e.status === "pending" ? "Pending" : "Pass"}</StatusChip>
                   </li>
@@ -171,7 +171,7 @@ export function SecurityLens({ stats, verification, lens, role }: { stats: Stats
               })}
             </ul>
           )}
-          <p className="mt-auto pt-4 text-2xs text-ink-tertiary">Actions sent through the SDK are checked against policy. In monitoring mode a failed check is recorded and the action still runs.</p>
+          <p className="mt-auto pt-4 text-xs text-ink-tertiary">Actions sent through the SDK are checked against policy. In monitoring mode a failed check is recorded and the action still runs.</p>
           {canOpenSecurity && (
             <Link href="/dashboard/security" className="mt-2 inline-flex min-h-6 items-center gap-1 text-xs font-semibold text-brand-text hover:underline">
               Open Security <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
