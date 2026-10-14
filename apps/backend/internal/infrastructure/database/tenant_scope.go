@@ -9,30 +9,32 @@ import (
 	"github.com/google/uuid"
 )
 
-// Tenant scoping for row-level security (AIMC-01).
+// Tenant scoping on the database connection.
 //
-// Migration 109 put PostgreSQL row-level security on the eleven tenant-scoped
-// tables that cmd/tenantscope-lint enumerates. Those policies read the tenant
-// identity from a session variable; this file is the Go side that writes it.
+// This file is the Go side of a per-connection tenant identity: it writes the
+// identity, or a declared cross-tenant service scope, into a PostgreSQL session
+// variable on the connection a query runs on. No migration in this repository
+// enables row-level security, and no policy here reads these variables yet;
+// until one does, setting them changes what no query returns.
 //
-// Until AIMC-01 the backend set no per-connection tenant identity at all. The
-// identity existed only in the request: the auth middleware writes
-// c.Locals("organization_id") (middleware/auth.go:133,197) and the API-key
-// middleware does the same (middleware/api_key.go:129,223), and every repository
-// then shared one pooled *sql.DB with nothing on it. The primitives below carry
-// that value the last hop, onto the connection the query actually runs on.
+// The backend sets no per-connection tenant identity on its own. The identity
+// exists only in the request: the auth middleware writes
+// c.Locals("organization_id") and the API-key middleware does the same, and
+// every repository then shares one pooled *sql.DB with nothing on it. The
+// primitives below carry that value the last hop, onto the connection the
+// query actually runs on.
 //
 // SCOPE, STATED PLAINLY. This is the primitive, not the rollout. Repositories
 // still hold a bare *sql.DB and still scope in their own SQL; converting them to
-// take their connection from WithTenant is a separate unit of work. Migration
-// 109 must not be applied to an environment whose request path has not been
-// converted, because a connection with no identity declared reads zero rows --
-// that is the fail-closed behaviour the policies are for.
+// take their connection from WithTenant is separate work. A policy that reads
+// these variables must not be applied to an environment whose request path has
+// not been converted, because a connection with no identity declared would
+// then read zero rows -- that is the fail-closed behaviour such a policy is for.
 
 const (
 	// TenantGUC is the PostgreSQL session variable that carries the tenant
-	// identity. The aim_tenant_isolation policy on every tenant-scoped table
-	// reads it through aim_current_organization_id().
+	// identity, for a row-level security policy to read. No migration in this
+	// repository defines such a policy yet.
 	//
 	// The app.* prefix is not invented here: migration 032's
 	// log_trust_score_change() already reads app.current_user_id, and this
@@ -40,11 +42,12 @@ const (
 	TenantGUC = "app.current_organization_id"
 
 	// ServiceScopeGUC is the session variable that declares a unit of work
-	// cross-tenant. It backs the aim_service_scope policy, which is the only
-	// named way past aim_tenant_isolation.
+	// cross-tenant. A policy that reads TenantGUC is expected to treat it as
+	// the only named way past tenant isolation. The migration runners already
+	// set it on every migration transaction.
 	ServiceScopeGUC = "app.rls_service_scope"
 
-	// serviceScopeOn is the single value aim_rls_service_scope() accepts.
+	// serviceScopeOn is the single value that declares the service scope.
 	// Anything else, including unset, reads as off.
 	serviceScopeOn = "on"
 )
@@ -72,12 +75,14 @@ type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// TenantScopedTable records one table policed by migration 109 and how its rows
-// are bound to a tenant.
+// TenantScopedTable records one tenant-scoped table and how its rows are bound
+// to a tenant.
 //
-// This manifest is duplicated on purpose: the authoritative copy is the VALUES
-// list in migration 109, and TestRLSMigrationCoversTheTenantScopedManifest reads
-// that file and fails if the two ever disagree. A table added to one and not the
+// Nothing in this repository yet ties this manifest to a row-level security
+// policy: no migration here enables one, and no test compares the list to a
+// migration. Its one reader today is the row security census, which counts
+// statements naming these tables. A policy that is added later should be
+// checked against this list, because a tenant-owned table in one and not the
 // other is exactly the drift worth failing on -- a new tenant-owned table with
 // no policy is an unprotected table.
 type TenantScopedTable struct {
@@ -98,8 +103,8 @@ type TenantScopedTable struct {
 	LintParamKeys []string
 }
 
-// TenantScopedTables is the set of tables migration 109 policies, in the same
-// order as the migration's manifest.
+// TenantScopedTables is the set of tables whose rows belong to one tenant: the
+// eleven tables that cmd/tenantscope-lint's paramKeys reach.
 var TenantScopedTables = []TenantScopedTable{
 	{Table: "organizations", TenantColumn: "id", LintParamKeys: []string{"orgId"}},
 	{Table: "users", TenantColumn: "organization_id", LintParamKeys: []string{"userId"}},
