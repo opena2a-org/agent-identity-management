@@ -126,12 +126,24 @@ def test_relay_sends_the_package_version(monkeypatch):
 
 # --- adjacent: logout clears the legacy SDK credentials ----------------------
 
+# The child is outside conftest.py's isolated_home, so it turns off the same
+# `.aim` folder discovery and runs from the temporary home rather than the
+# checkout (#726).
+_CLI = (
+    "import sys\n"
+    "import aim_sdk.credentials as credentials\n"
+    "credentials._find_sdk_package_credentials = lambda: None\n"
+    "from aim_sdk.cli import main\n"
+    "sys.exit(main())\n"
+)
+
+
 def _run_cli(home: Path, *args: str) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if not k.startswith("AIM_")}
-    env.update({"HOME": str(home), "USERPROFILE": str(home)})
+    env.update({"HOME": str(home), "USERPROFILE": str(home), "PYTHONPATH": str(SDK_ROOT)})
     return subprocess.run(
-        [sys.executable, "-m", "aim_sdk", *args],
-        cwd=SDK_ROOT, env=env, capture_output=True, text=True, timeout=60,
+        [sys.executable, "-c", _CLI, *args],
+        cwd=home, env=env, capture_output=True, text=True, timeout=60,
     )
 
 
