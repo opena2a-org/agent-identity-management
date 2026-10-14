@@ -33,7 +33,7 @@ import (
 // If the schema changes, this pin must be updated deliberately — the file is
 // vendored from the fleet-wide contract and must stay byte-identical to the
 // copies in opena2a-registry and aim-cloud.
-const aim07SchemaSHA256 = "a936972888f9e17632deb4398876eab4b8f790876178781ee8e52a525b2b9b18"
+const aim07SchemaSHA256 = "4b4c1fd03a298f2c50c12364680f3341f57e96148f591823d2d5438a6d70d914"
 
 // aim07HealthHandlerSource is the GET /health handler exactly as it exists at
 // base (main.go:224-230 at 5405500a); AIM-07.AC4 requires it unchanged byte
@@ -96,9 +96,10 @@ func aim07Enum(t *testing.T, prop any) []any {
 
 // aim07Validate checks a response body against the vendored schema: exact
 // top-level key set (additionalProperties: false + the seven required keys),
-// service and status enums, the commit pattern, RFC 3339 checkedAt, and the
-// closed shape of each dependency entry. Constraints are read from the schema
-// file itself, so the test exercises the committed contract, not a copy.
+// service and status enums, the commit and syncedFrom patterns, RFC 3339
+// checkedAt, and the closed shape of each dependency entry. Constraints are
+// read from the schema file itself, so the test exercises the committed
+// contract, not a copy.
 func aim07Validate(t *testing.T, s *aim07Schema, rawBody []byte) {
 	t.Helper()
 	var body map[string]any
@@ -141,6 +142,14 @@ func aim07Validate(t *testing.T, s *aim07Schema, rawBody []byte) {
 	case nil, string:
 	default:
 		t.Errorf("version must be a string or null, got %T", v)
+	}
+
+	if v, present := body["syncedFrom"]; present {
+		syncedFromProp, ok := props["syncedFrom"].(map[string]any)
+		require.True(t, ok)
+		syncedFromRe := regexp.MustCompile(syncedFromProp["pattern"].(string))
+		s, isStr := v.(string)
+		assert.True(t, isStr && syncedFromRe.MatchString(s), "syncedFrom %v must be a string matching %s", v, syncedFromRe)
 	}
 
 	checkedAt, ok := body["checkedAt"].(string)
