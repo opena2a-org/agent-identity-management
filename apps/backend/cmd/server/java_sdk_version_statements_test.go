@@ -142,6 +142,8 @@ func TestJavaSDKVersionFileStatesThePomVersion(t *testing.T) {
 }
 
 func TestJavaSDKVersionStatementsAgreeWithThePom(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	declared := javaSDKPomVersion(t)
 
 	files := append(append([]string{}, javaSDKVersionDocuments...), javaSDKSourceFiles(t)...)

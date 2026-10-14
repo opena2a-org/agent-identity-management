@@ -264,6 +264,8 @@ func checkBackendCommand(word string, shipped map[string]bool) string {
 // containers and services no compose file defines and ran `go run` in an image
 // with no Go toolchain. The changelog is skipped: it quotes the old commands.
 func TestDocumentedDockerCommandsUseNamesComposeDefines(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	root := aim03RepoRoot(t)
 	shipped := backendImageCommands(t)
 
@@ -509,6 +511,8 @@ func TestDocumentedDockerCommandsUseNamesComposeDefines(t *testing.T) {
 // one row for each service `docker compose up -d` starts, under the container
 // name the file gives it, marked healthy when the service has a healthcheck.
 func TestInstallationGuideComposePsOutputIsTheComposeFile(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := aim03ReadRepoFile(t, "docs/guides/INSTALLATION.md")
 	start := strings.Index(guide, "### 3. Start Services")
 	require.NotEqual(t, -1, start, "the installation guide has no Start Services step")

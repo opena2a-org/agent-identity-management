@@ -321,6 +321,8 @@ func TestDocsFigureFindings(t *testing.T) {
 // endpoints that file documents. Two tutorials said it documents all 160; it
 // documents a fraction of the routes the server mounts.
 func TestDocumentedAPIReferenceTotalsAreItsOwn(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	documented := apiReferenceEndpoints(aim03ReadRepoFile(t, "docs/API.md"))
 	require.NotZero(t, documented, "docs/API.md documents no endpoint; the endpoint scan is broken, not the documents")
 
@@ -360,6 +362,8 @@ func TestDocumentedAPIReferenceTotalsAreItsOwn(t *testing.T) {
 // deployment reference gives to the tables a migrated database has: the ones
 // the migrations create, and the migration runner's own schema_migrations.
 func TestDeploymentReferenceTableTotalIsTheDatabases(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	root := aim03RepoRoot(t)
 	dir := filepath.Join(root, "apps", "backend", "migrations")
 	entries, err := os.ReadDir(dir)
@@ -392,6 +396,8 @@ func TestDeploymentReferenceTableTotalIsTheDatabases(t *testing.T) {
 // one, and the table it carried had drifted from what the command prints.
 // The README says how to print the current figures instead.
 func TestBackendReadmeGivesNoPackageCoverageFigure(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	const readme = "apps/backend/README.md"
 	doc := aim03ReadRepoFile(t, readme)
 	require.Contains(t, doc, "## Test Coverage", "the backend README has no coverage section")
@@ -408,6 +414,8 @@ func TestBackendReadmeGivesNoPackageCoverageFigure(t *testing.T) {
 // named Java SDK 1.1.0 while sdk/java/pom.xml said 1.0.0, and gave the Python
 // SDK both 100% and 94.7%.
 func TestSDKTestPlanVersionsAndPassRatesHold(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	python := strings.TrimSpace(aim03ReadRepoFile(t, "sdk/python/VERSION"))
 	require.Regexp(t, `^\d+\.\d+\.\d+$`, python, "sdk/python/VERSION holds no version")
 	pom := javaSDKPom.FindStringSubmatch(aim03ReadRepoFile(t, "sdk/java/pom.xml"))

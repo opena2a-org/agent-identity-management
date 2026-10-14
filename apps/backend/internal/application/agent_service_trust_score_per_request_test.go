@@ -123,6 +123,8 @@ func TestAgentService_VerifyCapability_DoesNotRecalculateTheTrustScore(t *testin
 // verification request does to it. It said the score "runs on every action"
 // and "Updates on every action", which a run of allowed calls disproves.
 func TestRootReadme_StatesWhenTheTrustScoreIsRecalculated(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "README.md"))
 	require.NoError(t, err)
 	readme := string(raw)

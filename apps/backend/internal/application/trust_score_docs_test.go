@@ -94,6 +94,8 @@ func measuredAgentCalculator(t *testing.T, age time.Duration) (*TrustCalculator,
 }
 
 func TestTrustScoreDocs_PagesQuoteTheNineFactorScore(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	root := repoRoot(t)
 
 	t.Run("no page describes an 8-factor score", func(t *testing.T) {

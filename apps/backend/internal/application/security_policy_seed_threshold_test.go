@@ -101,6 +101,11 @@ func TestSeededTrustScoreLowPoliciesCarryTheThresholdTheEvaluatorReads(t *testin
 	}
 	for _, src := range sources {
 		t.Run(src.name, func(t *testing.T) {
+			// Only the released migration is guarded: the hosted twin keeps the
+			// bytes it applied, and carries the seed script and the backfill.
+			if strings.HasPrefix(src.path, "migrations/") {
+				requirePublicRepositoryFiles(t)
+			}
 			content, err := os.ReadFile(filepath.Join(backend, filepath.FromSlash(src.path)))
 			require.NoError(t, err)
 			all := src.extract(t, string(content))
@@ -161,6 +166,8 @@ func seededCriticalTrustScoreBlock(t *testing.T) *domain.SecurityPolicy {
 // The seeded block and the update-time suspension describe one critical
 // score. They are two rules, so the test keeps their values equal.
 func TestSeededCriticalTrustScoreBlockMatchesTheUpdateTimeSuspension(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	policy := seededCriticalTrustScoreBlock(t)
 	assert.Equal(t, TrustScoreThresholdCritical, trustScorePolicyThreshold(policy.Rules),
 		"the seeded block threshold and the suspension threshold must agree")
@@ -194,6 +201,8 @@ func TestDashboardPolicyCardAppliesTheEvaluatorsThresholdKeyAndDefault(t *testin
 // An evaluable agent at 0.40 is below the seeded 0.50 and is blocked. Before
 // the seed carried trust_threshold, the evaluator applied 0.3 and allowed it.
 func TestSeededCriticalTrustScoreBlockBlocksBelowItsSeededThreshold(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	repo := new(MockSecurityPolicyRepository)
 	service := NewSecurityPolicyService(repo, nil, nil)
 	agent := neverAllowedAgent()

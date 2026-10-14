@@ -86,6 +86,8 @@ func jsonBlockWith(t *testing.T, text, needle string) map[string]interface{} {
 var snakeTokenKey = regexp.MustCompile(`"(access|refresh)_token"\s*:`)
 
 func TestSecurityGuidesQuoteTheRefreshTheServerAnswers(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	// Unset, so the lifetime is the server default the guides quote.
 	t.Setenv("JWT_ACCESS_TTL", "")
 
@@ -136,6 +138,8 @@ func TestSecurityGuidesQuoteTheRefreshTheServerAnswers(t *testing.T) {
 }
 
 func TestTokenRotationGuideDescribesWhatAReuseDoes(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	f := newSDKFamilyFixture(t, &rotationStore{})
 	s1 := f.downloadSDK(t)
 	out, status := postRefresh(t, f.refresh, s1)
@@ -197,6 +201,8 @@ func sdkRotationLine(t *testing.T) *regexp.Regexp {
 // to the SDK's print statement, and what the FAQ says it depends on to the
 // answers of the refresh route with and without a revocation store.
 func TestTokenRotationGuideQuotesTheRotationLineTheSDKPrints(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	rotation := readBackendFile(t, tokenRotationGuidePath)
 	faq := guideSection(t, rotation, "### Q: How do I know if my token has been rotated?")
 
@@ -277,6 +283,8 @@ func oneLine(text string) string {
 // only on a server with Redis, which the FAQ test above holds to the refresh
 // route; every section that says how often a token rotates says so too.
 func TestTokenRotationGuideSaysWhichRefreshesRotate(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	rotation := readBackendFile(t, tokenRotationGuidePath)
 	for _, claim := range []string{"Every time you use a refresh token", "every time they're used", "cannot be disabled"} {
 		textLacks(t, rotation, claim, "the guide says every refresh rotates")
@@ -318,6 +326,8 @@ func TestTokenRotationGuideSaysWhichRefreshesRotate(t *testing.T) {
 // nothing in the backend writes (#701). What it quotes now is what the backend
 // writes: the access log line of the refresh route and a refresh warning.
 func TestTroubleshootingGuideQuotesRefreshLinesTheBackendWrites(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	guide := readBackendFile(t, "../../docs/troubleshooting/authentication.md")
 	section := guideSection(t, guide, "### Monitor Token Refresh Attempts")
 	for _, line := range []string{"Token refresh successful", "Token rotated:", "Token refresh failed"} {
@@ -347,6 +357,8 @@ func TestTroubleshootingGuideQuotesRefreshLinesTheBackendWrites(t *testing.T) {
 }
 
 func TestSecurityGuidesNameTheSDKCredentialFilesAndTheirPage(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	// Where the Python SDK keeps what it writes.
 	sdk := readBackendFile(t, "../../sdk/python/aim_sdk/credentials.py")
 	textHas(t, sdk, `SDK_CREDENTIALS_FILE = AIM_DIR / "sdk_credentials.json"`, "the SDK's own credentials file")

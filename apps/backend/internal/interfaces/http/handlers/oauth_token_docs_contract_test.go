@@ -73,6 +73,8 @@ func textLacks(t *testing.T, text, needle, what string) {
 // change to the signing method or to the response fields fails here until the
 // guide is rewritten to match.
 func TestFleetGovernanceGuideDescribesTheTokenTheServerIssues(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	// Unset, so the lifetime is the server default the guide quotes.
 	t.Setenv("JWT_ACCESS_TTL", "")
 

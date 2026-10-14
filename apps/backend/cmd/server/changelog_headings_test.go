@@ -57,6 +57,8 @@ func TestChangelogHeadingFindings(t *testing.T) {
 // Every typed heading in CHANGELOG.md separates the change type from its
 // summary the same way, so the entries read as one list.
 func TestChangelogTypedHeadingsUseEmDash(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	findings := changelogHeadingFindings(aim03ReadRepoFile(t, "CHANGELOG.md"))
 	assert.Empty(t, findings, "write each heading as `### <Type> — <summary>`:\n%s", strings.Join(findings, "\n"))
 }

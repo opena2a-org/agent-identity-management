@@ -440,6 +440,8 @@ func deploymentDocReferences(t *testing.T, root, file string) []deploymentDocRef
 // docker-compose.monitoring.yml, to apply infrastructure/k8s/*.yaml and to
 // cd into infrastructure/azure, none of which the repository carries.
 func TestDeploymentDocsNameOnlyFilesInTheRepository(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
 	root := aim03RepoRoot(t)
 	total := 0
 	for _, file := range deploymentDocs {
