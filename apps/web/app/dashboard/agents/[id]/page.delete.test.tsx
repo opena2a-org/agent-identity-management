@@ -20,7 +20,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/auth-guard", () => ({
   AuthGuard: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("@/components/agents/auto-detect-button", () => ({ AutoDetectButton: () => null }));
 vi.mock("@/components/agents/mcp-server-selector", () => ({ MCPServerSelector: () => null }));
 vi.mock("@/components/agents/mcp-server-list", () => ({ MCPServerList: () => null }));
 vi.mock("@/components/agents/agent-capabilities", () => ({ AgentCapabilities: () => null }));

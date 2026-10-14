@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Bell,
   Activity,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +40,13 @@ import {
 } from "@/lib/agent-detail-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AutoDetectButton } from "@/components/agents/auto-detect-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { DetectMCPServersDialog } from "@/components/agents/detect-mcp-servers-dialog";
 import { MCPServerSelector } from "@/components/agents/mcp-server-selector";
 import { MCPServerList } from "@/components/agents/mcp-server-list";
 import { AgentCapabilities } from "@/components/agents/agent-capabilities";
@@ -132,6 +139,7 @@ export default function AgentDetailsPage({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
+  const [showDetectDialog, setShowDetectDialog] = useState(false);
   const [lifecycleOutcome, setLifecycleOutcome] = useState<ActionOutcomeState | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [agentActivity, setAgentActivity] = useState<any[]>([]);
@@ -547,11 +555,6 @@ export default function AgentDetailsPage({
 
           {/* Action Buttons */}
           <div className="flex gap-2 flex-wrap">
-            <AutoDetectButton
-              agentId={agent.id}
-              onDetectionComplete={handleRefresh}
-              variant="default"
-            />
             <MCPServerSelector
               agentId={agent.id}
               currentMCPServers={agent.talksTo ?? []}
@@ -563,6 +566,19 @@ export default function AgentDetailsPage({
                 <Edit className="h-4 w-4 mr-1" /> Edit
               </Button>
             )}
+            {/* Non-modal, so the menu releases the page before the dialog it opens takes focus. */}
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <MoreHorizontal className="h-4 w-4 mr-1" aria-hidden="true" /> More
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setShowDetectDialog(true)}>
+                  Detect MCP servers
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {/* A verified agent has nothing left to verify: show the state as a
                 status badge, not as a disabled action. */}
             {canManage && isVerified && (
@@ -1342,6 +1358,13 @@ export default function AgentDetailsPage({
           rememberAgentDeleted(deleted.name);
           router.push("/dashboard/agents");
         }}
+      />
+
+      <DetectMCPServersDialog
+        agent={agent}
+        open={showDetectDialog}
+        onOpenChange={setShowDetectDialog}
+        onDetected={handleRefresh}
       />
 
       {/* Suspend Confirmation Dialog */}

@@ -16,7 +16,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/auth-guard", () => ({ AuthGuard: ({ children }: { children: ReactNode }) => <>{children}</> }));
 
 // These load their own data and have their own tests; the header under test is the page's.
-vi.mock("@/components/agents/auto-detect-button", () => ({ AutoDetectButton: () => null }));
 vi.mock("@/components/agents/mcp-server-selector", () => ({ MCPServerSelector: () => null }));
 vi.mock("@/components/agent/first-run-panel", () => ({ FirstRunPanel: () => null }));
 vi.mock("@/components/agent/drift-score-card", () => ({ DriftScoreCard: () => null }));
@@ -142,5 +141,27 @@ describe("Agent page header, verification", () => {
     const busy = (await within(actions).findByRole("button", { name: "Verifying..." })) as HTMLButtonElement;
     expect(busy.disabled).toBe(true);
     expect(disabledStatusButtons(container)).toEqual([]);
+  });
+});
+
+describe("Agent page header, MCP server detection", () => {
+  it("offers detection as an entry in a More menu after Edit, not as a primary action", async () => {
+    const { container } = renderPage(agent());
+    const actions = await headerActions();
+
+    expect(within(container).queryByRole("button", { name: /detect/i })).toBeNull();
+    const labels = within(actions).getAllByRole("button").map((button) => (button.textContent ?? "").trim());
+    expect(labels.indexOf("More")).toBe(labels.indexOf("Edit") + 1);
+    const more = within(actions).getByRole("button", { name: "More" });
+    expect(more.className).not.toContain("bg-brand");
+
+    fireEvent.keyDown(more, { key: "Enter" });
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toEqual(["Detect MCP servers"]);
+
+    fireEvent.click(items[0]);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading", { name: "Detect MCP servers" })).toBeTruthy();
+    expect(dialog.textContent).toContain("Run this on the machine where Billing Bot runs.");
   });
 });

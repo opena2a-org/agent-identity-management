@@ -19,7 +19,6 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/components/auth-guard", () => ({ AuthGuard: ({ children }: { children: ReactNode }) => <>{children}</> }));
 // Sections that fetch their own data; this test is about the lifecycle action outcomes.
-vi.mock("@/components/agents/auto-detect-button", () => ({ AutoDetectButton: () => null }));
 vi.mock("@/components/agents/mcp-server-selector", () => ({ MCPServerSelector: () => null }));
 vi.mock("@/components/agents/mcp-server-list", () => ({ MCPServerList: () => null }));
 vi.mock("@/components/agents/agent-capabilities", () => ({ AgentCapabilities: () => null }));
