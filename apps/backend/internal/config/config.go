@@ -88,6 +88,12 @@ type DatabaseConfig struct {
 	SSLMode         string
 	MaxConnections  int
 	ConnMaxLifetime time.Duration
+	// PoolRole is the role the request pool sets on every connection it opens
+	// (POSTGRES_POOL_ROLE). Empty, the default, sets none.
+	PoolRole string
+	// ScopeCensus turns on the row security census of the request pool
+	// (POSTGRES_SCOPE_CENSUS=on). Off by default.
+	ScopeCensus bool
 }
 
 // RedisConfig holds Redis configuration
@@ -215,6 +221,8 @@ func LoadDatabase() (DatabaseConfig, error) {
 		SSLMode:         getEnv("POSTGRES_SSL_MODE", "disable"),
 		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
 		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
+		PoolRole:        getEnv("POSTGRES_POOL_ROLE", ""),
+		ScopeCensus:     os.Getenv("POSTGRES_SCOPE_CENSUS") == "on",
 	}
 	if len(missing) > 0 {
 		return DatabaseConfig{}, fmt.Errorf("required environment variable(s) not set: %s", strings.Join(missing, ", "))

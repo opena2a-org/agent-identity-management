@@ -454,3 +454,44 @@ func TestLoadDatabase_MissingVariablesAreAnErrorNamingEach(t *testing.T) {
 		t.Fatalf("LoadDatabase read %+v", database)
 	}
 }
+
+// POSTGRES_POOL_ROLE names the role the request pool sets on every
+// connection, and is empty by default. POSTGRES_SCOPE_CENSUS turns the row
+// security census on with the value on, and is off by default and for every
+// other value.
+func TestLoadDatabase_PoolRoleAndScopeCensus(t *testing.T) {
+	t.Setenv("POSTGRES_HOST", "localhost")
+	t.Setenv("POSTGRES_USER", "aim")
+	t.Setenv("POSTGRES_DB", "aimdb")
+	os.Unsetenv("POSTGRES_POOL_ROLE")
+	os.Unsetenv("POSTGRES_SCOPE_CENSUS")
+
+	database, err := LoadDatabase()
+	if err != nil {
+		t.Fatalf("LoadDatabase: %v", err)
+	}
+	if database.PoolRole != "" || database.ScopeCensus {
+		t.Fatalf("both unset: PoolRole=%q ScopeCensus=%v, want empty and off", database.PoolRole, database.ScopeCensus)
+	}
+
+	t.Setenv("POSTGRES_POOL_ROLE", "aim_runtime")
+	t.Setenv("POSTGRES_SCOPE_CENSUS", "on")
+	database, err = LoadDatabase()
+	if err != nil {
+		t.Fatalf("LoadDatabase: %v", err)
+	}
+	if database.PoolRole != "aim_runtime" || !database.ScopeCensus {
+		t.Fatalf("both set: PoolRole=%q ScopeCensus=%v, want aim_runtime and on", database.PoolRole, database.ScopeCensus)
+	}
+
+	for _, value := range []string{"", "off", "true", "1", "yes", "ON"} {
+		t.Setenv("POSTGRES_SCOPE_CENSUS", value)
+		database, err = LoadDatabase()
+		if err != nil {
+			t.Fatalf("LoadDatabase: %v", err)
+		}
+		if database.ScopeCensus {
+			t.Fatalf("POSTGRES_SCOPE_CENSUS=%q turned the census on; only on does", value)
+		}
+	}
+}

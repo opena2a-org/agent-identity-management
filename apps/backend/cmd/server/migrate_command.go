@@ -21,7 +21,8 @@ const migrateCommandName = "migrate"
 // runMigrateCommand applies the pending migrations and exits without starting
 // the server. It reads only the POSTGRES_* variables and is meant to run as the
 // role that owns the schema, so the server itself can connect as a role that
-// owns nothing.
+// owns nothing. It runs on the migration handle, which never sets
+// POSTGRES_POOL_ROLE.
 //
 // With POSTGRES_APP_USER set it first provisions that role for the server
 // (provisionAppRole), with POSTGRES_APP_PASSWORD as its password. It returns
@@ -32,7 +33,7 @@ func runMigrateCommand() int {
 		log.Printf("❌ %v", err)
 		return 1
 	}
-	db, err := initDatabase(&config.Config{Database: database})
+	db, err := initMigrationHandle(&config.Config{Database: database})
 	if err != nil {
 		log.Printf("❌ Failed to connect to database: %v", err)
 		return 1

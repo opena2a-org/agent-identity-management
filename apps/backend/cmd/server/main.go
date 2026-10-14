@@ -30,6 +30,7 @@ import (
 	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/cache"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/database"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/registry"
@@ -99,16 +100,35 @@ func main() {
 		log.Println("✅ OpenTelemetry initialized (OTLP gRPC)")
 	}
 
-	// Initialize database
-	db, err := initDatabase(cfg)
+	// Initialize database: the request pool serves requests and the
+	// background jobs. With POSTGRES_POOL_ROLE set, every connection it opens
+	// runs as that role; with POSTGRES_SCOPE_CENSUS=on, it counts the
+	// statements that run outside a declared row security scope.
+	var census *database.Census
+	if cfg.Database.ScopeCensus {
+		census = database.NewCensus()
+	}
+	db, err := initRequestPool(cfg, census)
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer db.Close()
+	stopCensus := func() {}
+	if census != nil {
+		stopCensus = census.Start(database.CensusInterval, log.Printf)
+	}
+
+	// The schema migrations and the one-time startup data migrations run on
+	// the migration handle, as the login itself and never as
+	// POSTGRES_POOL_ROLE. It is closed before the server listens.
+	migrationDB, err := initMigrationHandle(cfg)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
 
 	// ⚡ Run database migrations automatically on startup
 	// This ensures production deployments have correct schema without manual intervention
-	if err := runMigrations(db); err != nil {
+	if err := runMigrations(migrationDB); err != nil {
 		log.Fatal("❌ Database migrations failed:", err)
 	}
 	log.Println("✅ Database migrations completed successfully")
@@ -122,7 +142,7 @@ func main() {
 	application.ReportPlatformAdminAllowlist()
 
 	// Seed the first administrator from ADMIN_PASSWORD; an existing account is never changed.
-	if err := seedAdminFromEnv(db); err != nil {
+	if err := seedAdminFromEnv(migrationDB); err != nil {
 		log.Printf("⚠️  Failed to seed administrator from ADMIN_PASSWORD: %v", err)
 	}
 
@@ -181,8 +201,14 @@ func main() {
 
 	// Convert stored agent private keys to the storage-bound v2 format once,
 	// before the server accepts requests: the request path refuses v1.
-	if _, err := application.MigrateAgentPrivateKeysToV2(context.Background(), db, keyVault); err != nil {
+	if _, err := application.MigrateAgentPrivateKeysToV2(context.Background(), migrationDB, keyVault); err != nil {
 		log.Printf("⚠️  Agent private key migration did not finish: %v", err)
+	}
+
+	// Every startup migration has run: close the migration handle before the
+	// server listens.
+	if err := migrationDB.Close(); err != nil {
+		log.Printf("⚠️  Closing the migration handle: %v", err)
 	}
 
 	// Initialize handlers
@@ -340,6 +366,10 @@ func main() {
 	// period that was still open, which would otherwise end with the process.
 	metrics.FlushS1RefusalLine()
 
+	// Print the row security census a last time, now that no request is in
+	// flight. Without POSTGRES_SCOPE_CENSUS=on this does nothing.
+	stopCensus()
+
 	if err := metricsSrv.Stop(); err != nil {
 		log.Printf("⚠️  Metrics listener did not drain within %s: %v", metricsShutdownTimeout, err)
 	}
@@ -387,23 +417,61 @@ func databaseConnString(database config.DatabaseConfig) string {
 	)
 }
 
+// initDatabase opens and pings the request pool without a census.
 func initDatabase(cfg *config.Config) (*sql.DB, error) {
-	db, err := sql.Open("postgres", databaseConnString(cfg.Database))
+	return initRequestPool(cfg, nil)
+}
+
+// initRequestPool opens the request pool, with the pool settings cfg names,
+// and pings it. With POSTGRES_POOL_ROLE set, every connection runs SET ROLE
+// to it first, and a refused SET ROLE fails the ping. With census non-nil,
+// the pool counts its statements into census.
+func initRequestPool(cfg *config.Config, census *database.Census) (*sql.DB, error) {
+	dsn := databaseConnString(cfg.Database)
+	var (
+		db  *sql.DB
+		err error
+	)
+	if census != nil {
+		db, err = database.OpenCensusPool(dsn, cfg.Database.PoolRole, census)
+	} else {
+		db, err = database.OpenPool(dsn, cfg.Database.PoolRole)
+	}
 	if err != nil {
 		return nil, err
 	}
-
-	db.SetMaxOpenConns(cfg.Database.MaxConnections)
-	db.SetMaxIdleConns(cfg.Database.MaxConnections / 2)
-	db.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
+	setPoolLimits(db, cfg.Database)
 
 	// Test connection
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 
 	log.Println("✅ Database connected")
 	return db, nil
+}
+
+// initMigrationHandle opens and pings the handle the schema migrations and
+// the one-time startup data migrations run on. It logs in as the request
+// pool does and never sets POSTGRES_POOL_ROLE, so it acts as the login.
+func initMigrationHandle(cfg *config.Config) (*sql.DB, error) {
+	db, err := database.OpenMigrationHandle(databaseConnString(cfg.Database))
+	if err != nil {
+		return nil, err
+	}
+	setPoolLimits(db, cfg.Database)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func setPoolLimits(db *sql.DB, settings config.DatabaseConfig) {
+	db.SetMaxOpenConns(settings.MaxConnections)
+	db.SetMaxIdleConns(settings.MaxConnections / 2)
+	db.SetConnMaxLifetime(settings.ConnMaxLifetime)
 }
 
 // initRedis connects to the Redis that cfg names and pings it. It returns a
@@ -2195,6 +2263,17 @@ func runMigrations(db *sql.DB) error {
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start transaction for %s: %w", file, err)
+		}
+
+		// Where row-level security is forced on the tenant-scoped tables, a
+		// transaction that declares no scope reads and writes nothing on them.
+		// A migration that backfills is cross-tenant by definition, so declare
+		// the named service scope first — otherwise a DML migration would
+		// update zero rows and report success. Transaction-local: it goes with
+		// the commit. Where no policy reads the setting, it changes nothing.
+		if _, err := tx.Exec(`SELECT set_config('app.rls_service_scope', 'on', true)`); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("failed to enter service scope for %s: %w", file, err)
 		}
 
 		// Execute migration SQL

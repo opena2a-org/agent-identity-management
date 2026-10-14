@@ -252,6 +252,10 @@ func applyConsolidatedSchema(ctx context.Context, db *sql.DB) error {
 	}
 	defer tx.Rollback()
 
+	if err := enterServiceScope(ctx, tx); err != nil {
+		return fmt.Errorf("enter service scope for the consolidated schema: %w", err)
+	}
+
 	if _, err := tx.ExecContext(ctx, string(content)); err != nil {
 		return fmt.Errorf("failed to execute consolidated schema: %w", err)
 	}
@@ -485,6 +489,10 @@ func applyMigration(ctx context.Context, db *sql.DB, migration Migration) error 
 	}
 	defer tx.Rollback()
 
+	if err := enterServiceScope(ctx, tx); err != nil {
+		return fmt.Errorf("enter service scope for %s: %w", migration.Filename, err)
+	}
+
 	// Execute migration
 	if _, err := tx.ExecContext(ctx, migration.SQL); err != nil {
 		return err
@@ -499,4 +507,16 @@ func applyMigration(ctx context.Context, db *sql.DB, migration Migration) error 
 	}
 
 	return tx.Commit()
+}
+
+// enterServiceScope declares the named service scope as the first statement
+// of a migration transaction. Where row-level security is forced on the
+// tenant-scoped tables, a transaction that declares no scope reads and writes
+// nothing on them; a migration that backfills is cross-tenant by definition,
+// and without the scope a DML migration would update zero rows and report
+// success. Transaction-local: it goes with the commit. Where no policy reads
+// the setting, it changes nothing.
+func enterServiceScope(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `SELECT set_config('app.rls_service_scope', 'on', true)`)
+	return err
 }

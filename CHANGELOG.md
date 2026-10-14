@@ -52,6 +52,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   same way. `POST /api/v1/mcp-servers/:id/detect-capabilities` logs a failure to read the detected
   capabilities with the server ID. Neither route's response carries the service's error.
 
+### Added — an opt-in request-pool role and a row security census, both off by default
+
+- `POSTGRES_POOL_ROLE` names a database role the server's request pool runs as. When it is set,
+  every connection the pool opens runs `SET ROLE` to that role once, before the pool hands the
+  connection out. If the database refuses the `SET ROLE`, that connection is closed and the error
+  returned, so no connection serves a statement as the login itself; at startup the pool's ping
+  fails and the server stops with `Failed to connect to database:` and the refusal. The role needs
+  no login and no password: the server still logs in as `POSTGRES_USER`. Unset or empty, the
+  default, the pool sets no role.
+- The schema migrations, the first-administrator seed from `ADMIN_PASSWORD` and the one-time
+  conversion of stored agent private keys to the v2 format run on a second handle that logs in the
+  same way and never sets `POSTGRES_POOL_ROLE`; the server closes it before it listens.
+  `aim-server migrate` runs on that handle too.
+- Every migration transaction, in the server and in the standalone `cmd/migrate` tool, first runs
+  `SELECT set_config('app.rls_service_scope', 'on', true)`. Where row-level security policies read
+  that setting, a migration reads and writes every tenant's rows; where none does, it changes
+  nothing.
+- `POSTGRES_SCOPE_CENSUS=on` makes the request pool count the statements whose text names a
+  tenant-scoped table (`organizations`, `users`, `agents`, `api_keys`, `mcp_servers`,
+  `audit_logs`, `tags`, `agent_capabilities`, `mcp_attestations`, `a2a_peer_trust`, `a2a_skills`)
+  and, of those, the ones that run outside a transaction that declared a tenant
+  (`app.current_organization_id`) or the service scope (`app.rls_service_scope`). Every five
+  minutes and at shutdown the server prints `row security census: statements=<n> undeclared=<n>`,
+  then one `row security census: undeclared site=<file>:<line> count=<n>` line per code location
+  that ran an undeclared statement. The lines carry counts and code locations only, never
+  statement text or argument values. Unset, the default, or any other value leaves the census off.
+- The tenant-scope helpers these settings serve, `WithTenant` and `WithServiceScope`, are added
+  in `apps/backend/internal/infrastructure/database`. No request path calls them in this release.
+
 ### Security — an access token ends with the sign-in it belongs to
 
 - The access token issued with a login pair, and the one each refresh of that login issues, now
