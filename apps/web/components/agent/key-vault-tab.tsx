@@ -114,21 +114,6 @@ export function KeyVaultTab({ agentId, canManage = false }: KeyVaultTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Future Use Cases */}
-      <Card className="p-4 bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800">
-        <div className="flex items-start gap-3">
-          <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400 mt-0.5" />
-          <div className="text-sm text-purple-800 dark:text-purple-200">
-            <p className="font-medium mb-2">Future Use Cases</p>
-            <ul className="list-disc list-inside space-y-1 text-purple-700 dark:text-purple-300 text-xs">
-              <li><strong>Request Signing:</strong> Cryptographically sign sensitive API calls for tamper-proof verification</li>
-              <li><strong>Audit Compliance:</strong> Non-repudiation proof for SOC 2, HIPAA, and regulatory requirements</li>
-              <li><strong>Zero-Trust Security:</strong> Verify agent identity even in compromised network environments</li>
-            </ul>
-          </div>
-        </div>
-      </Card>
-
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-6">
           <Key className="h-5 w-5" />
@@ -320,19 +305,6 @@ export function KeyVaultTab({ agentId, canManage = false }: KeyVaultTabProps) {
             </p>
           </div>
         )}
-      </Card>
-
-      {/* Security Note */}
-      <Card className="p-4 bg-gray-50 dark:bg-gray-900">
-        <div className="text-sm text-muted-foreground">
-          <p className="font-medium mb-2">Key Management Best Practices</p>
-          <ul className="list-disc list-inside space-y-1 text-xs">
-            <li><strong>Private key isolation:</strong> The private key exists only on your agent — never transmitted or stored elsewhere</li>
-            <li><strong>Key compromise:</strong> If you suspect compromise, re-register your agent to generate a new keypair</li>
-            <li><strong>Daily authentication:</strong> Use <strong>API Keys</strong> for routine auth — they're designed for regular rotation</li>
-            <li><strong>Cryptographic identity:</strong> This keypair is your agent's long-term identity — rotate only when necessary</li>
-          </ul>
-        </div>
       </Card>
 
       <AlertDialog open={showTurnOffConfirm} onOpenChange={setShowTurnOffConfirm}>
