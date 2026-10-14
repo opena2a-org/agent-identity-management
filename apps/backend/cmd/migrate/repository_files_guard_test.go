@@ -37,15 +37,15 @@ const (
 
 // repoFilesVerdictFor decides from go.mod's module line alone. This
 // repository's module runs the test. The hosted twin's module skips it, with a
-// reason naming rule R5: a synced test must hold in the twin. Any other line
-// fails it, so a renamed module cannot turn these tests into skips.
+// reason saying that a synced test holds in the twin. Any other line fails it,
+// so a renamed module cannot turn these tests into skips.
 func repoFilesVerdictFor(moduleLine string) (repoFilesVerdict, string) {
 	if fields := strings.Fields(moduleLine); len(fields) == 2 && fields[0] == "module" {
 		switch fields[1] {
 		case repoFilesPublicModule:
 			return repoFilesRun, ""
 		case repoFilesTwinModule:
-			return repoFilesSkip, "rule R5 (a synced test holds in the hosted twin): module " + repoFilesTwinModule +
+			return repoFilesSkip, "a synced test holds in the hosted twin: module " + repoFilesTwinModule +
 				" is the hosted twin of this backend and does not carry this repository's copy of the files this test reads;" +
 				" the test runs in module " + repoFilesPublicModule
 		}
@@ -87,7 +87,7 @@ func TestRequirePublicRepositoryFiles_DecidesOnTheModuleLineAlone(t *testing.T) 
 		reason     string // a substring of the reason; "" means no reason
 	}{
 		{"this repository runs the test", "module github.com/opena2a-org/agent-identity-management/apps/backend", repoFilesRun, ""},
-		{"the hosted twin skips it naming R5", "module github.com/opena2a/identity/backend", repoFilesSkip, "rule R5"},
+		{"the hosted twin skips it", "module github.com/opena2a/identity/backend", repoFilesSkip, "hosted twin"},
 		{"another module fails it", "module github.com/example/fork/apps/backend", repoFilesFail, `"module github.com/example/fork/apps/backend"`},
 		{"no module line fails it", "", repoFilesFail, `module line is ""`},
 	} {
