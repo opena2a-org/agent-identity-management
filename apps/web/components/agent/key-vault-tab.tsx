@@ -172,7 +172,7 @@ export function KeyVaultTab({ agentId, canManage = false }: KeyVaultTabProps) {
             <label className="text-sm font-medium text-muted-foreground block mb-2">
               Algorithm
             </label>
-            <div className="text-sm font-mono">{keyVault.keyAlgorithm || 'Ed25519'}</div>
+            <div className="text-sm font-mono">{keyVault.keyAlgorithm || 'Not recorded'}</div>
           </div>
 
           {/* Key Created At */}

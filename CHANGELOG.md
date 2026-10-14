@@ -39,6 +39,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   turns all three filters off and keeps the header line under SendGrid's 1,000-character limit. It also fails when
   a rendered template contains `<img` or `url(`, either of which can act as an open-tracking image.
 
+### Changed — the key vault says whether the server holds the agent's private key, and its Algorithm row shows only a stored algorithm
+
+- `GET /api/v1/agents/{id}/key-vault` returns `serverHoldsPrivateKey`: `true` when the server stores an
+  encrypted private key for the agent, `false` when it stores none. The response carries this fact only; the
+  key itself, encrypted or not, is never in it.
+- On the agent page's Security tab, the Algorithm row of the agent public key shows the algorithm the server
+  stored for the key, and `Not recorded` when none is stored. Before, the row read `Ed25519` when no algorithm
+  was stored.
+- A test fails when the key vault response leaves out `serverHoldsPrivateKey` or carries `encryptedPrivateKey`,
+  and when the Algorithm row shows `Ed25519` for a key with no stored algorithm.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The
