@@ -137,6 +137,24 @@ Exchange a refresh token for a new access token. The refresh token travels in th
 
 ---
 
+#### POST /api/v1/auth/reauth
+
+Re-authenticate the signed-in user. The request carries the session's access token in the `Authorization` header, and the user's password with the session's current refresh token in the body. The password is checked as at sign-in, so a wrong password is recorded as a failed attempt and counts toward the account lockout. The refresh token is retired as at `POST /api/v1/auth/refresh` and replaced by a pair in the same session whose `auth_time` claim is the time of the re-authentication. The session's maximum age (`JWT_SESSION_MAX_AGE`) then counts from it. A session already past its maximum age is not re-authenticated: its access token is refused with `401` as on every route, and the user signs in again.
+
+**Request:**
+```json
+{
+  "password": "<the user's password>",
+  "refreshToken": "<the session's refresh token>"
+}
+```
+
+**Response** (200): the shape of `POST /api/v1/auth/refresh`. Without a revocation store `rotated` is `false`, `refreshToken` is the token presented, and `accessToken` carries the new `auth_time`.
+
+A wrong password, a locked account and an account without a password answer `401` with `{"error": "Invalid password"}`. A refresh token that is not a login refresh token of the bearer's session answers `401` with `{"error": "Invalid or expired refresh token"}`. A refresh token already retired by a rotation ends the session, as at refresh, and it and a member of a revoked session answer `401` with `{"error": "Token has been revoked or is invalid"}`. A suspended, deactivated or deleted account answers `401` with `{"error": "Account is not active"}`. A successful re-authentication is recorded in the audit log as a `login` with `method` `reauthentication`.
+
+---
+
 ### Agents Endpoints
 
 #### POST /api/v1/agents
@@ -912,7 +930,7 @@ An error answers with an HTTP status and a JSON body whose `error` member is a m
 Requests are counted per signed-in user when the server knows the user before the limiter runs, and per client IP address otherwise, over a one-minute window:
 
 - **Most routes**: 100 requests per minute.
-- **Credential routes**: 10 requests per minute. These are sign-in, sign-out, token refresh, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
+- **Credential routes**: 10 requests per minute. These are sign-in, sign-out, token refresh, re-authentication, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
 
 Responses carry the limiter's headers. `X-RateLimit-Reset` is the number of seconds until the window resets:
 

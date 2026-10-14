@@ -46,6 +46,9 @@ var strictRateLimitedRoutes = []string{
 	"GET /api/v1/auth/me",
 	"POST /api/v1/auth/change-password",
 	"POST /api/v1/auth/sdk/recover",
+	// Re-authentication verifies a password. Its route adds no limiter of its
+	// own: the /auth group's reaches it.
+	"POST /api/v1/auth/reauth",
 }
 
 // strictCensusApp mounts every /api/v1 route through mountAPIRoutes, the call

@@ -58,18 +58,19 @@ type JWTClaims struct {
 	// refresh token carries the same value. Absent on service tokens.
 	SessionID string `json:"sid,omitempty"`
 	// AuthTime (the IANA-registered auth_time claim, seconds since the epoch)
-	// is the time of the sign-in a login refresh token belongs to: set at
-	// sign-in, copied unchanged on every rotation. The access token minted
-	// with or from a login refresh token carries the same value. Absent on
-	// access tokens minted from an SDK-download token or standalone, and on
-	// SDK-download and service tokens.
+	// is the time the user last presented their own password in a login
+	// family: set at sign-in and at a re-authentication (ReauthenticatedPair),
+	// copied unchanged on every rotation. The access token minted with or from
+	// a login refresh token carries the same value. Absent on access tokens
+	// minted from an SDK-download token or standalone, and on SDK-download and
+	// service tokens.
 	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
 }
 
-// SignedInAt returns the time the token's sign-in happened: its auth_time
-// claim, or its own iat for a token minted before the claim existed, or the
-// zero time when it carries neither.
+// SignedInAt returns the time of the token's sign-in, or of its family's
+// latest re-authentication: its auth_time claim, or its own iat for a token
+// minted before the claim existed, or the zero time when it carries neither.
 func (c *JWTClaims) SignedInAt() time.Time {
 	if c == nil {
 		return time.Time{}
@@ -133,7 +134,8 @@ type JWTService struct {
 }
 
 // SessionMaxAge is the longest a login sign-in lasts, however often it is
-// refreshed (JWT_SESSION_MAX_AGE, 8h by default).
+// refreshed (JWT_SESSION_MAX_AGE, 8h by default). A re-authentication starts
+// it again, since it sets the family's auth_time.
 func (s *JWTService) SessionMaxAge() time.Duration {
 	if s.sessionMaxAge <= 0 {
 		return defaultSessionMaxAge
@@ -464,6 +466,32 @@ func (s *JWTService) GenerateTokenPair(userID, orgID, email, role string) (acces
 		return "", "", err
 	}
 	accessToken, err = s.generateAccessToken(userID, orgID, email, role, claims.FamilyID(), claims.SignedInAt())
+	if err != nil {
+		return "", "", err
+	}
+	return accessToken, refreshToken, nil
+}
+
+// ReauthenticatedPair mints the successor of a login refresh token whose user
+// has just presented their password again: a refresh token in the presented
+// token's family whose auth_time is now (equal to its own iat), and an access
+// token in the same family carrying that auth_time. Only a login refresh
+// token (typ refresh, the user issuer) has a successor here. As with
+// RefreshTokenPair, the email and role are the caller's, read from the user
+// record, and nothing is retired here: the caller retires the presented token.
+func (s *JWTService) ReauthenticatedPair(presented *JWTClaims, email, role string) (accessToken, refreshToken string, err error) {
+	if presented == nil || presented.TokenType != TokenTypeRefresh || presented.Issuer != IssuerUser || presented.FamilyID() == "" {
+		return "", "", fmt.Errorf("only a login refresh token has a re-authenticated successor")
+	}
+	refreshToken, err = s.generateRefreshToken(presented.UserID, presented.OrganizationID, presented.FamilyID(), time.Time{})
+	if err != nil {
+		return "", "", err
+	}
+	claims, err := s.ValidateToken(refreshToken)
+	if err != nil {
+		return "", "", err
+	}
+	accessToken, err = s.generateAccessToken(presented.UserID, presented.OrganizationID, email, role, claims.FamilyID(), claims.SignedInAt())
 	if err != nil {
 		return "", "", err
 	}

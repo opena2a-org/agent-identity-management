@@ -1259,6 +1259,7 @@ type Handlers struct {
 	BootstrapToken     *handlers.BootstrapTokenHandler
 	Onboarding         *handlers.OnboardingTelemetryHandler
 	AuthRefresh        *handlers.AuthRefreshHandler
+	AuthReauth         *handlers.AuthReauthHandler
 	SDKTokenRecovery   *handlers.SDKTokenRecoveryHandler
 	Capability         *handlers.CapabilityHandler
 	Detection          *handlers.DetectionHandler          // ✅ For MCP auto-detection (SDK + Direct API)
@@ -1420,6 +1421,13 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.SDKToken,
 			repos.User, // role/email re-read at refresh; never from the token
 			services.Audit,
+		),
+		AuthReauth: handlers.NewAuthReauthHandler(
+			jwtService,
+			services.SDKToken,
+			repos.User,
+			services.Audit,
+			services.Auth, // verifies the password with the sign-in's lockout and failure records
 		),
 		SDKTokenRecovery: handlers.NewSDKTokenRecoveryHandler(
 			services.SDKToken,
@@ -1662,6 +1670,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	authProtected.Get("/me", h.Auth.Me)
 	authProtected.Post("/change-password", h.Auth.ChangePassword)
 	authProtected.Post("/sdk/recover", h.SDKTokenRecovery.RecoverRevokedToken) // SECURITY: Requires auth to prevent revocation bypass
+	// Password again; the session's pair is rotated with a new auth_time. It
+	// adds no limiter: the strict limiter of the /auth group above reaches it
+	// (strictRateLimitedRoutes).
+	authProtected.Post("/reauth", h.AuthReauth.Reauthenticate)
 
 	// Organization routes (authentication required)
 	organizations := v1.Group("/organizations")
