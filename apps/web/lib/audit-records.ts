@@ -39,16 +39,17 @@ function shortId(id: string): string {
 }
 
 /**
- * Who a record says acted, from the members the route sends. A user act names the
- * user, an agent act names the agent; a record with neither says so rather than
- * attributing it to "system".
+ * Who a record says acted, from the members the route sends. An agent act names the
+ * agent, also when the record carries the agent owner's user id beside it, as the
+ * route's actorType does; a user act names the user; a record with neither says so
+ * rather than attributing it to "system".
  */
 export function auditActor(record: AuditRecord): AuditActor {
-  if (present(record.userId)) {
-    return { kind: "user", id: record.userId, label: record.userName?.trim() || `User ${shortId(record.userId)}` };
-  }
   if (present(record.agentId)) {
     return { kind: "agent", id: record.agentId, label: record.agentName?.trim() || `Agent ${shortId(record.agentId)}` };
+  }
+  if (present(record.userId)) {
+    return { kind: "user", id: record.userId, label: record.userName?.trim() || `User ${shortId(record.userId)}` };
   }
   return { kind: "none", label: NO_ACTOR_LABEL };
 }

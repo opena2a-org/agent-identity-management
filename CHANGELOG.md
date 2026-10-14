@@ -93,6 +93,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - When the backend does not answer the admin login, `prep-stage.sh` prints the URL it tried and the
   health check to run, where it used to stop on a Python traceback.
 
+### Fixed — the audit log list names the agent as the actor of a record that carries an agent id
+
+- The actor cell of the dashboard's audit log list (`auditActor` in `apps/web/lib/audit-records.ts`) names the agent
+  whenever a record carries an agent id, also when the record carries the agent owner's user id beside it, as the
+  record of a verification of an agent's action does. This matches the `actorType` member that
+  `GET /api/v1/admin/audit-logs` sends with each record. A record with only a user id names that user, and a record
+  with neither says "No user or agent recorded".
+- A test cell in `apps/web/lib/audit-records.test.ts` covers a record that carries both an agent id and a user id.
+
 ### Security — webhook, MCP server and agent card requests refuse eight more special-purpose address ranges
 
 - The address policy that the URL check and the connection check share also refuses 192.88.99.0/24 (6to4 relay

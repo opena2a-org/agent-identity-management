@@ -45,6 +45,12 @@ describe("auditActor", () => {
     expect(auditActor(record({ agentId: AGENT_ID })).label).toBe("Agent 9e2f4c11");
   });
 
+  it("names the agent when the record also carries the agent owner's user id", () => {
+    const actor = auditActor(record({ userId: USER_ID, userName: "Example User", agentId: AGENT_ID, agentName: "example-agent" }));
+    expect(actor).toEqual({ kind: "agent", id: AGENT_ID, label: "example-agent" });
+    expect(actor.label).not.toContain("Example User");
+  });
+
   it("says no user or agent was recorded instead of calling the record system", () => {
     for (const r of [
       record(),
