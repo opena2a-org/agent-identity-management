@@ -700,7 +700,7 @@ function SupplyChainPage() {
         <h2>Summary</h2>
         <div class="summary-grid">
           <div class="summary-card"><h4>Total Agents</h4><p>${data.summary.totalAgents}</p></div>
-          <div class="summary-card"><h4>MCP Servers</h4><p>${data.summary.totalMcpServers}</p></div>
+          <div class="summary-card"><h4>MCP servers</h4><p>${data.summary.totalMcpServers}</p></div>
           <div class="summary-card"><h4>Total Tools</h4><p>${data.summary.totalTools}</p></div>
           <div class="summary-card"><h4>Connections</h4><p>${data.summary.totalConnections}</p></div>
           <div class="summary-card"><h4>Capabilities</h4><p>${data.summary.totalCapabilities}</p></div>
@@ -721,7 +721,7 @@ function SupplyChainPage() {
           `).join("")}
         </table>
 
-        <h2>MCP Servers</h2>
+        <h2>MCP servers</h2>
         <table>
           <tr><th>Name</th><th>URL</th><th>Status</th><th>Tools</th><th>Attestations</th></tr>
           ${data.mcpServers.map((s) => `

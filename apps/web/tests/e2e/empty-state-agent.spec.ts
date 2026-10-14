@@ -19,10 +19,10 @@ async function gotoAgentTab(page: Page, agentId: string, tab: string) {
 }
 
 test.describe('Agent detail page — empty-state rendering on fresh agent', () => {
-  test('connections tab renders "No MCP Servers Detected"', async ({ authedPage, registerAgent }) => {
+  test('connections tab renders "No MCP servers detected"', async ({ authedPage, registerAgent }) => {
     const agent = await registerAgent();
     await gotoAgentTab(authedPage, agent.id, 'connections');
-    await expect(authedPage.getByText('No MCP Servers Detected')).toBeVisible();
+    await expect(authedPage.getByText('No MCP servers detected')).toBeVisible();
     await assertNoErrorState(authedPage);
   });
 

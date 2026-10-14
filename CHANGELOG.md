@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the dashboard writes "MCP servers" in sentence case
+
+- The admin users page's link to the MCP page, the agent connection graph's server count and the
+  supply-chain HTML report's summary card and section heading read `MCP servers`. Before, they read
+  `MCP Servers`; the navigation and the MCP page title already read `MCP servers`.
+- The agent's MCP server list says `No MCP servers connected` when it is empty and titles its bulk removal
+  dialog `Remove multiple MCP servers`. The server picker's button reads `Add MCP servers` and its dialog
+  `Add MCP servers to agent`.
+- The end-to-end test for a fresh agent's connections tab expects `No MCP servers detected`, the text the tab
+  renders. Before, it expected `No MCP Servers Detected`, which matched the tab only because a text match ignores case.
+
 ### Security — a verification event logged for an unknown or unreadable agent answers the same error as a foreign agent
 
 - `LogVerificationEvent` answers `agent not found` when the agent lookup fails, whether the agent

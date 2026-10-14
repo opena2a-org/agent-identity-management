@@ -325,7 +325,7 @@ export default function UsersPage() {
             className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
           >
             <Server className="h-4 w-4" />
-            MCP Servers
+            MCP servers
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
