@@ -722,6 +722,10 @@ def test_first_refresh_after_login_prints_the_rotation_line_only_when_the_server
     printed = [line for line in capsys.readouterr().out.split("\n") if re.fullmatch(rotation, line)]
     if rotates:
         assert len(printed) == 1, "a rotated refresh token prints the rotation line once"
+        assert printed[0].startswith("Token rotated successfully. Old refresh token revoked (new id: "), (
+            "the rotation line reads as two sentences, with no dash between them"
+        )
+        assert "—" not in printed[0]
     else:
         assert printed == [], (
             "a server that answers with the refresh token it was given rotated nothing, "

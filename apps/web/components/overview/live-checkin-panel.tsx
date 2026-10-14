@@ -99,7 +99,7 @@ export function LiveCheckinPanel({ arrived, onArrived }: { arrived: Agent | null
                 {pollError ? "Cannot reach the API right now; retrying." : "Listening for the first check-in"}
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-ink-secondary">
-                Run the install commands below — the moment your agent calls in, it appears here with its identity and trust score, and this page fills in on its own.
+                Run the install commands below. The moment your agent calls in, it appears here with its identity and trust score, and this page fills in on its own.
               </p>
             </div>
             <p className="hidden flex-shrink-0 text-xs text-ink-tertiary sm:block">Checks every {CHECKIN_POLL_MS / 1000} seconds.</p>

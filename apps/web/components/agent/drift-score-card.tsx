@@ -173,7 +173,7 @@ export function DriftScoreCard({ agentId }: DriftScoreCardProps) {
                 Drift Score
               </CardTitle>
               <CardDescription className="mt-1">
-                Behavioral drift signal — runtime vs registered baseline (0% clean, 100% maximum drift)
+                Behavioral drift signal: runtime vs registered baseline (0% clean, 100% maximum drift)
               </CardDescription>
             </div>
             <Tooltip>

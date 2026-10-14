@@ -42,6 +42,11 @@ describe("LiveCheckinPanel", () => {
     await flush();
 
     expect(screen.getByText("Listening for the first check-in")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Run the install commands below. The moment your agent calls in, it appears here with its identity and trust score, and this page fills in on its own.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText(`Checks every ${CHECKIN_POLL_MS / 1000} seconds.`)).toBeTruthy();
     // The encouraging radar: three staggered rings while waiting.
     expect(document.querySelectorAll(".animate-radar-ring")).toHaveLength(3);

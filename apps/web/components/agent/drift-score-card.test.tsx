@@ -53,6 +53,9 @@ describe('DriftScoreCard — scale and classification', () => {
     render(<DriftScoreCard agentId="agent-1" />);
     await waitFor(() => expect(screen.getByText('0%')).toBeTruthy());
     expect(screen.getByText('Clean')).toBeTruthy();
+    expect(
+      screen.getByText('Behavioral drift signal: runtime vs registered baseline (0% clean, 100% maximum drift)'),
+    ).toBeTruthy();
   });
 
   it('factor 0.95 (boundary) renders as 5% drift, still Clean', async () => {
