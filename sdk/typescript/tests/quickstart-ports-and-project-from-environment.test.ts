@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { load } from 'js-yaml';
 
@@ -24,6 +24,13 @@ import { load } from 'js-yaml';
  *     no fixed path;
  *   - the Docker section of docs/DEPLOYMENT.md and the release smoke contract
  *     name every variable with its default.
+ *
+ * The dev stack, docker-compose.yml, fixed the same names and ports and seven
+ * more services' (aim-elasticsearch on 9200, aim-grafana on 3003, ...). It
+ * takes the quick-start's variables with the same defaults and one port
+ * variable per other service, and the commands the docs give to start part of
+ * it name its services, not its containers (`docker compose up -d
+ * aim-postgres` fails with "no such service").
  *
  * Interpolation follows the Compose file format: `${VAR}`, `${VAR:-default}`
  * with nested defaults, and `${VAR:?message}`; the rendering is checked
@@ -285,5 +292,182 @@ describe('the quick-start takes its host ports and container-name prefix from th
       if (!continuesTable && !opensTable) strays.push(`docs/testing/release-smoke.md:${i + 1}: ${line.slice(0, 48)}`);
     });
     expect(strays).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+const DEV_COMPOSE_FILE = join(REPO_ROOT, 'docker-compose.yml');
+const DEV_ENV_TEMPLATE = join(REPO_ROOT, '.env.example');
+
+/** Host port variables of the dev stack: [service, container port, variable, default]. */
+const DEV_PORTS: Array<[string, string, string, string]> = [
+  ['postgres', '5432', 'AIM_POSTGRES_PORT', '5432'],
+  ['redis', '6379', 'AIM_REDIS_PORT', '6379'],
+  ['elasticsearch', '9200', 'AIM_ELASTICSEARCH_PORT', '9200'],
+  ['elasticsearch', '9300', 'AIM_ELASTICSEARCH_TRANSPORT_PORT', '9300'],
+  ['minio', '9000', 'AIM_MINIO_PORT', '9000'],
+  ['minio', '9001', 'AIM_MINIO_CONSOLE_PORT', '9001'],
+  ['nats', '4222', 'AIM_NATS_PORT', '4222'],
+  ['nats', '8222', 'AIM_NATS_MONITOR_PORT', '8222'],
+  ['prometheus', '9090', 'AIM_PROMETHEUS_PORT', '9090'],
+  ['grafana', '3000', 'AIM_GRAFANA_PORT', '3003'],
+  ['loki', '3100', 'AIM_LOKI_PORT', '3100'],
+  ['backend', '8080', 'AIM_BACKEND_PORT', '8080'],
+  ['frontend', '3000', 'AIM_FRONTEND_PORT', '3000'],
+];
+
+/** Services that run as a container of the stack (bootstrap is a one-shot profile service). */
+const DEV_SERVICES = [
+  'postgres',
+  'redis',
+  'elasticsearch',
+  'minio',
+  'nats',
+  'prometheus',
+  'grafana',
+  'loki',
+  'promtail',
+  'backend',
+  'frontend',
+];
+
+/** The two services the dev stack publishes on every interface, as before. */
+const DEV_PUBLIC = new Set(['backend', 'frontend']);
+
+const DEV_SECRETS: Record<string, string> = {
+  ...SECRETS,
+  MINIO_ROOT_PASSWORD: 'not-a-real-password',
+  GRAFANA_ADMIN_PASSWORD: 'not-a-real-password',
+  METRICS_AUTH_TOKEN: 'not-a-real-token',
+};
+
+interface DevService extends Service {
+  profiles?: string[];
+}
+
+interface DevRendered {
+  services: Record<string, DevService>;
+  names: Record<string, string>;
+  /** `<service>:<container port>` -> `<host address>:<host port>` ('' address when unbound). */
+  published: Record<string, string>;
+  env: (service: string) => Record<string, string>;
+}
+
+function renderDev(env: Record<string, string>): DevRendered {
+  const doc = load(interpolate(readFileSync(DEV_COMPOSE_FILE, 'utf-8'), env)) as { services: Record<string, DevService> };
+  const names: Record<string, string> = {};
+  const published: Record<string, string> = {};
+  for (const [service, spec] of Object.entries(doc.services)) {
+    if (spec.container_name !== undefined) names[service] = spec.container_name;
+    for (const port of spec.ports ?? []) {
+      const parts = port.split(':');
+      const address = parts.length === 3 ? parts[0] : '';
+      published[`${service}:${parts[parts.length - 1]}`] = `${address}:${parts[parts.length - 2]}`;
+    }
+  }
+  const envOf = (service: string): Record<string, string> => {
+    const spec = doc.services[service].environment ?? [];
+    if (!Array.isArray(spec)) return spec;
+    return Object.fromEntries(spec.map((entry) => [entry.slice(0, entry.indexOf('=')), entry.slice(entry.indexOf('=') + 1)]));
+  };
+  return { services: doc.services, names, published, env: envOf };
+}
+
+function expectedPublished(hostPort: (variable: string, fallback: string) => string): Record<string, string> {
+  return Object.fromEntries(
+    DEV_PORTS.map(([service, containerPort, variable, fallback]) => [
+      `${service}:${containerPort}`,
+      `${DEV_PUBLIC.has(service) ? '' : '127.0.0.1'}:${hostPort(variable, fallback)}`,
+    ]),
+  );
+}
+
+/** Markdown files that start part of the dev stack by service name. */
+function devStackDocs(): string[] {
+  const files = [join(REPO_ROOT, 'README.md'), join(REPO_ROOT, 'CONTRIBUTING.md'), DEPLOYMENT_GUIDE];
+  const guides = join(REPO_ROOT, 'docs', 'guides');
+  for (const name of readdirSync(guides)) if (name.endsWith('.md')) files.push(join(guides, name));
+  const examples = join(REPO_ROOT, 'examples');
+  for (const entry of readdirSync(examples, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (readdirSync(join(examples, entry.name)).includes('README.md')) files.push(join(examples, entry.name, 'README.md'));
+  }
+  return files;
+}
+
+describe('the dev stack takes its host ports and container-name prefix from the environment', () => {
+  it('renders the names and host ports it always had when no variable is set', () => {
+    const rendered = renderDev(DEV_SECRETS);
+    expect(rendered.names).toEqual(Object.fromEntries(DEV_SERVICES.map((service) => [service, `aim-${service}`])));
+    expect(rendered.published).toEqual(expectedPublished((_, fallback) => fallback));
+    expect(rendered.env('backend').FRONTEND_URL).toBe('http://localhost:3000');
+    expect(rendered.env('backend').ALLOWED_ORIGINS).toBe('http://localhost:3000');
+    expect(rendered.env('frontend').NEXT_PUBLIC_API_URL).toBe('http://localhost:8080');
+    expect(rendered.env('grafana').GF_SERVER_ROOT_URL).toBe('http://localhost:3003');
+  });
+
+  it('renders the configured names and host ports, and the URLs follow the ports', () => {
+    const configured: Record<string, string> = Object.fromEntries(
+      DEV_PORTS.map(([, , variable], index) => [variable, String(20000 + index)]),
+    );
+    const rendered = renderDev({ ...DEV_SECRETS, ...configured, AIM_PROJECT: 'lab' });
+    expect(rendered.names).toEqual(Object.fromEntries(DEV_SERVICES.map((service) => [service, `lab-${service}`])));
+    expect(rendered.published).toEqual(expectedPublished((variable) => configured[variable]));
+    expect(rendered.env('backend').FRONTEND_URL).toBe(`http://localhost:${configured.AIM_FRONTEND_PORT}`);
+    expect(rendered.env('backend').ALLOWED_ORIGINS).toBe(`http://localhost:${configured.AIM_FRONTEND_PORT}`);
+    expect(rendered.env('frontend').NEXT_PUBLIC_API_URL).toBe(`http://localhost:${configured.AIM_BACKEND_PORT}`);
+    expect(rendered.env('grafana').GF_SERVER_ROOT_URL).toBe(`http://localhost:${configured.AIM_GRAFANA_PORT}`);
+    expect(rendered.env('backend').POSTGRES_PORT).toBe('5432');
+    expect(rendered.env('backend').REDIS_PORT).toBe('6379');
+  });
+
+  it('shares the quick-start variables with the same defaults', () => {
+    const dev = readFileSync(DEV_COMPOSE_FILE, 'utf-8');
+    for (const [variable, fallback] of Object.entries(VARIABLES)) {
+      expect(dev, `docker-compose.yml reads ${variable} with the default ${fallback}`).toContain(`\${${variable}:-${fallback}}`);
+    }
+  });
+
+  it('names a container and publishes a port only through a variable', () => {
+    const dev = load(readFileSync(DEV_COMPOSE_FILE, 'utf-8')) as { services: Record<string, DevService> };
+    for (const [service, spec] of Object.entries(dev.services)) {
+      if (spec.container_name !== undefined) expect(spec.container_name).toBe(`\${AIM_PROJECT:-aim}-${service}`);
+      for (const port of spec.ports ?? []) {
+        expect(port, `${service} takes its host port from a variable`).toMatch(/^(127\.0\.0\.1:)?\$\{AIM_[A-Z_]+_PORT:-\d+\}:\d+$/);
+      }
+    }
+    expect(dev.services.bootstrap.profiles).toEqual(['bootstrap']);
+  });
+
+  it('the From source section of docs/DEPLOYMENT.md and .env.example name every variable with its default', () => {
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const start = guide.indexOf('### From source\n');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = guide.indexOf('\n## ', start);
+    const fromSource = guide.slice(start, end === -1 ? undefined : end);
+    const template = readFileSync(DEV_ENV_TEMPLATE, 'utf-8');
+    const all: Array<[string, string]> = [['AIM_PROJECT', 'aim'], ...DEV_PORTS.map(([, , variable, fallback]): [string, string] => [variable, fallback])];
+    for (const [variable, fallback] of all) {
+      expect(fromSource, `docs/DEPLOYMENT.md From source names ${variable} with its default`).toContain(`\`${variable}\` (\`${fallback}\``);
+      expect(template, `.env.example names ${variable} with its default`).toContain(`# ${variable}=${fallback}\n`);
+    }
+  });
+
+  it('every documented command that starts part of the dev stack names its services', () => {
+    const services = Object.keys((load(readFileSync(DEV_COMPOSE_FILE, 'utf-8')) as { services: object }).services);
+    const command = /docker compose(?: -f (\S+))? up(?: -d)?((?: [a-z][a-z0-9_-]*)+)/g;
+    let checked = 0;
+    for (const file of devStackDocs()) {
+      for (const match of readFileSync(file, 'utf-8').matchAll(command)) {
+        const [, composeFile, names] = match;
+        if (composeFile !== undefined && !composeFile.endsWith('/docker-compose.yml') && composeFile !== 'docker-compose.yml') continue;
+        for (const name of names.trim().split(/\s+/)) {
+          expect(services, `${file.slice(REPO_ROOT.length + 1)}: "${match[0]}" starts ${name}`).toContain(name);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

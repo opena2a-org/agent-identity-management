@@ -1,17 +1,31 @@
 version: '3.9'
 
+# Host ports and container names come from the environment (or .env), with
+# these defaults:
+#   AIM_POSTGRES_PORT=5432  AIM_REDIS_PORT=6379  AIM_BACKEND_PORT=8080  AIM_FRONTEND_PORT=3000
+#   AIM_ELASTICSEARCH_PORT=9200  AIM_ELASTICSEARCH_TRANSPORT_PORT=9300
+#   AIM_MINIO_PORT=9000  AIM_MINIO_CONSOLE_PORT=9001
+#   AIM_NATS_PORT=4222  AIM_NATS_MONITOR_PORT=8222
+#   AIM_PROMETHEUS_PORT=9090  AIM_GRAFANA_PORT=3003  AIM_LOKI_PORT=3100
+#   AIM_PROJECT=aim   (prefix of every container name: aim-postgres, aim-backend, ...)
+# The first five are the quick-start's variables, with the same defaults.
+# Compose names the volumes and the network after its project, which is
+# COMPOSE_PROJECT_NAME when set and otherwise this file's directory. This stack
+# runs beside a quick-start or a second checkout on one host when each has its
+# own project, AIM_PROJECT and ports.
+
 services:
   # PostgreSQL with TimescaleDB
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: aim-postgres
+    container_name: ${AIM_PROJECT:-aim}-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-identity}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${AIM_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,10 +39,10 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: aim-redis
+    container_name: ${AIM_PROJECT:-aim}-redis
     command: redis-server --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${AIM_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -42,14 +56,14 @@ services:
   # Elasticsearch for audit logs and search
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
-    container_name: aim-elasticsearch
+    container_name: ${AIM_PROJECT:-aim}-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "127.0.0.1:9200:9200"
-      - "127.0.0.1:9300:9300"
+      - "127.0.0.1:${AIM_ELASTICSEARCH_PORT:-9200}:9200"
+      - "127.0.0.1:${AIM_ELASTICSEARCH_TRANSPORT_PORT:-9300}:9300"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -63,14 +77,14 @@ services:
   # MinIO for object storage (certificates, documents)
   minio:
     image: minio/minio:latest
-    container_name: aim-minio
+    container_name: ${AIM_PROJECT:-aim}-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aim_minio_user}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:${AIM_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${AIM_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -84,11 +98,11 @@ services:
   # NATS JetStream for messaging
   nats:
     image: nats:2-alpine
-    container_name: aim-nats
+    container_name: ${AIM_PROJECT:-aim}-nats
     command: "--jetstream --store_dir=/data"
     ports:
-      - "127.0.0.1:4222:4222"
-      - "127.0.0.1:8222:8222"
+      - "127.0.0.1:${AIM_NATS_PORT:-4222}:4222"
+      - "127.0.0.1:${AIM_NATS_MONITOR_PORT:-8222}:8222"
     volumes:
       - nats_data:/data
     healthcheck:
@@ -102,14 +116,14 @@ services:
   # Prometheus for metrics collection
   prometheus:
     image: prom/prometheus:latest
-    container_name: aim-prometheus
+    container_name: ${AIM_PROJECT:-aim}-prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:${AIM_PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -128,14 +142,14 @@ services:
   # Grafana for metrics visualization
   grafana:
     image: grafana/grafana:latest
-    container_name: aim-grafana
+    container_name: ${AIM_PROJECT:-aim}-grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env (run ./scripts/gen-dev-secrets.sh > .env to generate one)}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3003
+      - GF_SERVER_ROOT_URL=http://localhost:${AIM_GRAFANA_PORT:-3003}
     ports:
-      - "127.0.0.1:3003:3000"
+      - "127.0.0.1:${AIM_GRAFANA_PORT:-3003}:3000"
     volumes:
       - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./infrastructure/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
@@ -153,10 +167,10 @@ services:
   # Loki for log aggregation
   loki:
     image: grafana/loki:latest
-    container_name: aim-loki
+    container_name: ${AIM_PROJECT:-aim}-loki
     command: -config.file=/etc/loki/local-config.yaml
     ports:
-      - "127.0.0.1:3100:3100"
+      - "127.0.0.1:${AIM_LOKI_PORT:-3100}:3100"
     volumes:
       - ./infrastructure/monitoring/loki.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
@@ -171,7 +185,7 @@ services:
   # Promtail for log collection
   promtail:
     image: grafana/promtail:latest
-    container_name: aim-promtail
+    container_name: ${AIM_PROJECT:-aim}-promtail
     command: -config.file=/etc/promtail/config.yml
     volumes:
       - ./infrastructure/monitoring/promtail.yml:/etc/promtail/config.yml
@@ -188,7 +202,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.backend
-    container_name: aim-backend
+    container_name: ${AIM_PROJECT:-aim}-backend
     environment:
       # Database Configuration (connects to postgres service)
       - POSTGRES_HOST=postgres
@@ -229,9 +243,9 @@ services:
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USERNAME=${SMTP_USERNAME:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      # Frontend URL for CORS and links
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      # Frontend URL for CORS and links; by default they follow the dashboard's host port.
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:${AIM_FRONTEND_PORT:-3000}}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:${AIM_FRONTEND_PORT:-3000}}
       # Admin user configuration (optional). ADMIN_PASSWORD seeds the first administrator
       # (ADMIN_EMAIL) only while no administrator exists; it never changes an existing password.
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
@@ -243,7 +257,7 @@ services:
       # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
       - ENVIRONMENT=${ENVIRONMENT:-development}
     ports:
-      - "8080:8080"
+      - "${AIM_BACKEND_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -297,12 +311,13 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.frontend
-    container_name: aim-frontend
+    container_name: ${AIM_PROJECT:-aim}-frontend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      # The URL the browser reaches the API at; follows the backend's host port.
+      - NEXT_PUBLIC_API_URL=http://localhost:${AIM_BACKEND_PORT:-8080}
       - NODE_ENV=production
     ports:
-      - "3000:3000"
+      - "${AIM_FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy

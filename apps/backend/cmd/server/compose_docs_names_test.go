@@ -537,7 +537,8 @@ func TestInstallationGuideComposePsOutputIsTheComposeFile(t *testing.T) {
 		if len(svc.Profiles) > 0 {
 			continue // `docker compose up -d` does not start it
 		}
-		want[name] = svc.ContainerName
+		// The name `docker compose ps` prints when no variable is set.
+		want[name] = resolveComposeDefaults(svc.ContainerName)
 	}
 	got := map[string]string{}
 	for _, row := range rows[1:] {
