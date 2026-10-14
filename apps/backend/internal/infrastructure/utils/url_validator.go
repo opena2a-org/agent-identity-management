@@ -59,7 +59,10 @@ func ValidateExternalURL(rawURL string) error {
 	// Resolve hostname to IP addresses
 	ips, err := net.LookupHost(hostname)
 	if err != nil {
-		return fmt.Errorf("URL hostname could not be resolved")
+		// The text names no resolver detail; the lookup error stays
+		// reachable through errors.As, so a caller can tell a name that does
+		// not exist from a resolver that failed.
+		return &egressError{msg: "URL hostname could not be resolved", cause: err}
 	}
 
 	for _, ipStr := range ips {

@@ -66,6 +66,26 @@ func (h *A2AHandler) loadOwnedAgent(c fiber.Ctx, agentID, orgID uuid.UUID) *doma
 	return LoadOwned(c, loader, agentID, orgID, agentOrgID)
 }
 
+// agentCardURLRefusedMessage answers a card URL the server refuses to fetch.
+// It names no host or address: the card service's reason says what the URL
+// resolved to, and that stays in the server log.
+const agentCardURLRefusedMessage = "cardUrl must be a public http or https URL"
+
+// respondAgentCardError answers a card registration error. A card URL the
+// server refuses by policy is a problem with the caller's input, so it is
+// answered with 400 and a fixed reason. Fetch, parse and storage failures are
+// answered with the fixed 5xx line. Both keep the card service's reason in the
+// server log only.
+func respondAgentCardError(c fiber.Ctx, agentID uuid.UUID, err error) error {
+	if errors.Is(err, application.ErrAgentCardURLRefused) {
+		log.Printf("a2a: agent card URL refused for agent %s: %v", agentID, err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": agentCardURLRefusedMessage,
+		})
+	}
+	return respondServerError(c, fiber.StatusInternalServerError, fmt.Errorf("agent %s: %w", agentID, err))
+}
+
 // ============================================================================
 // Agent Card Endpoints
 // ============================================================================
@@ -121,7 +141,7 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 		CardData: req.CardData,
 	})
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondAgentCardError(c, agentID, err)
 	}
 
 	// Log audit
@@ -1977,7 +1997,9 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 		CardURL: req.CardURL,
 	})
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		// The card service's reason carries the outcome of the server-side
+		// card fetch; it stays in the server log.
+		return respondAgentCardError(c, agentID, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(card)

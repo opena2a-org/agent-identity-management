@@ -33,6 +33,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   endpoint's API description names the Python and Java SDKs it serves and gives no release date
   for any other.
 
+### Security — a refused A2A card URL is a 400 with a fixed reason, and MCP verify and detect keep the cause in the server log
+
+- `POST /api/v1/a2a/agents/:id/card` and `POST /api/v1/a2a/cards` answer a card URL the server
+  refuses to fetch with `400 {"error":"cardUrl must be a public http or https URL"}`: a URL that
+  does not parse, is not http or https, has no host or names a blocked host, a host the resolver
+  reports does not exist, and an address the egress address policy refuses, whether that address
+  comes from the check when the URL is accepted or from the lookup when the client connects (a
+  host whose DNS answer changes to loopback between the two is refused, and no request reaches
+  it). The reason, which names what the URL resolved to, is written to the server log with the
+  agent ID and is not in the response. A host lookup that fails for another reason, such as a
+  resolver that answers SERVFAIL, and a fetch, parse or storage failure, are answered with the
+  fixed 5xx line. `ValidateExternalURL` keeps its "URL hostname could not be resolved" text and
+  now keeps the lookup error reachable through `errors.As`.
+- `POST /api/v1/mcp-servers/:id/verify`: the audit entry of a verification that failed records the
+  server name and the `unreachable` status and no error text, and the failure is written to the
+  server log with the server ID. A failure to generate the verification challenge is logged the
+  same way. `POST /api/v1/mcp-servers/:id/detect-capabilities` logs a failure to read the detected
+  capabilities with the server ID. Neither route's response carries the service's error.
+
 ### Security — an access token ends with the sign-in it belongs to
 
 - The access token issued with a login pair, and the one each refresh of that login issues, now
