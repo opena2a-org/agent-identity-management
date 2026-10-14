@@ -350,6 +350,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   also fails when a listed file carries none. On the commit before this one the test listed 174 sites.
 - The target-size check skips a link or button that is `hidden` at 375px, where it has no target.
 
+### Changed — three dashboard sentences that held an em dash are punctuated with a full stop, a colon or commas
+
+- The overview's live check-in panel, while nothing has checked in, reads `Run the install commands below.
+  The moment your agent calls in, it appears here with its identity and trust score, and this page fills in
+  on its own.`
+- The agent page's drift score card describes itself as `Behavioral drift signal: runtime vs registered
+  baseline (0% clean, 100% maximum drift)`.
+- The trust score breakdown's execution isolation factor says the self-reported posture `is capped at 0.65,
+  the score of an ordinary hardened container, no matter how strong a posture is claimed`.
+- Every word stays; only the punctuation changed. The dash the drift score card prints in place of a value it
+  has no number for is unchanged. `apps/web/tests/sentences-carry-no-em-dash.test.ts` reads the three
+  components and fails on an em dash in any other line.
+
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
 - The README's SDK table gives `@opena2a/aim-core` the mode `Local`. Before, it read `Local or server`. The

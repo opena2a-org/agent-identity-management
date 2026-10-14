@@ -555,7 +555,7 @@ class OAuthTokenManager:
                 # server-side so the user understands why an out-of-band copy
                 # (other machine, another venv, bundled SDK) would stop working.
                 print(
-                    "Token rotated successfully \u2014 old refresh token revoked "
+                    "Token rotated successfully. Old refresh token revoked "
                     f"(new id: {new_token_id_full[:8] + '...' if new_token_id_full else 'unknown'})"
                 )
 

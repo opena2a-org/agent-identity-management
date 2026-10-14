@@ -315,7 +315,7 @@ def request_device_code(aim_url: str, client_id: str = DEVICE_CLIENT_ID):
     if response.status_code != 200:
         return {'error': _server_reason(
             response,
-            f"HTTP {response.status_code} from {url} — verify the server URL is the AIM API "
+            f"HTTP {response.status_code} from {url}. Verify the server URL is the AIM API "
             f"base (e.g. https://api.aim.opena2a.org), not the dashboard URL",
         )}
     try:

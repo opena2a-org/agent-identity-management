@@ -253,6 +253,6 @@ class TestRotationMessageWording:
 
     def test_rotation_print_says_old_token_revoked(self):
         oauth_src = Path(oauth_module.__file__).read_text()
-        assert "old refresh token revoked" in oauth_src, (
+        assert "Token rotated successfully. Old refresh token revoked" in oauth_src, (
             "Audit #12: rotation print must name the prior refresh token as revoked"
         )

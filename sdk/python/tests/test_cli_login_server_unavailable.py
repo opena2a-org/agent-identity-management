@@ -373,6 +373,22 @@ def test_no_answer_to_the_device_code_request_is_unavailable(aim, monkeypatch):
 # A failure that is not an outage keeps exit 1 and its own words: running the
 # same command again later would not help.
 
+def test_an_unexplained_answer_to_the_device_code_request_says_to_verify_the_url_in_two_sentences(
+        aim, monkeypatch):
+    """A 500 with an HTML body carries no reason the CLI can quote, so it falls
+    back to its own words: the status and URL, then the advice as its own
+    sentence, with no dash between them."""
+    aim.code = (500, HTML)
+    rc, out = _login(aim, monkeypatch)
+    assert rc == 1, out
+    assert (
+        f"Could not start the device login: HTTP 500 from {aim.url}{CODE_PATH}. Verify the server URL is the AIM API base "
+        "(e.g. https://api.aim.opena2a.org), not the dashboard URL"
+    ) in out
+    assert "—" not in out
+    assert aim.token_requests == 0
+    _assert_nothing_stored(aim)
+
 def test_a_url_that_cannot_be_requested_is_not_an_outage(aim, monkeypatch):
     def invalid(*args, **kw):
         raise cli.requests.exceptions.RequestException("Invalid URL")

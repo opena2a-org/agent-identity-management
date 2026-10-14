@@ -348,7 +348,7 @@ If you need long-lived credentials:
 **A:** The Python SDK prints one line when a refresh returns a new refresh token:
 
 ```
-Token rotated successfully — old refresh token revoked (new id: 461d130d...)
+Token rotated successfully. Old refresh token revoked (new id: 461d130d...)
 ```
 
 The SDK prints it after saving the new refresh token to its credentials file. It

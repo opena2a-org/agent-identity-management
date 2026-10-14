@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   paths computed at import time point into it, and that SDK credentials in a `.aim` folder above the working
   directory are not adopted.
 
+### Changed — the two printed lines that held an em dash now read as two sentences
+
+- `aim-sdk login` reports a device-code answer it cannot explain as `HTTP <status> from <url>. Verify the
+  server URL is the AIM API base (e.g. https://api.aim.opena2a.org), not the dashboard URL`. The words are
+  the ones it printed before, with a full stop and a capital letter where the dash stood.
+- The line the SDK prints after a refresh that rotated its token reads `Token rotated successfully. Old
+  refresh token revoked (new id: ...)`. The quick-start notes and the token rotation guide quote the new
+  form.
+- Tests: `test_an_unexplained_answer_to_the_device_code_request_says_to_verify_the_url_in_two_sentences` in
+  `tests/test_cli_login_server_unavailable.py`, and the server-with-redis case of
+  `test_first_refresh_after_login_prints_the_rotation_line_only_when_the_server_rotates` in
+  `tests/test_readme_quick_start_runs_as_written.py`. `test_rotation_print_says_old_token_revoked` in
+  `tests/test_stale_creds_and_rotation.py` pins the new form of the rotation line.
+
 ### Changed — the `sdk_credentials_lock` docstring says the lock does not serialize the Python SDK with the Java SDK on Linux (#722)
 
 - `sdk_credentials_lock` keeps processes of the Python SDK apart, and nothing in the code changes. On Linux it
