@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,10 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// ErrCapabilityRequestNotFound is returned for a capability request id that
+// no row has.
+var ErrCapabilityRequestNotFound = errors.New("capability request not found")
 
 type capabilityRequestRepository struct {
 	db *sqlx.DB
@@ -93,7 +98,7 @@ func (r *capabilityRequestRepository) GetByID(id uuid.UUID) (*domain.CapabilityR
 	var req domain.CapabilityRequestWithDetails
 	err := r.db.Get(&req, query, id)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("capability request not found")
+		return nil, ErrCapabilityRequestNotFound
 	}
 	if err != nil {
 		return nil, err

@@ -226,6 +226,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   or does not name where strict mode is set. `sdk/python/tests/test_cli_device_login.py` checks the `aim-sdk login`
   closing text.
 
+### Fixed — approving or rejecting a capability request that is no longer pending answers 409 (#738)
+
+- `POST /api/v1/admin/capability-requests/:id/approve` and `POST /api/v1/admin/capability-requests/:id/reject`
+  answer `409` with `{"error": "capability request is not pending"}` for a request that is approved,
+  auto-approved or rejected when the decision reads it, as after another administrator decided it first, and
+  write nothing. Before this change both routes answered such a request, in each of the three statuses, with `500` and
+  `An internal error occurred. Please try again later.`: no check covered a request that is not pending, and the
+  not-found check compared the error's text with exactly `capability request not found`, which the service
+  wraps as `capability request not found: <cause>`.
+- A request the route's ownership check found and that has no row when the decision reads it again is answered
+  `404` with `{"error": "capability request not found"}`. Before this change both routes answered it with `500`.
+  A read that fails for another reason is still answered `500`.
+
+### Fixed — saving an MCP server's edits keeps a consensus withdrawal made since the server was read (#738)
+
+- `MCPServerRepository.Update`, through which `MCPService.UpdateMCPServer`, `VerifyMCPServer` and
+  `CreateMCPServer` (for a URL already registered) save a server, writes `name`, `description`, `url`, `version`,
+  `public_key`, `verification_url`, `capabilities` and `updated_at`. Before this change it also wrote `status`,
+  `is_verified` and `last_verified_at` from the server value its caller had read before the edit.
+- After a server is created, its verification is written by `VerifyServer`, `UpdateMCPVerificationStatus` and
+  `WithdrawConsensusVerification`, each in one statement. A save from a value read before a consensus withdrawal
+  now leaves the server pending. Before this change that save wrote the server back to `verified` with
+  `is_verified` true and `consensus_verified_at` NULL, and both `WithdrawConsensusVerification` and the startup
+  recheck's `ListConsensusVerifiedMCPServerIDs` read only servers whose `consensus_verified_at` is set.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the

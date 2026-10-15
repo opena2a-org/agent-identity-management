@@ -20,6 +20,13 @@ var (
 	ErrCapabilityRequestPending = errors.New("pending request already exists")
 )
 
+// ApproveRequest and RejectRequest refusals: the request has no row, or it is
+// no longer pending (it was approved, auto-approved or rejected already).
+var (
+	ErrCapabilityRequestNotFound   = repository.ErrCapabilityRequestNotFound
+	ErrCapabilityRequestNotPending = repository.ErrCapabilityRequestNotPending
+)
+
 type CapabilityRequestService struct {
 	requestRepo    domain.CapabilityRequestRepository
 	capabilityRepo domain.CapabilityRepository
@@ -275,7 +282,7 @@ func (s *CapabilityRequestService) ApproveRequest(ctx context.Context, id uuid.U
 
 	// Verify status is pending
 	if request.Status != domain.CapabilityRequestStatusPending {
-		return fmt.Errorf("capability request is not pending (current status: %s)", request.Status)
+		return fmt.Errorf("%w (current status: %s)", ErrCapabilityRequestNotPending, request.Status)
 	}
 
 	// Grant the capability to the agent
@@ -324,7 +331,7 @@ func (s *CapabilityRequestService) RejectRequest(ctx context.Context, id uuid.UU
 
 	// Verify status is pending
 	if request.Status != domain.CapabilityRequestStatusPending {
-		return fmt.Errorf("capability request is not pending (current status: %s)", request.Status)
+		return fmt.Errorf("%w (current status: %s)", ErrCapabilityRequestNotPending, request.Status)
 	}
 
 	// Update request status to rejected. With a recorder, the rejection is
