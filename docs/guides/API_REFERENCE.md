@@ -784,13 +784,14 @@ There is no common list envelope. Each list answers with an array named for what
 
 ## Webhooks
 
-`/api/v1/webhooks` creates, lists, updates, deletes and tests webhook subscriptions. Event delivery is
-not switched on in the server yet; `POST /api/v1/webhooks/:id/test` sends a test delivery today.
+`/api/v1/webhooks` creates, lists, updates, deletes and tests webhook subscriptions.
+`POST /api/v1/webhooks/:id/test` sends a test delivery.
 
-The events a subscription can name, and when each is sent once delivery is on, are listed in
+The events a subscription can name, and when each is sent, are listed in
 [Webhook Events](../API.md#webhook-events): `agent.created`, `agent.verified`, `agent.updated`,
 `agent.suspended`, `agent.deleted`, `trust_score.changed`, `trust_score.low`, `alert.created`,
-`alert.acknowledged`, `api_key.created` and `api_key.revoked`.
+`alert.acknowledged`, `api_key.created` and `api_key.revoked`. Retries and the limits on pending
+deliveries are in [Delivery and retries](../API.md#delivery-and-retries).
 
 ---
 

@@ -9,15 +9,20 @@ import (
 // apiShutdownTimeout bounds how long the API listener waits for in-flight
 // requests after SIGTERM. Without a bound, one stalled request holds shutdown
 // open indefinitely. Connections still open when it expires are cut when the
-// process exits. Together with fgaDrainTimeout and the 5s telemetry flush, the
-// worst case is about 25s, which fits the 30s grace period Kubernetes allows
-// by default before SIGKILL.
+// process exits. Together with fgaDrainTimeout, webhookDrainTimeout and the 5s
+// telemetry flush, the worst case is about 27s, which fits the 30s grace period
+// Kubernetes allows by default before SIGKILL.
 const apiShutdownTimeout = 10 * time.Second
 
 // fgaDrainTimeout bounds the wait for the FGA async intent-check worker pool,
 // so a hung NanoMind daemon cannot deadlock shutdown. The per-call HTTP
 // timeout (800ms) caps individual workers regardless.
 const fgaDrainTimeout = 10 * time.Second
+
+// webhookDrainTimeout bounds the wait for the webhook event deliveries that
+// stopping the webhook service ends, each recorded as abandoned. An attempt
+// already sent to its endpoint is not waited for.
+const webhookDrainTimeout = 2 * time.Second
 
 // apiServer is the part of *fiber.App that shutdown uses.
 type apiServer interface {

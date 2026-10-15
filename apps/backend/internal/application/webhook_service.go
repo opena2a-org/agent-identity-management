@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,27 +23,51 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 )
 
-// WebhookConfig holds webhook service configuration
+// WebhookConfig holds webhook service configuration. The limits on pending
+// deliveries and on attempts in flight are read the first time the service
+// delivers an event or stops; a limit left at zero takes its default.
 type WebhookConfig struct {
-	DefaultTimeout       time.Duration
-	DefaultMaxRetries    int
-	DefaultRetryDelay    time.Duration
-	MaxRetryDelay        time.Duration
-	RetryBackoffFactor   float64
-	DeliveryWorkerCount  int
-	RetryWorkerInterval  time.Duration
+	DefaultTimeout     time.Duration
+	DefaultMaxRetries  int
+	DefaultRetryDelay  time.Duration
+	MaxRetryDelay      time.Duration
+	RetryBackoffFactor float64
+	// DeliveryWorkerCount is the most event delivery attempts in flight at
+	// once, across webhooks.
+	DeliveryWorkerCount int
+	RetryWorkerInterval time.Duration
+	// MaxRetries is the most retries an event delivery makes, whatever its
+	// webhook stores.
+	MaxRetries int
+	// MaxTimeout is the longest one attempt waits for its endpoint, whatever
+	// its webhook stores.
+	MaxTimeout time.Duration
+	// MaxPendingDeliveries is the most event deliveries held at once, sending
+	// or waiting to retry. A delivery beyond it is not sent and is recorded as
+	// abandoned.
+	MaxPendingDeliveries int
+	// MaxPendingPerWebhook is the most of those deliveries one webhook holds.
+	MaxPendingPerWebhook int
+	// MaxAttemptsPerWebhook is the most attempts in flight to one webhook at
+	// once, so a slow endpoint does not hold every attempt slot.
+	MaxAttemptsPerWebhook int
 }
 
 // DefaultWebhookConfig returns sensible defaults
 func DefaultWebhookConfig() *WebhookConfig {
 	return &WebhookConfig{
-		DefaultTimeout:       30 * time.Second,
-		DefaultMaxRetries:    3,
-		DefaultRetryDelay:    60 * time.Second,
-		MaxRetryDelay:        30 * time.Minute,
-		RetryBackoffFactor:   2.0,
-		DeliveryWorkerCount:  5,
-		RetryWorkerInterval:  30 * time.Second,
+		DefaultTimeout:        30 * time.Second,
+		DefaultMaxRetries:     3,
+		DefaultRetryDelay:     60 * time.Second,
+		MaxRetryDelay:         30 * time.Minute,
+		RetryBackoffFactor:    2.0,
+		DeliveryWorkerCount:   defaultMaxAttemptsInFlight,
+		RetryWorkerInterval:   30 * time.Second,
+		MaxRetries:            defaultMaxRetriesCeiling,
+		MaxTimeout:            30 * time.Second,
+		MaxPendingDeliveries:  defaultMaxPendingDeliveries,
+		MaxPendingPerWebhook:  defaultMaxPendingPerWebhook,
+		MaxAttemptsPerWebhook: defaultMaxAttemptsPerWebhook,
 	}
 }
 
@@ -57,6 +82,12 @@ type WebhookService struct {
 	// tenant-supplied, so it is the egress client: redirects are not followed and
 	// the address of every connection is checked when it is opened.
 	newHTTPClient func(timeout time.Duration) *http.Client
+	// newRetryTimer starts the wait before a retry.
+	newRetryTimer func(d time.Duration) *time.Timer
+
+	boundsOnce     sync.Once
+	deliveryBounds *deliveryBounds
+	stopOnce       sync.Once
 }
 
 func NewWebhookService(webhookRepo *repository.WebhookRepository) *WebhookService {
@@ -65,6 +96,34 @@ func NewWebhookService(webhookRepo *repository.WebhookRepository) *WebhookServic
 		config:        DefaultWebhookConfig(),
 		stopChan:      make(chan struct{}),
 		newHTTPClient: utils.NewEgressClient,
+		newRetryTimer: time.NewTimer,
+	}
+}
+
+// bounds returns the delivery bounds, built from the config the first time an
+// event delivery asks for them.
+func (s *WebhookService) bounds() *deliveryBounds {
+	s.boundsOnce.Do(func() {
+		s.deliveryBounds = newDeliveryBounds(s.config)
+	})
+	return s.deliveryBounds
+}
+
+// Stop refuses every later event delivery, ends the deliveries waiting for an
+// attempt slot or a retry, and waits up to timeout for the deliveries in hand
+// to end. A delivery it ends is recorded as abandoned. An attempt already
+// sent runs until its endpoint answers or its timeout ends. Stop returns
+// whether every delivery ended within timeout; it may be called more than once.
+func (s *WebhookService) Stop(timeout time.Duration) bool {
+	drained := s.bounds().stop()
+	s.stopOnce.Do(func() { close(s.stopChan) })
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-drained:
+		return true
+	case <-timer.C:
+		return false
 	}
 }
 
@@ -397,28 +456,129 @@ func (s *WebhookService) TriggerEvent(ctx context.Context, orgID uuid.UUID, even
 
 	// Send to each webhook asynchronously
 	for _, webhook := range matchingWebhooks {
-		go s.deliverWithRetry(webhook, payload)
+		s.dispatch(webhook, payload)
 	}
 
 	return nil
 }
 
-// deliverWithRetry attempts to deliver a webhook with retry logic
-func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *domain.WebhookPayload) {
-	maxRetries := webhook.MaxRetries
-	if maxRetries == 0 {
+// dispatch starts the delivery of payload to webhook on a goroutine of its own
+// when the delivery bounds admit it. A delivery they refuse is not sent: it is
+// recorded as abandoned with the reason, which is also written to the server log.
+func (s *WebhookService) dispatch(webhook *domain.Webhook, payload *domain.WebhookPayload) {
+	bounds := s.bounds()
+	if admitted, reason := bounds.admit(webhook.ID); !admitted {
+		log.Printf("webhook %s: %s delivery %s %s", webhook.ID, payload.Event, payload.ID, reason)
+		now := time.Now().UTC()
+		delivery := &domain.WebhookDelivery{
+			ID:             uuid.New(),
+			WebhookID:      webhook.ID,
+			OrganizationID: webhook.OrganizationID,
+			Event:          payload.Event,
+			Status:         domain.DeliveryStatusAbandoned,
+			ErrorMessage:   reason,
+			CreatedAt:      now,
+			CompletedAt:    &now,
+		}
+		if jsonData, err := json.Marshal(payload); err == nil {
+			delivery.Payload = string(jsonData)
+		}
+		s.recordDelivery(delivery)
+		return
+	}
+	go func() {
+		defer bounds.done(webhook.ID)
+		s.deliverWithRetry(webhook, payload)
+	}()
+}
+
+// retryBudget returns the retries, the first retry delay and the attempt
+// timeout of a delivery to webhook: the webhook's own values, or the
+// defaults where it stores none, capped by MaxRetries, MaxRetryDelay and
+// MaxTimeout.
+func (s *WebhookService) retryBudget(webhook *domain.Webhook) (maxRetries int, retryDelay, timeout time.Duration) {
+	maxRetries = webhook.MaxRetries
+	if maxRetries <= 0 {
 		maxRetries = s.config.DefaultMaxRetries
 	}
+	if ceiling := positiveOr(s.config.MaxRetries, defaultMaxRetriesCeiling); maxRetries > ceiling {
+		maxRetries = ceiling
+	}
 
-	retryDelay := time.Duration(webhook.RetryDelaySeconds) * time.Second
-	if retryDelay == 0 {
+	retryDelay = time.Duration(webhook.RetryDelaySeconds) * time.Second
+	if retryDelay <= 0 {
 		retryDelay = s.config.DefaultRetryDelay
 	}
+	if s.config.MaxRetryDelay > 0 && retryDelay > s.config.MaxRetryDelay {
+		retryDelay = s.config.MaxRetryDelay
+	}
 
-	timeout := time.Duration(webhook.TimeoutSeconds) * time.Second
-	if timeout == 0 {
+	timeout = time.Duration(webhook.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
 		timeout = s.config.DefaultTimeout
 	}
+	maxTimeout := s.config.MaxTimeout
+	if maxTimeout <= 0 {
+		maxTimeout = DefaultWebhookConfig().MaxTimeout
+	}
+	if timeout <= 0 || timeout > maxTimeout {
+		timeout = maxTimeout
+	}
+	return maxRetries, retryDelay, timeout
+}
+
+// waitForRetry waits d before a retry. It returns false when the service
+// stops first.
+func (s *WebhookService) waitForRetry(d time.Duration) bool {
+	newTimer := s.newRetryTimer
+	if newTimer == nil {
+		newTimer = time.NewTimer
+	}
+	timer := newTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-s.stopChan:
+		return false
+	}
+}
+
+// recordDelivery stores the record of an event delivery. A record that cannot
+// be stored is written to the server log. A service built without a
+// repository stores nothing.
+func (s *WebhookService) recordDelivery(delivery *domain.WebhookDelivery) {
+	if s.webhookRepo == nil {
+		return
+	}
+	if err := s.webhookRepo.RecordDelivery(delivery); err != nil {
+		log.Printf("webhook %s: failed to record delivery %s: %v", delivery.WebhookID, delivery.ID, err)
+	}
+}
+
+// abandonOnStop records a delivery the service stopped before its next
+// attempt as abandoned, keeping the error of the attempt before it.
+func (s *WebhookService) abandonOnStop(delivery *domain.WebhookDelivery) {
+	const stopped = "not sent: the server stopped before the attempt"
+	if delivery.ErrorMessage == "" {
+		delivery.ErrorMessage = stopped
+	} else {
+		delivery.ErrorMessage += "; " + stopped
+	}
+	delivery.Status = domain.DeliveryStatusAbandoned
+	delivery.Success = false
+	delivery.NextRetryAt = nil
+	completedAt := time.Now().UTC()
+	delivery.CompletedAt = &completedAt
+	s.recordDelivery(delivery)
+}
+
+// deliverWithRetry delivers payload to webhook, retrying a failed attempt with
+// exponential backoff within the budget retryBudget returns. Each attempt
+// waits for an attempt slot (see deliveryBounds); the wait before a retry
+// holds none, and lasts the delay recorded in the delivery's nextRetryAt.
+func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *domain.WebhookPayload) {
+	maxRetries, retryDelay, timeout := s.retryBudget(webhook)
 
 	// Create initial delivery record
 	delivery := &domain.WebhookDelivery{
@@ -436,18 +596,24 @@ func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *doma
 	if err != nil {
 		delivery.Status = domain.DeliveryStatusFailed
 		delivery.ErrorMessage = fmt.Sprintf("failed to marshal payload: %v", err)
-		s.webhookRepo.RecordDelivery(delivery)
+		s.recordDelivery(delivery)
 		return
 	}
 	delivery.Payload = string(jsonData)
 
 	// Attempt delivery with retries
 	for attempt := 1; attempt <= maxRetries+1; attempt++ {
+		release, ok := s.bounds().acquireAttempt(webhook.ID, s.stopChan)
+		if !ok {
+			s.abandonOnStop(delivery)
+			return
+		}
 		delivery.AttemptCount = attempt
 		now := time.Now().UTC()
 		delivery.LastAttemptAt = &now
 
 		statusCode, responseBody, duration, deliveryErr := s.attemptDelivery(webhook, payload.Event, jsonData, timeout)
+		release()
 		delivery.StatusCode = statusCode
 		delivery.ResponseBody = responseBody
 		delivery.DurationMs = duration.Milliseconds()
@@ -458,7 +624,7 @@ func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *doma
 			delivery.Success = true
 			completedAt := time.Now().UTC()
 			delivery.CompletedAt = &completedAt
-			s.webhookRepo.RecordDelivery(delivery)
+			s.recordDelivery(delivery)
 			s.webhookRepo.UpdateWebhookStats(webhook.ID, true, completedAt)
 			return
 		}
@@ -475,26 +641,27 @@ func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *doma
 			delivery.Status = domain.DeliveryStatusRetrying
 			nextRetry := time.Now().Add(retryDelay)
 			delivery.NextRetryAt = &nextRetry
+			s.recordDelivery(delivery)
 
-			// Exponential backoff
+			// Wait the delay just recorded, then back off for the next one
+			if !s.waitForRetry(retryDelay) {
+				s.abandonOnStop(delivery)
+				return
+			}
 			retryDelay = time.Duration(float64(retryDelay) * s.config.RetryBackoffFactor)
-			if retryDelay > s.config.MaxRetryDelay {
+			if s.config.MaxRetryDelay > 0 && retryDelay > s.config.MaxRetryDelay {
 				retryDelay = s.config.MaxRetryDelay
 			}
-
-			s.webhookRepo.RecordDelivery(delivery)
-
-			// Wait before retry
-			time.Sleep(retryDelay)
 		}
 	}
 
 	// All retries exhausted
 	delivery.Status = domain.DeliveryStatusAbandoned
 	delivery.Success = false
+	delivery.NextRetryAt = nil
 	completedAt := time.Now().UTC()
 	delivery.CompletedAt = &completedAt
-	s.webhookRepo.RecordDelivery(delivery)
+	s.recordDelivery(delivery)
 	s.webhookRepo.UpdateWebhookStats(webhook.ID, false, completedAt)
 }
 
@@ -560,7 +727,7 @@ func (s *WebhookService) ReplayDelivery(ctx context.Context, deliveryID uuid.UUI
 	payload.Timestamp = time.Now().UTC()
 
 	// Redeliver
-	go s.deliverWithRetry(webhook, &payload)
+	s.dispatch(webhook, &payload)
 
 	return nil
 }

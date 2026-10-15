@@ -360,6 +360,12 @@ func main() {
 		fga = services.FGA
 	}
 	shutdownGracefully(app, apiShutdownTimeout, fga, fgaDrainTimeout)
+	// The API listener has stopped. End the webhook deliveries waiting for a
+	// retry, so their records say abandoned and not retrying; an event raised
+	// after this is recorded as abandoned and not sent.
+	if !services.Webhook.Stop(webhookDrainTimeout) {
+		log.Printf("⚠️  Webhook deliveries still in flight after %s", webhookDrainTimeout)
+	}
 	// Deliver the audit log entries still queued for the SIEM.
 	if siemForwarder != nil {
 		flushSIEMForwarding(siemForwarder)
@@ -953,6 +959,13 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	webhookService := application.NewWebhookService(
 		repos.Webhook,
 	)
+	// Send the alert.*, agent.*, trust_score.* and api_key.* events to the
+	// webhooks subscribed to them. The webhook service bounds the delivery:
+	// retries and attempt timeout, pending deliveries overall and per webhook,
+	// and attempts in flight (application.WebhookConfig).
+	alertService.SetWebhookService(webhookService)
+	agentService.SetWebhookService(webhookService)
+	apiKeyService.SetWebhookService(webhookService)
 
 	// Initialize RegistrationService for email/password user registration workflow
 	registrationService := application.NewRegistrationService(

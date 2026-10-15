@@ -9,8 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -332,41 +330,4 @@ func TestCapabilityViolationDedupeKey(t *testing.T) {
 	// The resource is caller-supplied; the key length must not follow it.
 	long := CapabilityViolationDedupeKey(agentID, "db:query", strings.Repeat("x", 64*1024))
 	assert.Equal(t, len(key), len(long))
-}
-
-// TestSetWebhookService_HasNoCallerInCmd holds the order of the change that
-// turns alert.created delivery on. Coalescing bounds how many alerts the
-// capability-violation producer creates; wiring the webhook service into the
-// server is a separate change that lands after the delivery-side bound (retry
-// budget and concurrency ceiling for a slow or failing endpoint). That change
-// removes this test.
-func TestSetWebhookService_HasNoCallerInCmd(t *testing.T) {
-	root := repoRoot(t)
-	countCalls := func(dir string) int {
-		t.Helper()
-		n := 0
-		err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() || !strings.HasSuffix(path, ".go") {
-				return nil
-			}
-			src, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			n += strings.Count(string(src), ".SetWebhookService(")
-			return nil
-		})
-		require.NoError(t, err)
-		return n
-	}
-
-	// Positive control: the same scan finds the calls this package's tests make,
-	// so a zero for cmd/ is a real zero and not a scan that matches nothing.
-	require.Greater(t, countCalls(filepath.Join(root, "apps", "backend", "internal", "application")), 0)
-
-	assert.Zero(t, countCalls(filepath.Join(root, "apps", "backend", "cmd")),
-		"alert.created delivery is switched on by its own change, after the delivery-side bound")
 }

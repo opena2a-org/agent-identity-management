@@ -348,8 +348,8 @@ def process_payment(amount: float):
 
 Webhooks carry no event for an MCP connection or for capability drift. A webhook subscribed to
 `trust_score.low` and `agent.suspended` is told when an agent's trust score falls below 70% and when the
-trust score policy suspends the agent. Event delivery is not switched on in the server yet; see
-[Webhook Events](../API.md#webhook-events) for what is sent and when.
+trust score policy suspends the agent. See [Webhook Events](../API.md#webhook-events) for what is sent
+and when.
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/webhooks \

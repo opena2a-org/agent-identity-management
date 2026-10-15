@@ -11,6 +11,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — the server delivers agent, trust score, alert and API key events to subscribed webhooks, within limits on retries and pending deliveries (#672)
+
+- The server sets its webhook service on the alert, agent and API key services, so the events
+  `docs/API.md` lists under Webhook Events are sent to the active webhooks subscribed to them.
+  `TestInitServices_SetsTheWebhookServiceOnTheEventServices` holds the wiring.
+- An attempt waits at most 30 seconds for its endpoint and a delivery makes at most 5 retries, whatever
+  the webhook's row stores, and the first retry delay is at most 30 minutes. A webhook created through
+  the API stores none of these, so its deliveries wait 30 seconds per attempt and retry a failed attempt
+  3 times, after waits of 60, 120 and 240 seconds. Each wait before a retry lasts the delay the retrying
+  record names in `nextRetryAt`, and an abandoned delivery's record names none.
+- At most 1,000 event deliveries are pending at once (sending or waiting to retry), and at most 100 for
+  one webhook. At most 5 event delivery attempts are in flight, and at most 2 to one webhook; the wait
+  before a retry holds no attempt slot. A delivery beyond a pending limit is not sent: it is recorded as
+  `abandoned` with an error that names the limit, and the server log says so.
+- On shutdown, after the API listener stops, the server stops the webhook service and waits up to 2
+  seconds: a delivery waiting for a retry or an attempt slot is recorded as `abandoned`, and an event
+  raised after that is not sent. A delivery record the database refuses is written to the server log.
+- `docs/API.md` describes the delivery, retries and limits under Delivery and retries, and
+  `docs/guides/API_REFERENCE.md` and the A2A guide no longer say that delivery is off. Tests:
+  `apps/backend/internal/application/webhook_delivery_bounds_test.go`,
+  `apps/backend/cmd/server/webhook_wiring_test.go`.
+- Not sent yet: `api_key.expired`, `security.violation`, `compliance.violation`,
+  `security.capability_drift` and `security.data_exfiltration`; a trust score change other than an
+  administrator's update and a capability violation, including
+  `POST /api/v1/agents/:id/trust-score/recalculate`; and an alert raised outside the alert service.
+
 ### Security — an agent in hybrid mode is admitted only by a request signed with both Ed25519 and ML-DSA
 
 - `PQCAgentMiddleware` refuses a request from an agent whose hybrid mode is on unless its `X-Algorithm`
@@ -1528,9 +1554,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   disables. Neither event carries the key or its hash.
 - Each event is dispatched after the change is stored, on a goroutine of its own and under a background
   context, so it does not end with the request.
-- The server does not set a webhook service on the alert, agent or API key service
-  (`TestSetWebhookService_HasNoCallerInCmd` holds that), so none of these events, and no alert event, reaches an
-  endpoint yet. `POST /api/v1/webhooks/:id/test` sends a test delivery.
+- This change set no webhook service on the alert, agent or API key service in the server. The entry that
+  bounds webhook delivery (#672, above) sets it, and from then these events and the alert events reach
+  their endpoints. `POST /api/v1/webhooks/:id/test` sends a test delivery.
 - `docs/API.md` lists each event, when it is sent, the data it carries, the defined names for which no event is
   sent, and that delivery is not switched on. `docs/guides/API_REFERENCE.md` and the A2A guide point at that
   list. The names `agent.registered`, `agent.revoked`, `trust_score.updated`, `compliance.report_generated`,
