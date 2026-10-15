@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http/httptest"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +123,70 @@ func TestSDKArchive_PythonQuickStartPointsAtShippedExamples(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(quickstart), "test files")
 	assert.Contains(t, string(quickstart), "`examples/`")
+}
+
+// sdkRepoURL is the repository on GitHub, where a shipped doc points for the tests the
+// download leaves out.
+const sdkRepoURL = "https://github.com/opena2a-org/agent-identity-management"
+
+var markdownLinkTarget = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+
+// The Python docs ship in the download and the SDK's tests do not, so the docs point at the
+// tests in the repository: no relative link in docs/ reaches a test path, a link into the
+// repository names a path in its tree, and the release-process test run starts from a clone.
+func TestSDKArchive_PythonDocsPointAtTheTestsInTheRepository(t *testing.T) {
+	repoRoot := filepath.Dir(sdkSourceTree(t))
+	status, body := fetchSDKArchive(t, "python")
+	require.Equal(t, fiber.StatusOK, status, string(body))
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	require.NoError(t, err)
+
+	docs := map[string]string{}
+	for _, e := range zr.File {
+		rel := strings.TrimPrefix(e.Name, "aim-sdk-python/")
+		if !strings.HasPrefix(rel, "docs/") || !strings.HasSuffix(rel, ".md") {
+			continue
+		}
+		rc, err := e.Open()
+		require.NoError(t, err)
+		text, err := io.ReadAll(rc)
+		require.NoError(t, rc.Close())
+		require.NoError(t, err)
+		docs[rel] = string(text)
+	}
+	require.Contains(t, docs, "docs/README.md")
+	require.Contains(t, docs, "docs/VERSIONING.md")
+
+	for name, text := range docs {
+		for _, m := range markdownLinkTarget.FindAllStringSubmatch(text, -1) {
+			target, _, _ := strings.Cut(m[1], "#")
+			if rest, ok := strings.CutPrefix(target, sdkRepoURL+"/"); ok {
+				kind, ref, _ := strings.Cut(rest, "/")
+				if kind != "tree" && kind != "blob" {
+					continue
+				}
+				branch, p, _ := strings.Cut(ref, "/")
+				assert.Equal(t, "main", branch, "%s links %s", name, m[1])
+				_, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(p)))
+				assert.NoError(t, err, "%s links %s; the repository has no %s", name, m[1], p)
+				continue
+			}
+			if target == "" || strings.Contains(target, ":") {
+				continue
+			}
+			resolved := path.Clean(path.Join("docs", target))
+			base := path.Base(resolved)
+			if slices.Contains(strings.Split(resolved, "/"), "tests") || base == "conftest.py" || (strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py")) {
+				t.Errorf("%s links %s, a test path the download leaves out", name, m[1])
+			}
+		}
+	}
+
+	versioning := docs["docs/VERSIONING.md"]
+	run := strings.Index(versioning, "pytest tests/")
+	require.NotEqual(t, -1, run, "docs/VERSIONING.md gives the release-process test run")
+	clone := strings.Index(versioning, "git clone "+sdkRepoURL+".git\ncd agent-identity-management/sdk/python\n")
+	assert.True(t, clone != -1 && clone < run, "docs/VERSIONING.md runs pytest tests/ from a clone of the repository")
 }
 
 // An SDK the endpoint does not serve is refused with the list of SDKs it does serve, and the

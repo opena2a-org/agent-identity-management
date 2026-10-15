@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
+
+- The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`
+  links the test suite at `sdk/python/tests` in the repository instead of `../tests/`; the CrewAI and LangChain
+  guides link `tests/test_crewai_integration.py` and `tests/test_langchain_integration.py` in the repository instead
+  of a file beside the guide; and the test step of the release process in `docs/VERSIONING.md` clones the
+  repository and installs the `dev` extra before it runs `pytest tests/`.
+- Test: `TestSDKArchive_PythonDocsPointAtTheTestsInTheRepository`, which builds the archive from the repository's
+  `sdk/` tree through the download handler.
+
 ### Fixed — the tests run against an empty temporary home, not the stored credentials of the machine (#726)
 
 - `aim_sdk.credentials` computes `AIM_DIR` and the files under it from `Path.home()` when it is imported, and

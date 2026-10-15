@@ -49,7 +49,7 @@ For working code examples, check the [examples/](../examples/) directory.
 
 - **[Main SDK README](../README.md)** - Installation, quick start, and basic usage
 - **[Examples](../examples/)** - Working code examples
-- **[Tests](../tests/)** - Comprehensive test suite demonstrating SDK functionality
+- **[Tests](https://github.com/opena2a-org/agent-identity-management/tree/main/sdk/python/tests)** - The SDK's test suite, in the repository; the SDK download does not include it
 
 ## Contributing
 

@@ -553,7 +553,7 @@ result = verified_crew.kickoff(inputs={"quarter": "Q4 2025"})
 
 - **AIM Documentation**: [Main README](../../README.md)
 - **CrewAI Docs**: https://docs.crewai.com/
-- **Test Suite**: [test_crewai_integration.py](test_crewai_integration.py)
+- **Test Suite**: [tests/test_crewai_integration.py](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/tests/test_crewai_integration.py), in the repository
 - **LangChain Integration**: [LANGCHAIN_INTEGRATION.md](LANGCHAIN_INTEGRATION.md)
 
 ---

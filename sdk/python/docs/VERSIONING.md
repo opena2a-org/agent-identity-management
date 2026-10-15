@@ -123,9 +123,11 @@ Document changes in `CHANGELOG.md`:
 
 ### 3. Test
 
-Run full test suite:
+Run the full test suite from a clone of the repository; the SDK download does not include `tests/`:
 ```bash
-cd sdk/python
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management/sdk/python
+pip install -e ".[dev]"
 pytest tests/ -v --cov=aim_sdk --cov-report=html
 ```
 

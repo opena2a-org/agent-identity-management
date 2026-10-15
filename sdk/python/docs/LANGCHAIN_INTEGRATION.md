@@ -496,7 +496,7 @@ def drop_table(table_name: str) -> str:
 - **AIM Documentation**: [Main README](../../README.md)
 - **LangChain Docs**: https://python.langchain.com/docs/
 - **Integration Design**: [LANGCHAIN_INTEGRATION_DESIGN.md](../../LANGCHAIN_INTEGRATION_DESIGN.md)
-- **Test Suite**: [test_langchain_integration.py](test_langchain_integration.py)
+- **Test Suite**: [tests/test_langchain_integration.py](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/tests/test_langchain_integration.py), in the repository
 
 ---
 
