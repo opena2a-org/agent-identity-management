@@ -951,11 +951,7 @@ Create a webhook.
 
 ### Webhook Events
 
-Event delivery is not switched on in the server yet: the server does not connect its webhook sender to
-the services that produce the events below, so none of them reaches an endpoint.
-`POST /api/v1/webhooks/:id/test` sends a `webhook.test` delivery to an endpoint today.
-
-Once delivery is on, a webhook subscribed to an event receives it when:
+An active webhook subscribed to an event receives it when:
 
 | Event | Sent when |
 |-------|-----------|
@@ -979,6 +975,30 @@ The data of an `agent.*` event is the agent after the change: `agentId`, `name`,
 `previousScore` and `trustScore`, and `trust_score.low` adds `severity`. An `api_key.*` event carries
 `apiKeyId`, `agentId`, `name`, `prefix` and, for a key that expires, `expiresAt`; it never carries the
 key or its hash.
+
+`POST /api/v1/webhooks/:id/test` sends a `webhook.test` delivery to the endpoint at once.
+
+### Delivery and retries
+
+Each event is sent to each active webhook subscribed to it as a `POST`, after the change that raised it
+is stored. An attempt waits up to 30 seconds for the endpoint. An attempt that gets no answer, or an
+answer outside 2xx, is retried up to 3 times, after waits of 60, 120 and 240 seconds. A webhook row
+that stores its own retry count, first retry delay or wait uses it, capped at 5 retries, a 30-minute
+delay and a 30-second wait.
+
+The server holds at most this much event delivery at once, however many events are raised and however
+slow or failing an endpoint is:
+
+| Bound | Limit |
+|-------|-------|
+| Deliveries pending (sending or waiting to retry) | 1,000 |
+| Deliveries pending for one webhook | 100 |
+| Event delivery attempts in flight | 5 |
+| Event delivery attempts in flight to one webhook | 2 |
+
+A delivery beyond a pending limit is not sent: it is recorded as an `abandoned` delivery whose error
+names the limit. When the server shuts down, a delivery waiting to retry is not retried and is recorded
+as `abandoned`.
 
 ### Webhook Payload
 
