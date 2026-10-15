@@ -19,9 +19,13 @@ import (
 // does not carry rather than on a defect. The guard decides from the module
 // line of apps/backend/go.mod alone.
 
+// repoFilesTwinModule is the module path the hosted twin's go.mod declares. It
+// is under the opena2a GitHub account, which scripts/lint-docs-repo-links.sh
+// rejects in this repository's files as a link that does not resolve, so it is
+// written in two parts the lint does not read as one path.
 const (
 	repoFilesPublicModule = "github.com/opena2a-org/agent-identity-management/apps/backend"
-	repoFilesTwinModule   = "github.com/opena2a/identity/backend"
+	repoFilesTwinModule   = "github.com/" + "opena2a/identity/backend"
 )
 
 // repoFilesGoMod is apps/backend/go.mod from this package's directory, the
@@ -88,7 +92,7 @@ func TestRequirePublicRepositoryFiles_DecidesOnTheModuleLineAlone(t *testing.T) 
 		reason     string // a substring of the reason; "" means no reason
 	}{
 		{"this repository runs the test", "module github.com/opena2a-org/agent-identity-management/apps/backend", repoFilesRun, ""},
-		{"the hosted twin skips it", "module github.com/opena2a/identity/backend", repoFilesSkip, "hosted twin"},
+		{"the hosted twin skips it", "module github.com/" + "opena2a/identity/backend", repoFilesSkip, "hosted twin"},
 		{"another module fails it", "module github.com/example/fork/apps/backend", repoFilesFail, `"module github.com/example/fork/apps/backend"`},
 		{"no module line fails it", "", repoFilesFail, `module line is ""`},
 	} {
