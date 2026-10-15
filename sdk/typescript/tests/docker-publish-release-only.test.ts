@@ -24,7 +24,9 @@ import { load } from 'js-yaml';
  *   AC3  only build-backend and build-frontend can reach a registry, with the
  *        base's publish shape and a literal, per-job concurrency group;
  *   AC4  the verify build is the publish build (with-map parity by exclusion);
- *   AC5  a publish build reads nothing a merge-path run can write;
+ *   AC5  a publish build reads nothing a merge-path run can write, and no
+ *        job, verify or publish, names a build cache or restores the QEMU
+ *        image from the Actions cache (a verify job runs on a tag push too);
  *   AC6  the only tags a run can compute are a release's own;
  *   AC7  the release guard, structurally and over seventeen stubbed cases;
  *   AC8  each planted regression is refused by the assertion named for it;
@@ -67,8 +69,6 @@ const VERIFY_BUILD_WITH_KEYS = [
   'file',
   'platforms',
   'push',
-  'cache-from',
-  'cache-to',
   'provenance',
   'sbom',
   'build-args',
@@ -446,7 +446,7 @@ function assertAC4(doc: Workflow): void {
     if (publish.length !== 1) {
       fail(`file ${file}: expected exactly one publish build step, found ${publish.length} (${list(publish)}; verify: ${list(verify)})`);
     }
-    const v = omit(withOf(verify[0].step), ['push', 'cache-from', 'cache-to']);
+    const v = omit(withOf(verify[0].step), ['push']);
     const p = omit(withOf(publish[0].step), ['push', 'tags', 'labels']);
     if (!deepEqual(v, p)) {
       const keys = [...new Set([...Object.keys(v), ...Object.keys(p)])].filter((k) => !deepEqual(v[k], p[k]));
@@ -462,14 +462,40 @@ function assertAC4(doc: Workflow): void {
 // AC5 — a publish build reads nothing a merge-path run can write
 // ---------------------------------------------------------------------------
 
+/**
+ * The cache rules of AC5 hold for every job, not only the two publish jobs: a
+ * verify job carries no job-level if, so it runs for a platform-v* tag push as
+ * well. Input names are compared lower-cased, because the runner hands an input
+ * to the action by its upper-cased name (`Cache-To` reaches it as `cache-to`).
+ */
+function assertNoActionsCache(doc: Workflow): void {
+  for (const [name, job] of jobs(doc)) {
+    stepsOf(name, job).forEach((step, i) => {
+      const label = stepLabel(name, i, step);
+      const uses = usesOf(step);
+      if (uses.startsWith('actions/cache')) fail(`${label}: reads the Actions cache through ${uses}`);
+      const w = withOf(step);
+      for (const k of Object.keys(w)) {
+        if (['cache-from', 'cache-to'].includes(k.toLowerCase())) fail(`${label}: carries with.${k}`);
+      }
+      if (uses.startsWith('docker/setup-qemu-action')) {
+        const cacheImage = Object.entries(w).find(([k]) => k.toLowerCase() === 'cache-image');
+        if (cacheImage === undefined || cacheImage[1] !== false) {
+          fail(
+            `${label}: with.cache-image is ${JSON.stringify(cacheImage?.[1])}, not boolean false ` +
+              '(the action restores the binfmt image from the Actions cache by default)',
+          );
+        }
+      }
+    });
+  }
+}
+
 function assertAC5(doc: Workflow): void {
+  assertNoActionsCache(doc);
   for (const name of PUBLISH_JOBS) {
     const job = requirePublish(doc, name);
     const steps = stepsOf(name, job);
-    const [bi, build] = theBuildStep(name, job);
-    for (const k of ['cache-from', 'cache-to']) {
-      if (k in withOf(build)) fail(`${stepLabel(name, bi, build)}: a publish build step carries with.${k}`);
-    }
     if (job['runs-on'] !== 'ubuntu-latest') {
       fail(`job ${name}: runs-on is ${JSON.stringify(job['runs-on'])}, not ubuntu-latest`);
     }
@@ -477,7 +503,6 @@ function assertAC5(doc: Workflow): void {
     steps.forEach((step, i) => {
       const label = stepLabel(name, i, step);
       const uses = usesOf(step);
-      if (uses.startsWith('actions/cache')) fail(`${label}: a publish job reads the Actions cache through ${uses}`);
       if ('uses' in step) {
         if (!startsWithAny(uses, PUBLISH_USES)) fail(`${label}: uses ${JSON.stringify(step.uses)} is outside the closed publish list`);
       } else if ('run' in step) {
@@ -1132,6 +1157,10 @@ function metaStepOf(doc: Workflow, name: string, id: string): Step {
   return s;
 }
 
+function qemuStepsOf(doc: Workflow): Step[] {
+  return jobs(doc).flatMap(([name, j]) => stepsOf(name, j).filter((s) => usesOf(s).startsWith('docker/setup-qemu-action')));
+}
+
 function appendTagLine(step: Step, line: string): void {
   const w = withOf(step);
   w.tags = `${String(w.tags)}${line}\n`;
@@ -1241,6 +1270,23 @@ const PLANTS: Plant[] = [
     names: [/job build-frontend/, /step \d+ "Log in to Docker Hub"/],
     apply: (d) => { const s = stepsOf('build-frontend', job(d, 'build-frontend')).find((x) => runOf(x).includes('docker login')) as Step; s.run = `${runOf(s)}${CURL_ARTIFACT}\n`; },
   },
+  {
+    id: 'M37 both verify build steps gain cache-from: type=gha and cache-to: type=gha',
+    ac: 'AC5',
+    names: [/job verify-backend/, /step \d+ "Build image \(no push\)"/],
+    apply: (d) => {
+      for (const file of Object.values(DOCKERFILE_OF)) {
+        const w = withOf(buildStepOf(d, verifyJobBuilding(d, file)));
+        w['cache-from'] = 'type=gha';
+        w['cache-to'] = 'type=gha';
+      }
+    },
+  },
+  { id: 'M38 the verify build of Dockerfile.backend gains cache-to', ac: 'AC4', names: [/job verify-backend/, /job build-backend/, /step \d+ "/], apply: (d) => { withOf(buildStepOf(d, verifyJobBuilding(d, DOCKERFILE_OF['build-backend'])))['cache-to'] = 'type=gha,mode=max,scope=backend'; } },
+  { id: 'M39 a verify build step gains cache-from', ac: 'AC2', names: [/job verify-/, /step \d+ "/], apply: (d) => { withOf(buildStepOf(d, firstVerifyJobName(d)))['cache-from'] = 'type=gha'; } },
+  { id: "M40 build-frontend's build step gains Cache-To in mixed case", ac: 'AC5', names: [/job build-frontend/, /step \d+ "Build and push image"/], apply: (d) => { withOf(buildStepOf(d, 'build-frontend'))['Cache-To'] = 'type=gha,mode=max'; } },
+  { id: 'M41 the cache-image: false input removed from every QEMU step', ac: 'AC5', names: [/job verify-backend/, /step \d+ "Set up QEMU"/], apply: (d) => { for (const s of qemuStepsOf(d)) delete withOf(s)['cache-image']; } },
+  { id: "M42 build-backend's QEMU step sets cache-image: true", ac: 'AC5', names: [/job build-backend/, /step \d+ "Set up QEMU"/], apply: (d) => { withOf(stepsOf('build-backend', job(d, 'build-backend')).find((s) => usesOf(s).startsWith('docker/setup-qemu-action')) as Step)['cache-image'] = true; } },
 ];
 
 function refusalOf(fn: () => void): string {
@@ -1316,24 +1362,29 @@ describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a p
     expect((job(doc, 'build-backend').concurrency as Dict).group).not.toBe((job(doc, 'build-frontend').concurrency as Dict).group);
   });
 
-  it('DOCKER-PUBLISH-RELEASE-ONLY.AC4 the verify build is the publish build: for both Dockerfile paths the with maps agree once push, cache-from, cache-to, tags and labels are excluded', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC4 the verify build is the publish build: for both Dockerfile paths the with maps agree once push, tags and labels are excluded', () => {
     const doc = readWorkflow();
     assertAC4(doc);
     for (const name of PUBLISH_JOBS) {
       const file = DOCKERFILE_OF[name];
-      const v = omit(withOf(buildStepOf(doc, verifyJobBuilding(doc, file))), ['push', 'cache-from', 'cache-to']);
+      const v = omit(withOf(buildStepOf(doc, verifyJobBuilding(doc, file))), ['push']);
       const p = omit(withOf(buildStepOf(doc, name)), ['push', 'tags', 'labels']);
       expect(v, `${file}`).toEqual(p);
     }
   });
 
-  it('DOCKER-PUBLISH-RELEASE-ONLY.AC5 a publish build reads nothing a merge-path run can write: no cache, ubuntu-latest, a closed uses list, five run steps and no artifact download', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC5 a publish build reads nothing a merge-path run can write: no cache-from, cache-to or actions/cache and cache-image: false on every QEMU step in any job, ubuntu-latest, a closed uses list, five run steps and no artifact download', () => {
     const doc = readWorkflow();
     assertAC5(doc);
-    for (const name of PUBLISH_JOBS) {
+    for (const [name, j] of jobs(doc)) {
       const w = withOf(buildStepOf(doc, name));
-      expect('cache-from' in w).toBe(false);
-      expect('cache-to' in w).toBe(false);
+      expect('cache-from' in w, `${name} build step cache-from`).toBe(false);
+      expect('cache-to' in w, `${name} build step cache-to`).toBe(false);
+      const qemu = stepsOf(name, j).filter((s) => usesOf(s).startsWith('docker/setup-qemu-action'));
+      expect(qemu, `${name} QEMU steps`).toHaveLength(1);
+      expect(withOf(qemu[0])['cache-image'], `${name} QEMU cache-image`).toBe(false);
+    }
+    for (const name of PUBLISH_JOBS) {
       expect(job(doc, name)['runs-on']).toBe('ubuntu-latest');
       expect(stepsOf(name, job(doc, name)).filter((s) => 'run' in s)).toHaveLength(5);
     }
@@ -1379,11 +1430,12 @@ describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a p
     }
   });
 
-  it('DOCKER-PUBLISH-RELEASE-ONLY.AC8 (i) the base text (two push: true, four edge lines, four is_default_branch lines, zero if keys, workflow-level packages: write) is refused by AC2, AC3, AC4, AC6 and AC7, each naming a job', () => {
+  it('DOCKER-PUBLISH-RELEASE-ONLY.AC8 (i) the base text (two push: true, four edge lines, four is_default_branch lines, zero if keys, workflow-level packages: write, cache-from and cache-to on both build steps) is refused by AC2, AC3, AC4, AC5, AC6 and AC7, each naming a job', () => {
     const lines = BASE_TEXT.split('\n');
     expect(lines.filter((l) => l.trim() === 'push: true')).toHaveLength(2);
     expect(lines.filter((l) => l.trim() === 'type=edge,branch=main')).toHaveLength(4);
     expect(lines.filter((l) => l.includes('enable={{is_default_branch}}'))).toHaveLength(4);
+    expect(lines.filter((l) => /^cache-(from|to): type=gha,/.test(l.trim()))).toHaveLength(4);
     const base = parseWorkflow(BASE_TEXT);
     let ifs = 0;
     walkStrings(base, [], (s, path) => {
@@ -1395,6 +1447,7 @@ describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a p
       AC2: /^permissions:|job build-(backend|frontend)/,
       AC3: /job build-(backend|frontend)/,
       AC4: /job build-(backend|frontend) step \d+ "/,
+      AC5: /job build-(backend|frontend) step \d+ "/,
       AC6: /job build-(backend|frontend)/,
       AC7: /job build-(backend|frontend)/,
     };
