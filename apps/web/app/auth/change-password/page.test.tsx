@@ -2,10 +2,11 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import type { ReactNode } from "react";
 import ChangePasswordPage from "./page";
-import { HIT_AREA_FLOOR_PX, hitAreaPx } from "@/tests/readability";
+import { HIT_AREA_FLOOR_PX, countTextRuns, hitAreaPx, textBelowFloor } from "@/tests/readability";
 
-// Each "Show password" control on the forced password change is a 44 by 44 hit
-// area around an unchanged icon, and keeps its accessible name in both states.
+// The forced password change is read on a phone: no text on it renders below 14px
+// at 375px, and each "Show password" control is a 44 by 44 hit area around an
+// unchanged icon that keeps its accessible name in both states.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -26,6 +27,25 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   localStorage.clear();
+});
+
+describe("change password page readability", () => {
+  it("renders no text below 14px, with the requirement list showing and after a submit with every field empty", () => {
+    const { container } = render(<ChangePasswordPage />);
+    expect(countTextRuns(container)).toBeGreaterThan(5);
+    expect(textBelowFloor(container)).toEqual([]);
+
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "short" } });
+    expect(container.querySelector("ul[aria-live='polite'] li")).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+    expect(screen.getByText("Current password is required")).toBeTruthy();
+    expect(container.querySelector("#newPassword-error")).toBeTruthy();
+    expect(screen.getByText("Please confirm your new password")).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+  });
 });
 
 describe("change password page tap targets", () => {

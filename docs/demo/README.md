@@ -27,8 +27,8 @@ ignored by git; videos are never committed.
 
 ## How a render works
 
-1. `render.sh` generates the run's secrets (0600, under `$TMPDIR`, deleted at
-   the end) and starts `stack/compose.yml` as its own compose project
+1. `render.sh` generates the run's secrets (0600, in a directory `mktemp -d`
+   creates under `$TMPDIR`, deleted at the end) and starts `stack/compose.yml` as its own compose project
    `aimdemo-<utc-stamp>`: the quickstart's Postgres, Redis, AIM server and
    dashboard images pinned by digest (`stack/images.env`), a loopback
    forwarder (`lib/gw.mjs`), and the two recorders. Nothing is published on

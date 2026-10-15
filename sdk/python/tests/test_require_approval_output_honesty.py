@@ -104,13 +104,22 @@ def _run_decorated(client, capture_console):
         return "MONEY MOVED"
 
     buf = io.StringIO()
-    if capture_console.console is not None:
-        capture_console.console.file = buf
-    with redirect_stdout(buf):
-        try:
-            transfer_money()
-        except BaseException:
-            pass  # blocked cases are covered by test_enforcement_matrix.py
+    rich_console = capture_console.console
+    # The raw handle, not the ``file`` property: an unset handle reads back as
+    # whatever sys.stdout is now, and writing that back would pin the shared
+    # console to it for every later test.
+    previous_file = rich_console._file if rich_console is not None else None
+    if rich_console is not None:
+        rich_console.file = buf
+    try:
+        with redirect_stdout(buf):
+            try:
+                transfer_money()
+            except BaseException:
+                pass  # blocked cases are covered by test_enforcement_matrix.py
+    finally:
+        if rich_console is not None:
+            rich_console.file = previous_file
     return ran["body"], buf.getvalue()
 
 
@@ -228,3 +237,21 @@ def test_genuine_allow_still_says_approved():
     assert "approved" in out.lower(), (
         "a genuine ALLOW must still be announced as approved. Full output:\n" + out
     )
+
+
+def test_capturing_the_output_leaves_the_shared_console_on_stdout(capsys):
+    """_run_decorated points the shared console at a buffer and must point it
+    back. Left on the buffer, a later test that reads the console through
+    capsys reads nothing: two tests in other files failed that way when this
+    file ran before them."""
+    from aim_sdk import console as console_module
+
+    def allow_stub(method, url, **kwargs):
+        if "/verifications" in url:
+            return _FakeResponse(200, {"id": VERIFICATION_ID, "status": "approved"})
+        return _FakeResponse(200, {"ok": True})
+
+    _run_decorated(_client(allow_stub), console_module.console)
+
+    console_module.console.warning("written after the capture")
+    assert "written after the capture" in capsys.readouterr().out

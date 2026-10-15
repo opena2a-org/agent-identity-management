@@ -136,16 +136,21 @@ type s1RefusalLog struct {
 	open   bool
 	// gen numbers the open period, so the timer of a period that was already closed
 	// by hand finds a different number and closes nothing.
-	gen    uint64
+	gen uint64
+	// opened is when the open period began, so a period closed early by a flush
+	// reports the time it covered instead of the full period.
+	opened time.Time
 	period time.Duration
+	now    func() time.Time
 	after  func(time.Duration, func())
 	write  func(string)
 }
 
-func newS1RefusalLog(period time.Duration, after func(time.Duration, func()), write func(string)) *s1RefusalLog {
+func newS1RefusalLog(period time.Duration, now func() time.Time, after func(time.Duration, func()), write func(string)) *s1RefusalLog {
 	return &s1RefusalLog{
 		counts: make(map[s1RefusalKey]uint64),
 		period: period,
+		now:    now,
 		after:  after,
 		write:  write,
 	}
@@ -161,23 +166,34 @@ func (l *s1RefusalLog) add(key s1RefusalKey) {
 	}
 	l.open = true
 	l.gen++
+	l.opened = l.now()
 	gen := l.gen
-	l.after(l.period, func() { l.closePeriod(gen) })
+	l.after(l.period, func() { l.closePeriod(gen, false) })
 }
 
 // closePeriod writes the line for period gen if that period is still the open one.
-func (l *s1RefusalLog) closePeriod(gen uint64) {
+// A period its timer closes covered the full period. One closed early covered the
+// time since it opened, in whole seconds rounded up and at most the full period.
+func (l *s1RefusalLog) closePeriod(gen uint64, early bool) {
 	l.mu.Lock()
 	if !l.open || gen != l.gen {
 		l.mu.Unlock()
 		return
+	}
+	covered := l.period
+	if early {
+		elapsed := l.now().Sub(l.opened)
+		covered = (elapsed + time.Second - 1) / time.Second * time.Second
+		if covered > l.period {
+			covered = l.period
+		}
 	}
 	counts := l.counts
 	l.counts = make(map[s1RefusalKey]uint64)
 	l.open = false
 	l.mu.Unlock()
 
-	l.write(formatS1RefusalLine(l.period, counts))
+	l.write(formatS1RefusalLine(covered, counts))
 }
 
 // flush closes the open period now, if there is one.
@@ -186,7 +202,7 @@ func (l *s1RefusalLog) flush() {
 	gen := l.gen
 	l.mu.Unlock()
 
-	l.closePeriod(gen)
+	l.closePeriod(gen, true)
 }
 
 // formatS1RefusalLine renders one period as
@@ -226,6 +242,7 @@ func formatS1RefusalLine(period time.Duration, counts map[s1RefusalKey]uint64) s
 
 var s1Refusals = newS1RefusalLog(
 	S1RefusalPeriod,
+	time.Now,
 	func(d time.Duration, f func()) { time.AfterFunc(d, f) },
 	func(line string) { log.Print(line) },
 )
@@ -248,7 +265,7 @@ func RecordS1Refusal(reason S1RefusalReason, userAgent string) {
 // FlushS1RefusalLine writes the "s1_refusals" line for the open period now instead of
 // when the period ends. It writes nothing if no refusal has been counted since the
 // last line. The server calls it on shutdown so that refusals in the final, shorter
-// period still reach a line.
+// period still reach a line, whose period_s is the seconds that period lasted.
 func FlushS1RefusalLine() {
 	s1Refusals.flush()
 }

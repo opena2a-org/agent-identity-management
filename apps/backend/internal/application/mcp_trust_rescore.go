@@ -43,7 +43,8 @@ type MCPTrustRescoreResult struct {
 	// server was scored.
 	AlreadyDone bool
 	Scored      int
-	// Failed lists the servers whose scoring failed. Their rows are unchanged.
+	// Failed lists the servers whose scoring failed. Their rows are unchanged,
+	// and while it is non-empty the marker is not set.
 	Failed []uuid.UUID
 }
 
@@ -55,10 +56,12 @@ type MCPTrustRescoreResult struct {
 // score row is inserted only after the calculation succeeds, and that insert
 // is what updates `mcp_servers.trust_score` (migration 094 trigger).
 //
-// The marker is set once every server has been attempted. It is not set when
-// the marker cannot be read, the servers cannot be listed, or the context is
-// cancelled part-way, so the next start runs the pass again. Running it twice
-// is harmless: each run records a fresh calculation for each server.
+// The marker is set once every server has been scored. It is not set when the
+// marker cannot be read, the servers cannot be listed, the context is
+// cancelled part-way, or any server failed to score, so the next start runs
+// the pass again and a server that failed once gets another attempt instead of
+// keeping its rescaled placeholder. Running it twice is harmless: each run
+// records a fresh calculation for each server.
 func RescoreMCPServersOnce(ctx context.Context, markers SystemMarkerStore, servers MCPServerIDLister, calculator *MCPTrustCalculator) (*MCPTrustRescoreResult, error) {
 	done, err := markers.IsMarkerSet(ctx, MCPTrustRescoreMarkerKey)
 	if err != nil {
@@ -89,6 +92,9 @@ func RescoreMCPServersOnce(ctx context.Context, markers SystemMarkerStore, serve
 		result.Scored++
 	}
 
+	if len(result.Failed) > 0 {
+		return result, nil
+	}
 	if err := markers.SetMarker(ctx, MCPTrustRescoreMarkerKey, mcpTrustRescoreMarkerDescription); err != nil {
 		return result, fmt.Errorf("failed to record MCP rescore marker: %w", err)
 	}

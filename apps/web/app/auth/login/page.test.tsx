@@ -2,10 +2,11 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import type { ReactNode } from "react";
 import LoginPage from "./page";
-import { HIT_AREA_FLOOR_PX, hitAreaPx } from "@/tests/readability";
+import { HIT_AREA_FLOOR_PX, countTextRuns, hitAreaPx, textBelowFloor } from "@/tests/readability";
 
-// The "Show password" control on sign-in is a 44 by 44 hit area around an
-// unchanged icon, and keeps its accessible name in both states.
+// Sign-in is read on a phone: no text on it renders below 14px at 375px, and the
+// "Show password" control is a 44 by 44 hit area around an unchanged icon that
+// keeps its accessible name in both states.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
@@ -24,6 +25,21 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("login page readability", () => {
+  it("renders no text below 14px, before and after a submit with both fields empty", async () => {
+    const { container } = render(<LoginPage />);
+    const submit = await screen.findByRole("button", { name: "Sign in" });
+    expect(screen.getByText("Forgot password?")).toBeTruthy();
+    expect(countTextRuns(container)).toBeGreaterThan(8);
+    expect(textBelowFloor(container)).toEqual([]);
+
+    fireEvent.click(submit);
+    expect(screen.getByText("Email is required")).toBeTruthy();
+    expect(screen.getByText("Password is required")).toBeTruthy();
+    expect(textBelowFloor(container)).toEqual([]);
+  });
 });
 
 describe("login page tap targets", () => {

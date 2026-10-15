@@ -26,7 +26,7 @@ function RegistrationPendingContent() {
             <div>
               <p className="text-sm font-bold text-ink">Registration submitted</p>
               {requestId && (
-                <p className="mt-1 text-xs text-ink-secondary">
+                <p className="mt-1 text-sm text-ink-secondary">
                   Request ID <span className="break-all font-mono text-ink">{requestId}</span>
                 </p>
               )}
@@ -41,7 +41,7 @@ function RegistrationPendingContent() {
               </span>
               <div>
                 <p className="text-sm font-bold text-ink">An administrator reviews the request</p>
-                <p className="text-xs text-ink-secondary">Approval happens in this AIM deployment's admin area; the time it takes depends on your administrator.</p>
+                <p className="text-sm text-ink-secondary">Approval happens in this AIM deployment's admin area; the time it takes depends on your administrator.</p>
               </div>
             </li>
             <li className="flex items-start gap-3">
@@ -50,13 +50,13 @@ function RegistrationPendingContent() {
               </span>
               <div>
                 <p className="text-sm font-bold text-ink">Check back by signing in</p>
-                <p className="text-xs text-ink-secondary">Once approved, signing in takes you straight to your dashboard. Until then the sign-in page will tell you the request is still pending. If the request is declined you will not receive a message; contact the administrator if you have not been approved.</p>
+                <p className="text-sm text-ink-secondary">Once approved, signing in takes you straight to your dashboard. Until then the sign-in page will tell you the request is still pending. If the request is declined you will not receive a message; contact the administrator if you have not been approved.</p>
               </div>
             </li>
           </ol>
 
           <div className="mt-5 rounded-inset bg-glass-inset-gray px-4 py-3">
-            <p className="text-xs leading-relaxed text-ink-secondary">
+            <p className="text-sm leading-relaxed text-ink-secondary">
               Running this deployment yourself? Accounts whose email is listed in the{" "}
               <code className="font-mono text-ink">AIM_PLATFORM_ADMINS</code> environment variable
               (comma-separated, for example{" "}

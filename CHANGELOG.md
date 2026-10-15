@@ -11,6 +11,43 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the `s1_refusals` line written on shutdown states how long its last period lasted
+
+- On shutdown the server writes the `s1_refusals` line of the period still open. Its `period_s` is now
+  the seconds from that period's first refusal to the shutdown, rounded up and at most 64; a period that
+  runs its full length still reads `period_s=64`. Before this change the shutdown line read `period_s=64`
+  for periods ended 0, 0.3, 5, 12 and 63 seconds after their first refusal.
+
+### Fixed — the one-time MCP trust rescoring runs again at the next start when a server failed to score
+
+- The first start after the upgrade scores every MCP server and then records the
+  `mcp_trust_rescored_after_scale_migration` key in `system_config`. The key is now recorded only by a
+  run in which every server scored. When any server fails, the server log reads `MCP trust rescoring did
+  not complete, will retry at next start: <n> server(s) scored, <m> left unchanged after a scoring
+  failure`, and the next start scores every server again, so a server that failed once gets another
+  attempt instead of keeping its rescaled placeholder until its next verification. Before this change the
+  key was recorded once every server had been attempted, the failed ones included.
+
+### Fixed — the sign-in, password change, password reset and registration pending pages render no text below 14px
+
+- The field labels, field errors, notes and lists on `/auth/login`, `/auth/change-password`,
+  `/auth/reset-password` and `/auth/registration-pending` render at 14px (`text-sm`) at a 375px
+  viewport. Before this change they used `text-xs` (12px). Each page's `page.test.tsx` asserts that no
+  text renders below 14px: the login and change-password forms before and after a submit with empty
+  fields, the reset-password form, success and expired-link states, and the registration pending page
+  with and without a request ID.
+- The two Show password controls on `/auth/reset-password` are 44x44 CSS px (`h-11 w-11`) with the
+  icon centred, the size the login and change-password pages use. Before this change the button set no
+  size of its own and drew only its 16px icon.
+
+### Security — the demo render keeps its run secrets in a directory `mktemp` creates
+
+- `docs/demo/render.sh` writes the secrets it generates for a run into a directory `mktemp -d` creates
+  under `$TMPDIR`, and deletes that directory when the run ends. Before this change it used
+  `$TMPDIR/aimdemo-<UTC second>`, a name another account can create first: given a directory of that
+  name that already existed, it wrote its `compose.env`, which holds the secrets, into that directory
+  and deleted the directory at the end of the run.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the

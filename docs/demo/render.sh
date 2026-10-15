@@ -22,7 +22,9 @@ REHEARSAL=0; [ "${2:-}" = "--rehearsal" ] && REHEARSAL=1
 DOCKER="${DOCKER:-docker}"; command -v "$DOCKER" >/dev/null 2>&1 || DOCKER="$HOME/.docker/bin/docker"
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 PROJECT="aimdemo-${STAMP}"
-RUN="${TMPDIR:-/tmp}/${PROJECT}"
+# The run's secrets directory. mktemp creates it under "run secrets" below, so
+# its name cannot be predicted and created by anyone else first.
+RUN=""
 OUT="$HERE/out/$SLUG"
 SCENE="$HERE/$SLUG"
 T0=$(date +%s)
@@ -43,13 +45,17 @@ fail() {
 compose() { "$DOCKER" compose -p "$PROJECT" -f "$HERE/stack/compose.yml" --env-file "$RUN/compose.env" "$@"; }
 
 teardown() {
-  [ -f "$RUN/compose.env" ] || return 0
-  compose stop >/dev/null 2>&1 || true
-  compose rm -f -v >/dev/null 2>&1 || true
-  for v in $("$DOCKER" volume ls -q --filter "name=^${PROJECT}_" 2>/dev/null); do "$DOCKER" volume rm "$v" >/dev/null 2>&1 || true; done
-  for n in $("$DOCKER" network ls -q --filter "name=^${PROJECT}_" 2>/dev/null); do "$DOCKER" network rm "$n" >/dev/null 2>&1 || true; done
+  [ -n "$RUN" ] && [ -d "$RUN" ] || return 0
+  local stack=""
+  if [ -f "$RUN/compose.env" ]; then
+    compose stop >/dev/null 2>&1 || true
+    compose rm -f -v >/dev/null 2>&1 || true
+    for v in $("$DOCKER" volume ls -q --filter "name=^${PROJECT}_" 2>/dev/null); do "$DOCKER" volume rm "$v" >/dev/null 2>&1 || true; done
+    for n in $("$DOCKER" network ls -q --filter "name=^${PROJECT}_" 2>/dev/null); do "$DOCKER" network rm "$n" >/dev/null 2>&1 || true; done
+    stack="stack $PROJECT removed; "
+  fi
   rm -rf "$RUN"
-  log "stack $PROJECT removed; run secrets deleted"
+  log "${stack}run secrets deleted"
 }
 trap 'teardown' EXIT
 
@@ -60,7 +66,7 @@ if grep -qE 'container_name:' "$HERE/stack/compose.yml"; then fail 4 "stack/comp
 
 # ---- run secrets ------------------------------------------------------------
 umask 077
-mkdir -p "$RUN"
+RUN="$(mktemp -d "${TMPDIR:-/tmp}/${PROJECT}.XXXXXX")"
 {
   echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
   echo "REDIS_PASSWORD=$(openssl rand -hex 16)"

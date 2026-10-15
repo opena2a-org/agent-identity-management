@@ -126,7 +126,7 @@ function LoginPageContent() {
           )}
           <form onSubmit={handlePasswordLogin} className="space-y-4" noValidate>
             <div>
-              <label htmlFor="email" className="mb-1 block text-xs font-semibold text-ink-body">
+              <label htmlFor="email" className="mb-1 block text-sm font-semibold text-ink-body">
                 Email address
               </label>
               <div className="relative">
@@ -144,7 +144,7 @@ function LoginPageContent() {
                 />
               </div>
               {errors.email && (
-                <p id="email-error" className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+                <p id="email-error" className="mt-1 flex items-center gap-1 text-sm font-semibold text-danger-text">
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   {errors.email}
                 </p>
@@ -153,10 +153,10 @@ function LoginPageContent() {
 
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <label htmlFor="password" className="block text-xs font-semibold text-ink-body">
+                <label htmlFor="password" className="block text-sm font-semibold text-ink-body">
                   Password
                 </label>
-                <Link href="/auth/forgot-password" className="text-xs font-semibold text-brand-text hover:underline">
+                <Link href="/auth/forgot-password" className="text-sm font-semibold text-brand-text hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -183,7 +183,7 @@ function LoginPageContent() {
                 </button>
               </div>
               {errors.password && (
-                <p id="password-error" className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+                <p id="password-error" className="mt-1 flex items-center gap-1 text-sm font-semibold text-danger-text">
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   {errors.password}
                 </p>
@@ -197,7 +197,7 @@ function LoginPageContent() {
 
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-ink-body">
+            <p className="text-sm leading-relaxed text-ink-body">
               New accounts are reviewed by an administrator before they can sign in. Passwords are stored as bcrypt hashes, never in plain text.
             </p>
           </div>

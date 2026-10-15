@@ -752,8 +752,11 @@ func TestS1Refusal_EachBranchIsCountedOnceAndReachesTheNextLine(t *testing.T) {
 				"the refusal must move aim_s1_refusals_total{reason=%q,sdk=%q} by exactly 1 and no other series",
 				tc.reason, ua.sdk)
 
+			// The flush ends the period early, so period_s is the seconds since the
+			// refusal, rounded up, and not the full 64.
 			lines := flushS1Line(t)
-			assert.Equal(t, []string{"s1_refusals period_s=64 total=1 " + series + "=1"}, lines,
+			require.Len(t, lines, 1, "the refusal must be on the next period line, alone")
+			assert.Regexp(t, `^s1_refusals period_s=([0-9]|[1-5][0-9]|6[0-4]) total=1 `+regexp.QuoteMeta(series)+`=1$`, lines[0],
 				"the refusal must be on the next period line, alone")
 
 			// The refusal precedes authentication: nothing the caller sent, and nothing

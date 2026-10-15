@@ -170,7 +170,49 @@ func TestRescoreMCPServersOnce_FailedServerIsLeftUnchangedAndLogged(t *testing.T
 	scoreRepo.AssertNumberOfCalls(t, "Create", 2)
 	assert.Contains(t, logs.String(), missing.String())
 	assert.Contains(t, logs.String(), "left unchanged")
-	assert.Contains(t, markers.set, MCPTrustRescoreMarkerKey, "a per-server failure does not make the pass run again")
+	assert.NotContains(t, markers.set, MCPTrustRescoreMarkerKey, "a per-server failure leaves the pass to run again at the next start")
+}
+
+// A server that failed to score is attempted again at the next start, and the
+// marker is recorded only by the run in which every server scored.
+func TestRescoreMCPServersOnce_FailedServerIsRetriedAtTheNextStart(t *testing.T) {
+	servers := placeholderServers()
+	flaky := servers[1]
+
+	serverRepo := new(SharedMockMCPServerRepository)
+	scoreRepo := new(rescoreScoreRepo)
+	serverRepo.On("GetByID", servers[0].ID).Return(servers[0], nil)
+	serverRepo.On("GetByID", flaky.ID).Return(nil, errors.New("connection reset")).Once()
+	serverRepo.On("GetByID", flaky.ID).Return(flaky, nil)
+	scored := map[uuid.UUID]int{}
+	scoreRepo.On("Create", mock.AnythingOfType("*domain.MCPTrustScore")).
+		Run(func(args mock.Arguments) {
+			scored[args.Get(0).(*domain.MCPTrustScore).MCPServerID]++
+		}).Return(nil)
+
+	calculator := NewMCPTrustCalculatorWithRepo(serverRepo, nil, nil, nil, scoreRepo)
+	markers := newFakeMarkerStore()
+	lister := &fakeIDLister{ids: []uuid.UUID{servers[0].ID, flaky.ID}}
+	captureLog(t)
+
+	first, err := RescoreMCPServersOnce(context.Background(), markers, lister, calculator)
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{flaky.ID}, first.Failed)
+	assert.NotContains(t, markers.set, MCPTrustRescoreMarkerKey, "the first start had a failure")
+	assert.Zero(t, scored[flaky.ID], "the failed server has no calculated score after the first start")
+
+	second, err := RescoreMCPServersOnce(context.Background(), markers, lister, calculator)
+	require.NoError(t, err)
+	assert.False(t, second.AlreadyDone, "the second start runs the pass")
+	assert.Empty(t, second.Failed)
+	assert.Equal(t, 1, scored[flaky.ID], "the server that failed is scored at the second start")
+	assert.Equal(t, 2, scored[servers[0].ID], "the second start scores every server again")
+	assert.Contains(t, markers.set, MCPTrustRescoreMarkerKey, "the run in which every server scored records the marker")
+
+	third, err := RescoreMCPServersOnce(context.Background(), markers, lister, calculator)
+	require.NoError(t, err)
+	assert.True(t, third.AlreadyDone)
+	assert.Equal(t, 2, lister.calls, "the third start does not list servers")
 }
 
 func TestRescoreMCPServersOnce_StoreFailureCountsAsFailed(t *testing.T) {
