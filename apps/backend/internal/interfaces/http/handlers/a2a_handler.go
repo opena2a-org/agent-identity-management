@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -66,26 +66,6 @@ func (h *A2AHandler) loadOwnedAgent(c fiber.Ctx, agentID, orgID uuid.UUID) *doma
 	return LoadOwned(c, loader, agentID, orgID, agentOrgID)
 }
 
-// agentCardURLRefusedMessage answers a card URL the server refuses to fetch.
-// It names no host or address: the card service's reason says what the URL
-// resolved to, and that stays in the server log.
-const agentCardURLRefusedMessage = "cardUrl must be a public http or https URL"
-
-// respondAgentCardError answers a card registration error. A card URL the
-// server refuses by policy is a problem with the caller's input, so it is
-// answered with 400 and a fixed reason. Fetch, parse and storage failures are
-// answered with the fixed 5xx line. Both keep the card service's reason in the
-// server log only.
-func respondAgentCardError(c fiber.Ctx, agentID uuid.UUID, err error) error {
-	if errors.Is(err, application.ErrAgentCardURLRefused) {
-		log.Printf("a2a: agent card URL refused for agent %s: %v", agentID, err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": agentCardURLRefusedMessage,
-		})
-	}
-	return respondServerError(c, fiber.StatusInternalServerError, fmt.Errorf("agent %s: %w", agentID, err))
-}
-
 // ============================================================================
 // Agent Card Endpoints
 // ============================================================================
@@ -101,22 +81,16 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// Verify agent belongs to organization
 	agent, err := h.agentService.GetAgent(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+		return respondA2AFailure(c, a2aAgentNotFound)
 	}
 	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+		return respondA2AFailure(c, a2aAccessDenied)
 	}
 
 	var req struct {
@@ -124,15 +98,11 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 		CardData json.RawMessage `json:"cardData"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	if req.CardURL == "" && len(req.CardData) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "cardUrl or cardData is required",
-		})
+		return respondA2AFailure(c, a2aCardSourceRequired)
 	}
 
 	resp, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
@@ -169,9 +139,7 @@ func (h *A2AHandler) RegisterAgentCard(c fiber.Ctx) error {
 func (h *A2AHandler) GetAgentCard(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. Bound on both
@@ -188,9 +156,7 @@ func (h *A2AHandler) GetAgentCard(c fiber.Ctx) error {
 	// Get enhanced card with AIM extensions
 	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent card not found",
-		})
+		return respondA2AFailure(c, a2aAgentCardNotFound)
 	}
 
 	return c.JSON(card)
@@ -207,27 +173,21 @@ func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
 
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// Verify agent belongs to organization
 	agent, err := h.agentService.GetAgent(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+		return respondA2AFailure(c, a2aAgentNotFound)
 	}
 	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+		return respondA2AFailure(c, a2aAccessDenied)
 	}
 
 	card, err := h.a2aService.RefreshAttestation(c.Context(), agentID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	// Log audit
@@ -263,9 +223,7 @@ func (h *A2AHandler) RefreshCardAttestation(c fiber.Ctx) error {
 func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	var req struct {
@@ -274,9 +232,7 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 		Body   string `json:"body"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent AFTER body
@@ -300,7 +256,7 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 		[]byte(req.Body),
 	)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -319,32 +275,19 @@ func (h *A2AHandler) SignRequest(c fiber.Ctx) error {
 func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	var req application.VerifyA2ARequestRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"valid": false,
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aVerifyInvalidBody)
 	}
 
 	result, err := h.a2aService.VerifyA2ARequest(c.Context(), req)
 	if errors.Is(err, application.ErrInvalidA2ANonce) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"valid": false,
-			"error": application.InvalidA2ANonceMessage,
-		})
+		return respondA2AFailure(c, a2aVerifyInvalidNonce)
 	}
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	if !result.Valid {
-		body := fiber.Map{
-			"valid": false,
-			"error": result.Error,
-		}
-		if result.ReasonCode != "" {
-			body["reasonCode"] = result.ReasonCode
-		}
-		return c.Status(fiber.StatusUnauthorized).JSON(body)
+		return respondA2AVerifyRefused(c, result.Error, result.ReasonCode)
 	}
 
 	return c.JSON(fiber.Map{
@@ -363,13 +306,12 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 
 // GetA2ATrustScore returns the A2A-specific trust score for an agent
 // GET /api/v1/a2a/agents/:id/trust-score
-// Auto-computes trust score if none exists or score is zero
+// Auto-computes trust score if none exists or score is zero; a computation
+// that fails is answered 500.
 func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. Trust scores
@@ -389,13 +331,7 @@ func (h *A2AHandler) GetA2ATrustScore(c fiber.Ctx) error {
 		// Auto-compute if no score exists or score is zero
 		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
 		if computeErr != nil {
-			// If computation fails, return zero score with message
-			log.Printf("a2a trust score computation failed for agent %s: %v", agentID, computeErr)
-			return c.JSON(fiber.Map{
-				"agentId": agentID,
-				"score":   0.0,
-				"message": "Could not compute trust score",
-			})
+			return respondA2AFailureCause(c, a2aServerError, fmt.Errorf("a2a trust score computation failed for agent %s: %w", agentID, computeErr))
 		}
 		return c.JSON(computedScore)
 	}
@@ -414,27 +350,21 @@ func (h *A2AHandler) ComputeA2ATrustScore(c fiber.Ctx) error {
 
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// Verify agent belongs to organization
 	agent, err := h.agentService.GetAgent(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent not found",
-		})
+		return respondA2AFailure(c, a2aAgentNotFound)
 	}
 	if agent.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": "Access denied",
-		})
+		return respondA2AFailure(c, a2aAccessDenied)
 	}
 
 	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	// Log audit
@@ -462,16 +392,12 @@ func (h *A2AHandler) ComputeA2ATrustScore(c fiber.Ctx) error {
 func (h *A2AHandler) GetPeerTrustScore(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	peerID, err := uuid.Parse(c.Params("peer_id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid peer ID",
-		})
+		return respondA2AFailure(c, a2aInvalidPeerID)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the PATH agent only. A2A peer
@@ -497,9 +423,7 @@ func (h *A2AHandler) GetPeerTrustScore(c fiber.Ctx) error {
 		// and "peer relation missing for a same-org agent"
 		// ({"error":"Peer trust relationship not found"}), giving a same-org
 		// caller a side channel to distinguish the two states.
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "not found",
-		})
+		return respondA2AFailure(c, a2aNotFound)
 	}
 
 	return c.JSON(trust)
@@ -523,9 +447,11 @@ func (h *A2AHandler) ListTasks(c fiber.Ctx) error {
 
 	var agentID *uuid.UUID
 	if idStr := c.Query("agentId"); idStr != "" {
-		if parsed, err := uuid.Parse(idStr); err == nil {
-			agentID = &parsed
+		parsed, err := uuid.Parse(idStr)
+		if err != nil {
+			return respondA2AFailure(c, a2aInvalidAgentID)
 		}
+		agentID = &parsed
 	}
 	state := c.Query("state")
 
@@ -540,7 +466,7 @@ func (h *A2AHandler) ListTasks(c fiber.Ctx) error {
 
 	tasks, total, err := h.a2aService.ListA2ATasks(c.Context(), orgID, agentID, state, limit, offset)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -571,9 +497,7 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		RemoteAgentID  uuid.UUID `json:"remoteAgentId"`
 	}
 	if err := c.Bind().JSON(&sdkReq); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// Convert SDK format to internal format
@@ -582,9 +506,7 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		// SDK format - convert fields
 		targetAgentID, err := uuid.Parse(sdkReq.TargetAgentID)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid target agent ID",
-			})
+			return respondA2AFailure(c, a2aInvalidTargetAgentID)
 		}
 		req.RemoteAgentID = targetAgentID
 		req.ExternalTaskID = sdkReq.TaskID
@@ -599,18 +521,14 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		if sdkReq.SdkClientAgent != "" {
 			clientAgentID, err := uuid.Parse(sdkReq.SdkClientAgent)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Invalid client agent ID",
-				})
+				return respondA2AFailure(c, a2aInvalidClientAgentID)
 			}
 			req.ClientAgentID = clientAgentID
 		} else {
 			// Fallback to context
 			clientAgentID, err := h.getAgentIDFromContext(c)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Client agent ID required - provide in request body or context",
-				})
+				return respondA2AFailure(c, a2aClientAgentRequired)
 			}
 			req.ClientAgentID = clientAgentID
 		}
@@ -625,9 +543,7 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		if sdkReq.SdkClientAgent != "" {
 			clientAgentID, err := uuid.Parse(sdkReq.SdkClientAgent)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Invalid client agent ID",
-				})
+				return respondA2AFailure(c, a2aInvalidClientAgentID)
 			}
 			req.ClientAgentID = clientAgentID
 		} else if sdkReq.ClientAgentID != uuid.Nil {
@@ -636,9 +552,7 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 			// Fallback to context
 			clientAgentID, err := h.getAgentIDFromContext(c)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": "Client agent ID required",
-				})
+				return respondA2AFailure(c, a2aClientAgentRequiredInBody)
 			}
 			req.ClientAgentID = clientAgentID
 		}
@@ -675,9 +589,7 @@ func (h *A2AHandler) LogTask(c fiber.Ctx) error {
 		// err.Error() is NOT echoed — could carry victim agent state
 		// via wrapped service errors (mirrors A3d-vii.b PR #187 +
 		// AttestMCP PR #188 no-echo discipline).
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to log task",
-		})
+		return respondA2AFailureCause(c, a2aTaskNotLogged, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(task)
@@ -699,9 +611,7 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 
 	taskID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid task ID",
-		})
+		return respondA2AFailure(c, a2aInvalidTaskID)
 	}
 
 	var req struct {
@@ -710,16 +620,12 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 		ErrorMessage string `json:"errorMessage"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	state := domain.A2ATaskState(req.State)
 	if !isValidTaskState(state) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid task state",
-		})
+		return respondA2AFailure(c, a2aInvalidTaskState)
 	}
 
 	// SECURITY (A3d-vii.b): tenant-scope by verifying the task's
@@ -732,8 +638,7 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 	// NOT scoped — A2A tasks are cross-org by protocol design.
 	task, err := h.a2aReader.GetA2ATask(c.Context(), taskID)
 	if err != nil || task == nil {
-		respondResourceNotFound(c)
-		return nil
+		return respondA2AFailure(c, a2aNotFound)
 	}
 	agentLoader := func(id uuid.UUID) (*domain.Agent, error) {
 		return h.agentService.GetAgent(c.Context(), id)
@@ -743,7 +648,7 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 	}
 
 	if err := h.a2aService.UpdateA2ATaskState(c.Context(), taskID, state, req.ErrorCode, req.ErrorMessage); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -762,9 +667,7 @@ func (h *A2AHandler) UpdateTaskState(c fiber.Ctx) error {
 func (h *A2AHandler) GetAgentSkills(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent.
@@ -778,7 +681,7 @@ func (h *A2AHandler) GetAgentSkills(c fiber.Ctx) error {
 
 	skills, err := h.a2aService.GetAgentSkills(c.Context(), agentID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -793,13 +696,11 @@ func (h *A2AHandler) GetAgentSkills(c fiber.Ctx) error {
 func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 	query := c.Query("q")
 	if query == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Query parameter 'q' is required",
-		})
+		return respondA2AFailure(c, a2aSearchQueryRequired)
 	}
 	// q reaches the skill search as a text parameter.
 	if queryTextError("q", query) != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": queryTextMessage("q")})
+		return respondA2AFailure(c, a2aSearchQueryNotText)
 	}
 
 	limit := 20
@@ -811,7 +712,7 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 
 	skills, err := h.a2aService.SearchSkills(c.Context(), query, limit)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -830,9 +731,7 @@ func (h *A2AHandler) SearchSkills(c fiber.Ctx) error {
 func (h *A2AHandler) RouteByIntent(c fiber.Ctx) error {
 	intent := c.Query("intent")
 	if intent == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Query parameter 'intent' is required",
-		})
+		return respondA2AFailure(c, a2aIntentQueryRequired)
 	}
 
 	// Parse optional min trust score (default 0.5)
@@ -845,15 +744,11 @@ func (h *A2AHandler) RouteByIntent(c fiber.Ctx) error {
 
 	resp, err := h.a2aService.RouteByIntent(c.Context(), intent, minTrustScore)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	if resp.Agent == nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":        "No agent found matching intent",
-			"intent":       intent,
-			"alternatives": 0,
-		})
+		return respondA2ANoAgentForIntent(c, intent)
 	}
 
 	return c.JSON(resp)
@@ -864,9 +759,7 @@ func (h *A2AHandler) RouteByIntent(c fiber.Ctx) error {
 func (h *A2AHandler) CapableOf(c fiber.Ctx) error {
 	intent := c.Query("intent")
 	if intent == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Query parameter 'intent' is required",
-		})
+		return respondA2AFailure(c, a2aIntentQueryRequired)
 	}
 
 	// Parse optional min trust score (default 0.5)
@@ -887,7 +780,7 @@ func (h *A2AHandler) CapableOf(c fiber.Ctx) error {
 
 	agents, err := h.a2aService.CapableOf(c.Context(), intent, minTrustScore, limit)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -912,9 +805,7 @@ func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
 
 	var req application.RecordConsentRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// SECURITY (A3c #42 pair): always stamp the caller's orgID onto the
@@ -937,11 +828,9 @@ func (h *A2AHandler) RecordConsent(c fiber.Ctx) error {
 		// confirm the id exists somewhere, which is the enumeration oracle the
 		// check exists to close.
 		if errors.Is(err, application.ErrConsentGrantorNotOwned) {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Grantor agent not found",
-			})
+			return respondA2AFailure(c, a2aGrantorNotFound)
 		}
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	// Log audit
@@ -974,23 +863,23 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 	scope := c.Query("scope")
 
 	if userID == "" || grantorID == "" || recipientID == "" || scope == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "userId, grantorAgentId, recipientAgentId, and scope are required",
-		})
+		return respondA2AFailure(c, a2aConsentCheckParamsRequired)
 	}
 
 	grantorUUID, err := uuid.Parse(grantorID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid grantor agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidGrantorAgentID)
 	}
 
 	recipientUUID, err := uuid.Parse(recipientID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid recipient agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidRecipientAgentID)
+	}
+
+	// scope reaches the consent check inside a JSON document, which replaces
+	// bytes that are not UTF-8 and which jsonb refuses with a NUL in it.
+	if queryTextError("scope", scope) != nil {
+		return respondA2AFailure(c, a2aConsentScopeNotText)
 	}
 
 	// SECURITY: the grantor agent must belong to the caller's organization.
@@ -1020,7 +909,7 @@ func (h *A2AHandler) CheckConsent(c fiber.Ctx) error {
 	// anything — free to range across organizations.
 	hasConsent, err := h.a2aService.CheckConsent(c.Context(), orgID, userID, grantorUUID, recipientUUID, scope)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1042,9 +931,7 @@ func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
 
 	consentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid consent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidConsentID)
 	}
 
 	// SECURITY (A3d-vii.b): tenant-scope by verifying the consent record
@@ -1063,15 +950,19 @@ func (h *A2AHandler) RevokeConsent(c fiber.Ctx) error {
 		return nil
 	}
 
+	// The body is optional: without one the consent is revoked with the
+	// default reason. A body that is present and is not JSON is refused.
 	var req struct {
 		Reason string `json:"reason"`
 	}
-	if err := c.Bind().JSON(&req); err != nil {
+	if len(bytes.TrimSpace(c.Body())) == 0 {
 		req.Reason = "User revoked consent"
+	} else if err := c.Bind().JSON(&req); err != nil {
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	if err := h.a2aService.RevokeConsent(c.Context(), consentID, req.Reason); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	// Log audit
@@ -1106,9 +997,7 @@ func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
 
 	userID := c.Params("userId")
 	if userID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "User ID is required",
-		})
+		return respondA2AFailure(c, a2aUserIDRequired)
 	}
 
 	includeRevoked := c.Query("includeRevoked") == "true"
@@ -1119,7 +1008,7 @@ func (h *A2AHandler) ListUserConsents(c fiber.Ctx) error {
 	// existence side channel is exposed.
 	consents, err := h.a2aService.ListUserConsents(c.Context(), userID, orgID, includeRevoked)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1150,7 +1039,7 @@ func (h *A2AHandler) ListAllConsents(c fiber.Ctx) error {
 
 	consents, total, err := h.a2aService.ListAllConsents(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1177,7 +1066,7 @@ func (h *A2AHandler) ListAllTrustScores(c fiber.Ctx) error {
 
 	scores, total, err := h.a2aService.ListAllTrustScores(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1191,10 +1080,6 @@ func (h *A2AHandler) ListAllTrustScores(c fiber.Ctx) error {
 // ============================================================================
 // Policy Evaluation Endpoint
 // ============================================================================
-
-// evaluatePolicyOtherOrganizationMessage answers a policy evaluation whose body
-// names an organization other than the caller's. It names neither organization.
-const evaluatePolicyOtherOrganizationMessage = "organizationId must be your own organization; leave it out to evaluate your organization's policies"
 
 // EvaluatePolicy evaluates the A2A policies of the caller's organization for a
 // given action
@@ -1211,20 +1096,16 @@ func (h *A2AHandler) EvaluatePolicy(c fiber.Ctx) error {
 
 	var req application.EvaluateA2APolicyRequest
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 	if req.OrganizationID != uuid.Nil && req.OrganizationID != orgID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error": evaluatePolicyOtherOrganizationMessage,
-		})
+		return respondA2AFailure(c, a2aPolicyOtherOrganization)
 	}
 	req.OrganizationID = orgID
 
 	decision, err := h.a2aService.EvaluateA2APolicy(c.Context(), req)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(decision)
@@ -1243,23 +1124,17 @@ func (h *A2AHandler) GetPublicAgentCard(c fiber.Ctx) error {
 		agentID = c.Get("X-Agent-ID")
 	}
 	if agentID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Agent ID is required (query param 'agentId' or header 'X-Agent-ID')",
-		})
+		return respondA2AFailure(c, a2aPublicCardAgentIDRequired)
 	}
 
 	agentUUID, err := uuid.Parse(agentID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentUUID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent card not found",
-		})
+		return respondA2AFailure(c, a2aAgentCardNotFound)
 	}
 
 	// Set Content-Type for A2A discovery
@@ -1268,9 +1143,7 @@ func (h *A2AHandler) GetPublicAgentCard(c fiber.Ctx) error {
 	// Return the card as raw JSON for A2A protocol compliance
 	cardJSON, err := json.Marshal(card)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to serialize agent card",
-		})
+		return respondA2AFailureCause(c, a2aCardNotSerialized, err)
 	}
 
 	return c.Send(cardJSON)
@@ -1286,7 +1159,7 @@ func (h *A2AHandler) GetPublicAgentCard(c fiber.Ctx) error {
 func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 	count, err := h.a2aService.CleanupExpiredNonces(c.Context())
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1301,7 +1174,7 @@ func (h *A2AHandler) CleanupExpiredNonces(c fiber.Ctx) error {
 func (h *A2AHandler) RefreshExpiredCards(c fiber.Ctx) error {
 	count, err := h.a2aService.RefreshExpiredCards(c.Context())
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1330,9 +1203,7 @@ func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	agentID, err := uuid.Parse(req.AgentID)
@@ -1340,9 +1211,7 @@ func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
 		// Try to get agent ID from authenticated user
 		agentID, err = h.getAgentIDFromContext(c)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid or missing agent ID",
-			})
+			return respondA2AFailure(c, a2aInvalidOrMissingAgentID)
 		}
 	}
 
@@ -1358,7 +1227,7 @@ func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
 	}
 
 	if err := h.a2aService.RegisterSkill(c.Context(), skill); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(skill)
@@ -1381,16 +1250,12 @@ func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	attestedAgentID, err := uuid.Parse(req.AttestedAgentID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid attested agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAttestedAgentID)
 	}
 
 	// Get attesting agent - try request body first, then context
@@ -1398,17 +1263,13 @@ func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
 	if req.AttestingAgentID != "" {
 		attestingAgentID, err = uuid.Parse(req.AttestingAgentID)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid attesting agent ID",
-			})
+			return respondA2AFailure(c, a2aInvalidAttestingAgentID)
 		}
 	} else {
 		// Fallback to context
 		attestingAgentID, err = h.getAgentIDFromContext(c)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Could not determine attesting agent - provide attestingAgentId in request",
-			})
+			return respondA2AFailure(c, a2aAttestingAgentUnknown)
 		}
 	}
 
@@ -1423,7 +1284,7 @@ func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
 
 	attestation, err := h.a2aService.AttestSkill(c.Context(), attestReq)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(attestation)
@@ -1440,16 +1301,15 @@ func (h *A2AHandler) GetConsensusStatus(c fiber.Ctx) error {
 	}
 	agentID, err := uuid.Parse(agentIDStr)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	skillID := c.Params("skillId")
 	if skillID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Skill ID is required",
-		})
+		return respondA2AFailure(c, a2aConsensusSkillIDRequired)
+	}
+	if queryTextError("skillId", skillID) != nil {
+		return respondA2AFailure(c, a2aSkillIDNotText)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. Bound on both
@@ -1469,7 +1329,7 @@ func (h *A2AHandler) GetConsensusStatus(c fiber.Ctx) error {
 
 	result, err := h.a2aService.GetConsensusStatus(c.Context(), agentID, skillID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(result)
@@ -1485,9 +1345,7 @@ func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
 
 	agentID, err := uuid.Parse(c.Params("agentId"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	skillID := c.Params("skillId")
@@ -1505,7 +1363,7 @@ func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
 
 	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(attestations)
@@ -1516,9 +1374,7 @@ func (h *A2AHandler) GetSkillAttestations(c fiber.Ctx) error {
 func (h *A2AHandler) GetAgentAttestations(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. Sibling of
@@ -1536,7 +1392,7 @@ func (h *A2AHandler) GetAgentAttestations(c fiber.Ctx) error {
 
 	attestations, err := h.a2aService.GetAgentAttestations(c.Context(), agentID, skillID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1558,9 +1414,7 @@ func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	requestingID, err := uuid.Parse(req.RequestingAgentID)
@@ -1568,17 +1422,13 @@ func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
 		// Try to get from context
 		requestingID, err = h.getAgentIDFromContext(c)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid requesting agent ID",
-			})
+			return respondA2AFailure(c, a2aInvalidRequestingAgentID)
 		}
 	}
 
 	targetID, err := uuid.Parse(req.TargetAgentID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid target agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidTargetAgentID)
 	}
 
 	checkReq := &domain.A2ASecurityCheckRequest{
@@ -1589,7 +1439,7 @@ func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
 
 	result, err := h.a2aService.CheckA2ASecurity(c.Context(), checkReq)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(result)
@@ -1600,14 +1450,12 @@ func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
 func (h *A2AHandler) GetSecuritySettings(c fiber.Ctx) error {
 	orgID, err := h.getOrgIDFromContext(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Could not determine organization",
-		})
+		return respondA2AFailure(c, a2aOrganizationUnknown)
 	}
 
 	settings, err := h.a2aService.GetSecuritySettings(c.Context(), orgID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(settings)
@@ -1619,22 +1467,18 @@ func (h *A2AHandler) UpdateSecuritySettings(c fiber.Ctx) error {
 	var settings domain.A2ASecuritySettings
 
 	if err := c.Bind().JSON(&settings); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	orgID, err := h.getOrgIDFromContext(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Could not determine organization",
-		})
+		return respondA2AFailure(c, a2aOrganizationUnknown)
 	}
 
 	settings.OrganizationID = orgID
 
 	if err := h.a2aService.UpdateSecuritySettings(c.Context(), &settings); err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(settings)
@@ -1655,24 +1499,20 @@ func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	agentID, err := uuid.Parse(req.AgentID)
 	if err != nil {
 		agentID, err = h.getAgentIDFromContext(c)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid or missing agent ID",
-			})
+			return respondA2AFailure(c, a2aInvalidOrMissingAgentID)
 		}
 	}
 
 	signature, err := h.a2aService.SignA2ARequest(withTransitionActor(c), agentID, req.Method, req.Path, []byte(req.Body))
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(signature)
@@ -1680,13 +1520,12 @@ func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
 
 // GetTrustScoreAlt handles trust score with agent ID in path (SDK compatibility)
 // GET /api/v1/a2a/trust/:id
-// Auto-computes trust score if none exists or score is zero
+// Auto-computes trust score if none exists or score is zero; a computation
+// that fails is answered 500.
 func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. SDK alt route
@@ -1705,13 +1544,7 @@ func (h *A2AHandler) GetTrustScoreAlt(c fiber.Ctx) error {
 		// Auto-compute if no score exists or score is zero
 		computedScore, computeErr := h.a2aService.ComputeA2ATrustScore(c.Context(), agentID)
 		if computeErr != nil {
-			// If computation fails, return zero score with message
-			log.Printf("a2a trust score computation failed for agent %s: %v", agentID, computeErr)
-			return c.JSON(fiber.Map{
-				"agentId": agentID,
-				"score":   0.0,
-				"message": "Could not compute trust score",
-			})
+			return respondA2AFailureCause(c, a2aServerError, fmt.Errorf("a2a trust score computation failed for agent %s: %w", agentID, computeErr))
 		}
 		return c.JSON(computedScore)
 	}
@@ -1728,20 +1561,16 @@ func (h *A2AHandler) RouteByIntentPost(c fiber.Ctx) error {
 	}
 
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	if req.Intent == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Intent is required",
-		})
+		return respondA2AFailure(c, a2aIntentRequired)
 	}
 
 	result, err := h.a2aService.RouteByIntent(c.Context(), req.Intent, req.MinTrustScore)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(result)
@@ -1815,12 +1644,7 @@ const A2ATrustScoreNotAsserted = "the A2A trust score is measured from recorded 
 // a recompute is POST /agents/:id/trust-score/compute. A caller that sends a
 // score now hears so instead of receiving a 200 that did not mean it.
 func (h *A2AHandler) RefuseTrustScoreWrite(c fiber.Ctx) error {
-	c.Set("Allow", "GET")
-	return c.Status(fiber.StatusMethodNotAllowed).JSON(fiber.Map{
-		"error":  A2ATrustScoreNotAsserted,
-		"read":   "GET /api/v1/a2a/trust/:id",
-		"record": "POST /api/v1/a2a/trust/:id/interaction",
-	})
+	return respondA2AFailure(c, a2aTrustScoreNotWritable)
 }
 
 // RecordInteraction records an interaction (success or failure) with a peer agent
@@ -1828,16 +1652,12 @@ func (h *A2AHandler) RefuseTrustScoreWrite(c fiber.Ctx) error {
 func (h *A2AHandler) RecordInteraction(c fiber.Ctx) error {
 	targetAgentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	agentID, err := h.getAgentIDFromContext(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Agent ID required",
-		})
+		return respondA2AFailure(c, a2aAgentIDRequired)
 	}
 
 	var req struct {
@@ -1847,9 +1667,7 @@ func (h *A2AHandler) RecordInteraction(c fiber.Ctx) error {
 		ErrorReason string `json:"errorReason"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the PATH target agent.
@@ -1898,9 +1716,7 @@ func (h *A2AHandler) RecordInteraction(c fiber.Ctx) error {
 	// Return the computed trust score
 	score, err := h.a2aService.ComputeA2ATrustScore(c.Context(), targetAgentID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to compute trust score",
-		})
+		return respondA2AFailureCause(c, a2aTrustScoreNotComputed, err)
 	}
 
 	return c.JSON(score)
@@ -1914,9 +1730,7 @@ func (h *A2AHandler) CapableOfPost(c fiber.Ctx) error {
 		MinTrustScore float64  `json:"minTrustScore"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// Use skill IDs as intent for search
@@ -1927,9 +1741,7 @@ func (h *A2AHandler) CapableOfPost(c fiber.Ctx) error {
 
 	agents, err := h.a2aService.CapableOf(c.Context(), intent, req.MinTrustScore, 20)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to find capable agents",
-		})
+		return respondA2AFailureCause(c, a2aCapableAgentsNotFound, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1958,7 +1770,7 @@ func (h *A2AHandler) ListAgentCards(c fiber.Ctx) error {
 
 	cards, err := h.a2aService.ListAgentCards(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
 	return c.JSON(fiber.Map{
@@ -1976,9 +1788,7 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 		CardURL string `json:"cardUrl"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// Get agent ID from request body or context
@@ -1987,16 +1797,12 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 	if req.AgentID != "" {
 		agentID, err = uuid.Parse(req.AgentID)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid agent ID",
-			})
+			return respondA2AFailure(c, a2aInvalidAgentID)
 		}
 	} else {
 		agentID, err = h.getAgentIDFromContext(c)
 		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Agent ID required",
-			})
+			return respondA2AFailure(c, a2aAgentIDRequired)
 		}
 	}
 
@@ -2034,9 +1840,7 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid agent ID",
-		})
+		return respondA2AFailure(c, a2aInvalidAgentID)
 	}
 
 	var req struct {
@@ -2047,9 +1851,7 @@ func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 		Skills      []string `json:"skills"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. SDK alt
@@ -2065,9 +1867,7 @@ func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 	// Get existing card
 	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "Agent card not found",
-		})
+		return respondA2AFailure(c, a2aAgentCardNotFound)
 	}
 
 	// Return the existing card (updates would require service method)
@@ -2079,14 +1879,12 @@ func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 func (h *A2AHandler) ListPeerTrusts(c fiber.Ctx) error {
 	agentID, err := h.getAgentIDFromContext(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Agent ID required",
-		})
+		return respondA2AFailure(c, a2aAgentIDRequired)
 	}
 
 	peers, err := h.a2aService.ListPeerTrusts(c.Context(), agentID)
 	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
+		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 	if peers == nil {
 		peers = make([]*domain.A2APeerTrust, 0)
@@ -2103,9 +1901,10 @@ func (h *A2AHandler) ListPeerTrusts(c fiber.Ctx) error {
 func (h *A2AHandler) DeleteSkill(c fiber.Ctx) error {
 	skillID := c.Params("id")
 	if skillID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Skill ID required",
-		})
+		return respondA2AFailure(c, a2aDeleteSkillIDRequired)
+	}
+	if queryTextError("id", skillID) != nil {
+		return respondA2AFailure(c, a2aDeleteSkillIDNotText)
 	}
 
 	// For now, return success (proper implementation needs DeleteSkill service method)
@@ -2117,9 +1916,7 @@ func (h *A2AHandler) DeleteSkill(c fiber.Ctx) error {
 func (h *A2AHandler) GetSecurityViolations(c fiber.Ctx) error {
 	orgID, err := h.getOrgIDFromContext(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Organization ID required",
-		})
+		return respondA2AFailure(c, a2aOrganizationRequired)
 	}
 
 	limit := 50
@@ -2137,9 +1934,7 @@ func (h *A2AHandler) GetSecurityViolations(c fiber.Ctx) error {
 
 	violations, err := h.a2aService.GetSecurityViolations(c.Context(), orgID, limit, offset)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get security violations",
-		})
+		return respondA2AFailureCause(c, a2aViolationsNotRead, err)
 	}
 
 	return c.JSON(violations)
