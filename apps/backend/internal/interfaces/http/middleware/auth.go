@@ -118,7 +118,13 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 
 		// SECURITY: reject tokens revoked server-side (e.g. on logout). No-op when
 		// revocation is not configured; fails closed on a store outage by default.
-		if jwtService.IsRevoked(c.Context(), claims.ID) {
+		// A token is revoked by its own id or through its session (token family:
+		// a reused refresh token, logout, a dashboard SDK token revoke), read
+		// through the revoker's cache: at once on the instance that wrote the
+		// revocation, and on another once its cached answer lapses. Both answer
+		// the same body. A token minted before sessions carried a family has
+		// none to read.
+		if jwtService.IsSessionRevoked(c.Context(), claims.ID, claims.AccessFamilyID()) {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Token has been revoked",
 			})
@@ -211,7 +217,8 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		}
 
 		// SECURITY: a revoked token must not authenticate, even optionally.
-		if jwtService.IsRevoked(c.Context(), claims.ID) {
+		// Revoked by its own id or through its session (see AuthMiddleware).
+		if jwtService.IsSessionRevoked(c.Context(), claims.ID, claims.AccessFamilyID()) {
 			return c.Next()
 		}
 

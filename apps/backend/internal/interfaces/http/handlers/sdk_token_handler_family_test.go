@@ -21,9 +21,14 @@ import (
 // A dashboard revoke of an SDK token (one row, or revoke-all) ends the row's
 // token family as a reuse or a logout does: the family key is written under
 // the download token's jti, which the row's rotation lineage leads to, so the
-// access token the SDK path minted for that family is refused at the
-// credential-minting routes (/sdk/download) at once instead of until it
-// expires, and the family's refresh token is refused at /auth/refresh.
+// access token the SDK path minted for that family is refused at once instead
+// of until it expires (on this instance by the session middleware, which
+// reads the family before a credential-minting route such as /sdk/download
+// does), and the family's refresh token is refused at /auth/refresh.
+
+// sessionRefusal is the session middleware's answer to a revoked token, the
+// same for a token revoked by its own id and for one whose family is revoked.
+const sessionRefusal = `{"error":"Token has been revoked"}`
 
 // The dashboard's revoke routes read the row by id and the user's rows; the
 // sdk_tokens model of the family fixture answers those reads as the
@@ -153,7 +158,8 @@ func TestSDKTokenHandler_RevokeToken_EndsTheRowsFamily(t *testing.T) {
 
 	status, body = apps.downloadWith(t, a1)
 	assert.Equal(t, fiber.StatusUnauthorized, status, "the family's access token is refused at /sdk/download right after the revoke")
-	assert.Contains(t, body, familyRefusal)
+	assert.JSONEq(t, sessionRefusal, body, "by the session middleware of the instance that wrote the revocation")
+	assert.Empty(t, refusedRows(f.audit.rows), "the refused request does not reach the route's own family read")
 
 	body, status = postRefreshRaw(t, f.refresh, s2)
 	assert.Equal(t, fiber.StatusUnauthorized, status, "the family's refresh token is refused")
@@ -185,7 +191,7 @@ func TestSDKTokenHandler_RevokeAllTokens_EndsEveryFamily(t *testing.T) {
 	for name, access := range map[string]string{"first family": a1, "second family": b1} {
 		status, body := apps.downloadWith(t, access)
 		assert.Equal(t, fiber.StatusUnauthorized, status, "%s: the access token is refused at /sdk/download", name)
-		assert.Contains(t, body, familyRefusal, name)
+		assert.JSONEq(t, sessionRefusal, body, name)
 	}
 	for name, refresh := range map[string]string{"first family": s2, "second family": t2} {
 		body, status := postRefreshRaw(t, f.refresh, refresh)

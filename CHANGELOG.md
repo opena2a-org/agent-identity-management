@@ -315,6 +315,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/web/components/agent/key-vault-tab.test.tsx` renders the tab with a mocked key vault and fails when either
   heading appears or when the "Agent Public Key" card no longer copies its key. It fails on the previous commit.
 
+### Security — a revoked session's access token is refused on the routes behind the session middleware
+
+- After a session is revoked (a reused refresh token, logout, or a dashboard revoke of an SDK token), the session
+  middleware answers its access token with the 401 a token revoked by its own id gets (`Token has been revoked`):
+  at once on the instance that recorded the revocation, and within 30 seconds on another instance. A route behind
+  the optional session middleware serves such a request as anonymous. Before this change the middleware read the
+  token's own id only: in the backend's middleware test, a sign-in's access token whose session had been revoked
+  was answered 200 on `GET /api/v1/agents`, and so was the access token the SDK refresh had minted for a revoked
+  SDK download. An access token minted before sessions carried a family (`sid`) is checked by its own id only.
+- On a cache miss the middleware reads the family key (`revoked:fam:<family>`) after the token's own key, so a
+  token with a family costs one more revocation store read per miss and none while its answer is cached (30
+  seconds). A store error on the family read is answered as one on the token's own key: the token is refused, or
+  served when `AUTH_REVOCATION_FAIL_OPEN=true`.
+- A family's revocation key now lasts at least `JWT_ACCESS_TTL` plus one minute; the refresh lifetime and the
+  token's own lifetime still set it when longer. With `JWT_REFRESH_TTL=1h` and `JWT_ACCESS_TTL=5h` the key was
+  written for 61 minutes, so it could lapse while the family's access tokens were still valid.
+- The three credential-minting routes keep their uncached family read and their `credential_mint_refused` record.
+  A request the session middleware refuses does not reach them and is not recorded: in the backend's handler test,
+  a download made right after a dashboard revoke on the same instance is refused by the middleware, and no
+  `credential_mint_refused` record is written.
+
 ### Fixed — revoking an SDK token in the dashboard ends its token family, so the family's access token is refused at once
 
 - `POST /api/v1/users/me/sdk-tokens/{id}/revoke` and `POST /api/v1/users/me/sdk-tokens/revoke-all` now write the
@@ -322,11 +343,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   after a reuse and logout does for a sign-in. Before this change the two routes revoked the rows only: in the
   backend's handler test, a download made with the access token the SDK refresh had minted for the family was
   answered 200 right after the dashboard revoke, and no family key was written. Now that download is answered
-  401 (`Token has been revoked or is invalid`), and so is a refresh with the family's live refresh token.
+  401, and so is a refresh with the family's live refresh token.
 - A row's family is read from its rotation lineage: each rotated row names the row it replaced in its
   `parent_token` metadata, and the download row at the top holds the family's id as its token ID. The key lasts for
-  the longer of `JWT_REFRESH_TTL` and the row's own lifetime, plus one minute, the rule the refresh route's family
-  write uses. A row whose lineage cannot be followed to its download row, or a key the revocation store refuses,
+  the longest of `JWT_REFRESH_TTL`, `JWT_ACCESS_TTL` and the row's own lifetime, plus one minute, the rule the
+  refresh route's family write uses. A row whose lineage cannot be followed to its download row, or a key the revocation store refuses,
   is logged with identifiers only; the rows are revoked and the route answers as before. With no revocation store
   configured the routes revoke the rows and answer 200 as before.
 - `SDKTokenHandler` now takes the JWT service as a second constructor argument.
@@ -3555,8 +3576,9 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   refusal is recorded in the organization's audit log as `credential_mint_refused` (identifiers
   only) and as a `SECURITY` line. Login access tokens carry their session's `sid` for this; a
   token minted before this change carries none and is not checked. No client change is needed.
-  Other authenticated routes keep serving a revoked session's access token until it expires; that
-  window is `JWT_ACCESS_TTL`, and closing it on every request is a separate, measured change.
+  The session middleware now refuses such a token on the other routes it guards as well, at once on
+  the instance that recorded the revocation and within 30 s on another (entry "a revoked session's
+  access token is refused on the routes behind the session middleware").
 
 ### Security — two presentations of one refresh token in the same instant no longer both rotate
 
