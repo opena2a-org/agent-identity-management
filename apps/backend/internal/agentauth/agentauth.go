@@ -10,7 +10,9 @@
 // registered key, a registered key that does not decode to its algorithm's key length and
 // a presented key that is not the registered one are one refusal, ErrKeyNotRecognized.
 // Which of them it was is attached as a KeyCause for the server's own refusal counters,
-// and never reaches the caller.
+// and never reaches the caller. Each of them also verifies the request's signature, against
+// a decoy key, so the refusal costs the signature verification a known agent's invalid
+// signature costs.
 package agentauth
 
 import (
@@ -21,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -40,6 +43,9 @@ const (
 	// StatusDeniedReason is the `reasonCode` of a verified agent whose status does not
 	// permit authentication.
 	StatusDeniedReason = "agentStatusDenied"
+	// HybridRequiredReason is the `reasonCode` of a verified agent in hybrid mode whose
+	// request is not signed with both Ed25519 and ML-DSA.
+	HybridRequiredReason = "hybridSignatureRequired"
 	// AssertionNotRecognizedDescription is the token endpoint's `error_description` for the
 	// same four causes and for an assertion whose signature does not verify.
 	AssertionNotRecognizedDescription = "the assertion is not signed by the registered key of a known agent"
@@ -117,6 +123,13 @@ func StatusDeniedBody(status domain.AgentStatus) map[string]string {
 	return map[string]string{"error": domain.AgentStatusDeniedMessage(status), "reasonCode": StatusDeniedReason}
 }
 
+// HybridRequiredBody is the 401 body for a verified agent in hybrid mode whose request is
+// not hybrid-signed, with the authenticator's own message. Like the status, the hybrid flag
+// reaches only a caller whose signature verified under the agent's key.
+func HybridRequiredBody(message string) map[string]string {
+	return map[string]string{"error": message, "reasonCode": HybridRequiredReason}
+}
+
 // Source reads one agent row by id. *application.AgentService satisfies it.
 type Source interface {
 	GetAgent(ctx context.Context, id uuid.UUID) (*domain.Agent, error)
@@ -167,13 +180,14 @@ func (k Keys) Known() bool {
 // that does not carry one; it is compared with the registered key on decoded bytes.
 func (k Keys) VerifyEd25519(presented string, message, signature []byte) (VerifiedAgent, error) {
 	key, err := k.ed25519Key()
+	if err == nil && !presentedMatches(presented, key) {
+		err = keyNotRecognized(KeyCausePresentedKeyMismatch)
+	}
 	if err != nil {
+		decoyVerifyEd25519(message, signature)
 		return VerifiedAgent{}, err
 	}
-	if !presentedMatches(presented, key) {
-		return VerifiedAgent{}, keyNotRecognized(KeyCausePresentedKeyMismatch)
-	}
-	if !ed25519.Verify(key, message, signature) {
+	if !ed25519Verify(key, message, signature) {
 		return VerifiedAgent{}, ErrEd25519SignatureInvalid
 	}
 	return VerifiedAgent{agent: k.agent}, nil
@@ -183,13 +197,14 @@ func (k Keys) VerifyEd25519(presented string, message, signature []byte) (Verifi
 // alg's key length. presented is as for VerifyEd25519.
 func (k Keys) VerifyMLDSA(alg pqc.Algorithm, presented string, message, signature []byte) (VerifiedAgent, error) {
 	key, err := k.mldsaKey(alg)
+	if err == nil && !presentedMatches(presented, key) {
+		err = keyNotRecognized(KeyCausePresentedKeyMismatch)
+	}
 	if err != nil {
+		decoyVerifyMLDSA(alg, message, signature)
 		return VerifiedAgent{}, err
 	}
-	if !presentedMatches(presented, key) {
-		return VerifiedAgent{}, keyNotRecognized(KeyCausePresentedKeyMismatch)
-	}
-	if err := pqc.VerifyMLDSA(alg, key, message, signature); err != nil {
+	if err := mldsaVerify(alg, key, message, signature); err != nil {
 		return VerifiedAgent{}, fmt.Errorf("%w: %v", ErrMLDSASignatureInvalid, err)
 	}
 	return VerifiedAgent{agent: k.agent}, nil
@@ -197,30 +212,93 @@ func (k Keys) VerifyMLDSA(alg pqc.Algorithm, presented string, message, signatur
 
 // VerifyHybrid verifies both signatures of a hybrid algorithm; both must verify. Both
 // keys are checked before either signature, so a request that names the wrong key for
-// either half is refused as unrecognised whichever half it is.
+// either half is refused as unrecognised whichever half it is. The Ed25519 signature is
+// verified first and the ML-DSA one only if it verifies, so an unrecognised key pays the
+// Ed25519 verification: a signature made without the agent's key stops there too.
 func (k Keys) VerifyHybrid(alg pqc.Algorithm, presentedEd25519, presentedMLDSA string, message, ed25519Sig, mldsaSig []byte) (VerifiedAgent, error) {
 	variant := pqc.GetMLDSAVariant(alg)
-	edKey, err := k.ed25519Key()
+	edKey, mlKey, err := k.hybridKeys(variant, presentedEd25519, presentedMLDSA)
 	if err != nil {
+		decoyVerifyEd25519(message, ed25519Sig)
 		return VerifiedAgent{}, err
 	}
-	if !presentedMatches(presentedEd25519, edKey) {
-		return VerifiedAgent{}, keyNotRecognized(KeyCausePresentedKeyMismatch)
-	}
-	mlKey, err := k.mldsaKey(variant)
-	if err != nil {
-		return VerifiedAgent{}, err
-	}
-	if !presentedMatches(presentedMLDSA, mlKey) {
-		return VerifiedAgent{}, keyNotRecognized(KeyCausePresentedKeyMismatch)
-	}
-	if !ed25519.Verify(edKey, message, ed25519Sig) {
+	if !ed25519Verify(edKey, message, ed25519Sig) {
 		return VerifiedAgent{}, ErrEd25519SignatureInvalid
 	}
-	if err := pqc.VerifyMLDSA(variant, mlKey, message, mldsaSig); err != nil {
+	if err := mldsaVerify(variant, mlKey, message, mldsaSig); err != nil {
 		return VerifiedAgent{}, fmt.Errorf("%w: %v", ErrMLDSASignatureInvalid, err)
 	}
 	return VerifiedAgent{agent: k.agent}, nil
+}
+
+// hybridKeys is both registered keys of a hybrid request, each compared with the key
+// the request presents, or ErrKeyNotRecognized with its cause.
+func (k Keys) hybridKeys(variant pqc.Algorithm, presentedEd25519, presentedMLDSA string) (ed25519.PublicKey, []byte, error) {
+	edKey, err := k.ed25519Key()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !presentedMatches(presentedEd25519, edKey) {
+		return nil, nil, keyNotRecognized(KeyCausePresentedKeyMismatch)
+	}
+	mlKey, err := k.mldsaKey(variant)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !presentedMatches(presentedMLDSA, mlKey) {
+		return nil, nil, keyNotRecognized(KeyCausePresentedKeyMismatch)
+	}
+	return edKey, mlKey, nil
+}
+
+// The signature primitives the Verify methods call. They are variables so a test can
+// count the verifications a refusal costs.
+var (
+	ed25519Verify = ed25519.Verify
+	mldsaVerify   = pqc.VerifyMLDSA
+)
+
+// decoyEd25519Key and decoyMLDSAKeys are public keys generated once per process from
+// crypto/rand, whose private keys nobody holds. A request whose key is not recognised has
+// its signature verified against them and the result discarded, so its refusal costs the
+// signature verification an invalid signature from a known agent costs, and the time it
+// takes does not tell a caller holding only an agent id whether that agent exists.
+var decoyEd25519Key = sync.OnceValue(func() ed25519.PublicKey {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		panic(fmt.Sprintf("agentauth: generating the decoy Ed25519 key: %v", err))
+	}
+	return pub
+})
+
+var decoyMLDSAKeys = map[pqc.Algorithm]func() []byte{
+	pqc.AlgorithmMLDSA44: decoyMLDSAKey(pqc.AlgorithmMLDSA44),
+	pqc.AlgorithmMLDSA65: decoyMLDSAKey(pqc.AlgorithmMLDSA65),
+	pqc.AlgorithmMLDSA87: decoyMLDSAKey(pqc.AlgorithmMLDSA87),
+}
+
+func decoyMLDSAKey(alg pqc.Algorithm) func() []byte {
+	return sync.OnceValue(func() []byte {
+		kp, err := pqc.GenerateMLDSAKeyPair(alg)
+		if err != nil {
+			panic(fmt.Sprintf("agentauth: generating the decoy %s key: %v", alg, err))
+		}
+		return kp.PublicKey
+	})
+}
+
+// decoyVerifyEd25519 verifies signature against the decoy Ed25519 key.
+func decoyVerifyEd25519(message, signature []byte) {
+	_ = ed25519Verify(decoyEd25519Key(), message, signature)
+}
+
+// decoyVerifyMLDSA verifies signature against the decoy key of alg's level. An algorithm
+// that is no ML-DSA level has no decoy, and no registered key of that algorithm either,
+// so neither path verifies anything.
+func decoyVerifyMLDSA(alg pqc.Algorithm, message, signature []byte) {
+	if key, ok := decoyMLDSAKeys[alg]; ok {
+		_ = mldsaVerify(alg, key(), message, signature)
+	}
 }
 
 // ed25519Key is the registered Ed25519 key, decoded, or ErrKeyNotRecognized with its

@@ -37,8 +37,8 @@ func refuseS1(c fiber.Ctx, reason metrics.S1RefusalReason, status int, message s
 // The four reasons agentauth reports as one unrecognised key get agentauth's one body
 // whatever message the branch carried: the counter keeps the cause for operators, and
 // the caller, who holds at most an agent id, is told nothing about that agent. A
-// signature that does not verify and a status refusal carry agentauth's reasonCode
-// beside their message. Every other refusal is {"error": message}.
+// signature that does not verify, a status refusal and a hybrid-mode refusal carry
+// agentauth's reasonCode beside their message. Every other refusal is {"error": message}.
 func s1RefusalBody(reason metrics.S1RefusalReason, message string) map[string]string {
 	switch reason {
 	case metrics.S1ReasonAgentLookupFailed, metrics.S1ReasonNoRegisteredKey,
@@ -48,6 +48,8 @@ func s1RefusalBody(reason metrics.S1RefusalReason, message string) map[string]st
 		return agentauth.SignatureInvalidBody(message)
 	case metrics.S1ReasonAgentStatusDenied:
 		return map[string]string{"error": message, "reasonCode": agentauth.StatusDeniedReason}
+	case metrics.S1ReasonHybridRequired:
+		return agentauth.HybridRequiredBody(message)
 	default:
 		return map[string]string{"error": message}
 	}

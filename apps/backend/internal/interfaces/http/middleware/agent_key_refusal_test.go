@@ -340,6 +340,64 @@ func TestPQCAgentMiddleware_AHybridModeAgentWithADifferentKeyGetsTheMergedBody(t
 	}
 }
 
+// The refusals of a hybrid-mode agent's request that is not hybrid-signed, written out as
+// keyNotRecognizedBody is.
+const (
+	pqcHybridRequiredBody = `{"error":"Agent is in hybrid mode: sign the request with both Ed25519 and ML-DSA ` +
+		`(X-Algorithm Ed25519+ML-DSA-44, Ed25519+ML-DSA-65 or Ed25519+ML-DSA-87)","reasonCode":"hybridSignatureRequired"}`
+	ed25519HybridRequiredBody = `{"error":"Agent is in hybrid mode and this route verifies an Ed25519 signature alone",` +
+		`"reasonCode":"hybridSignatureRequired"}`
+)
+
+// A hybrid-mode agent is admitted only by a request signed with both of its keys. A
+// request signed with one of them alone is refused once that signature verifies; until
+// then the hybrid flag is not read, so a flipped byte gets the signature refusal.
+func TestPQCAgentMiddleware_AHybridModeAgentIsAdmittedOnlyWithBothSignatures(t *testing.T) {
+	registered := newAgentKeys(t)
+	hybrid := registeredAgent(domain.AgentStatusVerified, registered)
+	hybrid.HybridModeEnabled = true
+	app := newKeyRefusalApp(PQCAgentMiddleware, hybrid)
+
+	for _, alg := range []pqc.Algorithm{pqc.AlgorithmEd25519, pqc.AlgorithmMLDSA65} {
+		code, body := signedRequest{agentID: hybrid.ID, alg: alg, signer: registered}.do(t, app)
+		require.Equal(t, fiber.StatusUnauthorized, code, "%s: %s", alg, body)
+		require.Equal(t, pqcHybridRequiredBody, body, alg)
+
+		code, body = signedRequest{agentID: hybrid.ID, alg: alg, signer: registered, flip: true}.do(t, app)
+		require.Equal(t, fiber.StatusUnauthorized, code, "%s: %s", alg, body)
+		require.Contains(t, body, `"reasonCode":"signatureInvalid"`, alg)
+		require.NotContains(t, body, "hybrid mode", alg)
+	}
+
+	code, body := signedRequest{agentID: hybrid.ID, alg: pqc.AlgorithmHybridEd25519MLDSA65, signer: registered}.do(t, app)
+	require.Equal(t, fiber.StatusOK, code, body)
+
+	// A suspended hybrid-mode agent signing with one key is told it needs both, not its
+	// status: the status is read once the agent is authenticated the way it requires.
+	suspended := registeredAgent(domain.AgentStatusSuspended, registered)
+	suspended.HybridModeEnabled = true
+	app = newKeyRefusalApp(PQCAgentMiddleware, suspended)
+	code, body = signedRequest{agentID: suspended.ID, alg: pqc.AlgorithmEd25519, signer: registered}.do(t, app)
+	require.Equal(t, fiber.StatusUnauthorized, code, body)
+	require.Equal(t, pqcHybridRequiredBody, body)
+	code, body = signedRequest{agentID: suspended.ID, alg: pqc.AlgorithmHybridEd25519MLDSA65, signer: registered}.do(t, app)
+	require.Equal(t, fiber.StatusUnauthorized, code, body)
+	require.Equal(t, statusDeniedBody("suspended"), body)
+}
+
+// The Ed25519-only middleware cannot verify the ML-DSA half, so it admits no hybrid-mode
+// agent.
+func TestEd25519AgentMiddleware_RefusesAHybridModeAgent(t *testing.T) {
+	registered := newAgentKeys(t)
+	hybrid := registeredAgent(domain.AgentStatusVerified, registered)
+	hybrid.HybridModeEnabled = true
+	app := newKeyRefusalApp(Ed25519AgentMiddleware, hybrid)
+
+	code, body := signedRequest{agentID: hybrid.ID, alg: pqc.AlgorithmEd25519, signer: registered}.do(t, app)
+	require.Equal(t, fiber.StatusUnauthorized, code, body)
+	require.Equal(t, ed25519HybridRequiredBody, body)
+}
+
 // Sanity for the helpers: a request signed by the registered keys verifies on every
 // branch, so a refusal above is never the harness's own mistake.
 func TestAgentKeyRefusalHarness_SignsWhatTheMiddlewareVerifies(t *testing.T) {

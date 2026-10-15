@@ -408,12 +408,11 @@ func newS1Fixture(t *testing.T) *s1Fixture {
 func (f *s1Fixture) agent() *domain.Agent {
 	edKey, mlKey := f.edKey, f.mlKey
 	return &domain.Agent{
-		ID:                f.agentID,
-		OrganizationID:    uuid.New(),
-		Status:            domain.AgentStatusVerified,
-		PublicKey:         &edKey,
-		PQCPublicKey:      &mlKey,
-		HybridModeEnabled: true,
+		ID:             f.agentID,
+		OrganizationID: uuid.New(),
+		Status:         domain.AgentStatusVerified,
+		PublicKey:      &edKey,
+		PQCPublicKey:   &mlKey,
 	}
 }
 
@@ -513,6 +512,9 @@ func s1Cases() []s1Case {
 		{name: "ed25519: agent is revoked", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonAgentStatusDenied,
 			message: "Agent is not permitted to authenticate (status: revoked)",
 			change:  func(f F, h H, a A) { a.Status = domain.AgentStatusRevoked }},
+		{name: "ed25519: agent is in hybrid mode", fn: s1FnEd25519Middleware, reason: metrics.S1ReasonHybridRequired,
+			message: "Agent is in hybrid mode and this route verifies an Ed25519 signature alone",
+			change:  func(f F, h H, a A) { a.HybridModeEnabled = true }},
 
 		// --- PQCAgentMiddleware -------------------------------------------
 		{name: "pqc: algorithm is not supported", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonUnsupportedAlgorithm,
@@ -533,6 +535,10 @@ func s1Cases() []s1Case {
 		{name: "pqc: agent is suspended", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonAgentStatusDenied,
 			message: "Agent is not permitted to authenticate (status: suspended)",
 			change:  func(f F, h H, a A) { a.Status = domain.AgentStatusSuspended }},
+		{name: "pqc: agent in hybrid mode signs with ed25519 alone", fn: s1FnPQCMiddleware, reason: metrics.S1ReasonHybridRequired,
+			message: "Agent is in hybrid mode: sign the request with both Ed25519 and ML-DSA " +
+				"(X-Algorithm Ed25519+ML-DSA-44, Ed25519+ML-DSA-65 or Ed25519+ML-DSA-87)",
+			change: func(f F, h H, a A) { a.HybridModeEnabled = true }},
 
 		// --- readEd25519Signature (PQC middleware, Ed25519 algorithm) ------
 		{name: "pqc ed25519: signature header is absent", fn: s1FnReadEd25519, reason: metrics.S1ReasonMissingSignatureHeaders,
@@ -819,6 +825,8 @@ func TestS1Refusal_AcceptedAndUnsignedRequestsAreNotCounted(t *testing.T) {
 		{"pqc middleware, correctly signed with ed25519", s1Case{fn: s1FnReadEd25519}},
 		{"pqc middleware, correctly signed with ml-dsa", s1Case{fn: s1FnReadMLDSA}},
 		{"pqc middleware, correctly signed with hybrid", s1Case{fn: s1FnReadHybrid}},
+		{"pqc middleware, hybrid-mode agent, correctly signed with hybrid", s1Case{fn: s1FnReadHybrid,
+			change: func(f *s1Fixture, h map[string]string, a *domain.Agent) { a.HybridModeEnabled = true }}},
 		{"ed25519 middleware, no signature headers", s1Case{fn: s1FnEd25519Middleware,
 			change: func(f *s1Fixture, h map[string]string, a *domain.Agent) { delete(h, "X-Signature") }}},
 		{"pqc middleware, no agent id", s1Case{fn: s1FnPQCMiddleware,
