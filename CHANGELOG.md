@@ -2910,12 +2910,10 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 
 ### Fixed — No tracked file carries a home directory path from the machine that built or wrote it
 
-- Six backend executables were tracked in the repository: macOS builds from a developer machine, 13 to 25 MB each,
-  that embedded that machine's home directory paths (its Go module cache and its checkout). Nothing used them; the
-  backend image builds `cmd/server` from source. They are removed, and `.gitignore` names the local build outputs
-  (`apps/backend/server`, `main`, `bin/` and `cmd/server/server`) beside the existing `aim-server` entry. The two
-  instructions that ran the tracked `./server`, in `sdk/python/tests/README.md` and the LangChain CRUD example, now
-  say `go run ./cmd/server`.
+- The six backend executables whose removal is described under "Removed — the source tree no longer carries
+  prebuilt server binaries" embedded the home directory paths of the machine that built them (its Go module cache
+  and its checkout). The two instructions that ran the tracked `./server`, in `sdk/python/tests/README.md` and the
+  LangChain CRUD example, now say `go run ./cmd/server`.
 - The demo census (`docs/demo/lib/census.mjs`) assembles its local-path canary at run time, so the script holds no
   home directory path of its own. Its positive control still reports all nine classes.
 - One negative assertion in an SDK doc test builds its pattern with `new RegExp` so its own source no longer matches
@@ -3047,9 +3045,12 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - `sdk/java/pom.xml` and `examples/a2a-multi-agent-demo/java/pom.xml` set `jackson.version` to 2.18.11; platform 1.0.0
   pinned 2.16.1 in both. The property sets `jackson-databind` and `jackson-datatype-jsr310`, and `jackson-core` and
   `jackson-annotations` resolve to the same version. 2.18.11 is the first 2.18.x release outside four high-severity
-  advisories published on 2026-09-22, each of which covers every 2.18.x release through 2.18.10: `jackson-databind`
+  advisories, each of which covers every 2.18.x release through 2.18.10: `jackson-databind`
   GHSA-wv8q-qhhj-9h54 (CVE-2026-91776) and GHSA-cxp5-3px4-pw24 (CVE-2026-91777), and `jackson-core`
   GHSA-7hhh-6rmp-j9qf (CVE-2026-89425) and GHSA-p6pp-m3f8-5c89 (CVE-2026-89407). (#560)
+- GitHub published the two `jackson-databind` advisories on 2026-09-30 and the two `jackson-core` advisories on
+  2026-10-01. The CVE records were published on 2026-09-22 (CVE-2026-89407) and 2026-09-23 (the other three).
+  Dates are UTC.
 - As of 2026-10-05 no published advisory for `jackson-databind`, `jackson-core`, `jackson-annotations` or
   `jackson-modules-java8` includes 2.18.11 in its vulnerable range. The Java SDK is built from source: rebuild it, and
   the example, to pick up the new version.
@@ -3075,10 +3076,10 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 
 ### Removed — the source tree no longer carries prebuilt server binaries
 
-- Five macOS x86_64 executables built on developer machines were tracked under `apps/backend`: `aim-server`,
-  `bin/aim-backend`, `bin/server`, `main` and `server`, 108.5 MB together. Nothing used them: the container image
-  builds the server from source. They are removed (history is left as is), and ignore rules keep a local
-  `go build -o` to those paths out of `git status`.
+- Six macOS x86_64 executables built on developer machines were tracked under `apps/backend`: `aim-server`,
+  `bin/aim-backend`, `bin/server`, `cmd/server/server`, `main` and `server`, 13.1 to 25.0 MB each and 129.2 MB
+  together. Nothing used them: the container image builds the server from source. They are removed (history is
+  left as is), and ignore rules keep a local `go build` or `go build -o` to those paths out of `git status`.
 - A test in `apps/backend/cmd/server` reads every blob of the commit under test, not the working tree, and fails if
   one is a compiled executable, object or library (Mach-O, ELF, PE, ar, WebAssembly or Java class) or has the
   executable bit without a `#!` line. A PE file must carry its `PE\0\0` header; a file that only starts with `MZ` is
@@ -3086,6 +3087,8 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
   instead of skipping. A second test plants one file of each kind in a scratch repository, commits them, deletes one
   from the working tree and checks that the census reports exactly those. The ignore check covers all six former
   binary paths, `cmd/server/server` included.
+- `TestTheLocallyBuiltServerBinaryIsNeitherTrackedNorStageable`, also in `apps/backend/cmd/server`, fails if a
+  compiled `server` is tracked in that directory again or no ignore rule covers it.
 
 ### Fixed — password reset tokens are stored as a SHA-256 digest
 
@@ -3129,13 +3132,6 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 - `scripts/lint-docs-sample-addresses.sh` fails if a Markdown page under `docs/` carries an email address outside
   the reserved example domains, the project's own domain and the generic placeholders the guides already use, and
   names each one with its file and line. `scripts/test-lint-docs-sample-addresses.sh` tests it.
-
-### Removed — a prebuilt server binary is no longer part of the source tree
-
-- `apps/backend/cmd/server/server`, a 20.7 MB macOS x86_64 executable built on a developer machine, was tracked in
-  the repository. Nothing used it: the container image builds the server from source. It is removed, and an ignore
-  rule keeps the output of `go build` in that directory out of `git status`.
-- A test in `apps/backend/cmd/server` fails if a compiled `server` is tracked there again or the ignore rule goes.
 
 ### Changed — the developer compose stack passes `DEFAULT_ADMIN_PASSWORD` only to a one-shot bootstrap run
 
