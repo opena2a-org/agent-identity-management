@@ -382,8 +382,10 @@ Framework integration guides:
 - `pynacl` (Ed25519)
 - `cryptography` (TLS, secure storage)
 - `keyring` (OS keychain for OAuth tokens)
+- `PyJWT` (JWT parsing)
+- `rich` (optional: formats the console output)
 
-All install via `pip install aim-sdk`.
+`pip install aim-sdk`, the SDK's install line, installs all but `rich`, which the Quick start adds with the `[rich]` extra.
 
 ## Versioning
 

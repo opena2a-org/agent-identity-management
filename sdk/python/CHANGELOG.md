@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the README's Requirements name PyJWT and the optional rich extra (#627)
+
+- The Requirements section of `README.md` (the PyPI description) listed `requests`, `pynacl`, `cryptography` and
+  `keyring`, and said all install via `pip install aim-sdk`. It now also names `PyJWT`, which setup.py's
+  `install_requires` declares, and `rich`, marked optional, which the Quick start's `"aim-sdk[rich]"` installs and
+  `pip install aim-sdk` does not.
+- `pip install aim-sdk` stays the SDK's install line. The Quick start keeps `"aim-sdk[rich]"` for compact console
+  output, as its install sentence says.
+- Test: `tests/test_sdk_install_line.py` holds the Requirements to setup.py, and holds the root README's SDKs table,
+  `docs/use-cases/register-my-agent.md`, `docs/sdk/python.md`, the Requirements and the dashboard's SDK page to
+  `pip install aim-sdk`.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`
