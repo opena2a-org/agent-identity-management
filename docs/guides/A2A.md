@@ -228,7 +228,63 @@ for i in range(1, 5):
 
 ### Delegation Trust Attenuation
 
-Trust decays along a delegation chain only where the TypeScript SDK's `verifyDelegationChain()` checks the chain. The AIM server does not apply attenuation: it stores a trust attenuation factor (default 0.8) and a minimum delegated trust score (default 0.3) for each delegation in its `a2a_delegation` table, and no server code reads them. Neither the Python SDK nor the Java SDK applies attenuation.
+The AIM server applies trust attenuation when it verifies a chain of the delegations it stores. A delegation is a grant from one of an organization's agents, the delegator, to another, the delegate. The server keeps each one in its `a2a_delegation` table with a trust attenuation factor (default 0.8) and a minimum delegated trust score (default 0.3), and a chain verification reads both from every delegation in the chain. The TypeScript SDK's `verifyDelegationChain()` attenuates trust along a chain of SDK delegations, which the server does not store. Neither the Python SDK nor the Java SDK applies attenuation.
+
+#### Granting a delegation
+
+A manager or admin of the organization grants a delegation with `POST /api/v1/a2a/delegations`:
+
+```bash
+curl -X POST https://aim.example.com/api/v1/a2a/delegations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delegatorAgentId": "AGENT_A_ID",
+    "delegateAgentId": "AGENT_B_ID",
+    "trustAttenuationFactor": 0.8,
+    "minDelegatedTrustScore": 0.3,
+    "maxChainDepth": 3,
+    "canDelegateFurther": true,
+    "skillIds": ["search"]
+  }'
+```
+
+- `delegatorAgentId` and `delegateAgentId` are required and name two different agents of the caller's organization. An agent of another organization is answered 404.
+- `trustAttenuationFactor` (default 0.8) and `minDelegatedTrustScore` (default 0.3) are numbers from 0 to 1.
+- `maxChainDepth` (default 3) is from 1 to 10.
+- `canDelegateFurther` (default false) lets the delegate be the delegator of the next delegation in a chain.
+- `skillIds` (default empty, which covers every skill) names at most 100 skills.
+- `validUntil` (optional) is a time in the future. A delegation is valid from the time it is granted.
+
+The answer is 201 with the delegation, 400 with the reason a field is refused, or 409 when the two agents already have an active delegation. `GET /api/v1/a2a/delegations` lists the organization's delegations, newest first (`limit` default 50, at most 100, and `offset`), and `GET /api/v1/a2a/delegations/{id}` returns one. A manager or admin revokes a delegation with `POST /api/v1/a2a/delegations/{id}/revoke`; a chain that holds it no longer verifies, and the two agents can be granted a new one. Each grant and each revoke is recorded in the audit log; a record that cannot be written is logged by the server and does not undo the grant or the revoke.
+
+#### Verifying a chain
+
+`POST /api/v1/a2a/delegations/verify` takes the chain's delegation IDs in order, the root delegation first, from 1 to 10 of them with none repeated, and optionally the skill the chain is used for. The route has no role check beyond the authentication that every A2A route applies.
+
+```bash
+curl -X POST https://aim.example.com/api/v1/a2a/delegations/verify \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"delegationIds": ["DELEGATION_1_ID", "DELEGATION_2_ID", "DELEGATION_3_ID"], "skillId": "search"}'
+```
+
+The trust starts at the trust score of the root delegator, the first delegation's delegator. Every delegation, the first one included, multiplies it by its own trust attenuation factor, and the result is rounded to six decimal places. A delegation's trust floor is the highest minimum delegated trust score of that delegation and the ones before it, so a later delegation cannot lower a floor an earlier one set. A delegation whose effective trust is below its trust floor fails. With a root delegator whose trust score is 0.9 and three delegations at the defaults:
+
+```
+agent A          trustScore 0.9
+  delegation 1   effectiveTrust 0.72      # 0.9 × 0.8
+  delegation 2   effectiveTrust 0.576     # 0.72 × 0.8
+  delegation 3   effectiveTrust 0.4608    # 0.576 × 0.8
+```
+
+With a root delegator whose trust score is 0.5, delegation 3's effective trust is 0.256, below the 0.3 floor, and the chain is not valid.
+
+A delegation also fails when it is revoked, when the time is before it was granted or at or after its `validUntil`, when its delegator is not the previous delegation's delegate, when the previous delegation does not set `canDelegateFurther`, when the chain holds more delegations, counted from it or from an earlier delegation, than that delegation's `maxChainDepth`, when either of its agents has a status other than verified or pending, or when `skillId` is given and the delegation's `skillIds` is not empty and does not contain it.
+
+The answer is 200 with `valid`, `rootAgentId`, `rootTrustScore`, `effectiveTrust` (the last delegation's), `skillId` when one was given, and `hops`, which gives for each delegation its `index`, `delegationId`, `delegatorAgentId`, `delegateAgentId`, `trustAttenuationFactor`, `trustFloor`, `effectiveTrust` and, when it fails, the `error`. A request that names a delegation the organization does not hold is answered 404 with that `delegationId`. The verification does not read `requiresConsent`, which a delegation is stored with (default true), and no other server check reads a chain's effective trust.
+
+#### TypeScript SDK
 
 `verifyDelegationChain()` takes two optional settings from its caller, the verifier, in its options:
 - `trustAttenuation` (default 0.8): the factor that turns one delegation's trust into the next one's

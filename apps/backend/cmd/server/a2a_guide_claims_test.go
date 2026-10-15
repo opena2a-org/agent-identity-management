@@ -14,9 +14,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
 var (
@@ -30,6 +35,11 @@ var (
 	// attenuationDiagramLine captures the label and the figure of one line of
 	// the guide's attenuation diagram: "subdelegation-1  effectiveTrust 0.8".
 	attenuationDiagramLine = regexp.MustCompile(`(?m)^\s*(root|subdelegation-\d+)\s+effectiveTrust (\d+(?:\.\d+)?)`)
+	// serverDiagramRoot and serverDiagramLine capture the root delegator's trust
+	// score and each delegation's figure in the guide's diagram of a server
+	// chain verification: "delegation 1   effectiveTrust 0.72".
+	serverDiagramRoot = regexp.MustCompile(`(?m)^agent A\s+trustScore (\d+(?:\.\d+)?)$`)
+	serverDiagramLine = regexp.MustCompile(`(?m)^\s+delegation (\d+)\s+effectiveTrust (\d+(?:\.\d+)?)`)
 
 	tsRootTrustDefault   = regexp.MustCompile(`let effectiveTrust = options\?\.rootTrustScore \?\? (\d+(?:\.\d+)?);`)
 	tsAttenuationDefault = regexp.MustCompile(`const attenuation = options\?\.trustAttenuation \?\? (\d+(?:\.\d+)?);`)
@@ -267,31 +277,89 @@ func TestA2AGuideAttestationIsAnExplicitCall(t *testing.T) {
 
 // TestA2AGuideDelegationAttenuationNamesWhereItApplies pins what
 // docs/guides/A2A.md says about delegation trust attenuation to the code that
-// applies it. The guide said each delegation's trustAttenuationFactor and
-// minDelegatedTrustScore, the server's field names, decay trust per hop and
-// reject a chain below the floor, so that a deeply delegated agent cannot
-// execute high-risk capabilities. No server code reads either field; only the
-// TypeScript SDK's verifyDelegationChain() attenuates, under other field names,
-// and its first delegation keeps the root trust. It takes the factor and the
-// floor from the verifier's options and never from a delegation, whose fields
-// of those names are outside its signature, and it refuses a chain that
-// carries one of them when the verifier left the matching option unset. A
-// server change that starts reading the fields fails here until the guide says
-// what it does.
+// applies it. The server applies each stored delegation's
+// trustAttenuationFactor and minDelegatedTrustScore when it verifies a chain
+// (POST /api/v1/a2a/delegations/verify); the fields are read by that
+// verification and by the repository, service and handler that store, default
+// and audit them, and by no other server code. The TypeScript SDK's
+// verifyDelegationChain() attenuates a chain of SDK delegations under other
+// field names, and its first delegation keeps the root trust. It takes the
+// factor and the floor from the verifier's options and never from a
+// delegation, whose fields of those names are outside its signature, and it
+// refuses a chain that carries one of them when the verifier left the
+// matching option unset. A server change that reads the fields anywhere else
+// fails here until the guide says what it does.
 func TestA2AGuideDelegationAttenuationNamesWhereItApplies(t *testing.T) {
 	requirePublicRepositoryFiles(t)
 
 	guide := aim03ReadRepoFile(t, "docs/guides/A2A.md")
 	section := guideSubsection(t, guide, "### Delegation Trust Attenuation")
 
-	assert.Empty(t, backendDelegationTrustReaders(t),
-		"the backend now reads a delegation's attenuation fields; say what it does in the guide's Delegation Trust Attenuation section")
-	srcContains(t, section, "The AIM server does not apply attenuation", "the guide says the server does not attenuate")
-	srcContains(t, section, "and no server code reads them", "the guide says the stored values are not read")
-	srcNotContains(t, section, "trustAttenuationFactor", "the guide must not name the server's unread field as the one applied")
-	srcNotContains(t, section, "minDelegatedTrustScore", "the guide must not name the server's unread field as the one applied")
+	repoRoot := aim03RepoRoot(t)
+	readerFiles := map[string]bool{}
+	for _, use := range backendDelegationTrustReaders(t) {
+		rel, err := filepath.Rel(repoRoot, use[:strings.Index(use, ".go:")+len(".go")])
+		require.NoError(t, err)
+		readerFiles[filepath.ToSlash(rel)] = true
+	}
+	assert.Equal(t, map[string]bool{
+		"apps/backend/internal/domain/a2a_delegation_chain.go":                         true,
+		"apps/backend/internal/application/a2a_delegation_service.go":                  true,
+		"apps/backend/internal/infrastructure/repository/a2a_delegation_repository.go": true,
+		"apps/backend/internal/interfaces/http/handlers/a2a_delegation_handler.go":     true,
+	}, readerFiles, "the backend reads a delegation's attenuation fields somewhere new; say what it does in the guide's Delegation Trust Attenuation section")
+	srcContains(t, section, "The AIM server applies trust attenuation when it verifies a chain of the delegations it stores",
+		"the guide says the server attenuates")
+	srcContains(t, section, "a chain verification reads both from every delegation in the chain", "the guide says the stored values are read")
+	srcContains(t, section, "`POST /api/v1/a2a/delegations/verify`", "the guide names the verification route")
+	srcContains(t, section, "`POST /api/v1/a2a/delegations`:", "the guide names the grant route")
+	srcContains(t, section, "A manager or admin of the organization grants a delegation", "the grant route is manager-gated")
+	srcContains(t, section, "Every delegation, the first one included, multiplies it by its own trust attenuation factor",
+		"the guide says every server delegation attenuates")
+	srcContains(t, section, "so a later delegation cannot lower a floor an earlier one set", "the guide says the floor carries forward")
+	srcContains(t, section, "the result is rounded to six decimal places", "the guide says the trust is rounded")
+	srcContains(t, section, fmt.Sprintf("`trustAttenuationFactor` (default %s) and `minDelegatedTrustScore` (default %s) are numbers from 0 to 1",
+		strconv.FormatFloat(domain.DefaultA2ADelegationTrustAttenuationFactor, 'f', -1, 64),
+		strconv.FormatFloat(domain.DefaultA2ADelegationMinTrustScore, 'f', -1, 64)),
+		"the guide gives the server's defaults")
+	srcContains(t, section, fmt.Sprintf("`maxChainDepth` (default %d) is from 1 to %d",
+		domain.DefaultA2ADelegationMaxChainDepth, domain.MaxA2ADelegationChainLength), "the guide gives the depth's default and range")
+	srcContains(t, section, fmt.Sprintf("from 1 to %d of them with none repeated", domain.MaxA2ADelegationChainLength),
+		"the guide gives the chain's length limit")
+	srcContains(t, section, fmt.Sprintf("names at most %d skills", application.MaxA2ADelegationSkills), "the guide gives the skill limit")
 	srcNotContains(t, section, "Combined with per-capability trust thresholds",
 		"the server does not weigh delegated trust in capability checks")
+	srcContains(t, section, "no other server check reads a chain's effective trust", "the guide says the verdict is not used elsewhere")
+
+	// The server diagram's figures are the ones VerifyA2ADelegationChain
+	// reports for that root trust score and delegations at the defaults.
+	serverRoot, err := strconv.ParseFloat(submatch(t, serverDiagramRoot, section, "the server diagram's root trust score"), 64)
+	require.NoError(t, err)
+	serverLines := serverDiagramLine.FindAllStringSubmatch(section, -1)
+	require.GreaterOrEqual(t, len(serverLines), 3, "the guide shows the server's trust at three or more delegations")
+	chain := make([]*domain.A2ADelegation, len(serverLines))
+	agents := map[uuid.UUID]*domain.Agent{}
+	agentIDs := make([]uuid.UUID, len(serverLines)+1)
+	for i := range agentIDs {
+		agentIDs[i] = uuid.New()
+		agents[agentIDs[i]] = &domain.Agent{ID: agentIDs[i], Status: domain.AgentStatusVerified}
+	}
+	agents[agentIDs[0]].TrustScore = serverRoot
+	for i := range chain {
+		chain[i] = &domain.A2ADelegation{
+			DelegatorAgentID: agentIDs[i], DelegateAgentID: agentIDs[i+1],
+			MaxChainDepth:          domain.MaxA2ADelegationChainLength,
+			TrustAttenuationFactor: domain.DefaultA2ADelegationTrustAttenuationFactor,
+			MinDelegatedTrustScore: domain.DefaultA2ADelegationMinTrustScore,
+			CanDelegateFurther:     true, IsActive: true,
+		}
+	}
+	verdict := domain.VerifyA2ADelegationChain(chain, agents, "", time.Now())
+	for i, m := range serverLines {
+		assert.Equal(t, strconv.Itoa(i+1), m[1], "server diagram line %d", i)
+		assert.Equal(t, strconv.FormatFloat(verdict.Hops[i].EffectiveTrust, 'f', -1, 64), m[2],
+			"server diagram line %d; VerifyA2ADelegationChain reports %v", i, verdict.Hops[i].EffectiveTrust)
+	}
 
 	migration := aim03ReadRepoFile(t, "apps/backend/migrations/077_add_trust_attenuation_to_a2a_delegation.sql")
 	columns := regexp.MustCompile(`(?i)\b(trust_attenuation_factor|min_delegated_trust_score)\b`)

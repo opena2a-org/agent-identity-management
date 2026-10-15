@@ -292,6 +292,10 @@ var admittedStatusReads = map[string]struct {
 		1, "after ed25519.Verify in the same function, before the grant read and the nonce write; " +
 			"the agent row, which holds the public key the signature is checked with, is read " +
 			"before the verify and not through Keys and LoadVerifiedAgent"},
+	"domain/a2a_delegation_chain.go#delegationHopError": {
+		1, "not an authentication: the caller is authenticated before the route, the chain's agents are " +
+			"read in the caller's organization, and an agent whose status would refuse its own sign-in " +
+			"fails the delegation that names it"},
 }
 
 func TestAgentStatusReadCensus(t *testing.T) {
