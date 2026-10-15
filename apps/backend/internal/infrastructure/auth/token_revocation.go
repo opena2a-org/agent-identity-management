@@ -13,12 +13,14 @@ const (
 	// when a rotated-out member is presented again, or on logout.
 	revokedFamilyKeyPrefix = "revoked:fam:"
 	// negCacheTTL bounds how long a "not revoked" result is cached in-process.
-	// It also bounds cross-instance revocation lag (a token revoked on another
-	// instance is honored within this window) and the blast radius of a store
-	// outage (cached tokens are served without touching the store). The cache
-	// serves the request middleware only; the refresh route reads uncached
-	// (CheckJTI, CheckFamily), because every refresh token is presented once
-	// and a stale "not revoked" entry there would serve a replay.
+	// It also bounds cross-instance revocation lag (a token or a token family
+	// revoked on another instance is honored within this window) and the
+	// blast radius of a store outage (cached tokens are served without
+	// touching the store). The instance that writes a revocation drops its
+	// own cached answers for it at once. The cache serves the request
+	// middleware only; the refresh route reads uncached (CheckJTI,
+	// CheckFamily), because every refresh token is presented once and a stale
+	// "not revoked" entry there would serve a replay.
 	negCacheTTL    = 30 * time.Second
 	negCacheMaxLen = 50000
 )
@@ -39,14 +41,28 @@ type RevocationStoreNX interface {
 	SetWithNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error)
 }
 
-// TokenRevoker maintains a jti denylist in a shared store (Redis) with a small
-// in-process negative cache. On a store error it fails CLOSED by default
-// (treats the token as revoked) unless failOpen is set.
+// TokenRevoker maintains a jti denylist and a token-family denylist in a
+// shared store (Redis) with a small in-process negative cache. On a store
+// error it fails CLOSED by default (treats the token as revoked) unless
+// failOpen is set.
 type TokenRevoker struct {
 	store    RevocationStore
 	failOpen bool
+	now      func() time.Time
 	mu       sync.Mutex
-	negCache map[string]time.Time // jti -> "known not revoked until"
+	negCache map[string]negEntry // jti -> "known not revoked until", and the family checked
+	// familyRevocations counts the family revocations written through this
+	// revoker. A check whose store reads began before one of them does not
+	// cache its answer: the revocation's eviction has already run.
+	familyRevocations uint64
+}
+
+// negEntry is one cached "not revoked" answer: the token family it was
+// checked with ("" when only the jti was read) and when it lapses. A jti
+// belongs to one family, because the family (sid) is signed into the token.
+type negEntry struct {
+	family string
+	until  time.Time
 }
 
 // NewTokenRevoker builds a revoker over the given store. failOpen=false means a
@@ -55,24 +71,46 @@ func NewTokenRevoker(store RevocationStore, failOpen bool) *TokenRevoker {
 	return &TokenRevoker{
 		store:    store,
 		failOpen: failOpen,
-		negCache: make(map[string]time.Time),
+		now:      time.Now,
+		negCache: make(map[string]negEntry),
 	}
+}
+
+// clock is the revoker's time source: time.Now unless a test set another.
+func (r *TokenRevoker) clock() time.Time {
+	if r.now == nil {
+		return time.Now()
+	}
+	return r.now()
 }
 
 // IsRevoked reports whether the given jti has been revoked. nil receiver or no
 // store means revocation is disabled (returns false) — absence of a store must
 // not lock everyone out. On a store error the result is !failOpen.
 func (r *TokenRevoker) IsRevoked(ctx context.Context, jti string) bool {
+	return r.IsSessionRevoked(ctx, jti, "")
+}
+
+// IsSessionRevoked reports whether an access token is revoked by its own jti
+// or through the token family (session) it belongs to; an empty family checks
+// the jti only. A cached "not revoked" answer is served when it was checked
+// with the same family, or with any when the caller names none. Otherwise the
+// jti key is read and then, only for a token with a family, the family key,
+// and a "not revoked" answer is cached for negCacheTTL. nil receiver or no
+// store means revocation is disabled (returns false). On a store error on
+// either read the result is !failOpen and nothing is cached.
+func (r *TokenRevoker) IsSessionRevoked(ctx context.Context, jti, family string) bool {
 	if r == nil || r.store == nil || jti == "" {
 		return false
 	}
 
-	now := time.Now()
+	now := r.clock()
 	r.mu.Lock()
-	if exp, ok := r.negCache[jti]; ok && now.Before(exp) {
+	if e, ok := r.negCache[jti]; ok && now.Before(e.until) && (family == "" || e.family == family) {
 		r.mu.Unlock()
 		return false
 	}
+	revocations := r.familyRevocations
 	r.mu.Unlock()
 
 	exists, err := r.store.Exists(ctx, revokedKeyPrefix+jti)
@@ -83,11 +121,27 @@ func (r *TokenRevoker) IsRevoked(ctx context.Context, jti string) bool {
 	if exists {
 		return true
 	}
+	if family != "" {
+		exists, err = r.store.Exists(ctx, revokedFamilyKeyPrefix+family)
+		if err != nil {
+			return !r.failOpen
+		}
+		if exists {
+			return true
+		}
+	}
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	// A family revocation written here while the store was being read may
+	// have landed after the read, and its eviction has already run: caching
+	// this answer would serve the revoked session until the entry lapses.
+	if family != "" && r.familyRevocations != revocations {
+		return false
+	}
 	if len(r.negCache) >= negCacheMaxLen {
 		for k, e := range r.negCache {
-			if now.After(e) {
+			if now.After(e.until) {
 				delete(r.negCache, k)
 			}
 		}
@@ -96,9 +150,8 @@ func (r *TokenRevoker) IsRevoked(ctx context.Context, jti string) bool {
 	// skip caching this jti rather than growing unbounded. Correctness is
 	// preserved — uncached jtis just consult the store each time.
 	if len(r.negCache) < negCacheMaxLen {
-		r.negCache[jti] = now.Add(negCacheTTL)
+		r.negCache[jti] = negEntry{family: family, until: now.Add(negCacheTTL)}
 	}
-	r.mu.Unlock()
 	return false
 }
 
@@ -135,13 +188,31 @@ func (r *TokenRevoker) CheckFamily(ctx context.Context, family string) (revoked,
 	return r.lookup(ctx, revokedFamilyKeyPrefix+family)
 }
 
-// RevokeFamily denylists a token family until ttl elapses. A nil
+// RevokeFamily denylists a token family until ttl elapses, then drops every
+// cached "not revoked" answer this revoker holds for a member of the family
+// (whether or not the store reported the write), so the family is refused
+// here at once and on another instance within negCacheTTL. A nil
 // receiver/store, an empty id or a non-positive ttl is a no-op.
 func (r *TokenRevoker) RevokeFamily(ctx context.Context, family string, ttl time.Duration) error {
 	if r == nil || r.store == nil || family == "" || ttl <= 0 {
 		return nil
 	}
-	return r.store.Set(ctx, revokedFamilyKeyPrefix+family, legacyRevokedValue, ttl)
+	err := r.store.Set(ctx, revokedFamilyKeyPrefix+family, legacyRevokedValue, ttl)
+	r.forgetFamily(family)
+	return err
+}
+
+// forgetFamily drops the cached answers checked with family: one pass over
+// the cache, bounded by negCacheMaxLen, under the cache's lock.
+func (r *TokenRevoker) forgetFamily(family string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.familyRevocations++
+	for jti, e := range r.negCache {
+		if e.family == family {
+			delete(r.negCache, jti)
+		}
+	}
 }
 
 // Retire denylists a jti as Revoke does and says whether this call was the

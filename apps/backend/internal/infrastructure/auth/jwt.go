@@ -183,6 +183,14 @@ func (s *JWTService) IsRevoked(ctx context.Context, jti string) bool {
 	return s.revoker.IsRevoked(ctx, jti)
 }
 
+// IsSessionRevoked reports whether an access token has been revoked, by its
+// own id or through the session (token family) it belongs to: family is the
+// token's AccessFamilyID, and "" checks the id only. Read through the
+// revoker's negative cache, like IsRevoked; the request middleware calls it.
+func (s *JWTService) IsSessionRevoked(ctx context.Context, jti, family string) bool {
+	return s.revoker.IsSessionRevoked(ctx, jti, family)
+}
+
 // CheckRevoked reports whether the jti is denylisted, and whether the store
 // actually answered. Unlike IsRevoked it never serves the in-process cache;
 // the refresh route reads through it. With no revoker nothing is known.
@@ -197,9 +205,10 @@ func (s *JWTService) CheckFamilyRevoked(ctx context.Context, family string) (rev
 }
 
 // RevokeFamily ends the token family the given refresh token (login or
-// SDK-download) belongs to, for the longer of the configured refresh lifetime
-// and the token's own lifetime, plus a minute: every member minted before the write expires
-// within that, and one minted by a refresh in flight is covered by the
+// SDK-download) belongs to, for the longest of the configured refresh
+// lifetime, the configured access lifetime and the token's own lifetime, plus
+// a minute: every member minted before the write, access tokens included,
+// expires within that, and one minted by a refresh in flight is covered by the
 // slack. Reports true only when the key was written; a missing revoker or a
 // token with no family is a no-op reported as false with no error.
 func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool, error) {
@@ -215,17 +224,22 @@ func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool,
 
 // RevokeFamilyFor ends the token family named by family, whose longest-lived
 // member was minted for lifetime, under the same rule as RevokeFamily: the key
-// lasts for the longer of the configured refresh lifetime and lifetime, plus a
-// minute. It is the entry point for a caller that holds a family's id and
-// lifetime from a stored row rather than from a presented token (the
-// dashboard's SDK token revoke). Reports true only when the key was written;
-// a missing revoker or an empty family is a no-op reported as false with no
-// error.
+// lasts for the longest of the configured refresh lifetime, the configured
+// access lifetime and lifetime, plus a minute. The access lifetime is in the
+// rule because the request middleware refuses a family's access tokens only
+// while the key exists. It is the entry point for a caller that holds a
+// family's id and lifetime from a stored row rather than from a presented
+// token (the dashboard's SDK token revoke). Reports true only when the key
+// was written; a missing revoker or an empty family is a no-op reported as
+// false with no error.
 func (s *JWTService) RevokeFamilyFor(ctx context.Context, family string, lifetime time.Duration) (bool, error) {
 	if s == nil || s.revoker == nil || family == "" {
 		return false, nil
 	}
 	ttl := s.refreshExpiry
+	if s.accessExpiry > ttl {
+		ttl = s.accessExpiry
+	}
 	if lifetime > ttl {
 		ttl = lifetime
 	}
