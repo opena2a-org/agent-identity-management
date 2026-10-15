@@ -129,7 +129,7 @@ function ResetPasswordPageContent() {
           </div>
           <div className="glass-chrome p-6 sm:p-8">
             <p className="text-sm font-bold text-ink">What to do</p>
-            <ul className="mt-2 space-y-1.5 text-xs text-ink-body">
+            <ul className="mt-2 space-y-1.5 text-sm text-ink-body">
               <li>Request a new link and open the most recent email.</li>
               <li>Use the link within 24 hours of receiving it.</li>
             </ul>
@@ -160,7 +160,7 @@ function ResetPasswordPageContent() {
             <p className="mt-1 text-sm text-ink-secondary">You can sign in with the new password now.</p>
           </div>
           <div className="glass-chrome p-6 text-center sm:p-8" role="status" aria-live="polite">
-            <p className="text-xs text-ink-secondary">Taking you to sign in in a few seconds.</p>
+            <p className="text-sm text-ink-secondary">Taking you to sign in in a few seconds.</p>
             <Link href="/auth/login" className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-pill bg-brand text-sm font-bold text-white shadow-glow hover:bg-brand-hover">
               Go to sign in now
             </Link>
@@ -179,7 +179,7 @@ function ResetPasswordPageContent() {
     hint?: string
   ) => (
     <div>
-      <label htmlFor={id} className="mb-1 block text-xs font-semibold text-ink-body">
+      <label htmlFor={id} className="mb-1 block text-sm font-semibold text-ink-body">
         {label}
       </label>
       <div className="relative">
@@ -196,17 +196,17 @@ function ResetPasswordPageContent() {
           aria-invalid={!!errors[id]}
           aria-describedby={errors[id] ? `${id}-error` : hint ? `${id}-hint` : undefined}
         />
-        <button type="button" onClick={toggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-tertiary hover:text-ink" aria-label={shown ? "Hide password" : "Show password"}>
+        <button type="button" onClick={toggle} className="absolute right-0 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center text-ink-tertiary hover:text-ink" aria-label={shown ? "Hide password" : "Show password"}>
           {shown ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
         </button>
       </div>
       {errors[id] ? (
-        <p id={`${id}-error`} className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+        <p id={`${id}-error`} className="mt-1 flex items-center gap-1 text-sm font-semibold text-danger-text">
           <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
           {errors[id]}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1 text-xs text-ink-tertiary">{hint}</p>
+        <p id={`${id}-hint`} className="mt-1 text-sm text-ink-tertiary">{hint}</p>
       ) : null}
     </div>
   );
@@ -231,7 +231,7 @@ function ResetPasswordPageContent() {
           </form>
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-ink-body">Passwords are stored as bcrypt hashes. This reset link expires 24 hours after it was sent and works once.</p>
+            <p className="text-sm leading-relaxed text-ink-body">Passwords are stored as bcrypt hashes. This reset link expires 24 hours after it was sent and works once.</p>
           </div>
         </div>
       </div>

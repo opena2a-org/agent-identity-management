@@ -154,7 +154,7 @@ export default function ChangePasswordPage() {
     autoComplete: string
   ) => (
     <div>
-      <label htmlFor={id} className="mb-1 block text-xs font-semibold text-ink-body">
+      <label htmlFor={id} className="mb-1 block text-sm font-semibold text-ink-body">
         {label}
       </label>
       <div className="relative">
@@ -175,7 +175,7 @@ export default function ChangePasswordPage() {
         </button>
       </div>
       {errors[id] && (
-        <p id={`${id}-error`} className="mt-1 flex items-center gap-1 text-xs font-semibold text-danger-text">
+        <p id={`${id}-error`} className="mt-1 flex items-center gap-1 text-sm font-semibold text-danger-text">
           <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
           {errors[id]}
         </p>
@@ -199,7 +199,7 @@ export default function ChangePasswordPage() {
             {field("currentPassword", "Current password", "Enter your current password", showCurrentPassword, () => setShowCurrentPassword((v) => !v), "current-password")}
             {field("newPassword", "New password", "Enter a new password", showNewPassword, () => setShowNewPassword((v) => !v), "new-password")}
             {formData.newPassword && passwordStrength && (
-              <ul className="rounded-inset bg-glass-inset-gray p-3 text-xs" aria-live="polite">
+              <ul className="rounded-inset bg-glass-inset-gray p-3 text-sm" aria-live="polite">
                 {passwordStrength.length === 0 ? (
                   <li className="flex items-center gap-1.5 font-semibold text-success-text">
                     <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -223,7 +223,7 @@ export default function ChangePasswordPage() {
 
           <div className="mt-5 flex gap-3 rounded-inset bg-brand-soft p-3.5">
             <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-brand-text" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-ink-body">
+            <p className="text-sm leading-relaxed text-ink-body">
               At least 8 characters with an uppercase letter, a lowercase letter, a number and a special character, and different from the current one.
             </p>
           </div>

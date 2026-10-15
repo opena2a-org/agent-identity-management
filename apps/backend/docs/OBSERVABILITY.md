@@ -147,7 +147,7 @@ The set is closed. `unclassified` exists only as a guard: the middleware never p
 
 `sdk` is `python`, `typescript` or `java` when the request's `User-Agent` starts with `AIM-Python-SDK/`, `AIM-SDK-TypeScript/` or `AIM-Java-SDK/`, and `other` for every other caller.
 
-**Log line**, on the backend's standard log: one `s1_refusals` line per 64-second period in which at least one request was refused, with one `reason.sdk=count` field per series. A period starts at the first refusal after the previous line, so nothing is written while nothing is refused. On shutdown the open period is written before the process exits.
+**Log line**, on the backend's standard log: one `s1_refusals` line per 64-second period in which at least one request was refused, with one `reason.sdk=count` field per series. A period starts at the first refusal after the previous line, so nothing is written while nothing is refused. On shutdown the open period is written before the process exits, and its `period_s` is the seconds since that period's first refusal, rounded up, at most 64.
 
 ```
 s1_refusals period_s=64 total=3 signature_invalid_ed25519.typescript=1 skew_past.python=2

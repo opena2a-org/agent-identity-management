@@ -34,9 +34,11 @@ func s1SeriesValue(t *testing.T, reason, sdk string) float64 {
 	return 0
 }
 
-// fakeS1Clock stands in for time.AfterFunc: it records each period timer the log
-// arms and lets the test end a period by firing one.
+// fakeS1Clock stands in for time.Now and time.AfterFunc: it records each period
+// timer the log arms and lets the test end a period by firing one, and its time
+// moves only when the test advances it.
 type fakeS1Clock struct {
+	at      time.Time
 	periods []time.Duration
 	timers  []func()
 	lines   []string
@@ -45,6 +47,7 @@ type fakeS1Clock struct {
 func (f *fakeS1Clock) log() *s1RefusalLog {
 	return newS1RefusalLog(
 		S1RefusalPeriod,
+		func() time.Time { return f.at },
 		func(d time.Duration, fire func()) {
 			f.periods = append(f.periods, d)
 			f.timers = append(f.timers, fire)
@@ -150,8 +153,9 @@ func TestS1RefusalLogFlushedPeriodTimerDoesNotCloseTheNextPeriod(t *testing.T) {
 	l := clock.log()
 
 	l.add(s1RefusalKey{S1ReasonSkewPast, "python"})
+	clock.at = clock.at.Add(3 * time.Second)
 	l.flush()
-	if !reflect.DeepEqual(clock.lines, []string{"s1_refusals period_s=64 total=1 skew_past.python=1"}) {
+	if !reflect.DeepEqual(clock.lines, []string{"s1_refusals period_s=3 total=1 skew_past.python=1"}) {
 		t.Fatalf("flush wrote %q", clock.lines)
 	}
 
@@ -167,6 +171,55 @@ func TestS1RefusalLogFlushedPeriodTimerDoesNotCloseTheNextPeriod(t *testing.T) {
 	}
 }
 
+// A flush on shutdown writes a period that ended early. Its period_s is the time
+// the period covered, in whole seconds rounded up, never the configured 64.
+func TestS1RefusalLogFlushedPeriodReportsTheSecondsItCovered(t *testing.T) {
+	tests := []struct {
+		name    string
+		elapsed time.Duration
+		want    string
+	}{
+		{"flushed in the same instant", 0, "period_s=0"},
+		{"flushed under a second later", 300 * time.Millisecond, "period_s=1"},
+		{"flushed on a whole second", 5 * time.Second, "period_s=5"},
+		{"flushed just after a whole second", 5*time.Second + time.Millisecond, "period_s=6"},
+		{"flushed one second before the timer", 63 * time.Second, "period_s=63"},
+		{"flushed after the timer was due", 70 * time.Second, "period_s=64"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clock := &fakeS1Clock{at: time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)}
+			l := clock.log()
+
+			l.add(s1RefusalKey{S1ReasonSkewPast, "python"})
+			clock.at = clock.at.Add(tt.elapsed)
+			l.flush()
+
+			want := "s1_refusals " + tt.want + " total=1 skew_past.python=1"
+			if !reflect.DeepEqual(clock.lines, []string{want}) {
+				t.Fatalf("flush %v after the period opened wrote %q, want [%q]", tt.elapsed, clock.lines, want)
+			}
+		})
+	}
+}
+
+// The period a flush reports starts at the period's first refusal, not at a later
+// refusal counted in the same period.
+func TestS1RefusalLogFlushedPeriodStartsAtItsFirstRefusal(t *testing.T) {
+	clock := &fakeS1Clock{}
+	l := clock.log()
+
+	l.add(s1RefusalKey{S1ReasonSkewPast, "python"})
+	clock.at = clock.at.Add(10 * time.Second)
+	l.add(s1RefusalKey{S1ReasonSkewPast, "python"})
+	clock.at = clock.at.Add(2 * time.Second)
+	l.flush()
+
+	if !reflect.DeepEqual(clock.lines, []string{"s1_refusals period_s=12 total=2 skew_past.python=2"}) {
+		t.Fatalf("flush wrote %q", clock.lines)
+	}
+}
+
 // Refusals arrive on many request goroutines while periods close underneath them.
 // Each one must land on exactly one line: the totals of every line written add up to
 // the number of refusals, with none lost between two periods and none repeated.
@@ -177,11 +230,15 @@ func TestS1RefusalLogCountsEachConcurrentRefusalOnOneLine(t *testing.T) {
 	total := 0
 	l := newS1RefusalLog(
 		S1RefusalPeriod,
+		time.Now,
 		func(time.Duration, func()) {},
 		func(line string) {
-			var n int
-			if _, err := fmt.Sscanf(line, "s1_refusals period_s=64 total=%d", &n); err != nil {
+			var n, seconds int
+			if _, err := fmt.Sscanf(line, "s1_refusals period_s=%d total=%d", &seconds, &n); err != nil {
 				t.Errorf("unreadable line %q: %v", line, err)
+			}
+			if seconds < 0 || seconds > 64 {
+				t.Errorf("line %q covers %ds, want 0 to 64", line, seconds)
 			}
 			mu.Lock()
 			total += n

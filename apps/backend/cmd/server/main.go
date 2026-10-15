@@ -2420,8 +2420,8 @@ func startExpirationCleanupJob(db *sql.DB) chan struct{} {
 }
 
 // startMCPTrustRescore runs application.RescoreMCPServersOnce in a background
-// goroutine. A run that cannot finish leaves the marker unset, so the next
-// start tries again.
+// goroutine. A run that cannot finish, or in which any server failed to score,
+// leaves the marker unset, so the next start tries again.
 func startMCPTrustRescore(markers application.SystemMarkerStore, servers application.MCPServerIDLister, calculator *application.MCPTrustCalculator) {
 	go func() {
 		result, err := application.RescoreMCPServersOnce(context.Background(), markers, servers, calculator)
@@ -2432,7 +2432,11 @@ func startMCPTrustRescore(markers application.SystemMarkerStore, servers applica
 		if result.AlreadyDone {
 			return
 		}
-		log.Printf("MCP trust rescoring complete: %d server(s) scored, %d left unchanged after a scoring failure", result.Scored, len(result.Failed))
+		if len(result.Failed) > 0 {
+			log.Printf("MCP trust rescoring did not complete, will retry at next start: %d server(s) scored, %d left unchanged after a scoring failure", result.Scored, len(result.Failed))
+			return
+		}
+		log.Printf("MCP trust rescoring complete: %d server(s) scored", result.Scored)
 	}()
 }
 
