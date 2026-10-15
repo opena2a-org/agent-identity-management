@@ -113,6 +113,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   within 60 seconds the refresh is not sent and `AuthenticationException` is thrown. A refresh token the server
   refused with 401 is not presented again by the same client. A client built with only `Builder.refreshToken`
   does not read or write the file, as before.
+- `registerMcp` also sends `metadata`, the fourth member the route binds, and the `AIMException` of a 401 or
+  403 says that the route admits a signed-in user with the member role or higher and keeps the status code
+  (`getStatusCode()`). It returned 500 there (#623).
 - `MCPIntegration.registerServer`, `listServers`, `recordToolUsage` and `verifyAction` send the AIM client's
   access token in the `Authorization` header. They sent `Bearer ` with an empty token. Without an access token
   to send they now throw `AIMException` before any request is sent; `verifyAction` returns false, as it does

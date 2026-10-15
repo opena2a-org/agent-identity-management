@@ -852,6 +852,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	agentService.SetHoneytokenAuditing(repos.AuditLog)
 	onboardingTelemetryService := application.NewOnboardingTelemetryService(repos.OnboardingEvent)
 	agentService.SetOnboardingEvents(onboardingTelemetryService)
+	// Lets AddMCPServers tell that an MCP server's ID and its name on an
+	// agent's talks_to list are one server.
+	agentService.SetMCPServerLookup(repos.MCPServer)
 
 	apiKeyService := application.NewAPIKeyService(
 		repos.APIKey,

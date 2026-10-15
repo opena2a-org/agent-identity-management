@@ -53,6 +53,7 @@ type AgentService struct {
 	onboardingEvents         FirstAgentEventSink           // Optional: records first_agent_registered; injected via SetOnboardingEvents
 	transitions              *transition.Recorder          // Optional: set by SetTransitionRecorder
 	webhooks                 webhookEventDispatcher        // Optional: sends agent.* and trust_score.* events; set by SetWebhookService
+	mcpServerRepo            domain.MCPServerRepository    // Optional: resolves talks_to entries to MCP servers in AddMCPServers; injected via SetMCPServerLookup
 }
 
 // SetWebhookService wires the webhook service that the agent.* and
@@ -120,6 +121,13 @@ func (s *AgentService) SetOnboardingEvents(sink FirstAgentEventSink) {
 // honeytoken hit still raises the alert; only the audit-log write is skipped.
 func (s *AgentService) SetHoneytokenAuditing(auditRepo domain.AuditLogRepository) {
 	s.auditRepo = auditRepo
+}
+
+// SetMCPServerLookup wires the MCP server repository AddMCPServers uses to
+// tell that an ID and a name on an agent's talks_to list are the same server.
+// When unset, AddMCPServers compares the entries as given.
+func (s *AgentService) SetMCPServerLookup(mcpServerRepo domain.MCPServerRepository) {
+	s.mcpServerRepo = mcpServerRepo
 }
 
 // NewAgentService creates a new agent service
@@ -2043,18 +2051,22 @@ func (s *AgentService) AddMCPServers(
 		agent.TalksTo = sanitizeTalksTo(agent.TalksTo)
 	}
 
-	// 4. Create a map to track existing entries (prevent duplicates)
+	// 4. Create a map to track existing entries (prevent duplicates). An entry
+	// that names an MCP server of the organization, by ID or by name, is
+	// tracked as that server, so one server added both ways is one entry.
+	keyOf := s.talksToKeys(agent.OrganizationID)
 	existingMap := make(map[string]bool)
 	for _, existing := range agent.TalksTo {
-		existingMap[existing] = true
+		existingMap[keyOf(existing)] = true
 	}
 
 	// 5. Add new MCP servers (only unique ones)
 	addedServers := []string{}
 	for _, identifier := range mcpServerIdentifiers {
-		if !existingMap[identifier] {
+		key := keyOf(identifier)
+		if !existingMap[key] {
 			agent.TalksTo = append(agent.TalksTo, identifier)
-			existingMap[identifier] = true
+			existingMap[key] = true
 			addedServers = append(addedServers, identifier)
 		}
 	}
@@ -2078,22 +2090,24 @@ func (s *AgentService) AddMCPServers(
 }
 
 // addMCPServersRecorded adds identifiers to agent's talks_to list in one
-// talks_to_added transition, sanitizing the entries the row holds as
-// AddMCPServers does. The actor is the one the context names, else the
-// system. It returns the identifiers added.
+// talks_to_added transition, sanitizing the entries the row holds and
+// comparing them by MCP server as AddMCPServers does. The actor is the one
+// the context names, else the system. It returns the identifiers added.
 func (s *AgentService) addMCPServersRecorded(ctx context.Context, agent *domain.Agent, identifiers []string) (*domain.Agent, []string, error) {
+	keyOf := s.talksToKeys(agent.OrganizationID)
 	before, after, err := recordTalksToChange(ctx, s.transitions, agent, transition.TriggerTalksToAdded, transition.System(),
 		func(current []string) []string {
 			list := sanitizeTalksTo(current)
 			present := make(map[string]bool, len(list))
 			for _, entry := range list {
-				present[entry] = true
+				present[keyOf(entry)] = true
 			}
 			added := false
 			for _, identifier := range identifiers {
-				if !present[identifier] {
+				key := keyOf(identifier)
+				if !present[key] {
 					list = append(list, identifier)
-					present[identifier] = true
+					present[key] = true
 					added = true
 				}
 			}
@@ -2176,6 +2190,41 @@ func newEntries(before, after []string) []string {
 		}
 	}
 	return out
+}
+
+// talksToKeys returns the key a talks_to entry is compared by in
+// AddMCPServers. GET /agents/{id}/mcp-servers resolves an entry that parses as
+// a UUID by ID and any other entry by name, and lists each server once; an
+// entry resolved that way to a server of the organization is keyed by the
+// server's ID. Any other entry, and every entry when the servers cannot be
+// read, is keyed as given.
+func (s *AgentService) talksToKeys(orgID uuid.UUID) func(string) string {
+	serverIDs := make(map[uuid.UUID]bool)
+	serverByName := make(map[string]uuid.UUID)
+	if s.mcpServerRepo != nil {
+		if servers, err := s.mcpServerRepo.GetByOrganization(orgID); err == nil {
+			for _, server := range servers {
+				if server == nil {
+					continue
+				}
+				serverIDs[server.ID] = true
+				if _, taken := serverByName[server.Name]; !taken {
+					serverByName[server.Name] = server.ID
+				}
+			}
+		}
+	}
+
+	return func(entry string) string {
+		if id, err := uuid.Parse(entry); err == nil {
+			if serverIDs[id] {
+				return "server:" + id.String()
+			}
+		} else if id, ok := serverByName[entry]; ok {
+			return "server:" + id.String()
+		}
+		return "entry:" + entry
+	}
 }
 
 // RemoveMCPServers removes MCP servers from an agent's talks_to list

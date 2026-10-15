@@ -103,7 +103,7 @@ class FakeAIM:
         bound = {member: body.get(member) for member in BOUND_MEMBERS}
         identifiers = bound["mcpServerIds"] or []
         if not identifiers:
-            return self._json(400, {"error": "mcp_server_ids is required and must not be empty"})
+            return self._json(400, {"error": "mcpServerIds is required and must not be empty"})
         if not self.agent_exists:
             return self._json(404, {"error": "not found"})
         added = [i for i in identifiers if i not in self.talks_to]
@@ -294,6 +294,7 @@ def test_without_a_sign_in_the_refusal_says_what_the_route_admits(make_client):
     assert "Authentication failed" in message
     assert "signed-in user with the member role or higher" in message
     assert "sent no user token" in message
+    assert "holds an API key or the agent's signing keys only" in message
     assert "aim-sdk login" in message
 
 
@@ -301,7 +302,9 @@ def test_without_a_sign_in_the_refusal_says_what_the_route_admits(make_client):
 @pytest.mark.parametrize(
     "token", [None, "", RuntimeError("refresh failed")], ids=["none", "empty", "raises"]
 )
-def test_a_sign_in_that_yields_no_token_is_treated_as_no_sign_in(token):
+def test_a_sign_in_that_yields_no_token_is_described_as_such(token):
+    # A client that holds a saved sign-in is not one without a sign-in: the
+    # sign-in yielded no token, as it does when it can no longer be refreshed.
     fake = FakeAIM()
     _serve(fake)
 
@@ -311,7 +314,11 @@ def test_a_sign_in_that_yields_no_token_is_treated_as_no_sign_in(token):
     method, path, _, headers = _only_request(fake)
     assert (method, path) == ("PUT", ATTACH_PATH)
     assert "Authorization" not in headers
-    assert "sent no user token" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "sent no user token" in message
+    assert "saved sign-in yielded no token" in message
+    assert "holds an API key or the agent's signing keys only" not in message
+    assert "aim-sdk login" in message
     assert fake.created == []
 
 

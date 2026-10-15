@@ -52,6 +52,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `requirements-dev.txt` list `ruff>=0.5.0`. The rules are named in the test, so the installed ruff's default rule
   set does not decide what is checked: ruff 0.17.1 with no rule selection reports 375 findings in the two files.
 
+### Fixed — SDK requests carry only the members their routes read (#623)
+
+- `attest_isolation()` sends `sandbox`, `network`, `filesystem` and `process`, the members AIM reads. It also
+  sent `signature` and `signedMessage`, which AIM does not read; the request is authenticated by the agent's
+  signature headers, as before.
+- Automatic MCP registration (`secure(..., mcp_servers=[...])`) no longer sends `verificationMethod`, a member
+  AIM's MCP server creation does not read.
+- When the saved sign-in yields no token, the `AuthenticationError` of `register_mcp()` says so and names
+  `aim-sdk login`. It said the client held an API key or the agent's signing keys only.
+- The tag sync of `secure()` and `register_agent()` reads `urn:uuid:<id>` (in either letter case) and `{<id>}` as
+  tag IDs, as AIM does. It treated them as tag names, did not send them and warned that a name was not sent.
+- The MCP registration tutorial and `docs/MCP_INTEGRATION.md` describe `register_mcp()` as it is: it takes the
+  server's ID or name, returns `added_servers`, and does not attest the server.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

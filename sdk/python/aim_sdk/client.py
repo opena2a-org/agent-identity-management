@@ -2708,7 +2708,13 @@ class AIMClient:
                 f"{e}. AIM adds an MCP server to an agent's list only for a "
                 "signed-in user with the member role or higher."
             )
-            if not user_token:
+            if not user_token and self.oauth_token_manager:
+                reason += (
+                    " This client sent no user token: its saved sign-in yielded no "
+                    "token, as happens when the sign-in can no longer be refreshed. "
+                    "Run 'aim-sdk login' and create the client with secure()."
+                )
+            elif not user_token:
                 reason += (
                     " This client sent no user token: it holds an API key or the "
                     "agent's signing keys only. Run 'aim-sdk login' and create the "
@@ -2886,21 +2892,15 @@ class AIMClient:
             filesystem = detected["filesystem"].value
             process = detected["process"].value
 
+        # The four members SubmitIsolationAttestation binds. The request is
+        # authenticated like every other SDK request (_make_request signs it
+        # with the agent's key); a signature inside the body was never read.
         payload = {
             "sandbox": sandbox,
             "network": network,
             "filesystem": filesystem,
             "process": process,
         }
-
-        # Sign the attestation if we have a signing key
-        if self.signing_key:
-            import json
-            import time
-            message = json.dumps({**payload, "agentId": self.agent_id, "timestamp": int(time.time())})
-            signature = self._sign_message(message)
-            payload["signature"] = signature
-            payload["signedMessage"] = message
 
         result = self._make_request(
             method="POST",
@@ -4391,20 +4391,29 @@ def _update_agent_capabilities(aim_url: str, headers: Dict[str, str], agent_id: 
         console.warning(f"Failed to check capabilities: {_render_error(e, aim_url)}")
 
 
-# The two spellings of a tag ID: the 36-character form of a UUID, as the backend
-# returns it, or its 32 hexadecimal digits without the hyphens. The backend's
-# UUID parser reads both.
+# The spellings of a tag ID the backend's UUID parser reads: the 36-character
+# form of a UUID, as the backend returns it, that form after "urn:uuid:" (in
+# either letter case) or between braces, and its 32 hexadecimal digits without
+# the hyphens.
+_UUID_36 = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 _TAG_ID_FORM = re.compile(
-    r"[0-9a-fA-F]{8}(-?)[0-9a-fA-F]{4}\1[0-9a-fA-F]{4}\1[0-9a-fA-F]{4}\1[0-9a-fA-F]{12}"
+    rf"(?i:urn:uuid:)(?P<urn>{_UUID_36})"
+    rf"|\{{(?P<braced>{_UUID_36})\}}"
+    rf"|(?P<plain>{_UUID_36})"
+    r"|(?P<digits>[0-9a-fA-F]{32})"
 )
 
 
 def _as_tag_id(entry: Any) -> Optional[str]:
     """Return a tag ID in the form the backend returns it, or None for a tag name."""
     import uuid as _uuid
-    if isinstance(entry, str) and _TAG_ID_FORM.fullmatch(entry):
-        return str(_uuid.UUID(entry))
-    return None
+    if not isinstance(entry, str):
+        return None
+    spelled = _TAG_ID_FORM.fullmatch(entry)
+    if not spelled:
+        return None
+    digits = next(group for group in spelled.groups() if group)
+    return str(_uuid.UUID(digits))
 
 
 def _sync_agent_tags(aim_url: str, headers: Dict[str, str], agent_id: str, tags: List[str]):
@@ -5844,7 +5853,6 @@ def _register_single_mcp(
             "version": mcp_def.get("version", "1.0.0"),
             "capabilities": mcp_def.get("capabilities", []),
             "registeredByAgent": agent_id,
-            "verificationMethod": "agent_attestation"
         }
 
         # Use direct request instead of _make_request to properly handle 409 response body

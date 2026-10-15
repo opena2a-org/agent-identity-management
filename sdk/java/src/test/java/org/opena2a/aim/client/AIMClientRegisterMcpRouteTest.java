@@ -146,6 +146,7 @@ class AIMClientRegisterMcpRouteTest {
         assertEquals(1, body.path("mcpServerIds").size(), "body: " + body);
         assertEquals("auto_sdk", body.path("detectedMethod").asText(), "body: " + body);
         assertEquals(85.0, body.path("confidence").asDouble(), "body: " + body);
+        assertTrue(body.path("metadata").isObject(), "body: " + body);
 
         assertEquals(List.of(MCP_SERVER_ID), result.get("talksTo"), "result: " + result);
         assertEquals(List.of(MCP_SERVER_ID), result.get("added_servers"), "result: " + result);
@@ -167,7 +168,7 @@ class AIMClientRegisterMcpRouteTest {
     }
 
     @Test
-    @DisplayName("a token below the member role is refused, and registerMcp raises")
+    @DisplayName("a token below the member role is refused, and registerMcp raises saying what the route admits")
     void registerMcp_belowMember_raises() throws Exception {
         signedInToken = VIEWER_TOKEN;
 
@@ -175,6 +176,9 @@ class AIMClientRegisterMcpRouteTest {
             AIMException refused = assertThrows(AIMException.class,
                     () -> client.registerMcp(MCP_SERVER_ID));
             assertTrue(refused.getMessage().contains("403"), refused.getMessage());
+            assertEquals(403, refused.getStatusCode(), refused.getMessage());
+            assertTrue(refused.getMessage().contains("signed-in user with the member role or higher"),
+                    refused.getMessage());
         }
         assertTrue(talksTo.isEmpty(), "a refused call added a server: " + talksTo);
     }
