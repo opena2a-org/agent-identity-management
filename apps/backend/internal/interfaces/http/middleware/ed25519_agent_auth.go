@@ -165,6 +165,15 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 			return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
 		}
 
+		// SECURITY: an agent in hybrid mode is authenticated only by an Ed25519 and an
+		// ML-DSA signature together, and this middleware verifies the Ed25519 one alone.
+		// As in PQCAgentMiddleware, the flag is read after the signature verified and
+		// before the status.
+		if agentauth.RequiresHybrid(verified) {
+			return refuseS1(c, metrics.S1ReasonHybridRequired, fiber.StatusUnauthorized,
+				"Agent is in hybrid mode and this route verifies an Ed25519 signature alone")
+		}
+
 		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
 		// that sets the status. RevokeAgent expresses denial purely as `agents.status`, so
 		// an agent that keeps its key material after being revoked or suspended

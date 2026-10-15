@@ -11,6 +11,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — an agent in hybrid mode is admitted only by a request signed with both Ed25519 and ML-DSA
+
+- `PQCAgentMiddleware` refuses a request from an agent whose hybrid mode is on unless its `X-Algorithm`
+  is `Ed25519+ML-DSA-44`, `Ed25519+ML-DSA-65` or `Ed25519+ML-DSA-87` and both signatures verify. The
+  refusal is a 401 with `{"error":"Agent is in hybrid mode: sign the request with both Ed25519 and ML-DSA
+  (X-Algorithm Ed25519+ML-DSA-44, Ed25519+ML-DSA-65 or Ed25519+ML-DSA-87)","reasonCode":"hybridSignatureRequired"}`,
+  counted under `aim_s1_refusals_total{reason="hybrid_required"}`. `Ed25519AgentMiddleware`, which
+  verifies an Ed25519 signature alone, refuses an agent in hybrid mode with the same `reasonCode` and the
+  message `Agent is in hybrid mode and this route verifies an Ed25519 signature alone`. Before this
+  change both middlewares answered 200 to a hybrid-mode agent's request signed with its Ed25519 key alone.
+- The hybrid-mode flag is read after the signature verifies and before the agent's status: a signature
+  that does not verify gets the signature refusal, and a suspended hybrid-mode agent signing with one
+  key is told it needs both signatures, not its status.
+- `PQCAgentMiddleware` passes a request that carries an `Authorization` header to the next middleware
+  without reading its signature, so turning hybrid mode off through `POST /api/v1/agents/:id/hybrid-mode`
+  with a user's access token is not affected.
+
+### Security — refusing an agent key that is not recognised costs the signature verification an invalid signature costs
+
+- The agent-signature key check (`agentauth.Keys`) verifies the request's signature against a decoy key
+  before it refuses an unknown agent, an agent with no registered key for the algorithm, a registered key
+  that does not decode, or a presented key that is not the registered one. The decoy keys are generated
+  once per process and their private keys are discarded. The refusal and its body are unchanged; it now
+  costs the verification a known agent's signature with one byte flipped costs: one Ed25519
+  verification for an Ed25519 or hybrid request, one ML-DSA verification at the request's level for an
+  ML-DSA request.
+- Before this change those refusals returned before any signature was verified. In the package's test
+  harness on one development machine, an unknown agent's ML-DSA-87 refusal took a median of 41ns against
+  143µs for a known agent's signature with one byte flipped; after it, 139µs against 141µs.
+
 ### Fixed — the `s1_refusals` line written on shutdown states how long its last period lasted
 
 - On shutdown the server writes the `s1_refusals` line of the period still open. Its `period_s` is now

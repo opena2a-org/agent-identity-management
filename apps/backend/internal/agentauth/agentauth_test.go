@@ -39,6 +39,7 @@ func TestRefusalBodiesAreTheContractedBytes(t *testing.T) {
 		{KeyNotRecognizedBody(), `{"error":"the signing key is not the registered key of a known agent","reasonCode":"agentKeyNotRecognized"}`},
 		{StatusDeniedBody(domain.AgentStatusRevoked), `{"error":"Agent is not permitted to authenticate (status: revoked)","reasonCode":"agentStatusDenied"}`},
 		{SignatureInvalidBody("Invalid signature"), `{"error":"Invalid signature","reasonCode":"signatureInvalid"}`},
+		{HybridRequiredBody("Agent is in hybrid mode"), `{"error":"Agent is in hybrid mode","reasonCode":"hybridSignatureRequired"}`},
 	} {
 		got, err := json.Marshal(tc.body)
 		require.NoError(t, err)
@@ -180,3 +181,95 @@ func TestKeyNotRecognizedCarriesItsCause(t *testing.T) {
 }
 
 func second(_ VerifiedAgent, err error) error { return err }
+
+type verifications struct{ ed25519, mldsa int }
+
+// countVerifications wraps the two signature primitives so the test can count the
+// verifications each call costs. The primitives are restored when the test ends.
+func countVerifications(t *testing.T) *verifications {
+	t.Helper()
+	counted := &verifications{}
+	prevEd25519, prevMLDSA := ed25519Verify, mldsaVerify
+	ed25519Verify = func(key ed25519.PublicKey, message, signature []byte) bool {
+		counted.ed25519++
+		return prevEd25519(key, message, signature)
+	}
+	mldsaVerify = func(alg pqc.Algorithm, key, message, signature []byte) error {
+		counted.mldsa++
+		return prevMLDSA(alg, key, message, signature)
+	}
+	t.Cleanup(func() { ed25519Verify, mldsaVerify = prevEd25519, prevMLDSA })
+	return counted
+}
+
+// Each cause of ErrKeyNotRecognized verifies the request's signature, against a decoy key,
+// before it refuses: the refusal costs the verifications a known agent's signature with one
+// byte flipped costs, so the time to answer does not tell an unknown agent from a known one.
+func TestAnUnrecognisedKeyCostsTheVerificationsOfAnInvalidSignature(t *testing.T) {
+	edPub, edPriv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	edOther, _, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	ml, err := pqc.GenerateMLDSAKeyPair(pqc.AlgorithmMLDSA65)
+	require.NoError(t, err)
+	mlOther, err := pqc.GenerateMLDSAKeyPair(pqc.AlgorithmMLDSA65)
+	require.NoError(t, err)
+
+	msg := []byte("message")
+	edSig := ed25519.Sign(edPriv, msg)
+	edSig[0] ^= 1
+	mlSig, err := pqc.SignMLDSA(pqc.AlgorithmMLDSA65, ml.PrivateKey, msg)
+	require.NoError(t, err)
+	mlSig[0] ^= 1
+
+	registered := &domain.Agent{ID: uuid.New(), PublicKey: encoded(edPub), PQCPublicKey: encoded(ml.PublicKey)}
+	noKey := &domain.Agent{ID: uuid.New()}
+	corrupt := &domain.Agent{ID: uuid.New(), PublicKey: encoded(edPub[:16]), PQCPublicKey: encoded([]byte("not an ML-DSA key"))}
+	src := mapSource{registered.ID: registered, noKey.ID: noKey, corrupt.ID: corrupt}
+	keys := func(id uuid.UUID) Keys { return KeySet(context.Background(), src, id) }
+
+	prev := log.Writer()
+	log.SetOutput(&bytes.Buffer{})
+	defer log.SetOutput(prev)
+
+	counted := countVerifications(t)
+	for _, alg := range []struct {
+		name   string
+		verify func(k Keys, presentedEd25519, presentedMLDSA string) error
+		want   verifications
+	}{
+		{"Ed25519", func(k Keys, ed, _ string) error {
+			return second(k.VerifyEd25519(ed, msg, edSig))
+		}, verifications{ed25519: 1}},
+		{"ML-DSA-65", func(k Keys, _, ml string) error {
+			return second(k.VerifyMLDSA(pqc.AlgorithmMLDSA65, ml, msg, mlSig))
+		}, verifications{mldsa: 1}},
+		// The Ed25519 half is verified first and fails, so the ML-DSA half is not reached.
+		{"Ed25519+ML-DSA-65", func(k Keys, ed, ml string) error {
+			return second(k.VerifyHybrid(pqc.AlgorithmHybridEd25519MLDSA65, ed, ml, msg, edSig, mlSig))
+		}, verifications{ed25519: 1}},
+	} {
+		*counted = verifications{}
+		err := alg.verify(keys(registered.ID), "", "")
+		require.Error(t, err, "%s: the flipped byte is refused", alg.name)
+		require.NotErrorIs(t, err, ErrKeyNotRecognized, "%s: the control is a known key", alg.name)
+		require.Equal(t, alg.want, *counted, "%s: a known agent's invalid signature", alg.name)
+
+		for _, refused := range []struct {
+			name string
+			err  func() error
+		}{
+			{"unknown agent", func() error { return alg.verify(keys(uuid.New()), "", "") }},
+			{"no registered key", func() error { return alg.verify(keys(noKey.ID), "", "") }},
+			{"registered key does not decode", func() error { return alg.verify(keys(corrupt.ID), "", "") }},
+			{"presented key is not the registered key", func() error {
+				return alg.verify(keys(registered.ID), *encoded(edOther), *encoded(mlOther.PublicKey))
+			}},
+		} {
+			*counted = verifications{}
+			require.ErrorIs(t, refused.err(), ErrKeyNotRecognized, "%s, %s", alg.name, refused.name)
+			require.Equal(t, alg.want, *counted, "%s, %s: the refusal costs what an invalid signature costs",
+				alg.name, refused.name)
+		}
+	}
+}

@@ -143,6 +143,16 @@ func PQCAgentMiddleware(agentService *application.AgentService) fiber.Handler {
 			return refuseS1(c, refusal.reason, fiber.StatusUnauthorized, refusal.message)
 		}
 
+		// SECURITY: an agent in hybrid mode is authenticated only by both of its
+		// signatures, so a request signed with one of its keys alone is refused. The flag
+		// is an attribute, read only after that signature verified, and before the status,
+		// which a caller learns only once the agent is authenticated the way it requires.
+		if agentauth.RequiresHybrid(verified) && !pqc.IsHybridAlgorithm(alg) {
+			return refuseS1(c, metrics.S1ReasonHybridRequired, fiber.StatusUnauthorized,
+				"Agent is in hybrid mode: sign the request with both Ed25519 and ML-DSA "+
+					"(X-Algorithm Ed25519+ML-DSA-44, Ed25519+ML-DSA-65 or Ed25519+ML-DSA-87)")
+		}
+
 		// SECURITY: Revocation is enforced HERE, on the read path, not only at the write
 		// that sets the status. RevokeAgent expresses denial purely as `agents.status`, so
 		// an agent that keeps its key material after being revoked or suspended

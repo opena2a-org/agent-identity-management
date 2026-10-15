@@ -49,6 +49,9 @@ const (
 	S1ReasonAgentLookupFailed S1RefusalReason = "agent_lookup_failed"
 	// The agent's status (revoked, suspended, unrecognised) does not permit auth.
 	S1ReasonAgentStatusDenied S1RefusalReason = "agent_status_denied"
+	// The agent is in hybrid mode and the request is not signed with both Ed25519 and
+	// ML-DSA.
+	S1ReasonHybridRequired S1RefusalReason = "hybrid_required"
 	// A signature or public-key header the chosen algorithm requires is absent.
 	S1ReasonMissingSignatureHeaders S1RefusalReason = "missing_signature_headers"
 	// The agent has no registered key for the chosen algorithm.
@@ -76,6 +79,7 @@ var s1RefusalReasons = map[S1RefusalReason]bool{
 	S1ReasonSkewFuture:              true,
 	S1ReasonAgentLookupFailed:       true,
 	S1ReasonAgentStatusDenied:       true,
+	S1ReasonHybridRequired:          true,
 	S1ReasonMissingSignatureHeaders: true,
 	S1ReasonNoRegisteredKey:         true,
 	S1ReasonPublicKeyMismatch:       true,
