@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the dialog Close button is a 44x44 px target (#731)
+
+- The Close button `DialogContent` draws in a dialog's top-right corner
+  (`apps/web/components/ui/dialog.tsx`) is 44x44 CSS px (`h-11 w-11`), with no variant that
+  sizes it smaller, and centres its 16px X icon. Before this change the button set no size of its
+  own and drew only the icon; #731 reports it measured 15x15 on the Detect MCP servers dialog at
+  375px and 1280px wide. The button sits 2px in from the corner, so the icon is 16px in from the
+  top and right, where the old `right-4 top-4` placed the button.
+- `apps/web/components/ui/dialog.test.tsx` fails when the button's classes allow a height or width
+  under 44px or do not centre the icon.
+
 ### Fixed — the Detect MCP servers dialog says its command can replace the agent's key pair
 
 - Above its commands, the dashboard's Detect MCP servers dialog states that when the SDK on the
