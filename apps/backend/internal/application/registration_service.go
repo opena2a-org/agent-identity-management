@@ -219,10 +219,11 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		}
 
 		if err := s.emailService.SendTemplatedEmail(domain.TemplateWelcome, email, templateData); err != nil {
-			// Log error but don't fail the request (email is non-critical)
-			fmt.Printf("⚠️  Failed to send registration confirmation email to %s: %v\n", email, err)
+			// Log error but don't fail the request (email is non-critical). The request id names
+			// the registrant; the provider's error is redacted since an SMTP reply often echoes the recipient.
+			fmt.Printf("registration confirmation email not sent for registration request %s: %s\n", req.ID, redactEmailAddresses(err.Error()))
 		} else {
-			fmt.Printf("✅ Sent registration confirmation email to %s\n", email)
+			fmt.Printf("registration confirmation email sent for registration request %s\n", req.ID)
 		}
 	}
 
@@ -368,7 +369,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	userRole := domain.RoleViewer // Default to viewer
 	if len(existingUsers) == 0 {
 		userRole = domain.RoleAdmin // First user becomes admin
-		fmt.Printf("Making user %s admin (first user in organization %s)\n", req.Email, targetOrgID)
+		fmt.Printf("Making the user of registration request %s admin (first user in organization %s)\n", req.ID, targetOrgID)
 	}
 
 	user := &domain.User{
@@ -388,7 +389,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	}
 
 	if req.PasswordHash != nil && *req.PasswordHash != "" {
-		fmt.Printf("✅ Approving user with password hash for email: %s\n", req.Email)
+		fmt.Printf("✅ Approving user with password hash for registration request %s\n", req.ID)
 	} else {
 		fmt.Printf("⚠️  WARNING: Approving user without password hash - this should not happen for email/password registrations\n")
 	}
@@ -414,7 +415,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	}
 
 	// Success logging
-	fmt.Printf("✅ Successfully created user account: %s (ID: %s)\n", user.Email, user.ID)
+	fmt.Printf("✅ Successfully created user account %s for registration request %s\n", user.ID, req.ID)
 
 	// Log audit
 	s.auditService.LogAction(
@@ -459,10 +460,11 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 		}
 
 		if err := s.emailService.SendTemplatedEmail(domain.TemplateUserApproved, user.Email, templateData); err != nil {
-			// Log error but don't fail the request (email is non-critical)
-			fmt.Printf("⚠️  Failed to send approval email to %s: %v\n", user.Email, err)
+			// Log error but don't fail the request (email is non-critical). The account id names
+			// the user; the provider's error is redacted since an SMTP reply often echoes the recipient.
+			fmt.Printf("approval email not sent for user %s: %s\n", user.ID, redactEmailAddresses(err.Error()))
 		} else {
-			fmt.Printf("✅ Sent approval email to %s\n", user.Email)
+			fmt.Printf("approval email sent for user %s\n", user.ID)
 		}
 	}
 

@@ -570,6 +570,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `refusal_reason_code_test.go`, `TestCORSMiddleware_ExposesHeaders`, and `apps/web/lib/api.retry-after.test.ts`,
   `apps/web/lib/record-path-refusal.test.ts` and `apps/web/components/agents/delete-agent-dialog.test.tsx`.
 
+### Security — webhook, MCP server and agent card requests refuse the Dummy IPv6 Prefix and the unassigned part of 2001::/23
+
+- The address policy behind `ValidateExternalURL` and the connection check of `NewEgressClient` also refuses
+  100:0:0:1::/64 (Dummy IPv6 Prefix, RFC 9780) with the class `dummy prefix`, and 2001::/23 (IETF Protocol
+  Assignments) with the class `IETF protocol assignments`. Teredo, benchmarking, ORCHID and ORCHIDv2 addresses inside
+  2001::/23 are refused with their own class, as before.
+- The assignments inside 2001::/23 that the IANA IPv6 Special-Purpose Address Registry marks globally reachable stay
+  admitted: 2001:1::1, 2001:1::2 and 2001:1::3 (anycast), 2001:3::/32 (AMT), 2001:4:112::/48 (AS112-v6) and
+  2001:30::/28 (Drone Remote ID Protocol Entity Tags).
+- Measured with the test below on the commit this change is based on, `DeniedAddressClass` admitted the ten
+  addresses of the test in these two ranges, and `ValidateExternalURL` admitted the same ten as IP-literal URLs, among
+  them `https://[100:0:0:1::1]:443/`, `https://[2001:5::1]:443/` and `https://[2001:100::1]:443/`.
+- Tests: `apps/backend/internal/infrastructure/utils/url_validator_special_purpose_test.go` passes 14 addresses that
+  must be refused, each with its class, and 9 that must be admitted through `DeniedAddressClass` and, as IP-literal
+  URLs, through `ValidateExternalURL`.
+
+### Security — the welcome and approval mail lines and three approval lines log ids instead of the user's address
+
+- On a registration by an address that is not in `AIM_PLATFORM_ADMINS` and its approval, seven log lines wrote the
+  user's address. They name the registration request id or the user id instead: the welcome mail sent and not sent
+  lines, the first-user admin line, the approval-with-password line, the account created line, and the approval mail
+  sent and not sent lines.
+- When the welcome or approval mail is not sent, the provider's error goes through the address redaction the password
+  reset mail's failure line uses; in the test, the recipient in an SMTP `550` reply is logged as `[address]`.
+- This change does not touch the platform admin auto-approval lines, the account creation failure lines or the line
+  logged when a registration is refused because no administrator can approve it.
+- Tests: `apps/backend/internal/application/registration_mail_log_privacy_test.go` registers and approves a user,
+  once with both mails sent and once with both failing with a provider error that echoes the recipient, captures
+  standard output, standard error and the standard logger, and fails when the address appears or when the request
+  id or user id is missing.
+
 ### Security — webhook, MCP server and agent card requests refuse eight more special-purpose address ranges
 
 - The address policy that the URL check and the connection check share also refuses 192.88.99.0/24 (6to4 relay
