@@ -52,6 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials keys of the access token a refresh obtained and the SHA-256 of the refresh token it was issued
   with. They are read from and saved to the file as `"sharedAccessToken": {"token": ..., "refreshTokenSha256":
   ...}`, as the Python SDK writes them.
+- `AgentType` constants for the fourteen agent types the server accepts at registration that it did not list:
+  `GEMINI`, `LLAMA`, `MISTRAL`, `COHERE`, `LLAMAINDEX`, `LANGGRAPH`, `HAYSTACK`, `SEMANTIC_KERNEL`, `COPILOT`,
+  `ASSISTANT`, `CHATBOT`, `AUTOGPT`, `BABYAGI` and `AI_AGENT` (`ai_agent`). `AgentType.fromString` returns
+  the constant for each of their values, where it returned `UNKNOWN` (#716).
 
 ### Changed
 
@@ -95,6 +99,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `AgentType.UNKNOWN` is sent as `ai_agent`, the value of `AgentType.AI_AGENT`, so registering an agent with it
+  and filtering `listAgents` by it use an agent type the server defines. It was sent as `unknown`, which is not
+  one of the agent types the server accepts at registration. `AgentType.fromString` still returns `UNKNOWN`
+  for a value no other constant has, `unknown` included (#716).
 - Processes sharing `~/.aim/sdk_credentials.json` refresh it once. The server accepts each refresh token once,
   and an `AIMClient` created from SDK credentials (`AIMClient.secure`, or `Builder.credentials`) presented the
   token it read at startup, so when two processes refreshed together the second presented a token the first

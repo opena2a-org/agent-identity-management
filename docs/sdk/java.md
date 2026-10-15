@@ -127,14 +127,33 @@ AIMClient agent = AIMClient.secure(
 import org.opena2a.aim.client.AgentType;
 
 // Available types
-AgentType.LANGCHAIN   // "langchain"
-AgentType.CREWAI      // "crewai"
-AgentType.AUTOGEN     // "autogen"
-AgentType.OPENAI      // "gpt"
-AgentType.ANTHROPIC   // "claude"
-AgentType.CUSTOM      // "custom"
-AgentType.UNKNOWN     // "unknown"
+AgentType.LANGCHAIN        // "langchain"
+AgentType.CREWAI           // "crewai"
+AgentType.AUTOGEN          // "autogen"
+AgentType.OPENAI           // "gpt"
+AgentType.ANTHROPIC        // "claude"
+AgentType.CUSTOM           // "custom"
+AgentType.DEMO             // "demo"
+AgentType.GEMINI           // "gemini"
+AgentType.LLAMA            // "llama"
+AgentType.MISTRAL          // "mistral"
+AgentType.COHERE           // "cohere"
+AgentType.LLAMAINDEX       // "llamaindex"
+AgentType.LANGGRAPH        // "langgraph"
+AgentType.HAYSTACK         // "haystack"
+AgentType.SEMANTIC_KERNEL  // "semantic_kernel"
+AgentType.COPILOT          // "copilot"
+AgentType.ASSISTANT        // "assistant"
+AgentType.CHATBOT          // "chatbot"
+AgentType.AUTOGPT          // "autogpt"
+AgentType.BABYAGI          // "babyagi"
+AgentType.AI_AGENT         // "ai_agent"
+AgentType.UNKNOWN          // "ai_agent"
 ```
+
+These are the agent types the server accepts at registration. `AgentType.fromString` returns
+`AgentType.UNKNOWN` for a value none of the others has; `UNKNOWN` is sent as `ai_agent`, the
+value of `AgentType.AI_AGENT`.
 
 ---
 

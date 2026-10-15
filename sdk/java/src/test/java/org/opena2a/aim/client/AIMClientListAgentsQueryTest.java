@@ -69,6 +69,14 @@ class AIMClientListAgentsQueryTest {
     }
 
     @Test
+    @DisplayName("AgentType.UNKNOWN filters by ai_agent, an agent type the server defines")
+    void listAgents_unknownAgentTypeFiltersByAiAgent() throws Exception {
+        HttpUrl url = listAgents(50, 0, null, AgentType.UNKNOWN);
+
+        assertEquals(List.of("ai_agent"), url.queryParameterValues("agentType"));
+    }
+
+    @Test
     @DisplayName("without a status or agent type only limit and offset are sent, limit capped at 100")
     void listAgents_withoutFiltersSendsLimitAndOffset() throws Exception {
         HttpUrl url = listAgents(500, 0, "", null);
