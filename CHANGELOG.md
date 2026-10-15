@@ -49,6 +49,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `secure('<name>', auto_detect_mcp=True)` finds the agent by name and sends
   `PUT /api/v1/agents/{id}/keys` with the new public key.
 
+### Fixed — the token rotation guide says how long a stolen token keeps working
+
+- `docs/security/token-rotation.md` said that token rotation "prevents attackers from using stolen tokens", that
+  without it stolen tokens work "forever" and that with it they "expire immediately" after use. It now says that a
+  stolen refresh token is refused once rotation has retired it, and how long a stolen copy keeps working where
+  refreshes rotate. When the agent refreshes first, the copy is retired: presenting it is refused and ends the token
+  family, the agent's new token included. When the thief refreshes first, the thief can keep refreshing until the
+  agent's next refresh presents the retired token, which ends the family. While the agent is silent, the thief's
+  tokens keep working at most this long: a sign-in from `aim-sdk login` until `JWT_SESSION_MAX_AGE` after the sign-in
+  (8 hours by default), however often it is refreshed; a token from an SDK download, which has no maximum age, as
+  long as it is refreshed at least every 90 days; an access token `JWT_ACCESS_TTL` from its issue (2 hours by
+  default), since a refresh does not retire it. On a server without Redis a stolen copy of a sign-in's refresh token
+  keeps working as long as the agent's own, until the sign-in ends.
+- Its "Security Benefits" list says that a refresh that rotates retires the refresh token it was given and that a
+  retired refresh token presented again is refused and ends its token family, where it said "Every token use triggers
+  revocation of previous token", "No manual revocation needed" and "Immediate protection against stolen credentials".
+- Test: `TestTokenRotationGuideStatesHowLongAStolenTokenWorks` in
+  `apps/backend/internal/interfaces/http/handlers/token_rotation_guide_stolen_token_test.go` checks each of these
+  statements against the refresh route and the auth middleware at the server's default lifetimes, and fails when the
+  guide says "expire immediately".
+
 ### Changed — the dev stack takes its host ports and container names from the environment
 
 - `docker-compose.yml` reads `AIM_PROJECT` (`aim`, the prefix of all eleven container names) and the
