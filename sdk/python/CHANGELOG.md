@@ -19,6 +19,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/use-cases/register-my-agent.md`, `docs/sdk/python.md`, the Requirements and the dashboard's SDK page to
   `pip install aim-sdk`.
 
+### Fixed — `report_capabilities` reads a 409 whose body is not JSON as an answer without a known outcome (#612)
+
+- The capability registration route answers a repeat with 409 and a JSON body that names the outcome. A 409 whose
+  body is not JSON now raises `VerificationError: AIM answered the registration of capability '<type>' without a
+  known outcome (status None)`, the error a JSON answer without a known `status` raises, and the capabilities after
+  it are not sent. With requests 2.34.2 it raised `VerificationError: Request failed: Expecting value: line 1
+  column 1 (char 0)`, which names neither the status nor the capability. `_make_request` returns `None` for a
+  status in `accept_status` whose body is not JSON, and leaves the outcome check to the caller.
+- Test: `test_a_409_whose_body_is_not_json_raises_without_a_known_outcome` in
+  `tests/test_report_capabilities_register_route.py`.
+
+### Fixed — the agents directory test reads the mode the directory is created with (#612)
+
+- `test_agents_dir_is_created_0700` records the directory's mode as `Path.mkdir` returns, before the `chmod` in
+  `_ensure_private_dir` that narrows a directory an earlier version left wide. With `mode=0o700` taken out of that
+  `mkdir` call, the test fails (the directory is created 0755 under umask 022); before, it passed, because the
+  `chmod` narrowed the directory before the test read it.
+
+### Changed — `client.py` and `credentials.py` pass ruff's F, E4, E7 and E9 rules, and a test runs ruff on them (#612)
+
+- `ruff check --isolated --select E4,E7,E9,F aim_sdk/client.py aim_sdk/credentials.py` reported 31 findings with
+  ruff 0.17.1 (29 in `client.py`, 2 in `credentials.py`) and reports none now. The imports `aim_sdk.client` did
+  not use are removed (`hashlib`, `os`, `pathlib`, `VerifyKey`, `AuthnEventType`, `SecurityEventType`,
+  `EventSeverity`, `get_agent_credentials_path`, `list_agent_credentials` and `AGENTS_DIR`); code that imported
+  one of them from `aim_sdk.client` has to import it from where it is defined (`aim_sdk.credentials`,
+  `aim_sdk.security_logging`, `nacl.signing` or the standard library). The imports that sat
+  below module code are at the top of the module. The three bare `except:` clauses around reading an error body
+  catch `Exception`, so a `KeyboardInterrupt` or `SystemExit` raised there propagates. `credentials.py` drops its
+  unused `shutil` and `datetime` imports.
+- `tests/test_lint_ruff.py` runs that command and is skipped when ruff is not installed; the `dev` extra and
+  `requirements-dev.txt` list `ruff>=0.5.0`. The rules are named in the test, so the installed ruff's default rule
+  set does not decide what is checked: ruff 0.17.1 with no rule selection reports 375 findings in the two files.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

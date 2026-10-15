@@ -108,11 +108,12 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
-	// A token family a reuse ended is not recovered: the chain that grew from
-	// the reused token cannot be told apart from the owner's, so the holder
-	// downloads a new SDK instead. The family is ended when the row was
-	// revoked with it, or when the revocation store says so (an unanswered
-	// store follows the fail-open setting). The answer is the refresh route's.
+	// A token family a reuse or a logout ended is not recovered: the chain
+	// that grew from a reused token cannot be told apart from the owner's, and
+	// a logout ends the session it belongs to, so the holder downloads a new
+	// SDK instead. The family is ended when the row was revoked with it or by
+	// a logout, or when the revocation store says so (an unanswered store
+	// follows the fail-open setting). The answer is the refresh route's.
 	if h.familyEnded(c, req.OldRefreshToken, oldToken) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Token has been revoked or is invalid",
@@ -201,9 +202,12 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 	})
 }
 
-// familyEnded reports whether the presented token's family was ended.
+// familyEnded reports whether the presented token's family was ended. A row
+// revoked by a reuse or by a logout ends it without a revocation store: a
+// logout writes the family key only where a store is configured, and the
+// row's reason is what records it elsewhere.
 func (h *SDKTokenRecoveryHandler) familyEnded(c fiber.Ctx, token string, row *domain.SDKToken) bool {
-	if row.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked) {
+	if row.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked) || row.RevokedFor(sdkTokenLogoutReason) {
 		return true
 	}
 	claims, err := h.jwtService.ValidateToken(token)

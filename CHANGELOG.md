@@ -149,6 +149,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   organization is answered `401`.
 - Tests: `apps/backend/internal/interfaces/http/handlers/a2a_policy_evaluation_organization_test.go`.
 
+### Security — a logged-out SDK-download token is not recovered, with or without a revocation store (#612)
+
+- `POST /api/v1/auth/sdk/recover` refuses an SDK-download token whose `sdk_tokens` row was revoked by
+  `POST /api/v1/auth/logout` (revoke reason `logout`), with the refresh route's 401 answer
+  `Token has been revoked or is invalid`, as it refuses a token whose chain a reuse ended. Where a revocation
+  store is configured, the logout's family key already made it refuse that token; where none is configured, the
+  route answered 200 with a new token pair and stored a new `sdk_tokens` row for it. Both outcomes were measured
+  with the handler tests on a downloaded token that its owner logged out and then presented for recovery.
+- Test: `TestRecoverRevokedToken_RefusesALoggedOutSDKToken`, with and without a revocation store.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the
@@ -2442,8 +2452,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   the meantime makes it a reuse: it is refused, receives no tokens, and any row it created is
   revoked with the family. It used to receive a second live token.
 - `POST /api/v1/auth/sdk/recover` refuses a token whose chain a reuse ended, with the refresh
-  route's 401 answer; the SDK is downloaded again instead. A token its owner revoked is still
-  recovered.
+  route's 401 answer; the SDK is downloaded again instead. A token its owner logged out
+  (`POST /api/v1/auth/logout`) is refused the same way, with or without a revocation store. A token
+  its owner revoked from the dashboard (`POST /api/v1/users/me/sdk-tokens/{id}/revoke`) is recovered
+  where no revocation store is configured; where one is, the revoke writes the family key and the
+  route refuses the token.
 - SDK-download tokens carry the registered `sid` claim naming their download (the downloaded
   token's own id, copied on every rotation), and the access tokens minted from them carry it too,
   so the SDK download, device approval and SDK recovery routes refuse an access token from an
