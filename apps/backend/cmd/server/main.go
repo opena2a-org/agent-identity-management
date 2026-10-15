@@ -326,7 +326,7 @@ func main() {
 	// statements. Its first run completes before the server listens: until a
 	// purge has completed, every statement is refused with no write.
 	stopActionRequestNoncePurge := startActionRequestNoncePurgeJob(services.ActionRequestNonces, domain.ActionRequestNoncePurgeInterval)
-	defer close(stopActionRequestNoncePurge)
+	defer stopActionRequestNoncePurge()
 
 	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
 	if services.RegistryBridge != nil {
@@ -2585,9 +2585,11 @@ type actionRequestNoncePurger interface {
 }
 
 // startActionRequestNoncePurgeJob logs the signed action-request constants,
-// runs one purge, then purges every interval. Returns a channel that should
-// be closed to stop the job.
-func startActionRequestNoncePurgeJob(purger actionRequestNoncePurger, interval time.Duration) chan struct{} {
+// runs one purge, then purges every interval. The returned stop function
+// cancels a purge in flight, ends the job and returns once the goroutine has
+// exited, so nothing the job logs or runs outlives the call. Calling it
+// again does nothing.
+func startActionRequestNoncePurgeJob(purger actionRequestNoncePurger, interval time.Duration) (stop func()) {
 	log.Printf("Signed action-request statements: window %ds, nonces kept %ds past expiry, purge every %s, "+
 		"admission timeout %s, signedBytes at most %d bytes (%d base64url characters), body at most %d bytes "+
 		"(allowance %d), payload depth at most %d",
@@ -2595,33 +2597,43 @@ func startActionRequestNoncePurgeJob(purger actionRequestNoncePurger, interval t
 		domain.ActionRequestAdmissionTimeout, domain.ActionRequestMaxSignedBytes,
 		domain.ActionRequestMaxSignedBytesChars, domain.ActionRequestMaxRawBody,
 		domain.ActionRequestRawBodyAllowance, domain.ActionRequestMaxDepth)
-	runActionRequestNoncePurge(purger)
+	ctx, cancel := context.WithCancel(context.Background())
+	runActionRequestNoncePurge(ctx, purger)
 
-	stopChan := make(chan struct{})
+	done := make(chan struct{})
 	ticker := time.NewTicker(interval)
 	go func() {
+		defer close(done)
 		for {
 			select {
 			case <-ticker.C:
-				runActionRequestNoncePurge(purger)
-			case <-stopChan:
+				runActionRequestNoncePurge(ctx, purger)
+			case <-ctx.Done():
 				ticker.Stop()
 				log.Println("Action-request nonce purge job stopped")
 				return
 			}
 		}
 	}()
-	return stopChan
+
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // runActionRequestNoncePurge is one purge run, bounded by the purge interval
 // so a run blocked on a lock cannot hold up the server's start. Its line
-// carries counts and the duration only, never an organization or a nonce.
-func runActionRequestNoncePurge(purger actionRequestNoncePurger) {
-	ctx, cancel := context.WithTimeout(context.Background(), domain.ActionRequestNoncePurgeInterval)
+// carries counts and the duration only, never an organization or a nonce. A
+// run the job cancelled while stopping writes no line.
+func runActionRequestNoncePurge(jobCtx context.Context, purger actionRequestNoncePurger) {
+	ctx, cancel := context.WithTimeout(jobCtx, domain.ActionRequestNoncePurgeInterval)
 	defer cancel()
 	result, err := purger.Purge(ctx)
 	if err != nil {
+		if jobCtx.Err() != nil {
+			return // the job is stopping and cancelled this run
+		}
 		log.Printf("s6_nonce_purge success=false deleted=%d organizations=%d duration_ms=%d",
 			result.Deleted, result.Organizations, result.Duration.Milliseconds())
 		return

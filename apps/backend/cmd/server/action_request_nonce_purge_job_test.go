@@ -32,7 +32,7 @@ func TestActionRequestNoncePurgeJob_PurgesBeforeReturning(t *testing.T) {
 		result: application.ActionRequestNoncePurgeResult{Deleted: 2, Organizations: 3, Duration: 4 * time.Millisecond}}
 
 	stop := startActionRequestNoncePurgeJob(purger, time.Hour)
-	defer close(stop)
+	defer stop()
 
 	select {
 	case <-purger.calls:
@@ -56,7 +56,7 @@ func TestActionRequestNoncePurgeJob_PurgesEveryInterval(t *testing.T) {
 	captureLog(t)
 	purger := &fakeActionRequestNoncePurger{calls: make(chan struct{}, 8)}
 	stop := startActionRequestNoncePurgeJob(purger, 10*time.Millisecond)
-	defer close(stop)
+	defer stop()
 
 	for i := 0; i < 3; i++ {
 		select {
@@ -67,6 +67,51 @@ func TestActionRequestNoncePurgeJob_PurgesEveryInterval(t *testing.T) {
 	}
 }
 
+// Stopping the job returns only after its goroutine has exited: the stop line
+// is already written, so it cannot reach a later test's captured log, and no
+// purge runs afterwards.
+func TestActionRequestNoncePurgeJob_StopWaitsForTheJobToExit(t *testing.T) {
+	logs := captureLog(t)
+	purger := &fakeActionRequestNoncePurger{calls: make(chan struct{}, 64)}
+
+	stop := startActionRequestNoncePurgeJob(purger, time.Millisecond)
+	<-purger.calls // the purge the job ran before returning
+	select {
+	case <-purger.calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no purge ran in 2s at a 1ms interval")
+	}
+	stop()
+
+	if !strings.Contains(logs.String(), "Action-request nonce purge job stopped") {
+		t.Errorf("stop returned before the job logged its stop line:\n%s", logs.String())
+	}
+	for len(purger.calls) > 0 {
+		<-purger.calls
+	}
+	select {
+	case <-purger.calls:
+		t.Fatal("purge ran after stop returned")
+	case <-time.After(20 * time.Millisecond):
+	}
+	stop()
+}
+
+// A purge the job cancelled while stopping writes no line, so a stop writes
+// nothing after its stop line.
+func TestActionRequestNoncePurge_CancelledRunLogsNothing(t *testing.T) {
+	logs := captureLog(t)
+	purger := &fakeActionRequestNoncePurger{calls: make(chan struct{}, 1), err: context.Canceled}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	runActionRequestNoncePurge(ctx, purger)
+
+	if logs.Len() != 0 {
+		t.Errorf("a cancelled run wrote a line:\n%s", logs.String())
+	}
+}
+
 // A failed run is logged without its error text, which could carry a value
 // from the table.
 func TestActionRequestNoncePurge_FailureLogsCountsOnly(t *testing.T) {
@@ -74,7 +119,7 @@ func TestActionRequestNoncePurge_FailureLogsCountsOnly(t *testing.T) {
 	purger := &fakeActionRequestNoncePurger{calls: make(chan struct{}, 1), err: errors.New("key (nonce)=(\\xdeadbeef)"),
 		result: application.ActionRequestNoncePurgeResult{Deleted: 1, Organizations: 1}}
 
-	runActionRequestNoncePurge(purger)
+	runActionRequestNoncePurge(context.Background(), purger)
 
 	out := logs.String()
 	if !strings.Contains(out, "s6_nonce_purge success=false deleted=1 organizations=1") {

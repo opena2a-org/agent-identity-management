@@ -103,6 +103,12 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `ValidateExternalURL` keeps its `URL hostname could not be resolved` text and now keeps the
   resolver's error for `errors.As`.
 
+### Fixed — stopping the action-request nonce purge job waits for the job to exit
+
+- Stopping the action-request nonce purge job cancels a purge in flight and returns once the job's
+  goroutine has exited, so its stop line can no longer reach a later test's captured log and the
+  server's shutdown no longer leaves the job running. A purge the stop cancelled writes no line.
+
 ### Security — an access token ends with the sign-in it belongs to
 
 - The access token issued with a login pair, and the one each refresh of that login issues, now
