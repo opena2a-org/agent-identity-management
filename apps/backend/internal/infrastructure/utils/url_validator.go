@@ -120,17 +120,20 @@ var deniedIPv4 = classes(
 
 // deniedIPv6 lists the IPv6 ranges that are not public destinations. The
 // IPv4-compatible and IPv4-translated forms are refused whatever IPv4 address
-// they carry.
+// they carry. The order only decides which name a refusal reports when ranges
+// overlap: the narrower ranges inside 2001::/23 come before it.
 var deniedIPv6 = classes(
 	"::/128", "unspecified",
 	"::1/128", "loopback",
 	"::/96", "IPv4-compatible",
 	"::ffff:0:0:0/96", "IPv4-translated",
 	"100::/64", "discard-only",
+	"100:0:0:1::/64", "dummy prefix",
 	"2001::/32", "Teredo",
 	"2001:2::/48", "benchmarking",
 	"2001:10::/28", "ORCHID",
 	"2001:20::/28", "ORCHIDv2",
+	"2001::/23", "IETF protocol assignments", // except publicIPv6
 	"2001:db8::/32", "documentation",
 	"3fff::/20", "documentation",
 	"5f00::/16", "segment routing",
@@ -139,6 +142,18 @@ var deniedIPv6 = classes(
 	"fec0::/10", "site-local",
 	"ff00::/8", "multicast",
 )
+
+// publicIPv6 lists the assignments inside 2001::/23 that the IANA IPv6
+// Special-Purpose Address Registry marks globally reachable and deniedIPv6 does
+// not name. They are public destinations; the rest of 2001::/23 is refused.
+var publicIPv6 = []netip.Prefix{
+	netip.MustParsePrefix("2001:1::1/128"),   // Port Control Protocol anycast
+	netip.MustParsePrefix("2001:1::2/128"),   // TURN anycast
+	netip.MustParsePrefix("2001:1::3/128"),   // DNS-SD Service Registration Protocol anycast
+	netip.MustParsePrefix("2001:3::/32"),     // AMT
+	netip.MustParsePrefix("2001:4:112::/48"), // AS112-v6
+	netip.MustParsePrefix("2001:30::/28"),    // Drone Remote ID Protocol Entity Tags
+}
 
 var (
 	nat64WellKnown = netip.MustParsePrefix("64:ff9b::/96")
@@ -166,6 +181,11 @@ func DeniedAddressClass(ip net.IP) (string, bool) {
 	for _, embedded := range embeddedIPv4(addr) {
 		if class, denied := deniedClass(deniedIPv4, embedded); denied {
 			return class, true
+		}
+	}
+	for _, public := range publicIPv6 {
+		if public.Contains(addr) {
+			return "", false
 		}
 	}
 	return deniedClass(deniedIPv6, addr)
