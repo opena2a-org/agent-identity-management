@@ -424,6 +424,14 @@ func (r *MCPServerRepository) GetByName(orgID uuid.UUID, name string) (*domain.M
 //
 // A server's score is changed by calculating one, never by saving a row.
 // Regression test: `mcp_update_trust_score_integration_test.go`.
+//
+// `status`, `is_verified` and `last_verified_at` are not in the SET list either,
+// for the same reason. After Create, a server's verification is written by
+// VerifyServer, UpdateMCPVerificationStatus and WithdrawConsensusVerification,
+// each in one statement. Written here from a snapshot read before a consensus withdrawal,
+// they put the server back to verified with `consensus_verified_at` NULL, which
+// neither a later disagreeing attestation nor the startup recheck withdraws.
+// Regression test: `mcp_update_verification_test.go`.
 func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 	query := `
 		UPDATE mcp_servers
@@ -433,13 +441,10 @@ func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 			url = $3,
 			version = $4,
 			public_key = $5,
-			status = $6,
-			is_verified = $7,
-			last_verified_at = $8,
-			verification_url = $9,
-			capabilities = $10,
-			updated_at = $11
-		WHERE id = $12
+			verification_url = $6,
+			capabilities = $7,
+			updated_at = $8
+		WHERE id = $9
 		RETURNING updated_at
 	`
 
@@ -456,9 +461,6 @@ func (r *MCPServerRepository) Update(server *domain.MCPServer) error {
 		server.URL,
 		server.Version,
 		server.PublicKey,
-		server.Status,
-		server.IsVerified,
-		server.LastVerifiedAt,
 		server.VerificationURL,
 		capabilitiesJSON, // Use JSON bytes
 		time.Now().UTC(),
