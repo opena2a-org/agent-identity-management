@@ -87,7 +87,7 @@ describe('express verifyAction', () => {
 
   beforeEach(() => {
     res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
-    next = vi.fn();
+    next = vi.fn() as unknown as NextFunction;
   });
 
   it('answers 403 on a server-side denial instead of falling through to next(error)', async () => {

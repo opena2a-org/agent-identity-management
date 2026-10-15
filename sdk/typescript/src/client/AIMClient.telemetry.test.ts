@@ -367,7 +367,7 @@ describe('AIMClient causal-denial telemetry', () => {
       // The denied-injection record assembled by the auto-joiner lands in `dir`,
       // the relay reads it, and uploads — no manual seeding involved.
       await vi.waitFor(() => expect(relayFetch).toHaveBeenCalled(), { timeout: 1500 });
-      const body = JSON.parse((relayFetch.mock.calls[0][1] as RequestInit).body as string);
+      const body = JSON.parse(((relayFetch.mock.calls[0] as unknown[])[1] as RequestInit).body as string);
       expect(body.eventType).toBe('denied_injection_attempt');
       client.closeTelemetry();
     });

@@ -66,7 +66,7 @@ function serverEncrypt(
 
   // ChaCha20-Poly1305 encrypt
   const nonce = nodeCrypto.randomBytes(12);
-  const cipher = nodeCrypto.createCipheriv('chacha20-poly1305' as string, encKey, nonce, {
+  const cipher = nodeCrypto.createCipheriv('chacha20-poly1305', encKey, nonce, {
     authTagLength: 16,
   });
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
@@ -152,7 +152,7 @@ async function generateTestKeyPair(): Promise<{ privateKey: Uint8Array; publicKe
 // Mock host factory
 // ---------------------------------------------------------------------------
 
-function createMockHost(overrides: Partial<SecretsClientHost> = {}): SecretsClientHost & {
+function createMockHost(overrides: Partial<Omit<SecretsClientHost, 'request'>> = {}): SecretsClientHost & {
   request: ReturnType<typeof vi.fn>;
 } {
   const request = vi.fn();

@@ -4,14 +4,15 @@ import { EventEngine } from '../engine/event-engine';
 import type { ARPEvent, ARPConfig } from '../types';
 
 const testConfig: ARPConfig = {
+  agentName: 'runtime-twin-test',
   rules: [],
-  monitors: [],
-  interceptors: [],
+  monitors: {},
+  interceptors: {},
 };
 
 function emitTestEvent(engine: EventEngine, overrides: Partial<ARPEvent> = {}): Promise<ARPEvent> {
   return engine.emit({
-    source: 'test-monitor',
+    source: 'process',
     category: 'normal',
     severity: 'info',
     description: 'Test event',

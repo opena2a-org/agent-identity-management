@@ -40,6 +40,8 @@ it('AIM-12.AC3 item 7: the relay User-Agent carries the SDK version', async () =
       detection: {
         injectionDetected: true,
         attackClass: 'injection',
+        techniqueSource: 'interim-mapping',
+        confidence: 0.84,
         detector: 'guard',
         detectedAt: '2026-06-06T00:00:01.000Z',
       },

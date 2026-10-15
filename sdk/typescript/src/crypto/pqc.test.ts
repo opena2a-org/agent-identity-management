@@ -2,7 +2,7 @@
  * Tests for Post-Quantum Cryptography module
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { createHash } from 'crypto';
 import {
   isPQCAvailable,

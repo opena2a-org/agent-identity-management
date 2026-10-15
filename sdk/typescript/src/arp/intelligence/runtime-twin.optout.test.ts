@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -22,12 +22,12 @@ import type { ARPEvent, ARPConfig } from '../types';
  * vacuous.
  */
 
-const testConfig: ARPConfig = { rules: [], monitors: [], interceptors: [] };
+const testConfig: ARPConfig = { agentName: 'runtime-twin-optout-test', rules: [], monitors: {}, interceptors: {} };
 
 const GRADIENT_URL = 'https://api.oa2a.org/api/v1/telemetry/behavioral-gradient';
 
 let home: string;
-let fetchSpy: ReturnType<typeof vi.fn>;
+let fetchSpy: Mock<unknown[], Promise<Response>>;
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'arp-twin-optout-'));
@@ -35,7 +35,7 @@ beforeEach(() => {
   delete process.env.OPENA2A_TELEMETRY_OPTOUT;
   delete process.env.ARP_TELEMETRY_DISABLED;
 
-  fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+  fetchSpy = vi.fn<unknown[], Promise<Response>>(async () => new Response('{}', { status: 200 }));
   vi.stubGlobal('fetch', fetchSpy);
 });
 
@@ -49,7 +49,7 @@ afterEach(() => {
 
 function emitTestEvent(engine: EventEngine): Promise<ARPEvent> {
   return engine.emit({
-    source: 'test-monitor',
+    source: 'process',
     category: 'normal',
     severity: 'info',
     description: 'Test event',

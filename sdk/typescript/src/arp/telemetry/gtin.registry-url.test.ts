@@ -50,7 +50,7 @@ beforeEach(async () => {
 
   // Guard: forward loopback requests to the real server; swallow anything else
   // so a regression can NEVER produce non-loopback egress from this test.
-  vi.stubGlobal('fetch', ((input: RequestInfo | URL, init?: RequestInit) => {
+  vi.stubGlobal('fetch', ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = String(input);
     attempted.push(url);
     if (url.startsWith('http://127.0.0.1:')) return realFetch(input, init);
