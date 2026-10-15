@@ -9,6 +9,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **Breaking change for code that sets `requireSignedRequests` or `maxTimestampAge`.** `A2ASecuritySettings`
+  carries the member names the server reads and answers with: `requireRequestSigning` in place of
+  `requireSignedRequests`, and `nonceValiditySeconds`, in seconds, in place of `maxTimestampAge`. It adds
+  `minAttestationCount`, `maxRequestsPerMinute`, `maxRequestsPerHour`, `createdBy` and `updatedBy`, and
+  `allowedAgentIds` and `blockedAgentIds` are optional. The server reads neither old name, and it replaces
+  every setting with the ones a `PUT /api/v1/a2a/security/settings` carries. Run against the server's handler,
+  a body with `requireSignedRequests: true` and no `requireRequestSigning` was answered `200` and stored request
+  signing off, and stored `nonceValiditySeconds`, `minAttestationCount`, `maxRequestsPerMinute` and
+  `maxRequestsPerHour` as 0 where the body left them out. To change some settings, read them with
+  `getSecuritySettings()` and pass the whole object, changed, to `updateSecuritySettings()`. The request is
+  pinned in `tests/fixtures/sdk_requests/a2a_update_security_settings.json`, which the backend's handler tests
+  post to that route and the Java SDK's tests hold its client to (#652).
+
 - **Breaking change for a verifier that sets `trustAttenuation` or `minDelegatedTrust` on each delegation.**
   `verifyDelegationChain()` takes the trust attenuation factor and the trust floor from its options,
   `trustAttenuation` (default 0.8) and `minDelegatedTrust` (default 0.3), which the verifier sets. It no longer

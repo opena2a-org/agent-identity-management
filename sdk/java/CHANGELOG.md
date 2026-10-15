@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Breaking change for code that calls `requireSignedRequests` or `maxTimestampAge`.** `A2ASecuritySettings`
+  carries the member names the server reads and answers with: `requireRequestSigning`
+  (`isRequireRequestSigning`, `setRequireRequestSigning`, `Builder.requireRequestSigning`) in place of
+  `requireSignedRequests`, and `nonceValiditySeconds`, in seconds, in place of `maxTimestampAge`. It adds
+  `minAttestationCount`, `maxRequestsPerMinute`, `maxRequestsPerHour`, `createdBy` and `updatedBy`. The server
+  reads neither old name, and it replaces every setting with the ones a `PUT /api/v1/a2a/security/settings`
+  carries. Run against the server's handler, a body with `requireSignedRequests: true` and no
+  `requireRequestSigning` was answered `200` and stored request signing off, and stored `nonceValiditySeconds`,
+  `minAttestationCount`, `maxRequestsPerMinute` and `maxRequestsPerHour` as 0 where the body left them out. To
+  change some settings, read them with `getSecuritySettings()` and pass the whole object, changed, to
+  `updateSecuritySettings()`. The request is pinned in
+  `sdk/typescript/tests/fixtures/sdk_requests/a2a_update_security_settings.json`, which the backend's handler
+  tests post to that route and the TypeScript SDK's tests hold its client to (#652).
+- `updateSecuritySettings` sends the settings members and none of `id`, `organizationId`, `createdBy`,
+  `updatedBy`, `createdAt` and `updatedAt`, which are read from the server's answer, and it no longer sends
+  `strictMode` and `monitorMode`. Settings read with `getSecuritySettings()`, changed and passed to
+  `updateSecuritySettings()` were answered `400 {"error":"Invalid request body"}`, measured with the server's
+  answer for an organization with no stored settings: the update sent `createdAt` and `updatedAt` as numbers,
+  which the server does not read as a time. That update now sends every setting the server answered, with the
+  change (#652).
+
 ### Added
 
 - `CredentialManager.withSdkCredentialsLock` runs an action while it holds a lock on the SDK credentials

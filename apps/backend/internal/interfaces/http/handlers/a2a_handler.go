@@ -1188,15 +1188,35 @@ func (h *A2AHandler) ListAllTrustScores(c fiber.Ctx) error {
 // Policy Evaluation Endpoint
 // ============================================================================
 
-// EvaluatePolicy evaluates A2A policies for a given action
+// evaluatePolicyOtherOrganizationMessage answers a policy evaluation whose body
+// names an organization other than the caller's. It names neither organization.
+const evaluatePolicyOtherOrganizationMessage = "organizationId must be your own organization; leave it out to evaluate your organization's policies"
+
+// EvaluatePolicy evaluates the A2A policies of the caller's organization for a
+// given action
 // POST /api/v1/a2a/policies/evaluate
 func (h *A2AHandler) EvaluatePolicy(c fiber.Ctx) error {
+	// SECURITY: the policies evaluated are those of the organization in the
+	// caller's credentials. The body's organizationId went to the service as
+	// given, so a caller that named another organization was answered with
+	// that organization's decision and the names of its active policies (#652).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+
 	var req application.EvaluateA2APolicyRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
+	if req.OrganizationID != uuid.Nil && req.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": evaluatePolicyOtherOrganizationMessage,
+		})
+	}
+	req.OrganizationID = orgID
 
 	decision, err := h.a2aService.EvaluateA2APolicy(c.Context(), req)
 	if err != nil {

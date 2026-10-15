@@ -305,14 +305,17 @@ describe('A2ASecuritySettings interface', () => {
       enforcementMode: 'strict',
       requireVerifiedSkills: true,
       minTrustScore: 0.7,
-      requireSignedRequests: true,
+      minAttestationCount: 3,
+      requireRequestSigning: true,
       requireNonceValidation: true,
-      maxTimestampAge: 300000,
+      nonceValiditySeconds: 300,
       blockedAgentIds: ['blocked-agent-1'],
       allowedAgentIds: ['allowed-agent-1', 'allowed-agent-2'],
+      maxRequestsPerMinute: 60,
+      maxRequestsPerHour: 1000,
     };
     expect(settings.minTrustScore).toBe(0.7);
-    expect(settings.requireSignedRequests).toBe(true);
+    expect(settings.requireRequestSigning).toBe(true);
   });
 });
 

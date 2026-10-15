@@ -1,0 +1,19 @@
+{
+  "description": "The request A2AClient.updateSecuritySettings sends, in the TypeScript SDK for these settings and in the Java SDK for settings that give every settings member: every settings member of the backend's A2ASecuritySettings, and none of its record members (id, organizationId, createdBy, updatedBy, createdAt, updatedAt).",
+  "method": "PUT",
+  "path": "/api/v1/a2a/security/settings",
+  "requestType": "A2ASecuritySettings",
+  "body": {
+    "enforcementMode": "strict",
+    "requireVerifiedSkills": true,
+    "minTrustScore": 0.7,
+    "minAttestationCount": 3,
+    "requireRequestSigning": true,
+    "requireNonceValidation": true,
+    "nonceValiditySeconds": 300,
+    "allowedAgentIds": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
+    "blockedAgentIds": ["550e8400-e29b-41d4-a716-446655440000"],
+    "maxRequestsPerMinute": 60,
+    "maxRequestsPerHour": 1000
+  }
+}
