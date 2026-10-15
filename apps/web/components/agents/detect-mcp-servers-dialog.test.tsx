@@ -56,6 +56,18 @@ describe("DetectMCPServersDialog", () => {
     expect(screen.getByRole("status").textContent).toBe(WAITING);
   });
 
+  it("says, before the commands, that the command can replace the agent's key pair", () => {
+    vi.mocked(api.getAgent).mockReturnValue(new Promise(() => {}));
+    renderDialog();
+
+    const note = screen.getByRole("note");
+    expect(note.textContent).toBe(
+      "This can replace the agent's key pair. If the SDK on that machine has no saved credentials for this agent, the command creates a new key pair and replaces the agent's public key with it before it registers the MCP servers."
+    );
+    const code = screen.getByRole("dialog").querySelector("pre code") as Element;
+    expect(note.compareDocumentPosition(code) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("escapes a name that holds quotes for both the shell and Python", () => {
     expect(detectCommand(`O'Brien "$x"`)).toBe(
       String.raw`python -c "from aim_sdk import secure; secure('O\\'Brien \"\$x\"', auto_detect_mcp=True)"`

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -133,6 +133,15 @@ export function DetectMCPServersDialog({
             {`Run this on the machine where ${agent.displayName || agent.name} runs. The MCP servers in its Claude Desktop configuration are registered to the agent.`}
           </DialogDescription>
         </DialogHeader>
+        {/* secure() finds the agent by name; with no saved credentials it sends PUT /api/v1/agents/{id}/keys. */}
+        <div role="note" className="flex items-start gap-3 rounded-inset border border-warning-border bg-warning-fill p-3">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning-text" aria-hidden="true" />
+          <p className="text-sm text-warning-text">
+            <strong className="font-semibold">This can replace the agent&apos;s key pair.</strong>{" "}
+            If the SDK on that machine has no saved credentials for this agent, the command creates a new key pair
+            and replaces the agent&apos;s public key with it before it registers the MCP servers.
+          </p>
+        </div>
         <div className="relative min-w-0">
           <pre className={CODE}>
             <code>{commands}</code>
