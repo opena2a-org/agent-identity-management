@@ -616,6 +616,7 @@ type Repositories struct {
 	A2ARevokedAgent      *repository.A2ARevokedAgentRepository
 	A2ASecuritySettings  *repository.A2ASecuritySettingsRepository
 	A2ASecurityViolation *repository.A2ASecurityViolationRepository
+	A2ADelegation        *repository.A2ADelegationRepository
 	DeviceCode           *repository.DeviceCodeRepository
 	Remediation          *repository.RemediationRepository // For remediation tracking (agentpwn + HMA)
 	// Secrets management repositories
@@ -678,6 +679,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		A2ARevokedAgent:      repository.NewA2ARevokedAgentRepository(db),
 		A2ASecuritySettings:  repository.NewA2ASecuritySettingsRepository(db),
 		A2ASecurityViolation: repository.NewA2ASecurityViolationRepository(db),
+		A2ADelegation:        repository.NewA2ADelegationRepository(db),
 		DeviceCode:           repository.NewDeviceCodeRepository(db),
 		Remediation:          repository.NewRemediationRepository(db),
 		// Secrets management
@@ -723,6 +725,7 @@ type Services struct {
 	CapabilityRequest *application.CapabilityRequestService // ✅ For capability expansion approval workflow
 	Detection         *application.DetectionService         // ✅ For MCP auto-detection (SDK + Direct API)
 	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
+	A2ADelegation     *application.A2ADelegationService     // For A2A delegations and delegation chain verification
 	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
 	RegistryBridge    *application.RegistryBridgeService    // For OpenA2A Registry attestation contribution
 	Remediation       *application.RemediationService       // For remediation tracking (agentpwn + HMA)
@@ -1031,6 +1034,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		signingKeys.Key(crypto.PurposeCardAttestation),
 	)
 
+	// A2A delegations between an organization's agents, and the delegation
+	// chain verification that applies each delegation's trust attenuation.
+	a2aDelegationService := application.NewA2ADelegationService(repos.A2ADelegation, repos.Agent)
+
 	// Device Authorization Grant (RFC 8628) for CLI login. The verification URI
 	// the CLI prints is a dashboard page (/device), so its base is the dashboard
 	// origin, FRONTEND_URL, the same base registration and password-reset links
@@ -1222,6 +1229,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		CapabilityRequest: capabilityRequestService,                             // ✅ For capability expansion approval workflow
 		Detection:         detectionService,                                     // ✅ For MCP auto-detection (SDK + Direct API)
 		A2A:               a2aService,                                           // ✅ For A2A (Agent-to-Agent) protocol
+		A2ADelegation:     a2aDelegationService,                                 // For A2A delegations and delegation chain verification
 		DeviceAuth:        deviceAuthService,                                    // For OAuth Device Authorization Grant (RFC 8628)
 		RegistryBridge:    registryBridgeService,                                // For OpenA2A Registry attestation contribution
 		Remediation:       application.NewRemediationService(repos.Remediation), // For remediation tracking
@@ -1268,6 +1276,7 @@ type Handlers struct {
 	MCPDiscovery       *handlers.MCPDiscoveryHandler       // ✅ For MCP discovery dashboard
 	SupplyChain        *handlers.SupplyChainHandler        // ✅ For MCP supply chain analytics
 	A2A                *handlers.A2AHandler                // For A2A (Agent-to-Agent) protocol
+	A2ADelegation      *handlers.A2ADelegationHandler      // For A2A delegations and delegation chain verification
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
@@ -1467,6 +1476,10 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 		A2A: handlers.NewA2AHandler(
 			services.A2A,
 			services.Agent,
+			services.Audit,
+		),
+		A2ADelegation: handlers.NewA2ADelegationHandler(
+			services.A2ADelegation,
 			services.Audit,
 		),
 		OAuthToken: handlers.NewOAuthTokenHandler(jwtService, repos.Agent),
@@ -2128,6 +2141,15 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	a2a.Get("/consent/check", h.A2A.CheckConsent)
 	a2a.Post("/consent/:id/revoke", h.A2A.RevokeConsent)
 	a2a.Get("/consent/user/:userId", h.A2A.ListUserConsents)
+
+	// A2A Delegations: a manager grants and revokes a delegation between two of
+	// the organization's agents; any caller in the organization reads them and
+	// verifies a chain, which applies each delegation's trust attenuation.
+	a2a.Post("/delegations", middleware.ManagerMiddleware(), h.A2ADelegation.CreateDelegation)
+	a2a.Get("/delegations", h.A2ADelegation.ListDelegations)
+	a2a.Post("/delegations/verify", h.A2ADelegation.VerifyDelegationChain)
+	a2a.Get("/delegations/:id", h.A2ADelegation.GetDelegation)
+	a2a.Post("/delegations/:id/revoke", middleware.ManagerMiddleware(), h.A2ADelegation.RevokeDelegation)
 
 	// A2A Trust Scores (admin)
 	a2a.Get("/trust-scores", h.A2A.ListAllTrustScores)

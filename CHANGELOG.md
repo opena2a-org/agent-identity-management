@@ -371,6 +371,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   scan in `sdk/python/tests/test_enforcement_deadline.py` are skipped with the reason. Before, they
   failed with `not a git repository` and `CalledProcessError`.
 
+### Added — the server grants delegations between agents and verifies a delegation chain, applying each delegation's trust attenuation factor and floor (#679)
+
+- `POST /api/v1/a2a/delegations` grants a delegation from one of the organization's agents to another, for a
+  manager or admin. A field left out takes the `a2a_delegation` column default: `trustAttenuationFactor` 0.8,
+  `minDelegatedTrustScore` 0.3, `maxChainDepth` 3, `canDelegateFurther` false. An agent of another
+  organization is answered 404, and a second active delegation for the same two agents 409.
+  `GET /api/v1/a2a/delegations` and `GET /api/v1/a2a/delegations/{id}` read the organization's delegations,
+  and `POST /api/v1/a2a/delegations/{id}/revoke`, for a manager or admin, marks one inactive. Each grant and
+  revoke is recorded in the audit log; a record that cannot be written is logged by the server and does not
+  undo the change.
+- `POST /api/v1/a2a/delegations/verify` takes the IDs of a chain of the organization's delegations, root
+  first, and answers `valid` with each delegation's effective trust. The trust starts at the root
+  delegator's trust score and every delegation multiplies it by its own `trustAttenuationFactor`, rounded to
+  six decimal places. A delegation whose effective trust is below its floor fails; the floor is the highest
+  `minDelegatedTrustScore` of that delegation and the ones before it. With a root delegator at 0.9 and three
+  delegations at the defaults the figures are 0.72, 0.576 and 0.4608; with a root delegator at 0.5 the third
+  is 0.256 and the chain is not valid. A delegation also fails when it is revoked or outside its validity
+  window, does not continue the chain, follows a delegation without `canDelegateFurther`, exceeds a
+  `maxChainDepth`, names an agent whose status is not verified or pending, or does not cover the requested
+  `skillId`.
+- Before this change the only backend Go code, tests aside, that named either field was the `A2ADelegation`
+  struct that declares them, and no backend Go code outside tests registered a `/delegations` route.
+  The [A2A guide](docs/guides/A2A.md#delegation-trust-attenuation) describes the routes and the checks, and
+  [Trust Scoring](docs/sdk/trust-scoring.md#delegation-trust-attenuation), which said the server applies
+  neither value, says where it applies both.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the

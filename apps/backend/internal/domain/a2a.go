@@ -938,16 +938,20 @@ type A2ACallChainRepository interface {
 	GetChainSummary(ctx context.Context, chainID uuid.UUID) (*A2AChainSummary, error)
 }
 
-// A2ADelegationRepository defines operations for delegation management
+// A2ADelegationRepository stores delegations between agents. Every read and
+// the revoke take the caller's organization and apply it in the query, so a
+// delegation of another organization reads as absent.
 type A2ADelegationRepository interface {
+	// Create stores a delegation and returns ErrA2ADelegationActive when the
+	// delegator and delegate already have an active one.
 	Create(ctx context.Context, delegation *A2ADelegation) error
-	GetByID(ctx context.Context, id uuid.UUID) (*A2ADelegation, error)
-	GetByDelegator(ctx context.Context, delegatorID uuid.UUID) ([]*A2ADelegation, error)
-	GetByDelegate(ctx context.Context, delegateID uuid.UUID) ([]*A2ADelegation, error)
-	GetByOrganization(ctx context.Context, orgID uuid.UUID) ([]*A2ADelegation, error)
-	IsAuthorizedDelegate(ctx context.Context, delegatorID, delegateID uuid.UUID, skillID string) (bool, error)
-	Update(ctx context.Context, delegation *A2ADelegation) error
-	Revoke(ctx context.Context, id uuid.UUID) error
+	// GetByIDs returns the organization's delegations among ids, in no order.
+	GetByIDs(ctx context.Context, orgID uuid.UUID, ids []uuid.UUID) ([]*A2ADelegation, error)
+	// ListByOrganization returns the organization's delegations, newest first.
+	ListByOrganization(ctx context.Context, orgID uuid.UUID, limit, offset int) ([]*A2ADelegation, error)
+	// Revoke marks the delegation inactive and returns it, or returns
+	// ErrA2ADelegationNotFound.
+	Revoke(ctx context.Context, orgID, id uuid.UUID) (*A2ADelegation, error)
 }
 
 // A2AAgentDependencyRepository defines operations for dependency tracking

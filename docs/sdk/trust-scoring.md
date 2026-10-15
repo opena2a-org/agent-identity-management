@@ -679,7 +679,7 @@ Example: Agent A (trust 1.0) delegates to Agent B, which delegates to Agent C:
 - Agent B: 1.0 x 0.8 = 0.8
 - Agent C: 0.8 x 0.8 = 0.64
 
-The AIM server stores a `trustAttenuationFactor` and a `minDelegatedTrustScore` for each delegation and applies neither. The TypeScript SDK's `verifyDelegationChain()` applies the factor and the floor its caller passes in its options, `trustAttenuation` and `minDelegatedTrust`, and not values carried on a delegation, which its signature does not cover. A chain whose delegations carry either value fails unless the caller passes the matching option. See Delegation Trust Attenuation in [the A2A guide](../guides/A2A.md).
+The AIM server stores a `trustAttenuationFactor` and a `minDelegatedTrustScore` for each delegation and applies both when it verifies a chain of its delegations with `POST /api/v1/a2a/delegations/verify`: the trust starts at the root delegator's trust score, every delegation multiplies it by its own factor, and a later delegation cannot lower the floor an earlier one set. The TypeScript SDK's `verifyDelegationChain()` applies the factor and the floor its caller passes in its options, `trustAttenuation` and `minDelegatedTrust`, and not values carried on a delegation, which its signature does not cover. A chain whose delegations carry either value fails unless the caller passes the matching option. See Delegation Trust Attenuation in [the A2A guide](../guides/A2A.md).
 
 ### Production Readiness
 
