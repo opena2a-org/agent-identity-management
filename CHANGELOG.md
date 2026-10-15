@@ -644,6 +644,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   requests. The event SIEM forwarding queues from such a row is serialized after the request has
   ended, and it names the address of the request that wrote the row.
 
+### Fixed — an A2A request that fails is no longer answered 2xx, and every A2A failure is answered through one mapping
+
+- Each failure response of the A2A handler names one failure kind, and `a2a_failures.go` holds the status and
+  reason every kind is answered with. The handler builds only its success responses.
+- `a2a_failures_test.go` injects each failure an A2A route can meet on each of the 48 routes the A2A handler
+  serves, 257 cases in all: malformed JSON, a path or query value that is not UTF-8 text or holds a NUL
+  character, no organization in context, a policy evaluation that names another organization, an unknown,
+  foreign, suspended or unreadable agent, a failed repository statement, a nonce that is empty, used before
+  or cannot be read or recorded, and a signature that does not verify.
+  Eleven answers changed, each measured with that test before and after. Every other case answers the status
+  and body it answered before, byte for byte.
+- `GET /api/v1/a2a/agents/:id/trust-score` and `GET /api/v1/a2a/trust/:id`, when the stored score cannot be
+  read or is zero and computing it fails, answer 500 with the fixed server error line and log the cause. Before, both answered 200
+  `{"agentId":"<agent id>","message":"Could not compute trust score","score":0}`.
+- `GET /api/v1/a2a/tasks` answers 400 `Invalid agent ID` for an `agentId` that is not a UUID, measured with
+  `billing`, a byte that is not UTF-8 and a NUL character. Before, it answered 200 and ignored the `agentId`.
+- `GET /api/v1/a2a/consent/check` answers 400 `scope must be UTF-8 text without a NUL character` for such a
+  `scope`. Before, a `scope` that is not UTF-8 was answered 200 with `hasConsent: false`, and a `scope` holding
+  a NUL character was answered 500, because the database refuses it inside the consent check's JSON.
+- `POST /api/v1/a2a/consent/:id/revoke` answers 400 `Invalid request body` for a body that is present and is
+  not JSON, and revokes nothing. Before, it answered 200 `Consent revoked successfully` with `revoked: true`. A
+  request with no body, or only white space, is still revoked with the default reason.
+- `GET /api/v1/a2a/consensus/:agentId/:skillId` and `GET /api/v1/a2a/agents/:id/skills/:skillId/consensus`
+  answer 400 `skillId must be UTF-8 text without a NUL character` for a `skillId` that is not UTF-8. Before,
+  both answered 200 with a consensus result of no attestations.
+- `DELETE /api/v1/a2a/skills/:id` answers 400 `id must be UTF-8 text without a NUL character` for an `id` that
+  is not UTF-8. Before, it answered 204.
+- `a2a_failures_census_test.go` fails when the A2A handler builds a 4xx or 5xx response, or calls
+  `respondServerError`, `respondResourceNotFound` or `fiber.NewError`, outside the mapping.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the
