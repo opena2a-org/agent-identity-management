@@ -17,7 +17,8 @@ Which refreshes rotate depends on the token and on the server:
   answers a refresh with the refresh token it was given, and logout cannot revoke it. See
   [How do I know if my token has been rotated?](#q-how-do-i-know-if-my-token-has-been-rotated).
 
-This prevents attackers from using stolen tokens, even if they manage to intercept or steal your credentials.
+A stolen refresh token is refused once rotation has retired it. How long one keeps working before
+that is in [The Solution: Token Rotation](#the-solution-token-rotation).
 
 ---
 
@@ -25,18 +26,35 @@ This prevents attackers from using stolen tokens, even if they manage to interce
 
 ### The Problem: Token Theft
 
-Without token rotation:
-- ❌ Stolen tokens work **forever** (until manual revocation)
-- ❌ Attackers can use old tokens **indefinitely**
-- ❌ No automatic protection against credential leaks
+A refresh at `POST /api/v1/auth/refresh` asks for the refresh token and nothing else, so whoever
+holds a copy of a refresh token can refresh with it, as the agent does.
 
 ### The Solution: Token Rotation
 
-With token rotation:
-- ✅ Stolen tokens **expire immediately** after use
-- ✅ Only the **most recently issued token** works
-- ✅ **Automatic protection** against credential theft
-- ✅ Complete **audit trail** of all token usage
+A refresh that rotates retires the refresh token it was given. Where refreshes rotate (see
+[What is Token Rotation?](#what-is-token-rotation)), how long a stolen copy keeps working depends
+on who refreshes first:
+
+- **The agent refreshes first.** The stolen copy is retired. When the thief presents it, it is
+  refused and the token family ends, the agent's new token included (see the
+  [theft scenario](#theft-scenario-token-rotation-protects-you)).
+- **The thief refreshes first.** The thief now holds the newest refresh token and can keep
+  refreshing while the agent is silent. The agent's next refresh presents the retired token, and
+  that ends the family, the thief's token included.
+
+While the agent is silent, the thief's tokens keep working at most this long:
+
+- **A sign-in from `aim-sdk login`**: until `JWT_SESSION_MAX_AGE` after the sign-in (**8 hours**
+  by default), however often it is refreshed. From then on its refresh token is refused, and so
+  are its access tokens.
+- **A token from an SDK download**: as long as it is refreshed at least every **90 days**. It has
+  no maximum age, and each refresh issues a refresh token that lasts 90 days.
+- **An access token**: at most `JWT_ACCESS_TTL` from when it was issued (**2 hours** by default).
+  A refresh does not retire an access token, so one stolen before a refresh is still accepted
+  after it.
+
+On a server without Redis a sign-in from `aim-sdk login` is not rotated, so a stolen copy of its
+refresh token keeps working as long as the agent's own, until the sign-in ends.
 
 ---
 
@@ -220,9 +238,10 @@ cp dev/.aim/sdk_credentials.json production/.aim/  # Will cause rotation conflic
 Token rotation provides:
 
 1. **Automatic Token Revocation**
-   - Every token use triggers revocation of previous token
-   - No manual revocation needed
-   - Immediate protection against stolen credentials
+   - A refresh that rotates retires the refresh token it was given
+   - A retired refresh token presented again is refused and ends its token family
+   - A stolen token is not refused at once: [The Solution: Token Rotation](#the-solution-token-rotation)
+     says how long one keeps working
 
 2. **Complete Audit Trail**
    - Every token issuance logged in database
