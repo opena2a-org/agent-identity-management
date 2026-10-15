@@ -27,7 +27,7 @@ function collectEvents(engine: EventEngine): ARPEvent[] {
 
 // --- CR-002: No-ask-mode / fail-closed enforcement ---
 
-describe('CR-002: Fail-closed enforcement (no ask mode)', () => {
+describe('Fail-closed enforcement (no ask mode)', () => {
   it('rules with requireLlmConfirmation still execute enforcement immediately', async () => {
     const engine = createEngine({
       rules: [{
@@ -122,7 +122,7 @@ describe('CR-002: Fail-closed enforcement (no ask mode)', () => {
 
 // --- CR-001: Parse-to-deny (command complexity) ---
 
-describe('CR-001: Adversarial bash pipeline detection', () => {
+describe('Adversarial bash pipeline detection', () => {
   // We test the analyzeCommandComplexity function indirectly through
   // the ProcessInterceptor, but also test the logic directly.
 
@@ -227,7 +227,7 @@ describe('CR-001: Adversarial bash pipeline detection', () => {
 
 // --- CR-001: Parse-to-deny (L2 assessment parser) ---
 
-describe('CR-001: L2 assessment parser deny-safe defaults', () => {
+describe('L2 assessment parser deny-safe defaults', () => {
   // We can't easily import parseAssessment (it's not exported),
   // but we test the behavior through the coordinator integration.
   // These tests verify the contract: unparseable = deny.

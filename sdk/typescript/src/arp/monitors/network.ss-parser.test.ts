@@ -54,19 +54,19 @@ describe('NetworkMonitor ss parser — column shift under the state filter', () 
     vi.mocked(execSync).mockReset();
   });
 
-  it('AIM-04.AC1 filtered shape (ss -tpn state established) yields both connections with correct columns', () => {
+  it('filtered shape (ss -tpn state established) yields both connections with correct columns', () => {
     const connections = parseSs(FIXTURE_FILTERED);
     expect(connections).toHaveLength(2);
     expect(connections[0]).toMatchObject(FIRST_CONNECTION);
   });
 
-  it('AIM-04.AC1 unfiltered shape (ss -tpn, State column present) yields both connections with correct columns', () => {
+  it('unfiltered shape (ss -tpn, State column present) yields both connections with correct columns', () => {
     const connections = parseSs(FIXTURE_UNFILTERED);
     expect(connections).toHaveLength(2);
     expect(connections[0]).toMatchObject(FIRST_CONNECTION);
   });
 
-  it('AIM-04.AC2 filtered shape without a process column keeps both lines, pid undefined', () => {
+  it('filtered shape without a process column keeps both lines, pid undefined', () => {
     const connections = parseSs(FIXTURE_FILTERED_NO_PROCESS);
     expect(connections).toHaveLength(2);
     expect(connections[0]).toMatchObject(FIRST_CONNECTION);
@@ -74,11 +74,11 @@ describe('NetworkMonitor ss parser — column shift under the state filter', () 
     expect(connections[1].pid).toBeUndefined();
   });
 
-  it('AIM-04.AC3 header-only output (filtered shape) yields zero connections', () => {
+  it('header-only output (filtered shape) yields zero connections', () => {
     expect(parseSs(HEADER_ONLY_FILTERED)).toHaveLength(0);
   });
 
-  it('AIM-04.AC3 header-only output (State-column shape) yields zero connections', () => {
+  it('header-only output (State-column shape) yields zero connections', () => {
     expect(parseSs(HEADER_ONLY_UNFILTERED)).toHaveLength(0);
   });
 });

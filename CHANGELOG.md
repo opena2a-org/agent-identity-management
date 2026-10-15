@@ -50,6 +50,33 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `apps/backend/internal/interfaces/http/handlers/sdk_token_recovery_family_end_test.go` and
   `apps/backend/internal/application/sdk_token_service_family_rows_test.go`.
 
+### Changed — the backend's print and log lines say what happened in words, with no pictographic mark (#695)
+
+- 384 lines in 34 non-test Go files under `apps/backend` named `fmt.` or `log.` and carried a pictographic
+  mark, two of them commented out; the Redis summary for a disabled Redis and the three token revocation
+  disabled lines that `cmd/server/main.go` returns as strings carried one too. The marks are gone and the
+  words stay: `Database migrations completed successfully`, `Redis: disabled (running without caching)`,
+  `Token revocation disabled (Redis unavailable): ...`.
+- `aim-bootstrap` numbers its steps `1.` to `4.`, and `docs/guides/BOOTSTRAP_GUIDE.md` quotes those lines
+  without the marks. `aim-server migrate` with `POSTGRES_HOST` and `POSTGRES_DB` set and `POSTGRES_USER`
+  unset writes `Database configuration: required environment variable(s) not set: POSTGRES_USER` and exits 1.
+- The marks counted are the ones `sdk/python/tests/test_no_emoji_in_console_output.py` keeps out of the
+  Python SDK's console output. `TestBackendPrintAndLogLinesCarryNoPictographs` reads every non-test Go file
+  under `apps/backend` and fails on a line that names `fmt.` or `log.` and carries one.
+
+### Changed — the TypeScript SDK's test titles open with what they check, and the contributing guide says what its tests need (#695)
+
+- 157 test titles in 24 files under `sdk/typescript` opened with a tracking identifier such as `AIM-11.AC4`
+  or `CR-002:`, or with an ARP pattern identifier such as `PI-001:`. The tracking identifiers are gone, and a
+  pattern identifier follows the behaviour: `detects path traversal (MCP-001)`.
+  `tests/test-title-names.test.ts` parses the SDK's tests and fails on a `describe`, `it` or `test` title
+  that opens with a capital letter, any capitals or digits, a hyphen and a digit.
+- `CONTRIBUTING.md` gives the TypeScript SDK's test commands and says that its `npm test` runs three of the
+  repository's documentation lints with `python3` and `bash`, needs `git` and a git checkout, and fails the
+  link lint's case in a tree without `.git`, such as a source archive, or with an untracked file that links
+  to the `opena2a` GitHub account. `tests/repo-doc-lints.test.ts` checks that the guide names the three
+  scripts and quotes the link lint's own message.
+
 ### Changed — a downloaded SDK's credential ends `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token
 
 - Each refresh of an SDK-download token issues a new 90-day token. The chain now ends: `SDK_TOKEN_FAMILY_MAX_AGE`

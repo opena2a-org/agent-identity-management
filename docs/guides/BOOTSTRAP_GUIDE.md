@@ -101,9 +101,9 @@ Expected output:
 
 Agent Identity Management - Initial Setup
 
-📊 Connecting to database...
+Connecting to database...
 
-📋 Bootstrap Configuration:
+Bootstrap Configuration:
    • Admin Email:    admin@company.com
    • Admin Name:     System Administrator
    • Organization:   My Company
@@ -111,27 +111,27 @@ Agent Identity Management - Initial Setup
    • Max Users:      100
    • Max Agents:     1000
 
-⚠️  This will create the initial admin user and organization. Continue? (yes/no): yes
+This will create the initial admin user and organization. Continue? (yes/no): yes
 
-🚀 Starting bootstrap process...
-1️⃣  Checking organization...
+Starting bootstrap process...
+1. Checking organization...
    Creating organization 'My Company'...
-   ✓ Organization created
-2️⃣  Hashing password...
-   ✓ Password hashed
-3️⃣  Creating admin user...
-   ✓ Admin user created (ID: 83018b76-39b0-4dea-bc1b-67c53bb03fc7)
-4️⃣  Updating system configuration...
-   ✓ System configuration updated
+   Organization created
+2. Hashing password...
+   Password hashed
+3. Creating admin user...
+   Admin user created (ID: 83018b76-39b0-4dea-bc1b-67c53bb03fc7)
+4. Updating system configuration...
+   System configuration updated
 
-✅ Bootstrap completed successfully!
+Bootstrap completed successfully!
 
-ℹ️  Admin user: admin@company.com
+Admin user: admin@company.com
     Sign in with the password supplied to this run (--admin-password or DEFAULT_ADMIN_PASSWORD); it is not printed.
 
 You can now log in at: http://localhost:3000/auth/login
 
-⚠️  IMPORTANT: Please change the admin password after first login!
+IMPORTANT: Please change the admin password after first login!
 ```
 
 ### Step 3: Start Backend Server
@@ -317,7 +317,7 @@ go run cmd/bootstrap/main.go \
   --org-name="My Company"
 
 # Output:
-⚠️  System already bootstrapped!
+System already bootstrapped!
 Do you want to create another admin user? (yes/no): yes
 ```
 

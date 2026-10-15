@@ -86,9 +86,9 @@ func main() {
 	})
 	switch {
 	case errors.Is(otelErr, telemetry.ErrDisabled):
-		log.Println("ℹ️  OpenTelemetry disabled (OTEL_EXPORTER_OTLP_ENDPOINT is set and empty)")
+		log.Println("OpenTelemetry disabled (OTEL_EXPORTER_OTLP_ENDPOINT is set and empty)")
 	case otelErr != nil:
-		log.Printf("⚠️  OpenTelemetry init failed: %v (continuing without telemetry)", otelErr)
+		log.Printf("OpenTelemetry init failed: %v (continuing without telemetry)", otelErr)
 	default:
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -97,7 +97,7 @@ func main() {
 				log.Printf("OpenTelemetry shutdown error: %v", err)
 			}
 		}()
-		log.Println("✅ OpenTelemetry initialized (OTLP gRPC)")
+		log.Println("OpenTelemetry initialized (OTLP gRPC)")
 	}
 
 	// Initialize database: the request pool serves requests and the
@@ -129,9 +129,9 @@ func main() {
 	// ⚡ Run database migrations automatically on startup
 	// This ensures production deployments have correct schema without manual intervention
 	if err := runMigrations(migrationDB); err != nil {
-		log.Fatal("❌ Database migrations failed:", err)
+		log.Fatal("Database migrations failed:", err)
 	}
-	log.Println("✅ Database migrations completed successfully")
+	log.Println("Database migrations completed successfully")
 
 	// The audit record path's start state: pre-chain while no chain has
 	// started and a foreign key removes audit rows by cascade. It is read once,
@@ -143,18 +143,18 @@ func main() {
 
 	// Seed the first administrator from ADMIN_PASSWORD; an existing account is never changed.
 	if err := seedAdminFromEnv(migrationDB); err != nil {
-		log.Printf("⚠️  Failed to seed administrator from ADMIN_PASSWORD: %v", err)
+		log.Printf("Failed to seed administrator from ADMIN_PASSWORD: %v", err)
 	}
 
 	// Initialize Redis (optional - used for caching only)
 	redisClient, err := initRedis(cfg)
 	switch {
 	case err != nil:
-		log.Printf("⚠️  Redis connection failed: %v", err)
-		log.Println("ℹ️  AIM will continue without caching (Redis is optional)")
+		log.Printf("Redis connection failed: %v", err)
+		log.Println("AIM will continue without caching (Redis is optional)")
 		redisClient = nil // Continue without Redis
 	case redisClient == nil:
-		log.Println("ℹ️  Redis disabled (REDIS_HOST is set and empty): AIM will continue without caching")
+		log.Println("Redis disabled (REDIS_HOST is set and empty): AIM will continue without caching")
 	default:
 		defer redisClient.Close()
 	}
@@ -191,8 +191,8 @@ func main() {
 	// Initialize email service
 	emailService, err := initEmailService()
 	if err != nil {
-		log.Printf("⚠️  Email service initialization failed: %v", err)
-		log.Println("ℹ️  AIM will continue without email notifications")
+		log.Printf("Email service initialization failed: %v", err)
+		log.Println("AIM will continue without email notifications")
 		emailService = nil // Continue without email
 	}
 
@@ -202,13 +202,13 @@ func main() {
 	// Convert stored agent private keys to the storage-bound v2 format once,
 	// before the server accepts requests: the request path refuses v1.
 	if _, err := application.MigrateAgentPrivateKeysToV2(context.Background(), migrationDB, keyVault); err != nil {
-		log.Printf("⚠️  Agent private key migration did not finish: %v", err)
+		log.Printf("Agent private key migration did not finish: %v", err)
 	}
 
 	// Every startup migration has run: close the migration handle before the
 	// server listens.
 	if err := migrationDB.Close(); err != nil {
-		log.Printf("⚠️  Closing the migration handle: %v", err)
+		log.Printf("Closing the migration handle: %v", err)
 	}
 
 	// Initialize handlers
@@ -303,8 +303,8 @@ func main() {
 
 	// Start server
 	port := cfg.Server.Port
-	log.Printf("🚀 Agent Identity Management API starting on port %s", port)
-	log.Printf("📊 Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port)
+	log.Printf("Agent Identity Management API starting on port %s", port)
+	log.Printf("Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port)
 	log.Print(redisStartupSummary(cfg, redisClient))
 
 	// Start background job for automatic JIT access expiration
@@ -364,7 +364,7 @@ func main() {
 	// retry, so their records say abandoned and not retrying; an event raised
 	// after this is recorded as abandoned and not sent.
 	if !services.Webhook.Stop(webhookDrainTimeout) {
-		log.Printf("⚠️  Webhook deliveries still in flight after %s", webhookDrainTimeout)
+		log.Printf("Webhook deliveries still in flight after %s", webhookDrainTimeout)
 	}
 	// Deliver the audit log entries still queued for the SIEM.
 	if siemForwarder != nil {
@@ -382,7 +382,7 @@ func main() {
 	stopCensus()
 
 	if err := metricsSrv.Stop(); err != nil {
-		log.Printf("⚠️  Metrics listener did not drain within %s: %v", metricsShutdownTimeout, err)
+		log.Printf("Metrics listener did not drain within %s: %v", metricsShutdownTimeout, err)
 	}
 
 	log.Println("Server exited")
@@ -459,7 +459,7 @@ func initRequestPool(cfg *config.Config, census *database.Census) (*sql.DB, erro
 		return nil, err
 	}
 
-	log.Println("✅ Database connected")
+	log.Println("Database connected")
 	return db, nil
 }
 
@@ -514,7 +514,7 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 		return nil, err
 	}
 
-	log.Println("✅ Redis connected")
+	log.Println("Redis connected")
 	return client, nil
 }
 
@@ -524,11 +524,11 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 func redisStartupSummary(cfg *config.Config, redisClient *redis.Client) string {
 	switch {
 	case redisClient != nil:
-		return fmt.Sprintf("💾 Redis: %s:%d (connected)", cfg.Redis.Host, cfg.Redis.Port)
+		return fmt.Sprintf("Redis: %s:%d (connected)", cfg.Redis.Host, cfg.Redis.Port)
 	case cfg.Redis.Disabled:
-		return "💾 Redis: disabled (running without caching)"
+		return "Redis: disabled (running without caching)"
 	default:
-		return fmt.Sprintf("💾 Redis: %s:%d (unavailable, running without caching)", cfg.Redis.Host, cfg.Redis.Port)
+		return fmt.Sprintf("Redis: %s:%d (unavailable, running without caching)", cfg.Redis.Host, cfg.Redis.Port)
 	}
 }
 
@@ -539,13 +539,13 @@ func redisStartupSummary(cfg *config.Config, redisClient *redis.Client) string {
 func tokenRevocationStartupLine(cfg *config.Config, redisClient *redis.Client, cacheService *cache.RedisCache, failOpen bool) string {
 	switch {
 	case cacheService != nil:
-		return fmt.Sprintf("ℹ️  Token revocation enabled (fail-open=%v)", failOpen)
+		return fmt.Sprintf("Token revocation enabled (fail-open=%v)", failOpen)
 	case cfg.Redis.Disabled:
-		return "ℹ️  Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke"
+		return "Token revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke"
 	case redisClient == nil:
-		return "ℹ️  Token revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
+		return "Token revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
 	default:
-		return "ℹ️  Token revocation disabled (cache initialization failed): refresh tokens are not rotated and logout cannot revoke"
+		return "Token revocation disabled (cache initialization failed): refresh tokens are not rotated and logout cannot revoke"
 	}
 }
 
@@ -555,9 +555,9 @@ func tokenRevocationStartupLine(cfg *config.Config, redisClient *redis.Client, c
 func initCache(cfg *config.Config, redisClient *redis.Client) *cache.RedisCache {
 	if redisClient == nil {
 		if cfg.Redis.Disabled {
-			log.Println("ℹ️  Cache service skipped (Redis disabled)")
+			log.Println("Cache service skipped (Redis disabled)")
 		} else {
-			log.Println("ℹ️  Cache service skipped (Redis unavailable)")
+			log.Println("Cache service skipped (Redis unavailable)")
 		}
 		return nil
 	}
@@ -570,11 +570,11 @@ func initCache(cfg *config.Config, redisClient *redis.Client) *cache.RedisCache 
 		UseTLS:   cfg.Redis.UseTLS,
 	})
 	if err != nil {
-		log.Printf("⚠️  Cache initialization failed: %v", err)
-		log.Println("ℹ️  AIM will continue without caching")
+		log.Printf("Cache initialization failed: %v", err)
+		log.Println("AIM will continue without caching")
 		return nil
 	}
-	log.Println("✅ Cache service initialized")
+	log.Println("Cache service initialized")
 	return cacheService
 }
 
@@ -743,7 +743,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	if err != nil {
 		log.Fatal("Failed to initialize KeyVault:", err)
 	}
-	log.Println("✅ KeyVault initialized for automatic key generation")
+	log.Println("KeyVault initialized for automatic key generation")
 
 	// Server signing keys: one per purpose (card attestation, ATC issuer), so
 	// a signature made for one purpose never verifies for another. Each key is either
@@ -1535,7 +1535,7 @@ func initEmailService() (domain.EmailService, error) {
 		provider = "azure"
 	}
 	fromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
-	log.Printf("✅ Email service initialized (provider: %s, from: %s)", provider, fromAddress)
+	log.Printf("Email service initialized (provider: %s, from: %s)", provider, fromAddress)
 
 	return service, nil
 }
@@ -2245,7 +2245,7 @@ func customErrorHandler(c fiber.Ctx, err error) error {
 
 	// 🔍 LOG ALL ERRORS for debugging. A 404's error text repeats the path, so
 	// the whole line is redacted, not just the path.
-	log.Print(middleware.RedactBootstrapTokens(fmt.Sprintf("❌ ERROR [%d] %s %s - %v", code, c.Method(), c.Path(), err)))
+	log.Print(middleware.RedactBootstrapTokens(fmt.Sprintf("ERROR [%d] %s %s - %v", code, c.Method(), c.Path(), err)))
 
 	return c.Status(code).JSON(fiber.Map{
 		"error":     true,
@@ -2273,7 +2273,7 @@ func reportRecordPathStart(db *sql.DB) {
 // runMigrations executes all pending database migrations automatically on startup
 // This ensures production deployments have the correct schema without manual intervention
 func runMigrations(db *sql.DB) error {
-	log.Println("🔄 Running database migrations...")
+	log.Println("Running database migrations...")
 
 	// Create migrations table if it doesn't exist
 	if err := createMigrationsTable(db); err != nil {
@@ -2287,7 +2287,7 @@ func runMigrations(db *sql.DB) error {
 	}
 
 	if len(files) == 0 {
-		log.Println("ℹ️  No migration files found")
+		log.Println("No migration files found")
 		return nil
 	}
 
@@ -2302,11 +2302,11 @@ func runMigrations(db *sql.DB) error {
 	for _, file := range files {
 		version := getMigrationVersion(file)
 		if applied[version] {
-			log.Printf("⏭️  Skipping %s (already applied)", file)
+			log.Printf("Skipping %s (already applied)", file)
 			continue
 		}
 
-		log.Printf("🔄 Applying %s...", file)
+		log.Printf("Applying %s...", file)
 
 		// Read migration file
 		content, err := os.ReadFile(filepath.Join("migrations", file))
@@ -2348,14 +2348,14 @@ func runMigrations(db *sql.DB) error {
 			return fmt.Errorf("failed to commit migration %s: %w", file, err)
 		}
 
-		log.Printf("✅ Applied %s", file)
+		log.Printf("Applied %s", file)
 		pendingCount++
 	}
 
 	if pendingCount == 0 {
-		log.Println("ℹ️  All migrations already applied (database is up to date)")
+		log.Println("All migrations already applied (database is up to date)")
 	} else {
-		log.Printf("✅ Successfully applied %d pending migration(s)", pendingCount)
+		log.Printf("Successfully applied %d pending migration(s)", pendingCount)
 	}
 
 	return nil
@@ -2452,7 +2452,7 @@ func startExpirationCleanupJob(db *sql.DB) chan struct{} {
 	ticker := time.NewTicker(5 * time.Minute) // Run every 5 minutes
 
 	go func() {
-		log.Println("🕐 Starting JIT access expiration cleanup job (runs every 5 minutes)")
+		log.Println("Starting JIT access expiration cleanup job (runs every 5 minutes)")
 
 		for {
 			select {
@@ -2460,7 +2460,7 @@ func startExpirationCleanupJob(db *sql.DB) chan struct{} {
 				runExpirationCleanup(db)
 			case <-stopChan:
 				ticker.Stop()
-				log.Println("🛑 Stopping JIT access expiration cleanup job")
+				log.Println("Stopping JIT access expiration cleanup job")
 				return
 			}
 		}
@@ -2494,14 +2494,14 @@ func startMCPTrustRescore(markers application.SystemMarkerStore, servers applica
 // runs even when the one before it fails.
 func runExpirationCleanup(db *sql.DB) {
 	if err := expireOldVerifications(db); err != nil {
-		log.Printf("⚠️  Expiration cleanup error: %v", err)
+		log.Printf("Expiration cleanup error: %v", err)
 	}
 
 	cleared, err := clearExpiredPasswordResetTokens(db)
 	if err != nil {
-		log.Printf("⚠️  Password reset token cleanup error: %v", err)
+		log.Printf("Password reset token cleanup error: %v", err)
 	} else if cleared > 0 {
-		log.Printf("🕐 Cleared %d expired password reset token(s)", cleared)
+		log.Printf("Cleared %d expired password reset token(s)", cleared)
 	}
 }
 
@@ -2596,7 +2596,7 @@ func expireOldVerifications(db *sql.DB) error {
 	}
 
 	if expiredCount > 0 {
-		log.Printf("🕐 Expired %d verification(s) (pending >1h or approved >24h)", expiredCount)
+		log.Printf("Expired %d verification(s) (pending >1h or approved >24h)", expiredCount)
 	}
 
 	return nil

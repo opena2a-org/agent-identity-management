@@ -74,7 +74,7 @@ func NewKeyVaultFromEnv() (*KeyVault, error) {
 		// Generate a new master key for development only
 		// SECURITY: This key is ephemeral and will be different on each restart
 		// This is acceptable for development but NOT for production
-		fmt.Println("⚠️  SECURITY WARNING: KEYVAULT_MASTER_KEY not set")
+		fmt.Println("SECURITY WARNING: KEYVAULT_MASTER_KEY not set")
 		fmt.Printf("   Generating ephemeral master key because ENVIRONMENT=%s.\n", environment)
 		fmt.Println("   Set KEYVAULT_MASTER_KEY environment variable in production!")
 

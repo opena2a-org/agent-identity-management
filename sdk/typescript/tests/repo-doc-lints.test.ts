@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 
 /**
@@ -14,32 +15,65 @@ import { join } from 'path';
  * test, the Go SDK README the server generated and three Python files named
  * the opena2a GitHub account. Running them here keeps each one passing; a
  * failure prints the script's own report.
+ *
+ * The cases need git, bash and python3, and a git checkout: the link lint
+ * asks git which files to read and stops in a tree without .git. The
+ * contributing guide says so, and the last case keeps it saying so.
  */
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
-function run(command: string, args: string[]): { status: number | null; output: string } {
-  const result = spawnSync(command, args, { cwd: REPO_ROOT, encoding: 'utf-8' });
+interface Lint {
+  command: string;
+  script: string;
+}
+
+const WORDING: Lint = { command: 'python3', script: 'scripts/check-public-wording.py' };
+const KEYVAULT: Lint = { command: 'bash', script: 'scripts/test-lint-docs-keyvault-master-key.sh' };
+const REPO_LINKS: Lint = { command: 'bash', script: 'scripts/test-lint-docs-repo-links.sh' };
+
+function run(lint: Lint): { status: number | null; output: string } {
+  const result = spawnSync(lint.command, [lint.script], { cwd: REPO_ROOT, encoding: 'utf-8' });
   if (result.error) throw result.error;
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
 describe('repository documentation lints', () => {
   it('scripts/check-public-wording.py finds no barred wording in the public documents', () => {
-    const { status, output } = run('python3', ['scripts/check-public-wording.py']);
+    const { status, output } = run(WORDING);
     expect(status, output).toBe(0);
     expect(output).toMatch(/^0 hit\(s\) in 0 of [1-9]\d* file\(s\) scanned/m);
   });
 
   it('scripts/test-lint-docs-keyvault-master-key.sh passes, the repository\'s docs included', () => {
-    const { status, output } = run('bash', ['scripts/test-lint-docs-keyvault-master-key.sh']);
+    const { status, output } = run(KEYVAULT);
     expect(status, output).toBe(0);
     expect(output).toContain('test-lint-docs-keyvault-master-key: all checks passed');
   }, 120_000);
 
   it('scripts/test-lint-docs-repo-links.sh passes, the repository\'s files included', () => {
-    const { status, output } = run('bash', ['scripts/test-lint-docs-repo-links.sh']);
+    const { status, output } = run(REPO_LINKS);
     expect(status, output).toBe(0);
     expect(output).toContain('test-lint-docs-repo-links: all checks passed');
   }, 120_000);
+
+  it('CONTRIBUTING.md names these lints and says they need git, bash, python3 and a git checkout', () => {
+    const guide = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf-8');
+    const start = guide.indexOf('**TypeScript SDK**');
+    expect(start, 'CONTRIBUTING.md has no TypeScript SDK passage under Testing Requirements').toBeGreaterThan(-1);
+    const end = guide.indexOf('\n### ', start);
+    const passage = guide.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ');
+
+    expect(passage).toContain('`tests/repo-doc-lints.test.ts`');
+    for (const lint of [WORDING, KEYVAULT, REPO_LINKS]) {
+      expect(passage).toContain(`\`${lint.script}\``);
+      expect(passage).toContain(`\`${lint.command}\``);
+    }
+    expect(passage).toContain('It needs `git`, `bash` and `python3` on the `PATH`, and a git checkout of the repository');
+
+    // The guide quotes the link lint's own words for a tree that is not a checkout.
+    const stop = 'is not the top of a git work tree';
+    expect(readFileSync(join(REPO_ROOT, 'scripts', 'lint-docs-repo-links.sh'), 'utf-8')).toContain(stop);
+    expect(passage).toContain(`"${stop}"`);
+  });
 });

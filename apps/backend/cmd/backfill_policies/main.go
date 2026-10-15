@@ -12,26 +12,26 @@ import (
 
 // Backfill default security policies for existing organizations
 func main() {
-	log.Println("🔄 Starting security policy backfill for existing organizations...")
+	log.Println("Starting security policy backfill for existing organizations...")
 
 	// Initialize database connection
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		log.Fatal("❌ DATABASE_URL environment variable not set")
+		log.Fatal("DATABASE_URL environment variable not set")
 	}
 
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
-		log.Fatalf("❌ Failed to connect to database: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		log.Fatalf("❌ Failed to ping database: %v", err)
+		log.Fatalf("Failed to ping database: %v", err)
 	}
 
-	log.Println("✅ Database connected")
+	log.Println("Database connected")
 
 	ctx := context.Background()
 
@@ -43,7 +43,7 @@ func main() {
 
 	rows, err := db.QueryContext(ctx, "SELECT id, name FROM organizations")
 	if err != nil {
-		log.Fatalf("❌ Failed to fetch organizations: %v", err)
+		log.Fatalf("Failed to fetch organizations: %v", err)
 	}
 	defer rows.Close()
 
@@ -53,13 +53,13 @@ func main() {
 			Name string
 		}
 		if err := rows.Scan(&org.ID, &org.Name); err != nil {
-			log.Printf("⚠️  Failed to scan organization: %v", err)
+			log.Printf("Failed to scan organization: %v", err)
 			continue
 		}
 		organizations = append(organizations, org)
 	}
 
-	log.Printf("📊 Found %d organizations to check\n", len(organizations))
+	log.Printf("Found %d organizations to check\n", len(organizations))
 
 	backfilledCount := 0
 	skippedCount := 0
@@ -74,12 +74,12 @@ func main() {
 		).Scan(&existingCount)
 
 		if err != nil {
-			log.Printf("⚠️  Failed to check policies for organization %s: %v", org.Name, err)
+			log.Printf("Failed to check policies for organization %s: %v", org.Name, err)
 			continue
 		}
 
 		if existingCount > 0 {
-			log.Printf("⏭️  Organization '%s' already has %d policies, skipping", org.Name, existingCount)
+			log.Printf("Organization '%s' already has %d policies, skipping", org.Name, existingCount)
 			skippedCount++
 			continue
 		}
@@ -94,12 +94,12 @@ func main() {
 		`, org.ID).Scan(&adminUserID)
 
 		if err != nil {
-			log.Printf("⚠️  Failed to find admin user for organization %s: %v", org.Name, err)
+			log.Printf("Failed to find admin user for organization %s: %v", org.Name, err)
 			continue
 		}
 
 		// Create default policies for this organization
-		log.Printf("➕ Creating default policies for organization: %s (admin user: %s)", org.Name, adminUserID)
+		log.Printf("Creating default policies for organization: %s (admin user: %s)", org.Name, adminUserID)
 
 		defaultPolicies := []struct {
 			Name              string
@@ -170,11 +170,11 @@ func main() {
 			)
 
 			if err != nil {
-				log.Printf("❌ Failed to create policy '%s' for organization %s: %v", policy.Name, org.Name, err)
+				log.Printf("Failed to create policy '%s' for organization %s: %v", policy.Name, org.Name, err)
 				continue
 			}
 
-			log.Printf("   ✅ Created policy: %s (priority: %d, enforcement: %s)",
+			log.Printf("Created policy: %s (priority: %d, enforcement: %s)",
 				policy.Name, policy.Priority, policy.EnforcementAction)
 		}
 
@@ -182,9 +182,9 @@ func main() {
 	}
 
 	log.Println("\n" + strings.Repeat("=", 60))
-	log.Printf("✅ Backfill complete!")
-	log.Printf("📊 Organizations processed: %d", len(organizations))
-	log.Printf("➕ Organizations backfilled: %d", backfilledCount)
-	log.Printf("⏭️  Organizations skipped: %d", skippedCount)
+	log.Printf("Backfill complete!")
+	log.Printf("Organizations processed: %d", len(organizations))
+	log.Printf("Organizations backfilled: %d", backfilledCount)
+	log.Printf("Organizations skipped: %d", skippedCount)
 	log.Println(strings.Repeat("=", 60))
 }

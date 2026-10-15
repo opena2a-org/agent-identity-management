@@ -86,7 +86,7 @@ afterEach(() => {
 });
 
 describe('Retry-After (item 4)', () => {
-  it('AIM-11.AC4 a 429 with "Retry-After: 7" yields RateLimitError.retryAfter 7', async () => {
+  it('a 429 with "Retry-After: 7" yields RateLimitError.retryAfter 7', async () => {
     const client = new AIMClient();
     client.setCredentials(await realCredentials());
     mockVerifyFailure(429, { message: 'rate limited' }, { 'Retry-After': '7' });
@@ -101,19 +101,19 @@ describe('Retry-After (item 4)', () => {
     expect((caught as RateLimitError).retryAfter).toBe(7);
   });
 
-  it('AIM-11.AC4 falls back to the body retryAfter field when the header is absent', () => {
+  it('falls back to the body retryAfter field when the header is absent', () => {
     const err = parseAPIError(429, { retryAfter: 13 });
     expect(err).toBeInstanceOf(RateLimitError);
     expect((err as RateLimitError).retryAfter).toBe(13);
   });
 
-  it('AIM-11.AC4 falls back to the default only when both header and body are absent', () => {
+  it('falls back to the default only when both header and body are absent', () => {
     const err = parseAPIError(429, {});
     expect(err).toBeInstanceOf(RateLimitError);
     expect((err as RateLimitError).retryAfter).toBe(60);
   });
 
-  it('AIM-11.AC4 the header wins over the body field when both are present', async () => {
+  it('the header wins over the body field when both are present', async () => {
     const client = new AIMClient();
     client.setCredentials(await realCredentials());
     mockVerifyFailure(429, { retryAfter: 999 }, { 'Retry-After': '7' });
@@ -129,7 +129,7 @@ describe('Retry-After (item 4)', () => {
 });
 
 describe('telemetry on wire 403 (item 5)', () => {
-  it('AIM-11.AC5 a 403 refusal with no decision, with telemetry enabled, produces a correlated deny record', async () => {
+  it('a 403 refusal with no decision, with telemetry enabled, produces a correlated deny record', async () => {
     const records: CorrelatedRecord[] = [];
     const joiner = new CorrelationJoiner({ windowMs: 60_000, onRecord: (r) => records.push(r) });
     const client = new AIMClient({ telemetry: { enabled: true, joiner } });
@@ -153,7 +153,7 @@ describe('telemetry on wire 403 (item 5)', () => {
     expect(records[0].enforcement.capability).toBe('file:write');
   });
 
-  it('AIM-11.AC5 an allowed verify carrying a detection produces an enforcement record too', async () => {
+  it('an allowed verify carrying a detection produces an enforcement record too', async () => {
     const records: CorrelatedRecord[] = [];
     const joiner = new CorrelationJoiner({ windowMs: 60_000, onRecord: (r) => records.push(r) });
     const client = new AIMClient({ telemetry: { enabled: true, joiner } });

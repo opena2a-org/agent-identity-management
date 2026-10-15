@@ -129,7 +129,7 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		now := time.Now()
 		req.ReviewedAt = &now
 		req.ReviewedBy = nil // System auto-approval (platform admin allowlist)
-		fmt.Printf("✅ Auto-approving platform admin: %s\n", email)
+		fmt.Printf("Auto-approving platform admin: %s\n", email)
 	}
 
 	// Save registration request
@@ -179,7 +179,7 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 			return nil, fmt.Errorf("failed to create auto-approved user: %w", err)
 		}
 
-		fmt.Printf("✅ Auto-created admin user %s for new organization %s\n", email, emailDomain)
+		fmt.Printf("Auto-created admin user %s for new organization %s\n", email, emailDomain)
 	}
 
 	// Send registration confirmation email
@@ -389,9 +389,9 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	}
 
 	if req.PasswordHash != nil && *req.PasswordHash != "" {
-		fmt.Printf("✅ Approving user with password hash for registration request %s\n", req.ID)
+		fmt.Printf("Approving user with password hash for registration request %s\n", req.ID)
 	} else {
-		fmt.Printf("⚠️  WARNING: Approving user without password hash - this should not happen for email/password registrations\n")
+		fmt.Printf("WARNING: Approving user without password hash - this should not happen for email/password registrations\n")
 	}
 
 	// Set approval timestamp
@@ -401,7 +401,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	// Create user via repository
 	if err := s.userRepo.Create(user); err != nil {
 		// Log detailed error for debugging
-		fmt.Printf("❌ CRITICAL ERROR: Failed to create user account after approval\n")
+		fmt.Printf("CRITICAL ERROR: Failed to create user account after approval\n")
 		fmt.Printf("   Email: %s\n", user.Email)
 		fmt.Printf("   Organization ID: %s\n", user.OrganizationID)
 		fmt.Printf("   Provider: %s\n", user.Provider)
@@ -415,7 +415,7 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 	}
 
 	// Success logging
-	fmt.Printf("✅ Successfully created user account %s for registration request %s\n", user.ID, req.ID)
+	fmt.Printf("Successfully created user account %s for registration request %s\n", user.ID, req.ID)
 
 	// Log audit
 	s.auditService.LogAction(
@@ -670,12 +670,12 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 	org, err := s.orgRepo.GetByDomain(domainName)
 	if err == nil && org != nil {
 		// Organization exists
-		fmt.Printf("✅ Found existing organization for domain: %s\n", domainName)
+		fmt.Printf("Found existing organization for domain: %s\n", domainName)
 		return org.ID, nil
 	}
 
 	// Organization doesn't exist, create new one
-	fmt.Printf("📝 Creating new organization for domain: %s\n", domainName)
+	fmt.Printf("Creating new organization for domain: %s\n", domainName)
 
 	newOrg := &domain.Organization{
 		ID:        uuid.New(),
@@ -693,7 +693,7 @@ func (s *RegistrationService) findOrCreateOrganization(ctx context.Context, doma
 		return uuid.Nil, fmt.Errorf("failed to create organization: %w", err)
 	}
 
-	fmt.Printf("✅ Created new organization: %s (ID: %s)\n", domainName, newOrg.ID)
+	fmt.Printf("Created new organization: %s (ID: %s)\n", domainName, newOrg.ID)
 	return newOrg.ID, nil
 }
 

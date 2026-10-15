@@ -134,7 +134,7 @@ func (s *MCPManifestService) raiseDriftAlert(serverID uuid.UUID, drift *domain.M
 	}
 	server, err := s.mcpRepo.GetByID(serverID)
 	if err != nil || server == nil {
-		fmt.Printf("⚠️  Failed to load MCP server %s for drift alert: %v\n", serverID, err)
+		fmt.Printf("Failed to load MCP server %s for drift alert: %v\n", serverID, err)
 		return
 	}
 
@@ -174,10 +174,10 @@ func (s *MCPManifestService) raiseDriftAlert(serverID uuid.UUID, drift *domain.M
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.alertRepo.Create(alert); err != nil {
-		fmt.Printf("⚠️  Failed to create MCP manifest drift alert for %s: %v\n", server.Name, err)
+		fmt.Printf("Failed to create MCP manifest drift alert for %s: %v\n", server.Name, err)
 		return
 	}
-	fmt.Printf("🚨 Created MCP manifest drift alert for %s (severity=%s)\n", server.Name, severity)
+	fmt.Printf("Created MCP manifest drift alert for %s (severity=%s)\n", server.Name, severity)
 }
 
 func orEmpty(s []string) []string {

@@ -158,14 +158,13 @@ func TestSDKHandler_generateSetupInstructions(t *testing.T) {
 	assert.Contains(t, javaInstructions, "java")
 	assert.Contains(t, javaInstructions, "<version>7.8.9</version>")
 
-	// The repository carries no Go SDK, so Go gets the generic text and no
-	// sample that imports a module nobody can fetch.
-	goInstructions := handler.generateSetupInstructions("go", "aim-sdk-test", "7.8.9")
-	assert.Equal(t, handler.generateSetupInstructions("unknown", "aim-sdk-test", "7.8.9"), goInstructions)
-
-	// Test JavaScript instructions
-	jsInstructions := handler.generateSetupInstructions("javascript", "aim-sdk-test", "7.8.9")
-	assert.Contains(t, jsInstructions, "javascript")
+	// The download serves the Python and Java SDKs only, so Go and JavaScript,
+	// which the route refuses, get the generic text and no sample that imports a
+	// package the download does not carry.
+	for _, sdkType := range []string{"go", "javascript"} {
+		assert.Equal(t, handler.generateSetupInstructions("unknown", "aim-sdk-test", "7.8.9"),
+			handler.generateSetupInstructions(sdkType, "aim-sdk-test", "7.8.9"), sdkType)
+	}
 
 	// Test unknown SDK (default case)
 	unknownInstructions := handler.generateSetupInstructions("unknown", "aim-sdk-test", "7.8.9")
@@ -226,8 +225,9 @@ func TestGetSDKDisplayName(t *testing.T) {
 	}{
 		{"python", "Python"},
 		{"java", "Java"},
-		{"go", "Go"},
-		{"javascript", "JavaScript"},
+		// The download refuses every other type, so none has a display name.
+		{"go", "go"},
+		{"javascript", "javascript"},
 		{"unknown", "unknown"},
 	}
 

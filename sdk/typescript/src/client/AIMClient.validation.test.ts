@@ -15,23 +15,23 @@ afterEach(() => {
 });
 
 describe('constructor timeout validation', () => {
-  it('AIM-12.AC3 item 9: timeout: -5 throws ConfigurationError', () => {
+  it('timeout: -5 throws ConfigurationError', () => {
     expect(() => new AIMClient({ timeout: -5 })).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 9: timeout: NaN throws ConfigurationError', () => {
+  it('timeout: NaN throws ConfigurationError', () => {
     expect(() => new AIMClient({ timeout: Number.NaN })).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 9: timeout: 0 throws ConfigurationError', () => {
+  it('timeout: 0 throws ConfigurationError', () => {
     expect(() => new AIMClient({ timeout: 0 })).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 9: enforcementTimeout: -1 throws ConfigurationError', () => {
+  it('enforcementTimeout: -1 throws ConfigurationError', () => {
     expect(() => new AIMClient({ enforcementTimeout: -1 })).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 9: enforcementTimeout: Infinity throws ConfigurationError', () => {
+  it('enforcementTimeout: Infinity throws ConfigurationError', () => {
     expect(() => new AIMClient({ enforcementTimeout: Number.POSITIVE_INFINITY })).toThrow(
       ConfigurationError,
     );
@@ -44,7 +44,7 @@ describe('constructor timeout validation', () => {
 });
 
 describe('registerAgent input validation', () => {
-  it('AIM-12.AC3 item 9: an empty name is refused before any request is made', async () => {
+  it('an empty name is refused before any request is made', async () => {
     const fetchSpy = vi.fn(async () => {
       throw new Error('network must not be touched');
     });

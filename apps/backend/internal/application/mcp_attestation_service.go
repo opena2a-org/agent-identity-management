@@ -242,7 +242,7 @@ func (s *MCPAttestationService) GenerateChallenge(
 		return nil, fmt.Errorf("failed to store challenge: %w", err)
 	}
 
-	fmt.Printf("🔐 Generated attestation challenge for agent %s -> MCP %s (expires: %s)\n",
+	fmt.Printf("Generated attestation challenge for agent %s -> MCP %s (expires: %s)\n",
 		agentID, mcpServerID, expiresAt.Format(time.RFC3339))
 
 	return &ChallengeResponse{
@@ -290,14 +290,14 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	// another org" from "MCP does not exist."
 	mcpServer, err := s.mcpRepo.GetByID(mcpServerID)
 	if err != nil || mcpServer == nil {
-		fmt.Printf("🔒 AttestMCP: mcp server lookup failed for %s: %v\n", mcpServerID, err)
+		fmt.Printf("AttestMCP: mcp server lookup failed for %s: %v\n", mcpServerID, err)
 		return nil, ErrAttestationFailed
 	}
 
 	// 3. Load agent. Same sentinel for not-found.
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil || agent == nil {
-		fmt.Printf("🔒 AttestMCP: agent lookup failed for %s: %v\n", agentID, err)
+		fmt.Printf("AttestMCP: agent lookup failed for %s: %v\n", agentID, err)
 		return nil, ErrAttestationFailed
 	}
 
@@ -322,19 +322,19 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	// without touching the cross-org disclosure surface.
 	if agent.OrganizationID == uuid.Nil || mcpServer.OrganizationID == uuid.Nil ||
 		mcpServer.OrganizationID != agent.OrganizationID {
-		fmt.Printf("🔒 AttestMCP organization isolation: agent %s (org: %s) targeted MCP %s (org: %s)\n",
+		fmt.Printf("AttestMCP organization isolation: agent %s (org: %s) targeted MCP %s (org: %s)\n",
 			agentID, agent.OrganizationID, mcpServerID, mcpServer.OrganizationID)
 		return nil, ErrAttestationFailed
 	}
 
-	fmt.Printf("🔍 Agent fetched from DB: ID=%s, Status=%s, VerifiedAt=%v\n", agent.ID, agent.Status, agent.VerifiedAt)
+	fmt.Printf("Agent fetched from DB: ID=%s, Status=%s, VerifiedAt=%v\n", agent.ID, agent.Status, agent.VerifiedAt)
 
 	if agent.Status != domain.AgentStatusVerified {
-		fmt.Printf("❌ Agent status check failed: expected %s, got %s\n", domain.AgentStatusVerified, agent.Status)
+		fmt.Printf("Agent status check failed: expected %s, got %s\n", domain.AgentStatusVerified, agent.Status)
 		return nil, fmt.Errorf("%w: agent status %s", ErrAttestationFailed, agent.Status)
 	}
 
-	fmt.Printf("✅ Agent status check passed: %s\n", agent.Status)
+	fmt.Printf("Agent status check passed: %s\n", agent.Status)
 
 	// 5. Check agent trust score - block if too low, warn if borderline.
 	// SAFE: any alert.Create below runs with agent.OrganizationID, which
@@ -342,12 +342,12 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	minTrust := getMinAgentTrustForAttestation()
 	warnThreshold := getWarnAgentTrustThreshold()
 
-	fmt.Printf("🔍 Agent trust score: %.2f%% (min: %.0f%%, warn: %.0f%%)\n",
+	fmt.Printf("Agent trust score: %.2f%% (min: %.0f%%, warn: %.0f%%)\n",
 		agent.TrustScore*100, minTrust*100, warnThreshold*100)
 
 	if agent.TrustScore < minTrust {
 		// BLOCK: Agent trust score is too low
-		fmt.Printf("❌ Agent trust score %.2f%% is below minimum %.0f%% - BLOCKING attestation\n",
+		fmt.Printf("Agent trust score %.2f%% is below minimum %.0f%% - BLOCKING attestation\n",
 			agent.TrustScore*100, minTrust*100)
 
 		// Create security alert for blocked attestation
@@ -372,9 +372,9 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 				CreatedAt: time.Now().UTC(),
 			}
 			if err := s.alertRepo.Create(alert); err != nil {
-				fmt.Printf("⚠️ Failed to create alert for blocked attestation: %v\n", err)
+				fmt.Printf("Failed to create alert for blocked attestation: %v\n", err)
 			} else {
-				fmt.Printf("🚨 Created alert for blocked low-trust attestation attempt\n")
+				fmt.Printf("Created alert for blocked low-trust attestation attempt\n")
 			}
 		}
 
@@ -383,7 +383,7 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 
 	// Check for borderline trust score - allow but create warning alert
 	if agent.TrustScore < warnThreshold && s.alertRepo != nil {
-		fmt.Printf("⚠️ Agent trust score %.2f%% is below warning threshold %.0f%% - creating alert\n",
+		fmt.Printf("Agent trust score %.2f%% is below warning threshold %.0f%% - creating alert\n",
 			agent.TrustScore*100, warnThreshold*100)
 
 		alert := &domain.Alert{
@@ -406,9 +406,9 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 			CreatedAt: time.Now().UTC(),
 		}
 		if err := s.alertRepo.Create(alert); err != nil {
-			fmt.Printf("⚠️ Failed to create warning alert for low-trust attestation: %v\n", err)
+			fmt.Printf("Failed to create warning alert for low-trust attestation: %v\n", err)
 		} else {
-			fmt.Printf("⚠️ Created warning alert for low-trust attestation\n")
+			fmt.Printf("Created warning alert for low-trust attestation\n")
 		}
 	}
 
@@ -423,23 +423,23 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	}
 
 	// Debug: Print what we're verifying
-	fmt.Printf("🔍 Backend attestation verification:\n")
+	fmt.Printf("Backend attestation verification:\n")
 	fmt.Printf("   Canonical JSON (first 200): %s\n", string(attestationJSON)[:min(200, len(attestationJSON))])
 	fmt.Printf("   Signature (first 40): %s\n", req.Signature[:min(40, len(req.Signature))])
 	fmt.Printf("   Agent public key (first 20): %s\n", (*agent.PublicKey)[:min(20, len(*agent.PublicKey))])
 
 	valid, err := s.cryptoService.Verify(*agent.PublicKey, attestationJSON, req.Signature)
 	if err != nil {
-		fmt.Printf("❌ Crypto verification error: %v\n", err)
+		fmt.Printf("Crypto verification error: %v\n", err)
 		return nil, fmt.Errorf("%w: signature verification error: %v", ErrAttestationInvalid, err)
 	}
 
 	if !valid {
-		fmt.Printf("❌ Signature verification returned FALSE\n")
+		fmt.Printf("Signature verification returned FALSE\n")
 		return nil, ErrAttestationInvalid
 	}
 
-	fmt.Printf("✅ Attestation signature verification PASSED\n")
+	fmt.Printf("Attestation signature verification PASSED\n")
 
 	// 7. PROOF OF KEY POSSESSION: Validate server-generated challenge (prevents replay attacks)
 	// If a challenge is provided, validate it. For backward compatibility, challenge is optional
@@ -448,39 +448,39 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	if req.Attestation.Challenge != "" {
 		challengeRecord, err = s.attestationRepo.GetChallengeByValue(req.Attestation.Challenge)
 		if err != nil {
-			fmt.Printf("❌ Challenge not found: %s\n", req.Attestation.Challenge)
+			fmt.Printf("Challenge not found: %s\n", req.Attestation.Challenge)
 			return nil, fmt.Errorf("%w: invalid or unknown challenge", ErrAttestationInvalid)
 		}
 
 		// Validate challenge hasn't expired
 		if time.Now().UTC().After(challengeRecord.ExpiresAt) {
-			fmt.Printf("❌ Challenge expired at %s\n", challengeRecord.ExpiresAt)
+			fmt.Printf("Challenge expired at %s\n", challengeRecord.ExpiresAt)
 			return nil, fmt.Errorf("%w: challenge expired", ErrAttestationInvalid)
 		}
 
 		// Validate challenge hasn't been used (replay attack prevention)
 		if challengeRecord.UsedAt != nil {
-			fmt.Printf("❌ Challenge already used at %s (replay attack detected)\n", challengeRecord.UsedAt)
+			fmt.Printf("Challenge already used at %s (replay attack detected)\n", challengeRecord.UsedAt)
 			return nil, fmt.Errorf("%w: challenge already used", ErrAttestationInvalid)
 		}
 
 		// Validate challenge was issued for this agent
 		if challengeRecord.AgentID != agentID {
-			fmt.Printf("❌ Challenge was issued for different agent: %s (expected %s)\n",
+			fmt.Printf("Challenge was issued for different agent: %s (expected %s)\n",
 				challengeRecord.AgentID, agentID)
 			return nil, fmt.Errorf("%w: challenge agent mismatch", ErrAttestationInvalid)
 		}
 
 		// Validate challenge was issued for this MCP server
 		if challengeRecord.MCPServerID != mcpServerID {
-			fmt.Printf("❌ Challenge was issued for different MCP: %s (expected %s)\n",
+			fmt.Printf("Challenge was issued for different MCP: %s (expected %s)\n",
 				challengeRecord.MCPServerID, mcpServerID)
 			return nil, fmt.Errorf("%w: challenge mcp mismatch", ErrAttestationInvalid)
 		}
 
-		fmt.Printf("✅ Challenge validated: proof of private key possession confirmed\n")
+		fmt.Printf("Challenge validated: proof of private key possession confirmed\n")
 	} else {
-		fmt.Printf("⚠️  No challenge provided (legacy attestation mode - consider upgrading SDK)\n")
+		fmt.Printf("No challenge provided (legacy attestation mode - consider upgrading SDK)\n")
 	}
 
 	// 8. Check attestation is recent (< 5 minutes old)
@@ -498,7 +498,7 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 		if err := s.attestationRepo.MarkChallengeUsed(challengeRecord.ID); err != nil {
 			return nil, fmt.Errorf("failed to mark challenge as used: %w", err)
 		}
-		fmt.Printf("✅ Challenge marked as used (replay protection active)\n")
+		fmt.Printf("Challenge marked as used (replay protection active)\n")
 	}
 
 	// 8. Store attestation
@@ -525,9 +525,9 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	if s.capabilityRepo != nil && len(req.Attestation.CapabilitiesFound) > 0 {
 		if err := s.capabilityRepo.UpsertFromAttestation(mcpServerID, req.Attestation.CapabilitiesFound); err != nil {
 			// Log but don't fail the attestation if capability sync fails
-			fmt.Printf("⚠️  Failed to sync capabilities from attestation: %v\n", err)
+			fmt.Printf("Failed to sync capabilities from attestation: %v\n", err)
 		} else {
-			fmt.Printf("✅ Synced %d capabilities from attestation to MCP server\n", len(req.Attestation.CapabilitiesFound))
+			fmt.Printf("Synced %d capabilities from attestation to MCP server\n", len(req.Attestation.CapabilitiesFound))
 		}
 	}
 
@@ -552,14 +552,14 @@ func (s *MCPAttestationService) VerifyAndRecordAttestation(
 	if s.manifestService != nil && len(req.Attestation.CapabilitiesFound) > 0 {
 		consensusMet := false
 		if status, err := s.GetConsensusStatus(ctx, mcpServerID); err != nil {
-			fmt.Printf("⚠️  Failed to read consensus status for manifest drift on %s: %v\n", mcpServerID, err)
+			fmt.Printf("Failed to read consensus status for manifest drift on %s: %v\n", mcpServerID, err)
 		} else {
 			consensusMet = status.thresholdsMet()
 		}
 		if drift, err := s.manifestService.RecomputeFromAttestation(ctx, mcpServerID, req.Attestation.CapabilitiesFound, consensusMet); err != nil {
-			fmt.Printf("⚠️  Failed to recompute MCP manifest from attestation for %s: %v\n", mcpServerID, err)
+			fmt.Printf("Failed to recompute MCP manifest from attestation for %s: %v\n", mcpServerID, err)
 		} else if drift != nil {
-			fmt.Printf("⚠️  MCP manifest drift detected from attestation for %s (severity=%s, +%d/-%d tools)\n",
+			fmt.Printf("MCP manifest drift detected from attestation for %s (severity=%s, +%d/-%d tools)\n",
 				mcpServerID, drift.Severity, len(drift.AddedTools), len(drift.RemovedTools))
 		}
 	}
@@ -663,7 +663,7 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 	}
 
 	// Log the breakdown for debugging
-	fmt.Printf("📊 MCP %s confidence score breakdown:\n", mcpServerID)
+	fmt.Printf("MCP %s confidence score breakdown:\n", mcpServerID)
 	fmt.Printf("   SDK attestations: %d (%.1f points)\n", sdkAttestations, sdkPoints)
 	fmt.Printf("   Manual attestations: %d (%.1f points)\n", manualAttestations, manualPoints)
 	fmt.Printf("   Trust score: %.1f points\n", trustPoints)
@@ -689,7 +689,7 @@ func (s *MCPAttestationService) updateMCPConfidenceScore(
 	// 4. Every attesting agent connected and reported the same tool set
 	if err := s.checkAndApplyConsensusVerification(ctx, mcpServerID, confidenceScore); err != nil {
 		// Log but don't fail - attestation was still recorded successfully
-		fmt.Printf("⚠️  Warning: failed to check consensus verification: %v\n", err)
+		fmt.Printf("Warning: failed to check consensus verification: %v\n", err)
 	}
 
 	return confidenceScore, len(attestations), nil
@@ -724,7 +724,7 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 	}
 
 	if uniqueAgentCount < minAgents {
-		fmt.Printf("🔐 MCP %s: Consensus not reached - need %d agents, have %d\n",
+		fmt.Printf("MCP %s: Consensus not reached - need %d agents, have %d\n",
 			mcpServerID, minAgents, uniqueAgentCount)
 		return nil
 	}
@@ -736,14 +736,14 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 	}
 
 	if uniqueOwnerCount < minOwners {
-		fmt.Printf("🔐 MCP %s: Consensus not reached - need %d owners, have %d\n",
+		fmt.Printf("MCP %s: Consensus not reached - need %d owners, have %d\n",
 			mcpServerID, minOwners, uniqueOwnerCount)
 		return nil
 	}
 
 	// Check 3: Confidence score threshold
 	if confidenceScore < MinConfidenceScoreForVerification {
-		fmt.Printf("🔐 MCP %s: Consensus not reached - need %.1f%% confidence, have %.1f%%\n",
+		fmt.Printf("MCP %s: Consensus not reached - need %.1f%% confidence, have %.1f%%\n",
 			mcpServerID, MinConfidenceScoreForVerification, confidenceScore)
 		return nil
 	}
@@ -757,17 +757,17 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 	}
 	agreement := evaluateAttestationAgreement(attestations)
 	if !agreement.agree() {
-		fmt.Printf("🔐 MCP %s: Consensus not reached - attestations disagree (%d of %d agents agree, %d failed connections, %d tool sets)\n",
+		fmt.Printf("MCP %s: Consensus not reached - attestations disagree (%d of %d agents agree, %d failed connections, %d tool sets)\n",
 			mcpServerID, agreement.AgreeingAgents, agreement.Agents, agreement.ConnectionFailures, agreement.DistinctToolSets)
 		return nil
 	}
 
 	// 🎉 All consensus criteria met! Auto-verify the MCP server
-	fmt.Printf("🎉 MULTI-AGENT CONSENSUS REACHED for MCP %s:\n", mcpServerID)
-	fmt.Printf("   ✓ Unique agents: %d (required: %d)\n", uniqueAgentCount, minAgents)
-	fmt.Printf("   ✓ Unique owners: %d (required: %d)\n", uniqueOwnerCount, minOwners)
-	fmt.Printf("   ✓ Confidence: %.1f%% (required: %.1f%%)\n", confidenceScore, MinConfidenceScoreForVerification)
-	fmt.Printf("   ✓ Agreement: %d agents connected and reported the same tool set\n", agreement.AgreeingAgents)
+	fmt.Printf("MULTI-AGENT CONSENSUS REACHED for MCP %s:\n", mcpServerID)
+	fmt.Printf("Unique agents: %d (required: %d)\n", uniqueAgentCount, minAgents)
+	fmt.Printf("Unique owners: %d (required: %d)\n", uniqueOwnerCount, minOwners)
+	fmt.Printf("Confidence: %.1f%% (required: %.1f%%)\n", confidenceScore, MinConfidenceScoreForVerification)
+	fmt.Printf("Agreement: %d agents connected and reported the same tool set\n", agreement.AgreeingAgents)
 	fmt.Printf("   → Auto-verifying MCP server\n")
 
 	// Update MCP status to verified
@@ -780,7 +780,7 @@ func (s *MCPAttestationService) checkAndApplyConsensusVerification(
 		return fmt.Errorf("failed to update MCP verification status: %w", err)
 	}
 
-	fmt.Printf("✅ MCP server %s automatically verified via multi-agent consensus\n", mcpServerID)
+	fmt.Printf("MCP server %s automatically verified via multi-agent consensus\n", mcpServerID)
 	return nil
 }
 
@@ -809,7 +809,7 @@ func (s *MCPAttestationService) withdrawConsensusVerificationOnDisagreement(mcpS
 		return false, err
 	}
 	if withdrawn {
-		fmt.Printf("🔐 MCP %s: consensus verification withdrawn - attestations disagree (%d of %d agents agree, %d failed connections, %d tool sets)\n",
+		fmt.Printf("MCP %s: consensus verification withdrawn - attestations disagree (%d of %d agents agree, %d failed connections, %d tool sets)\n",
 			mcpServerID, agreement.AgreeingAgents, agreement.Agents, agreement.ConnectionFailures, agreement.DistinctToolSets)
 	}
 	return withdrawn, nil
@@ -841,7 +841,7 @@ func (s *MCPAttestationService) RecheckConsensusVerifications(ctx context.Contex
 		}
 		withdrawn, err := s.withdrawConsensusVerificationOnDisagreement(id)
 		if err != nil {
-			fmt.Printf("⚠️  Consensus recheck: failed to recheck MCP server %s, status left unchanged: %v\n", id, err)
+			fmt.Printf("Consensus recheck: failed to recheck MCP server %s, status left unchanged: %v\n", id, err)
 			result.Failed = append(result.Failed, id)
 			continue
 		}
@@ -1355,10 +1355,10 @@ func (s *MCPAttestationService) RevokeAttestation(
 	_, _, err = s.updateMCPConfidenceScore(ctx, attestation.MCPServerID)
 	if err != nil {
 		// Log but don't fail - revocation was successful
-		fmt.Printf("⚠️  Warning: failed to recalculate confidence score after revocation: %v\n", err)
+		fmt.Printf("Warning: failed to recalculate confidence score after revocation: %v\n", err)
 	}
 
-	fmt.Printf("🔴 Attestation %s revoked by %s: %s\n", attestationID, revokerID, reason)
+	fmt.Printf("Attestation %s revoked by %s: %s\n", attestationID, revokerID, reason)
 	return nil
 }
 
@@ -1382,7 +1382,7 @@ func (s *MCPAttestationService) RevokeAllAttestationsByAgent(
 	for _, attestation := range attestations {
 		if attestation.IsValid {
 			if err := s.attestationRepo.InvalidateAttestation(attestation.ID); err != nil {
-				fmt.Printf("⚠️  Warning: failed to revoke attestation %s: %v\n", attestation.ID, err)
+				fmt.Printf("Warning: failed to revoke attestation %s: %v\n", attestation.ID, err)
 				continue
 			}
 			revokedCount++
@@ -1394,11 +1394,11 @@ func (s *MCPAttestationService) RevokeAllAttestationsByAgent(
 	for mcpID := range affectedMCPs {
 		_, _, err = s.updateMCPConfidenceScore(ctx, mcpID)
 		if err != nil {
-			fmt.Printf("⚠️  Warning: failed to recalculate confidence score for MCP %s: %v\n", mcpID, err)
+			fmt.Printf("Warning: failed to recalculate confidence score for MCP %s: %v\n", mcpID, err)
 		}
 	}
 
-	fmt.Printf("🔴 Revoked %d attestations by agent %s (reason: %s)\n", revokedCount, agentID, reason)
+	fmt.Printf("Revoked %d attestations by agent %s (reason: %s)\n", revokedCount, agentID, reason)
 	return revokedCount, nil
 }
 
@@ -1449,7 +1449,7 @@ func (s *MCPAttestationService) RecordManualAttestation(
 
 	// 2. ORGANIZATION ISOLATION: Verify user can only attest MCP servers in their organization
 	if mcpServer.OrganizationID != organizationID {
-		fmt.Printf("🔒 Organization isolation violation: user %s (org: %s) attempted to attest MCP %s (org: %s)\n",
+		fmt.Printf("Organization isolation violation: user %s (org: %s) attempted to attest MCP %s (org: %s)\n",
 			userID, organizationID, mcpServerID, mcpServer.OrganizationID)
 		return nil, fmt.Errorf("cannot attest MCP servers from other organizations")
 	}
@@ -1484,7 +1484,7 @@ func (s *MCPAttestationService) RecordManualAttestation(
 		return nil, fmt.Errorf("failed to store manual attestation: %w", err)
 	}
 
-	fmt.Printf("✅ Manual attestation created: %s for MCP %s by user %s\n", attestation.ID, mcpServerID, userID)
+	fmt.Printf("Manual attestation created: %s for MCP %s by user %s\n", attestation.ID, mcpServerID, userID)
 
 	// 4. Update MCP server confidence score and attestation count
 	// Use the updateMCPConfidenceScore helper which recalculates from all attestations
@@ -1493,7 +1493,7 @@ func (s *MCPAttestationService) RecordManualAttestation(
 		return nil, fmt.Errorf("failed to update confidence score: %w", err)
 	}
 
-	fmt.Printf("✅ Updated MCP server %s: confidence_score=%.2f%%, attestation_count=%d\n",
+	fmt.Printf("Updated MCP server %s: confidence_score=%.2f%%, attestation_count=%d\n",
 		mcpServerID, confidenceScore, attestationCount)
 
 	return &AttestMCPResponse{
@@ -1549,7 +1549,7 @@ func (s *MCPAttestationService) RecordAgentMCPConnection(
 		return nil, fmt.Errorf("failed to create connection: %w", err)
 	}
 
-	fmt.Printf("✅ Created agent-MCP connection: agent=%s, mcp=%s, tool=%s\n",
+	fmt.Printf("Created agent-MCP connection: agent=%s, mcp=%s, tool=%s\n",
 		agentID, mcpServerID, toolName)
 
 	return connection, nil
@@ -1620,7 +1620,7 @@ func (s *MCPAttestationService) RecordMCPUsageReport(
 	if mcpServer != nil {
 		// Log the usage report (for now, we track this through connections)
 		// Future: store detailed tool usage in a separate table
-		fmt.Printf("📊 MCP Usage Report: agent=%s, server=%s, tools=%d, invocations=%d\n",
+		fmt.Printf("MCP Usage Report: agent=%s, server=%s, tools=%d, invocations=%d\n",
 			agentID, mcpServerID, len(toolUsage), totalInvocations)
 
 		// Log individual tool usage

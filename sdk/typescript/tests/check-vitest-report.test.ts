@@ -140,7 +140,7 @@ const INTEGRATION_FILES = [
 ];
 
 describe('check-vitest-report walks per-assertion statuses', () => {
-  it('AIM-10.AC1 refuses the measured 1.3.1 divergence: aggregate 1194/1194/0 pending while assertionResults carry 36 skipped', () => {
+  it('refuses the measured 1.3.1 divergence: aggregate 1194/1194/0 pending while assertionResults carry 36 skipped', () => {
     // The fixture reproduces the shape measured on the 1.3.1 release
     // commit: default reporter 1158 passed / 36 skipped; JSON aggregate
     // 1194 total, 1194 passed, 0 pending, 0 todo. The aggregate-only
@@ -165,7 +165,7 @@ describe('check-vitest-report walks per-assertion statuses', () => {
     expect(res.output).toContain('skipped=36');
   });
 
-  it('AIM-10.AC1 prints the per-status counts before the verdict', () => {
+  it('prints the per-status counts before the verdict', () => {
     const report = buildReport([
       { file: 'src/a.test.ts', status: 'passed', n: 3 },
       { file: 'src/b.test.ts', status: 'skipped', n: 2 },
@@ -182,7 +182,7 @@ describe('check-vitest-report walks per-assertion statuses', () => {
     expect(res.stderr).toMatch(/refus/i);
   });
 
-  it('AIM-10.AC1 refuses a report carrying a pending assertion', () => {
+  it('refuses a report carrying a pending assertion', () => {
     const report = buildReport([
       { file: 'src/a.test.ts', status: 'passed', n: 5 },
       { file: 'src/b.test.ts', status: 'pending', n: 1 },
@@ -192,7 +192,7 @@ describe('check-vitest-report walks per-assertion statuses', () => {
     expect(res.stdout).toContain('pending=1');
   });
 
-  it('AIM-10.AC1 refuses a report carrying a todo assertion among passes', () => {
+  it('refuses a report carrying a todo assertion among passes', () => {
     const report = buildReport([
       { file: 'src/a.test.ts', status: 'passed', n: 5 },
       { file: 'src/b.test.ts', status: 'todo', n: 1 },
@@ -204,14 +204,14 @@ describe('check-vitest-report walks per-assertion statuses', () => {
 });
 
 describe('check-vitest-report fails closed on vacuous shapes', () => {
-  it('AIM-10.AC3 refuses a report with numTotalTests 0', () => {
+  it('refuses a report with numTotalTests 0', () => {
     const report = buildReport([], { numTotalTests: 0 });
     const res = runChecker([writeReport(report)]);
     expect(res.status, res.output).not.toBe(0);
     expect(res.stderr).toMatch(/no test ran/i);
   });
 
-  it('AIM-10.AC3 refuses a report with an empty testResults array even when the aggregate claims tests ran', () => {
+  it('refuses a report with an empty testResults array even when the aggregate claims tests ran', () => {
     const report = buildReport([], {
       numTotalTests: 1194,
       numPassedTests: 1194,
@@ -221,7 +221,7 @@ describe('check-vitest-report fails closed on vacuous shapes', () => {
     expect(res.stderr).toMatch(/no test ran/i);
   });
 
-  it('AIM-10.AC3 refuses a report whose assertionResults carry only todo', () => {
+  it('refuses a report whose assertionResults carry only todo', () => {
     const report = buildReport([
       { file: 'src/a.test.ts', status: 'todo', n: 4 },
     ]);
@@ -230,13 +230,13 @@ describe('check-vitest-report fails closed on vacuous shapes', () => {
     expect(res.stdout).toContain('todo=4');
   });
 
-  it('AIM-10.AC3 refuses a missing report file with a distinct message', () => {
+  it('refuses a missing report file with a distinct message', () => {
     const res = runChecker([join(workDir, 'does-not-exist.json')]);
     expect(res.status).not.toBe(0);
     expect(res.stderr).toContain('unreadable vitest report');
   });
 
-  it('AIM-10.AC3 refuses a malformed report file with a distinct message', () => {
+  it('refuses a malformed report file with a distinct message', () => {
     const p = join(workDir, 'malformed.json');
     writeFileSync(p, '{ this is not json');
     const res = runChecker([p]);
@@ -244,7 +244,7 @@ describe('check-vitest-report fails closed on vacuous shapes', () => {
     expect(res.stderr).toContain('unreadable vitest report');
   });
 
-  it('AIM-10.AC3 exits 0 on a fully-passed report', () => {
+  it('exits 0 on a fully-passed report', () => {
     const report = buildReport([
       { file: 'src/a.test.ts', status: 'passed', n: 7 },
       { file: 'src/b.test.ts', status: 'passed', n: 2 },
@@ -257,7 +257,7 @@ describe('check-vitest-report fails closed on vacuous shapes', () => {
 describe('check-vitest-report allowlist: exclusions are explicit and bounded', () => {
   const allowFlags = INTEGRATION_FILES.map((f) => `--allow-skips=${f}`);
 
-  it('AIM-10.AC4 accepts skips confined to the allowlisted environment-gated integration files', () => {
+  it('accepts skips confined to the allowlisted environment-gated integration files', () => {
     const report = buildReport([
       { file: 'src/a2a/A2AClient.integration.test.ts', status: 'skipped', n: 21 },
       { file: 'src/client/AIMClient.integration.test.ts', status: 'skipped', n: 13 },
@@ -270,7 +270,7 @@ describe('check-vitest-report allowlist: exclusions are explicit and bounded', (
     expect(res.stdout).toContain('skipped=36');
   });
 
-  it('AIM-10.AC4 refuses a skip outside the allowlist and names the offending file', () => {
+  it('refuses a skip outside the allowlist and names the offending file', () => {
     const report = buildReport([
       { file: 'src/a2a/A2AClient.integration.test.ts', status: 'skipped', n: 21 },
       { file: 'src/telemetry/correlation.test.ts', status: 'skipped', n: 1 },
@@ -281,7 +281,7 @@ describe('check-vitest-report allowlist: exclusions are explicit and bounded', (
     expect(res.stderr).toContain('src/telemetry/correlation.test.ts');
   });
 
-  it('AIM-10.AC4 the allowlist does not excuse failures inside allowlisted files', () => {
+  it('the allowlist does not excuse failures inside allowlisted files', () => {
     const report = buildReport([
       { file: 'src/a2a/A2AClient.integration.test.ts', status: 'failed', n: 1 },
       { file: 'src/version.test.ts', status: 'passed', n: 1000 },
@@ -291,7 +291,7 @@ describe('check-vitest-report allowlist: exclusions are explicit and bounded', (
     expect(res.stdout).toContain('failed=1');
   });
 
-  it('AIM-10.AC4 refuses a report whose only executed outcome is allowlisted skips (nothing ran green)', () => {
+  it('refuses a report whose only executed outcome is allowlisted skips (nothing ran green)', () => {
     const report = buildReport([
       { file: 'src/a2a/A2AClient.integration.test.ts', status: 'skipped', n: 21 },
     ]);
@@ -319,7 +319,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
     return copy;
   }
 
-  it('AIM-18.AC2 refuses a skipped case under a nested same-suffix path and names it; the same report with the file at the listed path exits 0', () => {
+  it('refuses a skipped case under a nested same-suffix path and names it; the same report with the file at the listed path exits 0', () => {
     const report = buildReport([
       { file: NESTED, status: 'skipped', n: 1 },
       { file: 'src/version.test.ts', status: 'passed', n: 10 },
@@ -334,7 +334,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
     expect(ok.status, ok.output).toBe(0);
   });
 
-  it('AIM-18.AC3 refuses an absolute report name outside the root that merely ends with an entry, and tolerates the bare relative entry', () => {
+  it('refuses an absolute report name outside the root that merely ends with an entry, and tolerates the bare relative entry', () => {
     const outside = `/elsewhere/${LISTED}`;
     const report = renamed(
       buildReport([
@@ -361,7 +361,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
     expect(ok.status, ok.output).toBe(0);
   });
 
-  it('AIM-18.AC1 the root defaults to the checker cwd when no --root is given', () => {
+  it('the root defaults to the checker cwd when no --root is given', () => {
     // Report names under the spawn cwd resolve without --root ...
     const cwd = join(workDir, 'cwd-root');
     mkdirSync(cwd, { recursive: true });
@@ -386,7 +386,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
     expect(res.stderr).toContain(join(FIXTURE_ROOT, LISTED));
   });
 
-  it('AIM-18.AC1 normalises backslashes and a leading ./ on both sides before the exact comparison', () => {
+  it('normalises backslashes and a leading ./ on both sides before the exact comparison', () => {
     const report = renamed(
       buildReport([
         { file: LISTED, status: 'skipped', n: 1 },
@@ -399,7 +399,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
     expect(res.status, res.output).toBe(0);
   });
 
-  it('AIM-18.AC1 a skip at an exactly-listed path is tolerated and the ok and counts lines keep their text', () => {
+  it('a skip at an exactly-listed path is tolerated and the ok and counts lines keep their text', () => {
     const report = buildReport([
       { file: 'src/a2a/A2AClient.integration.test.ts', status: 'skipped', n: 21 },
       { file: 'src/client/AIMClient.integration.test.ts', status: 'skipped', n: 13 },
@@ -417,7 +417,7 @@ describe('check-vitest-report allowlist: an entry matches its SDK-root-relative 
     );
   });
 
-  it('AIM-18.AC1 the matcher carries no suffix arm', () => {
+  it('the matcher carries no suffix arm', () => {
     const source = readFileSync(CHECKER, 'utf-8');
     expect(source).not.toMatch(/endsWith\(/);
   });
@@ -451,7 +451,7 @@ describe('both workflow gates invoke the committed checker', () => {
     ['release.yml', releaseRaw],
     ['ci.yml', ciRaw],
   ] as const) {
-    it(`AIM-10.AC2 the ${wfName} gate step runs the committed checker on its JSON report under CI=true, allowlisting only the three integration files`, () => {
+    it(`the ${wfName} gate step runs the committed checker on its JSON report under CI=true, allowlisting only the three integration files`, () => {
       const step = gateStep(raw);
       const run = step.run ?? '';
       expect(run).toContain('--reporter=json');
@@ -465,7 +465,7 @@ describe('both workflow gates invoke the committed checker', () => {
       expect(run.match(/--allow-skips=/g)?.length).toBe(3);
     });
 
-    it(`AIM-10.AC2 no aggregate-only numPendingTests/numTodoTests refusal expression remains in any ${wfName} step`, () => {
+    it(`no aggregate-only numPendingTests/numTodoTests refusal expression remains in any ${wfName} step`, () => {
       const wf = load(raw) as Wf;
       for (const [jobId, job] of Object.entries(wf.jobs)) {
         for (const step of job.steps ?? []) {

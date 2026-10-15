@@ -40,14 +40,14 @@ type asyncDrainer interface {
 // and its deferred cleanup (background jobs, Redis, database, telemetry) run.
 func shutdownGracefully(api apiServer, apiTimeout time.Duration, fga asyncDrainer, fgaTimeout time.Duration) {
 	if err := api.ShutdownWithTimeout(apiTimeout); err != nil {
-		log.Printf("⚠️  API server did not shut down cleanly within %s: %v", apiTimeout, err)
+		log.Printf("API server did not shut down cleanly within %s: %v", apiTimeout, err)
 	}
 
 	if fga != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), fgaTimeout)
 		defer cancel()
 		if err := fga.Shutdown(ctx); err != nil {
-			log.Printf("⚠️  FGA engine shutdown timed out: %v", err)
+			log.Printf("FGA engine shutdown timed out: %v", err)
 		}
 	}
 }

@@ -103,7 +103,7 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 		return fmt.Errorf("invalid MCP capabilities URL: %w", err)
 	}
 
-	fmt.Printf("🔍 Capability Detection for %s:\n", server.Name)
+	fmt.Printf("Capability Detection for %s:\n", server.Name)
 	fmt.Printf("   Original URL: %s\n", server.URL)
 	fmt.Printf("   Base URL: %s\n", baseURL)
 	fmt.Printf("   Capabilities URL: %s\n", capabilitiesURL)
@@ -119,7 +119,7 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		fmt.Printf("❌ Failed to fetch capabilities: %v\n", err)
+		fmt.Printf("Failed to fetch capabilities: %v\n", err)
 		return fmt.Errorf("failed to fetch capabilities from %s: %w", capabilitiesURL, err)
 	}
 	defer resp.Body.Close()
@@ -127,7 +127,7 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 	fmt.Printf("   Response Status: %d\n", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("❌ Non-200 status: %d\n", resp.StatusCode)
+		fmt.Printf("Non-200 status: %d\n", resp.StatusCode)
 		return fmt.Errorf("MCP server returned non-200 status: %d", resp.StatusCode)
 	}
 
@@ -205,16 +205,16 @@ func (s *MCPCapabilityService) DetectCapabilities(ctx context.Context, serverID 
 		return fmt.Errorf("failed to store detected capabilities: %w", err)
 	}
 
-	fmt.Printf("✅ Successfully detected %d real capabilities from MCP server %s\n", len(capabilities), server.Name)
+	fmt.Printf("Successfully detected %d real capabilities from MCP server %s\n", len(capabilities), server.Name)
 
 	// Recompute the manifest baseline from the server's freshly-stored /.well-known capabilities and
 	// record drift if the trusted tool surface changed. Best-effort: a drift-tracking failure must not
 	// fail capability detection, so the error is logged, not returned.
 	if s.manifestService != nil {
 		if drift, err := s.manifestService.RecomputeFromWellKnown(ctx, serverID); err != nil {
-			fmt.Printf("⚠️  Failed to recompute MCP manifest for %s: %v\n", server.Name, err)
+			fmt.Printf("Failed to recompute MCP manifest for %s: %v\n", server.Name, err)
 		} else if drift != nil {
-			fmt.Printf("⚠️  MCP manifest drift detected for %s (severity=%s, +%d/-%d/~%d tools)\n",
+			fmt.Printf("MCP manifest drift detected for %s (severity=%s, +%d/-%d/~%d tools)\n",
 				server.Name, drift.Severity, len(drift.AddedTools), len(drift.RemovedTools), len(drift.ChangedTools))
 		}
 	}

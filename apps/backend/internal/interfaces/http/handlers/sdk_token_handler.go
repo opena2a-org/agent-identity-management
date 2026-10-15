@@ -195,7 +195,7 @@ func (h *SDKTokenHandler) endFamilies(c fiber.Ctx, route string, rows ...*domain
 		}
 		family, err := h.sdkTokenService.FamilyOf(c.Context(), row)
 		if err != nil {
-			log.Printf("⚠️  %s: family of sdk token row %s not found, its family key is not written: %v", route, row.ID, err)
+			log.Printf("%s: family of sdk token row %s not found, its family key is not written: %v", route, row.ID, err)
 			continue
 		}
 		if done[family] {
@@ -203,7 +203,7 @@ func (h *SDKTokenHandler) endFamilies(c fiber.Ctx, route string, rows ...*domain
 		}
 		done[family] = true
 		if _, err := h.jwtService.RevokeFamilyFor(c.Context(), family, row.ExpiresAt.Sub(row.CreatedAt)); err != nil {
-			log.Printf("⚠️  %s: family %s could not be revoked: %v", route, family, err)
+			log.Printf("%s: family %s could not be revoked: %v", route, family, err)
 		}
 	}
 }

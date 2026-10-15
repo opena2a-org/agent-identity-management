@@ -128,7 +128,7 @@ func (s *BehaviorAnalysisService) RecordActivity(
 	// Check if baseline is now mature
 	if !baseline.IsMature && baseline.SamplesCount >= baseline.MaturityThreshold {
 		baseline.IsMature = true
-		fmt.Printf("✅ Agent %s baseline now mature (%d samples)\n", agentID, baseline.SamplesCount)
+		fmt.Printf("Agent %s baseline now mature (%d samples)\n", agentID, baseline.SamplesCount)
 	}
 
 	// Save updated baseline

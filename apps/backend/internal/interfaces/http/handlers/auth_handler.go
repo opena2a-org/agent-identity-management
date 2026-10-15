@@ -258,7 +258,7 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 					meta["familyId"] = family
 				}
 				if err := h.auditService.LogAction(c.Context(), orgID, userID, domain.AuditActionLogout, "user", userID, c.IP(), c.Get("User-Agent"), meta); err != nil {
-					log.Printf("⚠️  Logout: audit row not written: %v", err)
+					log.Printf("Logout: audit row not written: %v", err)
 				}
 			}
 		}
@@ -341,7 +341,7 @@ func (h *AuthHandler) retireSDKTokenRow(ctx context.Context, token string, claim
 	retired := true
 	if revokeErr := h.sdkTokenService.RevokeByTokenHash(ctx, tokenHash, sdkTokenLogoutReason); revokeErr != nil {
 		if row, err := h.sdkTokenService.GetByTokenHash(ctx, tokenHash); err != nil || row == nil || row.IsActive() {
-			log.Printf("⚠️  Logout: sdk_tokens row not revoked for token id %s: %v", claims.ID, revokeErr)
+			log.Printf("Logout: sdk_tokens row not revoked for token id %s: %v", claims.ID, revokeErr)
 			retired = false
 		}
 	}
@@ -362,7 +362,7 @@ func (h *AuthHandler) revokeSDKTokenFamily(ctx context.Context, claims *auth.JWT
 		err = h.sdkTokenService.RevokeFamily(ctx, userID, family, sdkTokenLogoutReason)
 	}
 	if err != nil {
-		log.Printf("⚠️  Logout: sdk_tokens family %s not revoked for token id %s: %v", family, claims.ID, err)
+		log.Printf("Logout: sdk_tokens family %s not revoked for token id %s: %v", family, claims.ID, err)
 		return false
 	}
 	return true

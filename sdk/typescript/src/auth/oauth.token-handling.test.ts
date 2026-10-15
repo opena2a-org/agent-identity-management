@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe('token response shapes (item 1)', () => {
-  it('AIM-11.AC1 RFC 6749 snake_case token response yields "Bearer <token>", never "Bearer undefined"', async () => {
+  it('RFC 6749 snake_case token response yields "Bearer <token>", never "Bearer undefined"', async () => {
     const client = new AIMClient({ baseUrl: BASE_URL });
     client.setCredentials(await realCredentials());
 
@@ -89,7 +89,7 @@ describe('token response shapes (item 1)', () => {
     expect(headers['Authorization']).not.toContain('undefined');
   });
 
-  it('AIM-11.AC1 camelCase token response keeps working', async () => {
+  it('camelCase token response keeps working', async () => {
     const client = new AIMClient({ baseUrl: BASE_URL });
     client.setCredentials(await realCredentials());
 
@@ -100,7 +100,7 @@ describe('token response shapes (item 1)', () => {
     expect(lastRequestHeaders()['Authorization']).toBe('Bearer camel-shaped-token');
   });
 
-  it('AIM-11.AC1 expires_in drives the cache expiry for the RFC shape', async () => {
+  it('expires_in drives the cache expiry for the RFC shape', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
 
     mockTokenResponse({ access_token: 'rfc-cached', token_type: 'Bearer', expires_in: 3600 });
@@ -111,7 +111,7 @@ describe('token response shapes (item 1)', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('AIM-11.AC1 a missing expiry must not poison the cache into NaN', async () => {
+  it('a missing expiry must not poison the cache into NaN', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
 
     // No expiresIn/expires_in at all: the cache must still hold a real number,
@@ -126,7 +126,7 @@ describe('token response shapes (item 1)', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('AIM-11.AC1 an unparseable expiry must not poison the cache into NaN', async () => {
+  it('an unparseable expiry must not poison the cache into NaN', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
 
     mockTokenResponse({ access_token: 'weird-expiry-token', token_type: 'Bearer', expires_in: 'soon' });
@@ -148,7 +148,7 @@ describe('typed /oauth/token errors (item 2)', () => {
     });
   }
 
-  it('AIM-11.AC2 a 429 from /oauth/token surfaces as RateLimitError', async () => {
+  it('a 429 from /oauth/token surfaces as RateLimitError', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
     mockTokenFailure(429, JSON.stringify({ message: 'slow down' }), { 'Retry-After': '7' });
 
@@ -162,7 +162,7 @@ describe('typed /oauth/token errors (item 2)', () => {
     expect((caught as RateLimitError).retryAfter).toBe(7);
   });
 
-  it('AIM-11.AC2 a 401 from /oauth/token surfaces as AuthenticationError', async () => {
+  it('a 401 from /oauth/token surfaces as AuthenticationError', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
     mockTokenFailure(401, JSON.stringify({ message: 'bad assertion' }));
 
@@ -176,7 +176,7 @@ describe('typed /oauth/token errors (item 2)', () => {
     expect((caught as AuthenticationError).statusCode).toBe(401);
   });
 
-  it('AIM-11.AC2 other statuses surface as an AIMError subclass with code and statusCode', async () => {
+  it('other statuses surface as an AIMError subclass with code and statusCode', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
     mockTokenFailure(503, 'upstream unavailable');
 
@@ -191,7 +191,7 @@ describe('typed /oauth/token errors (item 2)', () => {
     expect((caught as AIMError).code).toBeTruthy();
   });
 
-  it('AIM-11.AC2 the embedded response-body excerpt is capped at 500 characters', async () => {
+  it('the embedded response-body excerpt is capped at 500 characters', async () => {
     const manager = new OAuthTokenManager(BASE_URL, await realCredentials());
     // The release test observed a 2095-character HTML body embedded verbatim.
     mockTokenFailure(502, 'x'.repeat(2095));
@@ -210,7 +210,7 @@ describe('typed /oauth/token errors (item 2)', () => {
 });
 
 describe('env-credential diagnostics (item 9, loader half)', () => {
-  it('AIM-11.AC10 a partial credential environment names the missing variables', async () => {
+  it('a partial credential environment names the missing variables', async () => {
     process.env.AIM_AGENT_ID = 'agent-partial';
     process.env.AIM_PUBLIC_KEY = 'pk-partial';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -224,14 +224,14 @@ describe('env-credential diagnostics (item 9, loader half)', () => {
     expect(message).toContain('AIM_ORGANIZATION_ID');
   });
 
-  it('AIM-11.AC10 a clean environment stays silent and returns null', () => {
+  it('a clean environment stays silent and returns null', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     expect(loadCredentialsFromEnv()).toBeNull();
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it('AIM-11.AC10 a complete environment still loads without warning', () => {
+  it('a complete environment still loads without warning', () => {
     process.env.AIM_AGENT_ID = 'agent-full';
     process.env.AIM_PRIVATE_KEY = 'sk-full';
     process.env.AIM_PUBLIC_KEY = 'pk-full';

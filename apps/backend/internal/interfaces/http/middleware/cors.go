@@ -39,7 +39,7 @@ func ValidateAndSanitizeCORSOrigins(origins []string) []string {
 
 		// SECURITY: Reject wildcard origins - this is a critical security risk
 		if origin == "*" {
-			log.Println("⚠️  SECURITY WARNING: Wildcard CORS origin '*' rejected. Use specific origins instead.")
+			log.Println("SECURITY WARNING: Wildcard CORS origin '*' rejected. Use specific origins instead.")
 			continue
 		}
 
@@ -50,13 +50,13 @@ func ValidateAndSanitizeCORSOrigins(origins []string) []string {
 
 		// SECURITY: Validate origin format (must start with http:// or https://)
 		if !strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://") {
-			log.Printf("⚠️  SECURITY WARNING: Invalid CORS origin format rejected: %s", origin)
+			log.Printf("SECURITY WARNING: Invalid CORS origin format rejected: %s", origin)
 			continue
 		}
 
 		// SECURITY: Reject origins with wildcards in subdomain (*.example.com)
 		if strings.Contains(origin, "*") {
-			log.Printf("⚠️  SECURITY WARNING: Wildcard subdomain CORS origin rejected: %s", origin)
+			log.Printf("SECURITY WARNING: Wildcard subdomain CORS origin rejected: %s", origin)
 			continue
 		}
 
@@ -65,7 +65,7 @@ func ValidateAndSanitizeCORSOrigins(origins []string) []string {
 
 	// SECURITY: If no valid origins remain, default to localhost only
 	if len(sanitized) == 0 {
-		log.Println("⚠️  SECURITY WARNING: No valid CORS origins configured. Defaulting to localhost:3000 only.")
+		log.Println("SECURITY WARNING: No valid CORS origins configured. Defaulting to localhost:3000 only.")
 		return []string{"http://localhost:3000"}
 	}
 
@@ -93,7 +93,7 @@ func CORSMiddleware(allowedOrigins []string) fiber.Handler {
 	// scoped to our project prefixes — never a blanket *.vercel.app.
 	if strings.EqualFold(os.Getenv("CORS_ALLOW_VERCEL_PREVIEWS"), "true") {
 		cfg.AllowOriginsFunc = vercelPreviewOriginAllowed
-		log.Println("ℹ️  CORS: AIM Vercel preview origins allowed (CORS_ALLOW_VERCEL_PREVIEWS=true)")
+		log.Println("CORS: AIM Vercel preview origins allowed (CORS_ALLOW_VERCEL_PREVIEWS=true)")
 	}
 
 	return cors.New(cfg)

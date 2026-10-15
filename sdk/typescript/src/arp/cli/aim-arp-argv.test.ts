@@ -49,21 +49,21 @@ afterEach(() => {
 });
 
 describe('bare help/version words work like their flag spellings', () => {
-  it('AIM-12.AC3 item 1: bare `help` prints usage and exits 0', async () => {
+  it('bare `help` prints usage and exits 0', async () => {
     const code = await runAimArp(['help']);
     expect(code).toBe(0);
     expect(logLines.join('\n')).toContain('USAGE');
     expect(errLines.join('\n')).toBe('');
   });
 
-  it('AIM-12.AC3 item 1: bare `version` prints the version and exits 0', async () => {
+  it('bare `version` prints the version and exits 0', async () => {
     const code = await runAimArp(['version']);
     expect(code).toBe(0);
     expect(logLines.join('\n')).toContain(`aim-arp v${SDK_VERSION}`);
     expect(errLines.join('\n')).toBe('');
   });
 
-  it('AIM-12.AC3 item 1: `telemetry --version` answers with the version, not an unknown-subcommand error', async () => {
+  it('`telemetry --version` answers with the version, not an unknown-subcommand error', async () => {
     const code = await runAimArp(['telemetry', '--version']);
     expect(code).toBe(0);
     expect(logLines.join('\n')).toContain(`aim-arp v${SDK_VERSION}`);
@@ -78,26 +78,26 @@ describe('bare help/version words work like their flag spellings', () => {
 });
 
 describe('`telemetry log` validates its count argument instead of silently defaulting', () => {
-  it('AIM-12.AC3 item 3: `log abc` is an error naming the argument, not a silent 20', async () => {
+  it('`log abc` is an error naming the argument, not a silent 20', async () => {
     const code = await runAimArp(['telemetry', 'log', 'abc']);
     expect(code).toBe(1);
     expect(errLines.join('\n')).toContain('abc');
     expect(logLines.join('\n')).not.toContain('Telemetry audit log');
   });
 
-  it('AIM-12.AC3 item 3: `log 0` is an error (the count must be a positive integer)', async () => {
+  it('`log 0` is an error (the count must be a positive integer)', async () => {
     const code = await runAimArp(['telemetry', 'log', '0']);
     expect(code).toBe(1);
     expect(errLines.join('\n')).toContain('0');
   });
 
-  it('AIM-12.AC3 item 3: `log 5 5` is an error — extra arguments are refused, matching the option side', async () => {
+  it('`log 5 5` is an error — extra arguments are refused, matching the option side', async () => {
     const code = await runAimArp(['telemetry', 'log', '5', '5']);
     expect(code).toBe(1);
     expect(logLines.join('\n')).not.toContain('Telemetry audit log');
   });
 
-  it('AIM-12.AC3 item 3: a stray positional on a no-argument subcommand is an error too', async () => {
+  it('a stray positional on a no-argument subcommand is an error too', async () => {
     const code = await runAimArp(['telemetry', 'status', 'extra']);
     expect(code).toBe(1);
     expect(errLines.join('\n')).toContain('extra');

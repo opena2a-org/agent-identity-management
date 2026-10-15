@@ -30,12 +30,12 @@ const migrateCommandName = "migrate"
 func runMigrateCommand() int {
 	database, err := config.LoadDatabase()
 	if err != nil {
-		log.Printf("❌ %v", err)
+		log.Printf("Database configuration: %v", err)
 		return 1
 	}
 	db, err := initMigrationHandle(&config.Config{Database: database})
 	if err != nil {
-		log.Printf("❌ Failed to connect to database: %v", err)
+		log.Printf("Failed to connect to database: %v", err)
 		return 1
 	}
 	defer db.Close()
@@ -46,25 +46,25 @@ func runMigrateCommand() int {
 	appUser := os.Getenv("POSTGRES_APP_USER")
 	if appUser != "" {
 		if err := provisionAppRole(ctx, db, appUser, os.Getenv("POSTGRES_APP_PASSWORD")); err != nil {
-			log.Printf("❌ Application role %s: %v", appUser, err)
+			log.Printf("Application role %s: %v", appUser, err)
 			return 1
 		}
-		log.Printf("✅ Application role %s provisioned; CREATE on schema public revoked from PUBLIC and from %s", appUser, appUser)
+		log.Printf("Application role %s provisioned; CREATE on schema public revoked from PUBLIC and from %s", appUser, appUser)
 	}
 
 	if err := runMigrations(db); err != nil {
-		log.Printf("❌ Database migrations failed: %v", err)
+		log.Printf("Database migrations failed: %v", err)
 		return 1
 	}
-	log.Println("✅ Database migrations completed successfully")
+	log.Println("Database migrations completed successfully")
 
 	if appUser != "" {
 		superuser, bypassRLS, owned, err := appRoleState(ctx, db, appUser)
 		if err != nil {
-			log.Printf("❌ Application role %s: reading its attributes: %v", appUser, err)
+			log.Printf("Application role %s: reading its attributes: %v", appUser, err)
 			return 1
 		}
-		log.Printf("✅ Application role %s: superuser=%t bypassrls=%t ownedRelations=%d", appUser, superuser, bypassRLS, owned)
+		log.Printf("Application role %s: superuser=%t bypassrls=%t ownedRelations=%d", appUser, superuser, bypassRLS, owned)
 	}
 	return 0
 }

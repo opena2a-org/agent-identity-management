@@ -127,7 +127,7 @@ func (h *AuthRefreshHandler) recordRefusalWith(c fiber.Ctx, claims *auth.JWTClai
 		return
 	}
 	if err := h.audit.LogAction(c.Context(), orgID, userID, action, "user", userID, ip, ua, meta); err != nil {
-		log.Printf("⚠️  Refresh: audit row %s for family %s not written: %v", action, family, err)
+		log.Printf("Refresh: audit row %s for family %s not written: %v", action, family, err)
 	}
 }
 
@@ -169,14 +169,14 @@ func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
 	clientMatch := h.jwtService.ClassifyReuse(c.Context(), claims.ID, presenter(c))
 	familyRevoked, revokeErr := h.jwtService.RevokeFamily(c.Context(), claims)
 	if revokeErr != nil {
-		log.Printf("⚠️  Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
+		log.Printf("Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
 	}
 	if claims.Issuer == auth.IssuerSDK && h.sdkTokenService != nil {
 		if userID, err := uuid.Parse(claims.UserID); err == nil {
 			if rowsErr := h.sdkTokenService.RevokeFamily(c.Context(), userID, claims.FamilyID(), domain.SDKTokenRevokeReasonFamilyRevoked); rowsErr == nil {
 				familyRevoked = true
 			} else {
-				log.Printf("⚠️  Refresh: sdk_tokens rows of family %s could not be revoked after a reuse: %v", claims.FamilyID(), rowsErr)
+				log.Printf("Refresh: sdk_tokens rows of family %s could not be revoked after a reuse: %v", claims.FamilyID(), rowsErr)
 			}
 		}
 	}
@@ -263,7 +263,7 @@ func (h *AuthRefreshHandler) familyPastMaxAge(c fiber.Ctx, claims *auth.JWTClaim
 		return false
 	}
 	if err := h.sdkTokenService.RevokeByTokenHash(c.Context(), tokenHash, domain.SDKTokenRevokeReasonFamilyMaxAge); err != nil {
-		log.Printf("⚠️  Refresh: sdk_tokens row of family %s past its maximum age could not be revoked: %v", claims.FamilyID(), err)
+		log.Printf("Refresh: sdk_tokens row of family %s past its maximum age could not be revoked: %v", claims.FamilyID(), err)
 	}
 	bornAt := born.UTC().Format(time.RFC3339)
 	h.recordRefusalWith(c, claims, domain.AuditActionRefreshFamilyMaxAge, map[string]interface{}{"familyCreatedAt": bornAt}, " familyCreatedAt="+bornAt)
@@ -450,7 +450,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		} else {
 			newRefreshToken = req.RefreshToken
 			if revokeErr != nil {
-				log.Printf("⚠️  Refresh: denylist write failed for jti %s; the presented refresh token was returned unchanged: %v", tokenID, revokeErr)
+				log.Printf("Refresh: denylist write failed for jti %s; the presented refresh token was returned unchanged: %v", tokenID, revokeErr)
 			}
 		}
 	}
@@ -477,7 +477,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		// Record usage on the old token (updates last_used_at, usage_count).
 		// This is bookkeeping: a failed write is logged and the refresh proceeds.
 		if err := h.sdkTokenService.RecordTokenUsage(c.Context(), tokenID, c.IP()); err != nil {
-			log.Printf("⚠️  Refresh: usage of token id %s not recorded: %v", tokenID, err)
+			log.Printf("Refresh: usage of token id %s not recorded: %v", tokenID, err)
 		}
 
 		if newRefreshToken != req.RefreshToken && (claims.Issuer == auth.IssuerSDK || oldToken != nil) {
@@ -489,13 +489,13 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 			}
 			if claims.Issuer != auth.IssuerSDK {
 				if rotateErr != nil {
-					log.Printf("⚠️  Refresh: sdk_tokens rotation failed for token id %s: %v", tokenID, rotateErr)
+					log.Printf("Refresh: sdk_tokens rotation failed for token id %s: %v", tokenID, rotateErr)
 				}
 			} else if rotateErr == nil {
 				rotated = true
 			} else {
 				newRefreshToken = req.RefreshToken
-				log.Printf("⚠️  Refresh: sdk_tokens rotation failed for token id %s; the presented refresh token was returned unchanged: %v", tokenID, rotateErr)
+				log.Printf("Refresh: sdk_tokens rotation failed for token id %s; the presented refresh token was returned unchanged: %v", tokenID, rotateErr)
 			}
 		}
 	}

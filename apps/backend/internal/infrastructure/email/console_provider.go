@@ -31,7 +31,7 @@ func (p *ConsoleProvider) GetProviderName() string {
 // SendEmail "sends" an email by printing it to console
 func (p *ConsoleProvider) SendEmail(ctx context.Context, params EmailParams) error {
 	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("📧 EMAIL (Console Provider - Development Only)")
+	fmt.Println("EMAIL (Console Provider - Development Only)")
 	fmt.Println(strings.Repeat("=", 80))
 	fmt.Printf("From: %s\n", params.From)
 	fmt.Printf("To: %s\n", strings.Join(params.To, ", "))

@@ -105,7 +105,7 @@ func TestInitCache_EmptyRedisHostIsLoggedAsDisabled(t *testing.T) {
 	cacheService := initCache(cfg, client)
 
 	assert.Nil(t, cacheService)
-	assert.Equal(t, "ℹ️  Cache service skipped (Redis disabled)\n", logged.String())
+	assert.Equal(t, "Cache service skipped (Redis disabled)\n", logged.String())
 }
 
 // The startup summary's Redis line gives the reason too: with no connection,
@@ -119,7 +119,7 @@ func TestRedisStartupSummary_EmptyRedisHostIsDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, client)
 
-	assert.Equal(t, "💾 Redis: disabled (running without caching)", redisStartupSummary(cfg, client))
+	assert.Equal(t, "Redis: disabled (running without caching)", redisStartupSummary(cfg, client))
 }
 
 func TestRedisStartupSummary_FailedRedisPingIsUnavailable(t *testing.T) {
@@ -145,7 +145,7 @@ func TestRedisStartupSummary_FailedRedisPingIsUnavailable(t *testing.T) {
 			require.Nil(t, client)
 
 			assert.Equal(t,
-				"💾 Redis: "+tc.host+":"+strconv.Itoa(port)+" (unavailable, running without caching)",
+				"Redis: "+tc.host+":"+strconv.Itoa(port)+" (unavailable, running without caching)",
 				redisStartupSummary(cfg, client))
 		})
 	}
@@ -160,7 +160,7 @@ func TestRedisStartupSummary_ConnectionIsConnected(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:" + strconv.Itoa(port)})
 	t.Cleanup(func() { _ = client.Close() })
 
-	assert.Equal(t, "💾 Redis: 127.0.0.1:"+strconv.Itoa(port)+" (connected)", redisStartupSummary(cfg, client))
+	assert.Equal(t, "Redis: 127.0.0.1:"+strconv.Itoa(port)+" (connected)", redisStartupSummary(cfg, client))
 }
 
 // The token revocation line gives the cache line's reason too. "no Redis
@@ -174,9 +174,9 @@ func TestRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
 		value string
 		want  string
 	}{
-		{name: "REDIS_HOST is empty", set: true, value: "", want: "ℹ️  Token revocation disabled (no Redis configured)" + notRotated},
-		{name: "REDIS_HOST names a host", set: true, value: "127.0.0.1", want: "ℹ️  Token revocation disabled (Redis unavailable)" + notRotated},
-		{name: "REDIS_HOST is unset", want: "ℹ️  Token revocation disabled (Redis unavailable)" + notRotated},
+		{name: "REDIS_HOST is empty", set: true, value: "", want: "Token revocation disabled (no Redis configured)" + notRotated},
+		{name: "REDIS_HOST names a host", set: true, value: "127.0.0.1", want: "Token revocation disabled (Redis unavailable)" + notRotated},
+		{name: "REDIS_HOST is unset", want: "Token revocation disabled (Redis unavailable)" + notRotated},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			port, _ := countingListener(t)
@@ -211,7 +211,7 @@ func TestRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
 		// dialed stands in for a connection.
 		client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:" + strconv.Itoa(port)})
 		t.Cleanup(func() { _ = client.Close() })
-		assert.Equal(t, "ℹ️  Token revocation disabled (cache initialization failed)"+notRotated,
+		assert.Equal(t, "Token revocation disabled (cache initialization failed)"+notRotated,
 			tokenRevocationStartupLine(cfg, client, nil, false))
 	})
 
@@ -221,13 +221,13 @@ func TestRevocationStartupLine_GivesTheCacheLinesReason(t *testing.T) {
 		cfg := loadConfigForRedisTest(t, port)
 		client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:" + strconv.Itoa(port)})
 		t.Cleanup(func() { _ = client.Close() })
-		assert.Equal(t, "ℹ️  Token revocation enabled (fail-open=true)", tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, true))
-		assert.Equal(t, "ℹ️  Token revocation enabled (fail-open=false)", tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, false))
+		assert.Equal(t, "Token revocation enabled (fail-open=true)", tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, true))
+		assert.Equal(t, "Token revocation enabled (fail-open=false)", tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, false))
 	})
 }
 
 // The token rotation guide quotes the revocation line for each case as the
-// server writes it, after the log prefix.
+// server writes it.
 func TestTokenRotationGuideQuotesTheRevocationStartupLines(t *testing.T) {
 	requirePublicRepositoryFiles(t)
 
@@ -243,13 +243,10 @@ func TestTokenRotationGuideQuotesTheRevocationStartupLines(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"})
 	t.Cleanup(func() { _ = client.Close() })
 
-	var written []string
-	for _, line := range []string{
+	written := []string{
 		tokenRevocationStartupLine(cfg, client, &cache.RedisCache{}, false),
 		tokenRevocationStartupLine(&disabled, nil, nil, false),
 		tokenRevocationStartupLine(cfg, nil, nil, false),
-	} {
-		written = append(written, strings.TrimPrefix(line, "ℹ️  "))
 	}
 	assert.Equal(t, written, strings.Split(string(block[1]), "\n"))
 }
@@ -279,7 +276,7 @@ func TestInitCache_FailedRedisPingIsLoggedAsUnavailable(t *testing.T) {
 			cacheService := initCache(cfg, client)
 
 			assert.Nil(t, cacheService)
-			assert.Equal(t, "ℹ️  Cache service skipped (Redis unavailable)\n", logged.String())
+			assert.Equal(t, "Cache service skipped (Redis unavailable)\n", logged.String())
 		})
 	}
 }

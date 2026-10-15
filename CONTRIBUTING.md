@@ -116,6 +116,22 @@ npm test
 npm test -- --coverage
 ```
 
+**TypeScript SDK** (`sdk/typescript`):
+```bash
+cd sdk/typescript
+npm ci
+npm test
+```
+
+The TypeScript SDK's `npm test` also runs three of the repository's documentation lints, from
+`tests/repo-doc-lints.test.ts`: `scripts/check-public-wording.py` with `python3`, and
+`scripts/test-lint-docs-keyvault-master-key.sh` and `scripts/test-lint-docs-repo-links.sh` with `bash`.
+It needs `git`, `bash` and `python3` on the `PATH`, and a git checkout of the repository: the link lint
+asks `git` which files to read. In a tree without `.git`, such as a source archive, the link lint stops
+with "is not the top of a git work tree" and its case fails. The link lint also reads the untracked
+files that git does not ignore, so an untracked file with a link to the `opena2a` GitHub account fails
+that case until the link is changed or the file is removed or ignored.
+
 ### Commit Message Format
 
 We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:

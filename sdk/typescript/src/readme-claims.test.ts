@@ -20,7 +20,7 @@ const clientSrc = readFileSync(join(ROOT, 'src', 'client', 'AIMClient.ts'), 'utf
 const typesSrc = readFileSync(join(ROOT, 'src', 'types', 'index.ts'), 'utf-8');
 
 describe('README claims match the code (item 3)', () => {
-  it('AIM-11.AC3 README does not claim automatic retries the client does not implement', () => {
+  it('README does not claim automatic retries the client does not implement', () => {
     // The delivered client has no retry loop and no retry configuration...
     expect(clientSrc).not.toMatch(/exponential backoff/i);
     expect(typesSrc).not.toMatch(/\bretries\??:/);
@@ -31,13 +31,13 @@ describe('README claims match the code (item 3)', () => {
 });
 
 describe('README delegation window claim (item 7)', () => {
-  it('AIM-11.AC7 README documents the enforced not-yet-valid lower bound', () => {
+  it('README documents the enforced not-yet-valid lower bound', () => {
     expect(readme).toMatch(/not yet valid|before its signed .?createdAt|before `createdAt`/i);
   });
 });
 
 describe('CHANGELOG release invariant (AIM-11)', () => {
-  it('AIM-11.AC11 the Unreleased section carries an entry per shipped P2 item', () => {
+  it('the Unreleased section carries an entry per shipped P2 item', () => {
     const unreleased = changelog.split(/^## \[Unreleased\]/m)[1]?.split(/^## \[/m)[0] ?? '';
     // One recognizable marker per shipped item (1-9 of the release-test P2 set).
     expect(unreleased).toMatch(/RFC 6749/); // item 1: token shape

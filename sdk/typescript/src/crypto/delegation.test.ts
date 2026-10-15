@@ -994,31 +994,31 @@ describe('Delegation temporal lower bound (AIM-11 item 7)', () => {
     });
   }
 
-  it('AIM-11.AC7 verifyDelegation at 1970-01-01 against a delegation created in 2026 returns false', async () => {
+  it('verifyDelegation at 1970-01-01 against a delegation created in 2026 returns false', async () => {
     const d = await makeFutureWindow();
     expect(await verifyDelegation(d, { verifyAt: '1970-01-01T00:00:00.000Z' })).toBe(false);
   });
 
-  it('AIM-11.AC7 checkDelegationTemporalValidity refuses an instant before createdAt', async () => {
+  it('checkDelegationTemporalValidity refuses an instant before createdAt', async () => {
     const d = await makeFutureWindow();
     const res = checkDelegationTemporalValidity(d, '2025-12-31T23:59:59.000Z');
     expect(res.valid).toBe(false);
     expect(res.error).toMatch(/not yet valid|createdAt/i);
   });
 
-  it('AIM-11.AC7 the chain variant refuses an evaluation instant before createdAt', async () => {
+  it('the chain variant refuses an evaluation instant before createdAt', async () => {
     const d = await makeFutureWindow();
     const result = await verifyDelegationChain([d], { verifyAt: '1970-01-01T00:00:00.000Z' });
     expect(result.valid).toBe(false);
     expect(result.results[0].temporalValid).toBe(false);
   });
 
-  it('AIM-11.AC7 an instant inside the window still verifies', async () => {
+  it('an instant inside the window still verifies', async () => {
     const d = await makeFutureWindow();
     expect(await verifyDelegation(d, { verifyAt: '2027-06-01T00:00:00.000Z' })).toBe(true);
   });
 
-  it('AIM-11.AC7 the boundary instant createdAt itself is valid (inclusive lower bound)', async () => {
+  it('the boundary instant createdAt itself is valid (inclusive lower bound)', async () => {
     const d = await makeFutureWindow();
     expect(checkDelegationTemporalValidity(d, '2026-01-01T00:00:00.000Z').valid).toBe(true);
   });

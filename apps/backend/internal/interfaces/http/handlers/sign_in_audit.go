@@ -26,18 +26,18 @@ func recordSignIn(c fiber.Ctx, audit *application.AuditService, jwtService *auth
 	}
 	claims, err := jwtService.ValidateToken(refreshToken)
 	if err != nil {
-		log.Printf("⚠️  Sign-in: issued refresh token not readable, audit row not written: %v", err)
+		log.Printf("Sign-in: issued refresh token not readable, audit row not written: %v", err)
 		return
 	}
 	userID, err1 := uuid.Parse(claims.UserID)
 	orgID, err2 := uuid.Parse(claims.OrganizationID)
 	if err1 != nil || err2 != nil {
-		log.Printf("⚠️  Sign-in: issued refresh token names no user or organization, audit row not written")
+		log.Printf("Sign-in: issued refresh token names no user or organization, audit row not written")
 		return
 	}
 	family := claims.FamilyID()
 	meta["familyId"] = family
 	if err := audit.LogAction(c.Context(), orgID, userID, domain.AuditActionLogin, "user", userID, c.IP(), c.Get("User-Agent"), meta); err != nil {
-		log.Printf("⚠️  Sign-in: audit row for family %s not written: %v", family, err)
+		log.Printf("Sign-in: audit row for family %s not written: %v", family, err)
 	}
 }

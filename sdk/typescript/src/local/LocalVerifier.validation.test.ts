@@ -83,7 +83,7 @@ describe('a malformed ML-DSA-65 trust anchor fails at construction', () => {
 });
 
 describe('trust anchors are validated at construction', () => {
-  it('AIM-12.AC3 item 14: a non-array trustedIssuers throws ConfigurationError', () => {
+  it('a non-array trustedIssuers throws ConfigurationError', () => {
     expect(
       () =>
         new LocalVerifier({
@@ -93,7 +93,7 @@ describe('trust anchors are validated at construction', () => {
     ).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 14: a non-string entry in trustedIssuers throws ConfigurationError', () => {
+  it('a non-string entry in trustedIssuers throws ConfigurationError', () => {
     expect(
       () =>
         new LocalVerifier({
@@ -103,7 +103,7 @@ describe('trust anchors are validated at construction', () => {
     ).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 14: a non-array publicKeys throws ConfigurationError', () => {
+  it('a non-array publicKeys throws ConfigurationError', () => {
     expect(
       () =>
         new LocalVerifier({
@@ -113,7 +113,7 @@ describe('trust anchors are validated at construction', () => {
     ).toThrow(ConfigurationError);
   });
 
-  it('AIM-12.AC3 item 14: a non-object publicKeys entry throws ConfigurationError', () => {
+  it('a non-object publicKeys entry throws ConfigurationError', () => {
     expect(
       () =>
         new LocalVerifier({

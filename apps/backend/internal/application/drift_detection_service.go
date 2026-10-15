@@ -47,7 +47,7 @@ func NewDriftDetectionService(agentRepo domain.AgentRepository, alertRepo domain
 	if err != nil {
 		// Log via fmt to match existing service style; metric will be nil
 		// and gauge emission becomes a no-op.
-		fmt.Printf("⚠️  drift score gauge init failed: %v\n", err)
+		fmt.Printf("drift score gauge init failed: %v\n", err)
 	}
 	return &DriftDetectionService{
 		agentRepo:  agentRepo,
@@ -211,7 +211,7 @@ func (s *DriftDetectionService) applyTrustScorePenalty(
 		return fmt.Errorf("failed to update trust score: %w", err)
 	}
 
-	fmt.Printf("✅ Applied trust score penalty to agent %s: %.2f -> %.2f (-%0.f points)\n",
+	fmt.Printf("Applied trust score penalty to agent %s: %.2f -> %.2f (-%0.f points)\n",
 		agent.Name, agent.TrustScore, newScore, penalty)
 
 	return nil

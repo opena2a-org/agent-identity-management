@@ -116,7 +116,7 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 	if isMonitoringMode {
 		// Auto-approve: update status and grant capability
 		if err := s.requestRepo.UpdateStatus(request.ID, domain.CapabilityRequestStatusAutoApproved, input.RequestedBy); err != nil {
-			fmt.Printf("⚠️ Failed to auto-approve capability request: %v\n", err)
+			fmt.Printf("Failed to auto-approve capability request: %v\n", err)
 		} else {
 			// Grant the capability
 			capability := &domain.AgentCapability{
@@ -126,17 +126,17 @@ func (s *CapabilityRequestService) CreateRequest(ctx context.Context, input *dom
 				GrantedAt:      time.Now(),
 			}
 			if err := s.capabilityRepo.CreateCapability(capability); err != nil {
-				fmt.Printf("⚠️ Failed to grant auto-approved capability: %v\n", err)
+				fmt.Printf("Failed to grant auto-approved capability: %v\n", err)
 			} else {
 				request.Status = domain.CapabilityRequestStatusAutoApproved
-				fmt.Printf("✅ Capability request AUTO-APPROVED (monitoring mode): agent=%s, capability=%s\n",
+				fmt.Printf("Capability request AUTO-APPROVED (monitoring mode): agent=%s, capability=%s\n",
 					agent.Name, input.CapabilityType)
 				return request, nil
 			}
 		}
 	}
 
-	fmt.Printf("✅ Capability request created: agent=%s, capability=%s, reason=%s\n",
+	fmt.Printf("Capability request created: agent=%s, capability=%s, reason=%s\n",
 		agent.Name, input.CapabilityType, input.Reason)
 
 	return request, nil
@@ -167,7 +167,7 @@ func (s *CapabilityRequestService) autoApprove(ctx context.Context, agent *domai
 		return nil, fmt.Errorf("failed to auto-approve capability request: %w", err)
 	}
 	request.Status = domain.CapabilityRequestStatusAutoApproved
-	fmt.Printf("✅ Capability request AUTO-APPROVED (monitoring mode): agent=%s, capability=%s\n",
+	fmt.Printf("Capability request AUTO-APPROVED (monitoring mode): agent=%s, capability=%s\n",
 		agent.Name, request.CapabilityType)
 	return request, nil
 }
@@ -192,7 +192,7 @@ func (s *CapabilityRequestService) filePending(ctx context.Context, agent *domai
 	if err != nil {
 		return nil, fmt.Errorf("failed to create capability request: %w", err)
 	}
-	fmt.Printf("✅ Capability request created: agent=%s, capability=%s, reason=%s\n",
+	fmt.Printf("Capability request created: agent=%s, capability=%s, reason=%s\n",
 		agent.Name, request.CapabilityType, request.Reason)
 	return request, nil
 }
@@ -299,7 +299,7 @@ func (s *CapabilityRequestService) ApproveRequest(ctx context.Context, id uuid.U
 			transition.TriggerRequestApproved, reviewerID, capability); err != nil {
 			return fmt.Errorf("failed to approve capability request: %w", err)
 		}
-		fmt.Printf("✅ Capability request approved and capability granted: agent=%s, capability=%s, reviewer=%s\n",
+		fmt.Printf("Capability request approved and capability granted: agent=%s, capability=%s, reviewer=%s\n",
 			request.AgentName, request.CapabilityType, reviewerID)
 		return nil
 	}
@@ -315,7 +315,7 @@ func (s *CapabilityRequestService) ApproveRequest(ctx context.Context, id uuid.U
 		return fmt.Errorf("failed to grant capability: %w", err)
 	}
 
-	fmt.Printf("✅ Capability request approved and capability granted: agent=%s, capability=%s, reviewer=%s\n",
+	fmt.Printf("Capability request approved and capability granted: agent=%s, capability=%s, reviewer=%s\n",
 		request.AgentName, request.CapabilityType, reviewerID)
 
 	return nil
@@ -345,7 +345,7 @@ func (s *CapabilityRequestService) RejectRequest(ctx context.Context, id uuid.UU
 		return fmt.Errorf("failed to reject capability request: %w", err)
 	}
 
-	fmt.Printf("❌ Capability request rejected: agent=%s, capability=%s, reviewer=%s\n",
+	fmt.Printf("Capability request rejected: agent=%s, capability=%s, reviewer=%s\n",
 		request.AgentName, request.CapabilityType, reviewerID)
 
 	return nil
