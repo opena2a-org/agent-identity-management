@@ -250,6 +250,20 @@ def test_an_answer_without_a_known_status_raises(client):
 
 
 @responses.activate
+def test_a_409_whose_body_is_not_json_raises_without_a_known_outcome(client):
+    # A 409 is read for its outcome; one whose body is not JSON carries none.
+    responses.add(
+        responses.POST, AIM_URL + REGISTER_PATH,
+        status=409, body="Conflict", content_type="text/plain",
+    )
+
+    with pytest.raises(VerificationError, match="capability 'db:read' without a known outcome"):
+        client.report_capabilities(["db:read", "api:call"])
+
+    assert len(responses.calls) == 1, "the capability after the failure is not sent"
+
+
+@responses.activate
 def test_scope_is_accepted_with_a_deprecation_warning_and_not_sent(client):
     fake = FakeAIM(mode="monitoring")
     _serve(fake)

@@ -58,6 +58,7 @@ setup(
             "black>=24.3.0",  # CVE-2024-48 fix
             "flake8>=6.0.0",
             "mypy>=1.0.0",
+            "ruff>=0.5.0",  # tests/test_lint_ruff.py
         ],
         "mcp": [
             "mcp>=1.23.0",  # Official MCP SDK (CVE-2025-53366, CVE-2025-66416 fix)

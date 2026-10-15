@@ -24,7 +24,6 @@ import os
 import sys
 import json
 import errno
-import shutil
 import stat
 import tempfile
 import threading
@@ -32,7 +31,6 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
-from datetime import datetime
 
 if sys.platform == "win32":
     import msvcrt

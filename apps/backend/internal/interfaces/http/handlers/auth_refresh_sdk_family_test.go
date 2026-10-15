@@ -378,7 +378,8 @@ func TestRefreshToken_SDKRetirementRaceLoserEndsTheFamily(t *testing.T) {
 }
 
 // SF6: the recovery route refuses a family a reuse ended, with or without a
-// revocation store; a row its owner revoked is still recovered.
+// revocation store; a row revoked with another reason and no family key
+// written is still recovered.
 func TestRecoverRevokedToken_RefusesARevokedSDKFamily(t *testing.T) {
 	for name, store := range map[string]*rotationStore{"store": {}, "noStore": nil} {
 		t.Run(name, func(t *testing.T) {
@@ -396,11 +397,37 @@ func TestRecoverRevokedToken_RefusesARevokedSDKFamily(t *testing.T) {
 			assert.NotContains(t, body, "refreshToken")
 			assert.Len(t, f.repo.rows, rows, "no recovered credential row")
 
-			// control: a row its owner revoked (no reuse) is recovered
+			// control: a row revoked with another reason (no reuse, no
+			// logout, no family key) is recovered
 			s3 := f.downloadSDK(t)
 			require.NoError(t, f.repo.Revoke(f.repo.row(s3).ID, "user_revoked"))
 			status, body = f.recoverWith(t, s3)
 			assert.Equal(t, fiber.StatusOK, status, body)
+		})
+	}
+}
+
+// SF7: a logged-out SDK-download token is not recovered, with or without a
+// revocation store. With a store the logout writes the family key; without
+// one the token's row carries the logout reason, and either ends the family.
+func TestRecoverRevokedToken_RefusesALoggedOutSDKToken(t *testing.T) {
+	for name, store := range map[string]*rotationStore{"store": {}, "noStore": nil} {
+		t.Run(name, func(t *testing.T) {
+			f := newSDKFamilyFixture(t, store)
+			s1 := f.downloadSDK(t)
+			logout := NewAuthHandler(nil, f.svc, nil, nil, application.NewSDKTokenService(f.repo))
+			_, _, _, status := postLogout(t, logout, "", `{"refreshToken":"`+s1+`"}`, "")
+			require.Equal(t, fiber.StatusOK, status)
+			row := f.repo.row(s1)
+			require.NotNil(t, row.RevokeReason)
+			require.Equal(t, sdkTokenLogoutReason, *row.RevokeReason)
+			rows := len(f.repo.rows)
+
+			status, body := f.recoverWith(t, s1)
+			assert.Equal(t, fiber.StatusUnauthorized, status, "the logout ended the token's family")
+			assert.Contains(t, body, familyRefusal)
+			assert.NotContains(t, body, "refreshToken")
+			assert.Len(t, f.repo.rows, rows, "no recovered credential row")
 		})
 	}
 }

@@ -80,9 +80,24 @@ def test_agent_key_file_is_0600_while_the_key_is_written(agents_dir, modes_at_wr
 
 def test_agents_dir_is_created_0700(agents_dir, modes_at_write):
     assert not agents_dir.exists()
+    # The mode the directory is created with, read as mkdir returns and before
+    # the chmod that narrows a directory an earlier version left wide. With
+    # parents=True, mkdir calls itself again once the parents exist, so one
+    # creation can be seen by both calls.
+    created = []
+    real_mkdir = type(agents_dir).mkdir
 
-    assert save_agent_credentials("my-agent", dict(AGENT_KEYS)) is True
+    def recording_mkdir(self, *args, **kwargs):
+        creates = self == agents_dir and not self.exists()
+        real_mkdir(self, *args, **kwargs)
+        if creates:
+            created.append(_mode(self))
 
+    with patch.object(type(agents_dir), "mkdir", recording_mkdir):
+        assert save_agent_credentials("my-agent", dict(AGENT_KEYS)) is True
+
+    assert created, "the agents directory was not created through Path.mkdir"
+    assert {oct(mode) for mode in created} == {oct(0o700)}
     assert oct(modes_at_write[0]["dir"]) == oct(0o700)
     assert oct(_mode(agents_dir)) == oct(0o700)
 

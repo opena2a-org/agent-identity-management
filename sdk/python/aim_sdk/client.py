@@ -5,7 +5,6 @@ AIM Client - Core SDK functionality for automatic identity verification
 import atexit
 import base64
 import functools
-import hashlib
 import json
 import threading
 import time
@@ -15,7 +14,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 import requests
-from nacl.signing import SigningKey, VerifyKey
+from nacl.signing import SigningKey
 from nacl.encoding import Base64Encoder
 
 import re
@@ -43,6 +42,30 @@ from .decision import (
 )
 from .enforcement import PendingEnforcementChange, evaluate as _evaluate_enforcement
 from .strict_mode import strict_mode_override
+from .oauth import OAuthTokenManager, load_sdk_credentials
+from .capability_detection import auto_detect_capabilities
+from .console import console
+from ._dashboard import JIT_APPROVALS_PAGE, dashboard_url_for
+from .risk_detector import detect_risk_level
+from .security_logging import (
+    security_logger,
+    AuthzEventType,
+    AgentEventType,
+)
+from .telemetry import (
+    CorrelationJoiner,
+    CorrelatedRelay,
+    EnforcementInput,
+    correlation_headers,
+    mint_correlation_id,
+    open_a2a_home,
+)
+from .credentials import (
+    load_agent_credentials as _load_agent_creds_from_module,
+    save_agent_credentials as _save_agent_creds_to_module,
+    refresh_rejected_fix,
+    LEGACY_CREDENTIALS_FILE,
+)
 
 # Get version - we need to compute it directly to avoid circular import
 import os as _os
@@ -158,27 +181,6 @@ def _resolve_enforcement_timeout(enforcement_timeout: "Optional[float]") -> floa
         return DEFAULT_ENFORCEMENT_TIMEOUT_SECONDS
     return millis / 1000.0
 
-from .oauth import OAuthTokenManager, load_sdk_credentials
-from .capability_detection import auto_detect_capabilities
-from .console import console
-from ._dashboard import JIT_APPROVALS_PAGE, dashboard_url_for
-from .risk_detector import detect_risk_level
-from .security_logging import (
-    security_logger,
-    AuthnEventType,
-    AuthzEventType,
-    AgentEventType,
-    SecurityEventType,
-    EventSeverity,
-)
-from .telemetry import (
-    CorrelationJoiner,
-    CorrelatedRelay,
-    EnforcementInput,
-    correlation_headers,
-    mint_correlation_id,
-    open_a2a_home,
-)
 
 # Default enforcement-source label stamped on captured telemetry records.
 DEFAULT_ENFORCEMENT_SOURCE = "aim-sdk"
@@ -856,7 +858,7 @@ class AIMClient:
         retry_count: int = 0,
         custom_headers: Optional[Dict] = None,
         accept_status: tuple = ()
-    ) -> Dict:
+    ) -> Optional[Dict]:
         """
         Make authenticated HTTP request to AIM server.
 
@@ -870,7 +872,8 @@ class AIMClient:
                 (capability registration answers a repeat with 409 and a body)
 
         Returns:
-            Response JSON data
+            Response JSON data, or None for a status in ``accept_status``
+            whose body is not JSON
 
         Raises:
             AuthenticationError: If authentication fails
@@ -991,7 +994,12 @@ class AIMClient:
             #     print(f"[DEBUG] 400 Bad Request - Response body: {response.text}")
 
             if response.status_code in accept_status:
-                return response.json()
+                # An accepted status whose body is not JSON carries no
+                # outcome: the caller's outcome check refuses the None.
+                try:
+                    return response.json()
+                except ValueError:
+                    return None
 
             response.raise_for_status()
             return response.json()
@@ -1258,7 +1266,7 @@ class AIMClient:
             if response.status_code == 401:
                 try:
                     error_detail = response.json().get("error", "unknown error")
-                except:
+                except Exception:
                     error_detail = response.text
                 # Server text sanitised where it enters the message (#384 class).
                 raise AuthenticationError(
@@ -2049,7 +2057,7 @@ class AIMClient:
                         # Server text sanitised at entry (#384 class).
                         error_detail = _sanitize_reason(response.json().get("error", response.text))
                         error_msg = f"{error_msg}: {error_detail}"
-                    except:
+                    except Exception:
                         error_msg = f"{error_msg}: {_sanitize_reason(response.text[:200])}"
                     # Continue polling on transient errors, but log the issue
                     console.warning(f"Error polling verification status: {error_msg}")
@@ -3018,7 +3026,7 @@ class AIMClient:
                 }
 
             # Submit to backend
-            result = self._make_request(
+            self._make_request(
                 method="POST",
                 endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/mcp-usage-report",
                 data=payload
@@ -3333,7 +3341,6 @@ class AIMClient:
 
         # Generate Ed25519 keypair for the new agent
         from nacl.signing import SigningKey
-        from nacl.encoding import Base64Encoder
 
         signing_key = SigningKey.generate()
         private_key_bytes = bytes(signing_key)  # 32-byte seed
@@ -3940,7 +3947,7 @@ class AIMClient:
                     "requires_approval": True,
                     "function_name": func.__name__,
                     "module": func.__module__,
-                    "warning": f" CRITICAL: This action requires human approval!"
+                    "warning": " CRITICAL: This action requires human approval!"
                 }
 
                 # Add args/kwargs to context
@@ -4307,20 +4314,6 @@ class AIMClient:
 # ONE-LINE AGENT REGISTRATION - Enterprise security simplified
 # ============================================================================
 
-import os
-import pathlib
-
-# Import centralized credential management
-from .credentials import (
-    get_agent_credentials_path,
-    load_agent_credentials as _load_agent_creds_from_module,
-    save_agent_credentials as _save_agent_creds_to_module,
-    list_agent_credentials,
-    refresh_rejected_fix,
-    AGENTS_DIR,
-    LEGACY_CREDENTIALS_FILE,
-)
-
 
 def _get_credentials_path():
     """
@@ -4612,7 +4605,7 @@ def _validate_cached_credentials(
             # Authentication failed - but this doesn't mean credentials are stale
             # It could be an SDK auth issue. We should still try to use the agent credentials
             # since agent auth uses Ed25519 signatures, not OAuth tokens
-            console.debug(f"Backend auth check returned 401 - proceeding with agent credentials")
+            console.debug("Backend auth check returned 401 - proceeding with agent credentials")
             return True, None
 
         elif response.status_code == 403:
@@ -4633,7 +4626,7 @@ def _validate_cached_credentials(
 
     except requests.exceptions.Timeout:
         # Timeout - same as connection error, don't invalidate
-        console.warning(f"Timeout connecting to AIM backend - using cached credentials")
+        console.warning("Timeout connecting to AIM backend - using cached credentials")
         return True, None
 
     except Exception as e:
@@ -5846,7 +5839,7 @@ def _register_single_mcp(
     try:
         mcp_data = {
             "name": mcp_name,
-            "description": mcp_def.get("description", f"MCP server registered via SDK"),
+            "description": mcp_def.get("description", "MCP server registered via SDK"),
             "url": mcp_def.get("url", ""),
             "version": mcp_def.get("version", "1.0.0"),
             "capabilities": mcp_def.get("capabilities", []),
@@ -5915,7 +5908,7 @@ def _register_single_mcp(
             else:
                 try:
                     error_body = response.json()
-                except:
+                except Exception:
                     error_body = response.text[:200]
                 result["error"] = f"HTTP {response.status_code}: {error_body}"
                 return result
