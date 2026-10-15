@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -100,6 +102,9 @@ func (h *SecurityPolicyHandler) CreatePolicy(c fiber.Ctx) error {
 			"error": "Invalid request body",
 		})
 	}
+	if err := domain.ValidateMCPPolicyRules(req.PolicyType, req.Rules); err != nil {
+		return respondPolicyRulesRefusal(c, req.PolicyType, err)
+	}
 
 	policy := &domain.SecurityPolicy{
 		OrganizationID:    orgID,
@@ -124,6 +129,21 @@ func (h *SecurityPolicyHandler) CreatePolicy(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(policy)
 }
 
+// respondPolicyRulesRefusal answers a ValidateMCPPolicyRules refusal: rules that break a
+// rule of their mcp_* type are a 400 that names the member and the rule, and rules that
+// cannot be read at all are a 400 that names the policy type.
+func respondPolicyRulesRefusal(c fiber.Ctx, policyType domain.PolicyType, err error) error {
+	var invalid *domain.PolicyRulesError
+	if errors.As(err, &invalid) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": invalid.Message,
+		})
+	}
+	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		"error": "rules cannot be read as the rules of the " + string(policyType) + " policy type",
+	})
+}
+
 // UpdatePolicy updates an existing security policy (admin only)
 func (h *SecurityPolicyHandler) UpdatePolicy(c fiber.Ctx) error {
 	policyID, err := uuid.Parse(c.Params("id"))
@@ -142,6 +162,9 @@ func (h *SecurityPolicyHandler) UpdatePolicy(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
+	}
+	if err := domain.ValidateMCPPolicyRules(req.PolicyType, req.Rules); err != nil {
+		return respondPolicyRulesRefusal(c, req.PolicyType, err)
 	}
 
 	// SECURITY: gate cross-tenant policy updates. Without this, ANY

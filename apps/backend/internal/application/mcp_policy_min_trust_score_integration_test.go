@@ -65,17 +65,22 @@ func TestMCPPolicyMinTrustScoreOutOfScaleIsRescaled(t *testing.T) {
 		insert("floor 30", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 30}`, true)
 		insert("floor 72.5", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 72.5}`, false)
 		insert("floor 100", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 100}`, false)
+		insert("floor 150", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 150}`, false)
 		insert("canonical 0.7", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 0.7}`, false)
 		insert("boundary 1", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 1}`, false)
 		insert("no floor", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": 0}`, false)
+		insert("null floor", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": null}`, false)
 		insert("string floor", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": "50"}`, false)
 		insert("boolean floor", "mcp_allowlist", `{"allowedDomains": ["*"], "minTrustScore": true}`, false)
 		insert("absent floor", "mcp_blocklist", `{"blockedDomains": ["*.malware.com"]}`, false)
+		// Only the mcp_allowlist evaluator reads the floor, but the migration rescales every
+		// mcp_* row; this row fails if the UPDATE is narrowed to mcp_allowlist.
+		insert("blocklist floor", "mcp_blocklist", `{"blockedDomains": ["*.malware.com"], "minTrustScore": 50}`, false)
 		insert("non-mcp floor", "trust_score_low", `{"minTrustScore": 50}`, false)
 
 		for run := 1; run <= 2; run++ {
-			// The second run proves the migration is idempotent: a value already on [0,1] is
-			// never divided again.
+			// The second run proves the migration is idempotent: every value it writes is at
+			// most 1, so none is divided again, including the 150 it caps at 1.
 			applyMigration(t, tx, rescaleMigration)
 
 			for _, tc := range []struct {
@@ -86,12 +91,15 @@ func TestMCPPolicyMinTrustScoreOutOfScaleIsRescaled(t *testing.T) {
 				{"floor 30", "0.3"},
 				{"floor 72.5", "0.725"},
 				{"floor 100", "1"},
+				{"floor 150", "1"},
 				{"canonical 0.7", "0.7"},
 				{"boundary 1", "1"},
 				{"no floor", "0"},
+				{"null floor", "null"},
 				{"string floor", `"50"`},
 				{"boolean floor", "true"},
 				{"absent floor", ""},
+				{"blocklist floor", "0.5"},
 				{"non-mcp floor", "50"},
 			} {
 				require.Equal(t, tc.want, floorOf(t, tx, orgID, tc.name),

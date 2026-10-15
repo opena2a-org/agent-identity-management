@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -31,10 +30,16 @@ import (
 // mcp_allowlist policy that sets neither list still triggers nothing, so one that sets only
 // AllowedCapabilities is not enforced.
 //
+// A policy whose rules do not decode into its type's rule struct is reported as violated, for
+// its rules, and is never skipped. The admin API refuses such rules
+// (domain.ValidateMCPPolicyRules); a row written before that check, or directly to the
+// database, can still carry them.
+//
 // Still undecided, and required before this is wired: where enforcement runs (registration,
-// agent-to-MCP connection, a background sweep), fail-open versus fail-closed when evaluation
-// errors (evaluatePolicy failures are currently skipped), whether block_and_alert may block or
-// the first wired version is alert-only, and whether the six seeded defaults are re-enabled.
+// agent-to-MCP connection, a background sweep), fail-open versus fail-closed when the policies
+// cannot be read (EvaluateMCPServer returns the repository's error, and EvaluateAllMCPServers
+// leaves that server out of its results), whether block_and_alert may block or the first wired
+// version is alert-only, and whether the six seeded defaults are re-enabled.
 //
 // Tracked in https://github.com/opena2a-org/agent-identity-management/issues/355.
 type MCPPolicyEvaluator struct {
@@ -156,8 +161,8 @@ func (e *MCPPolicyEvaluator) evaluateAllowlist(
 	result *domain.MCPPolicyEvaluationResult,
 ) {
 	var rules domain.MCPAllowlistRules
-	rulesJSON, _ := json.Marshal(policy.Rules)
-	if err := json.Unmarshal(rulesJSON, &rules); err != nil {
+	if err := domain.DecodePolicyRules(policy.Rules, &rules); err != nil {
+		reportUndecodableRules(result, err)
 		return
 	}
 
@@ -266,8 +271,8 @@ func (e *MCPPolicyEvaluator) evaluateBlocklist(
 	result *domain.MCPPolicyEvaluationResult,
 ) {
 	var rules domain.MCPBlocklistRules
-	rulesJSON, _ := json.Marshal(policy.Rules)
-	if err := json.Unmarshal(rulesJSON, &rules); err != nil {
+	if err := domain.DecodePolicyRules(policy.Rules, &rules); err != nil {
+		reportUndecodableRules(result, err)
 		return
 	}
 
@@ -338,8 +343,8 @@ func (e *MCPPolicyEvaluator) evaluateCapabilities(
 	result *domain.MCPPolicyEvaluationResult,
 ) {
 	var rules domain.MCPCapabilitiesRules
-	rulesJSON, _ := json.Marshal(policy.Rules)
-	if err := json.Unmarshal(rulesJSON, &rules); err != nil {
+	if err := domain.DecodePolicyRules(policy.Rules, &rules); err != nil {
+		reportUndecodableRules(result, err)
 		return
 	}
 
@@ -418,8 +423,8 @@ func (e *MCPPolicyEvaluator) evaluateUnverified(
 	result *domain.MCPPolicyEvaluationResult,
 ) {
 	var rules domain.MCPUnverifiedRules
-	rulesJSON, _ := json.Marshal(policy.Rules)
-	if err := json.Unmarshal(rulesJSON, &rules); err != nil {
+	if err := domain.DecodePolicyRules(policy.Rules, &rules); err != nil {
+		reportUndecodableRules(result, err)
 		return
 	}
 
@@ -446,6 +451,17 @@ func (e *MCPPolicyEvaluator) evaluateUnverified(
 
 // Helper functions
 
+// reportUndecodableRules marks a policy whose rules do not decode into its rule struct as
+// violated. Returning without a verdict let such a policy pass every server: an allowlist
+// whose minTrustScore is the string "50" admitted a server off its domain list.
+func reportUndecodableRules(result *domain.MCPPolicyEvaluationResult, err error) {
+	result.Triggered = true
+	result.ViolatedRules = append(result.ViolatedRules, "Policy rules could not be decoded")
+	result.Reason = fmt.Sprintf("The policy's rules could not be decoded: %v", err)
+	result.Recommendations = append(result.Recommendations,
+		"Correct the policy's rules so each key holds the JSON type its policy type takes")
+}
+
 func isMCPPolicy(policyType domain.PolicyType) bool {
 	return policyType == domain.PolicyTypeMCPAllowlist ||
 		policyType == domain.PolicyTypeMCPBlocklist ||
@@ -461,16 +477,26 @@ func extractDomain(rawURL string) string {
 	return parsed.Hostname()
 }
 
+// matchDomainPattern reports whether a host matches an allowedDomains or blockedDomains entry.
+// Both sides are compared in lower case and without trailing dots, so "x.EVIL.com" and the
+// fully qualified "x.evil.com." match "*.evil.com" as "x.evil.com" does, and a blocklist entry
+// cannot be stepped around by writing the host another way.
 func matchDomainPattern(domain, pattern string) bool {
 	// A bare "*" matches every host, including the empty one extractDomain returns for a URL
 	// with no host, so a "*" blocklist cannot be stepped around by registering one.
 	if pattern == "*" {
 		return true
 	}
-	// Handle wildcard patterns like "*.company.com"
-	if strings.HasPrefix(pattern, "*.") {
-		suffix := pattern[1:] // ".company.com"
-		return strings.HasSuffix(domain, suffix) || domain == pattern[2:] // exact match without wildcard
+	host := normalizeHostName(domain)
+	// A wildcard such as "*.company.com" matches company.com and every name under it.
+	if base, ok := strings.CutPrefix(pattern, "*."); ok {
+		base = normalizeHostName(base)
+		return base != "" && (host == base || strings.HasSuffix(host, "."+base))
 	}
-	return strings.EqualFold(domain, pattern)
+	return host == normalizeHostName(pattern)
+}
+
+// normalizeHostName lower-cases a host name and drops its trailing dots.
+func normalizeHostName(name string) string {
+	return strings.ToLower(strings.TrimRight(name, "."))
 }

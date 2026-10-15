@@ -50,8 +50,11 @@ var seededPolicyNames = []string{
 // organization and admin user both exist.
 //
 // It fails if a future migration re-enables these rows. That is the intent: re-enabling is only
-// correct once MCPPolicyEvaluator is wired AND rules.minTrustScore is rescaled to [0,1] AND the
-// bare '*' allowedDomains entry is fixed. See https://github.com/opena2a-org/agent-identity-management/issues/355.
+// correct once MCPPolicyEvaluator is wired, and #355 still has to decide where enforcement runs,
+// fail-open or fail-closed when the policies cannot be read, whether block_and_alert may block,
+// and whether the seeded defaults come back at all. The rules themselves are ready: migration
+// 114 put rules.minTrustScore on [0,1], and a bare '*' matches every host.
+// See https://github.com/opena2a-org/agent-identity-management/issues/355.
 //
 // Build-tag gated: requires Postgres reachable via TEST_DATABASE_URL.
 //
@@ -121,8 +124,17 @@ func TestSeededMCPPoliciesAreNotEnabled(t *testing.T) {
 	require.Equal(t, 6, total, "the disabling migration must not delete the seeded policies, only disable them")
 	require.Equal(t, 0, enabled,
 		"a security policy of a type nothing evaluates is enabled. Either wire MCPPolicyEvaluator "+
-			"(and rescale rules.minTrustScore to [0,1] and fix the bare '*' allowedDomains entry "+
-			"first), or keep these rows disabled. See https://github.com/opena2a-org/agent-identity-management/issues/355")
+			"(deciding first where enforcement runs, fail-open or fail-closed when the policies "+
+			"cannot be read, and whether block_and_alert may block), or keep these rows disabled. "+
+			"See https://github.com/opena2a-org/agent-identity-management/issues/355")
+
+	// Migration 130: a server on an allowed domain that declares logging or completions passes
+	// the seeded allowlist's capability list.
+	var capabilities string
+	require.NoError(t, tx.QueryRow(`
+		SELECT rules->>'allowedCapabilities' FROM security_policies
+		WHERE policy_type = 'mcp_allowlist' AND name = 'Trusted MCP Server Domains'`).Scan(&capabilities))
+	require.Equal(t, `["tools", "resources", "prompts", "logging", "completions"]`, capabilities)
 }
 
 // securityPolicyMigrations returns the migration filenames that touch security_policies, split

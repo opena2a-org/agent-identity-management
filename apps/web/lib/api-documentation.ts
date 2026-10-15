@@ -2369,21 +2369,53 @@ export const apiDocumentation: EndpointCategory[] = [
               description: "Policy name",
               required: true,
             },
-            rules: {
-              type: "object",
-              description: "Policy rules",
+            description: { type: "string", description: "Policy description" },
+            policyType: {
+              type: "string",
+              description:
+                "capability_violation, trust_score_low, unusual_activity, unauthorized_access, data_exfiltration, config_drift, mcp_allowlist, mcp_blocklist, mcp_capabilities or mcp_unverified",
               required: true,
             },
-            enabled: { type: "boolean", description: "Policy enabled" },
+            enforcementAction: {
+              type: "string",
+              description: "alert_only, block_and_alert or allow",
+              required: true,
+            },
+            severityThreshold: {
+              type: "string",
+              description: "Severity threshold, such as medium or high",
+              required: true,
+            },
+            rules: {
+              type: "object",
+              description:
+                "Rules the policy type reads. trust_score_low reads trust_threshold, a trust score from 0 to 1. The rules of an mcp_* type must match that type's rule format, and an mcp_allowlist minTrustScore must be from 0 to 1; rules that do not are answered 400.",
+            },
+            appliesTo: {
+              type: "string",
+              description: "all, agent_id:<id>, agent_type:<type> or trust_score_below:<score>",
+              required: true,
+            },
+            isEnabled: { type: "boolean", description: "Whether the policy is enabled" },
+            priority: {
+              type: "number",
+              description: "Policies are listed and evaluated highest priority first",
+              required: true,
+            },
           },
         },
         example: `{
-  "name": "Trust Score Minimum Policy",
+  "name": "Low trust score alert",
+  "description": "Alert when an agent's trust score is below 0.5",
+  "policyType": "trust_score_low",
+  "enforcementAction": "alert_only",
+  "severityThreshold": "high",
   "rules": {
-    "minTrustScore": 0.7,
-    "action": "suspend"
+    "trust_threshold": 0.5
   },
-  "enabled": true
+  "appliesTo": "all",
+  "isEnabled": true,
+  "priority": 100
 }`,
       },
       {

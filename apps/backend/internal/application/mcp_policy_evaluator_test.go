@@ -175,6 +175,49 @@ func TestMatchDomainPattern(t *testing.T) {
 			pattern:  "example.com",
 			expected: false,
 		},
+		// Host names compare without regard to case, and a trailing dot names the same host.
+		{
+			name:     "wildcard matches a host written in upper case",
+			domain:   "x.EVIL.com",
+			pattern:  "*.evil.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard written in upper case matches a lower-case host",
+			domain:   "evil.com",
+			pattern:  "*.EVIL.com",
+			expected: true,
+		},
+		{
+			name:     "wildcard matches a host with a trailing dot",
+			domain:   "x.evil.com.",
+			pattern:  "*.evil.com",
+			expected: true,
+		},
+		{
+			name:     "exact pattern matches a host with a trailing dot",
+			domain:   "evil.com.",
+			pattern:  "evil.com",
+			expected: true,
+		},
+		{
+			name:     "exact pattern with a trailing dot matches the host without one",
+			domain:   "evil.com",
+			pattern:  "evil.com.",
+			expected: true,
+		},
+		{
+			name:     "a trailing dot does not make a lookalike match",
+			domain:   "notevil.com.",
+			pattern:  "*.evil.com",
+			expected: false,
+		},
+		{
+			name:     "a wildcard with no domain after it matches nothing",
+			domain:   "evil.com",
+			pattern:  "*.",
+			expected: false,
+		},
 		// Edge cases
 		{
 			name:     "empty domain",
@@ -594,4 +637,295 @@ func TestEvaluateMCPServer_RejectsServerViolatingEachRule(t *testing.T) {
 				"the server must be rejected for the rule it violates, not for another")
 		})
 	}
+}
+
+// TestMCPPolicy_BlocklistIgnoresHostCaseAndTrailingDot drives the four server URL and pattern
+// pairs of #593 through a blocklist policy. A host name in another case, or with the trailing
+// dot of its fully qualified form, names the same host, so each must be blocked.
+func TestMCPPolicy_BlocklistIgnoresHostCaseAndTrailingDot(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	tests := []struct {
+		url     string
+		pattern string
+	}{
+		{url: "https://x.EVIL.com/sse", pattern: "*.evil.com"},
+		{url: "https://x.evil.com./sse", pattern: "*.evil.com"},
+		{url: "https://evil.com./sse", pattern: "evil.com"},
+		{url: "https://evil.com/sse", pattern: "*.EVIL.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.url+" against "+tt.pattern, func(t *testing.T) {
+			policy := &domain.SecurityPolicy{
+				ID:         uuid.New(),
+				PolicyType: domain.PolicyTypeMCPBlocklist,
+				Rules:      map[string]interface{}{"blockedDomains": []string{tt.pattern}},
+			}
+			server := &domain.MCPServer{ID: uuid.New(), Name: "example-mcp", URL: tt.url}
+
+			result := &domain.MCPPolicyEvaluationResult{}
+			evaluator.evaluateBlocklist(server, policy, result)
+
+			assert.True(t, result.Triggered, "%s must be blocked by %s", tt.url, tt.pattern)
+			assert.Equal(t, []string{"Domain is blocked"}, result.ViolatedRules)
+		})
+	}
+}
+
+// TestMCPPolicy_UndecodableRulesReportAViolation covers a policy whose rules hold a value of a
+// JSON type its rule struct cannot take. Each evaluator returned without a verdict, so such a
+// policy admitted every server: an allowlist with the string floor "50" let a server off its
+// domain list through. The policy is now reported as violated, for its rules, so it gets fixed.
+func TestMCPPolicy_UndecodableRulesReportAViolation(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	server := func() *domain.MCPServer {
+		return &domain.MCPServer{
+			ID:           uuid.New(),
+			Name:         "example-mcp",
+			URL:          "https://mcp.example.com/sse",
+			Status:       domain.MCPServerStatusVerified,
+			IsVerified:   true,
+			TrustScore:   0.9,
+			Capabilities: []string{"tools"},
+		}
+	}
+
+	// The control from #593: the same allowlist without the string floor rejects the server.
+	control := &domain.SecurityPolicy{
+		ID:         uuid.New(),
+		PolicyType: domain.PolicyTypeMCPAllowlist,
+		Rules:      map[string]interface{}{"allowedDomains": []string{"only.example.org"}},
+	}
+	controlResult, err := evaluator.evaluatePolicy(context.Background(), server(), control)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Not in allowlist"}, controlResult.ViolatedRules)
+
+	tests := []struct {
+		name       string
+		policyType domain.PolicyType
+		rules      map[string]interface{}
+		field      string
+	}{
+		{
+			name:       "allowlist with a string minTrustScore",
+			policyType: domain.PolicyTypeMCPAllowlist,
+			rules:      map[string]interface{}{"allowedDomains": []string{"only.example.org"}, "minTrustScore": "50"},
+			field:      "minTrustScore",
+		},
+		{
+			name:       "blocklist with a string where a list belongs",
+			policyType: domain.PolicyTypeMCPBlocklist,
+			rules:      map[string]interface{}{"blockedDomains": "mcp.example.com"},
+			field:      "blockedDomains",
+		},
+		{
+			name:       "capabilities with a string count",
+			policyType: domain.PolicyTypeMCPCapabilities,
+			rules:      map[string]interface{}{"forbiddenCapabilities": []string{"tools"}, "maxCapabilityCount": "1"},
+			field:      "maxCapabilityCount",
+		},
+		{
+			name:       "unverified with a string flag",
+			policyType: domain.PolicyTypeMCPUnverified,
+			rules:      map[string]interface{}{"requireManualApproval": "yes"},
+			field:      "requireManualApproval",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &domain.SecurityPolicy{
+				ID:                uuid.New(),
+				PolicyType:        tt.policyType,
+				EnforcementAction: domain.EnforcementAlertOnly,
+				Rules:             tt.rules,
+			}
+
+			result, err := evaluator.evaluatePolicy(context.Background(), server(), policy)
+			require.NoError(t, err)
+
+			assert.True(t, result.Triggered, "a policy whose rules cannot be read must not pass the server")
+			assert.True(t, result.ShouldAlert)
+			assert.False(t, result.ShouldBlock, "an alert_only policy alerts and does not block")
+			assert.Equal(t, []string{"Policy rules could not be decoded"}, result.ViolatedRules)
+			assert.Contains(t, result.Reason, "rules."+tt.field)
+		})
+	}
+}
+
+// TestMCPPolicy_AllowedNamesAdmitAServer covers allowedNames: a server whose domain is not on
+// allowedDomains, or a policy with no allowedDomains, is admitted by its name (case-insensitive),
+// and an admitted server still goes through the checks behind the admission.
+func TestMCPPolicy_AllowedNamesAdmitAServer(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	tests := []struct {
+		name           string
+		rules          map[string]interface{}
+		serverName     string
+		capabilities   []string
+		expectViolated []string
+		expectMatched  []string
+	}{
+		{
+			name:          "a name on the list admits a server off the domain list",
+			rules:         map[string]interface{}{"allowedDomains": []string{"only.example.org"}, "allowedNames": []string{"example-mcp"}},
+			serverName:    "Example-MCP",
+			expectMatched: []string{"name:example-mcp"},
+		},
+		{
+			name:          "a name on the list admits a server when the policy lists no domains",
+			rules:         map[string]interface{}{"allowedNames": []string{"example-mcp"}},
+			serverName:    "example-mcp",
+			expectMatched: []string{"name:example-mcp"},
+		},
+		{
+			name: "a server admitted by name is still held to allowedCapabilities",
+			rules: map[string]interface{}{
+				"allowedNames":        []string{"example-mcp"},
+				"allowedCapabilities": []string{"tools"},
+			},
+			serverName:     "example-mcp",
+			capabilities:   []string{"tools", "sampling"},
+			expectViolated: []string{"Capability not in allowlist"},
+			expectMatched:  []string{"name:example-mcp"},
+		},
+		{
+			name:           "a name off the list is not admitted",
+			rules:          map[string]interface{}{"allowedNames": []string{"example-mcp"}},
+			serverName:     "other-mcp",
+			expectViolated: []string{"Not in allowlist"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &domain.SecurityPolicy{ID: uuid.New(), PolicyType: domain.PolicyTypeMCPAllowlist, Rules: tt.rules}
+			server := &domain.MCPServer{
+				ID:           uuid.New(),
+				Name:         tt.serverName,
+				URL:          "https://mcp.example.com/sse",
+				Status:       domain.MCPServerStatusVerified,
+				TrustScore:   0.9,
+				Capabilities: tt.capabilities,
+			}
+
+			result := &domain.MCPPolicyEvaluationResult{}
+			evaluator.evaluateAllowlist(server, policy, result)
+
+			assert.Equal(t, len(tt.expectViolated) > 0, result.Triggered)
+			assert.Equal(t, tt.expectViolated, result.ViolatedRules)
+			assert.Equal(t, tt.expectMatched, result.MatchedPatterns)
+		})
+	}
+}
+
+// TestMCPPolicy_AllowlistWithNeitherListEnforcesNothing pins the documented limit of an
+// mcp_allowlist policy that sets neither allowedDomains nor allowedNames: no server is admitted,
+// so none is checked, and no rule of the policy reports a violation.
+func TestMCPPolicy_AllowlistWithNeitherListEnforcesNothing(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	policy := &domain.SecurityPolicy{
+		ID:         uuid.New(),
+		PolicyType: domain.PolicyTypeMCPAllowlist,
+		Rules: map[string]interface{}{
+			"allowedCapabilities": []string{"tools"},
+			"requireVerified":     true,
+			"minTrustScore":       0.9,
+		},
+	}
+	server := &domain.MCPServer{
+		ID:           uuid.New(),
+		Name:         "example-mcp",
+		URL:          "https://mcp.example.com/sse",
+		Status:       domain.MCPServerStatusPending,
+		TrustScore:   0.1,
+		Capabilities: []string{"sampling"},
+	}
+
+	result := &domain.MCPPolicyEvaluationResult{}
+	evaluator.evaluateAllowlist(server, policy, result)
+
+	assert.False(t, result.Triggered)
+	assert.Empty(t, result.ViolatedRules)
+}
+
+// TestMCPPolicy_SeededTrustedDomainsAllowlistAdmitsLoggingAndCompletions evaluates the rules of
+// the seeded "Trusted MCP Server Domains" policy as migration 052 wrote them and as migration 130
+// leaves them, against a server on one of its domains that declares logging and completions.
+func TestMCPPolicy_SeededTrustedDomainsAllowlistAdmitsLoggingAndCompletions(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+	seededDomains := []string{"localhost", "127.0.0.1", "*.local", "*.internal", "*.amazonaws.com", "*.azure.com", "*.googleapis.com"}
+
+	tests := []struct {
+		name            string
+		capabilities    []string
+		expectTriggered bool
+	}{
+		{name: "as migration 052 seeded it", capabilities: []string{"tools", "resources", "prompts"}, expectTriggered: true},
+		{name: "after migration 130", capabilities: []string{"tools", "resources", "prompts", "logging", "completions"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &domain.SecurityPolicy{
+				ID:         uuid.New(),
+				PolicyType: domain.PolicyTypeMCPAllowlist,
+				Rules: map[string]interface{}{
+					"allowedDomains":      seededDomains,
+					"allowedNames":        []string{},
+					"allowedCapabilities": tt.capabilities,
+					"requireVerified":     false,
+					"minTrustScore":       0,
+					"minAttestations":     0,
+				},
+			}
+			server := &domain.MCPServer{
+				ID:           uuid.New(),
+				Name:         "example-mcp",
+				URL:          "https://mcp.example.amazonaws.com/sse",
+				Status:       domain.MCPServerStatusVerified,
+				TrustScore:   0.9,
+				Capabilities: []string{"tools", "logging", "completions"},
+			}
+
+			result := &domain.MCPPolicyEvaluationResult{}
+			evaluator.evaluateAllowlist(server, policy, result)
+
+			assert.Equal(t, tt.expectTriggered, result.Triggered, "violated: %v", result.ViolatedRules)
+		})
+	}
+}
+
+// TestMCPPolicy_CapabilityAllowlistStopsAtTheFirstCapabilityOffTheList pins that a server
+// declaring several capabilities off the list is reported once, for the first of them.
+func TestMCPPolicy_CapabilityAllowlistStopsAtTheFirstCapabilityOffTheList(t *testing.T) {
+	evaluator := &MCPPolicyEvaluator{}
+
+	policy := &domain.SecurityPolicy{
+		ID:         uuid.New(),
+		PolicyType: domain.PolicyTypeMCPAllowlist,
+		Rules: map[string]interface{}{
+			"allowedDomains":      []string{"mcp.example.com"},
+			"allowedCapabilities": []string{"tools"},
+		},
+	}
+	server := &domain.MCPServer{
+		ID:           uuid.New(),
+		Name:         "example-mcp",
+		URL:          "https://mcp.example.com/sse",
+		Status:       domain.MCPServerStatusVerified,
+		TrustScore:   0.9,
+		Capabilities: []string{"tools", "sampling", "elicitation"},
+	}
+
+	result := &domain.MCPPolicyEvaluationResult{}
+	evaluator.evaluateAllowlist(server, policy, result)
+
+	assert.True(t, result.Triggered)
+	assert.Equal(t, []string{"Capability not in allowlist"}, result.ViolatedRules)
+	assert.Equal(t, "MCP server has capability not in allowlist: sampling", result.Reason)
 }
