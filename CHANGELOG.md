@@ -166,7 +166,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `AIM_FRONTEND_PORT` (`3000`) from the environment, then the repository's `.env`, then the
   defaults, through the new `stack_env.py`; `--aim-url` and then `AIM_URL` still win for the
   backend, and the dashboard links use the dashboard port. The example's README lists the variables
-  with their defaults. The Java demo still reads `AIM_URL` only.
+  with their defaults.
 
 ### Changed — the LangChain CRUD and MCP server demos follow `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
 
