@@ -78,6 +78,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   name that already existed, it wrote its `compose.env`, which holds the secrets, into that directory
   and deleted the directory at the end of the run.
 
+### Security — A2A policy evaluation reads the policies of the caller's organization (#652)
+
+- `POST /api/v1/a2a/policies/evaluate` evaluates the active A2A policies of the organization in the
+  caller's credentials. It passed the body's `organizationId` to the evaluation as given. Run against the
+  handler with the policy store stubbed, a body naming another organization was answered `200` with that
+  organization's decision and the names of its active policies in `policiesEvaluated`, and a body naming
+  no organization read the policies of the zero UUID.
+- A body whose `organizationId` names another organization is answered
+  `403 {"error":"organizationId must be your own organization; leave it out to evaluate your organization's policies"}`
+  before any policy is read. A body that leaves `organizationId` out or names the caller's own
+  organization is evaluated for the caller's organization, and a caller whose credentials carry no
+  organization is answered `401`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/a2a_policy_evaluation_organization_test.go`.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the

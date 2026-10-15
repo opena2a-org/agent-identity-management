@@ -142,7 +142,15 @@ export interface A2ASecurityViolationInfo {
 }
 
 /**
- * A2A Security Settings
+ * A2A Security Settings, with the member names the server reads and answers with.
+ *
+ * The server replaces every setting with the ones an update carries, and stores a member the
+ * update leaves out as false, 0, an empty string or no agent IDs. To change some settings, read
+ * them with `getSecuritySettings()`, change them on that object, and pass it to
+ * `updateSecuritySettings()`.
+ *
+ * `id`, `organizationId`, `createdBy`, `updatedBy`, `createdAt` and `updatedAt` describe the
+ * stored record.
  */
 export interface A2ASecuritySettings {
   id?: string;
@@ -150,11 +158,16 @@ export interface A2ASecuritySettings {
   enforcementMode: 'monitor' | 'strict';
   requireVerifiedSkills: boolean;
   minTrustScore: number;
-  requireSignedRequests: boolean;
+  minAttestationCount: number;
+  requireRequestSigning: boolean;
   requireNonceValidation: boolean;
-  maxTimestampAge: number;
-  blockedAgentIds: string[];
-  allowedAgentIds: string[];
+  nonceValiditySeconds: number;
+  allowedAgentIds?: string[];
+  blockedAgentIds?: string[];
+  maxRequestsPerMinute: number;
+  maxRequestsPerHour: number;
+  createdBy?: string;
+  updatedBy?: string;
   createdAt?: string;
   updatedAt?: string;
 }

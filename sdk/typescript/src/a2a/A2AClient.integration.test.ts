@@ -408,13 +408,19 @@ describe('A2AClient Integration Tests', () => {
     it.skipIf(!backendAvailable || !credentialsAvailable)(
       'should update security settings',
       async () => {
+        // The server replaces every setting with the ones an update carries, so
+        // the update sends the current settings with two of them changed.
+        const current = await a2aClient.getSecuritySettings();
         const updatedSettings = await a2aClient.updateSecuritySettings({
+          ...current,
           minTrustScore: 0.6,
           requireVerifiedSkills: true,
         });
 
         expect(updatedSettings.minTrustScore).toBe(0.6);
         expect(updatedSettings.requireVerifiedSkills).toBe(true);
+        expect(updatedSettings.requireRequestSigning).toBe(current.requireRequestSigning);
+        expect(updatedSettings.nonceValiditySeconds).toBe(current.nonceValiditySeconds);
 
         console.log('✅ Security settings updated');
       }

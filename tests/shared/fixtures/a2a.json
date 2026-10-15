@@ -190,22 +190,28 @@
       "enforcementMode": "strict",
       "requireVerifiedSkills": true,
       "minTrustScore": 0.7,
-      "requireSignedRequests": true,
+      "minAttestationCount": 3,
+      "requireRequestSigning": true,
       "requireNonceValidation": true,
-      "maxTimestampAge": 300000,
+      "nonceValiditySeconds": 300,
       "blockedAgentIds": [],
-      "allowedAgentIds": []
+      "allowedAgentIds": [],
+      "maxRequestsPerMinute": 60,
+      "maxRequestsPerHour": 1000
     },
     "relaxed": {
       "organizationId": "org-x1y2z3",
       "enforcementMode": "monitor",
       "requireVerifiedSkills": false,
       "minTrustScore": 0.3,
-      "requireSignedRequests": false,
+      "minAttestationCount": 0,
+      "requireRequestSigning": false,
       "requireNonceValidation": false,
-      "maxTimestampAge": 600000,
+      "nonceValiditySeconds": 600,
       "blockedAgentIds": [],
-      "allowedAgentIds": []
+      "allowedAgentIds": [],
+      "maxRequestsPerMinute": 60,
+      "maxRequestsPerHour": 1000
     }
   },
   "attestation": {
