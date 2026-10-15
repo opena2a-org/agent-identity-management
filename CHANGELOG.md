@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the Detect MCP servers dialog says its command can replace the agent's key pair
+
+- Above its commands, the dashboard's Detect MCP servers dialog states that when the SDK on the
+  agent's machine has no saved credentials for the agent, the command creates a new key pair and
+  replaces the agent's public key with it before it registers the MCP servers. In that case
+  `secure('<name>', auto_detect_mcp=True)` finds the agent by name and sends
+  `PUT /api/v1/agents/{id}/keys` with the new public key.
+
 ### Security — sign-in failure and lock alert log lines name no email address
 
 - The server log lines a password sign-in writes name no account email address. The account-locked
