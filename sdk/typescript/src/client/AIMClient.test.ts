@@ -11,13 +11,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AIMClient, createClient, registerAgent } from './AIMClient';
-import {
-  AIMError,
-  AuthenticationError,
-  ActionDeniedError,
-  VerificationError,
-  NetworkError,
-} from '../exceptions';
+import { AuthenticationError, NetworkError } from '../exceptions';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -317,7 +311,7 @@ describe('AIMClient', () => {
           }),
       });
 
-      const agent = await client.registerAgent({
+      await client.registerAgent({
         name: 'alt-agent',
       });
 
@@ -390,7 +384,13 @@ describe('AIMClient', () => {
     it('should return a function wrapper', () => {
       const client = new AIMClient();
       const originalFn = async (x: number) => x * 2;
-      const verifiedFn = client.createVerifiedAction('db:read', originalFn);
+      // createVerifiedAction's type parameter is constrained to
+      // (...args: unknown[]) => Promise<unknown>, which a function with a
+      // typed parameter does not satisfy.
+      const verifiedFn = client.createVerifiedAction(
+        'db:read',
+        originalFn as (...args: unknown[]) => Promise<unknown>
+      );
 
       expect(typeof verifiedFn).toBe('function');
     });

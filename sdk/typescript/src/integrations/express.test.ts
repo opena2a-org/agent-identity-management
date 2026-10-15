@@ -32,8 +32,11 @@ vi.mock('../client/AIMClient', () => ({
   })),
 }));
 
+// Express declares `path` read-only; these tests set it on the mock.
+type MockRequest = { -readonly [K in keyof AIMRequest]?: AIMRequest[K] };
+
 describe('createAIMMiddleware', () => {
-  let mockReq: Partial<AIMRequest>;
+  let mockReq: MockRequest;
   let mockRes: Partial<Response>;
   let mockNext: NextFunction;
 
@@ -45,7 +48,7 @@ describe('createAIMMiddleware', () => {
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),
     };
-    mockNext = vi.fn();
+    mockNext = vi.fn() as unknown as NextFunction;
   });
 
   it('should create middleware function', () => {
@@ -143,7 +146,7 @@ describe('verifyAction', () => {
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),
     };
-    mockNext = vi.fn();
+    mockNext = vi.fn() as unknown as NextFunction;
   });
 
   it('should create middleware for action', () => {
@@ -276,7 +279,7 @@ describe('verifyRouter', () => {
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),
     };
-    mockNext = vi.fn();
+    mockNext = vi.fn() as unknown as NextFunction;
   });
 
   it('should create middleware for router', () => {
@@ -374,7 +377,7 @@ describe('aimErrorHandler', () => {
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),
     };
-    mockNext = vi.fn();
+    mockNext = vi.fn() as unknown as NextFunction;
   });
 
   it('should handle ActionDeniedError', () => {

@@ -18,6 +18,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type Server } from 'http';
 import type { AddressInfo } from 'net';
+import type { FastifyInstance } from 'fastify';
 import { createAIMMiddleware, verifyAction } from './express';
 import { aimPlugin, verifyAction as fastifyVerifyAction } from './fastify';
 import { AIMClient } from '../client/AIMClient';
@@ -206,7 +207,7 @@ describe('README Fastify example against a fake AIM server (#449)', () => {
       },
     };
     for (const hook of Object.values(hooks)) await hook(req, reply);
-    await fastifyVerifyAction('data:write')(req, reply);
+    await fastifyVerifyAction('data:write').call(undefined as unknown as FastifyInstance, req, reply);
 
     expect(reply.statusCode).toBe(200);
     expect(req.aim.verified).toBe(true);

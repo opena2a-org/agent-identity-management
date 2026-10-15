@@ -82,7 +82,7 @@ afterEach(() => {
 /** The server's rule, applied to what the loopback server received. */
 function serverSignedBytes(r: Received): Buffer {
   const head = `${r.method.toUpperCase()}\n${r.target}\n${String(r.headers['x-timestamp'])}`;
-  const parts = [Buffer.from(head, 'utf8')];
+  const parts: Buffer[] = [Buffer.from(head, 'utf8')];
   if (r.body.length > 0) parts.push(Buffer.from('\n'), r.body);
   return Buffer.concat(parts);
 }

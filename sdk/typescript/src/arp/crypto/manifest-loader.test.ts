@@ -113,33 +113,6 @@ async function generateFixtureSet(): Promise<GeneratedFixtures> {
   const mldsaSeed = new Uint8Array(32).fill(0x02);
   const mldsaKeys = ml_dsa65.keygen(mldsaSeed);
 
-  function signManifest(payload: RawManifest, expiresAt?: string): RawManifest {
-    const { signature: _sig, ...rest } = payload;
-    const base: RawManifest = {
-      ...rest,
-      ...(expiresAt !== undefined ? { expiresAt } : {}),
-      ed25519PublicKey: toBase64(edPubKey),
-      mldsa65PublicKey: toBase64(mldsaKeys.publicKey),
-    };
-    const canonical = canonicalizeManifestPayload(
-      base as unknown as Record<string, unknown>,
-    );
-    // Noble ed25519 v2 signAsync is deterministic given the same key + msg.
-    // Ml-dsa `sign(sk, msg)` is the deterministic variant per FIPS 204.
-    // The test intentionally calls them twice (once here, once via
-    // hybridSign during verification) to make sure both produce the same
-    // bytes. Timestamp is fixed for determinism.
-    return {
-      ...base,
-      signature: {
-        alg: MANIFEST_SIGNATURE_ALGORITHM,
-        ed25519Sig: '',
-        mldsaSig: '',
-        ts: 1712880000000,
-      },
-    };
-  }
-
   // Produce the signed bytes for the happy fixture and reuse them for every
   // other variant except "wrong algorithm". The function is invoked
   // synchronously per fixture so keys are not shared by reference.

@@ -8,7 +8,7 @@
  */
 import { it, expect, vi } from 'vitest';
 import type { Response, NextFunction } from 'express';
-import type { FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { verifyAction as expressVerifyAction, type AIMRequest } from './express';
 import { verifyAction as fastifyVerifyAction } from './fastify';
 
@@ -31,7 +31,7 @@ it('AIM-12.AC3 item 8: express verifyAction sets req.aim.agentId from the verifi
     query: {},
     ip: '127.0.0.1',
   } as unknown as AIMRequest;
-  const next = vi.fn() as NextFunction;
+  const next = vi.fn() as unknown as NextFunction;
   const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response;
 
   await expressVerifyAction('thing:read')(req, res, next);
@@ -53,7 +53,7 @@ it('AIM-12.AC3 item 8: fastify verifyAction sets request.aim.agentId from the ve
   } as unknown as FastifyRequest;
   const reply = { status: vi.fn().mockReturnThis(), send: vi.fn() } as unknown as FastifyReply;
 
-  await fastifyVerifyAction('thing:read')(request, reply);
+  await fastifyVerifyAction('thing:read').call(undefined as unknown as FastifyInstance, request, reply);
 
   expect(request.aim?.verified).toBe(true);
   expect(request.aim?.agentId).toBe('agent-42');
@@ -69,7 +69,7 @@ it('a result without an agentId leaves the field unset rather than clobbering it
     query: {},
     ip: '127.0.0.1',
   } as unknown as AIMRequest;
-  const next = vi.fn() as NextFunction;
+  const next = vi.fn() as unknown as NextFunction;
   const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response;
 
   await expressVerifyAction('thing:read')(req, res, next);

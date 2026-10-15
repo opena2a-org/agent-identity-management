@@ -8,9 +8,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { aimPlugin, verifyAction, verifyRoute } from './fastify';
 import { ActionDeniedError, AuthenticationError } from '../exceptions';
+
+// The hooks are typed with `this: FastifyInstance`; these tests call them
+// without an instance bound.
+const noInstance = undefined as unknown as FastifyInstance;
+
+// Fastify declares `method` read-only; the verifyRoute tests set it on the mock.
+type MockRequest = { -readonly [K in keyof FastifyRequest]?: FastifyRequest[K] };
 
 // Mock AIMClient
 vi.mock('../client/AIMClient', () => ({
@@ -139,7 +146,7 @@ describe('verifyAction', () => {
   it('should verify action on client', async () => {
     const hook = verifyAction('db:write');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -153,7 +160,7 @@ describe('verifyAction', () => {
   it('should update request aim context on success', async () => {
     const hook = verifyAction('db:read');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockRequest.aim?.verified).toBe(true);
     expect(mockRequest.aim?.trustScore).toBe(0.9);
@@ -163,7 +170,7 @@ describe('verifyAction', () => {
     mockRequest.aim = undefined;
     const hook = verifyAction('db:read');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockReply.status).toHaveBeenCalledWith(500);
     expect(mockReply.send).toHaveBeenCalledWith({
@@ -177,7 +184,7 @@ describe('verifyAction', () => {
     );
 
     const hook = verifyAction('db:delete');
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockReply.status).toHaveBeenCalledWith(403);
     expect(mockReply.send).toHaveBeenCalledWith({
@@ -194,7 +201,7 @@ describe('verifyAction', () => {
     );
 
     const hook = verifyAction('db:read');
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockReply.status).toHaveBeenCalledWith(401);
     expect(mockReply.send).toHaveBeenCalledWith({
@@ -210,7 +217,7 @@ describe('verifyAction', () => {
     const hook = verifyAction('db:read');
 
     await expect(
-      hook(mockRequest as FastifyRequest, mockReply as FastifyReply)
+      hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply)
     ).rejects.toThrow('Generic error');
   });
 
@@ -219,7 +226,7 @@ describe('verifyAction', () => {
       context: { custom: 'value' },
     });
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -232,7 +239,7 @@ describe('verifyAction', () => {
 });
 
 describe('verifyRoute', () => {
-  let mockRequest: Partial<FastifyRequest>;
+  let mockRequest: MockRequest;
   let mockReply: Partial<FastifyReply>;
   let mockClient: {
     verifyAction: ReturnType<typeof vi.fn>;
@@ -271,7 +278,7 @@ describe('verifyRoute', () => {
     mockRequest.method = 'GET';
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -284,7 +291,7 @@ describe('verifyRoute', () => {
     mockRequest.method = 'POST';
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -297,7 +304,7 @@ describe('verifyRoute', () => {
     mockRequest.method = 'PUT';
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -310,7 +317,7 @@ describe('verifyRoute', () => {
     mockRequest.method = 'PATCH';
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -323,7 +330,7 @@ describe('verifyRoute', () => {
     mockRequest.method = 'DELETE';
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -336,7 +343,7 @@ describe('verifyRoute', () => {
     mockRequest.method = 'HEAD';
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockClient.verifyAction).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -349,7 +356,7 @@ describe('verifyRoute', () => {
     mockRequest.aim = undefined;
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockReply.status).toHaveBeenCalledWith(500);
   });
@@ -362,7 +369,7 @@ describe('verifyRoute', () => {
     const hook = verifyRoute('users');
     mockRequest.method = 'DELETE';
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockReply.status).toHaveBeenCalledWith(403);
   });
@@ -374,7 +381,7 @@ describe('verifyRoute', () => {
 
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockReply.status).toHaveBeenCalledWith(401);
   });
@@ -382,7 +389,7 @@ describe('verifyRoute', () => {
   it('should update aim context on success', async () => {
     const hook = verifyRoute('users');
 
-    await hook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    await hook.call(noInstance, mockRequest as FastifyRequest, mockReply as FastifyReply);
 
     expect(mockRequest.aim?.verified).toBe(true);
     expect(mockRequest.aim?.trustScore).toBe(0.9);

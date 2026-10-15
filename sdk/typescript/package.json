@@ -48,7 +48,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
     "lint": "eslint . --ext .ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "smoke:local": "npm run build && node tests/local-verify-consumer.cjs && node tests/local-verify-consumer.mjs",
     "prepublishOnly": "npm run build"
   },
