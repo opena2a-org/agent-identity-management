@@ -341,6 +341,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `is_verified` true and `consensus_verified_at` NULL, and both `WithdrawConsensusVerification` and the startup
   recheck's `ListConsensusVerifiedMCPServerIDs` read only servers whose `consensus_verified_at` is set.
 
+### Fixed — MCP security policies match host names in any case, report unreadable rules, and refuse a floor off the trust scale (#593)
+
+- An `allowedDomains` or `blockedDomains` entry matches a server's host without regard to case or a
+  trailing dot. A `blockedDomains` entry blocks each of these pairs of server URL and pattern, which
+  it did not block before: `https://x.EVIL.com/sse` and `*.evil.com`, `https://x.evil.com./sse` and
+  `*.evil.com`, `https://evil.com./sse` and `evil.com`, `https://evil.com/sse` and `*.EVIL.com`.
+- An `mcp_*` policy whose rules hold a value of a JSON type its rule format does not take, such as
+  the string `"50"` for `minTrustScore`, is reported as violated, with the violated rule
+  `Policy rules could not be decoded` and a reason that names the key. Before, such a policy
+  reported no violation: an allowlist with `{"allowedDomains": ["only.example.org"],
+  "minTrustScore": "50"}` did not report a server at `https://mcp.example.com/sse`.
+- `POST /api/v1/admin/security-policies` and `PUT /api/v1/admin/security-policies/:id` answer 400
+  for `mcp_*` rules that do not match the policy type's rule format, and for an `mcp_allowlist`
+  `minTrustScore` outside 0 to 1, such as `70`; the error names the key. Before, create answered
+  201 and update 200 and stored the rules as sent, for a floor of `70`, `-0.1` or `"50"` and for a
+  string where a list, number or boolean belongs. The rules of the other policy types are not
+  checked.
+- Migration 130 adds `logging` and `completions` to the `allowedCapabilities` of the seeded
+  "Trusted MCP Server Domains" allowlist where the list is still the seeded
+  `["tools", "resources", "prompts"]`, so a server on an allowed domain that declares either is not
+  reported as "Capability not in allowlist". The policy stays disabled.
+- The API reference's example for `POST /api/v1/admin/security-policies` sends every field the
+  handler binds, including `policyType`, `enforcementAction`, `severityThreshold`, `appliesTo` and
+  `priority`, under the name `isEnabled` where it said `enabled`, and rules for a `trust_score_low`
+  policy under `trust_threshold`, the key that type reads. It no longer sets `rules.action`, which
+  no evaluator reads.
+- From a source archive (`git archive`), `apps/web/tracked-build-cache.test.ts` and the tracked-file
+  scan in `sdk/python/tests/test_enforcement_deadline.py` are skipped with the reason. Before, they
+  failed with `not a git repository` and `CalledProcessError`.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the
@@ -3527,9 +3557,13 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 ### Fixed — MCP security policy rules mean what the admin page says
 
 - `rules.minTrustScore` on the `mcp_*` security policies is on the [0,1] scale of an MCP server's
-  trust score. Migration 114 divides every stored JSON number above 1 by 100, including the seeded
-  floors of 50 and 30, which sat above every possible trust score. The admin security-policies page
-  still shows the floor as a percentage and now saves it as a fraction.
+  trust score. Migration 114 divides every stored JSON number above 1 and up to 100 by 100,
+  including the seeded floors of 50 and 30, which sat above every possible trust score, and sets a
+  number above 100 to 1. A number from 0 to 1 is kept as a fraction, so a floor the old form saved
+  as 1, meaning 1%, now reads as 100%: the migration's NOTICE lines name each `mcp_*` policy whose
+  floor lies above 0 and at most 1, and each whose floor is not a JSON number, which it leaves
+  unchanged. A JSON `null` floor reads as no floor and stays `null`. The admin security-policies
+  page still shows the floor as a percentage and now saves it as a fraction.
 - Each MCP policy card on the admin security-policies page has an Edit button. Nothing opened the
   Edit MCP Policy dialog before, so a stored MCP policy could not be changed from the page. Saving
   an edit keeps the policy's stored severity threshold and scope; the dialog no longer resets them

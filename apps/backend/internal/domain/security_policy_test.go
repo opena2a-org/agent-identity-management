@@ -284,7 +284,7 @@ func TestMCPUnverifiedRules_Structure(t *testing.T) {
 func TestMCPUnverifiedRules_BlockAction(t *testing.T) {
 	rules := MCPUnverifiedRules{
 		Action:                "block_and_alert",
-		GracePeriodDays:       0,     // No grace period
+		GracePeriodDays:       0, // No grace period
 		RequireManualApproval: false,
 	}
 
@@ -440,6 +440,77 @@ func TestSecurityPolicy_AllEnforcementActions(t *testing.T) {
 
 			assert.Equal(t, action, policy.EnforcementAction)
 			assert.NotEmpty(t, string(action))
+		})
+	}
+}
+
+// TestValidateMCPPolicyRules pins the error an administrator reads when the admin API refuses
+// the rules of an mcp_* policy, the member that error names, and the rules it accepts.
+func TestValidateMCPPolicyRules(t *testing.T) {
+	tests := []struct {
+		name       string
+		policyType PolicyType
+		rules      string
+		wantErr    string // "" means accepted
+		wantMember string // the PolicyRulesError member of a refusal
+	}{
+		{name: "floor on the [0,1] scale", policyType: PolicyTypeMCPAllowlist, rules: `{"minTrustScore":0.7}`},
+		{name: "JSON null floor reads as no floor", policyType: PolicyTypeMCPAllowlist, rules: `{"minTrustScore":null}`},
+		{name: "no rules", policyType: PolicyTypeMCPAllowlist, rules: `null`},
+		{name: "unknown key", policyType: PolicyTypeMCPBlocklist, rules: `{"action":"block"}`},
+		{
+			name:       "floor written as a percentage",
+			policyType: PolicyTypeMCPAllowlist,
+			rules:      `{"minTrustScore":70}`,
+			wantErr:    "rules.minTrustScore must be from 0 to 1, the scale of an MCP server's trust score (0.7 is a 70% floor); got 70",
+			wantMember: "rules.minTrustScore",
+		},
+		{
+			name:       "floor written as a string",
+			policyType: PolicyTypeMCPAllowlist,
+			rules:      `{"minTrustScore":"50"}`,
+			wantErr:    "rules.minTrustScore cannot hold a JSON string; it takes a number",
+			wantMember: "rules.minTrustScore",
+		},
+		{
+			name:       "list written as a string",
+			policyType: PolicyTypeMCPBlocklist,
+			rules:      `{"blockedDomains":"evil.example"}`,
+			wantErr:    "rules.blockedDomains cannot hold a JSON string; it takes a list of strings",
+			wantMember: "rules.blockedDomains",
+		},
+		{
+			name:       "list holding a number",
+			policyType: PolicyTypeMCPCapabilities,
+			rules:      `{"requiredCapabilities":["tools",3]}`,
+			wantErr:    "rules.requiredCapabilities cannot hold a JSON number; it takes a string",
+			wantMember: "rules.requiredCapabilities",
+		},
+		{
+			name:       "flag written as a string",
+			policyType: PolicyTypeMCPUnverified,
+			rules:      `{"notifyOwners":"no"}`,
+			wantErr:    "rules.notifyOwners cannot hold a JSON string; it takes a boolean",
+			wantMember: "rules.notifyOwners",
+		},
+		{name: "non-MCP rules are not checked", policyType: PolicyTypeTrustScoreLow, rules: `{"trust_threshold":"high"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var rules map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(tt.rules), &rules))
+
+			err := ValidateMCPPolicyRules(tt.policyType, rules)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tt.wantErr)
+			var refusal *PolicyRulesError
+			require.ErrorAs(t, err, &refusal, "a refusal is a *PolicyRulesError the admin API can answer")
+			assert.Equal(t, tt.wantMember, refusal.Member)
+			assert.Equal(t, tt.wantErr, refusal.Message)
 		})
 	}
 }

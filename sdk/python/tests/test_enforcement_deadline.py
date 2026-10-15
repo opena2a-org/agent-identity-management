@@ -394,6 +394,19 @@ def test_no_seconds_spelled_environment_variable_exists_in_either_sdk():
 
     sdk_dir = Path(__file__).resolve().parents[2]
     assert sdk_dir.name == "sdk"
+    # The tracked file list exists only in a git checkout of this repository: a
+    # source archive (`git archive`) has none, and a checkout of another
+    # repository above the archive would answer for that one.
+    try:
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=sdk_dir.parent,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        pytest.skip("git is not installed; this scan reads the repository's tracked files")
+    if toplevel.returncode != 0 or Path(toplevel.stdout.decode().strip()).resolve() != sdk_dir.parent:
+        pytest.skip("not a git checkout of this repository; this scan reads its tracked files")
     tracked = subprocess.run(
         ["git", "ls-files", "-z", "--", "sdk"],
         cwd=sdk_dir.parent,

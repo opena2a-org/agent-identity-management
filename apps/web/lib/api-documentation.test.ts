@@ -41,3 +41,41 @@ describe("API reference: POST /api/v1/public/agents/register", () => {
     expect(Object.keys(JSON.parse(entry.example)).sort()).toEqual(required);
   });
 });
+
+// POST /api/v1/admin/security-policies binds CreatePolicyRequest
+// (apps/backend/internal/interfaces/http/handlers/security_policy_handler.go). The
+// example used to send `enabled`, a name the handler does not bind, left out the
+// policy type, enforcement action, severity, scope and priority, and set
+// rules.action, which no evaluator reads.
+describe("API reference: POST /api/v1/admin/security-policies", () => {
+  const create = () => endpoint("POST", "/api/v1/admin/security-policies");
+  const bound = [
+    "appliesTo",
+    "description",
+    "enforcementAction",
+    "isEnabled",
+    "name",
+    "policyType",
+    "priority",
+    "rules",
+    "severityThreshold",
+  ];
+  const requiredByTag = ["appliesTo", "enforcementAction", "name", "policyType", "priority", "severityThreshold"];
+
+  it("documents the fields the handler binds, and marks the ones its struct tags require", () => {
+    const properties = create().requestSchema?.properties ?? {};
+    expect(Object.keys(properties).sort()).toEqual(bound);
+    const required = Object.entries(properties)
+      .filter(([, property]) => property.required)
+      .map(([name]) => name)
+      .sort();
+    expect(required).toEqual(requiredByTag);
+  });
+
+  it("gives an example that sends every bound field and rules a trust_score_low policy reads", () => {
+    const example = JSON.parse(create().example);
+    expect(Object.keys(example).sort()).toEqual(bound);
+    expect(example.policyType).toBe("trust_score_low");
+    expect(example.rules).toEqual({ trust_threshold: 0.5 });
+  });
+});

@@ -1,6 +1,11 @@
 package domain
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -210,4 +215,89 @@ type MCPPolicyEvaluationResult struct {
 
 	// Recommendations contains suggested actions to resolve policy violations
 	Recommendations []string `json:"recommendations,omitempty"`
+}
+
+// PolicyRulesError names the rules member of an mcp_* policy that breaks a rule, such as
+// "rules.minTrustScore", and states the rule in Message, which is written for the
+// administrator who sent the rules.
+type PolicyRulesError struct {
+	Member  string
+	Message string
+}
+
+func (e *PolicyRulesError) Error() string {
+	return e.Message
+}
+
+// DecodePolicyRules decodes a policy's rules into dst, one of the MCP*Rules structs above.
+// A key holding a JSON type its field cannot take, such as the string "50" for minTrustScore,
+// is a *PolicyRulesError that names the key; a key the struct does not declare is ignored, and
+// a JSON null leaves the field at its zero value.
+func DecodePolicyRules(rules map[string]interface{}, dst interface{}) error {
+	raw, err := json.Marshal(rules)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, dst); err != nil {
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) && typeErr.Field != "" {
+			member := "rules." + typeErr.Field
+			return &PolicyRulesError{
+				Member: member,
+				Message: fmt.Sprintf("%s cannot hold a JSON %s; it takes %s",
+					member, typeErr.Value, jsonKindOf(typeErr.Type)),
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// jsonKindOf names the JSON type a Go field type decodes from.
+func jsonKindOf(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.Bool:
+		return "a boolean"
+	case reflect.String:
+		return "a string"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return "a number"
+	case reflect.Slice, reflect.Array:
+		return "a list of " + strings.TrimPrefix(jsonKindOf(t.Elem()), "a ") + "s"
+	default:
+		return "a " + t.String()
+	}
+}
+
+// ValidateMCPPolicyRules reports whether rules can be stored on a policy of policyType. The
+// rules of an mcp_* type must decode into that type's rule struct, the way MCPPolicyEvaluator
+// reads them, and an mcp_allowlist minTrustScore must lie in [0,1], the scale of
+// MCPServer.TrustScore. Rules that break either requirement are a *PolicyRulesError. The rules
+// of the other policy types are not checked here.
+func ValidateMCPPolicyRules(policyType PolicyType, rules map[string]interface{}) error {
+	switch policyType {
+	case PolicyTypeMCPAllowlist:
+		var allowlist MCPAllowlistRules
+		if err := DecodePolicyRules(rules, &allowlist); err != nil {
+			return err
+		}
+		if allowlist.MinTrustScore < 0 || allowlist.MinTrustScore > 1 {
+			return &PolicyRulesError{
+				Member: "rules.minTrustScore",
+				Message: fmt.Sprintf("rules.minTrustScore must be from 0 to 1, the scale of an MCP server's trust score "+
+					"(0.7 is a 70%% floor); got %v", allowlist.MinTrustScore),
+			}
+		}
+		return nil
+	case PolicyTypeMCPBlocklist:
+		return DecodePolicyRules(rules, &MCPBlocklistRules{})
+	case PolicyTypeMCPCapabilities:
+		return DecodePolicyRules(rules, &MCPCapabilitiesRules{})
+	case PolicyTypeMCPUnverified:
+		return DecodePolicyRules(rules, &MCPUnverifiedRules{})
+	default:
+		return nil
+	}
 }
