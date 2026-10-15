@@ -141,11 +141,18 @@ The Go suite in `apps/backend/tests/integration/` sends HTTP requests to a runni
 | `BACKEND_URL` | `http://localhost:8080` | The address of the backend under test, for every test in the suite. |
 | `TEST_BASE_URL` | none | Deprecated. Read only when `BACKEND_URL` is unset, with a note on standard error; set `BACKEND_URL` instead. |
 | `TEST_ADMIN_PASSWORD` | the legacy seed password in `test_helper.go` | The password of `admin@opena2a.org`, the account the suite signs in with. |
+| `TEST_CROSS_ORG_EMAIL` | none | An address on the backend's `AIM_PLATFORM_ADMINS` allowlist, in a domain other than `opena2a.org`. `TestMCPServer_CrossOrganizationAccessDenied` registers it to get a user in a second organization, and is skipped when the variable is unset: the backend approves a registration into an organization of its own only for an allowlisted address. A later run against the same database signs in to the account the first run created. |
 
 ```bash
 cd apps/backend
-BACKEND_URL=http://localhost:8080 TEST_ADMIN_PASSWORD='<admin password>' go test ./tests/integration/
+BACKEND_URL=http://localhost:8080 TEST_ADMIN_PASSWORD='<admin password>' \
+  TEST_CROSS_ORG_EMAIL=crossorg@crossorg.test go test ./tests/integration/
 ```
+
+The backend under test is started with `AIM_PLATFORM_ADMINS=crossorg@crossorg.test` for that address. The suite signs
+in as the admin once per run, and holds a request to the public, auth, OAuth and MCP server route groups when the
+group's rate-limit window is spent, so it runs within the production rate limits. The tests that create and manage
+agents sign in as a user the admin has given the manager role.
 
 ## CI Integration
 

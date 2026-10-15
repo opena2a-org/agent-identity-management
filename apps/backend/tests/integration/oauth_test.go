@@ -60,9 +60,22 @@ func createOAuthTestAgent(t *testing.T, tc *TestContext) *oauthTestAgent {
 
 // buildSignedJWTAssertion creates a properly Ed25519-signed JWT for OAuth testing.
 // Format: base64url(header).base64url(payload).base64url(signature)
-func buildSignedJWTAssertion(sub string, privateKey ed25519.PrivateKey) string {
+//
+// The token endpoint requires an exp no more than five minutes ahead, plus a
+// minute of clock skew, and an aud that names the server (its AIM_BASE_URL, or
+// the origin the request reached when that is unset), so the assertion carries
+// exp two minutes from now, iat now, and the audience the caller passes: the
+// backend address under test.
+func buildSignedJWTAssertion(sub, audience string, privateKey ed25519.PrivateKey) string {
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"EdDSA","typ":"JWT"}`))
-	payload, _ := json.Marshal(map[string]interface{}{"sub": sub, "iss": sub, "aud": "aim"})
+	now := time.Now()
+	payload, _ := json.Marshal(map[string]interface{}{
+		"sub": sub,
+		"iss": sub,
+		"aud": audience,
+		"iat": now.Unix(),
+		"exp": now.Add(2 * time.Minute).Unix(),
+	})
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
 
 	signedContent := header + "." + payloadB64
@@ -96,7 +109,7 @@ func TestOAuthTokenEndpointExists(t *testing.T) {
 	body := map[string]interface{}{
 		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
 		"client_id":        agent.AgentID,
-		"client_assertion": buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
+		"client_assertion": buildSignedJWTAssertion(agent.AgentID, tc.Config.BaseURL, agent.PrivateKey),
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -257,7 +270,7 @@ func TestOAuthTokenWithUnsupportedAssertionType(t *testing.T) {
 	body := map[string]interface{}{
 		"grant_type":            "urn:ietf:params:oauth:grant-type:jwt-bearer",
 		"client_id":             agent.AgentID,
-		"client_assertion":      buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
+		"client_assertion":      buildSignedJWTAssertion(agent.AgentID, tc.Config.BaseURL, agent.PrivateKey),
 		"client_assertion_type": "urn:unsupported:assertion-type",
 	}
 
@@ -342,7 +355,7 @@ func TestOAuthTokenResponseFormat(t *testing.T) {
 	body := map[string]interface{}{
 		"grant_type":       "urn:ietf:params:oauth:grant-type:jwt-bearer",
 		"client_id":        agent.AgentID,
-		"client_assertion": buildSignedJWTAssertion(agent.AgentID, agent.PrivateKey),
+		"client_assertion": buildSignedJWTAssertion(agent.AgentID, tc.Config.BaseURL, agent.PrivateKey),
 	}
 
 	jsonBody, _ := json.Marshal(body)
