@@ -197,7 +197,7 @@ func (h *AdminHandler) ListUsers(c fiber.Ctx) error {
 	pendingRequests, _, err := h.getRegistrationService().ListPendingRegistrationRequests(c.Context(), orgID, 100, 0)
 	if err != nil {
 		// ℹ️ If table doesn't exist or query fails, just show approved users
-		log.Printf("⚠️ Warning: Failed to fetch pending registration requests (table may not exist): %v", err)
+		log.Printf("Warning: Failed to fetch pending registration requests (table may not exist): %v", err)
 		pendingRequests = []*domain.UserRegistrationRequest{} // Empty slice, no pending requests
 	}
 
@@ -403,7 +403,7 @@ func (h *AdminHandler) DeactivateUser(c fiber.Ctx) error {
 	// Super admin is identified as the oldest admin user by created_at timestamp
 	isSuperAdmin, err := h.isSuperAdmin(c.Context(), targetUserID, orgID)
 	if err != nil {
-		log.Printf("⚠️ Error checking super admin status: %v", err)
+		log.Printf("Error checking super admin status: %v", err)
 	}
 
 	if isSuperAdmin {
@@ -520,7 +520,7 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 	// Super admin is identified as the oldest admin user by created_at timestamp
 	isSuperAdmin, err := h.isSuperAdmin(c.Context(), targetUserID, orgID)
 	if err != nil {
-		log.Printf("⚠️ Error checking super admin status: %v", err)
+		log.Printf("Error checking super admin status: %v", err)
 	}
 
 	if isSuperAdmin {

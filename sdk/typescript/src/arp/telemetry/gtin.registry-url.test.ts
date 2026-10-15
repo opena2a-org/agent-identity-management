@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 describe('submitGTINEvent registry URL resolution (item 8)', () => {
-  it('AIM-11.AC8 honours OPENA2A_REGISTRY_URL: the POST arrives at the loopback server', async () => {
+  it('honours OPENA2A_REGISTRY_URL: the POST arrives at the loopback server', async () => {
     process.env.OPENA2A_REGISTRY_URL = loopbackBase;
 
     const result = await submitGTINEvent(PAYLOAD);
@@ -79,7 +79,7 @@ describe('submitGTINEvent registry URL resolution (item 8)', () => {
     expect(result.eventId).toBe('evt-loopback-1');
   });
 
-  it('AIM-11.AC8 an explicit registryUrl argument wins over the environment', async () => {
+  it('an explicit registryUrl argument wins over the environment', async () => {
     process.env.OPENA2A_REGISTRY_URL = 'http://127.0.0.1:1'; // would be refused
     const result = await submitGTINEvent(PAYLOAD, loopbackBase);
 
@@ -87,7 +87,7 @@ describe('submitGTINEvent registry URL resolution (item 8)', () => {
     expect(result.success).toBe(true);
   });
 
-  it('AIM-11.AC9 no request is addressed to api.oa2a.org or any non-loopback host', async () => {
+  it('no request is addressed to api.oa2a.org or any non-loopback host', async () => {
     process.env.OPENA2A_REGISTRY_URL = loopbackBase;
     await submitGTINEvent(PAYLOAD);
     await submitGTINEvent(PAYLOAD, loopbackBase);

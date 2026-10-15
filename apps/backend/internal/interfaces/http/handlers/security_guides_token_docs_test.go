@@ -257,7 +257,7 @@ func TestTokenRotationGuideQuotesTheRotationLineTheSDKPrints(t *testing.T) {
 			"Token revocation disabled (Redis unavailable)",
 		} {
 			textHas(t, faq, "`"+logged+"`", "the FAQ quotes the startup line")
-			textHas(t, server, `"ℹ️  `+logged+`: refresh tokens are not rotated`, "the server writes that line at startup")
+			textHas(t, server, `"`+logged+`: refresh tokens are not rotated`, "the server writes that line at startup")
 		}
 	})
 
@@ -352,7 +352,7 @@ func TestTroubleshootingGuideQuotesRefreshLinesTheBackendWrites(t *testing.T) {
 	require.NotEmpty(t, quoted, "the guide quotes a refresh warning")
 	for _, q := range quoted {
 		format := strings.ReplaceAll(q[1], "<id>", "%s")
-		textHas(t, handler, `log.Printf("⚠️  `+format, "the refresh handler writes the warning the guide quotes")
+		textHas(t, handler, `log.Printf("`+format, "the refresh handler writes the warning the guide quotes")
 	}
 }
 

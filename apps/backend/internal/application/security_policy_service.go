@@ -105,7 +105,7 @@ func (s *SecurityPolicyService) trustScoreEvaluable(agent *domain.Agent) bool {
 		return true
 	}
 	if stats.SuccessCount == 0 {
-		fmt.Printf("ℹ️  Trust score not evaluable for agent %s: no allowed action and no capability violation in the window (%d verifications, 0 successes)\n",
+		fmt.Printf("Trust score not evaluable for agent %s: no allowed action and no capability violation in the window (%d verifications, 0 successes)\n",
 			agent.Name, stats.TotalVerifications)
 		return false
 	}
@@ -134,7 +134,7 @@ func (s *SecurityPolicyService) EvaluateCapabilityViolation(
 
 	// 2. If no policies configured, use safe defaults (block + alert)
 	if len(policies) == 0 {
-		fmt.Printf("⚠️  No security policies configured for org %s, using default: block + alert\n", agent.OrganizationID)
+		fmt.Printf("No security policies configured for org %s, using default: block + alert\n", agent.OrganizationID)
 		return true, true, "default_policy", nil
 	}
 
@@ -146,7 +146,7 @@ func (s *SecurityPolicyService) EvaluateCapabilityViolation(
 		}
 
 		// Policy matches - return enforcement action
-		fmt.Printf("✅ Security Policy '%s' triggered for agent %s (action: %s)\n",
+		fmt.Printf("Security Policy '%s' triggered for agent %s (action: %s)\n",
 			policy.Name, agent.Name, policy.EnforcementAction)
 
 		switch policy.EnforcementAction {
@@ -163,7 +163,7 @@ func (s *SecurityPolicyService) EvaluateCapabilityViolation(
 	}
 
 	// 4. No matching policy found - use safe default (block + alert)
-	fmt.Printf("⚠️  No matching security policy for agent %s, using default: block + alert\n", agent.Name)
+	fmt.Printf("No matching security policy for agent %s, using default: block + alert\n", agent.Name)
 	return true, true, "default_policy", nil
 }
 
@@ -266,7 +266,7 @@ func (s *SecurityPolicyService) CreateDefaultPolicies(ctx context.Context, orgID
 		return fmt.Errorf("failed to create data exfiltration policy: %w", err)
 	}
 
-	fmt.Printf("✅ Created 3 default security policies for organization %s\n", orgID)
+	fmt.Printf("Created 3 default security policies for organization %s\n", orgID)
 	return nil
 }
 
@@ -374,7 +374,7 @@ func (s *SecurityPolicyService) EvaluateTrustScoreLow(
 			if !s.trustScoreEvaluable(agent) {
 				continue
 			}
-			fmt.Printf("✅ Trust Score Policy '%s' triggered for agent %s (score: %.2f < %.2f)\n",
+			fmt.Printf("Trust Score Policy '%s' triggered for agent %s (score: %.2f < %.2f)\n",
 				policy.Name, agent.Name, agent.TrustScore, threshold)
 
 			switch policy.EnforcementAction {
@@ -459,16 +459,16 @@ func (s *SecurityPolicyService) EvaluateTrustScoreOnUpdate(
 
 		// Create critical alert
 		if err := s.createTrustScoreAlert(ctx, agent, result); err != nil {
-			fmt.Printf("⚠️  Failed to create critical trust score alert: %v\n", err)
+			fmt.Printf("Failed to create critical trust score alert: %v\n", err)
 		}
 
 		// Suspend the agent
 		statusBefore := agent.Status
 		if err := s.suspendAgentForLowTrustScore(ctx, agent); err != nil {
-			fmt.Printf("⚠️  Failed to suspend agent %s: %v\n", agent.Name, err)
+			fmt.Printf("Failed to suspend agent %s: %v\n", agent.Name, err)
 		} else {
 			result.Suspended = statusBefore != domain.AgentStatusSuspended && agent.Status == domain.AgentStatusSuspended
-			fmt.Printf("🛑 Agent '%s' suspended due to critical trust score (%.1f%%)\n",
+			fmt.Printf("Agent '%s' suspended due to critical trust score (%.1f%%)\n",
 				agent.Name, currentScore*100)
 		}
 
@@ -488,9 +488,9 @@ func (s *SecurityPolicyService) EvaluateTrustScoreOnUpdate(
 
 		// Create warning alert
 		if err := s.createTrustScoreAlert(ctx, agent, result); err != nil {
-			fmt.Printf("⚠️  Failed to create trust score warning alert: %v\n", err)
+			fmt.Printf("Failed to create trust score warning alert: %v\n", err)
 		} else {
-			fmt.Printf("⚠️  Low trust score alert created for agent '%s' (%.1f%%)\n",
+			fmt.Printf("Low trust score alert created for agent '%s' (%.1f%%)\n",
 				agent.Name, currentScore*100)
 		}
 
@@ -586,14 +586,14 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 	if s.behaviorAnalysis != nil {
 		// First, record this activity to update the agent's baseline
 		if err := s.behaviorAnalysis.RecordActivity(ctx, agent.ID, agent.OrganizationID, actionType, resource, actionType); err != nil {
-			fmt.Printf("⚠️  Failed to record activity for agent %s: %v\n", agent.Name, err)
+			fmt.Printf("Failed to record activity for agent %s: %v\n", agent.Name, err)
 			// Don't fail - continue with detection
 		}
 
 		// Run intelligent anomaly detection against learned baseline
 		result, err := s.behaviorAnalysis.DetectAnomalies(ctx, agent.ID, agent.OrganizationID, actionType, resource, actionType)
 		if err != nil {
-			fmt.Printf("⚠️  Behavioral analysis failed for agent %s: %v\n", agent.Name, err)
+			fmt.Printf("Behavioral analysis failed for agent %s: %v\n", agent.Name, err)
 			// Fall through to legacy detection
 		} else if result.IsAnomalous {
 			// Get the policy for enforcement action
@@ -603,7 +603,7 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 				for _, policy := range policies {
 					if policy.IsEnabled && s.policyAppliesToAgent(policy, agent) {
 						// Log the intelligent detection
-						fmt.Printf("🧠 INTELLIGENT DETECTION: Agent %s - %s\n", agent.Name, result.Reason)
+						fmt.Printf("INTELLIGENT DETECTION: Agent %s - %s\n", agent.Name, result.Reason)
 						for _, anomaly := range result.Anomalies {
 							fmt.Printf("   ↳ %s [%s]: %s\n", anomaly.AnomalyType, anomaly.Severity, anomaly.Description)
 						}
@@ -630,7 +630,7 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 			}
 		} else if result.Reason != "" {
 			// Baseline learning in progress - log and allow
-			fmt.Printf("📊 Baseline: Agent %s - %s\n", agent.Name, result.Reason)
+			fmt.Printf("Baseline: Agent %s - %s\n", agent.Name, result.Reason)
 			return false, false, "", nil
 		}
 	}
@@ -658,14 +658,14 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 
 	agentAge := time.Since(agent.CreatedAt)
 	if agentAge < time.Duration(minAgentAgeHours)*time.Hour {
-		fmt.Printf("ℹ️  Skipping legacy unusual activity check for new agent %s (age: %v < %dh)\n",
+		fmt.Printf("Skipping legacy unusual activity check for new agent %s (age: %v < %dh)\n",
 			agent.Name, agentAge.Round(time.Minute), minAgentAgeHours)
 		return false, false, "", nil
 	}
 
 	recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, minVerifications+1)
 	if err == nil && len(recentActions) < minVerifications {
-		fmt.Printf("ℹ️  Skipping legacy unusual activity check for agent %s (only %d verifications, need %d)\n",
+		fmt.Printf("Skipping legacy unusual activity check for agent %s (only %d verifications, need %d)\n",
 			agent.Name, len(recentActions), minVerifications)
 		return false, false, "", nil
 	}
@@ -693,12 +693,12 @@ func (s *SecurityPolicyService) EvaluateUnusualActivity(
 				int(timeWindowMinutes),
 			)
 			if err != nil {
-				fmt.Printf("⚠️  Failed to count actions for agent %s: %v\n", agent.Name, err)
+				fmt.Printf("Failed to count actions for agent %s: %v\n", agent.Name, err)
 				continue
 			}
 
 			if actionCount > int(apiRateThreshold) {
-				fmt.Printf("⚠️  LEGACY Detection: API rate spike (count: %d > threshold: %.0f)\n",
+				fmt.Printf("LEGACY Detection: API rate spike (count: %d > threshold: %.0f)\n",
 					actionCount, apiRateThreshold)
 
 				switch policy.EnforcementAction {
@@ -764,12 +764,12 @@ func (s *SecurityPolicyService) EvaluateDataExfiltration(
 			// Check cumulative transfer size
 			_, responseBytes, err := s.dataTransferRepo.GetCumulativeSize(agent.ID, timeWindowMins)
 			if err != nil {
-				fmt.Printf("⚠️  Failed to get cumulative transfer size for agent %s: %v\n", agent.Name, err)
+				fmt.Printf("Failed to get cumulative transfer size for agent %s: %v\n", agent.Name, err)
 			} else {
 				thresholdBytes := domain.MBToBytes(thresholdMB)
 				if responseBytes >= thresholdBytes {
 					transferMB := domain.BytesToMB(responseBytes)
-					fmt.Printf("🚨 Data Exfiltration Policy '%s' triggered for agent %s (%.2f MB transferred in %d mins, threshold: %d MB)\n",
+					fmt.Printf("Data Exfiltration Policy '%s' triggered for agent %s (%.2f MB transferred in %d mins, threshold: %d MB)\n",
 						policy.Name, agent.Name, transferMB, timeWindowMins, thresholdMB)
 
 					// Create alert for exfiltration threshold breach
@@ -801,7 +801,7 @@ func (s *SecurityPolicyService) EvaluateDataExfiltration(
 				// Check if action matches exfiltration pattern
 				if strings.Contains(strings.ToLower(actionType), pattern) ||
 					strings.Contains(strings.ToLower(resource), pattern) {
-					fmt.Printf("✅ Data Exfiltration Policy '%s' triggered for agent %s (pattern: %s)\n",
+					fmt.Printf("Data Exfiltration Policy '%s' triggered for agent %s (pattern: %s)\n",
 						policy.Name, agent.Name, pattern)
 
 					switch policy.EnforcementAction {
@@ -870,9 +870,9 @@ func (s *SecurityPolicyService) createDataExfiltrationAlert(
 	}
 
 	if err := s.alertRepo.Create(alert); err != nil {
-		fmt.Printf("⚠️  Failed to create data exfiltration alert: %v\n", err)
+		fmt.Printf("Failed to create data exfiltration alert: %v\n", err)
 	} else {
-		fmt.Printf("🚨 Data exfiltration alert created for agent '%s' (%.2f MB transferred)\n",
+		fmt.Printf("Data exfiltration alert created for agent '%s' (%.2f MB transferred)\n",
 			agent.Name, transferMB)
 	}
 }
@@ -968,7 +968,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 				}
 
 				if len(addedCaps) > 0 || len(removedCaps) > 0 {
-					fmt.Printf("✅ Config Drift Policy '%s' triggered: Capability changes detected (added: %v, removed: %v)\n",
+					fmt.Printf("Config Drift Policy '%s' triggered: Capability changes detected (added: %v, removed: %v)\n",
 						policy.Name, addedCaps, removedCaps)
 
 					switch policy.EnforcementAction {
@@ -988,7 +988,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 			// Get recent audit logs for this agent to detect key changes
 			recentActions, err := s.auditLogRepo.GetRecentActionsByAgent(agent.ID, 50)
 			if err != nil {
-				fmt.Printf("⚠️  Failed to get recent actions for agent %s: %v\n", agent.Name, err)
+				fmt.Printf("Failed to get recent actions for agent %s: %v\n", agent.Name, err)
 				continue
 			}
 
@@ -1002,7 +1002,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 						if requireApproval {
 							// Check if approval metadata exists
 							if approved, ok := action.Metadata["key_rotation_approved"].(bool); !ok || !approved {
-								fmt.Printf("✅ Config Drift Policy '%s' triggered: Unapproved public key rotation detected\n",
+								fmt.Printf("Config Drift Policy '%s' triggered: Unapproved public key rotation detected\n",
 									policy.Name)
 
 								switch policy.EnforcementAction {
@@ -1059,7 +1059,7 @@ func (s *SecurityPolicyService) EvaluateConfigDrift(
 			}
 
 			if len(foundDangerousCaps) > 0 {
-				fmt.Printf("✅ Config Drift Policy '%s' triggered: Dangerous capabilities detected: %v\n",
+				fmt.Printf("Config Drift Policy '%s' triggered: Dangerous capabilities detected: %v\n",
 					policy.Name, foundDangerousCaps)
 
 				switch policy.EnforcementAction {
@@ -1149,7 +1149,7 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 				}
 
 				if !isAllowed {
-					fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: IP address %s not in allowed list\n",
+					fmt.Printf("Unauthorized Access Policy '%s' triggered: IP address %s not in allowed list\n",
 						policy.Name, currentIPAddress)
 
 					switch policy.EnforcementAction {
@@ -1185,7 +1185,7 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 				}
 
 				if !isDayAllowed {
-					fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Access not allowed on %s\n",
+					fmt.Printf("Unauthorized Access Policy '%s' triggered: Access not allowed on %s\n",
 						policy.Name, currentDay)
 
 					switch policy.EnforcementAction {
@@ -1206,7 +1206,7 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 				}
 
 				if currentHour < int(allowedHoursStart) || currentHour >= int(allowedHoursEnd) {
-					fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Access not allowed at hour %d (allowed: %.0f-%.0f)\n",
+					fmt.Printf("Unauthorized Access Policy '%s' triggered: Access not allowed at hour %d (allowed: %.0f-%.0f)\n",
 						policy.Name, currentHour, allowedHoursStart, allowedHoursEnd)
 
 					switch policy.EnforcementAction {
@@ -1231,7 +1231,7 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 						// Simple pattern matching
 						if strings.Contains(resource, restrictedResourceStr) ||
 							strings.Contains(restrictedResourceStr, resource) {
-							fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Access to restricted resource %s\n",
+							fmt.Printf("Unauthorized Access Policy '%s' triggered: Access to restricted resource %s\n",
 								policy.Name, resource)
 
 							switch policy.EnforcementAction {
@@ -1256,7 +1256,7 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 				for _, restrictedAction := range restrictedActions {
 					if restrictedActionStr, ok := restrictedAction.(string); ok {
 						if strings.EqualFold(actionType, restrictedActionStr) {
-							fmt.Printf("✅ Unauthorized Access Policy '%s' triggered: Restricted action %s attempted\n",
+							fmt.Printf("Unauthorized Access Policy '%s' triggered: Restricted action %s attempted\n",
 								policy.Name, actionType)
 
 							switch policy.EnforcementAction {
@@ -1288,7 +1288,7 @@ func (s *SecurityPolicyService) EvaluateUnauthorizedAccess(
 // - Investigate repeated authentication failures
 func (s *SecurityPolicyService) EvaluateAuthFailures(email string, orgID uuid.UUID, failureCount int, isLocked bool) {
 	if s.alertRepo == nil {
-		fmt.Printf("⚠️  Alert repository not configured, skipping auth failure alert\n")
+		fmt.Printf("Alert repository not configured, skipping auth failure alert\n")
 		return
 	}
 
@@ -1335,9 +1335,9 @@ func (s *SecurityPolicyService) EvaluateAuthFailures(email string, orgID uuid.UU
 		}
 
 		if err := s.alertRepo.Create(alert); err != nil {
-			fmt.Printf("⚠️  Failed to create account locked alert: %v\n", err)
+			fmt.Printf("Failed to create account locked alert: %v\n", err)
 		} else {
-			fmt.Printf("🔒 Account locked alert created for organization %s (after %d failures)\n", orgID, failureCount)
+			fmt.Printf("Account locked alert created for organization %s (after %d failures)\n", orgID, failureCount)
 		}
 	} else {
 		// Multiple failures but not yet locked - warning alert
@@ -1358,9 +1358,9 @@ func (s *SecurityPolicyService) EvaluateAuthFailures(email string, orgID uuid.UU
 		}
 
 		if err := s.alertRepo.Create(alert); err != nil {
-			fmt.Printf("⚠️  Failed to create auth failure pattern alert: %v\n", err)
+			fmt.Printf("Failed to create auth failure pattern alert: %v\n", err)
 		} else {
-			fmt.Printf("⚠️  Auth failure pattern alert created for organization %s (%d failures)\n", orgID, failureCount)
+			fmt.Printf("Auth failure pattern alert created for organization %s (%d failures)\n", orgID, failureCount)
 		}
 	}
 }

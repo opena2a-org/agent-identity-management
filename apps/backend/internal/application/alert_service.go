@@ -168,7 +168,7 @@ func (s *AlertService) triggerAlertWebhook(ctx context.Context, alert *domain.Al
 	// on the request would end the delivery with it.
 	go func() {
 		if err := s.webhookService.TriggerEvent(context.Background(), alert.OrganizationID, event, data); err != nil {
-			fmt.Printf("⚠️  Failed to trigger %s webhook: %v\n", event, err)
+			fmt.Printf("Failed to trigger %s webhook: %v\n", event, err)
 		}
 	}()
 }
@@ -393,22 +393,22 @@ func DefaultUnusualAccessConfig() UnusualAccessPatternConfig {
 // DetectUnusualAccessPatterns checks for anomalous agent behavior
 func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uuid.UUID, agentID uuid.UUID) ([]*domain.Alert, error) {
 	if s.db == nil {
-		fmt.Printf("📊 [ANOMALY-DETECTION] Skipped: DB not configured (orgID=%s, agentID=%s)\n", orgID, agentID)
+		fmt.Printf("[ANOMALY-DETECTION] Skipped: DB not configured (orgID=%s, agentID=%s)\n", orgID, agentID)
 		return nil, nil // DB not configured, skip detection
 	}
 
 	config := DefaultUnusualAccessConfig()
 	alerts := make([]*domain.Alert, 0)
 
-	fmt.Printf("📊 [ANOMALY-DETECTION] Starting checks for agent %s in org %s (config: volume=%d/%dmin, offHours=%d:00-%d:00)\n",
+	fmt.Printf("[ANOMALY-DETECTION] Starting checks for agent %s in org %s (config: volume=%d/%dmin, offHours=%d:00-%d:00)\n",
 		agentID, orgID, config.HighVolumeThreshold, config.TimeWindowMinutes, config.OffHoursStart, config.OffHoursEnd)
 
 	// 1. Check for high volume of requests
 	highVolumeAlert, err := s.checkHighVolumeAccess(ctx, orgID, agentID, config)
 	if err != nil {
-		fmt.Printf("⚠️  [ANOMALY-DETECTION] High volume check failed: %v\n", err)
+		fmt.Printf("[ANOMALY-DETECTION] High volume check failed: %v\n", err)
 	} else if highVolumeAlert != nil {
-		fmt.Printf("🚨 [ANOMALY-DETECTION] HIGH VOLUME DETECTED: Agent %s made excessive requests (severity: %s)\n",
+		fmt.Printf("[ANOMALY-DETECTION] HIGH VOLUME DETECTED: Agent %s made excessive requests (severity: %s)\n",
 			agentID, highVolumeAlert.Severity)
 		alerts = append(alerts, highVolumeAlert)
 	}
@@ -416,9 +416,9 @@ func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uu
 	// 2. Check for off-hours access
 	offHoursAlert, err := s.checkOffHoursAccess(ctx, orgID, agentID, config)
 	if err != nil {
-		fmt.Printf("⚠️  [ANOMALY-DETECTION] Off-hours check failed: %v\n", err)
+		fmt.Printf("[ANOMALY-DETECTION] Off-hours check failed: %v\n", err)
 	} else if offHoursAlert != nil {
-		fmt.Printf("🌙 [ANOMALY-DETECTION] OFF-HOURS ACCESS: Agent %s active during unusual hours (severity: %s)\n",
+		fmt.Printf("[ANOMALY-DETECTION] OFF-HOURS ACCESS: Agent %s active during unusual hours (severity: %s)\n",
 			agentID, offHoursAlert.Severity)
 		alerts = append(alerts, offHoursAlert)
 	}
@@ -426,9 +426,9 @@ func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uu
 	// 3. Check for unusual resource access
 	resourceAlerts, err := s.checkUnusualResourceAccess(ctx, orgID, agentID, config)
 	if err != nil {
-		fmt.Printf("⚠️  [ANOMALY-DETECTION] Resource access check failed: %v\n", err)
+		fmt.Printf("[ANOMALY-DETECTION] Resource access check failed: %v\n", err)
 	} else if len(resourceAlerts) > 0 {
-		fmt.Printf("📂 [ANOMALY-DETECTION] UNUSUAL RESOURCES: Agent %s accessed %d new resources (severity: info)\n",
+		fmt.Printf("[ANOMALY-DETECTION] UNUSUAL RESOURCES: Agent %s accessed %d new resources (severity: info)\n",
 			agentID, len(resourceAlerts))
 		alerts = append(alerts, resourceAlerts...)
 	}
@@ -436,9 +436,9 @@ func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uu
 	// 4. Check for failed verification spike
 	failedAlert, err := s.checkFailedVerificationSpike(ctx, orgID, agentID, config)
 	if err != nil {
-		fmt.Printf("⚠️  [ANOMALY-DETECTION] Failed verification check failed: %v\n", err)
+		fmt.Printf("[ANOMALY-DETECTION] Failed verification check failed: %v\n", err)
 	} else if failedAlert != nil {
-		fmt.Printf("❌ [ANOMALY-DETECTION] FAILED VERIFICATION SPIKE: Agent %s has high failure rate (severity: %s)\n",
+		fmt.Printf("[ANOMALY-DETECTION] FAILED VERIFICATION SPIKE: Agent %s has high failure rate (severity: %s)\n",
 			agentID, failedAlert.Severity)
 		alerts = append(alerts, failedAlert)
 	}
@@ -458,10 +458,10 @@ func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uu
 		}
 		if !exists {
 			if err := s.alertRepo.Create(alert); err != nil {
-				fmt.Printf("⚠️  [ANOMALY-DETECTION] Failed to create alert: %v\n", err)
+				fmt.Printf("[ANOMALY-DETECTION] Failed to create alert: %v\n", err)
 			} else {
 				alertsCreated++
-				fmt.Printf("✅ [ANOMALY-DETECTION] Alert created: type=%s, severity=%s, title='%s'\n",
+				fmt.Printf("[ANOMALY-DETECTION] Alert created: type=%s, severity=%s, title='%s'\n",
 					alert.AlertType, alert.Severity, alert.Title)
 			}
 		} else {
@@ -469,7 +469,7 @@ func (s *AlertService) DetectUnusualAccessPatterns(ctx context.Context, orgID uu
 		}
 	}
 
-	fmt.Printf("📊 [ANOMALY-DETECTION] Completed for agent %s: %d anomalies detected, %d alerts created, %d skipped (duplicate)\n",
+	fmt.Printf("[ANOMALY-DETECTION] Completed for agent %s: %d anomalies detected, %d alerts created, %d skipped (duplicate)\n",
 		agentID, len(alerts), alertsCreated, alertsSkipped)
 
 	return alerts, nil

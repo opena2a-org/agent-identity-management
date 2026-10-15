@@ -503,33 +503,29 @@ func stringContainsUA(s, substr string) bool {
 	return false
 }
 
-// getSDKDisplayName converts SDK type to capitalized display name
+// getSDKDisplayName converts SDK type to capitalized display name. The
+// download serves the Python and Java SDKs; any other type is returned as given.
 func getSDKDisplayName(sdkType string) string {
 	switch sdkType {
 	case "python":
 		return "Python"
 	case "java":
 		return "Java"
-	case "go":
-		return "Go"
-	case "javascript":
-		return "JavaScript"
 	default:
 		return sdkType
 	}
 }
 
 // generateSetupInstructions creates SDK-specific setup instructions. The
-// repository carries no Go SDK, so Go gets the generic text. version is the SDK
-// version the download is named after, read from the SDK's VERSION file.
+// download serves the Python and Java SDKs, so any other type gets the generic
+// text. version is the SDK version the download is named after, read from the
+// SDK's VERSION file.
 func (h *SDKHandler) generateSetupInstructions(sdkType, zipPrefix, version string) string {
 	switch sdkType {
 	case "python":
 		return h.generatePythonInstructions(zipPrefix)
 	case "java":
 		return h.generateJavaInstructions(zipPrefix, version)
-	case "javascript":
-		return h.generateJavaScriptInstructions(zipPrefix)
 	default:
 		return "# AIM SDK\n\nPlease refer to the SDK documentation for usage instructions."
 	}
@@ -694,88 +690,5 @@ Agent credentials (after registration) are stored separately in ` + "`~/.aim/age
 - Tokens can be revoked at any time from your dashboard
 
 For more examples, see the ` + "`examples/`" + ` directory.
-`
-}
-
-// generateJavaScriptInstructions creates JavaScript-specific setup instructions
-func (h *SDKHandler) generateJavaScriptInstructions(zipPrefix string) string {
-	return `# AIM JavaScript SDK - Quick Start
-
-This SDK is pre-configured with your credentials!
-
-## Installation
-
-1. Unzip this file:
-   ` + "```bash\n   unzip " + zipPrefix + ".zip\n   cd " + zipPrefix + "\n   ```" + `
-
-2. Install dependencies:
-   ` + "```bash\n   npm install\n   # or\n   yarn install\n   ```" + `
-
-## Usage
-
-The SDK is already configured with your identity. Just use it!
-
-` + "```javascript\n" +
-		`const { AIMClient } = require('@opena2a/aim-sdk');
-
-async function main() {
-  // Zero configuration needed! Your credentials are embedded.
-  const client = new AIMClient();
-
-  // Register an agent
-  const agent = await client.registerAgent({
-    name: 'my-awesome-agent',
-    agentType: 'ai_agent',
-    description: 'An agent that does amazing things'
-  });
-
-  console.log('Agent registered! ID:', agent.id);
-  console.log('Trust Score:', agent.trustScore);
-}
-
-main().catch(console.error);
-` + "```" + `
-
-## TypeScript Support
-
-This SDK includes full TypeScript definitions!
-
-` + "```typescript\n" +
-		`import { AIMClient, Agent, RegisterAgentRequest } from '@opena2a/aim-sdk';
-
-async function registerAgent(): Promise<Agent> {
-  const client = new AIMClient();
-
-  const request: RegisterAgentRequest = {
-    name: 'my-awesome-agent',
-    agentType: 'ai_agent',
-    description: 'An agent that does amazing things'
-  };
-
-  return await client.registerAgent(request);
-}
-` + "```" + `
-
-## Automatic Authentication
-
-Your SDK contains embedded OAuth credentials that automatically:
-- ✅ Authenticate your agent registrations
-- ✅ Link agents to your user account
-- ✅ Refresh tokens when they expire
-- ✅ Work for 90 days without re-authentication
-
-## Security
-
-Your SDK credentials are stored in ` + "`.aim/sdk_credentials.json`" + `. Keep this file secure!
-
-Agent credentials (after registration) are stored separately in ` + "`~/.aim/agents/{agent-name}.json`" + `.
-
-⚠️ **Important Security Notes:**
-- Credentials are valid for 90 days
-- Never commit credentials to Git
-- Revoke tokens from dashboard if compromised
-- Tokens can be revoked at any time from your dashboard
-
-For more examples, see the included test files.
 `
 }

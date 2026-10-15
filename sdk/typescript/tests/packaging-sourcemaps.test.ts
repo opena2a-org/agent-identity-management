@@ -59,7 +59,7 @@ afterAll(() => {
 });
 
 describe('the packed tarball does not embed the TypeScript source', () => {
-  it('AIM-12.AC2 no .map in the npm tarball carries a sourcesContent array', () => {
+  it('no .map in the npm tarball carries a sourcesContent array', () => {
     const maps = walk(packageDir).filter((f) => f.endsWith('.map'));
     // Non-vacuity: maps must still ship at all — the fix strips the embedded
     // sources, it does not turn source maps off.
@@ -82,7 +82,7 @@ describe('the packed tarball does not embed the TypeScript source', () => {
     ).toEqual([]);
   });
 
-  it('AIM-12.AC2 the frozen OpenA2A-ARP/0.2.0 docstring literal does not ride into any shipped map', () => {
+  it('the frozen OpenA2A-ARP/0.2.0 docstring literal does not ride into any shipped map', () => {
     // The literal is deliberately quoted in source docstrings
     // (src/arp/index.ts, version.test.ts documents the rule). It reached the
     // tarball only inside sourcesContent; with embedded sources gone it must

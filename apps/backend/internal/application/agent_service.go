@@ -86,7 +86,7 @@ func (s *AgentService) sendTrustScoreChanged(agent *domain.Agent, previousScore,
 func (s *AgentService) evaluateTrustScoreChange(ctx context.Context, agent *domain.Agent, previousScore, trustScore float64) {
 	result, err := s.policyService.EvaluateTrustScoreOnUpdate(ctx, agent, previousScore, trustScore)
 	if err != nil {
-		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
+		fmt.Printf("Trust score policy evaluation failed: %v\n", err)
 		return
 	}
 	if s.webhooks == nil {
@@ -225,7 +225,7 @@ func sanitizeTalksTo(talksTo []string) []string {
 				if part != "" && !seen[part] {
 					sanitized = append(sanitized, part)
 					seen[part] = true
-					fmt.Printf("⚠️  Sanitized malformed talks_to entry: split '%s' into '%s'\n", entry, part)
+					fmt.Printf("Sanitized malformed talks_to entry: split '%s' into '%s'\n", entry, part)
 				}
 			}
 		} else {
@@ -432,7 +432,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			fmt.Printf("Warning: failed to auto-verify agent: %v\n", err)
 		} else {
 			autoVerified = true
-			fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
+			fmt.Printf("Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
 		}
 
 		s.createAutoVerificationEvent(ctx, orgID, agent)
@@ -443,7 +443,7 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			agent.TrustScore = updatedTrustScore.Score
 			s.agentRepo.Update(agent)
 			s.trustScoreRepo.Create(updatedTrustScore)
-			fmt.Printf("✅ Updated trust score after verification: %.2f\n", agent.TrustScore)
+			fmt.Printf("Updated trust score after verification: %.2f\n", agent.TrustScore)
 		}
 	}
 
@@ -465,14 +465,14 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 			}
 
 			if err := s.capabilityRepo.CreateCapability(capabilityRecord); err != nil {
-				fmt.Printf("⚠️  Warning: failed to auto-grant capability '%s': %v\n", capabilityType, err)
+				fmt.Printf("Warning: failed to auto-grant capability '%s': %v\n", capabilityType, err)
 			} else {
 				grantedCount++
 			}
 		}
 
 		if grantedCount > 0 {
-			fmt.Printf("✅ Granted %d baseline capabilities for agent %s: %v\n", grantedCount, agent.Name, req.Capabilities)
+			fmt.Printf("Granted %d baseline capabilities for agent %s: %v\n", grantedCount, agent.Name, req.Capabilities)
 		}
 	}
 
@@ -574,7 +574,7 @@ func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, c
 		return agentCreateError(err)
 	}
 	if len(capabilities) > 0 {
-		fmt.Printf("✅ Granted %d baseline capabilities for agent %s: %v\n", len(capabilities), agent.Name, capabilities)
+		fmt.Printf("Granted %d baseline capabilities for agent %s: %v\n", len(capabilities), agent.Name, capabilities)
 	}
 	if trustScore != nil {
 		if err := s.trustScoreRepo.Create(trustScore); err != nil {
@@ -582,7 +582,7 @@ func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, c
 		}
 	}
 	if verified {
-		fmt.Printf("✅ Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
+		fmt.Printf("Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
 		s.createAutoVerificationEvent(ctx, orgID, agent)
 	}
 	return nil
@@ -608,9 +608,9 @@ func (s *AgentService) createAutoVerificationEvent(ctx context.Context, orgID uu
 	}
 
 	if _, err := s.verificationEventService.CreateVerificationEvent(ctx, domain.VerificationEventSourceSystem, verificationReq); err != nil {
-		fmt.Printf("⚠️  Warning: failed to create verification event: %v\n", err)
+		fmt.Printf("Warning: failed to create verification event: %v\n", err)
 	} else {
-		fmt.Printf("✅ Created verification event for agent %s\n", agent.Name)
+		fmt.Printf("Created verification event for agent %s\n", agent.Name)
 	}
 }
 
@@ -634,7 +634,7 @@ func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.
 			// Not a UUID - treat as tag name/key. Find existing or create new tag.
 			existingTags, searchErr := s.tagRepo.SearchTags(ctx, orgID, tagIDStr, nil)
 			if searchErr != nil {
-				fmt.Printf("⚠️  Warning: failed to search for tag '%s': %v\n", tagIDStr, searchErr)
+				fmt.Printf("Warning: failed to search for tag '%s': %v\n", tagIDStr, searchErr)
 				continue
 			}
 
@@ -662,19 +662,19 @@ func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.
 					CreatedBy:      userID,
 				}
 				if createErr := s.tagRepo.Create(ctx, newTag); createErr != nil {
-					fmt.Printf("⚠️  Warning: failed to create tag '%s': %v\n", tagIDStr, createErr)
+					fmt.Printf("Warning: failed to create tag '%s': %v\n", tagIDStr, createErr)
 					continue
 				}
 				tagUUIDs = append(tagUUIDs, newTag.ID)
-				fmt.Printf("✅ Auto-created tag '%s' for agent %s\n", tagIDStr, agent.Name)
+				fmt.Printf("Auto-created tag '%s' for agent %s\n", tagIDStr, agent.Name)
 			}
 		}
 
 		if len(tagUUIDs) > 0 {
 			if err := s.tagRepo.AddTagsToAgent(ctx, agent.ID, tagUUIDs); err != nil {
-				fmt.Printf("⚠️  Warning: failed to apply tags to agent %s: %v\n", agent.Name, err)
+				fmt.Printf("Warning: failed to apply tags to agent %s: %v\n", agent.Name, err)
 			} else {
-				fmt.Printf("✅ Applied %d tags to agent %s\n", len(tagUUIDs), agent.Name)
+				fmt.Printf("Applied %d tags to agent %s\n", len(tagUUIDs), agent.Name)
 			}
 		}
 	}
@@ -688,19 +688,19 @@ func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.
 func (s *AgentService) shouldAutoVerifyAgent(agent *domain.Agent) bool {
 	// ✅ Check 1: Must have cryptographic keys
 	if agent.PublicKey == nil || agent.EncryptedPrivateKey == nil {
-		fmt.Printf("⚠️  Agent %s cannot be auto-verified: missing cryptographic keys\n", agent.Name)
+		fmt.Printf("Agent %s cannot be auto-verified: missing cryptographic keys\n", agent.Name)
 		return false
 	}
 
 	// ✅ Check 2: Trust score must be >= 0.3 (30%)
 	if agent.TrustScore < 0.3 {
-		fmt.Printf("⚠️  Agent %s cannot be auto-verified: trust score too low (%.2f < 0.3)\n", agent.Name, agent.TrustScore)
+		fmt.Printf("Agent %s cannot be auto-verified: trust score too low (%.2f < 0.3)\n", agent.Name, agent.TrustScore)
 		return false
 	}
 
 	// ✅ Check 3: Must have required metadata
 	if agent.Name == "" || agent.DisplayName == "" || agent.Description == "" {
-		fmt.Printf("⚠️  Agent %s cannot be auto-verified: missing required metadata\n", agent.Name)
+		fmt.Printf("Agent %s cannot be auto-verified: missing required metadata\n", agent.Name)
 		return false
 	}
 
@@ -1327,7 +1327,7 @@ func (s *AgentService) VerifyCapability(
 		}
 
 		if enforcementMode == domain.EnforcementModeMonitoring {
-			fmt.Printf("✅ MONITORING MODE: Allowing action '%s' for unverified agent %s (status: %s) - logged for review\n",
+			fmt.Printf("MONITORING MODE: Allowing action '%s' for unverified agent %s (status: %s) - logged for review\n",
 				capability, agent.Name, agent.Status)
 
 			// Log violation for visibility
@@ -1353,7 +1353,7 @@ func (s *AgentService) VerifyCapability(
 				RequestMetadata: metadata,
 			}
 			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
-				fmt.Printf("⚠️  Warning: failed to create monitoring violation record: %v\n", err)
+				fmt.Printf("Warning: failed to create monitoring violation record: %v\n", err)
 			}
 
 			// Create alert so admin sees unverified agent activity
@@ -1378,7 +1378,7 @@ func (s *AgentService) VerifyCapability(
 				CreatedAt:      time.Now(),
 			}
 			if err := s.alertRepo.Create(alert); err != nil {
-				fmt.Printf("⚠️  Warning: failed to create monitoring alert: %v\n", err)
+				fmt.Printf("Warning: failed to create monitoring alert: %v\n", err)
 			}
 
 			return true, fmt.Sprintf(
@@ -1450,7 +1450,7 @@ func (s *AgentService) VerifyCapability(
 			ctx, agent, capability, resource, auditID,
 		)
 		if policyErr != nil {
-			fmt.Printf("⚠️  Policy evaluation failed for no-capabilities check: %v\n", policyErr)
+			fmt.Printf("Policy evaluation failed for no-capabilities check: %v\n", policyErr)
 			// Policy failed - use enforcement mode as fallback
 			shouldAlert = true
 			policyName = "enforcement_mode_fallback"
@@ -1460,7 +1460,7 @@ func (s *AgentService) VerifyCapability(
 		// This is the key difference: MONITORING mode overrides individual policy blocking decisions
 		// If you want to block, switch to STRICT mode in Global Enforcement settings
 		if enforcementMode == domain.EnforcementModeMonitoring {
-			fmt.Printf("✅ MONITORING MODE: Allowing action '%s' for agent %s (no granted capabilities) - will be logged\n",
+			fmt.Printf("MONITORING MODE: Allowing action '%s' for agent %s (no granted capabilities) - will be logged\n",
 				capability, agent.Name)
 			fmt.Printf("   Policy '%s' would block in STRICT mode, but MONITORING mode allows all actions\n", policyName)
 
@@ -1487,7 +1487,7 @@ func (s *AgentService) VerifyCapability(
 			}
 
 			if err := s.capabilityRepo.CreateViolation(violation); err != nil {
-				fmt.Printf("⚠️  Warning: failed to create monitoring violation record: %v\n", err)
+				fmt.Printf("Warning: failed to create monitoring violation record: %v\n", err)
 			}
 
 			// Create alert if policy requires it
@@ -1518,7 +1518,7 @@ func (s *AgentService) VerifyCapability(
 					DedupeKey: UnregisteredCapabilityDedupeKey(agentID, capability, resource),
 				}
 				if _, err := coalesceAlert(s.alertRepo, alert, time.Now()); err != nil {
-					fmt.Printf("⚠️  Warning: failed to create monitoring alert: %v\n", err)
+					fmt.Printf("Warning: failed to create monitoring alert: %v\n", err)
 				}
 			}
 
@@ -1552,9 +1552,9 @@ func (s *AgentService) VerifyCapability(
 		}
 
 		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
-			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+			fmt.Printf("Warning: failed to create violation record: %v\n", err)
 		} else {
-			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s with no granted capabilities (mode: %s)\n",
+			fmt.Printf("VIOLATION RECORDED: Agent %s attempted %s with no granted capabilities (mode: %s)\n",
 				agent.Name, capability, enforcementMode)
 		}
 
@@ -1586,7 +1586,7 @@ func (s *AgentService) VerifyCapability(
 		)
 		if err != nil {
 			// Policy evaluation failed - use safe default (block + alert)
-			fmt.Printf("⚠️  Policy evaluation failed: %v, using safe default (block + alert)\n", err)
+			fmt.Printf("Policy evaluation failed: %v, using safe default (block + alert)\n", err)
 			shouldBlock = true
 			shouldAlert = true
 			policyName = "default_policy"
@@ -1595,7 +1595,7 @@ func (s *AgentService) VerifyCapability(
 		// 🔄 MONITORING MODE OVERRIDE: In monitoring mode, never block, only alert
 		// This allows all actions to proceed for observation purposes
 		if orgEnforcementMode == domain.EnforcementModeMonitoring && shouldBlock {
-			fmt.Printf("✅ MONITORING MODE OVERRIDE: Policy '%s' would block '%s' but MONITORING mode allows all actions\n",
+			fmt.Printf("MONITORING MODE OVERRIDE: Policy '%s' would block '%s' but MONITORING mode allows all actions\n",
 				policyName, capability)
 			shouldBlock = false // Override to allow
 			shouldAlert = true  // Still alert for visibility
@@ -1633,9 +1633,9 @@ func (s *AgentService) VerifyCapability(
 			}
 
 			if _, err := coalesceAlert(s.alertRepo, alert, time.Now()); err != nil {
-				fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
+				fmt.Printf("Warning: failed to create security alert: %v\n", err)
 			} else {
-				fmt.Printf("🚨 SECURITY ALERT: Capability violation for agent %s (policy: %s, action: %s)\n",
+				fmt.Printf("SECURITY ALERT: Capability violation for agent %s (policy: %s, action: %s)\n",
 					agent.Name, policyName, map[bool]string{true: "BLOCKED", false: "MONITORED"}[shouldBlock])
 			}
 		}
@@ -1663,9 +1663,9 @@ func (s *AgentService) VerifyCapability(
 		}
 
 		if err := s.capabilityRepo.CreateViolation(violation); err != nil {
-			fmt.Printf("⚠️  Warning: failed to create violation record: %v\n", err)
+			fmt.Printf("Warning: failed to create violation record: %v\n", err)
 		} else {
-			fmt.Printf("📝 VIOLATION RECORDED: Agent %s attempted %s (blocked: %v)\n",
+			fmt.Printf("VIOLATION RECORDED: Agent %s attempted %s (blocked: %v)\n",
 				agent.Name, capability, shouldBlock)
 		}
 
@@ -1685,17 +1685,17 @@ func (s *AgentService) VerifyCapability(
 		// Update agent's trust score in database
 		scoreStored := false
 		if err := s.agentRepo.UpdateTrustScore(agentID, newScore); err != nil {
-			fmt.Printf("⚠️  Warning: failed to update agent trust score: %v\n", err)
+			fmt.Printf("Warning: failed to update agent trust score: %v\n", err)
 		} else {
 			scoreStored = true
-			fmt.Printf("✅ Trust score updated after violation: %.2f%% → %.2f%% (impact: %d%%) for agent %s\n",
+			fmt.Printf("Trust score updated after violation: %.2f%% → %.2f%% (impact: %d%%) for agent %s\n",
 				agent.TrustScore*100, newScore*100, violation.TrustScoreImpact, agent.Name)
 		}
 
 		// Also update trust_scores table to keep it in sync with agents.trust_score
 		// This ensures the Trust Score tab shows the correct value
 		if err := s.trustScoreRepo.UpdateScore(agentID, newScore); err != nil {
-			fmt.Printf("⚠️  Warning: failed to update trust_scores table: %v\n", err)
+			fmt.Printf("Warning: failed to update trust_scores table: %v\n", err)
 		}
 
 		// capability_violation_count is bumped by an AFTER INSERT trigger
@@ -1722,7 +1722,7 @@ func (s *AgentService) VerifyCapability(
 			), auditID, nil
 		} else {
 			// Policy says alert-only mode - allow the action but log it
-			fmt.Printf("⚠️  Capability violation ALLOWED by policy '%s' (alert-only mode): %s attempting %s\n",
+			fmt.Printf("Capability violation ALLOWED by policy '%s' (alert-only mode): %s attempting %s\n",
 				policyName, agent.Name, capability)
 			return true, fmt.Sprintf(
 				"Action allowed by security policy '%s' (alert-only mode) - capability violation logged",
@@ -1765,7 +1765,7 @@ func (s *AgentService) VerifyCapability(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
-		fmt.Printf("⚠️  Trust score policy evaluation failed: %v\n", err)
+		fmt.Printf("Trust score policy evaluation failed: %v\n", err)
 	}
 	if trustScoreAlert {
 		s.createPolicyAlert(agent, "Trust Score Low", trustScorePolicyName, trustScoreBlocked,
@@ -1773,7 +1773,7 @@ func (s *AgentService) VerifyCapability(
 	}
 	// Apply MONITORING mode override
 	if trustScoreBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
-		fmt.Printf("✅ MONITORING MODE: Trust score policy '%s' would block but allowing (mode: %s)\n",
+		fmt.Printf("MONITORING MODE: Trust score policy '%s' would block but allowing (mode: %s)\n",
 			trustScorePolicyName, policyEnforcementMode)
 		trustScoreBlocked = false
 	}
@@ -1789,7 +1789,7 @@ func (s *AgentService) VerifyCapability(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
-		fmt.Printf("⚠️  Data exfiltration policy evaluation failed: %v\n", err)
+		fmt.Printf("Data exfiltration policy evaluation failed: %v\n", err)
 	}
 	if exfilAlert {
 		s.createPolicyAlert(agent, "Data Exfiltration Attempt", exfilPolicyName, exfilBlocked,
@@ -1798,7 +1798,7 @@ func (s *AgentService) VerifyCapability(
 	}
 	// Apply MONITORING mode override
 	if exfilBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
-		fmt.Printf("✅ MONITORING MODE: Data exfiltration policy '%s' would block but allowing (mode: %s)\n",
+		fmt.Printf("MONITORING MODE: Data exfiltration policy '%s' would block but allowing (mode: %s)\n",
 			exfilPolicyName, policyEnforcementMode)
 		exfilBlocked = false
 	}
@@ -1814,7 +1814,7 @@ func (s *AgentService) VerifyCapability(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
-		fmt.Printf("⚠️  Unusual activity policy evaluation failed: %v\n", err)
+		fmt.Printf("Unusual activity policy evaluation failed: %v\n", err)
 	}
 	if unusualAlert {
 		s.createPolicyAlert(agent, "Unusual Activity", unusualPolicyName, unusualBlocked,
@@ -1822,7 +1822,7 @@ func (s *AgentService) VerifyCapability(
 	}
 	// Apply MONITORING mode override
 	if unusualBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
-		fmt.Printf("✅ MONITORING MODE: Unusual activity policy '%s' would block but allowing (mode: %s)\n",
+		fmt.Printf("MONITORING MODE: Unusual activity policy '%s' would block but allowing (mode: %s)\n",
 			unusualPolicyName, policyEnforcementMode)
 		unusualBlocked = false
 	}
@@ -1838,7 +1838,7 @@ func (s *AgentService) VerifyCapability(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
-		fmt.Printf("⚠️  Config drift policy evaluation failed: %v\n", err)
+		fmt.Printf("Config drift policy evaluation failed: %v\n", err)
 	}
 	if driftAlert {
 		s.createPolicyAlert(agent, "Configuration Drift", driftPolicyName, driftBlocked,
@@ -1846,7 +1846,7 @@ func (s *AgentService) VerifyCapability(
 	}
 	// Apply MONITORING mode override
 	if driftBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
-		fmt.Printf("✅ MONITORING MODE: Config drift policy '%s' would block but allowing (mode: %s)\n",
+		fmt.Printf("MONITORING MODE: Config drift policy '%s' would block but allowing (mode: %s)\n",
 			driftPolicyName, policyEnforcementMode)
 		driftBlocked = false
 	}
@@ -1862,7 +1862,7 @@ func (s *AgentService) VerifyCapability(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
-		fmt.Printf("⚠️  Unauthorized access policy evaluation failed: %v\n", err)
+		fmt.Printf("Unauthorized access policy evaluation failed: %v\n", err)
 	}
 	if unauthAlert {
 		s.createPolicyAlert(agent, "Unauthorized Access Attempt", unauthPolicyName, unauthBlocked,
@@ -1870,7 +1870,7 @@ func (s *AgentService) VerifyCapability(
 	}
 	// Apply MONITORING mode override
 	if unauthBlocked && policyEnforcementMode == domain.EnforcementModeMonitoring {
-		fmt.Printf("✅ MONITORING MODE: Unauthorized access policy '%s' would block but allowing (mode: %s)\n",
+		fmt.Printf("MONITORING MODE: Unauthorized access policy '%s' would block but allowing (mode: %s)\n",
 			unauthPolicyName, policyEnforcementMode)
 		unauthBlocked = false
 	}
@@ -2983,9 +2983,9 @@ func (s *AgentService) createPolicyAlert(
 	}
 
 	if err := s.alertRepo.Create(alert); err != nil {
-		fmt.Printf("⚠️  Warning: failed to create security alert: %v\n", err)
+		fmt.Printf("Warning: failed to create security alert: %v\n", err)
 	} else {
-		fmt.Printf("🚨 SECURITY ALERT: %s for agent %s (policy: %s, action: %s)\n",
+		fmt.Printf("SECURITY ALERT: %s for agent %s (policy: %s, action: %s)\n",
 			alertType, agent.Name, policyName, map[bool]string{true: "BLOCKED", false: "MONITORED"}[isBlocked])
 	}
 }

@@ -22,7 +22,7 @@ const RESULT = {
   timestamp: '2026-09-09T00:00:00.000Z',
 };
 
-it('AIM-12.AC3 item 8: express verifyAction sets req.aim.agentId from the verification result', async () => {
+it('express verifyAction sets req.aim.agentId from the verification result', async () => {
   const client = { verifyAction: vi.fn(async () => ({ ...RESULT })) };
   const req = {
     aim: { client, verified: false },
@@ -42,7 +42,7 @@ it('AIM-12.AC3 item 8: express verifyAction sets req.aim.agentId from the verifi
   expect(req.aim?.agentId).toBe('agent-42');
 });
 
-it('AIM-12.AC3 item 8: fastify verifyAction sets request.aim.agentId from the verification result', async () => {
+it('fastify verifyAction sets request.aim.agentId from the verification result', async () => {
   const client = { verifyAction: vi.fn(async () => ({ ...RESULT })) };
   const request = {
     aim: { client, verified: false },

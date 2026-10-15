@@ -32,7 +32,7 @@ func NewConsoleEmailService(config domain.EmailConfig) (domain.EmailService, err
 // SendEmail sends a plain text or HTML email by printing to console
 func (s *ConsoleEmailService) SendEmail(to, subject, body string, isHTML bool) error {
 	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("📧 EMAIL (Console Provider - Development Only)")
+	fmt.Println("EMAIL (Console Provider - Development Only)")
 	fmt.Println(strings.Repeat("=", 80))
 	fmt.Printf("From: %s <%s>\n", s.fromName, s.fromAddress)
 	fmt.Printf("To: %s\n", to)
@@ -61,7 +61,7 @@ func (s *ConsoleEmailService) SendTemplatedEmail(template domain.EmailTemplate, 
 
 	// Print email to console
 	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("📧 TEMPLATED EMAIL (Console Provider - Development Only)")
+	fmt.Println("TEMPLATED EMAIL (Console Provider - Development Only)")
 	fmt.Println(strings.Repeat("=", 80))
 	fmt.Printf("Template: %s\n", template)
 	fmt.Printf("From: %s <%s>\n", s.fromName, s.fromAddress)
@@ -79,7 +79,7 @@ func (s *ConsoleEmailService) SendTemplatedEmail(template domain.EmailTemplate, 
 // SendBulkEmail sends the same email to multiple recipients by printing to console
 func (s *ConsoleEmailService) SendBulkEmail(recipients []string, subject, body string, isHTML bool) error {
 	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("📧 BULK EMAIL (Console Provider - Development Only)")
+	fmt.Println("BULK EMAIL (Console Provider - Development Only)")
 	fmt.Println(strings.Repeat("=", 80))
 	fmt.Printf("From: %s <%s>\n", s.fromName, s.fromAddress)
 	fmt.Printf("To: %s\n", strings.Join(recipients, ", "))
@@ -100,8 +100,8 @@ func (s *ConsoleEmailService) SendBulkEmail(recipients []string, subject, body s
 
 // ValidateConnection validates the console provider connection (always succeeds)
 func (s *ConsoleEmailService) ValidateConnection() error {
-	fmt.Println("✅ Console email service initialized (emails will be printed to console)")
+	fmt.Println("Console email service initialized (emails will be printed to console)")
 	fmt.Printf("   From: %s <%s>\n", s.fromName, s.fromAddress)
-	fmt.Println("   ⚠️  This is for development only - no actual emails will be sent!")
+	fmt.Println("This is for development only - no actual emails will be sent!")
 	return nil
 }

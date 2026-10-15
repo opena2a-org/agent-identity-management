@@ -910,7 +910,7 @@ func (h *MCPHandler) DetectCapabilities(c fiber.Ctx) error {
 // @Failure 404 {object} map[string]interface{}
 // @Router /api/v1/mcp-servers/{id}/agents [get]
 func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
-	log.Printf("⭐ GetMCPServerAgents: HANDLER CALLED")
+	log.Printf("GetMCPServerAgents: HANDLER CALLED")
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
 		return err
@@ -922,7 +922,7 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("🔍 GetMCPServerAgents: serverID=%s, orgID=%s", serverID, orgID)
+	log.Printf("GetMCPServerAgents: serverID=%s, orgID=%s", serverID, orgID)
 
 	// Verify server belongs to organization first
 	mcpSvc := h.getMCPService()
@@ -930,29 +930,29 @@ func (h *MCPHandler) GetMCPServerAgents(c fiber.Ctx) error {
 	if server == nil {
 		return nil
 	}
-	log.Printf("✅ GetMCPServerAgents: Found MCP server '%s' (orgID=%s)", server.Name, server.OrganizationID)
+	log.Printf("GetMCPServerAgents: Found MCP server '%s' (orgID=%s)", server.Name, server.OrganizationID)
 
 	// Fetch agents that have this MCP server in their talks_to array
 	// Try both by ID and by NAME (agents often use names, not IDs)
-	log.Printf("🔍 GetMCPServerAgents: Searching for agents by MCP server ID and name...")
+	log.Printf("GetMCPServerAgents: Searching for agents by MCP server ID and name...")
 	agentRepo := h.getAgentRepository()
 	agentsByID, err := agentRepo.GetByMCPServer(serverID, orgID)
 	if err != nil {
-		log.Printf("❌ GetMCPServerAgents: Failed to fetch agents by ID: %v", err)
+		log.Printf("GetMCPServerAgents: Failed to fetch agents by ID: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents by ID",
 		})
 	}
-	log.Printf("✅ GetMCPServerAgents: Found %d agents by ID", len(agentsByID))
+	log.Printf("GetMCPServerAgents: Found %d agents by ID", len(agentsByID))
 
 	agentsByName, err := agentRepo.GetByMCPServerName(server.Name, orgID)
 	if err != nil {
-		log.Printf("❌ GetMCPServerAgents: Failed to fetch agents by name: %v", err)
+		log.Printf("GetMCPServerAgents: Failed to fetch agents by name: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch agents by name",
 		})
 	}
-	log.Printf("✅ GetMCPServerAgents: Found %d agents by name", len(agentsByName))
+	log.Printf("GetMCPServerAgents: Found %d agents by name", len(agentsByName))
 
 	// Combine and deduplicate
 	agentMap := make(map[uuid.UUID]*domain.Agent)

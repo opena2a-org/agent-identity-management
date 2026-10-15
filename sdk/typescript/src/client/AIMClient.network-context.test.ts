@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe('network-error context (item 6)', () => {
-  it('AIM-11.AC6 a refused connection with an explicit baseUrl names the URL and the errno', async () => {
+  it('a refused connection with an explicit baseUrl names the URL and the errno', async () => {
     const port = await refusedLoopbackPort();
     const baseUrl = `http://127.0.0.1:${port}`;
     const client = new AIMClient({ baseUrl });
@@ -54,7 +54,7 @@ describe('network-error context (item 6)', () => {
     expect(message).toContain('ECONNREFUSED');
   });
 
-  it('AIM-11.AC6 the defaulted-baseUrl hint is preserved alongside the new context', async () => {
+  it('the defaulted-baseUrl hint is preserved alongside the new context', async () => {
     // No baseUrl option and no AIM_BASE_URL: the hint about the localhost
     // default must still appear (the pre-existing diagnostic must not regress).
     const client = new AIMClient();

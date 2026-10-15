@@ -92,12 +92,12 @@ func NewMCPService(mcpRepo *repository.MCPServerRepository, verificationEventRep
 // logged rather than swallowed so an unscored server is traceable.
 func (s *MCPService) scoreServer(ctx context.Context, server *domain.MCPServer, occasion string) {
 	if s.trustCalculator == nil {
-		fmt.Printf("⚠️  No trust calculator configured; MCP server %s left unscored after %s\n", server.ID, occasion)
+		fmt.Printf("No trust calculator configured; MCP server %s left unscored after %s\n", server.ID, occasion)
 		return
 	}
 	score, err := s.trustCalculator.CalculateTrustScore(ctx, server.ID)
 	if err != nil {
-		fmt.Printf("⚠️  Failed to calculate trust score for MCP server %s after %s: %v\n", server.ID, occasion, err)
+		fmt.Printf("Failed to calculate trust score for MCP server %s after %s: %v\n", server.ID, occasion, err)
 		return
 	}
 	server.TrustScore = score.Score
@@ -173,9 +173,9 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 				}
 
 				if err := s.connectionRepo.Create(ctx, connection); err != nil {
-					fmt.Printf("⚠️  Warning: Failed to create agent-MCP connection for agent %s and existing MCP %s: %v\n", agentID, existing.Name, err)
+					fmt.Printf("Warning: Failed to create agent-MCP connection for agent %s and existing MCP %s: %v\n", agentID, existing.Name, err)
 				} else {
-					fmt.Printf("✅ Created agent-MCP connection for agent %s → existing MCP server %s\n", agentID, existing.Name)
+					fmt.Printf("Created agent-MCP connection for agent %s → existing MCP server %s\n", agentID, existing.Name)
 				}
 			}
 
@@ -202,9 +202,9 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		if needsUpdate {
 			existing.UpdatedAt = time.Now().UTC()
 			if err := s.mcpRepo.Update(existing); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to update existing MCP %s: %v\n", existing.Name, err)
+				fmt.Printf("Warning: Failed to update existing MCP %s: %v\n", existing.Name, err)
 			} else {
-				fmt.Printf("✅ Updated existing MCP server %s (version: %s, capabilities: %d)\n", existing.Name, existing.Version, len(existing.Capabilities))
+				fmt.Printf("Updated existing MCP server %s (version: %s, capabilities: %d)\n", existing.Name, existing.Version, len(existing.Capabilities))
 			}
 		}
 
@@ -229,7 +229,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		// Note: For MCP servers, we don't store the private key since the actual MCP server
 		// will have its own private key. We just use this for initial verification testing.
 		// In production, the real MCP server would sign challenges with its own private key.
-		fmt.Printf("✅ Generated Ed25519 keys for MCP server %s\n", req.Name)
+		fmt.Printf("Generated Ed25519 keys for MCP server %s\n", req.Name)
 	}
 
 	// ✅ Fetch user details for audit trail
@@ -258,7 +258,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		verificationMethod = "sdk_registration"
 		now := time.Now()
 		lastVerifiedAt = &now
-		fmt.Printf("✅ Auto-verifying MCP server %s (registered via SDK by agent %s)\n", req.Name, agentID)
+		fmt.Printf("Auto-verifying MCP server %s (registered via SDK by agent %s)\n", req.Name, agentID)
 	} else {
 		// Manual registration: requires admin verification
 		status = domain.MCPServerStatusPending
@@ -321,10 +321,10 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 			}
 
 			if err := s.capabilityRepo.Create(capability); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to create capability %s for MCP server %s: %v\n", capName, server.Name, err)
+				fmt.Printf("Warning: Failed to create capability %s for MCP server %s: %v\n", capName, server.Name, err)
 				// Don't fail the entire operation if capability creation fails
 			} else {
-				fmt.Printf("✅ Created capability %s for MCP server %s\n", capName, server.Name)
+				fmt.Printf("Created capability %s for MCP server %s\n", capName, server.Name)
 			}
 		}
 	}
@@ -348,10 +348,10 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		}
 
 		if err := s.connectionRepo.Create(ctx, connection); err != nil {
-			fmt.Printf("⚠️  Warning: Failed to create agent-MCP connection for agent %s and MCP %s: %v\n", agentID, server.Name, err)
+			fmt.Printf("Warning: Failed to create agent-MCP connection for agent %s and MCP %s: %v\n", agentID, server.Name, err)
 			// Don't fail the entire operation if connection creation fails
 		} else {
-			fmt.Printf("✅ Created agent-MCP connection for agent %s → MCP server %s\n", agentID, server.Name)
+			fmt.Printf("Created agent-MCP connection for agent %s → MCP server %s\n", agentID, server.Name)
 
 			// ✅ Also update agent's talks_to field so GetMCPServerAgents can find this connection
 			s.updateAgentTalksTo(ctx, *agentID, server.Name, requesterActor(userID))
@@ -365,9 +365,9 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	//		bgCtx := context.Background()
 	//		// Use localhost IP for system-initiated verification
 	//		if err := s.VerifyMCPServer(bgCtx, server.ID, userID, "127.0.0.1"); err != nil {
-	//			fmt.Printf("⚠️  Automatic verification failed for MCP server %s: %v\n", server.Name, err)
+	//			fmt.Printf("Automatic verification failed for MCP server %s: %v\n", server.Name, err)
 	//		} else {
-	//			fmt.Printf("✅ Automatic verification succeeded for MCP server %s\n", server.Name)
+	//			fmt.Printf("Automatic verification succeeded for MCP server %s\n", server.Name)
 	//		}
 	//	}()
 	// }
@@ -382,7 +382,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 		for _, tagIDStr := range req.TagIds {
 			tagID, err := uuid.Parse(tagIDStr)
 			if err != nil {
-				fmt.Printf("⚠️  Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
+				fmt.Printf("Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
 				continue
 			}
 			tagUUIDs = append(tagUUIDs, tagID)
@@ -390,9 +390,9 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 
 		if len(tagUUIDs) > 0 {
 			if err := s.tagRepo.AddTagsToMCPServer(ctx, server.ID, tagUUIDs); err != nil {
-				fmt.Printf("⚠️  Warning: failed to apply tags to MCP server %s: %v\n", server.Name, err)
+				fmt.Printf("Warning: failed to apply tags to MCP server %s: %v\n", server.Name, err)
 			} else {
-				fmt.Printf("✅ Applied %d tags to MCP server %s\n", len(tagUUIDs), server.Name)
+				fmt.Printf("Applied %d tags to MCP server %s\n", len(tagUUIDs), server.Name)
 			}
 		}
 	}
@@ -599,7 +599,7 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 				// context so the caller returning does not cancel detection.
 				bgCtx := context.Background()
 				if err := s.capabilityService.DetectCapabilities(bgCtx, id); err != nil {
-					fmt.Printf("⚠️  Failed to detect capabilities for MCP server %s: %v\n", server.Name, err)
+					fmt.Printf("Failed to detect capabilities for MCP server %s: %v\n", server.Name, err)
 				}
 			}()
 		}
@@ -647,7 +647,7 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	// Store the verification event
 	if s.verificationEventRepo != nil {
 		if err := s.verificationEventRepo.Create(event); err != nil {
-			fmt.Printf("⚠️  Failed to create verification event: %v\n", err)
+			fmt.Printf("Failed to create verification event: %v\n", err)
 		}
 	}
 
@@ -907,7 +907,7 @@ func (s *MCPService) updateAgentTalksTo(ctx context.Context, agentID uuid.UUID, 
 
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil {
-		fmt.Printf("⚠️  Warning: Failed to get agent %s for talks_to update: %v\n", agentID, err)
+		fmt.Printf("Warning: Failed to get agent %s for talks_to update: %v\n", agentID, err)
 		return
 	}
 
@@ -941,7 +941,7 @@ func (s *MCPService) updateAgentTalksTo(ctx context.Context, agentID uuid.UUID, 
 		if existing == mcpServerName {
 			// Already present, no update needed (but still save sanitized version)
 			if err := s.agentRepo.Update(agent); err != nil {
-				fmt.Printf("⚠️  Warning: Failed to sanitize agent %s talks_to: %v\n", agentID, err)
+				fmt.Printf("Warning: Failed to sanitize agent %s talks_to: %v\n", agentID, err)
 			}
 			return
 		}
@@ -951,9 +951,9 @@ func (s *MCPService) updateAgentTalksTo(ctx context.Context, agentID uuid.UUID, 
 	agent.TalksTo = append(agent.TalksTo, mcpServerName)
 
 	if err := s.agentRepo.Update(agent); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to update agent %s talks_to: %v\n", agentID, err)
+		fmt.Printf("Warning: Failed to update agent %s talks_to: %v\n", agentID, err)
 	} else {
-		fmt.Printf("✅ Updated agent %s talks_to with MCP server %s\n", agentID, mcpServerName)
+		fmt.Printf("Updated agent %s talks_to with MCP server %s\n", agentID, mcpServerName)
 	}
 }
 
@@ -985,7 +985,7 @@ func sanitizeTalksToEntries(talksTo []string) []string {
 				if part != "" && !seen[part] {
 					sanitized = append(sanitized, part)
 					seen[part] = true
-					fmt.Printf("⚠️  Sanitized malformed talks_to entry: split '%s' into '%s'\n", entry, part)
+					fmt.Printf("Sanitized malformed talks_to entry: split '%s' into '%s'\n", entry, part)
 				}
 			}
 		} else {

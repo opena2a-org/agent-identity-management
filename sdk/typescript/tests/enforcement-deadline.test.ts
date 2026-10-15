@@ -167,7 +167,7 @@ afterAll(() => {
 
 describe('the enforcement deadline (AIM-06)', () => {
   it(
-    'AIM-06.AC3 (a) a stalled verification POST is ended by enforcementTimeout: 500 on the credentialed path',
+    '(a) a stalled verification POST is ended by enforcementTimeout: 500 on the credentialed path',
     async () => {
       const server = await startServer(stallEverything);
       const client = await credentialedClient(server.url, { enforcementTimeout: 500 });
@@ -189,7 +189,7 @@ describe('the enforcement deadline (AIM-06)', () => {
   );
 
   it(
-    'AIM-06.AC3 (b) AIM_ENFORCEMENT_TIMEOUT_MS=2000 bounds the credentialed path with no constructor option',
+    '(b) AIM_ENFORCEMENT_TIMEOUT_MS=2000 bounds the credentialed path with no constructor option',
     async () => {
       // A value of 2000 is a 2 s deadline — were it misread as seconds the
       // call would still be pending at the 3 000 ms bound (AC4).
@@ -210,7 +210,7 @@ describe('the enforcement deadline (AIM-06)', () => {
   );
 
   it(
-    'AIM-06.AC3 (c) the verification POST is the only request, and an answer later than the deadline is not waited for',
+    '(c) the verification POST is the only request, and an answer later than the deadline is not waited for',
     async () => {
       // Every request is answered after 1500 ms and the deadline is 1000 ms.
       // A token exchange would be answered, so one would show in the request
@@ -233,7 +233,7 @@ describe('the enforcement deadline (AIM-06)', () => {
   );
 
   it(
-    'AIM-06.AC3 (d) with no enforcement option anywhere the 5000 ms DEFAULT_ENFORCEMENT_TIMEOUT applies',
+    '(d) with no enforcement option anywhere the 5000 ms DEFAULT_ENFORCEMENT_TIMEOUT applies',
     async () => {
       // Verification POST never answered.
       const server = await startServer(stallEverything);
@@ -252,7 +252,7 @@ describe('the enforcement deadline (AIM-06)', () => {
   );
 
   it(
-    'AIM-06.AC3 (e) the general timeout still bounds non-enforcement requests; verifyAction is not bound by it',
+    '(e) the general timeout still bounds non-enforcement requests; verifyAction is not bound by it',
     async () => {
       // Base (origin/main 5405500a): with the token manager nulled the verify
       // POST rejected NetworkError at 509 ms under timeout: 500 — the :221
@@ -288,7 +288,7 @@ describe('the enforcement deadline (AIM-06)', () => {
     15000
   );
 
-  it('AIM-06.AC4 DEFAULT_TIMEOUT is still 30000 beside DEFAULT_ENFORCEMENT_TIMEOUT = 5000', () => {
+  it('DEFAULT_TIMEOUT is still 30000 beside DEFAULT_ENFORCEMENT_TIMEOUT = 5000', () => {
     const source = fs.readFileSync(
       path.join(__dirname, '..', 'src', 'client', 'AIMClient.ts'),
       'utf8'

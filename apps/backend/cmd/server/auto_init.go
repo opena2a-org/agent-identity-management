@@ -35,7 +35,7 @@ func seedAdminFromEnv(db *sql.DB) error {
 		return fmt.Errorf("failed to check for an existing administrator: %w", err)
 	}
 	if exists {
-		log.Printf("ℹ️  ADMIN_PASSWORD not applied: an administrator or an account for %s already exists. It only seeds the first administrator; change passwords from the dashboard.", adminEmail)
+		log.Printf("ADMIN_PASSWORD not applied: an administrator or an account for %s already exists. It only seeds the first administrator; change passwords from the dashboard.", adminEmail)
 		return nil
 	}
 
@@ -67,7 +67,7 @@ func seedAdminFromEnv(db *sql.DB) error {
 	}
 
 	if rows, _ := result.RowsAffected(); rows > 0 {
-		log.Printf("✅ Seeded administrator %s from ADMIN_PASSWORD (change the password at first sign-in)", adminEmail)
+		log.Printf("Seeded administrator %s from ADMIN_PASSWORD (change the password at first sign-in)", adminEmail)
 	}
 	return nil
 }

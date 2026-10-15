@@ -55,7 +55,7 @@ func raiseHoneytokenAlert(
 			Timestamp: time.Now().UTC(),
 		}
 		if err := auditRepo.Create(entry); err != nil {
-			fmt.Printf("⚠️  Failed to record honeytoken audit event for capability %s: %v\n", cap.ID, err)
+			fmt.Printf("Failed to record honeytoken audit event for capability %s: %v\n", cap.ID, err)
 		} else {
 			id := entry.ID
 			auditID = &id
@@ -94,9 +94,9 @@ func raiseHoneytokenAlert(
 		CreatedAt:      time.Now().UTC(),
 	}
 	if err := alertRepo.Create(alert); err != nil {
-		fmt.Printf("⚠️  Failed to create honeytoken alert for capability %s: %v\n", cap.ID, err)
+		fmt.Printf("Failed to create honeytoken alert for capability %s: %v\n", cap.ID, err)
 		return
 	}
-	fmt.Printf("🚨 Honeytoken triggered: agent %s matched honeytoken capability %s (severity=high)\n",
+	fmt.Printf("Honeytoken triggered: agent %s matched honeytoken capability %s (severity=high)\n",
 		agent.DisplayName, cap.CapabilityType)
 }

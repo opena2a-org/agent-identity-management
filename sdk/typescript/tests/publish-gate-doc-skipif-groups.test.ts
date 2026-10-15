@@ -182,13 +182,13 @@ const section = excludedSection(doc);
 const tables = parseDocTables(section);
 
 describe('sdk-publish-gate.md names the two skipIf groups by file', () => {
-  it('AIM-20.AC1 the Excluded subsection no longer claims every case gates on both predicates', () => {
+  it('the Excluded subsection no longer claims every case gates on both predicates', () => {
     expect(section).not.toMatch(
       /Every one is an `it\.skipIf\(!backendAvailable \|\| !credentialsAvailable\)`/,
     );
   });
 
-  it('AIM-20.AC1 the groups table carries both / one / total per file with the documented values, totals 29 / 7 / 36', () => {
+  it('the groups table carries both / one / total per file with the documented values, totals 29 / 7 / 36', () => {
     const expected: Record<string, [number, number, number]> = {
       'sdk/typescript/src/a2a/A2AClient.integration.test.ts': [19, 2, 21],
       'sdk/typescript/src/client/AIMClient.integration.test.ts': [10, 3, 13],
@@ -203,7 +203,7 @@ describe('sdk-publish-gate.md names the two skipIf groups by file', () => {
     expect([tables.totals!.both, tables.totals!.one, tables.totals!.total]).toEqual([29, 7, 36]);
   });
 
-  it('AIM-20.AC1 the one-predicate cell names the predicate(s) used', () => {
+  it('the one-predicate cell names the predicate(s) used', () => {
     const expected: Record<string, string[]> = {
       'sdk/typescript/src/a2a/A2AClient.integration.test.ts': ['!backendAvailable'],
       'sdk/typescript/src/client/AIMClient.integration.test.ts': [
@@ -226,7 +226,7 @@ describe('sdk-publish-gate.md names the two skipIf groups by file', () => {
     }
   });
 
-  it("AIM-20.AC1 each file's groups total equals its row in the existing Cases table (21, 13, 2)", () => {
+  it("each file's groups total equals its row in the existing Cases table (21, 13, 2)", () => {
     const expected: Record<string, number> = {
       'sdk/typescript/src/a2a/A2AClient.integration.test.ts': 21,
       'sdk/typescript/src/client/AIMClient.integration.test.ts': 13,
@@ -240,13 +240,13 @@ describe('sdk-publish-gate.md names the two skipIf groups by file', () => {
     }
   });
 
-  it('AIM-20.AC1 the prose states that a single-predicate case skips when only that one condition is missing on the runner', () => {
+  it('the prose states that a single-predicate case skips when only that one condition is missing on the runner', () => {
     expect(section).toMatch(
       /single-predicate case skips when only that one condition is missing on\s+the runner/,
     );
   });
 
-  it('AIM-20.AC1 the doc carries no internal artifact name', () => {
+  it('the doc carries no internal artifact name', () => {
     expect(doc).not.toMatch(new RegExp('qgf', 'i'));
     expect(doc).not.toMatch(/ledger/i);
     expect(doc).not.toMatch(/chief[-_ ]?tag/i);
@@ -258,7 +258,7 @@ describe('sdk-publish-gate.md names the two skipIf groups by file', () => {
 describe('the groups table is derived from the three files', () => {
   const derived = deriveGroups();
 
-  it('AIM-20.AC2 the derived per-file both / one / total equal the doc table cells', () => {
+  it('the derived per-file both / one / total equal the doc table cells', () => {
     let both = 0;
     let one = 0;
     let total = 0;
@@ -279,7 +279,7 @@ describe('the groups table is derived from the three files', () => {
     ]);
   });
 
-  it('AIM-20.AC2 the derived numbers are 19/2/21, 10/3/13 and 0/2/2', () => {
+  it('the derived numbers are 19/2/21, 10/3/13 and 0/2/2', () => {
     const d = INTEGRATION_FILES.map((rel) => {
       const g = derived.get(rel)!;
       return [g.both, g.one, g.total];
@@ -291,7 +291,7 @@ describe('the groups table is derived from the three files', () => {
     ]);
   });
 
-  it('AIM-20.AC2 the one-predicate cell of each row names exactly the single predicates the file uses', () => {
+  it('the one-predicate cell of each row names exactly the single predicates the file uses', () => {
     for (const rel of INTEGRATION_FILES) {
       const row = tables.groups.get(rel);
       expect(row, `groups table row for ${rel}`).toBeDefined();
@@ -318,7 +318,7 @@ describe('the classifier refuses a predicate outside the three forms', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
-  it('AIM-20.AC3 a scratch copy of oauth.integration.test.ts with one planted it.skipIf(process.env.SKIP_ME)( case throws naming that line', () => {
+  it('a scratch copy of oauth.integration.test.ts with one planted it.skipIf(process.env.SKIP_ME)( case throws naming that line', () => {
     const rel = 'sdk/typescript/src/auth/oauth.integration.test.ts';
     const original = readFileSync(join(REPO_ROOT, rel), 'utf-8');
     const lines = original.split('\n');
@@ -343,7 +343,7 @@ describe('the classifier refuses a predicate outside the three forms', () => {
     expect(() => classifySkipIfCases(scratch, planted)).toThrow(/process\.env\.SKIP_ME/);
   });
 
-  it('AIM-20.AC3 the unmodified three files classify without throwing', () => {
+  it('the unmodified three files classify without throwing', () => {
     for (const rel of INTEGRATION_FILES) {
       expect(() =>
         classifySkipIfCases(rel, readFileSync(join(REPO_ROOT, rel), 'utf-8')),

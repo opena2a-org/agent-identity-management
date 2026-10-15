@@ -56,7 +56,7 @@ func (p *GoogleProvider) ExchangeCode(ctx context.Context, code string) (accessT
 	data.Set("grant_type", "authorization_code")
 
 	// Debug logging (can be removed in production)
-	fmt.Printf("🔍 Google OAuth Token Exchange Debug:\n")
+	fmt.Printf("Google OAuth Token Exchange Debug:\n")
 	fmt.Printf("   URL: %s\n", googleTokenURL)
 	fmt.Printf("   Client ID: %s\n", p.clientID)
 	fmt.Printf("   Redirect URI: %s\n", p.redirectURI)
@@ -81,7 +81,7 @@ func (p *GoogleProvider) ExchangeCode(ctx context.Context, code string) (accessT
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("❌ Google OAuth Error Response (Status %d):\n%s\n", resp.StatusCode, string(body))
+		fmt.Printf("Google OAuth Error Response (Status %d):\n%s\n", resp.StatusCode, string(body))
 		return "", "", 0, fmt.Errorf("token exchange failed: %s", string(body))
 	}
 

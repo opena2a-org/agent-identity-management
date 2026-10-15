@@ -49,14 +49,14 @@ function captureHeaders(): {
 }
 
 describe('enroll and purge identify their build like the emitter does', () => {
-  it('AIM-12.AC3 item 7: enrollSensor sends User-Agent OpenA2A-ARP/<VERSION>', async () => {
+  it('enrollSensor sends User-Agent OpenA2A-ARP/<VERSION>', async () => {
     const { headers, fetchImpl } = captureHeaders();
     await enrollSensor(undefined, { fetchImpl });
     expect(headers()).toBeDefined();
     expect(headers()!['User-Agent']).toBe(`OpenA2A-ARP/${VERSION}`);
   });
 
-  it('AIM-12.AC3 item 7: purgeRemoteSignatures sends User-Agent OpenA2A-ARP/<VERSION>', async () => {
+  it('purgeRemoteSignatures sends User-Agent OpenA2A-ARP/<VERSION>', async () => {
     const { headers, fetchImpl } = captureHeaders();
     await purgeRemoteSignatures(undefined, { fetchImpl });
     expect(headers()).toBeDefined();

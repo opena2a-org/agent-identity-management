@@ -124,7 +124,7 @@ function populationReport(a2aSkips: number): object {
 }
 
 describe('check-vitest-report allowlist: every entry binds its file to a skip bound', () => {
-  it('AIM-19.AC1 tolerates skips in an allowlisted file only while their count is at or below the bound, and passes a count below it', () => {
+  it('tolerates skips in an allowlisted file only while their count is at or below the bound, and passes a count below it', () => {
     const atBound = runChecker([writeReport(populationReport(21)), ...BOUND_FLAGS]);
     expect(atBound.status, atBound.output).toBe(0);
 
@@ -142,7 +142,7 @@ describe('check-vitest-report allowlist: every entry binds its file to a skip bo
     expect(zeroSkips.status, zeroSkips.output).toBe(0);
   });
 
-  it('AIM-19.AC1 the ok line lists every entry as <file> <skipped>/<bound> when skips remain', () => {
+  it('the ok line lists every entry as <file> <skipped>/<bound> when skips remain', () => {
     const res = runChecker([writeReport(populationReport(21)), ...BOUND_FLAGS]);
     expect(res.status, res.output).toBe(0);
     const okLine = res.stdout.split('\n').find((l) => l.startsWith('ok:')) ?? '';
@@ -151,7 +151,7 @@ describe('check-vitest-report allowlist: every entry binds its file to a skip bo
     expect(okLine).toContain(`${OAUTH} 2/2`);
   });
 
-  it('AIM-19.AC1 the per-status counts line keeps its text and precedes the verdict', () => {
+  it('the per-status counts line keeps its text and precedes the verdict', () => {
     const res = runChecker([writeReport(populationReport(21)), ...BOUND_FLAGS]);
     expect(res.status, res.output).toBe(0);
     const lines = res.stdout.split('\n').filter((l) => l.length > 0);
@@ -164,7 +164,7 @@ describe('check-vitest-report allowlist: every entry binds its file to a skip bo
     );
   });
 
-  it('AIM-19.AC2 refuses 22 skips in src/a2a/A2AClient.integration.test.ts against its bound of 21, naming the file, the count, the bound and the delta', () => {
+  it('refuses 22 skips in src/a2a/A2AClient.integration.test.ts against its bound of 21, naming the file, the count, the bound and the delta', () => {
     // The planted fault: one skipIf case added to the A2A file. Before
     // the bound, this report exited 0 and only the counts line
     // (skipped=37) witnessed the growth.
@@ -182,7 +182,7 @@ describe('check-vitest-report allowlist: every entry binds its file to a skip bo
     expect(identicalAtBound.status, identicalAtBound.output).toBe(0);
   });
 
-  it('AIM-19.AC2 an over-bound file is refused even when the other entries are below their bounds', () => {
+  it('an over-bound file is refused even when the other entries are below their bounds', () => {
     const report = buildReport([
       { file: A2A, status: 'skipped', n: 5 },
       { file: CLIENT, status: 'skipped', n: 13 },
@@ -203,7 +203,7 @@ describe('check-vitest-report allowlist: every entry binds its file to a skip bo
     `--allow-skips=${A2A}:many`,
     `--allow-skips=${A2A}:-1`,
   ]) {
-    it(`AIM-19.AC3 refuses ${entry} with exit 2, quoting the entry, before any verdict on the report`, () => {
+    it(`refuses ${entry} with exit 2, quoting the entry, before any verdict on the report`, () => {
       const res = runChecker([writeReport(populationReport(21)), entry]);
       expect(res.status, res.output).toBe(2);
       expect(res.stderr).toContain(entry.slice('--allow-skips='.length));
@@ -214,7 +214,7 @@ describe('check-vitest-report allowlist: every entry binds its file to a skip bo
     });
   }
 
-  it('AIM-19.AC3 refuses a bare entry even when the report would otherwise pass, and even before an unreadable report is opened', () => {
+  it('refuses a bare entry even when the report would otherwise pass, and even before an unreadable report is opened', () => {
     const passing = writeReport(
       buildReport([{ file: 'src/version.test.ts', status: 'passed', n: 3 }]),
     );

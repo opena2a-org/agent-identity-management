@@ -97,7 +97,7 @@ function findSdkTestJob(): { id: string; job: WorkflowJob } {
 }
 
 describe('ci.yml runs the SDK suite in a job the CI Gate needs', () => {
-  it('AIM-05.AC1 a job runs npm ci, then vitest with the zero-skip refusal under CI=true, then npm run typecheck, in sdk/typescript', () => {
+  it('a job runs npm ci, then vitest with the zero-skip refusal under CI=true, then npm run typecheck, in sdk/typescript', () => {
     const { job } = findSdkTestJob();
     const steps = job.steps ?? [];
     const runOf = (s: WorkflowStep) => s.run ?? '';
@@ -133,7 +133,7 @@ describe('ci.yml runs the SDK suite in a job the CI Gate needs', () => {
     expect(testRun).toContain('scripts/check-vitest-report.mjs');
   });
 
-  it('AIM-05.AC2 the ci-gate needs the SDK test job on top of the twelve baseline entries, and its verify step checks the job result as an unconditional requirement', () => {
+  it('the ci-gate needs the SDK test job on top of the twelve baseline entries, and its verify step checks the job result as an unconditional requirement', () => {
     const { id } = findSdkTestJob();
     const gate = workflow.jobs['ci-gate'];
     expect(gate, 'the ci-gate job must exist').toBeDefined();
@@ -169,7 +169,7 @@ describe('ci.yml runs the SDK suite in a job the CI Gate needs', () => {
     ).toContain(`"${id}:$`);
   });
 
-  it('AIM-05.AC3 the SDK test job has no continue-on-error at the job level or on any step', () => {
+  it('the SDK test job has no continue-on-error at the job level or on any step', () => {
     const { job } = findSdkTestJob();
     expect(job['continue-on-error']).toBeUndefined();
     for (const step of job.steps ?? []) {
@@ -180,7 +180,7 @@ describe('ci.yml runs the SDK suite in a job the CI Gate needs', () => {
     }
   });
 
-  it('AIM-05.AC3 no step of the SDK test job masks its exit code with || true', () => {
+  it('no step of the SDK test job masks its exit code with || true', () => {
     const { job } = findSdkTestJob();
     for (const step of job.steps ?? []) {
       expect(
@@ -190,7 +190,7 @@ describe('ci.yml runs the SDK suite in a job the CI Gate needs', () => {
     }
   });
 
-  it('AIM-05.AC3 the SDK test job has no if: condition on the job or its steps, so it cannot skip on pull requests', () => {
+  it('the SDK test job has no if: condition on the job or its steps, so it cannot skip on pull requests', () => {
     const { job } = findSdkTestJob();
     expect(job.if, 'the job must be unconditional').toBeUndefined();
     for (const step of job.steps ?? []) {

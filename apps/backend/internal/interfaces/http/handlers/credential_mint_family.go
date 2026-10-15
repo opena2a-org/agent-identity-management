@@ -101,6 +101,6 @@ func recordMintRefused(c fiber.Ctx, audit AuditServicer, route, family, cause st
 	}
 	meta := map[string]interface{}{"familyId": family, "jti": jti, "route": route, "cause": cause}
 	if err := audit.LogAction(c.Context(), orgID, userID, domain.AuditActionCredentialMintRefused, "user", userID, ip, ua, meta); err != nil {
-		log.Printf("⚠️  %s: audit row for family %s not written: %v", route, family, err)
+		log.Printf("%s: audit row for family %s not written: %v", route, family, err)
 	}
 }

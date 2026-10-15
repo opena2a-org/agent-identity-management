@@ -67,12 +67,12 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 	// Get organization ID from context
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
 	if !ok {
-		log.Printf("❌ Supply chain analytics: organization_id not found in context, locals: %v", c.Locals("organization_id"))
+		log.Printf("Supply chain analytics: organization_id not found in context, locals: %v", c.Locals("organization_id"))
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Organization ID not found in context",
 		})
 	}
-	log.Printf("✅ Supply chain analytics: orgID=%s", orgID)
+	log.Printf("Supply chain analytics: orgID=%s", orgID)
 
 	// Get days parameter (default 7)
 	days := 7
@@ -85,26 +85,26 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 	// Get supply chain stats
 	stats, err := h.connectionRepo.GetSupplyChainStats(c.Context(), orgID)
 	if err != nil {
-		log.Printf("❌ GetSupplyChainStats error: %v", err)
+		log.Printf("GetSupplyChainStats error: %v", err)
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
-	log.Printf("✅ Stats: connections=%d, attestations=%d", stats.TotalConnections, stats.TotalAttestations)
+	log.Printf("Stats: connections=%d, attestations=%d", stats.TotalConnections, stats.TotalAttestations)
 
 	// Get attestation trend
 	trend, err := h.connectionRepo.GetAttestationTrend(c.Context(), orgID, days)
 	if err != nil {
-		log.Printf("❌ GetAttestationTrend error: %v", err)
+		log.Printf("GetAttestationTrend error: %v", err)
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
-	log.Printf("✅ Trend: %d entries", len(trend))
+	log.Printf("Trend: %d entries", len(trend))
 
 	// Get connections with details
 	connections, err := h.connectionRepo.ListByOrganization(c.Context(), orgID)
 	if err != nil {
-		log.Printf("❌ ListByOrganization error: %v", err)
+		log.Printf("ListByOrganization error: %v", err)
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
-	log.Printf("✅ Connections: %d found", len(connections))
+	log.Printf("Connections: %d found", len(connections))
 
 	// Build agent and MCP server name maps for lookup
 	agentNames := make(map[string]string)
@@ -113,22 +113,22 @@ func (h *SupplyChainHandler) GetSupplyChainAnalytics(c fiber.Ctx) error {
 	// Get all agents for org
 	agents, err := h.agentRepo.GetByOrganization(orgID)
 	if err != nil {
-		log.Printf("⚠️ Failed to get agents for org %s: %v", orgID, err)
+		log.Printf("Failed to get agents for org %s: %v", orgID, err)
 	}
 	for _, agent := range agents {
 		agentNames[agent.ID.String()] = agent.DisplayName
 	}
-	log.Printf("✅ Loaded %d agents for name lookup", len(agents))
+	log.Printf("Loaded %d agents for name lookup", len(agents))
 
 	// Get all MCP servers for org
 	mcpServers, err := h.mcpRepo.GetByOrganization(orgID)
 	if err != nil {
-		log.Printf("⚠️ Failed to get MCP servers for org %s: %v", orgID, err)
+		log.Printf("Failed to get MCP servers for org %s: %v", orgID, err)
 	}
 	for _, mcp := range mcpServers {
 		mcpNames[mcp.ID.String()] = mcp.Name
 	}
-	log.Printf("✅ Loaded %d MCP servers for name lookup", len(mcpServers))
+	log.Printf("Loaded %d MCP servers for name lookup", len(mcpServers))
 
 	// Transform connections to include names
 	connectionDetails := make([]ConnectionWithDetails, 0, len(connections))
@@ -196,10 +196,10 @@ func (h *SupplyChainHandler) GetCapabilityDriftAlerts(c fiber.Ctx) error {
 	// Get capability drift alerts
 	alerts, stats, err := h.capabilityRepo.GetCapabilityDriftAlerts(orgID, days)
 	if err != nil {
-		log.Printf("❌ GetCapabilityDriftAlerts error: %v", err)
+		log.Printf("GetCapabilityDriftAlerts error: %v", err)
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
-	log.Printf("✅ Drift alerts: %d alerts found", len(alerts))
+	log.Printf("Drift alerts: %d alerts found", len(alerts))
 
 	// Ensure alerts is not nil (return empty array instead)
 	if alerts == nil {

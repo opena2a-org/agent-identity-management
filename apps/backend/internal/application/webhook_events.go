@@ -34,7 +34,7 @@ func sendWebhookEvent(d webhookEventDispatcher, orgID uuid.UUID, event domain.We
 	}
 	go func() {
 		if err := d.TriggerEvent(context.Background(), orgID, event, data); err != nil {
-			fmt.Printf("⚠️  Failed to trigger %s webhook: %v\n", event, err)
+			fmt.Printf("Failed to trigger %s webhook: %v\n", event, err)
 		}
 	}()
 }

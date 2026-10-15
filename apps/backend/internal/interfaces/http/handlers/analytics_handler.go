@@ -1257,7 +1257,7 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
 		// 🔍 LOG DETAILED ERROR for debugging
-		log.Printf("❌ Failed to fetch agents for org %s: %v", orgID.String(), err)
+		log.Printf("Failed to fetch agents for org %s: %v", orgID.String(), err)
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
@@ -1436,7 +1436,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	`
 	if h.db != nil {
 		if err := h.db.QueryRow(verificationQuery, orgID, startTime).Scan(&verificationCount); err != nil {
-			log.Printf("❌ Error fetching verification count: %v", err)
+			log.Printf("Error fetching verification count: %v", err)
 			verificationCount = 0
 		}
 	}
@@ -1451,7 +1451,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	`
 	if h.db != nil {
 		if err := h.db.QueryRow(attestationQuery, orgID, startTime).Scan(&attestationCount); err != nil {
-			log.Printf("❌ Error fetching attestation count: %v", err)
+			log.Printf("Error fetching attestation count: %v", err)
 			attestationCount = 0
 		}
 	}
@@ -1476,14 +1476,14 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	if h.db != nil {
 		rows, err := h.db.Query(activityByDayQuery, orgID, startTime)
 		if err != nil {
-			log.Printf("❌ Error fetching activity by day: %v", err)
+			log.Printf("Error fetching activity by day: %v", err)
 			activityByDay = []DailyActivity{}
 		} else {
 			defer rows.Close()
 			for rows.Next() {
 				var activity DailyActivity
 				if err := rows.Scan(&activity.Date, &activity.Count); err != nil {
-					log.Printf("❌ Error scanning activity row: %v", err)
+					log.Printf("Error scanning activity row: %v", err)
 					continue
 				}
 				activityByDay = append(activityByDay, activity)
@@ -1524,7 +1524,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	if h.db != nil {
 		activityRows, err := h.db.Query(recentActivityQuery, orgID, startTime)
 		if err != nil {
-			log.Printf("❌ Error fetching recent activity: %v", err)
+			log.Printf("Error fetching recent activity: %v", err)
 			recentActivity = []RecentActivity{}
 		} else {
 			defer activityRows.Close()
@@ -1539,7 +1539,7 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 					&activity.CreatedAt,
 					&activity.DurationMs,
 				); err != nil {
-					log.Printf("❌ Error scanning recent activity row: %v", err)
+					log.Printf("Error scanning recent activity row: %v", err)
 					continue
 				}
 				recentActivity = append(recentActivity, activity)
@@ -1552,13 +1552,13 @@ func (h *AnalyticsHandler) GetActivitySummary(c fiber.Ctx) error {
 	// Get agent and MCP server counts
 	agents, err := h.getAgentService().ListAgents(c.Context(), orgID)
 	if err != nil {
-		log.Printf("❌ Error fetching agents: %v", err)
+		log.Printf("Error fetching agents: %v", err)
 		agents = []*domain.Agent{}
 	}
 
 	mcpServers, err := h.getMCPService().ListMCPServers(c.Context(), orgID)
 	if err != nil {
-		log.Printf("❌ Error fetching MCP servers: %v", err)
+		log.Printf("Error fetching MCP servers: %v", err)
 		mcpServers = []*domain.MCPServer{}
 	}
 

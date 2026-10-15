@@ -8,18 +8,18 @@ import { describe, it, expect } from 'vitest';
 import { parseAPIError, AuthenticationError } from './exceptions';
 
 describe('parseAPIError message hygiene', () => {
-  it('AIM-12.AC3 item 12: a huge body message is capped, not passed through whole', () => {
+  it('a huge body message is capped, not passed through whole', () => {
     const err = parseAPIError(500, { message: 'x'.repeat(100_000) });
     expect(err.message.length).toBeLessThanOrEqual(600);
     expect(err.message).toContain('truncated');
   });
 
-  it('AIM-12.AC3 item 12: a non-string message falls back to "Unknown error"', () => {
+  it('a non-string message falls back to "Unknown error"', () => {
     const err = parseAPIError(500, { message: { nested: 'object' } });
     expect(err.message).toBe('Unknown error');
   });
 
-  it('AIM-12.AC3 item 12: the cap applies on every status branch, 401 included', () => {
+  it('the cap applies on every status branch, 401 included', () => {
     const err = parseAPIError(401, { error: 'y'.repeat(100_000) });
     expect(err).toBeInstanceOf(AuthenticationError);
     expect(err.message.length).toBeLessThanOrEqual(600);
