@@ -157,7 +157,7 @@ def main():
             }
         )
 
-        print(f"   ✅ Registered {mcp_result.get('added', 0)} MCP server(s)")
+        print(f"   ✅ Registered {len(mcp_result.get('added_servers', []))} MCP server(s)")
         print()
 
     except Exception as e:

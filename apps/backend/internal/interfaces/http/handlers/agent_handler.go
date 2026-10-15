@@ -1249,7 +1249,7 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 	// Validate input
 	if len(req.MCPServerIDs) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "mcp_server_ids is required and must not be empty",
+			"error": "mcpServerIds is required and must not be empty",
 		})
 	}
 

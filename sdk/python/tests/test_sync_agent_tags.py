@@ -49,12 +49,14 @@ def _sync(tags, on_agent=(), post=None):
     """
     Run the sync against a mocked tag route and return the requests it made.
 
-    ``on_agent`` is the GET answer. ``post`` is the POST answer as keyword
-    arguments for ``responses``; with ``post=None`` no POST is registered, so a
-    POST the SDK made is still recorded but fails to connect.
+    ``on_agent`` is the GET answer: a list of tags, or a dict that wraps one.
+    ``post`` is the POST answer as keyword arguments for ``responses``; with
+    ``post=None`` no POST is registered, so a POST the SDK made is still
+    recorded but fails to connect.
     """
+    answer = on_agent if isinstance(on_agent, dict) else list(on_agent)
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
-        rsps.add(responses.GET, TAGS_URL, json=list(on_agent), status=200)
+        rsps.add(responses.GET, TAGS_URL, json=answer, status=200)
         if post is not None:
             rsps.add(responses.POST, TAGS_URL, **post)
         _sync_agent_tags(AIM_URL, HEADERS, AGENT_ID, tags)
@@ -127,12 +129,71 @@ def test_a_tag_id_is_sent_once_and_in_the_form_the_backend_returns(said):
 @pytest.mark.parametrize(
     "entry",
     [
+        "urn:uuid:" + TAG_ID,
+        "URN:UUID:" + TAG_ID.upper(),
+        "{" + TAG_ID + "}",
+    ],
+    ids=["urn", "urn-upper-case", "braces"],
+)
+def test_the_urn_and_brace_spellings_of_a_tag_id_are_ids(said, entry):
+    # The backend's parser (uuid.Parse) reads both spellings, and registration
+    # accepts them as tag IDs.
+    made = _sync([entry, OTHER_TAG_ID], post={"status": 204})
+
+    assert json.loads(_posts(made)[0].body) == {"tagIds": [TAG_ID, OTHER_TAG_ID]}
+    assert said["success"] == [f"Applied 2 tag(s): {TAG_ID}, {OTHER_TAG_ID}"]
+    assert said["warning"] == []
+
+
+def test_a_tag_id_in_its_urn_spelling_already_on_the_agent_sends_no_request(said):
+    made = _sync(["urn:uuid:" + TAG_ID], on_agent=[_tag(TAG_ID, "production")])
+
+    assert [r.method for r in made] == ["GET"]
+    assert said == {"success": [], "warning": []}
+
+
+def test_a_name_that_holds_a_tag_id_is_a_name(said):
+    # Only a whole entry is a tag ID: a name with an ID inside it is not sent.
+    named = "release-" + OTHER_TAG_ID
+    made = _sync([named, TAG_ID], post={"status": 204})
+
+    assert json.loads(_posts(made)[0].body) == {"tagIds": [TAG_ID]}
+    assert said["success"] == [f"Applied 1 tag(s): {TAG_ID}"]
+    assert len(said["warning"]) == 1
+    assert named in said["warning"][0]
+
+
+def test_tags_wrapped_in_a_tags_member_are_read(said):
+    made = _sync(
+        ["production", TAG_ID],
+        on_agent={"tags": [_tag(TAG_ID, "production")]},
+    )
+
+    assert [r.method for r in made] == ["GET"]
+    assert said == {"success": [], "warning": []}
+
+
+def test_a_tag_id_the_backend_returns_in_another_spelling_is_on_the_agent(said):
+    made = _sync([TAG_ID], on_agent=[_tag(TAG_ID.upper(), "production")])
+
+    assert [r.method for r in made] == ["GET"]
+    assert said == {"success": [], "warning": []}
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
         # 32 characters that Python's uuid.UUID() reads and the backend's parser refuses.
         "0x" + "a" * 30,
         # The digits of a UUID with one hyphen missing.
         "7c9e66797425-40de-944b-e07fc1f90ae7",
+        # Prefixes and braces the backend's parser reads only around the 36-character form.
+        "urn:uuid:" + TAG_ID.replace("-", ""),
+        "{" + TAG_ID.replace("-", "") + "}",
+        # A prefix Python's uuid.UUID() strips and the backend's parser does not read.
+        "uuid:" + TAG_ID,
     ],
-    ids=["hex-prefix", "misplaced-hyphens"],
+    ids=["hex-prefix", "misplaced-hyphens", "urn-of-32-digits", "braces-of-32-digits", "uuid-prefix"],
 )
 def test_an_entry_the_backend_would_not_read_as_a_uuid_is_not_sent(said, entry):
     made = _sync([entry, TAG_ID], post={"status": 204})

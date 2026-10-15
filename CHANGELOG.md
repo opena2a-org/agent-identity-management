@@ -159,6 +159,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   with the handler tests on a downloaded token that its owner logged out and then presented for recovery.
 - Test: `TestRecoverRevokedToken_RefusesALoggedOutSDKToken`, with and without a revocation store.
 
+### Fixed — MCP server creation requires a name and a URL, and an agent's MCP server list holds each server once (#623)
+
+- `POST /api/v1/mcp-servers` and `POST /api/v1/sdk-api/agents/{id}/mcp-servers` answer 400 `name and url are
+  required` (or the one that is missing) for a body without a name or a URL. They stored a server with an empty
+  name and URL, and answered the next such body 409. That body was what the generated Python SDK sent to add a
+  server to an agent's list.
+- `PUT /api/v1/agents/{id}/mcp-servers` compares the given identifiers with the agent's list by MCP server: a server
+  of the organization already on the list by its ID is not added again by its name, or the other way round.
+  It compared them as strings, so one server added both ways left two entries, and `total_count` said 2 while
+  `GET /api/v1/agents/{id}/mcp-servers` listed one server. An identifier that names no server of the organization
+  is compared as given.
+- `PUT /api/v1/agents/{id}/mcp-servers` answers an empty list with `mcpServerIds is required and must not be
+  empty`, naming the member it reads. It named `mcp_server_ids`.
+- The Python SDK generated for an agent's download sends `register_mcp` to `PUT /api/v1/agents/{id}/mcp-servers`
+  with `mcpServerIds`, `detectedMethod`, `confidence` and `metadata`. It posted `mcp_server_ids` and
+  `detected_method` to the route that creates an MCP server. AIM adds to an agent's list only for a signed-in user
+  with the member role or higher and the generated SDK holds the agent's signing keys only, so the call raises an
+  `AuthenticationError` that says so and points to the agent's page in the dashboard.
+- The deleted-agent notice of the agents list wraps an agent name that has no space or hyphen. At 375 px a
+  41-character name made the page scroll sideways and put the Dismiss button out of view, in the list view and in
+  the error view.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the

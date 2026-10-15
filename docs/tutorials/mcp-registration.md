@@ -37,7 +37,7 @@ After registering, go to an agent's detail page and connect it to the MCP server
 
 ## Method 2: Via Python SDK
 
-Register MCP servers programmatically when your agent starts:
+Link an MCP server that is registered in AIM (Method 1 or 3) to your agent when it starts, by the server's name or ID:
 
 ```python
 from aim_sdk import secure
@@ -45,18 +45,16 @@ from aim_sdk import secure
 # Initialize your agent
 agent = secure("my-agent")
 
-# Register an MCP server
-mcp_result = agent.register_mcp(
-    server_name="filesystem-server",
-    server_url="stdio://filesystem-server",
-    capabilities=["read_file", "write_file", "list_directory"]
-)
+# Add the MCP server to the agent's list
+mcp_result = agent.register_mcp("filesystem-server")
 
-print(f"MCP Server registered: {mcp_result['id']}")
+print(f"Added: {mcp_result['added_servers']}")  # [] when it was already on the list
 
 # The agent is now linked to this MCP server
 # AIM will detect if this agent connects to any OTHER servers
 ```
+
+`register_mcp` does not create the MCP server. AIM accepts it only from a signed-in user with the member role or higher, so the call needs the sign-in saved by `aim-sdk login`; a client that holds only an API key or the agent's signing keys gets an `AuthenticationError`.
 
 > **Auto-Detection:** If you're using Claude Desktop, AIM can automatically detect MCP servers from your `claude_desktop_config.json`. Just run `agent = secure("my-agent")` and they'll be registered automatically!
 
@@ -64,15 +62,16 @@ print(f"MCP Server registered: {mcp_result['id']}")
 
 ## Method 3: Via REST API
 
+Registering an MCP server takes the access token of a signed-in user with the member role or higher, and the server needs a `name` and a `url`.
+
 ```bash
 # Register an MCP server
 curl -X POST "http://localhost:8080/api/v1/mcp-servers" \
-  -H "Authorization: Bearer $AIM_API_KEY" \
+  -H "Authorization: Bearer $AIM_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "github-server",
-    "display_name": "GitHub MCP Server",
-    "server_url": "stdio://github-server",
+    "url": "stdio://github-server",
     "capabilities": ["read_repo", "create_issue", "create_pr"],
     "description": "GitHub integration for code operations"
   }'

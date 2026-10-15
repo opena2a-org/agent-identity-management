@@ -1700,40 +1700,57 @@ public class AIMClient implements AutoCloseable {
      * Add an MCP server to this agent's list of MCP servers.
      *
      * Sends {@code PUT /api/v1/agents/{id}/mcp-servers} with {@code mcpServerIds},
-     * {@code detectedMethod} and {@code confidence}, the members the server reads.
-     * AIM adds to an agent's list only for a signed-in user with the member role or
-     * higher, so the call succeeds when the client holds the SDK sign-in (a refresh
-     * token from the dashboard's SDK download). The method does not create an MCP
-     * server: the agent's list shows the server once one with that ID or name is
-     * registered in the organization.
+     * {@code detectedMethod}, {@code confidence} and {@code metadata}, the members
+     * the server reads. AIM adds to an agent's list only for a signed-in user with
+     * the member role or higher, so the call succeeds when the client holds the SDK
+     * sign-in (a refresh token from the dashboard's SDK download). The method does
+     * not create an MCP server: the agent's list shows the server once one with that
+     * ID or name is registered in the organization.
      *
      * @param mcpServerId     MCP server ID or name to add
      * @param detectionMethod How the MCP was detected ("manual", "auto_sdk", "auto_config", "cli")
      * @param confidence      Detection confidence score (0-100, default: 100 for manual)
      * @return what AIM answers: {@code message}, {@code talksTo}, {@code added_servers} and {@code total_count}
+     * @throws AIMException if AIM refuses or fails the request; a refusal (401 or 403)
+     *         says what the route admits and keeps its status code
      */
     public Map<String, Object> registerMcp(String mcpServerId, String detectionMethod, double confidence) {
+        String response;
         try {
             ObjectNode payload = objectMapper.createObjectNode();
             var mcpArray = payload.putArray("mcpServerIds");
             mcpArray.add(mcpServerId);
             payload.put("detectedMethod", detectionMethod != null ? detectionMethod : "manual");
             payload.put("confidence", confidence);
+            payload.putObject("metadata");
 
             String agentId = getAgentId();
-            String response = put("/api/v1/agents/" + agentId + "/mcp-servers", payload.toString());
+            response = put("/api/v1/agents/" + agentId + "/mcp-servers", payload.toString());
+        } catch (AIMException e) {
+            String reason = "Failed to register MCP server: " + e.getMessage();
+            if (e.getStatusCode() == 401 || e.getStatusCode() == 403) {
+                reason += ". AIM adds an MCP server to an agent's list only for a signed-in user"
+                        + " with the member role or higher.";
+            }
+            throw new AIMException(reason, e.getErrorCode(), e.getStatusCode(), e);
+        } catch (Exception e) {
+            throw new AIMException("Failed to register MCP server: " + e.getMessage(), e);
+        }
+
+        try {
             logger.info("Added MCP server to agent: {}", mcpServerId);
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
-            throw new AIMException("Failed to register MCP server: " + e.getMessage(), e);
+            throw new AIMException("Failed to read the MCP registration answer: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Register an MCP server with default detection method and confidence.
+     * Add an MCP server to this agent's list with the "manual" detection method
+     * and a confidence of 100. See {@link #registerMcp(String, String, double)}.
      *
-     * @param mcpServerId MCP server ID or name to register
-     * @return Map containing registration result
+     * @param mcpServerId MCP server ID or name to add
+     * @return what AIM answered
      */
     public Map<String, Object> registerMcp(String mcpServerId) {
         return registerMcp(mcpServerId, "manual", 100.0);

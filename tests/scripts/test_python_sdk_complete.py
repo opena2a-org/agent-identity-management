@@ -125,7 +125,7 @@ def main():
     for mcp in test_mcps:
         try:
             mcp_result = client.register_mcp(**mcp)
-            registered_count += mcp_result.get('added', 0)
+            registered_count += len(mcp_result.get('added_servers', []))
             print(f"   ✅ Registered: {mcp['mcp_server_id']}")
         except Exception as e:
             print(f"   ⚠️  Failed to register {mcp['mcp_server_id']}: {e}")

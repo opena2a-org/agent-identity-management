@@ -233,7 +233,7 @@ The SDK provides **smart attestation** - intelligent, automatic attestation that
 
 ### Two Types of Attestation
 
-1. **Registration-Time Attestation**: When agents register MCP servers via `secure()` or `register_mcp()`
+1. **Registration-Time Attestation**: When agents register MCP servers via `secure(..., mcp_servers=[...])`. Adding a server to an agent's list with `register_mcp()` does not attest it.
 2. **Smart Attestation on Tool Use**: When agents use MCP tools via `use_mcp_tool()` (NEW in v1.8.0)
 
 ### Smart Attestation Triggers

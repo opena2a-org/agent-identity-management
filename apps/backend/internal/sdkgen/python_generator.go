@@ -658,19 +658,31 @@ class AIMClient:
         confidence: float = 100.0,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict:
-        """Register an MCP server to this agent's talks_to list."""
+        """Add an MCP server registered in AIM to this agent's talks_to list, by its ID or name.
+
+        AIM adds to an agent's list only for a signed-in user with the member
+        role or higher. This client holds the agent's signing keys only, so AIM
+        refuses the call and it raises AuthenticationError. Add the server on
+        the agent's page in the AIM dashboard instead.
+        """
         try:
             result = self._make_request(
-                method="POST",
-                endpoint=f"/api/v1/sdk-api/agents/{self.agent_id}/mcp-servers",
+                method="PUT",
+                endpoint=f"/api/v1/agents/{self.agent_id}/mcp-servers",
                 data={
-                    "mcp_server_ids": [mcp_server_id],
-                    "detected_method": detection_method,
+                    "mcpServerIds": [mcp_server_id],
+                    "detectedMethod": detection_method,
                     "confidence": confidence,
                     "metadata": metadata or {}
                 }
             )
             return result
+        except AuthenticationError as e:
+            raise AuthenticationError(
+                f"{e}. AIM adds an MCP server to an agent's list only for a signed-in "
+                "user with the member role or higher, and this client holds the agent's "
+                "signing keys only. Add the server on the agent's page in the AIM dashboard."
+            )
         except Exception as e:
             raise VerificationError(f"MCP registration failed: {e}")
 

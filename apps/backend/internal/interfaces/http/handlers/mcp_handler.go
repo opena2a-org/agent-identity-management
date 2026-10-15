@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -247,6 +248,27 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
+		})
+	}
+
+	// Bind does not enforce the request type's validate tags. A body without
+	// a name and a URL (one meant for the route that adds servers to an
+	// agent's list, for example) stored a server with both empty, and the
+	// next such body was answered 409 on the empty URL.
+	missing := make([]string, 0)
+	if strings.TrimSpace(req.Name) == "" {
+		missing = append(missing, "name")
+	}
+	if strings.TrimSpace(req.URL) == "" {
+		missing = append(missing, "url")
+	}
+	if len(missing) > 0 {
+		verb := "is"
+		if len(missing) > 1 {
+			verb = "are"
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": strings.Join(missing, " and ") + " " + verb + " required",
 		})
 	}
 

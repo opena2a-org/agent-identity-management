@@ -138,6 +138,35 @@ describe("agents list: delete", () => {
     expect(screen.getByRole("status").textContent).toContain(agentDeletedNotice("Billing bot"));
   });
 
+  // A name with no space or hyphen widened the page at 375 px and pushed the
+  // Dismiss button out of view. jsdom does not lay out, so this pins what lets
+  // the name wrap: the text breaks inside a word (break-words) in flex items
+  // that may shrink below their content (min-w-0), and the button keeps its size.
+  it.each([
+    ["the list view", false],
+    ["the error view", true],
+  ])("lets a long agent name wrap in the notice in %s", async (_view, listFails) => {
+    const name = "customer_support_escalation_agent_prod_01";
+    rememberAgentDeleted(name);
+    if (listFails) {
+      vi.mocked(api.listAgents).mockRejectedValue(requestError("Failed to fetch", 503) as never);
+    } else {
+      vi.mocked(api.listAgents).mockResolvedValue({ agents: [] } as never);
+    }
+    render(<AgentsPage />);
+
+    const status = await screen.findByRole("status");
+    await waitFor(() => expect(status.textContent).toContain(agentDeletedNotice(name)));
+
+    const text = within(status).getByText(agentDeletedNotice(name));
+    expect(text.classList.contains("break-words")).toBe(true);
+    expect(text.classList.contains("min-w-0")).toBe(true);
+    const row = text.parentElement as HTMLElement;
+    expect(row.classList.contains("flex")).toBe(true);
+    expect(row.classList.contains("min-w-0")).toBe(true);
+    expect(within(status).getByRole("button", { name: "Dismiss" }).classList.contains("shrink-0")).toBe(true);
+  });
+
   // React runs mount effects twice under StrictMode (the dashboard's development build).
   // The second run finds the notice already taken and must not clear it.
   it("states a delete made from the agent page when its effects run twice", async () => {

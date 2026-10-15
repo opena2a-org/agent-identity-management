@@ -414,19 +414,22 @@ function AgentsPageContent() {
   // Kept in the page while empty so the notice is announced when it appears;
   // sr-only takes it out of the layout until then. The mount effect has already
   // taken the notice out of sessionStorage, so the error view renders it too.
+  // An agent name with no space or hyphen is one long word: min-w-0 lets the
+  // flex items shrink below it and break-words wraps it, so at 375 px the page
+  // does not widen and Dismiss stays in view.
   const deletedNoticeStatus = (
     <div role="status" className={deletedNotice ? undefined : "sr-only"}>
       {deletedNotice && (
         <div className="flex items-center justify-between gap-3 rounded-inset border border-success-border bg-success-fill px-4 py-3 text-sm text-success-text">
-          <span className="flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {deletedNotice}
+            <span className="min-w-0 break-words">{deletedNotice}</span>
           </span>
           <button
             type="button"
             onClick={() => setDeletedNotice(null)}
             aria-label="Dismiss"
-            className="rounded p-1 hover:brightness-95"
+            className="shrink-0 rounded p-1 hover:brightness-95"
           >
             <XCircle className="h-4 w-4" aria-hidden="true" />
           </button>
