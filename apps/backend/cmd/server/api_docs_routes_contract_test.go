@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,10 +30,12 @@ var apiReferenceDocs = []string{
 	"docs/specs/capability-scope-v1.md",
 }
 
-// docRoute is one method and path the server registers.
+// docRoute is one method and path the server registers, with the handlers
+// the route runs in order (none for the paths read from main.go's source).
 type docRoute struct {
 	method   string
 	segments []string
+	handlers []fiber.Handler
 }
 
 // serverRouteTable returns every route the server answers: the /api/v1 table
@@ -47,6 +50,7 @@ func serverRouteTable(t *testing.T) []docRoute {
 	}
 	for _, r := range app.GetRoutes(true) {
 		add(r.Method, r.Path)
+		table[len(table)-1].handlers = r.Handlers
 	}
 
 	bare := regexp.MustCompile(`(?m)^\s*app\.(Get|Post|Put|Patch|Delete)\("([^"]+)"`)
