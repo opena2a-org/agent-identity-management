@@ -115,8 +115,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does not read or write the file, as before.
 - `MCPIntegration.registerServer`, `listServers`, `recordToolUsage` and `verifyAction` send the AIM client's
   access token in the `Authorization` header. They sent `Bearer ` with an empty token. Without an access token
-  to send they now throw `AIMException` before any request is sent; `verifyAction` returns false, as it does on
-  any error.
+  to send they now throw `AIMException` before any request is sent; `verifyAction` returns false, as it does
+  when a request fails.
+- `MCPIntegration.recordToolUsage` sends `mcpServerId`, `toolName`, `mcpUrl`, `mcpName` and `connectionType`, the
+  members `POST /api/v1/sdk-api/agents/{id}/mcp-connections` binds. It sent `mcp_server_id`, `tool_name`,
+  `mcp_url`, `mcp_name` and `connection_type`, which the route does not bind, and the route's handler answered
+  each such body 400: `mcp_server_id is required` when the agent ID was a UUID, `Invalid agent ID` otherwise.
+- `MCPIntegration.listServers` reads the servers from the `mcpServers` member that
+  `GET /api/v1/sdk-api/agents/{id}/mcp-servers` answers with. It read a `servers` member, which that answer does
+  not carry, and returned an empty list. An answer without an `mcpServers` array now throws `AIMException`.
+- The route reads no query parameter, and `listServers` sends none. `listServers(client)` returns every server in
+  the answer; `listServers(client, limit, offset)` skips `offset` of them and returns at most `limit`, and throws
+  `IllegalArgumentException` for a negative `limit` or `offset`.
+- `MCPIntegration.verifyAction` posts the tool name as `capability` to
+  `POST /api/v1/mcp-servers/{id}/verify-capability` and returns true only when the answer's `allowed` is the JSON
+  value `true`. It posted to `/api/v1/mcp-servers/{id}/verify-action`, which the server does not register, and
+  read a `verified` member. The server ID goes into the request path, so a `serverId` that is not a UUID in
+  8-4-4-4-12 hex form, or an empty `toolName`, now throws `IllegalArgumentException` before any request is sent.
+- `MCPIntegration.attestServer`'s refusal names `AIMClient.attestMcp`, which signs the attestation with the private
+  key the client holds.
 - `AIMClient.listAgents` URL-encodes its query parameters. A `status` holding `&`, `#`, `=` or `+` was
   appended as written, so it could add or override query parameters or cut the URL short; the server now
   receives it as the value of the one `status` parameter.

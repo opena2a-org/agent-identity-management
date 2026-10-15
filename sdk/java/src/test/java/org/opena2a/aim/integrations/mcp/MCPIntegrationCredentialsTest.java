@@ -30,7 +30,7 @@ class MCPIntegrationCredentialsTest {
     private static final String AGENT_ID = "agent-123";
     private static final String ACCESS_TOKEN = "test-access-token";
     private static final String SERVER_ID = "6f1c2b9e-4d3a-4f7e-9b2d-0c8e5a7f1d24";
-    private static final String PUBLIC_KEY = "MCowBQYDK2VwAyEAExamplePublicKeyForDemonstration123456789012345";
+    private static final String PUBLIC_KEY = "FAKE-PUBLIC-KEY-PLACEHOLDER-NOT-A-REAL-KEY";
     private static final List<String> CAPABILITIES = List.of("read_file", "write_file");
 
     @FunctionalInterface
@@ -51,14 +51,14 @@ class MCPIntegrationCredentialsTest {
                         "{\"id\":\"" + SERVER_ID + "\",\"name\":\"filesystem-mcp\"}",
                         c -> MCPIntegration.registerServer(c, "filesystem-mcp", "http://localhost:3000",
                                 PUBLIC_KEY, CAPABILITIES)),
-                new Call("listServers", "/api/v1/sdk-api/agents/" + AGENT_ID + "/mcp-servers?limit=50&offset=0",
-                        "{\"servers\":[]}",
+                new Call("listServers", "/api/v1/sdk-api/agents/" + AGENT_ID + "/mcp-servers",
+                        "{\"mcpServers\":[]}",
                         MCPIntegration::listServers),
                 new Call("recordToolUsage", "/api/v1/sdk-api/agents/" + AGENT_ID + "/mcp-connections",
                         "{\"success\":true}",
                         c -> MCPIntegration.recordToolUsage(c, SERVER_ID, "read_file")),
-                new Call("verifyAction", "/api/v1/mcp-servers/" + SERVER_ID + "/verify-action",
-                        "{\"verified\":true}",
+                new Call("verifyAction", "/api/v1/mcp-servers/" + SERVER_ID + "/verify-capability",
+                        "{\"allowed\":true}",
                         c -> MCPIntegration.verifyAction(c, SERVER_ID, "read_file"))
         );
     }

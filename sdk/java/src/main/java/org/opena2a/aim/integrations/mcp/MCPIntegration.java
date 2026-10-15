@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
  * MCP (Model Context Protocol) Integration for AIM.
@@ -63,7 +64,13 @@ public class MCPIntegration {
     private static final String ATTESTATION_UNSIGNABLE =
             "MCPIntegration.attestServer cannot sign an attestation: the signature "
             + "must be made with the agent's Ed25519 private key, which this class "
-            + "cannot reach. No request was sent.";
+            + "cannot reach. No request was sent. AIMClient.attestMcp signs the "
+            + "attestation with the private key the client holds.";
+
+    // A server ID goes into a request path, so anything but a UUID is refused
+    // before a request is built from it.
+    private static final Pattern UUID_FORM = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     private static final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -151,34 +158,50 @@ public class MCPIntegration {
      *
      * @param client AIMClient instance for authentication
      * @return List of MCP server information
+     * @throws AIMException if the request fails or the answer carries no {@code mcpServers} array
      */
     public static List<MCPServerInfo> listServers(AIMClient client) {
-        return listServers(client, 50, 0);
+        return fetchServers(client);
     }
 
     /**
-     * List MCP servers with pagination.
+     * List a slice of the MCP servers registered with AIM for the current organization.
+     *
+     * <p>The server answers with every MCP server of the organization; this
+     * method skips {@code offset} of them and returns at most {@code limit}.</p>
      *
      * @param client AIMClient instance for authentication
      * @param limit  Maximum number of servers to return
      * @param offset Number of servers to skip
      * @return List of MCP server information
+     * @throws IllegalArgumentException if {@code limit} or {@code offset} is negative
+     * @throws AIMException if the request fails or the answer carries no {@code mcpServers} array
      */
     public static List<MCPServerInfo> listServers(AIMClient client, int limit, int offset) {
+        if (limit < 0) {
+            throw new IllegalArgumentException("limit cannot be negative");
+        }
+        if (offset < 0) {
+            throw new IllegalArgumentException("offset cannot be negative");
+        }
+        List<MCPServerInfo> servers = fetchServers(client);
+        int from = Math.min(offset, servers.size());
+        int to = (int) Math.min((long) from + limit, servers.size());
+        return new ArrayList<>(servers.subList(from, to));
+    }
+
+    private static List<MCPServerInfo> fetchServers(AIMClient client) {
         try {
-            String response = get(client, "/api/v1/sdk-api/agents/" + client.getAgentId() +
-                    "/mcp-servers?limit=" + limit + "&offset=" + offset);
-            JsonNode json = objectMapper.readTree(response);
-
-            List<MCPServerInfo> servers = new ArrayList<>();
-            JsonNode serversArray = json.isArray() ? json : json.get("servers");
-
-            if (serversArray != null && serversArray.isArray()) {
-                for (JsonNode serverNode : serversArray) {
-                    servers.add(parseServerInfo(serverNode));
-                }
+            String response = get(client, "/api/v1/sdk-api/agents/" + client.getAgentId() + "/mcp-servers");
+            JsonNode serversArray = objectMapper.readTree(response).get("mcpServers");
+            if (serversArray == null || !serversArray.isArray()) {
+                throw new AIMException("Failed to list MCP servers: the answer carries no mcpServers array");
             }
 
+            List<MCPServerInfo> servers = new ArrayList<>();
+            for (JsonNode serverNode : serversArray) {
+                servers.add(parseServerInfo(serverNode));
+            }
             return servers;
         } catch (IOException e) {
             throw new AIMException("Failed to list MCP servers: " + e.getMessage(), e);
@@ -189,7 +212,9 @@ public class MCPIntegration {
      * Not available: throws {@link AIMException} before any request is sent.
      *
      * <p>The server accepts an attestation only with an Ed25519 signature made
-     * with the agent's private key, and this class cannot reach that key.</p>
+     * with the agent's private key, and this class cannot reach that key.
+     * {@link AIMClient#attestMcp} signs the attestation with the private key
+     * the client holds.</p>
      *
      * @param client           AIMClient instance
      * @param serverId         UUID of the MCP server to attest
@@ -213,7 +238,9 @@ public class MCPIntegration {
      * Not available: throws {@link AIMException} before any request is sent.
      *
      * <p>The server accepts an attestation only with an Ed25519 signature made
-     * with the agent's private key, and this class cannot reach that key.</p>
+     * with the agent's private key, and this class cannot reach that key.
+     * {@link AIMClient#attestMcp} signs the attestation with the private key
+     * the client holds.</p>
      *
      * @param client               AIMClient instance
      * @param serverId             UUID of the MCP server to attest
@@ -282,15 +309,15 @@ public class MCPIntegration {
 
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("mcp_server_id", serverId);
-            payload.put("tool_name", toolName);
+            payload.put("mcpServerId", serverId);
+            payload.put("toolName", toolName);
             if (mcpUrl != null) {
-                payload.put("mcp_url", mcpUrl);
+                payload.put("mcpUrl", mcpUrl);
             }
             if (mcpName != null) {
-                payload.put("mcp_name", mcpName);
+                payload.put("mcpName", mcpName);
             }
-            payload.put("connection_type", "attested");
+            payload.put("connectionType", "attested");
 
             String response = post(client, "/api/v1/sdk-api/agents/" + client.getAgentId() + "/mcp-connections", payload.toString());
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
@@ -303,22 +330,33 @@ public class MCPIntegration {
     /**
      * Verify an MCP action before execution.
      *
+     * <p>Posts the tool name as the {@code capability} of
+     * {@code POST /api/v1/mcp-servers/{id}/verify-capability}.</p>
+     *
      * @param client   AIMClient instance for authentication
      * @param serverId UUID of the MCP server
      * @param toolName Name of the tool being used
-     * @return true if the action is verified
+     * @return true only when the server answers {@code "allowed": true}; false when it
+     *         refuses the action or the request fails
+     * @throws IllegalArgumentException if {@code serverId} is not a UUID or {@code toolName}
+     *         is empty, before any request is sent
      */
     public static boolean verifyAction(AIMClient client, String serverId, String toolName) {
+        if (serverId == null || !UUID_FORM.matcher(serverId).matches()) {
+            throw new IllegalArgumentException("serverId must be a UUID");
+        }
+        if (toolName == null || toolName.isBlank()) {
+            throw new IllegalArgumentException("toolName cannot be empty");
+        }
+
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("mcpServerId", serverId);
-            payload.put("toolName", toolName);
-            payload.put("timestamp", Instant.now().toString());
+            payload.put("capability", toolName);
 
-            String response = post(client, "/api/v1/mcp-servers/" + serverId + "/verify-action", payload.toString());
-            JsonNode json = objectMapper.readTree(response);
+            String response = post(client, "/api/v1/mcp-servers/" + serverId + "/verify-capability", payload.toString());
+            JsonNode allowed = objectMapper.readTree(response).path("allowed");
 
-            return json.has("verified") && json.get("verified").asBoolean();
+            return allowed.isBoolean() && allowed.booleanValue();
         } catch (Exception e) {
             logger.error("Failed to verify MCP action: {}", e.getMessage());
             return false;

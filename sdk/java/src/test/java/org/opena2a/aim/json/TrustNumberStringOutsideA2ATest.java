@@ -103,7 +103,7 @@ class TrustNumberStringOutsideA2ATest {
                                 + v + "}", c -> MCPIntegration.registerServer(c, "filesystem-mcp",
                                 "http://localhost:3000", SERVER_PUBLIC_KEY, List.of("read_file")))),
                 new Cell("MCPIntegration.listServers trustScore", "trustScore", false, "0.75", 0.75,
-                        (t, v) -> t.mcpList("{\"servers\":[{\"id\":\"" + SERVER_ID
+                        (t, v) -> t.mcpList("{\"mcpServers\":[{\"id\":\"" + SERVER_ID
                                 + "\",\"name\":\"filesystem-mcp\",\"trustScore\":" + v + "}]}"))
         );
     }
