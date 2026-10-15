@@ -81,7 +81,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The tenant-scope helpers these settings serve, `WithTenant` and `WithServiceScope`, are added
   in `apps/backend/internal/infrastructure/database`. No request path calls them in this release.
 
-### Security — webhook test deliveries are sent, recorded and logged like event deliveries, and a refused webhook URL is a 400 with a fixed reason
+### Security — webhook test deliveries send the event-delivery headers, are recorded as deliveries and log their failures, and a refused webhook URL is a 400 with a fixed reason
 
 - `POST /api/v1/webhooks/{id}/test` sends the headers an event delivery sends: `Content-Type`,
   `X-Webhook-Signature`, `X-Webhook-Event`, `X-Webhook-ID` and `User-Agent: AIM-Webhook/1.0`. Its
@@ -89,8 +89,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `HTTP <code>` as the error of a non-2xx answer), the duration, the attempt and completion times,
   and at most 1 KB of the endpoint's answer. A test delivery that gets no answer (the connection is
   refused, or the egress client refuses the address) is recorded as a failed delivery with the
-  connection error. A record that cannot be stored is written to the server log and leaves the
-  test's result unchanged.
+  connection error. A record that cannot be stored leaves the test's result unchanged, and the
+  failure to store it is written to the server log.
 - A failed test is reported as `Webhook test failed: the endpoint responded with status <code>` or
   `Webhook test failed: the endpoint could not be reached`. The delivery error is not in the
   answer; it is written to the server log and kept in the delivery record.
