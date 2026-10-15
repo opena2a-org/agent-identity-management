@@ -26,7 +26,7 @@ func TestAgentCreation_WithAllFields(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-full-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user (registration may require approval): %v", err)
 	}
@@ -82,7 +82,7 @@ func TestAgentCreation_MinimalFields(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-minimal-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestAgentCreation_DifferentAgentTypes(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-types-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestAgentCreation_WithCamelCaseFields(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-camel-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestAgentCreation_EmptyBody(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-empty-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestAgentCreation_InvalidJSON(t *testing.T) {
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestAgentLifecycle_CreateReadUpdateDelete(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-crud-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -350,7 +350,7 @@ func TestAgentLifecycle_SuspendReactivate(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-suspend-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -419,7 +419,7 @@ func TestAgentLifecycle_Verify(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-verify-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestAgentTrustScore_GetAndUpdate(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-trust-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -557,7 +557,7 @@ func TestAgentSearch(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-search-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -632,7 +632,7 @@ func TestAgentCredentials(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-creds-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -698,7 +698,7 @@ func TestAgentActivity(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-activity-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}
@@ -763,7 +763,7 @@ func TestAgentAlerts(t *testing.T) {
 	require.NoError(t, tc.WaitForBackend())
 
 	email := fmt.Sprintf("agent-alerts-%d@example.com", time.Now().UnixNano())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	if err != nil {
 		t.Skipf("Could not create test user: %v", err)
 	}

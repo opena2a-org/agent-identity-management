@@ -164,7 +164,25 @@ func (tc *TestContext) LoginAsAdmin() error {
 
 // CreateTestUser registers a user, approves via admin API, and returns a login token.
 // Flow: register → admin approves registration → login as new user → return token.
+// The server gives an approved registration the viewer role, which POST
+// /api/v1/agents refuses with 403 "Member access required"; use
+// CreateTestManager for a test that calls a member or manager route.
 func (tc *TestContext) CreateTestUser(email, password string) (string, error) {
+	return tc.createTestUser(email, password, "")
+}
+
+// CreateTestManager is CreateTestUser for a user with the manager role, which
+// the server's routes to delete, suspend, reactivate and verify an agent
+// require (ManagerMiddleware). The admin sets the role through
+// PUT /api/v1/admin/users/:id/role after the approval and before the sign-in,
+// so the token the user signs in with carries it.
+func (tc *TestContext) CreateTestManager(email, password string) (string, error) {
+	return tc.createTestUser(email, password, "manager")
+}
+
+// createTestUser registers, approves and signs in a user; a non-empty role is
+// set between the approval and the sign-in.
+func (tc *TestContext) createTestUser(email, password, role string) (string, error) {
 	// Ensure admin is logged in (needed to approve registrations)
 	if tc.AdminToken == "" {
 		if err := tc.LoginAsAdmin(); err != nil {
@@ -200,6 +218,22 @@ func (tc *TestContext) CreateTestUser(email, password string) (string, error) {
 	approveResp, approveRespBody := tc.Request("POST", approvePath, nil, tc.AdminToken)
 	if approveResp.StatusCode != 200 {
 		return "", fmt.Errorf("registration approval failed with status %d: %s", approveResp.StatusCode, string(approveRespBody))
+	}
+
+	if role != "" {
+		var approveResult struct {
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+		}
+		if err := json.Unmarshal(approveRespBody, &approveResult); err != nil || approveResult.User.ID == "" {
+			return "", fmt.Errorf("no user id in registration approval response: %s", string(approveRespBody))
+		}
+		rolePath := fmt.Sprintf("/api/v1/admin/users/%s/role", approveResult.User.ID)
+		roleResp, roleRespBody := tc.Request("PUT", rolePath, map[string]interface{}{"role": role}, tc.AdminToken)
+		if roleResp.StatusCode != 200 {
+			return "", fmt.Errorf("setting role %q failed with status %d: %s", role, roleResp.StatusCode, string(roleRespBody))
+		}
 	}
 
 	// Step 3: Login as the new user to get their token

@@ -13,9 +13,14 @@ import (
 // The server mounts StrictRateLimitMiddleware on the public, auth and OAuth
 // route groups: ten requests a minute per client address with the production
 // limits, one hundred under ENVIRONMENT=test. Each group has its own counter.
-// One run of this package sends more requests to the public group than one
-// window admits, so every request from this package to one of those groups
-// passes through strictLimitGate. The gate reads the X-RateLimit-Remaining
+// The /api/v1/mcp-servers group runs RateLimitMiddleware before the JWT
+// middleware sets the user, so that limiter keys every request by client
+// address, signed in or not: one hundred a minute with the production limits,
+// one thousand under ENVIRONMENT=test, and its counter is the one the response
+// headers report. One run of this package sends more requests to the public
+// group, and to the MCP server group, than one window admits, so every
+// request from this package to one of those groups passes through
+// strictLimitGate. The gate reads the X-RateLimit-Remaining
 // and X-RateLimit-Reset headers the limiter writes on each response and, once
 // the window is spent, holds the next request to that group until the window
 // resets, instead of letting the server answer 429. A 429 can still arrive
@@ -26,15 +31,17 @@ import (
 // init puts the gate in front of http.DefaultTransport, so a test that calls
 // http.Post or builds its own http.Client with a nil Transport is paced too.
 
-// strictLimitGroups lists the path prefixes the server limits with
-// StrictRateLimitMiddleware, each a separate counter on the server.
-var strictLimitGroups = []string{"/api/v1/public/", "/api/v1/auth/", "/api/v1/oauth/"}
+// strictLimitGroups lists the path prefixes the gate paces, each a separate
+// per-address counter on the server: the three groups the server limits with
+// StrictRateLimitMiddleware, and the MCP server group.
+var strictLimitGroups = []string{"/api/v1/public/", "/api/v1/auth/", "/api/v1/oauth/", "/api/v1/mcp-servers/"}
 
-// strictLimitGroup returns the strict-limited group a path belongs to, or ""
-// when the path is not under one.
+// strictLimitGroup returns the paced group a path belongs to, or "" when the
+// path is not under one. The group's own path without the trailing slash
+// (GET /api/v1/mcp-servers, the list) belongs to it too.
 func strictLimitGroup(path string) string {
 	for _, prefix := range strictLimitGroups {
-		if strings.HasPrefix(path, prefix) {
+		if strings.HasPrefix(path, prefix) || path == strings.TrimSuffix(prefix, "/") {
 			return prefix
 		}
 	}

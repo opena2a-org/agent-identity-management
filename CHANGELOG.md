@@ -11,6 +11,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the backend integration suite passes against a fresh backend with the production rate limits (#688)
+
+- Measured with the suite and a backend built from the previous commit, on a fresh database with
+  `ENVIRONMENT=test`: 277 top-level tests ran, 258 passed and 19 failed, none on a 429. The causes, each fixed in the suite:
+  - 15 tests that send `POST /api/v1/agents` signed in as a user whose registration the admin approved, which the
+    server gives the viewer role; the request answered 403 `Member access required (viewers cannot perform this action)`.
+    Those tests now sign in through `CreateTestManager`, which sets the manager role between the approval and the
+    sign-in: with the member role, 13 of them still failed, on 403 `Manager or admin access required` from the agent
+    delete, suspend and verify routes they go on to call.
+  - `TestMCPServer_GetByName` put a server name with spaces in the query string unescaped, and the server answered 400.
+    The name is query-escaped.
+  - `TestMCPServer_CrossOrganizationAccessDenied` registered the first address of a new domain and expected it to be
+    approved into an organization of its own; the server held the registration, and the login answered
+    `Account not yet approved by administrator` with no access token. The server approves such a registration only
+    for an address on `AIM_PLATFORM_ADMINS`, so the test registers `TEST_CROSS_ORG_EMAIL`, checks that the user is in
+    an organization other than the admin's, and is skipped when the variable is unset.
+  - `TestOAuthTokenEndpointExists` and `TestOAuthTokenResponseFormat` signed an assertion with no `exp` and the audience
+    `aim`, and the token endpoint answered 401 `Assertion is missing a valid exp claim`. The assertion carries `iat`,
+    an `exp` two minutes ahead and the backend address as its audience.
+- With those fixed and the backend on `ENVIRONMENT=development` (general limit 100 a minute, strict 10), 8 tests that
+  send `/api/v1/mcp-servers` requests with no token were answered 429 where they expected 401. That group's limiter runs
+  before the JWT middleware and counts every request from one address, signed in or not; the suite's rate-limit gate
+  now holds a request to the group once its window is spent, as it does for the public, auth and OAuth groups.
+- After the change, on a fresh database with `ENVIRONMENT=development` and `TEST_CROSS_ORG_EMAIL` on the backend's
+  `AIM_PLATFORM_ADMINS`: 282 top-level tests ran, 282 passed, the backend's request log holds no 429, and the run took
+  435 s. Against the same database with `ENVIRONMENT=test`, 282 passed in 23 s.
+- `tests/README.md` names `TEST_CROSS_ORG_EMAIL`, and the backend HTTP API row of `docs/testing/release-smoke.md` gives the
+  run command with it and the `AIM_PLATFORM_ADMINS` setting it needs, in place of the note that the row was broken.
+- Tests that need no backend: `tests/integration/create_test_user_test.go`, `tests/integration/oauth_assertion_test.go`,
+  and the MCP server group cases in `tests/integration/strict_rate_limit_gate_test.go`.
+
 ### Added — the server delivers agent, trust score, alert and API key events to subscribed webhooks, within limits on retries and pending deliveries (#672)
 
 - The server sets its webhook service on the alert, agent and API key services, so the events

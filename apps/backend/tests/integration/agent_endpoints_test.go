@@ -23,7 +23,7 @@ func TestAgentEndpoints(t *testing.T) {
 
 	// Create test user and get token
 	email := fmt.Sprintf("agent-test-%d@example.com", time.Now().Unix())
-	userToken, err := tc.CreateTestUser(email, "TestPass123!")
+	userToken, err := tc.CreateTestManager(email, "TestPass123!")
 	require.NoError(t, err)
 
 	var createdAgentID string

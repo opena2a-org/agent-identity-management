@@ -208,3 +208,35 @@ func TestStrictLimitGate_IsThePackageDefaultTransport(t *testing.T) {
 	require.True(t, ok, "http.DefaultTransport is the strict limit gate")
 	assert.Same(t, strictGate, gate)
 }
+
+// The MCP server group's limiter counts every request to it by client
+// address, the list path included, so the gate paces the group's paths as one
+// window and leaves paths outside it alone.
+func TestStrictLimitGroup_TheMCPServerGroupIsOneWindow(t *testing.T) {
+	assert.Equal(t, "/api/v1/mcp-servers/", strictLimitGroup("/api/v1/mcp-servers"))
+	assert.Equal(t, "/api/v1/mcp-servers/", strictLimitGroup("/api/v1/mcp-servers/123e4567-e89b-12d3-a456-426614174000/capabilities"))
+	assert.Equal(t, "", strictLimitGroup("/api/v1/mcp-servers-other"))
+	assert.Equal(t, "", strictLimitGroup("/api/v1/agents"))
+	assert.Equal(t, "/api/v1/public/", strictLimitGroup("/api/v1/public/login"))
+}
+
+// Seven requests at three a window, alternating between the MCP server list
+// and one server, are answered 200 every time.
+func TestStrictLimitGate_HoldsMCPServerRequestsSoNoneIsRefused(t *testing.T) {
+	limiter := &fixedWindowServer{max: 3, window: time.Second}
+	srv := httptest.NewServer(limiter)
+	defer srv.Close()
+	client := gatedClient(srv)
+
+	paths := []string{"/api/v1/mcp-servers", "/api/v1/mcp-servers/123e4567-e89b-12d3-a456-426614174000/capabilities"}
+	for i := 0; i < 7; i++ {
+		resp, err := client.Get(srv.URL + paths[i%2])
+		require.NoError(t, err)
+		resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode, "request %d", i+1)
+	}
+
+	served, limited, _ := limiter.counts()
+	assert.Equal(t, 7, served)
+	assert.Equal(t, 0, limited)
+}

@@ -3,6 +3,8 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -184,8 +186,9 @@ func TestMCPServer_GetByName(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mcpResp, &mcpResult))
 	mcpServerID := mcpResult["id"].(string)
 
-	// Get by name
-	path := fmt.Sprintf("/api/v1/mcp-servers/by-name?name=%s", serverName)
+	// Get by name. The name carries spaces, so it is query-escaped: unescaped,
+	// they end the request line early and the server answers 400.
+	path := "/api/v1/mcp-servers/by-name?name=" + url.QueryEscape(serverName)
 	byNameResp := tc.AssertStatusCode("GET", path, nil, userToken, 200)
 	var byNameResult map[string]interface{}
 	require.NoError(t, json.Unmarshal(byNameResp, &byNameResult))
@@ -750,6 +753,18 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 		t.Skip("Skipping integration tests in short mode")
 	}
 
+	// The user in a DIFFERENT organization. The server approves a
+	// registration into an organization of its own only for an address on its
+	// AIM_PLATFORM_ADMINS allowlist; otherwise it holds the registration until
+	// an administrator approves it, and that approval puts the user in the
+	// administrator's organization. TEST_CROSS_ORG_EMAIL names an address on
+	// the allowlist in a domain other than the admin's.
+	crossOrgEmail := os.Getenv("TEST_CROSS_ORG_EMAIL")
+	if crossOrgEmail == "" {
+		t.Skip("TEST_CROSS_ORG_EMAIL is unset: set it to an address on the backend's AIM_PLATFORM_ADMINS allowlist, in a domain other than the admin's (tests/README.md)")
+	}
+	crossOrgPassword := "CrossOrgPass123!"
+
 	tc := NewTestContext(t)
 	require.NoError(t, tc.WaitForBackend())
 
@@ -768,13 +783,9 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mcpResp, &mcpResult))
 	mcpServerID := mcpResult["id"].(string)
 
-	// Create a user in a DIFFERENT organization by using a unique email domain.
-	// The first user from a new domain auto-approves and creates a separate org.
-	crossOrgDomain := fmt.Sprintf("crossorg-%d.test", time.Now().UnixNano())
-	crossOrgEmail := fmt.Sprintf("user@%s", crossOrgDomain)
-	crossOrgPassword := "CrossOrgPass123!"
-
-	// Register directly via public endpoint (auto-approves as first user from domain)
+	// The first registration of the address creates its organization and is
+	// answered 201; a later run against the same database is answered 409 and
+	// signs in to the account the first run created.
 	regBody := map[string]interface{}{
 		"email":     crossOrgEmail,
 		"password":  crossOrgPassword,
@@ -782,9 +793,10 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 		"lastName":  "OrgUser",
 	}
 	regResp, regRespBody := tc.Request("POST", "/api/v1/public/register", regBody, "")
-	require.Equal(t, 201, regResp.StatusCode, "Registration should succeed: %s", string(regRespBody))
+	require.Contains(t, []int{201, 409}, regResp.StatusCode, "Registration should succeed or find the existing account: %s", string(regRespBody))
 
-	// Login as the cross-org user
+	// Login as the cross-org user. The server creates the account with a
+	// forced password change and still issues an access token at sign-in.
 	loginBody := map[string]interface{}{
 		"email":    crossOrgEmail,
 		"password": crossOrgPassword,
@@ -797,6 +809,16 @@ func TestMCPServer_CrossOrganizationAccessDenied(t *testing.T) {
 	crossOrgToken, ok := loginResult["accessToken"].(string)
 	require.True(t, ok, "login response carries accessToken: %s", string(loginRespBody))
 	require.NotEmpty(t, crossOrgToken)
+
+	// The two users are in different organizations.
+	var adminMe, crossOrgMe struct {
+		OrganizationID string `json:"organizationId"`
+	}
+	require.NoError(t, json.Unmarshal(tc.AssertStatusCode("GET", "/api/v1/auth/me", nil, userToken, 200), &adminMe))
+	require.NoError(t, json.Unmarshal(tc.AssertStatusCode("GET", "/api/v1/auth/me", nil, crossOrgToken, 200), &crossOrgMe))
+	require.NotEmpty(t, adminMe.OrganizationID)
+	require.NotEqual(t, adminMe.OrganizationID, crossOrgMe.OrganizationID,
+		"TEST_CROSS_ORG_EMAIL must register into an organization other than the admin's")
 
 	// Cross-org user should NOT be able to access admin's MCP server (expect 403 or 404)
 	getPath := fmt.Sprintf("/api/v1/mcp-servers/%s", mcpServerID)
