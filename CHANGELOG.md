@@ -39,6 +39,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   when the body is refused, when the documented response fields differ from the returned ones, or when the key does
   not expire 90 days after it is created.
 
+### Fixed — reading a user's or an organization's SDK token rows gives the read's error when it fails after the first row (#744)
+
+- The `sdk_tokens` repository's `GetByUserID` and `GetByOrganizationID` check the result set's error after the last
+  row and return it. Measured on the previous commit with a two-row result whose second row's read fails, with and
+  without revoked rows: each method returned the first row and no error; it now returns the read's error and no rows.
+- SDK credential recovery (`POST /api/v1/auth/sdk/recover`) reads the token family through `GetByUserID`, so such a
+  read now reaches the route's answer for a family that cannot be read: for a presented token a rotation retired,
+  `500` `{"error":"Failed to read the token family"}` and no credential minted.
+- Tests: `apps/backend/internal/infrastructure/repository/sdk_token_repository_list_test.go`; the route's answer to a
+  failed family read is `TestRecoverRevokedToken_AFamilyThatCannotBeReadMintsNothing`.
+
 ### Security — creating an API key requires a live sign-in session
 
 - `POST /api/v1/api-keys` creates a key only for an access token that records a sign-in (one carrying `auth_time`),
