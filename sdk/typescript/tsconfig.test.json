@@ -1,9 +1,6 @@
 // Type-checks the test files that tsconfig.json leaves out (`npm run typecheck`
-// runs both). The two integration files below are left out until they are
-// rewritten against the current client: they call methods A2AClient does not
-// have (publishAgentCard, updatePeerTrust), and loadCredentialsFromFile, which
-// one never imports and the other calls without its path argument.
-// tests/typecheck-covers-tests.test.ts pins this list.
+// runs both). tests/typecheck-covers-tests.test.ts pins that it reads every
+// test file.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -12,10 +9,5 @@
     "types": ["node", "vitest/globals"]
   },
   "include": ["src/**/*", "tests/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/a2a/A2AClient.integration.test.ts",
-    "src/client/AIMClient.integration.test.ts"
-  ]
+  "exclude": ["node_modules", "dist"]
 }

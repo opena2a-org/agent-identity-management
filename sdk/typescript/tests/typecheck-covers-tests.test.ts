@@ -14,13 +14,6 @@ import ts from 'typescript';
 
 const PKG_ROOT = path.join(__dirname, '..');
 
-// Left out of tsconfig.test.json (its comment says why). A new entry here is a
-// test file the type check stops reading.
-const LEFT_OUT = [
-  'src/a2a/A2AClient.integration.test.ts',
-  'src/client/AIMClient.integration.test.ts',
-];
-
 function toPosix(rel: string): string {
   return rel.split(path.sep).join('/');
 }
@@ -61,7 +54,7 @@ describe('npm run typecheck covers the tests', () => {
     ).toBe(true);
   });
 
-  it('reads every .ts file under tests/ and every src test file but the integration files named here', () => {
+  it('reads every .ts file under tests/ and every test file under src/, the integration tests included', () => {
     const read = new Set(
       parseConfig('tsconfig.test.json').fileNames.map((f) => toPosix(path.relative(PKG_ROOT, f))),
     );
@@ -69,12 +62,14 @@ describe('npm run typecheck covers the tests', () => {
       ...listFiles('tests', (rel) => rel.endsWith('.ts')),
       ...listFiles('src', (rel) => rel.endsWith('.test.ts')),
     ];
-    // Without files in both places this check proves nothing.
+    // Without files in both places, and integration files among them, this
+    // check proves nothing.
     expect(testFiles.some((f) => f.startsWith('tests/'))).toBe(true);
     expect(testFiles.some((f) => f.startsWith('src/'))).toBe(true);
+    expect(testFiles.some((f) => f.endsWith('.integration.test.ts'))).toBe(true);
 
     const unread = testFiles.filter((f) => !read.has(f)).sort();
-    expect(unread, 'tsconfig.test.json does not read these test files').toEqual(LEFT_OUT);
+    expect(unread, 'tsconfig.test.json does not read these test files').toEqual([]);
   });
 
   it('keeps every compiler option of tsconfig.json except rootDir, and emits nothing', () => {
