@@ -5,17 +5,17 @@
   "captures": [
     {
       "command": "agent = secure(\"my-first-agent\", capabilities=[\"db:read\"])",
-      "capturedAt": "2026-10-09",
+      "capturedAt": "2026-10-16",
       "sdk": {
         "package": "aim-sdk",
         "version": "2.0.3",
         "builtFrom": "this repository",
-        "differsFromRelease": "prints [OK] where the aim-sdk 2.0.3 release on PyPI prints ✓"
+        "differsFromRelease": "prints [OK] where the aim-sdk 2.0.3 release on PyPI prints ✓, and a full stop and a capital O in `Token rotated successfully. Old refresh token revoked` where the release prints an em dash and a lowercase o"
       },
       "server": "self-hosted AIM built from this repository, with Redis, right after aim-sdk login",
-      "trimmedInReadme": "the line `Token rotated successfully — old refresh token revoked (new id: 461d130d...)`, which prints only when the server rotates the refresh token, and the line `  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0`, elided in place as `  ...` because the README names no version",
+      "trimmedInReadme": "the line `Token rotated successfully. Old refresh token revoked (new id: 69d423bb...)`, which prints only when the server rotates the refresh token, and the line `  ID: dbb0c4b4...a56a  Type: ai_agent  Version: 1.0.0`, elided in place as `  ...` because the README names no version",
       "outputs": {
-        "capture": "  ○ Agent Type: using default 'ai_agent'\nToken rotated successfully — old refresh token revoked (new id: 461d130d...)\n\n[OK] Agent registered: my-first-agent\n  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0\n  Status: ○ pending  Trust: 59%\n  Capabilities: db:read\n"
+        "capture": "  ○ Agent Type: using default 'ai_agent'\nToken rotated successfully. Old refresh token revoked (new id: 69d423bb...)\n\n[OK] Agent registered: my-first-agent\n  ID: dbb0c4b4...a56a  Type: ai_agent  Version: 1.0.0\n  Status: ○ pending  Trust: 59%\n  Capabilities: db:read\n"
       }
     },
     {

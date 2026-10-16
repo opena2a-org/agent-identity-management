@@ -1,10 +1,10 @@
 >>> from aim_sdk import secure
 >>> agent = secure("my-first-agent", capabilities=["db:read"])
   ○ Agent Type: using default 'ai_agent'
-Token rotated successfully — old refresh token revoked (new id: 461d130d...)
+Token rotated successfully. Old refresh token revoked (new id: 69d423bb...)
 
 [OK] Agent registered: my-first-agent
-  ID: 14466d98...cd30  Type: ai_agent  Version: 1.0.0
+  ID: dbb0c4b4...a56a  Type: ai_agent  Version: 1.0.0
   Status: ○ pending  Trust: 59%
   Capabilities: db:read
 
