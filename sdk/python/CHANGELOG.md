@@ -128,6 +128,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   characters is cut with ` [truncated]`. The `Name:` line prints the `--name` given, not the name in the answer.
 - Test: `tests/test_cli_init_bootstrap_token.py`.
 
+### Fixed — `aim-sdk init` sends the bootstrap token over `http:` only to a loopback host
+
+- `aim-sdk init` sends the bootstrap token over `http:` only when the server address's host is `localhost`,
+  `127.0.0.1` or `[::1]`, compared as written in the URL and never resolved. For an `http:` address on any other
+  host, from `--url`, it exits 1 before the exchange request: no request is made, nothing is saved and the token is
+  not printed. The error names the host and prints `aim-sdk init --url` with the `https:` address of that host.
+  `https:` addresses are accepted on any host. `invalid_server_url_reason`, which `aim-sdk login` also uses, is
+  unchanged.
+- Test: `tests/test_cli_init_cleartext_url.py`.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

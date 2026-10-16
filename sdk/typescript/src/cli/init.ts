@@ -163,6 +163,19 @@ export function invalidServerUrlReason(url: string): string | null {
 /** Hosts of the local stack, which serves the API on port 8080 and the dashboard on 3000. */
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+/**
+ * The host of an `http:` address whose host is not this machine, or null for
+ * an `https:` address or an `http:` one on a loopback host. `init` sends the
+ * bootstrap token over `http:` only to a loopback host. The host is compared
+ * as written in the URL and is never resolved. `url` has passed
+ * `invalidServerUrlReason`.
+ */
+function nonLoopbackHttpHost(url: string): string | null {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'http:' || LOOPBACK_HOSTS.has(parsed.hostname)) return null;
+  return parsed.hostname;
+}
+
 const HOSTED_DASHBOARDS: Record<string, string> = {
   'api.aim.opena2a.org': 'https://aim.opena2a.org',
   'api.community.opena2a.org': 'https://community.opena2a.org',
@@ -321,6 +334,16 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   if (urlProblem) {
     err(`Error: ${urlProblem}.`);
     err('Pass the server address, for example: --url https://aim.example.com');
+    return 1;
+  }
+  const remoteHttpHost = nonLoopbackHttpHost(rawUrl.trim());
+  if (remoteHttpHost) {
+    const host = scrubToken(remoteHttpHost);
+    err(
+      'Error: init sends the bootstrap token over http: only to this machine (localhost, 127.0.0.1 or [::1]), ' +
+        `and ${host} is not this machine. Nothing was sent or saved.`,
+    );
+    err(`Pass the server's https address, for example: --url https://${host}`);
     return 1;
   }
   const aimUrl = rawUrl.trim().replace(/\/+$/, '');

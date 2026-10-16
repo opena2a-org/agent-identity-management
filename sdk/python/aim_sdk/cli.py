@@ -98,6 +98,10 @@ BOOTSTRAP_TOKEN_PREFIX = "aim_ob_"
 BOOTSTRAP_TOKEN_HEADER = "X-AIM-Bootstrap-Token"
 DEFAULT_INIT_AGENT_NAME = "my-first-agent"
 INIT_REQUEST_TIMEOUT_SECONDS = 30
+# The hosts `aim-sdk init` sends the bootstrap token to over http:, as
+# urlsplit().hostname gives them. The host is compared as written in the URL
+# and is never resolved; any other host needs an https: address.
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 # An agent or organization ID `init` saves and prints. The server sends a UUID;
 # the pattern admits that and other short IDs, and no character that changes
@@ -919,6 +923,18 @@ def init(args):
         print(f"or omit --url to use {DEFAULT_AIM_URL}.")
         return 1
     aim_url = args.url.strip().rstrip('/')
+
+    url_parts = urlsplit(aim_url)
+    if url_parts.scheme == 'http' and url_parts.hostname not in LOOPBACK_HOSTS:
+        # Only the host is shown: urlsplit keeps a user:password part out of it.
+        host = url_parts.hostname
+        shown = _redact_token(f"[{host}]" if ':' in host else host, token)
+        print("Error: aim-sdk init sends the bootstrap token over http: only to this machine "
+              f"(localhost, 127.0.0.1 or [::1]), and {shown} is not this machine. Nothing was sent or saved.")
+        print("Pass the server's https address, for example:")
+        print(f"  aim-sdk init --url https://{shown}")
+        print(f"or omit --url to use {DEFAULT_AIM_URL}.")
+        return 1
 
     name = (args.name or '').strip()
     if not name:
