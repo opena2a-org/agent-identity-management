@@ -21,6 +21,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { runAimArp } from './aim-arp-main';
 import { SDK_VERSION } from '../../version';
+import { cliVersion } from '../../build-version';
 
 let home: string;
 let savedHome: string | undefined;
@@ -74,6 +75,34 @@ describe('bare help/version words work like their flag spellings', () => {
     const code = await runAimArp(['frobnicate']);
     expect(code).toBe(1);
     expect(errLines.join('\n')).toContain('frobnicate');
+  });
+});
+
+describe('a build the release job did not make says so in each version line', () => {
+  // Under vitest the tsup build constant is not defined, so this is a source build.
+  const line = `aim-arp v${cliVersion()}`;
+
+  it('the qualifier follows the version', () => {
+    expect(line).toBe(
+      `aim-arp v${SDK_VERSION}+source (built from source; not the published ${SDK_VERSION})`,
+    );
+  });
+
+  it('`--version` prints the qualified version', async () => {
+    expect(await runAimArp(['--version'])).toBe(0);
+    expect(logLines).toEqual([line]);
+  });
+
+  it('`telemetry --version` prints the qualified version', async () => {
+    expect(await runAimArp(['telemetry', '--version'])).toBe(0);
+    expect(logLines).toEqual([line]);
+  });
+
+  it('the help header prints the qualified version and no em dash', async () => {
+    expect(await runAimArp(['--help'])).toBe(0);
+    const header = logLines.join('\n').split('\n').slice(0, 3);
+    expect(header).toEqual(['', `  ${line}`, '  OpenA2A AIM SDK CLI']);
+    expect(header.join('\n')).not.toContain('—');
   });
 });
 

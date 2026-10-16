@@ -31,6 +31,13 @@ export default defineConfig({
   esbuildOptions(options) {
     options.sourcesContent = false;
   },
+  // The ref the build ran on. The release workflow builds the npm package on
+  // the tag `sdk-ts-v<version>`, so `aim-arp --version` prints the bare version
+  // only for that build and names every other build a source build
+  // (src/build-version.ts).
+  define: {
+    __AIM_SDK_BUILD_REF__: JSON.stringify(process.env.GITHUB_REF_NAME ?? ''),
+  },
   clean: true,
   treeshake: true,
   minify: false,
