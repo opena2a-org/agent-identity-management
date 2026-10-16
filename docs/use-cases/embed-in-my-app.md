@@ -5,7 +5,7 @@
 
 ## Problem
 
-You are building an agent framework, tool, or library. You want to embed cryptographic identity, audit logging, and capability enforcement directly in your code -- without requiring users to install a CLI or run a server.
+You are building an agent framework, tool, or library. You want to embed cryptographic identity, audit logging, and capability enforcement directly in your code, without requiring users to install a CLI or run a server.
 
 ## Option A: TypeScript / Node.js
 
@@ -251,5 +251,5 @@ Delete operation blocked by policy
 
 ## Next Steps
 
-- [Enforce capabilities](enforce-capabilities.md) -- more detail on policy syntax and wildcards
-- [Fleet governance](fleet-governance.md) -- centralize identity management when you outgrow local mode
+- [Enforce capabilities](enforce-capabilities.md): more detail on policy syntax and wildcards
+- [Fleet governance](fleet-governance.md): centralize identity management when you outgrow local mode

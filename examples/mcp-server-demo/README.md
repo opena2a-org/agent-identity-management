@@ -1,4 +1,4 @@
-# MCP Server Demo — Ed25519 + AIM verification
+# MCP Server Demo: Ed25519 + AIM verification
 
 A minimal MCP (Model Context Protocol) server that holds an Ed25519 keypair, signs the challenge AIM sends to `/mcp/.well-known/mcp/verify`, and lists its tools, resources and prompts at `/.well-known/mcp/capabilities`. Use it to exercise AIM's MCP-server verification flow without depending on a third-party MCP server.
 
@@ -83,5 +83,5 @@ The `server://config` resource is listed in the capabilities but has no route. O
 
 ## Related demos
 
-- [`flight-search-agent`](../flight-search-agent/) — the agent side of the AIM story. Pair it with this MCP server if you want a full agent-to-MCP demo locally.
-- [`a2a-multi-agent-demo`](../a2a-multi-agent-demo/) — A2A protocol between two agents (sibling protocol to MCP).
+- [`flight-search-agent`](../flight-search-agent/): the agent side of the AIM story. Pair it with this MCP server if you want a full agent-to-MCP demo locally.
+- [`a2a-multi-agent-demo`](../a2a-multi-agent-demo/): A2A protocol between two agents (sibling protocol to MCP).

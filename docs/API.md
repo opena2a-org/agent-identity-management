@@ -663,7 +663,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Response** (factor values are 0-1 scores, not weighted contributions; factors
-with no data are excluded from the composite per AIP §6.1 — their placeholder
+with no data are excluded from the composite per AIP §6.1, and their placeholder
 values here are not measurements):
 ```json
 {

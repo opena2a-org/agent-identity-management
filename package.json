@@ -11,7 +11,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
-    "lint": "turbo run lint",
+    "lint": "npm run lint:docs && turbo run lint",
+    "lint:docs": "node scripts/check-docs-prose.mjs && node --test scripts/test-check-docs-prose.mjs",
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },

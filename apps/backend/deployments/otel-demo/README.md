@@ -30,12 +30,12 @@ decision point.
 ### `*.method` semantics
 
 Each `*.method` is a stable producer label naming *how* the paired signal is
-derived — not per-record provenance. `gen_ai.agent.scan.method = aim/registry-asc`
+derived, not per-record provenance. `gen_ai.agent.scan.method = aim/registry-asc`
 means AIM read the verdict replicated from the Registry Agent Security Context;
 AIM does not observe which underlying scanner produced it, so it does not claim
 one.
 
-A `*.method` is only emitted alongside its paired score/verdict — there are no
+A `*.method` is only emitted alongside its paired score/verdict. There are no
 orphan method labels.
 
 ## Run it

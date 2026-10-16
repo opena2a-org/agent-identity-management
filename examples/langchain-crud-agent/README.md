@@ -1,4 +1,4 @@
-# LangChain CRUD Agent — AIM SDK integration
+# LangChain CRUD Agent: AIM SDK integration
 
 A LangChain agent that performs CRUD operations on a todo list, with each operation secured by AIM's `@perform_action` decorator. Demonstrates that AIM integrates with the LangChain agent runtime without rewriting the agent's tools or prompts.
 
@@ -36,16 +36,16 @@ AIM_BACKEND_PORT=18080 AIM_FRONTEND_PORT=13000 ./run-langchain-crud.sh
 
 ## Setup
 
-Two supported SDK layouts — `flight_agent.py:34-39` prepends both paths so either works:
+Two supported SDK layouts (`flight_agent.py:34-39` prepends both paths so either works):
 
-**Option 1 — Repo checkout (recommended for contributors).** The SDK at `../../sdk/python` is already on `sys.path`.
+**Option 1: Repo checkout (recommended for contributors).** The SDK at `../../sdk/python` is already on `sys.path`.
 
 ```bash
 pip install -r requirements.txt
 python3 langchain_crud_agent.py
 ```
 
-**Option 2 — Dashboard bundle (AIM Cloud users).** Download the Python SDK from your AIM dashboard → Settings → SDK Downloads, extract over `./aim-sdk-python/`, then run the same command.
+**Option 2: Dashboard bundle (AIM Cloud users).** Download the Python SDK from your AIM dashboard → Settings → SDK Downloads, extract over `./aim-sdk-python/`, then run the same command.
 
 ## Usage
 
@@ -60,13 +60,13 @@ Each tool call routes through AIM. If you've configured a tool with a capability
 
 ## Files in this directory
 
-- `langchain_crud_agent.py` — the agent (~500 lines)
-- `requirements.txt` — pinned dependencies
-- `run-langchain-crud.sh` — convenience launcher
+- `langchain_crud_agent.py`: the agent (~500 lines)
+- `requirements.txt`: pinned dependencies
+- `run-langchain-crud.sh`: convenience launcher
 - `stack_env.py`: the backend and dashboard URLs, from `AIM_BACKEND_PORT` and `AIM_FRONTEND_PORT`
-- `COMPLETE_CHANGES_DOCUMENTATION.md` — internal change-log from the October 2025 implementation; kept for historical context but not required reading to run the demo
+- `COMPLETE_CHANGES_DOCUMENTATION.md`: internal change-log from the October 2025 implementation; kept for historical context but not required reading to run the demo
 
 ## Related demos
 
-- [`flight-search-agent`](../flight-search-agent/) — same AIM verification flow without LangChain, plus deterministic `inject` injection scenarios for the LF stage demo.
-- [`a2a-multi-agent-demo`](../a2a-multi-agent-demo/) — Agent-to-Agent collaboration across two agents.
+- [`flight-search-agent`](../flight-search-agent/): same AIM verification flow without LangChain, plus deterministic `inject` injection scenarios for the LF stage demo.
+- [`a2a-multi-agent-demo`](../a2a-multi-agent-demo/): Agent-to-Agent collaboration across two agents.

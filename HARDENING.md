@@ -8,7 +8,7 @@ AIM 1.0 ships with every Roadmap-to-1.0 gate criterion met (see below). This pag
 
 **Stable (1.0).** AIM's architecture, threat model, and core enforcement primitives (capability authorization, trust scoring, monitoring/strict modes, cryptographic identity, audit logging) are in place and the integration layer between the SDK, the backend services, and the dashboard has been audited with contract-enforcement gaps closed.
 
-We documented the road to 1.0 openly because pretending an unfinished system is production-ready is more harmful than saying it is not. With every gate criterion below now closed, AIM is suitable for production deployments — including environments with untrusted tenants or sensitive data — within the deployment posture documented in [SECURITY.md](SECURITY.md). New hardening work (middleware-level tenant scoping, the partial / aspirational items in SECURITY.md compliance section, etc.) continues post-1.0 and is tracked openly in this page.
+We documented the road to 1.0 openly because pretending an unfinished system is production-ready is more harmful than saying it is not. With every gate criterion below now closed, AIM is suitable for production deployments (including environments with untrusted tenants or sensitive data) within the deployment posture documented in [SECURITY.md](SECURITY.md). New hardening work (middleware-level tenant scoping, the partial / aspirational items in SECURITY.md compliance section, etc.) continues post-1.0 and is tracked openly in this page.
 
 ## What we are working on
 
@@ -30,7 +30,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Data model invariants
 
-**Status: done.** Each known data-model invariant — parent cache columns plus richer detail tables, and row-internal couplings where two columns on the same row must move together — is now enforced at the database layer rather than by application code. Six invariant-preserving triggers cover trust scores → agent cache, MCP trust scores → MCP server cache, capability violations → agent count, MCP server capabilities → cache, A2A peer trust aggregates, and agent status → `verified_at` timestamp. The A2A consent cross-tenant invariant is enforced by a complementary `NOT NULL` constraint on `a2a_consent_records.organization_id` (migration 097, backfilled from the grantor agent). Tests assert the trigger and constraint behavior under insert, update, and delete.
+**Status: done.** Each known data-model invariant (parent cache columns plus richer detail tables, and row-internal couplings where two columns on the same row must move together) is now enforced at the database layer rather than by application code. Six invariant-preserving triggers cover trust scores → agent cache, MCP trust scores → MCP server cache, capability violations → agent count, MCP server capabilities → cache, A2A peer trust aggregates, and agent status → `verified_at` timestamp. The A2A consent cross-tenant invariant is enforced by a complementary `NOT NULL` constraint on `a2a_consent_records.organization_id` (migration 097, backfilled from the grantor agent). Tests assert the trigger and constraint behavior under insert, update, and delete.
 
 ### Capability lifecycle
 
@@ -38,7 +38,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Dashboard rendering on empty state
 
-**Status: done.** Empty-state messages are implemented on the agent and MCP server detail pages in code, and the corresponding Playwright suite (`apps/web/tests/e2e/empty-state-agent.spec.ts` and `apps/web/tests/e2e/empty-state-mcp.spec.ts`) exercises every tab on a freshly-registered resource against a real backend in CI on every PR (the `e2e-empty-state` job in `.github/workflows/ci.yml`). Four panels — api-keys, activity, and trust on the agent detail page, and audit trail on the MCP detail page — are reclassified N/A-by-design for empty-state copy because backend auto-population on resource creation (default API key, audit event for the registration itself, default trust score, Activity Timeline summary) makes the empty branch unreachable through the fixture path; those four are still exercised for "panel renders without crash." Evidence: PR #247 introduced the suite; PR #248 closed the CI job over several iterations against the real backend.
+**Status: done.** Empty-state messages are implemented on the agent and MCP server detail pages in code, and the corresponding Playwright suite (`apps/web/tests/e2e/empty-state-agent.spec.ts` and `apps/web/tests/e2e/empty-state-mcp.spec.ts`) exercises every tab on a freshly-registered resource against a real backend in CI on every PR (the `e2e-empty-state` job in `.github/workflows/ci.yml`). Four panels (api-keys, activity, and trust on the agent detail page, and audit trail on the MCP detail page) are reclassified N/A-by-design for empty-state copy because backend auto-population on resource creation (default API key, audit event for the registration itself, default trust score, Activity Timeline summary) makes the empty branch unreachable through the fixture path; those four are still exercised for "panel renders without crash." Evidence: PR #247 introduced the suite; PR #248 closed the CI job over several iterations against the real backend.
 
 ### Post-quantum cryptography surfacing
 
@@ -46,7 +46,7 @@ Coverage in main today: organization-scoped handlers for agents, MCP servers, ca
 
 ### Third-party security review
 
-**Status: rescoped — post-1.0.** AIM is open source under Apache-2.0. The codebase, threat model, and architectural decisions are publicly auditable, and the community is welcome to review and report findings per [SECURITY.md](SECURITY.md). A paid third-party engagement is a worthwhile post-1.0 investment when the deployment surface includes regulated tenants, but it is not a binding 1.0 gate criterion. Decision recorded 2026-05-28.
+**Status: rescoped (post-1.0).** AIM is open source under Apache-2.0. The codebase, threat model, and architectural decisions are publicly auditable, and the community is welcome to review and report findings per [SECURITY.md](SECURITY.md). A paid third-party engagement is a worthwhile post-1.0 investment when the deployment surface includes regulated tenants, but it is not a binding 1.0 gate criterion. Decision recorded 2026-05-28.
 
 ## Our process
 

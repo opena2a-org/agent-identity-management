@@ -12,8 +12,8 @@ Practical guides organized by what you are trying to accomplish. Each guide incl
 
 ## Where to Start
 
-**Single agent, no infrastructure** -- Start with [Register my agent](use-cases/register-my-agent.md). Everything runs locally using Ed25519 keys and file-based storage.
+**Single agent, no infrastructure:** Start with [Register my agent](use-cases/register-my-agent.md). Everything runs locally using Ed25519 keys and file-based storage.
 
-**Adding identity to your own framework** -- Go to [Embed in my app](use-cases/embed-in-my-app.md) for programmatic access via `@opena2a/aim-core` or the Python SDK.
+**Adding identity to your own framework:** Go to [Embed in my app](use-cases/embed-in-my-app.md) for programmatic access via `@opena2a/aim-core` or the Python SDK.
 
-**Team with multiple agents** -- Jump to [Fleet governance](use-cases/fleet-governance.md) for centralized audit, service tokens for agents, and dashboard-based management.
+**Team with multiple agents:** Jump to [Fleet governance](use-cases/fleet-governance.md) for centralized audit, service tokens for agents, and dashboard-based management.

@@ -58,16 +58,16 @@ aim-sdk-python-v1.1.0.zip
 
 ### Backend API Compatibility
 
-The SDK and the backend platform are versioned and released independently — SDK
+The SDK and the backend platform are versioned and released independently. SDK
 tags are `sdk-py-v<version>`, platform tags are `platform-v<version>` (see the
 platform `CHANGELOG.md`), and a major version bump in one does not require a
 matching major version in the other. A SDK major version describes a breaking
 change in the SDK's own public Python API (for example, `verify_capability()`
-raising instead of returning a falsy dict in 2.0.0) — it says nothing about the
+raising instead of returning a falsy dict in 2.0.0). It says nothing about the
 backend's HTTP contract.
 
 **Example**:
-- SDK `2.0.0` runs against backend `platform-v1.0.0` — nothing about the wire
+- SDK `2.0.0` runs against backend `platform-v1.0.0`: nothing about the wire
   protocol changed in the SDK's 2.0.0 release.
 - Check a given release's `CHANGELOG.md` entry for whether it requires a
   minimum backend version; there is no fixed major-version-matching rule.

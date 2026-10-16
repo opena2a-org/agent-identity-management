@@ -235,11 +235,11 @@ Capabilities use colon-separated hierarchical scopes:
 ```
 
 Examples:
-- `secrets:resolve` — resolve any credential
-- `secrets:resolve:github` — resolve credentials in the "github" namespace only
-- `scan:read` — read scan results
-- `registry:write` — write to registry
-- `agent:manage` — manage agent lifecycle
+- `secrets:resolve`: resolve any credential
+- `secrets:resolve:github`: resolve credentials in the "github" namespace only
+- `scan:read`: read scan results
+- `registry:write`: write to registry
+- `agent:manage`: manage agent lifecycle
 
 ### 6.2 Wildcard
 

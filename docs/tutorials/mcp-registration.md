@@ -6,10 +6,10 @@ Register and attest MCP (Model Context Protocol) servers that your AI agents con
 
 ## Why Register MCP Servers?
 
-- **Drift Detection** — Get alerts if agents connect to unregistered servers
-- **Trust Scoring** — Attested MCP connections improve agent trust scores
-- **Audit Trail** — Complete visibility into agent-MCP interactions
-- **Capability Control** — Define what capabilities each MCP server provides
+- **Drift Detection**: Get alerts if agents connect to unregistered servers
+- **Trust Scoring**: Attested MCP connections improve agent trust scores
+- **Audit Trail**: Complete visibility into agent-MCP interactions
+- **Capability Control**: Define what capabilities each MCP server provides
 
 ---
 

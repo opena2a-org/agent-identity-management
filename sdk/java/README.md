@@ -290,10 +290,10 @@ The version of each library is pinned in [`pom.xml`](pom.xml).
 
 ## Related
 
-- [Python SDK](../python/README.md) — same API shape, decorator-based
-- [TypeScript SDK](../typescript/README.md) — local-or-server mode
-- [opena2a CLI](https://github.com/opena2a-org/opena2a) — codebase auditing, credential migration, runtime monitoring
-- [AIM backend](../../README.md) — server, dashboard, deployment
+- [Python SDK](../python/README.md): same API shape, decorator-based
+- [TypeScript SDK](../typescript/README.md): local-or-server mode
+- [opena2a CLI](https://github.com/opena2a-org/opena2a): codebase auditing, credential migration, runtime monitoring
+- [AIM backend](../../README.md): server, dashboard, deployment
 
 ## License
 

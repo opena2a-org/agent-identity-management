@@ -103,7 +103,7 @@ Spans whose check denies set status `codes.Error` with the deny reason.
 |---|---|---|---|---|
 | `fga.decisions` | counter | `fga.outcome`, `fga.denied_by` | `fga_decisions_total` | Incremented on every Authorize return. The `_total` suffix is added by Prometheus's OTLP receiver per OpenMetrics convention; do NOT include it in the OTel name (Prometheus rejects with "invalid temporality and type combination"). |
 | `fga.latency_ms` | histogram | none | `fga_latency_ms_bucket`, `_count`, `_sum` | Total Authorize latency in ms |
-| `fga.intent_checks` | counter | `fga.risk_tier`, `fga.intent_mode`, `fga.intent_status`, `fga.intent_blocked` | `fga_intent_checks_total` | Step 5 (NanoMind intent) evaluations that reached the daemon call. `intent_mode` is `async` for HIGH and MEDIUM alike (series recorded before Step 5 stopped denying may carry `sync` for HIGH); `intent_status` is `classified` (daemon returned a non-empty attack class), `abstain` (clean response, no class — the common case until NanoMind is fine-tuned on the FGA prompt), or `fail_open` (daemon unreachable, request build error, or undecodable body — the action proceeds without an intent verdict). `intent_blocked` is always `false` now: the classifier's verdict is recorded, never acted on. |
+| `fga.intent_checks` | counter | `fga.risk_tier`, `fga.intent_mode`, `fga.intent_status`, `fga.intent_blocked` | `fga_intent_checks_total` | Step 5 (NanoMind intent) evaluations that reached the daemon call. `intent_mode` is `async` for HIGH and MEDIUM alike (series recorded before Step 5 stopped denying may carry `sync` for HIGH); `intent_status` is `classified` (daemon returned a non-empty attack class), `abstain` (clean response, no class: the common case until NanoMind is fine-tuned on the FGA prompt), or `fail_open` (daemon unreachable, request build error, or undecodable body: the action proceeds without an intent verdict). `intent_blocked` is always `false` now: the classifier's verdict is recorded, never acted on. |
 | `fga.intent_skipped` | counter | `fga.risk_tier` | `fga_intent_skipped_total` | Authorizes where Step 5 was skipped (LOW risk, or any non-HIGH/MEDIUM level). Pair with `fga.intent_checks` to get the skip rate. |
 | `fga.async_intent_dropped` | counter | `fga.async_drop_reason` | `fga_async_intent_dropped_total` | HIGH- and MEDIUM-risk async intent dispatches dropped before running. `async_drop_reason` is `queue_full` (worker pool saturated) or `shutdown` (engine draining). A dropped dispatch never increments `fga.intent_checks`; sum both for total HIGH and MEDIUM dispatch attempts. |
 | `agent.drift_score` | gauge | `agent.id` | `agent_drift_score` | Saturated 0-1 score from `tanh(drift_count / 2)`. Emitted on every DetectDrift call (including 0 when no drift) so dashboards distinguish "clean" from "silent". |
@@ -202,7 +202,7 @@ P99 Authorize latency over last 5m:
 histogram_quantile(0.99, sum by (le) (rate(fga_latency_ms_bucket[5m])))
 ```
 
-Step 5 classification rate (share of evaluations that produced a real class) — today this sits near zero, which is the evidence behind issue #131:
+Step 5 classification rate (share of evaluations that produced a real class). Today this sits near zero, which is the evidence behind issue #131:
 
 ```promql
 sum(rate(fga_intent_checks_total{fga_intent_status="classified"}[5m]))

@@ -43,7 +43,7 @@ docker compose run --rm bootstrap
 
 **Default Admin Login**:
 - Email: `admin@opena2a.org`
-- Password: the `DEFAULT_ADMIN_PASSWORD` value in `.env`. The bootstrap step does not print it. If `.env` sets no `DEFAULT_ADMIN_PASSWORD`, the bootstrap step generates a password and prints it once. (⚠️ Pre-B2 stacks used `AIM2025!Secure` — rotate immediately if you inherited it; first login forces a change either way.)
+- Password: the `DEFAULT_ADMIN_PASSWORD` value in `.env`. The bootstrap step does not print it. If `.env` sets no `DEFAULT_ADMIN_PASSWORD`, the bootstrap step generates a password and prints it once. (⚠️ Pre-B2 stacks used `AIM2025!Secure`. Rotate it immediately if you inherited it; first login forces a change either way.)
 
 ### Option B: Azure Production (One Command) ☁️
 

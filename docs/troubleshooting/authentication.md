@@ -363,7 +363,7 @@ else:
 longer allowed to authenticate. Only agents in `pending` or `verified` status may
 authenticate; `suspended` and `revoked` are refused, as is any other status value.
 
-This applies to every agent auth path — Ed25519, ML-DSA, hybrid, and API keys.
+This applies to every agent auth path: Ed25519, ML-DSA, hybrid, and API keys.
 Rotating the key or re-signing the request will not help, because the key is not
 what was rejected.
 
@@ -404,7 +404,7 @@ on a schedule ahead of `keyExpiresAt` avoids the suspension entirely.
 
 An API key carries its own `is_active` flag, but it authenticates *as an agent*.
 If that agent is revoked or suspended, the key is refused even while it is active
-and unexpired — the key is not the thing being denied.
+and unexpired. The key is not the thing being denied.
 
 ```bash
 # The key's own state and its agent's state are two different questions

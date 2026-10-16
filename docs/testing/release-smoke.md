@@ -1,6 +1,6 @@
 # AIM Release Smoke Tests
 
-This document is the per-repo release smoke test contract for `agent-identity-management`. Every PR that ships changes to a piece of the system MUST run the smoke test for that piece BEFORE asking a reviewer to merge — not "I ran the unit tests" or "I ran `docker compose config -q`," but **the actual binary boots, accepts traffic, and the externally-observable signal that the change targeted is verifiable**.
+This document is the per-repo release smoke test contract for `agent-identity-management`. Every PR that ships changes to a piece of the system MUST run the smoke test for that piece BEFORE asking a reviewer to merge: not "I ran the unit tests" or "I ran `docker compose config -q`," but **the actual binary boots, accepts traffic, and the externally-observable signal that the change targeted is verifiable**.
 
 This was written 2026-04-28 after the OTel exporter PR (#114) was almost merged with five real bugs that no unit test, lint, or syntax check would have caught. The bugs:
 
@@ -11,7 +11,7 @@ This was written 2026-04-28 after the OTel exporter PR (#114) was almost merged 
 | Loki rejected `index_label` under `scope_attributes` (only valid under `resource_attributes`) | `loki /ready` health probe | smoke harness |
 | Collector 0.150 dropped `service.telemetry.metrics.address`, replaced with `readers` block | collector startup | smoke harness |
 | Prometheus v3 renamed `--enable-feature=otlp-write-receiver` to `--web.enable-otlp-receiver` | warn log on startup | smoke harness |
-| **Production**: OTel Go SDK v1.43 default temporality is Delta, but Prometheus OTLP receiver only accepts Cumulative — counters silently rejected | OTLP-to-Prometheus translation error log | smoke harness |
+| **Production**: OTel Go SDK v1.43 default temporality is Delta, but Prometheus OTLP receiver only accepts Cumulative: counters silently rejected | OTLP-to-Prometheus translation error log | smoke harness |
 
 All six were syntactically valid. All six would have shipped if the verification stopped at "go build clean and YAML parses."
 
@@ -19,7 +19,7 @@ All six were syntactically valid. All six would have shipped if the verification
 
 For every component of the AIM platform, there is a smoke test that:
 
-1. **Boots the real artifact** (binary, container, stack — not a mock, not a unit test)
+1. **Boots the real artifact** (binary, container, stack), not a mock, not a unit test
 2. **Sends real traffic** through the path the PR touched
 3. **Verifies the externally-observable signal** the PR was supposed to deliver
 4. **Cleans up after itself** so it is idempotent (re-runnable without manual reset)
@@ -31,12 +31,12 @@ If a smoke test does not exist for the path you touched, **write one as part of 
 | Component | What ships | Smoke test | What it verifies | Run command |
 |---|---|---|---|---|
 | **OTel demo stack** | docker-compose stack with collector + Tempo + Prometheus + Loki + Grafana | `apps/backend/deployments/otel-demo/smoke-test.sh` | All 5 services boot healthy; a synthetic OTLP trace + counter + log lands in Tempo, Prometheus, and Loki respectively | `cd apps/backend/deployments/otel-demo && ./smoke-test.sh` |
-| **AIM backend OTel wiring** | telemetry.Init, FGA span wrap, drift gauge, /api/v1/agents/:id/authorize handler | `apps/backend/deployments/otel-demo/smoke-backend.sh` | Boots throwaway Postgres + OTel demo stack + a fresh backend binary; logs in as admin, creates an agent, POSTs /authorize, asserts the response shape, then verifies the `fga.authorize` parent span with at least one `fga.*` child landed in Tempo. Hermetic — does not touch the user's running backend or persistent data | `cd apps/backend/deployments/otel-demo && ./smoke-backend.sh` |
+| **AIM backend OTel wiring** | telemetry.Init, FGA span wrap, drift gauge, /api/v1/agents/:id/authorize handler | `apps/backend/deployments/otel-demo/smoke-backend.sh` | Boots throwaway Postgres + OTel demo stack + a fresh backend binary; logs in as admin, creates an agent, POSTs /authorize, asserts the response shape, then verifies the `fga.authorize` parent span with at least one `fga.*` child landed in Tempo. Hermetic: does not touch the user's running backend or persistent data | `cd apps/backend/deployments/otel-demo && ./smoke-backend.sh` |
 | **AIM backend HTTP API** | Fiber routes, auth, FGA enforcement | `apps/backend/tests/integration/*.go` | Endpoints return correct status codes against a live backend; 0 failed | `cd apps/backend && BACKEND_URL=http://localhost:8080 TEST_ADMIN_PASSWORD='<admin password>' TEST_CROSS_ORG_EMAIL=crossorg@crossorg.test go test ./tests/integration/` against a running backend started with `AIM_PLATFORM_ADMINS=crossorg@crossorg.test`; variables in `tests/README.md` |
 | **PQC migration** | ML-DSA / ML-KEM key generation | `internal/crypto/pqc/*_test.go` | Keys generate, sign, verify | `go test ./internal/crypto/pqc/` (passes today; not a real "boot" test but acceptable since the surface is pure crypto) |
-| **AIM backend list endpoints** | bulk-prefetch row enrichment on `GET /api/v1/mcp-servers` + `GET /api/v1/admin/verifications/pending` | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` | Boots throwaway Postgres + a fresh backend (no OTel stack); creates a tag, a server carrying it, and one `tool` capability, then asserts the list row comes back WITH the bulk-prefetched tag and `toolCount==1`; asserts pending-verifications returns 200 + the `verifications[]`/`pagination` shape. Catches bulk-query column/table typos that mock-backed unit tests cannot — see design rule 9 | `cd apps/backend/deployments/smoke && ./rest-list-endpoints-smoke.sh` |
+| **AIM backend list endpoints** | bulk-prefetch row enrichment on `GET /api/v1/mcp-servers` + `GET /api/v1/admin/verifications/pending` | `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh` | Boots throwaway Postgres + a fresh backend (no OTel stack); creates a tag, a server carrying it, and one `tool` capability, then asserts the list row comes back WITH the bulk-prefetched tag and `toolCount==1`; asserts pending-verifications returns 200 + the `verifications[]`/`pagination` shape. Catches bulk-query column/table typos that mock-backed unit tests cannot (see design rule 9) | `cd apps/backend/deployments/smoke && ./rest-list-endpoints-smoke.sh` |
 | **A2A page progressive load** | per-section loading on `/dashboard/a2a` (cards/tasks/consents/trust resolve independently) + consent-filter debounce | `apps/web/scripts/smoke-a2a-progressive.mjs` | Drives a real browser against a PRODUCTION build with the A2A API stubbed (no backend). Holds the tasks response open and asserts the card stats paint while the task chart still shows its own spinner (the page no longer blocks on the slowest call), then that the chart fills on release; asserts 6 rapid keystrokes into the consent filter collapse to 1 request. | `cd apps/web && npm run build && cp -R .next/static .next/standalone/apps/web/.next/ && cp -R public .next/standalone/apps/web/ && (PORT=3737 node .next/standalone/apps/web/server.js &) && BASE_URL=http://localhost:3737 node scripts/smoke-a2a-progressive.mjs` (`next start` does not work with the dashboard's `output: 'standalone'` build; the copies match `infrastructure/docker/Dockerfile.frontend`) |
-| **Python SDK (`aim-sdk`)** | the published `aim-sdk` wheel: `aim_sdk` package, `aim-sdk` CLI entry point | the run command in the next cell, executed against a freshly installed wheel in a clean virtualenv | The installed distribution imports, and the `sdkVersion` an MCP detection reports is the version of the package that is actually installed — `MCPDetector().sdk_version` resolves `aim-sdk-python@<aim_sdk.__version__>` at call time, so a wheel built from a stale VERSION, or a detector that froze a version at import, fails here instead of shipping wrong `sdkVersion` values into every customer's Detection tab | `python -c "from aim_sdk import detection; assert detection.MCPDetector().sdk_version == 'aim-sdk-python@' + __import__('aim_sdk').__version__"` |
+| **Python SDK (`aim-sdk`)** | the published `aim-sdk` wheel: `aim_sdk` package, `aim-sdk` CLI entry point | the run command in the next cell, executed against a freshly installed wheel in a clean virtualenv | The installed distribution imports, and the `sdkVersion` an MCP detection reports is the version of the package that is actually installed: `MCPDetector().sdk_version` resolves `aim-sdk-python@<aim_sdk.__version__>` at call time, so a wheel built from a stale VERSION, or a detector that froze a version at import, fails here instead of shipping wrong `sdkVersion` values into every customer's Detection tab | `python -c "from aim_sdk import detection; assert detection.MCPDetector().sdk_version == 'aim-sdk-python@' + __import__('aim_sdk').__version__"` |
 | **TypeScript SDK (`@opena2a/aim-sdk`)** | the npm tarball: `AIMClient.verifyAction` against a real server | `sdk/typescript/scripts/release-smoke.sh` | Packs the client (or fetches the version `AIM_SDK_SPEC` names), checks that its CommonJS and ESM builds name `/api/v1/sdk-api/verifications` and neither names `/api/v1/verify`, installs the tarball into a throwaway consumer project, creates an agent on a real backend, and calls `verifyAction` from the consumer. The call must return a decision, and `GET /api/v1/verifications/<id>` must read back the same decision under the event ID the SDK reported. Hermetic by default (throwaway Postgres and a backend built from this tree, plus a strict-enforcement call for a capability the agent lacks, which must come back denied); with `AIM_SMOKE_BASE_URL` it runs against a stack that is already up, such as the quickstart stack, and deletes its agent on exit. The 1.3.1 tarball fails it: its signer refuses the 64-byte private key AIM issues, and it posts to `/api/v1/verify`, which the server does not serve | before a release: `sdk/typescript/scripts/release-smoke.sh`; after it, against the quickstart stack with `ADMIN_EMAIL` and `ADMIN_PASSWORD` exported: `AIM_SDK_SPEC=@opena2a/aim-sdk@latest AIM_SMOKE_BASE_URL=http://localhost:8080 sdk/typescript/scripts/release-smoke.sh` |
 | **Docker quick-start** | `docker-compose.quickstart.yml`, `scripts/quickstart.sh` | `scripts/test-quickstart.sh` | Builds the backend from the published Dockerfile, starts the quick-start stack from it in a directory the run creates with `mktemp`, under its own Compose project and container names, and waits for `GET /health` on the backend's host port; it never tears down a directory it did not create in that run. Host ports and the container-name prefix come from the environment with the quick-start's defaults: `AIM_BACKEND_PORT` (`8080`), `AIM_FRONTEND_PORT` (`3000`), `AIM_POSTGRES_PORT` (`5432`), `AIM_REDIS_PORT` (`6379`), `AIM_PROJECT` (`aim`; the test run sets its own). Two runs with different ports start side by side on one host; each prints its own teardown command | `./scripts/test-quickstart.sh`, or with other ports `AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 AIM_POSTGRES_PORT=5433 AIM_REDIS_PORT=6380 ./scripts/test-quickstart.sh` |
 | **quickstart.sh without Docker** | `scripts/quickstart.sh` | `scripts/test-quickstart-orphan-volume.sh` | Runs the script against docker and curl stubs: it stops before writing anything when an earlier install's database volume remains, and it probes and prints the ports given in the environment, falling back to an existing install's `.env` and then to the defaults. A first run records the ports and `AIM_PROJECT` in the `.env` it writes; a run over an existing install starts Compose with the ones given for that run and leaves that `.env` as it is | `./scripts/test-quickstart-orphan-volume.sh` |
@@ -46,8 +46,8 @@ If a smoke test does not exist for the path you touched, **write one as part of 
 > Note on web timing checks: run them against `next build` + the standalone
 > server it writes (`node .next/standalone/apps/web/server.js`), not
 > `next dev`. Under dev-mode StrictMode/HMR the dashboard tab content does not
-> render deterministically — a dev-server artifact, not real (production) user
-> behavior — so the committed Playwright e2e suite (dev webServer) is the wrong
+> render deterministically (a dev-server artifact, not real production user
+> behavior), so the committed Playwright e2e suite (dev webServer) is the wrong
 > host for timing-sensitive assertions. Use the standalone prod smoke above.
 
 ## Smoke test design rules
@@ -57,12 +57,12 @@ When writing a new smoke test for AIM:
 ### 1. Pre-flight, then cleanup, then port check
 
 - Verify required tools are on PATH (`docker`, `curl`, `go`, etc.)
-- Reap any orphan resources from prior failed runs (`docker rm -f <named-container>`, drop stale temp dirs) **before** the port-conflict check — otherwise your own prior run shows up as a conflict
+- Reap any orphan resources from prior failed runs (`docker rm -f <named-container>`, drop stale temp dirs) **before** the port-conflict check. Otherwise your own prior run shows up as a conflict
 - Then check ports/files/env you need
 
 ### 2. Boot the real thing, with a real readiness signal
 
-Every service has a real readiness signal — find it.
+Every service has a real readiness signal. Find it.
 
 | Service | Readiness probe |
 |---|---|
@@ -75,11 +75,11 @@ Every service has a real readiness signal — find it.
 | Postgres | `pg_isready` |
 | Redis | `redis-cli ping` |
 
-Do not use "service self-metrics endpoint exists" as a readiness probe — it returns 200 before the service is actually serving its main port.
+Do not use "service self-metrics endpoint exists" as a readiness probe. It returns 200 before the service is actually serving its main port.
 
 ### 3. Send real traffic, not synthetic stubs
 
-The synthetic OTLP signal generator (`gen-signal.sh`) sends an actual OTLP message via a throwaway Go program using the same SDK as the backend. This caught the Delta-vs-Cumulative bug because **the SDK's actual default behavior** is what hits Prometheus — not what the docs say it should be.
+The synthetic OTLP signal generator (`gen-signal.sh`) sends an actual OTLP message via a throwaway Go program using the same SDK as the backend. This caught the Delta-vs-Cumulative bug because **the SDK's actual default behavior** is what hits Prometheus, not what the docs say it should be.
 
 For HTTP smoke tests against the backend, use real `curl` against real endpoints. For database smoke tests, run real migrations against a real Postgres and `SELECT` the result.
 
@@ -87,15 +87,15 @@ For HTTP smoke tests against the backend, use real `curl` against real endpoints
 
 If the PR adds a metric, query Prometheus for it (`/api/v1/query?query=<name>`). If it adds a span, query Tempo for the trace_id (`/api/traces/<id>`). If it adds a log line, query Loki (`/loki/api/v1/query_range?query=...`).
 
-**Do not stop at "the request returned 200."** A 200 with empty `data.result.[]` in Prometheus means the metric did not land — that's exactly the failure mode that hid the temporality bug for hours.
+**Do not stop at "the request returned 200."** A 200 with empty `data.result.[]` in Prometheus means the metric did not land. That's exactly the failure mode that hid the temporality bug for hours.
 
 ### 5. Wait, but bound the wait
 
-Async pipelines need flush time. Pattern: poll every 2s for up to 30s with a clear failure message that includes the last response body. Do not use a single `sleep 60` — when it fails you do not know whether you needed 5 more seconds or 5 minutes.
+Async pipelines need flush time. Pattern: poll every 2s for up to 30s with a clear failure message that includes the last response body. Do not use a single `sleep 60`: when it fails you do not know whether you needed 5 more seconds or 5 minutes.
 
 ### 6. Make it port-overridable
 
-Dev machines run other Docker stacks. The smoke test must work on a clean machine AND on a machine where the default ports are taken. Pattern: env vars with defaults (`OTEL_GRPC_PORT=${OTEL_GRPC_PORT:-4317}`), provide an `env.example` operators can copy (note: deliberately no leading dot — leading-dot `.env*` filenames trip the pre-push sensitive-file scanner), document the conflict-check command in the comments at the top of compose.
+Dev machines run other Docker stacks. The smoke test must work on a clean machine AND on a machine where the default ports are taken. Pattern: env vars with defaults (`OTEL_GRPC_PORT=${OTEL_GRPC_PORT:-4317}`), provide an `env.example` operators can copy (note: deliberately no leading dot, because leading-dot `.env*` filenames trip the pre-push sensitive-file scanner), document the conflict-check command in the comments at the top of compose.
 
 ### 7. Make it idempotent
 
@@ -113,9 +113,9 @@ A smoke test that fails halfway and leaves orphan containers/files/ports must be
 4 = a signal failed to land in its backend
 ```
 
-### 9. For degrade-on-error read paths, a 200 is NOT the signal — seed and assert the enriched value
+### 9. For degrade-on-error read paths, a 200 is NOT the signal: seed and assert the enriched value
 
-List/detail endpoints that enrich each row from a related table (tags, capabilities, names, counts) almost always degrade to an empty value on a query error rather than returning 500 — that is correct production behavior (one bad join should not blank the whole page). The trap is that it makes the failure **invisible at the HTTP status level**: a bulk-prefetch query with a wrong column or table name compiles, passes every mock-backed unit test, and still returns `200` with the enriched field silently empty.
+List/detail endpoints that enrich each row from a related table (tags, capabilities, names, counts) almost always degrade to an empty value on a query error rather than returning 500. That is correct production behavior (one bad join should not blank the whole page). The trap is that it makes the failure **invisible at the HTTP status level**: a bulk-prefetch query with a wrong column or table name compiles, passes every mock-backed unit test, and still returns `200` with the enriched field silently empty.
 
 So the smoke for any such endpoint must **seed a real related row and assert it comes back through the query**, not just assert `200`:
 
@@ -167,10 +167,10 @@ These were all observed during the OTel exporter PR review and represent the fai
 - "`docker compose config -q` exits 0, so the stack is fine." It validates YAML schema, not whether image tags exist or services boot.
 - "`go build` is clean, so the SDK call is correct." Build only validates types; it does not catch wrong default behaviors (Delta vs Cumulative, wrong package imports for option types).
 - "`go test -race` passes, so the production behavior is correct." Tests use mocks; the production OTLP exporter that your code constructs at boot was never exercised.
-- "The unit test calls `Authorize`, so the metrics emit." Authorize was wrapped in a `defer` that only `emitDecisionTelemetry` calls — no test ran against a real meter provider.
+- "The unit test calls `Authorize`, so the metrics emit." Authorize was wrapped in a `defer` that only `emitDecisionTelemetry` calls. No test ran against a real meter provider.
 - "I read the docs, so I know the SDK default." OTel Go SDK v1.43 ships Delta temporality by default for synchronous counters, contradicting common assumption.
 
-If you find yourself reasoning your way to "this should work," stop and run the smoke test. If the smoke test does not exist, write one — that **is** the work, not extra work on top of the work.
+If you find yourself reasoning your way to "this should work," stop and run the smoke test. If the smoke test does not exist, write one. That **is** the work, not extra work on top of the work.
 
 ## Adding a new smoke test
 

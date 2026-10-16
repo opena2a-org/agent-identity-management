@@ -13,7 +13,7 @@ before its verdict, so every gate log carries them. It deliberately ignores
 the report's aggregate counters: the vitest JSON reporter counts a
 `skipIf`-skipped case in `numPassedTests` and leaves
 `numPendingTests`/`numTodoTests` at 0, so an aggregate-only check reports
-"0 skipped" while the default reporter shows dozens of skips — measured on
+"0 skipped" while the default reporter shows dozens of skips, measured on
 the 1.3.1 release commit as 1158 passed / 36 skipped in the terminal against
 1194 total / 1194 passed / 0 pending in the JSON aggregate. A workflow-shape
 test (`sdk/typescript/tests/check-vitest-report.test.ts`) pins both
@@ -90,9 +90,9 @@ Compensating controls:
 - The exclusion is bounded and reviewable: the allowlist lives in the
   workflow step itself and in committed test assertions that pin it to
   exactly these three files with exactly these bounds. Growing it requires
-  a workflow diff and a test change. A skip in **any other file** —
-  including a new `.skip`, `.todo` or an environment probe added
-  elsewhere — still fails the publish.
+  a workflow diff and a test change. A skip in **any other file**
+  (including a new `.skip`, `.todo` or an environment probe added
+  elsewhere) still fails the publish.
 - Growth inside an allowlisted file fails the gate: a skipped count above
   the file's bound is refused, and the refusal names the file, the
   measured count, the bound and the delta (for example
@@ -118,6 +118,6 @@ Compensating controls:
 `sdk/typescript/src/arp/telemetry/signature/manual-curl.test.ts` gates one
 describe block on `describe.skipIf(!hasCurl())`. The gate's runners
 (`ubuntu-latest`) ship curl, so **the dependency is provided and the block
-executes in both gates** — it is not on the allowlist. On any runner
+executes in both gates**. It is not on the allowlist. On any runner
 without curl the checker refuses (a skip outside the allowlist) rather than
 silently passing, which is the intended fail-closed behavior.

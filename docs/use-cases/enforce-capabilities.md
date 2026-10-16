@@ -292,6 +292,6 @@ When `review` mode is active, `VerifyAction` returns `isAuthorized: false` with 
 
 ## Next Steps
 
-- [Audit agent actions](audit-agent-actions.md) -- review what your agent has done
-- [Embed in my app](embed-in-my-app.md) -- enforce capabilities programmatically in your code
-- [Fleet governance](fleet-governance.md) -- manage policies across multiple agents
+- [Audit agent actions](audit-agent-actions.md): review what your agent has done
+- [Embed in my app](embed-in-my-app.md): enforce capabilities programmatically in your code
+- [Fleet governance](fleet-governance.md): manage policies across multiple agents

@@ -172,7 +172,7 @@ This repository ships multiple independently versioned artifacts (the platform i
 | TypeScript SDK | `sdk-ts-v` | `sdk-ts-v1.0.0` | `sdk/typescript/package.json` |
 | Java SDK | `sdk-java-v` | `sdk-java-v1.0.0` | `sdk/java/VERSION` and `sdk/java/pom.xml` |
 
-**Bare `v<X.Y.Z>` tags are retired for new releases.** Historical bare tags from `v0.2.0` through `v1.23.0` remain in the tag history as immutable artifacts — they were de-facto Python SDK releases despite the ambiguous naming, and removing them would break external references. Do not create new bare-`v*` tags.
+**Bare `v<X.Y.Z>` tags are retired for new releases.** Historical bare tags from `v0.2.0` through `v1.23.0` remain in the tag history as immutable artifacts. They were de-facto Python SDK releases despite the ambiguous naming, and removing them would break external references. Do not create new bare-`v*` tags.
 
 **Cutting a release:**
 
