@@ -210,3 +210,53 @@ func TestSDKToken_ExpirationEdgeCases(t *testing.T) {
 	}
 	assert.True(t, tokenAboutToExpire.IsActive())
 }
+
+// A row's family was born when the row the download wrote was created. The
+// birth travels in the row's metadata under familyCreatedAt; a row without
+// it, or with a value that is not a time, is its family's root and is born
+// at its own created_at.
+func TestSDKToken_FamilyCreatedAt(t *testing.T) {
+	created := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	born := time.Date(2025, 11, 20, 8, 30, 15, 123456789, time.UTC)
+
+	tests := []struct {
+		name     string
+		metadata map[string]interface{}
+		expected time.Time
+	}{
+		{name: "no metadata", metadata: nil, expected: created},
+		{name: "metadata without a birth", metadata: map[string]interface{}{"browser": "Chrome"}, expected: created},
+		{name: "a birth that is not a string", metadata: map[string]interface{}{SDKTokenMetadataFamilyCreatedAt: 1763627415}, expected: created},
+		{name: "a birth that is not a time", metadata: map[string]interface{}{SDKTokenMetadataFamilyCreatedAt: "yesterday"}, expected: created},
+		{name: "a birth in RFC 3339", metadata: map[string]interface{}{SDKTokenMetadataFamilyCreatedAt: born.Format(time.RFC3339Nano)}, expected: born},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token := SDKToken{ID: uuid.New(), CreatedAt: created, Metadata: tt.metadata}
+			assert.True(t, tt.expected.Equal(token.FamilyCreatedAt()), "got %s", token.FamilyCreatedAt())
+		})
+	}
+}
+
+// SetFamilyCreatedAt writes the birth as an RFC 3339 time in UTC, into
+// metadata it creates when the row has none, beside the keys the row already
+// carries; FamilyCreatedAt reads it back.
+func TestSDKToken_SetFamilyCreatedAt(t *testing.T) {
+	born := time.Date(2025, 11, 20, 8, 30, 15, 123456789, time.FixedZone("MST", -7*3600))
+
+	t.Run("a row without metadata", func(t *testing.T) {
+		token := SDKToken{ID: uuid.New(), CreatedAt: time.Now()}
+		token.SetFamilyCreatedAt(born)
+		assert.Equal(t, "2025-11-20T15:30:15.123456789Z", token.Metadata[SDKTokenMetadataFamilyCreatedAt])
+		assert.True(t, born.Equal(token.FamilyCreatedAt()))
+	})
+
+	t.Run("a row with metadata", func(t *testing.T) {
+		token := SDKToken{ID: uuid.New(), CreatedAt: time.Now(), Metadata: map[string]interface{}{"browser": "Chrome"}}
+		token.SetFamilyCreatedAt(born)
+		assert.Equal(t, "Chrome", token.Metadata["browser"])
+		assert.Equal(t, "2025-11-20T15:30:15.123456789Z", token.Metadata[SDKTokenMetadataFamilyCreatedAt])
+		assert.True(t, born.Equal(token.FamilyCreatedAt()))
+	})
+}
