@@ -89,6 +89,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The project URL in `pom.xml` and the first link in the README go to the project page,
   https://opena2a.org/agent-identity-management. They pointed at the GitHub repository and at the license
   file. The repository stays listed under `<scm>`.
+- `requestCapability(capabilityType, reason, metadata)` no longer sends `metadata`, and logs a warning when it
+  is given one. The capability request route binds `capabilityType` and `reason` only, so the metadata was not
+  stored; put the context an approver needs in the reason (#716).
+- Reconnecting to an existing agent (`AIMClient.secure` for an agent name AIM already holds) no longer sends
+  `tagIds` in its `PUT /api/v1/agents/{id}`: the update route does not read them. Tags are applied when AIM
+  creates the agent, and the javadoc of `Builder.tags` and `secure` says so (#716).
 
 ### Deprecated
 
@@ -96,8 +102,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verification does not accept these headers: it verifies a signature over the method, path, timestamp and
   body joined by newlines, and these headers sign `timestamp:METHOD:path:sha256(body)`. Their javadoc said
   they were compatible with the AIM backend; it now says they are not accepted.
+- `AIMClient.logCapabilityResult`, `logSuccess` and `logFailure` send nothing and log a deprecation warning,
+  as the Python SDK's `log_capability_result` does. They posted to
+  `POST /api/v1/sdk-api/verifications/{id}/result`, a route the server marks withdrawn and refuses for every
+  caller, so the post recorded nothing. `performAction` no longer calls them: it sends the verification request
+  and nothing after the action runs, where it posted a result after the action returned and after it threw (#716).
+- `AIMClient.Builder.clientId` and `clientSecret`. See the client ID and secret entry under Fixed (#716).
 
 ### Fixed
+
+- `listAgents` documents the four agent statuses the server defines, `pending`, `verified`, `suspended` and
+  `revoked`, as the values of its `status` filter. It listed `denied`, which no agent holds (#716).
+- A client built with a client ID and secret and no refresh token throws `AuthenticationException` when it
+  signs in, before sending anything, with a message that names the refresh token as the sign-in to use. The
+  server's token route (`POST /api/v1/oauth/token`) accepts only the jwt-bearer grant. The client's sign-in
+  built a `client_credentials` grant for `/oauth/token`, and `getAccessToken()` on such a client threw
+  `StackOverflowError`. `AIMClient.secure` now refuses SDK credentials that hold a client ID and secret and no
+  refresh token with the same exception, before it builds a client. The README and the Java SDK guide configure
+  a refresh token (#716).
+- `listMcpServers` reads the servers from the `mcpServers` member that
+  `GET /api/v1/sdk-api/agents/{id}/mcp-servers` answers with, and returns at most `limit` of them. It read a
+  `servers` member, which that answer does not carry, and returned an empty list. It no longer sends
+  `?limit=`, which the route does not read. An answer without an `mcpServers` array throws `AIMException`, and
+  a negative `limit` throws `IllegalArgumentException` before any request is sent, as
+  `MCPIntegration.listServers` does (#716).
+- `getSupportedAlgorithms` reads `GET /api/v1/crypto/algorithms` and returns the classical, post-quantum and
+  hybrid entries of its answer in one list, in that order. It requested `/api/v1/pqc/algorithms`, a path the
+  server does not register, and read the answer as a list, where the server answers an object holding
+  `classical`, `postQuantum` and `hybrid` lists (#716).
+- `deleteAgent` returns `{"success": true}` when the server answers the deletion with 204 and no body, as it
+  does on success. It threw `AIMException` (`No content to map due to end-of-input`) on that answer (#716).
+- `waitForApproval` puts the `denialReason` the server answers into the `ActionDeniedException` of a denied
+  verification. It read a `message` member, which the answer does not carry, so the exception said
+  `Action denied by administrator`. A verification the server answers as `expired` ends the wait with
+  `ActionDeniedException`; it was treated as pending and polled until the timeout, which ended with
+  `VerificationException`. `verifyCapability` with JIT access waits through the same code (#716).
+- Automatic MCP server registration no longer sends `verificationMethod`, which `CreateMCPServerRequest` does
+  not bind, as the Python SDK's automatic registration already does (#716).
 
 - `AgentType.UNKNOWN` is sent as `ai_agent`, the value of `AgentType.AI_AGENT`, so registering an agent with it
   and filtering `listAgents` by it use an agent type the server defines. It was sent as `unknown`, which is not

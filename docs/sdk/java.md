@@ -116,7 +116,7 @@ AIMClient agent = AIMClient.secure(
 | `agentType` | AgentType | No | Agent type enum |
 | `talksTo` | List<String> | No | MCP servers the agent uses |
 | `description` | String | No | Human-readable description |
-| `tags` | List<String> | No | Tags for categorization |
+| `tags` | List<String> | No | Tags for categorization, applied when AIM creates the agent |
 | `metadata` | Map<String, Object> | No | Custom key-value metadata |
 
 ---
@@ -197,7 +197,7 @@ VerificationResult result = agent.verifyCapability(
 
 ### Perform Action (Recommended)
 
-Execute an action with automatic verification and logging.
+Execute an action once AIM verifies the capability. The client sends the verification request and nothing after the action runs.
 
 ```java
 // Basic usage with lambda
@@ -398,9 +398,7 @@ For more control, use the builder pattern:
 AIMClient agent = new AIMClient.Builder()
     .agentName("my-enterprise-agent")
     .aimUrl("https://aim.yourcompany.com")
-    .clientId("client-id")
-    .clientSecret("client-secret")
-    .organizationId("org-id")
+    .refreshToken(System.getenv("AIM_REFRESH_TOKEN"))
     .agentType(AgentType.LANGCHAIN)
     .addCapability("db:read")
     .addCapability("db:write")
@@ -422,7 +420,7 @@ Credentials are loaded in this order:
    - `AIM_URL`
    - `AIM_REFRESH_TOKEN`
    - `AIM_SDK_TOKEN_ID`
-   - `AIM_CLIENT_ID` / `AIM_CLIENT_SECRET` (legacy)
+   - `AIM_CLIENT_ID` / `AIM_CLIENT_SECRET` (legacy: read, but AIM's token route does not accept them, so without a refresh token the client throws `AuthenticationException` at sign-in, before sending anything)
 
 2. **Home Directory** - `~/.aim/sdk_credentials.json`
 

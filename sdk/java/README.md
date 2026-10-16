@@ -66,9 +66,7 @@ The SDK reads credentials from environment variables first, then `~/.aim/sdk_cre
 
 ```bash
 export AIM_URL=https://aim.opena2a.org
-export AIM_CLIENT_ID=your-client-id
-export AIM_CLIENT_SECRET=your-client-secret
-export AIM_ORG_ID=your-org-id
+export AIM_REFRESH_TOKEN=your-refresh-token
 ```
 
 Or place a credentials file at `~/.aim/sdk_credentials.json` (mode 0600):
@@ -76,11 +74,12 @@ Or place a credentials file at `~/.aim/sdk_credentials.json` (mode 0600):
 ```json
 {
     "aimUrl": "https://aim.opena2a.org",
-    "clientId": "your-client-id",
-    "clientSecret": "your-client-secret",
-    "organizationId": "your-org-id"
+    "refreshToken": "your-refresh-token",
+    "sdkTokenId": "your-sdk-token-id"
 }
 ```
+
+The SDK signs in with the refresh token. Without one, a client ID and secret (`AIM_CLIENT_ID` and `AIM_CLIENT_SECRET`, or `clientId` and `clientSecret`) are refused with `AuthenticationException` before any request is sent: AIM's token route does not accept them.
 
 To download pre-configured credentials: log in to the AIM dashboard, go to **Settings → SDK Download**, copy the JSON into `~/.aim/sdk_credentials.json`.
 
@@ -221,9 +220,7 @@ For full control over configuration:
 AIMClient agent = new AIMClient.Builder()
     .agentName("my-enterprise-agent")
     .aimUrl("https://aim.mycompany.com")
-    .clientId("client-id")
-    .clientSecret("client-secret")
-    .organizationId("org-id")
+    .refreshToken(System.getenv("AIM_REFRESH_TOKEN"))
     .agentType(AgentType.LANGCHAIN)
     .addCapability("db:read")
     .addCapability("db:write")
@@ -254,7 +251,7 @@ try {
 
 The SDK loads credentials in this order:
 
-1. Environment variables (`AIM_URL`, `AIM_CLIENT_ID`, `AIM_CLIENT_SECRET`, `AIM_ORG_ID`)
+1. Environment variables (`AIM_URL`, `AIM_REFRESH_TOKEN`, `AIM_SDK_TOKEN_ID`)
 2. `~/.aim/sdk_credentials.json`
 3. `./.aim/credentials.json` (project-local)
 4. `./sdk_credentials.json` (current directory)

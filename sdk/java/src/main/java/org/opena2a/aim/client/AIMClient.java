@@ -55,6 +55,19 @@ public class AIMClient implements AutoCloseable {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final String VERIFICATIONS_PATH = "/api/v1/sdk-api/verifications/";
 
+    // logCapabilityResult, logSuccess and logFailure posted to
+    // POST /api/v1/sdk-api/verifications/{id}/result, which the server refuses
+    // for every caller. They send nothing now and log this warning on each call.
+    private static final String RESULT_REPORT_WITHDRAWN =
+            "{}() is deprecated and sends nothing: AIM refuses every request to the result route it posted to";
+
+    // The server's token route (POST /api/v1/oauth/token) accepts only the
+    // jwt-bearer grant, so no client ID and secret can sign in.
+    private static final String CLIENT_SECRET_SIGN_IN_UNAVAILABLE =
+            "AIM does not sign in with a client ID and secret: its token route accepts only a signed "
+            + "client assertion. Sign in with a refresh token: download the SDK credentials from the AIM "
+            + "dashboard (Settings, SDK Downloads), or set AIM_REFRESH_TOKEN";
+
     /**
      * The outcomes the capability registration route answers with. "already_exists"
      * is a capability the agent already holds; "pending" awaits admin approval.
@@ -352,7 +365,8 @@ public class AIMClient implements AutoCloseable {
      * @param agentType    Type of agent (auto-detected if null)
      * @param talksTo      List of MCP servers this agent communicates with
      * @param description  Description of the agent
-     * @param tags         List of tags for categorization (e.g., "production", "customer-facing")
+     * @param tags         List of tags for categorization (e.g., "production", "customer-facing"),
+     *                     applied when AIM creates the agent; reconnecting does not change them
      * @param metadata     Additional metadata as key-value pairs
      * @return Configured AIMClient ready for use
      */
@@ -370,7 +384,8 @@ public class AIMClient implements AutoCloseable {
      * @param agentType    Type of agent (auto-detected if null)
      * @param talksTo      List of MCP servers this agent communicates with
      * @param description  Description of the agent
-     * @param tags         List of tags for categorization (e.g., "production", "customer-facing")
+     * @param tags         List of tags for categorization (e.g., "production", "customer-facing"),
+     *                     applied when AIM creates the agent; reconnecting does not change them
      * @param metadata     Additional metadata as key-value pairs
      * @param mcpCommands  Map of MCP server name to command for capability discovery
      * @return Configured AIMClient ready for use
@@ -389,24 +404,25 @@ public class AIMClient implements AutoCloseable {
                     "No SDK credentials found. Download the SDK from your AIM dashboard (Settings -> SDK Downloads)");
         }
 
-        // Check for SDK OAuth credentials (refresh token flow) - preferred method
+        // SDK OAuth credentials (refresh token flow), the one sign-in AIM accepts from the SDK
         String refreshToken = credentials.get("refreshToken");
         String sdkTokenId = credentials.get("sdkTokenId");
 
-        // Fall back to client credentials if no refresh token
+        // A client ID and secret cannot sign in: refuse them before building a client
         String clientId = credentials.get("clientId");
         String clientSecret = credentials.get("clientSecret");
-        String organizationId = credentials.get("organizationId");
 
-        // Validate we have at least one valid credential type
         boolean hasRefreshToken = refreshToken != null && !refreshToken.isEmpty();
         boolean hasClientCredentials = clientId != null && clientSecret != null;
 
-        if (!hasRefreshToken && !hasClientCredentials) {
+        if (!hasRefreshToken && hasClientCredentials) {
+            throw new AuthenticationException(CLIENT_SECRET_SIGN_IN_UNAVAILABLE);
+        }
+        if (!hasRefreshToken) {
             CredentialManager.CredentialType foundType = CredentialManager.detectCredentialType(credentials);
             CredentialManager.printWrongCredentialTypeError(foundType, aimUrl);
             throw new CredentialException(
-                    "Invalid SDK credentials. Need either refreshToken or clientId/clientSecret. " +
+                    "Invalid SDK credentials. Need a refreshToken. " +
                     "Re-download from AIM dashboard (Settings -> SDK Downloads).");
         }
 
@@ -422,16 +438,11 @@ public class AIMClient implements AutoCloseable {
                 .metadata(metadata != null ? metadata : Collections.emptyMap())
                 .credentials(credentials);
 
-        if (hasRefreshToken) {
-            builder.refreshToken(refreshToken).sdkTokenId(sdkTokenId);
-            String tokenIdPreview = sdkTokenId != null && sdkTokenId.length() > 8
-                    ? sdkTokenId.substring(0, 8) + "..."
-                    : sdkTokenId;
-            logger.info("Using SDK OAuth authentication (token: {})", tokenIdPreview);
-        } else {
-            builder.clientId(clientId).clientSecret(clientSecret).organizationId(organizationId);
-            logger.info("Using client credentials authentication");
-        }
+        builder.refreshToken(refreshToken).sdkTokenId(sdkTokenId);
+        String tokenIdPreview = sdkTokenId != null && sdkTokenId.length() > 8
+                ? sdkTokenId.substring(0, 8) + "..."
+                : sdkTokenId;
+        logger.info("Using SDK OAuth authentication (token: {})", tokenIdPreview);
 
         AIMClient client = builder.build();
 
@@ -447,7 +458,7 @@ public class AIMClient implements AutoCloseable {
      *
      * Follows the "get or create" pattern:
      * 1. First check if agent with this name already exists
-     * 2. If exists: reconnect and update configuration (capabilities, tags, metadata)
+     * 2. If exists: reconnect and update configuration (description, metadata, capabilities, talksTo)
      * 3. If not exists: create new agent
      */
     private void registerAgent() {
@@ -576,7 +587,7 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Update an existing agent with new public key, capabilities, tags, or metadata.
+     * Update an existing agent with the new public key, description, metadata, capabilities and talksTo.
      * This is called when reconnecting to an existing agent to sync configuration.
      */
     private void updateExistingAgent() {
@@ -590,7 +601,7 @@ public class AIMClient implements AutoCloseable {
             logger.warn("Could not update agent public key: {}", e.getMessage());
         }
 
-        // 2. Update agent configuration (capabilities, tags, metadata)
+        // 2. Update agent configuration (description, metadata, capabilities, talksTo)
         try {
             ObjectNode updatePayload = objectMapper.createObjectNode();
             boolean hasUpdates = false;
@@ -625,14 +636,8 @@ public class AIMClient implements AutoCloseable {
                 hasUpdates = true;
             }
 
-            // Update tags if provided
-            if (tags != null && !tags.isEmpty()) {
-                var tagsArray = updatePayload.putArray("tagIds");
-                for (String tag : tags) {
-                    tagsArray.add(tag);
-                }
-                hasUpdates = true;
-            }
+            // Tags are not sent: AIM applies them when it creates the agent, and
+            // the agent update route does not read them.
 
             if (hasUpdates) {
                 put("/api/v1/agents/" + agentId, updatePayload.toString());
@@ -765,7 +770,6 @@ public class AIMClient implements AutoCloseable {
             }
 
             mcpData.put("registeredByAgent", agentId);
-            mcpData.put("verificationMethod", "agent_attestation");
 
             // Use SDK endpoint for MCP registration
             String endpoint = "/api/v1/sdk-api/agents/" + agentId + "/mcp-servers";
@@ -1237,36 +1241,11 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Authenticate using OAuth client credentials flow.
+     * Refuses a client ID and secret before sending anything: the server's token
+     * route accepts only the jwt-bearer grant, which this SDK does not send.
      */
     private void authenticateWithClientCredentials() {
-        try {
-            FormBody formBody = new FormBody.Builder()
-                    .add("grant_type", "client_credentials")
-                    .add("client_id", clientId)
-                    .add("client_secret", clientSecret)
-                    .build();
-
-            Request request = new Request.Builder()
-                    .url(aimUrl + "/oauth/token")
-                    .post(formBody)
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    throw new AuthenticationException("OAuth authentication failed: " + response.code());
-                }
-
-                String body = response.body().string();
-                JsonNode json = objectMapper.readTree(body);
-
-                this.accessToken = json.get("access_token").asText();
-                int expiresIn = json.has("expires_in") ? json.get("expires_in").asInt() : 3600;
-                this.tokenExpiry = Instant.now().plusSeconds(expiresIn - TOKEN_REFRESH_MARGIN_SECONDS);
-            }
-        } catch (IOException e) {
-            throw new AuthenticationException("Failed to authenticate: " + e.getMessage(), e);
-        }
+        throw new AuthenticationException(CLIENT_SECRET_SIGN_IN_UNAVAILABLE);
     }
 
     /**
@@ -1459,10 +1438,9 @@ public class AIMClient implements AutoCloseable {
                     return waitForApproval(verificationId, timeoutSeconds, capability, resource);
                 }
 
-                // Unknown status - check verified field
-                boolean verified = result.has("verified") && result.get("verified").asBoolean();
+                // Any other status is not an approval
                 return VerificationResult.builder()
-                        .verified(verified)
+                        .verified(false)
                         .status(status)
                         .verificationId(verificationId)
                         .capability(capability)
@@ -1537,11 +1515,8 @@ public class AIMClient implements AutoCloseable {
     public <T> T performAction(String capability, String resource, RiskLevel riskLevel,
                                 boolean jitAccess, int timeoutSeconds, Supplier<T> action) {
         VerificationResult result = verifyCapability(capability, resource, riskLevel, null, jitAccess, timeoutSeconds);
-        String verificationId = result.getVerificationId();
 
         if (!result.isVerified()) {
-            // Log the denial to Activity Timeline
-            logCapabilityResult(verificationId, false, null, "Action denied: capability not authorized");
             throw new ActionDeniedException(
                     "Action denied: " + capability + " on " + resource,
                     capability,
@@ -1549,19 +1524,9 @@ public class AIMClient implements AutoCloseable {
             );
         }
 
-        // Execute the action and log the result
         try {
-            T actionResult = action.get();
-            // Log success to Activity Timeline
-            String summary = actionResult != null ? actionResult.toString() : "Action completed successfully";
-            if (summary.length() > 200) {
-                summary = summary.substring(0, 200) + "...";
-            }
-            logCapabilityResult(verificationId, true, summary, null);
-            return actionResult;
+            return action.get();
         } catch (Exception e) {
-            // Log failure to Activity Timeline
-            logCapabilityResult(verificationId, false, null, e.getMessage());
             throw new AIMException("Action execution failed: " + e.getMessage(), e);
         }
     }
@@ -1618,58 +1583,47 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Log the result of a capability execution to AIM.
-     * This updates the Activity Timeline and helps build trust scores.
+     * Sends nothing and records nothing.
      *
-     * @param verificationId ID from verifyCapability response
-     * @param success        Whether the execution succeeded
-     * @param resultSummary  Brief summary of the result (optional)
-     * @param errorMessage   Error message if failed (optional)
+     * This method posted the result of a capability execution to
+     * POST /api/v1/sdk-api/verifications/{id}/result. AIM refuses every request
+     * to that route, so the post recorded nothing, and the method no longer
+     * sends it. It is kept so that code that calls it keeps compiling and
+     * running. {@link #performAction} does not call it.
+     *
+     * @param verificationId accepted and not used
+     * @param success        accepted and not used
+     * @param resultSummary  accepted and not used
+     * @param errorMessage   accepted and not used
+     * @deprecated AIM records no execution result through this client; remove the call.
      */
+    @Deprecated
     public void logCapabilityResult(String verificationId, boolean success, String resultSummary, String errorMessage) {
-        if (verificationId == null || verificationId.isEmpty()) {
-            logger.warn("Cannot log capability result: verification ID is null or empty");
-            return;
-        }
-
-        try {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("result", success ? "success" : "failure");
-            if (resultSummary != null) {
-                payload.put("resultSummary", resultSummary);
-            }
-            if (errorMessage != null) {
-                payload.put("errorMessage", errorMessage);
-            }
-            payload.put("timestamp", java.time.Instant.now().toString());
-
-            String url = "/api/v1/sdk-api/verifications/" + verificationId + "/result";
-            post(url, payload.toString());
-            logger.debug("Logged capability result: verification={}, success={}", verificationId, success);
-        } catch (Exception e) {
-            // Don't fail the action if logging fails - just log the error
-            logger.warn("Failed to log capability result: {}", e.getMessage());
-        }
+        logger.warn(RESULT_REPORT_WITHDRAWN, "logCapabilityResult");
     }
 
     /**
-     * Log a successful capability execution result.
+     * Sends nothing and records nothing, as {@link #logCapabilityResult} does.
      *
-     * @param verificationId ID from verifyCapability response
-     * @param resultSummary  Brief summary of the result
+     * @param verificationId accepted and not used
+     * @param resultSummary  accepted and not used
+     * @deprecated AIM records no execution result through this client; remove the call.
      */
+    @Deprecated
     public void logSuccess(String verificationId, String resultSummary) {
-        logCapabilityResult(verificationId, true, resultSummary, null);
+        logger.warn(RESULT_REPORT_WITHDRAWN, "logSuccess");
     }
 
     /**
-     * Log a failed capability execution result.
+     * Sends nothing and records nothing, as {@link #logCapabilityResult} does.
      *
-     * @param verificationId ID from verifyCapability response
-     * @param errorMessage   Error message describing the failure
+     * @param verificationId accepted and not used
+     * @param errorMessage   accepted and not used
+     * @deprecated AIM records no execution result through this client; remove the call.
      */
+    @Deprecated
     public void logFailure(String verificationId, String errorMessage) {
-        logCapabilityResult(verificationId, false, null, errorMessage);
+        logger.warn(RESULT_REPORT_WITHDRAWN, "logFailure");
     }
 
     /**
@@ -1954,21 +1908,35 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * List all MCP servers registered for this agent.
+     * List the MCP servers of this agent's organization.
+     *
+     * The route answers every server of the organization; this returns the
+     * first {@code limit} of them, in the order the route answered.
      *
      * @param limit Maximum number of servers to return
      * @return List of MCP server details
+     * @throws IllegalArgumentException if {@code limit} is negative; nothing is sent
+     * @throws AIMException if the request fails or the answer carries no {@code mcpServers} array
      */
     public List<Map<String, Object>> listMcpServers(int limit) {
+        if (limit < 0) {
+            throw new IllegalArgumentException("limit must not be negative: " + limit);
+        }
+        Map<String, Object> result;
         try {
             String agentId = getAgentId();
             // Use SDK API endpoint (Ed25519 auth) instead of dashboard API (JWT auth)
-            String response = get("/api/v1/sdk-api/agents/" + agentId + "/mcp-servers?limit=" + limit);
-            Map<String, Object> result = objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
-            return (List<Map<String, Object>>) result.getOrDefault("servers", Collections.emptyList());
+            String response = get("/api/v1/sdk-api/agents/" + agentId + "/mcp-servers");
+            result = objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to list MCP servers: " + e.getMessage(), e);
         }
+        Object servers = result.get("mcpServers");
+        if (!(servers instanceof List)) {
+            throw new AIMException("Failed to list MCP servers: the answer carries no mcpServers array");
+        }
+        List<Map<String, Object>> list = (List<Map<String, Object>>) servers;
+        return new ArrayList<>(list.subList(0, Math.min(limit, list.size())));
     }
 
     /**
@@ -2177,7 +2145,8 @@ public class AIMClient implements AutoCloseable {
      *
      * @param capabilityType Type of capability being requested (e.g., "write_database")
      * @param reason Business justification for the capability request (minimum 10 characters)
-     * @param metadata Optional additional context for the request
+     * @param metadata accepted and not sent: the capability request route reads the capability
+     *                 type and the reason only, so put any context the approver needs in the reason
      * @return Map containing request details (id, status, etc.)
      */
     public Map<String, Object> requestCapability(String capabilityType, String reason, Map<String, Object> metadata) {
@@ -2193,7 +2162,8 @@ public class AIMClient implements AutoCloseable {
             payload.put("capabilityType", capabilityType);
             payload.put("reason", reason);
             if (metadata != null && !metadata.isEmpty()) {
-                payload.set("metadata", objectMapper.valueToTree(metadata));
+                logger.warn("requestCapability does not send metadata: the capability request route reads "
+                        + "the capability type and the reason only");
             }
 
             String agentId = getAgentId();
@@ -2319,7 +2289,8 @@ public class AIMClient implements AutoCloseable {
      * @param verificationId ID of the verification request
      * @param timeoutSeconds Maximum time to wait for approval
      * @return VerificationResult when approved
-     * @throws ActionDeniedException if action is denied
+     * @throws ActionDeniedException if the action is denied, with the denial reason AIM
+     *         answered when it gave one, or if the verification expired before approval
      * @throws VerificationException if timeout or polling fails, or if the
      *         agent has no signing key or the IDs are not UUIDs
      */
@@ -2336,7 +2307,7 @@ public class AIMClient implements AutoCloseable {
      * @param capability     The capability being verified (for result)
      * @param resource       The resource being accessed (for result)
      * @return VerificationResult when approved
-     * @throws ActionDeniedException if action is denied
+     * @throws ActionDeniedException if the action is denied or the verification expired
      * @throws VerificationException if timeout or polling fails
      */
     private VerificationResult waitForApproval(String verificationId, int timeoutSeconds,
@@ -2369,15 +2340,24 @@ public class AIMClient implements AutoCloseable {
                             .resource(resource)
                             .enforcementMode(enforcementMode)
                             .timestamp(Instant.now())
-                            .metadata(result.get("constraints") != null ?
-                                objectMapper.convertValue(result.get("constraints"), new TypeReference<Map<String, Object>>() {}) : null)
                             .build();
                 }
 
                 if ("denied".equalsIgnoreCase(status) || "rejected".equalsIgnoreCase(status)) {
-                    String message = (String) result.getOrDefault("message", "Action denied by administrator");
+                    Object reason = result.get("denialReason");
+                    String message = reason instanceof String && !((String) reason).isEmpty()
+                            ? (String) reason
+                            : "Action denied by administrator";
                     logger.warn("JIT approval denied for verification {}: {}", verificationId, message);
                     throw new ActionDeniedException(message, capability, resource);
+                }
+
+                // An expired verification is never approved: stop waiting.
+                if ("expired".equalsIgnoreCase(status)) {
+                    logger.warn("JIT approval for verification {} expired", verificationId);
+                    throw new ActionDeniedException(
+                            "Verification " + verificationId + " expired before it was approved",
+                            capability, resource);
                 }
 
                 // Still pending, continue polling
@@ -2470,7 +2450,7 @@ public class AIMClient implements AutoCloseable {
      *
      * @param limit Maximum number of agents to return (default 50, max 100)
      * @param offset Pagination offset
-     * @param status Filter by status ("pending", "verified", "denied")
+     * @param status Filter by status: "pending", "verified", "suspended" or "revoked"
      * @param agentType Filter by agent type
      * @return Map containing agents list and pagination info
      */
@@ -2544,7 +2524,8 @@ public class AIMClient implements AutoCloseable {
      * WARNING: This action cannot be easily undone.
      *
      * @param targetAgentId Agent ID to delete (cannot delete current agent)
-     * @return Map containing success/message
+     * @return {"success": true} when AIM answers the deletion with no content, as it
+     *         does on success; otherwise the JSON object it answered with
      */
     public Map<String, Object> deleteAgent(String targetAgentId) {
         String currentAgentId = getAgentId();
@@ -2555,6 +2536,11 @@ public class AIMClient implements AutoCloseable {
         try {
             String url = "/api/v1/agents/" + targetAgentId;
             String response = delete(url);
+            if (response == null || response.isBlank()) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("success", true);
+                return result;
+            }
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             throw new AIMException("Failed to delete agent: " + e.getMessage(), e);
@@ -3022,13 +3008,18 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Get list of supported PQC algorithms from the server.
+     * Get the signature algorithms the server supports, from GET /api/v1/crypto/algorithms.
+     *
+     * The server lists them in three groups; this returns the classical entries,
+     * then the post-quantum entries, then the hybrid entries, in the order the
+     * server listed each group. Every entry carries "algorithm" (for example
+     * "ML-DSA-65") and "type" ("classical", "post-quantum" or "hybrid").
      *
      * @return List of algorithm info maps
      */
     public List<Map<String, Object>> getSupportedAlgorithms() {
         try {
-            String url = aimUrl + "/api/v1/pqc/algorithms";
+            String url = aimUrl + "/api/v1/crypto/algorithms";
             Request request = new Request.Builder()
                     .url(url)
                     .get()
@@ -3040,8 +3031,21 @@ public class AIMClient implements AutoCloseable {
                     throw new AIMException("Failed to get supported algorithms: " + response.code() + " - " + errorBody,
                             "PQC_ALGORITHMS_FAILED", response.code());
                 }
-                String responseBody = response.body() != null ? response.body().string() : "[]";
-                return objectMapper.readValue(responseBody, new TypeReference<List<Map<String, Object>>>() {});
+                String responseBody = response.body() != null ? response.body().string() : "{}";
+                Map<String, Object> groups =
+                        objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
+                List<Map<String, Object>> algorithms = new ArrayList<>();
+                for (String group : new String[]{"classical", "postQuantum", "hybrid"}) {
+                    Object entries = groups.get(group);
+                    if (entries instanceof List) {
+                        for (Object entry : (List<Object>) entries) {
+                            if (entry instanceof Map) {
+                                algorithms.add((Map<String, Object>) entry);
+                            }
+                        }
+                    }
+                }
+                return algorithms;
             }
         } catch (IOException e) {
             throw new AIMException("Failed to get supported algorithms: " + e.getMessage(), "NETWORK_ERROR", 0, e);
@@ -3267,7 +3271,8 @@ public class AIMClient implements AutoCloseable {
         }
 
         /**
-         * Sets the list of tags for agent categorization.
+         * Sets the list of tags for agent categorization. AIM applies them when it
+         * creates the agent; reconnecting to an existing agent does not change its tags.
          *
          * @param tags the list of tag strings
          * @return this builder for chaining
@@ -3323,22 +3328,30 @@ public class AIMClient implements AutoCloseable {
         }
 
         /**
-         * Sets the OAuth client ID for authentication.
+         * Sets an OAuth client ID. AIM does not sign in with a client ID and secret,
+         * so a client built with them and no refresh token throws
+         * {@link AuthenticationException} when it signs in, before sending anything.
          *
          * @param clientId the OAuth client ID
          * @return this builder for chaining
+         * @deprecated sign in with {@link #refreshToken(String)}.
          */
+        @Deprecated
         public Builder clientId(String clientId) {
             this.clientId = clientId;
             return this;
         }
 
         /**
-         * Sets the OAuth client secret for authentication.
+         * Sets an OAuth client secret. AIM does not sign in with a client ID and secret,
+         * so a client built with them and no refresh token throws
+         * {@link AuthenticationException} when it signs in, before sending anything.
          *
          * @param clientSecret the OAuth client secret
          * @return this builder for chaining
+         * @deprecated sign in with {@link #refreshToken(String)}.
          */
+        @Deprecated
         public Builder clientSecret(String clientSecret) {
             this.clientSecret = clientSecret;
             return this;
