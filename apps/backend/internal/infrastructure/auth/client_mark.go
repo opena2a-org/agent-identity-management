@@ -67,6 +67,27 @@ func clientClass(address string) (string, bool) {
 	return "6:" + ip.Mask(net.CIDRMask(64, 128)).String(), true
 }
 
+// CompareClients classifies a reuse from a stored client record instead of a
+// mark: the client that retired the token, as a row stored it, against the
+// client presenting it now. The rule is the mark's: the same address class
+// (an IPv4 address exactly, an IPv6 address by its /64) and the same user
+// agent is sameClient; unknown when either address has no class, never a
+// verdict it cannot support.
+func CompareClients(stored, current Client) string {
+	storedClass, ok := clientClass(stored.Address)
+	if !ok {
+		return ClientMatchUnknown
+	}
+	currentClass, ok := clientClass(current.Address)
+	if !ok {
+		return ClientMatchUnknown
+	}
+	if storedClass == currentClass && stored.UserAgent == current.UserAgent {
+		return ClientMatchSame
+	}
+	return ClientMatchDifferent
+}
+
 // clientMark is the denylist value for jti as presented by client, or the
 // legacy value when there is no key, no jti or no address class.
 func (s *JWTService) clientMark(jti string, client Client) string {

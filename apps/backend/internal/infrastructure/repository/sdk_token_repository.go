@@ -215,6 +215,61 @@ func (r *sdkTokenRepository) GetByTokenHash(tokenHash string) (*domain.SDKToken,
 	return token, nil
 }
 
+// GetByParentID reads the row rotation created from the user's row parentID,
+// the row whose metadata parent_token names it. Rotation retires a row once
+// (its UPDATE is set-if-absent), so at most one row descends from it; the
+// earliest created is returned where more than one does.
+func (r *sdkTokenRepository) GetByParentID(userID uuid.UUID, parentID uuid.UUID) (*domain.SDKToken, error) {
+	query := `
+		SELECT id, user_id, organization_id, token_hash, token_id,
+		       device_name, device_fingerprint, ip_address, user_agent,
+		       last_used_at, last_ip_address, usage_count,
+		       created_at, expires_at, revoked_at, revoke_reason, metadata
+		FROM sdk_tokens
+		WHERE user_id = $1 AND metadata->>'parent_token' = $2
+		ORDER BY created_at ASC
+		LIMIT 1
+	`
+
+	token := &domain.SDKToken{}
+	metadataJSON := make([]byte, 0)
+
+	err := r.db.QueryRow(query, userID, parentID.String()).Scan(
+		&token.ID,
+		&token.UserID,
+		&token.OrganizationID,
+		&token.TokenHash,
+		&token.TokenID,
+		&token.DeviceName,
+		&token.DeviceFingerprint,
+		&token.IPAddress,
+		&token.UserAgent,
+		&token.LastUsedAt,
+		&token.LastIPAddress,
+		&token.UsageCount,
+		&token.CreatedAt,
+		&token.ExpiresAt,
+		&token.RevokedAt,
+		&token.RevokeReason,
+		&metadataJSON,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("SDK token not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SDK token by parent: %w", err)
+	}
+
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &token.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+	}
+
+	return token, nil
+}
+
 func (r *sdkTokenRepository) GetByUserID(userID uuid.UUID, includeRevoked bool) ([]*domain.SDKToken, error) {
 	query := `
 		SELECT id, user_id, organization_id, token_hash, token_id,

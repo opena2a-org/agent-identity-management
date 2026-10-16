@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -73,9 +75,12 @@ func (h *AuthRefreshHandler) refreshPrincipal(claims *auth.JWTClaims) (*domain.U
 
 // presenter is the client presenting a token on this request: the
 // trusted-proxy client address (identical to c.IP() when TRUSTED_PROXIES is
-// unset) and the raw User-Agent header.
+// unset) and the raw User-Agent header. Both are copied: a header value is
+// a view of the request buffer, which the server reuses for the next
+// request, and the values are stored on an sdk_tokens row and in an audit
+// row.
 func presenter(c fiber.Ctx) auth.Client {
-	return auth.Client{Address: middleware.ClientIP(c), UserAgent: c.Get("User-Agent")}
+	return auth.Client{Address: strings.Clone(middleware.ClientIP(c)), UserAgent: strings.Clone(c.Get("User-Agent"))}
 }
 
 // recordRefusal records one refused presentation of a revoked token: a
@@ -136,29 +141,53 @@ func (h *AuthRefreshHandler) sdkRowRefused(c fiber.Ctx, token string, row *domai
 	}
 	switch {
 	case row.RevokedFor(domain.SDKTokenRevokeReasonRotation):
-		h.reuseDetected(c, token)
+		h.endFamilyForReuse(c, claims, h.classifySDKRowReuse(c, row))
 	case row.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked):
 		h.recordRefusal(c, claims, domain.AuditActionRefreshSessionRevoked, nil, "")
 	}
 }
 
+// classifySDKRowReuse classifies a reuse detected by an sdk_tokens row, which
+// no denylist mark describes: the row rotation created from the reused row
+// (its successor) stores the address and user agent of the client that
+// rotated, and the presenter is compared with them under the mark's rule
+// (auth.CompareClients). It is unknown when the successor row cannot be read
+// or stores no client, or an address has no class.
+func (h *AuthRefreshHandler) classifySDKRowReuse(c fiber.Ctx, row *domain.SDKToken) string {
+	if h.sdkTokenService == nil {
+		return auth.ClientMatchUnknown
+	}
+	next, err := h.sdkTokenService.SuccessorOf(c.Context(), row)
+	if err != nil || next.IPAddress == nil || next.UserAgent == nil {
+		return auth.ClientMatchUnknown
+	}
+	return auth.CompareClients(auth.Client{Address: *next.IPAddress, UserAgent: *next.UserAgent}, presenter(c))
+}
+
 // reuseDetected handles a refresh token that was retired and was presented
 // again (RFC 9700 section 4.14.2): a login token denylisted by rotation or
-// logout, or an SDK-download token whose sdk_tokens row was retired by
-// rotation. Whoever holds the chain that grew from it cannot be told apart
-// from the legitimate client, so the whole family is revoked and the event
-// recorded. The record says whether the presenter is the client that retired
-// the token (a race with itself) or not (auth.ClassifyReuse); enforcement is
-// the same either way. An SDK-download family's sdk_tokens rows are revoked
-// too, so the family ends even where no revocation store is configured; the
-// record's familyRevoked is true when either write succeeded. A token without
-// a family (an access or service token) records nothing here.
+// logout. The record says whether the presenter is the client that retired
+// the token (a race with itself) or not, read from the denylist mark
+// (auth.ClassifyReuse). An SDK-download token whose sdk_tokens row was
+// retired by rotation is classified from its successor row instead
+// (sdkRowRefused). A token without a family (an access or service token)
+// records nothing here.
 func (h *AuthRefreshHandler) reuseDetected(c fiber.Ctx, token string) {
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil || claims.FamilyID() == "" {
 		return
 	}
-	clientMatch := h.jwtService.ClassifyReuse(c.Context(), claims.ID, presenter(c))
+	h.endFamilyForReuse(c, claims, h.jwtService.ClassifyReuse(c.Context(), claims.ID, presenter(c)))
+}
+
+// endFamilyForReuse ends the family of a reused refresh token and records the
+// reuse with its classification. Whoever holds the chain that grew from the
+// token cannot be told apart from the legitimate client, so the whole family
+// is revoked; enforcement is the same whatever the classification. An
+// SDK-download family's sdk_tokens rows are revoked too, so the family ends
+// even where no revocation store is configured; the record's familyRevoked
+// is true when either write succeeded.
+func (h *AuthRefreshHandler) endFamilyForReuse(c fiber.Ctx, claims *auth.JWTClaims, clientMatch string) {
 	familyRevoked, revokeErr := h.jwtService.RevokeFamily(c.Context(), claims)
 	if revokeErr != nil {
 		log.Printf("Refresh: family %s could not be revoked after a reuse: %v", claims.FamilyID(), revokeErr)
@@ -196,9 +225,16 @@ func (h *AuthRefreshHandler) rotateSDKTokenRow(c fiber.Ctx, oldToken *domain.SDK
 	newHasher.Write([]byte(newRefreshToken))
 	newTokenHash := hex.EncodeToString(newHasher.Sum(nil))
 
-	// Get client info
-	newIPAddress := c.IP()
-	userAgent := c.Get("User-Agent")
+	// The rotating client, as the route saw it: the trusted-proxy client
+	// address and the raw User-Agent header. A later reuse of oldToken is
+	// classified by comparing its presenter with this row (classifySDKRowReuse),
+	// so the row stores what the comparison reads. A forwarded address that
+	// does not parse is not stored; the connecting address is.
+	client := presenter(c)
+	newIPAddress, userAgent := client.Address, client.UserAgent
+	if net.ParseIP(newIPAddress) == nil {
+		newIPAddress = c.IP()
+	}
 
 	// Get rotation count from old token metadata
 	rotationCount := 1
