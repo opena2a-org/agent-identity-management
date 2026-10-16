@@ -171,7 +171,7 @@ func main() {
 	// Run bootstrap
 	fmt.Println("\nStarting bootstrap process...")
 
-	if err := runBootstrap(context.Background(), db, config); err != nil {
+	if err := runBootstrap(context.Background(), os.Stdout, db, config); err != nil {
 		log.Fatalf("Bootstrap failed: %v", err)
 	}
 
@@ -412,7 +412,10 @@ func isBootstrapped(db *sql.DB) bool {
 	return value == "true"
 }
 
-func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) error {
+// runBootstrap seeds the organization, the admin user and the
+// bootstrap_completed marker in one transaction, writing a numbered line to w
+// for each step and lines indented three spaces under it for what the step did.
+func runBootstrap(ctx context.Context, w io.Writer, db *sql.DB, config *BootstrapConfig) error {
 	// Start transaction
 	tx, err := db.Begin()
 	if err != nil {
@@ -421,14 +424,14 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 	defer tx.Rollback()
 
 	// 1. Check if organization exists
-	fmt.Println("1.Checking organization...")
+	fmt.Fprintln(w, "1. Checking organization...")
 	var orgID uuid.UUID
 	query := `SELECT id FROM organizations WHERE domain = $1`
 	err = tx.QueryRow(query, config.OrgDomain).Scan(&orgID)
 
 	if err != nil {
 		// Organization doesn't exist, create it
-		fmt.Printf("   Creating organization '%s'...\n", config.OrgName)
+		fmt.Fprintf(w, "   Creating organization '%s'...\n", config.OrgName)
 		orgID = uuid.New()
 		query = `
 			INSERT INTO organizations (id, name, domain, plan_type, max_agents, max_users, is_active)
@@ -438,19 +441,19 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 		if err != nil {
 			return fmt.Errorf("failed to create organization: %w", err)
 		}
-		fmt.Println("Organization created")
+		fmt.Fprintln(w, "   Organization created")
 	} else {
-		fmt.Printf("Organization exists (ID: %s)\n", orgID)
+		fmt.Fprintf(w, "   Organization exists (ID: %s)\n", orgID)
 	}
 
 	// 2. Hash password
-	fmt.Println("2.Hashing password...")
+	fmt.Fprintln(w, "2. Hashing password...")
 	passwordHasher := auth.NewPasswordHasher()
 	passwordHash, err := passwordHasher.HashPassword(config.AdminPassword)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
-	fmt.Println("Password hashed")
+	fmt.Fprintln(w, "   Password hashed")
 
 	// 3. Create admin user.
 	//
@@ -470,7 +473,7 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 	// blocks downstream approval flows that expect the seeded admin to be
 	// active out of the gate. The pre-B2 migration 013 v1 set this column
 	// explicitly; the move to Go preserves that behavior.
-	fmt.Println("3.Creating admin user...")
+	fmt.Fprintln(w, "3. Creating admin user...")
 	userID := uuid.New()
 	providerID := fmt.Sprintf("local-%s", userID.String())
 
@@ -523,14 +526,14 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 		// Signal the caller (via config.passwordWasGenerated reset) that the
 		// credential print should be suppressed; the stored password is NOT
 		// the one we just hashed.
-		fmt.Printf("Admin user already exists for %s in this org — leaving stored password unchanged\n", config.AdminEmail)
+		fmt.Fprintf(w, "   Admin user already exists for %s in this org — leaving stored password unchanged\n", config.AdminEmail)
 		config.adminAlreadyExisted = true
 	} else {
-		fmt.Printf("Admin user created (ID: %s)\n", userID)
+		fmt.Fprintf(w, "   Admin user created (ID: %s)\n", userID)
 	}
 
 	// 4. Mark bootstrap as completed
-	fmt.Println("4.Updating system configuration...")
+	fmt.Fprintln(w, "4. Updating system configuration...")
 	query = `
 		INSERT INTO system_config (key, value, description, updated_at)
 		VALUES ('bootstrap_completed', 'true', 'Initial admin bootstrap completed', NOW())
@@ -541,7 +544,7 @@ func runBootstrap(ctx context.Context, db *sql.DB, config *BootstrapConfig) erro
 	if err != nil {
 		return fmt.Errorf("failed to update system config: %w", err)
 	}
-	fmt.Println("System configuration updated")
+	fmt.Fprintln(w, "   System configuration updated")
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
