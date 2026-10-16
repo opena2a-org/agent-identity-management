@@ -26,6 +26,7 @@ type documentedRequest struct {
 	properties  []string
 	required    []string
 	exampleKeys []string
+	example     string
 }
 
 // documentedRequestFor extracts the request schema and example of the endpoint
@@ -41,22 +42,57 @@ func documentedRequestFor(t *testing.T, doc, apiPath string) documentedRequest {
 	if next := strings.Index(entry[len(pathEntry):], "method: \""); next >= 0 {
 		entry = entry[:len(pathEntry)+next]
 	}
+	return documentedRequestIn(t, entry, apiPath)
+}
 
-	propsAt := strings.Index(entry, "properties: {")
-	require.GreaterOrEqual(t, propsAt, 0, "%s has no requestSchema properties", apiPath)
+// documentedRequestIn reads the first schema's properties and the example body
+// of one endpoint entry.
+func documentedRequestIn(t *testing.T, entry, label string) documentedRequest {
+	t.Helper()
 
 	var out documentedRequest
+	out.properties, out.required = docSchemaProperties(t, entry, label)
+
+	const exampleOpen = "example: `"
+	exAt := strings.Index(entry, exampleOpen)
+	require.GreaterOrEqual(t, exAt, 0, "%s has no example body", label)
+	example := entry[exAt+len(exampleOpen):]
+	out.example = example[:strings.Index(example, "`")]
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out.example), &body),
+		"the %s example must be valid JSON", label)
+	for k := range body {
+		out.exampleKeys = append(out.exampleKeys, k)
+	}
+
+	sort.Strings(out.exampleKeys)
+	return out
+}
+
+// docSchemaProperties returns the property names of the first `properties: {`
+// block in src, and the subset marked `required: true`, whether that sits on
+// the property's own line or inside its braces.
+func docSchemaProperties(t *testing.T, src, label string) (properties, required []string) {
+	t.Helper()
+
+	propsAt := strings.Index(src, "properties: {")
+	require.GreaterOrEqual(t, propsAt, 0, "%s has no schema properties", label)
+
 	depth := 0
 	current := ""
-	for _, line := range strings.Split(entry[propsAt+len("properties: {"):], "\n") {
+	for _, line := range strings.Split(src[propsAt+len("properties: {"):], "\n") {
 		if depth == 0 {
 			if m := docPropertyKeyRe.FindStringSubmatch(line); m != nil {
 				current = m[1]
-				out.properties = append(out.properties, current)
+				properties = append(properties, current)
+				if strings.Contains(line, "required: true") {
+					required = append(required, current)
+				}
 			}
 		}
 		if depth == 1 && strings.Contains(line, "required: true") {
-			out.required = append(out.required, current)
+			required = append(required, current)
 		}
 		depth += strings.Count(line, "{") - strings.Count(line, "}")
 		if depth < 0 {
@@ -64,23 +100,9 @@ func documentedRequestFor(t *testing.T, doc, apiPath string) documentedRequest {
 		}
 	}
 
-	const exampleOpen = "example: `"
-	exAt := strings.Index(entry, exampleOpen)
-	require.GreaterOrEqual(t, exAt, 0, "%s has no example body", apiPath)
-	example := entry[exAt+len(exampleOpen):]
-	example = example[:strings.Index(example, "`")]
-
-	var body map[string]any
-	require.NoError(t, json.Unmarshal([]byte(example), &body),
-		"the %s example must be valid JSON", apiPath)
-	for k := range body {
-		out.exampleKeys = append(out.exampleKeys, k)
-	}
-
-	sort.Strings(out.properties)
-	sort.Strings(out.required)
-	sort.Strings(out.exampleKeys)
-	return out
+	sort.Strings(properties)
+	sort.Strings(required)
+	return properties, required
 }
 
 // boundFields returns the json names the handler binds from v's struct type,

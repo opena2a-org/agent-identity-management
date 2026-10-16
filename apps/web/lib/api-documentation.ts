@@ -1455,7 +1455,8 @@ export const apiDocumentation: EndpointCategory[] = [
       {
         method: "POST",
         path: "/api/v1/api-keys",
-        description: "Create new API key. SHA-256 hashed before storage.",
+        description:
+          "Create an API key for one agent. agentId and name are required. The key expires 90 days after it is created. SHA-256 hashed before storage; the plain-text key is returned only in this response.",
         summary: "Create API key",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,
@@ -1464,32 +1465,37 @@ export const apiDocumentation: EndpointCategory[] = [
         requestSchema: {
           type: "object",
           properties: {
-            name: { type: "string", description: "Key name", required: true },
-            expiresAt: {
+            agentId: {
               type: "string",
-              description: "Expiration date (optional)",
+              description: "ID of an agent in your organization",
+              required: true,
             },
-            scopes: {
-              type: "array",
-              description: "Permission scopes (optional)",
-            },
+            name: { type: "string", description: "Key name", required: true },
           },
         },
         responseSchema: {
           type: "object",
           properties: {
+            id: { type: "string", description: "Key ID" },
             apiKey: {
               type: "string",
-              description: "Plain-text API key - SAVE THIS!",
+              description: "Plain-text API key, returned only in this response",
             },
-            keyId: { type: "string", description: "Key ID" },
+            name: { type: "string", description: "Key name" },
+            agentId: {
+              type: "string",
+              description: "Agent the key belongs to",
+            },
+            expiresAt: {
+              type: "string",
+              description: "Expiry timestamp, 90 days after creation",
+            },
             createdAt: { type: "string", description: "Creation timestamp" },
           },
         },
         example: `{
-  "name": "production-api-key",
-  "expiresAt": "2025-12-31T23:59:59Z",
-  "scopes": ["agents:read", "agents:write"]
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "production-api-key"
 }`,
       },
       {

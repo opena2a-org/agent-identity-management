@@ -24,6 +24,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `false`.
 - Tests: `apps/backend/internal/interfaces/http/handlers/auth_logout_sdk_family_test.go`.
 
+### Fixed — the dashboard's API reference lists the fields `POST /api/v1/api-keys` reads and returns (#742)
+
+- The API reference on `/dashboard/developers` lists `agentId` and `name` as the required request fields of
+  `POST /api/v1/api-keys`, and its example body carries both. It listed `name`, `expiresAt` and `scopes`, and its
+  example body, which had no `agentId`, was answered `400` `agent_id and name are required`.
+- The reference says the key expires 90 days after it is created and leaves out `expiresAt` and `scopes`: a key
+  created with an `expiresAt` one day ahead in the body still expires 90 days after it is created, and the handler's
+  request struct has no `scopes` field.
+- The documented response fields are `id`, `apiKey`, `name`, `agentId`, `expiresAt` and `createdAt`, the fields the
+  handler returns. The reference listed `apiKey`, `keyId` and `createdAt`.
+- `apps/backend/internal/interfaces/http/handlers/api_key_docs_test.go` posts the reference's example body to
+  `CreateAPIKey` as a signed-in caller, and fails when the documented request fields are not `agentId` and `name`,
+  when the body is refused, when the documented response fields differ from the returned ones, or when the key does
+  not expire 90 days after it is created.
+
 ### Security — creating an API key requires a live sign-in session
 
 - `POST /api/v1/api-keys` creates a key only for an access token that records a sign-in (one carrying `auth_time`),
