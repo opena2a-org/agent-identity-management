@@ -129,7 +129,22 @@ export interface AlertRule {
   condition: AlertCondition;
   /** Action to take */
   action: 'log' | 'alert' | 'pause' | 'kill';
-  /** Escalate to L2 LLM for confirmation before enforcement? */
+  /**
+   * Record on the event that this rule asked for an L2 review. The rule's
+   * `action` is not held back for one: it is sent to enforcement as soon as the
+   * rule matches, with or without this flag.
+   *
+   * The flag only writes `_llmReviewRequested: true`, `_initialAction` (this
+   * rule's action) and `_matchedRule` (this rule's name) onto `event.data`. It
+   * never delays, cancels or changes the action, and no L2 assessment is started
+   * because of it.
+   *
+   * L2 is off unless `intelligence.enabled` is `true` and `intelligence.adapter`
+   * is set; with L2 off no review runs. With L2 on, L2 assesses an event before
+   * the rules are evaluated (an event it batches is assessed later), whether or
+   * not a rule sets this flag, and its answer can change the event's category and
+   * severity and so which rules match.
+   */
   requireLlmConfirmation?: boolean;
 }
 

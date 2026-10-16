@@ -392,6 +392,60 @@ runtime protection lives here, inside the agent process. This module is the
 canonical home of the ARP engine; hackmyagent's `./arp` export is being
 converted to a thin re-export of it.
 
+### Default rules
+
+The event engine (L0) checks each event against a list of rules and sends the
+action of every rule that matches to enforcement, so one event can trigger more
+than one action. When the config object given to
+`new AgentRuntimeProtection(config)` or `new EventEngine(config)` has no `rules`
+field, the list is:
+
+| Rule | Condition | Action | `requireLlmConfirmation` |
+| --- | --- | --- | --- |
+| `critical-threat` | `{ category: 'threat', minSeverity: 'critical' }` | `kill` | `true` |
+| `high-violation` | `{ category: 'violation', minSeverity: 'high' }` | `alert` | |
+| `anomaly-burst` | `{ category: 'anomaly', threshold: { count: 10, windowMs: 60000 } }` | `alert` | `true` |
+| `prompt-injection-detected` | `{ source: 'prompt', category: 'threat', minSeverity: 'high' }` | `alert` | |
+| `credential-leak-detected` | `{ source: 'prompt', category: 'threat', fieldMatch: { 'data.patternId': 'OL-001' } }` | `alert` | |
+| `mcp-exploitation-detected` | `{ source: 'mcp-protocol', category: 'threat', minSeverity: 'high' }` | `alert` | |
+| `a2a-spoofing-detected` | `{ source: 'a2a-protocol', category: 'threat', minSeverity: 'high' }` | `alert` | |
+
+A `threshold` counts every event in the window from the rule's `source` (from
+all sources when `source` is not set), not only events that meet the rest of the
+condition: an anomaly that arrives after nine other events within 60 seconds
+triggers `anomaly-burst`.
+
+With L2 off, which is the default, an event classified as a critical `threat`
+(an L0 pattern match, for one) ends in `kill` from `critical-threat` as soon as
+it is emitted. `requireLlmConfirmation` does not hold that back: the rule's
+action runs at once with or without the flag, which only records
+`_llmReviewRequested`, `_initialAction` and `_matchedRule` on `event.data`. With
+L2 on, L2 assesses such an event before the rules are evaluated, unless its
+budget is spent, so the action waits for its answer, and that answer can change
+the event's category and severity and with them the rules that match: an L2
+answer of `PAUSE` turns a critical threat into a high violation, which
+`high-violation` answers with `alert` instead of `kill`.
+
+`rules` in the ARP config replaces this list; it is not merged with it, so copy
+any default rule you want to keep, and `rules: []` means no rule fires.
+`loadConfig()`, which `new AgentRuntimeProtection()` uses when given no argument
+or a config file path, starts from `defaultConfig()` with `rules: []`: ARP built
+that way, from a config file without `rules` or with no config file at all, has
+no rules and sends no action to enforcement until the config lists some.
+
+```typescript
+import { AgentRuntimeProtection } from '@opena2a/aim-sdk/arp';
+
+const arp = new AgentRuntimeProtection({
+  agentName: 'my-agent',
+  rules: [
+    // critical-threat, with alert in place of kill
+    { name: 'critical-threat', condition: { category: 'threat', minSeverity: 'critical' }, action: 'alert' },
+    { name: 'high-violation', condition: { category: 'violation', minSeverity: 'high' }, action: 'alert' },
+  ],
+});
+```
+
 ### L2 sends nothing unless you configure it
 
 L0 (rules) and L1 (behavioral twin) run entirely in-process and make no
