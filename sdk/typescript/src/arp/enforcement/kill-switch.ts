@@ -1,12 +1,25 @@
-import type { EnforcementAction, EnforcementResult, ARPEvent } from '../types';
+import type { EnforcementAction, EnforcementExecutor, EnforcementResult, ARPEvent } from '../types';
 
 export type AlertCallback = (event: ARPEvent, result: EnforcementResult) => void | Promise<void>;
+
+/**
+ * The PID a pause or kill may signal: a positive safe integer. `process.kill`
+ * reads 0 as the caller's process group and -1 as every process the user may
+ * signal, so anything else is treated as no target.
+ */
+function signalTarget(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 /**
  * Enforcement engine — executes actions on agent processes.
  * Supports: log, alert, pause (SIGSTOP), kill (SIGTERM → SIGKILL).
  */
-export class EnforcementEngine {
+export class EnforcementEngine implements EnforcementExecutor {
   private paused = new Set<number>();
   private onAlert?: AlertCallback;
 
@@ -19,18 +32,34 @@ export class EnforcementEngine {
     this.onAlert = callback;
   }
 
-  /** Execute an enforcement action */
+  /**
+   * Execute an enforcement action and return its outcome. A pause or kill
+   * signals `targetPid`, or else `event.data.pid`, only when that value is a
+   * positive integer; otherwise it returns `outcome: 'no-target'`.
+   */
   async execute(action: EnforcementAction, event: ARPEvent, targetPid?: number): Promise<EnforcementResult> {
-    const pid = targetPid ?? (event.data.pid as number | undefined);
+    const pid = signalTarget(targetPid ?? event.data.pid);
 
     switch (action) {
       case 'log':
-        return { action, success: true, reason: 'Event logged', event };
+        return { action, success: true, outcome: 'executed', reason: 'Event logged', event };
 
       case 'alert': {
-        const result: EnforcementResult = { action, success: true, reason: `Alert raised: ${event.description}`, event };
+        const reason = `Alert raised: ${event.description}`;
+        const result: EnforcementResult = { action, success: true, outcome: 'executed', reason, event };
         if (this.onAlert) {
-          try { await this.onAlert(event, result); } catch { /* callback errors don't block enforcement */ }
+          // A throwing callback does not stop enforcement; it makes the alert failed.
+          try {
+            await this.onAlert(event, result);
+          } catch (err) {
+            return {
+              action,
+              success: false,
+              outcome: 'failed',
+              reason: `${reason}; the alert callback threw: ${errorMessage(err)}`,
+              event,
+            };
+          }
         }
         return result;
       }
@@ -42,7 +71,7 @@ export class EnforcementEngine {
         return this.killProcess(pid, event);
 
       default:
-        return { action, success: false, reason: `Unknown action: ${action}`, event };
+        return { action, success: false, outcome: 'not-executed', reason: `Unknown action: ${action}`, event };
     }
   }
 
@@ -65,8 +94,8 @@ export class EnforcementEngine {
   }
 
   private pauseProcess(pid: number | undefined, event: ARPEvent): EnforcementResult {
-    if (!pid) {
-      return { action: 'pause', success: false, reason: 'No PID to pause', event };
+    if (pid === undefined) {
+      return { action: 'pause', success: false, outcome: 'no-target', reason: 'No PID to pause', event };
     }
 
     try {
@@ -76,6 +105,7 @@ export class EnforcementEngine {
         action: 'pause',
         targetPid: pid,
         success: true,
+        outcome: 'executed',
         reason: `Paused PID ${pid}: ${event.description}`,
         event,
       };
@@ -84,15 +114,16 @@ export class EnforcementEngine {
         action: 'pause',
         targetPid: pid,
         success: false,
-        reason: `Failed to pause PID ${pid}: ${err instanceof Error ? err.message : String(err)}`,
+        outcome: 'failed',
+        reason: `Failed to pause PID ${pid}: ${errorMessage(err)}`,
         event,
       };
     }
   }
 
   private killProcess(pid: number | undefined, event: ARPEvent): EnforcementResult {
-    if (!pid) {
-      return { action: 'kill', success: false, reason: 'No PID to kill', event };
+    if (pid === undefined) {
+      return { action: 'kill', success: false, outcome: 'no-target', reason: 'No PID to kill', event };
     }
 
     try {
@@ -120,6 +151,7 @@ export class EnforcementEngine {
         action: 'kill',
         targetPid: pid,
         success: true,
+        outcome: 'executed',
         reason: `Killed PID ${pid}: ${event.description}`,
         event,
       };
@@ -128,7 +160,8 @@ export class EnforcementEngine {
         action: 'kill',
         targetPid: pid,
         success: false,
-        reason: `Failed to kill PID ${pid}: ${err instanceof Error ? err.message : String(err)}`,
+        outcome: 'failed',
+        reason: `Failed to kill PID ${pid}: ${errorMessage(err)}`,
         event,
       };
     }

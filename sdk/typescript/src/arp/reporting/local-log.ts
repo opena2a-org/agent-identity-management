@@ -30,6 +30,7 @@ export class LocalLogger {
       action: result.action,
       targetPid: result.targetPid,
       success: result.success,
+      outcome: result.outcome,
       reason: result.reason,
       eventId: result.event.id,
       eventSource: result.event.source,

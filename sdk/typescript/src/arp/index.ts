@@ -54,6 +54,8 @@ export type {
   ProxyUpstream,
   EnforcementAction,
   EnforcementResult,
+  EnforcementOutcome,
+  EnforcementExecutor,
   Monitor,
   GTINConfig,
 } from './types';
@@ -181,7 +183,7 @@ export type {
 export type { SignatureTelemetryConfig } from './types';
 
 import * as path from 'path';
-import type { ARPConfig, ARPEvent, Monitor } from './types';
+import type { ARPConfig, ARPEvent, EnforcementResult, Monitor } from './types';
 import { EventEngine } from './engine/event-engine';
 import { IntelligenceCoordinator } from './intelligence/coordinator';
 import { RuntimeTwin } from './intelligence/runtime-twin';
@@ -271,7 +273,16 @@ export class AgentRuntimeProtection {
 
     const dataDir = this.config.dataDir ?? path.join(process.cwd(), '.opena2a', 'arp');
 
-    this.engine = new EventEngine(this.config);
+    // The engine carries out each matched rule's action once, through the
+    // enforcement engine, and writes the result to enforcement.jsonl before any
+    // enforcement handler runs, so every handler receives the result that was
+    // recorded.
+    this.enforcement = new EnforcementEngine();
+    this.logger = new LocalLogger(dataDir);
+    this.engine = new EventEngine(this.config, {
+      execute: async (action, event, targetPid) =>
+        this.recordEnforcement(await this.enforcement.execute(action, event, targetPid)),
+    });
 
     // Build the runtime twin and behavioral risk source. Runtime twin is
     // on by default when intelligence is enabled; opt out via
@@ -299,19 +310,11 @@ export class AgentRuntimeProtection {
       this.behavioralRiskSource,
       this.guardAnomaly,
     );
-    this.enforcement = new EnforcementEngine();
-    this.logger = new LocalLogger(dataDir);
 
     // Wire up: events → intelligence → logger
     this.engine.onEvent(async (event) => {
       await this.intelligence.analyze(event);
       this.logger.logEvent(event);
-    });
-
-    // Wire up: enforcement → logger
-    this.engine.onEnforcement(async (result) => {
-      const enforced = await this.enforcement.execute(result.action, result.event);
-      this.logger.logEnforcement(enforced);
     });
 
     // Create monitors based on config
@@ -397,6 +400,26 @@ export class AgentRuntimeProtection {
       this.engine.onEvent((event) => {
         this.signatureEmitter?.onEvent(event);
       });
+    }
+  }
+
+  /**
+   * Write an executed result to enforcement.jsonl. A `log` action is carried
+   * out by this write, so a failed write makes it `failed`; for any other
+   * action the write does not change what the action did.
+   */
+  private recordEnforcement(result: EnforcementResult): EnforcementResult {
+    try {
+      this.logger.logEnforcement(result);
+      return result;
+    } catch (err) {
+      if (result.action !== 'log') return result;
+      return {
+        ...result,
+        success: false,
+        outcome: 'failed',
+        reason: `Failed to record the result: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
   }
 
@@ -489,8 +512,13 @@ export class AgentRuntimeProtection {
     this.engine.onEvent(handler);
   }
 
-  /** Subscribe to all enforcement results */
-  onEnforcement(handler: (result: import('./types').EnforcementResult) => void | Promise<void>): void {
+  /**
+   * Subscribe to all enforcement results: the outcome of each action, after it
+   * ran. A handler receives the same result the ARP writes to
+   * `enforcement.jsonl`; read `outcome` (or `success`) to tell an action that
+   * was carried out from one that failed or had no PID to signal.
+   */
+  onEnforcement(handler: (result: EnforcementResult) => void | Promise<void>): void {
     this.engine.onEnforcement(handler);
   }
 

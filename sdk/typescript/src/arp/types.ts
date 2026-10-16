@@ -312,12 +312,58 @@ export interface BudgetState {
 
 export type EnforcementAction = 'log' | 'alert' | 'pause' | 'kill';
 
+/**
+ * How an enforcement action ended.
+ *
+ * - `executed`: the action was carried out (see `EnforcementResult.success`).
+ * - `failed`: the action was attempted and did not complete: `process.kill`
+ *   threw, the alert callback threw, or a `log` result could not be written.
+ * - `no-target`: a `pause` or `kill` had no usable PID (absent, or not a
+ *   positive integer), so no signal was sent.
+ * - `not-executed`: nothing carried the action out: an `EventEngine` with no
+ *   executor attached, or an action the executor does not know.
+ */
+export type EnforcementOutcome = 'executed' | 'failed' | 'no-target' | 'not-executed';
+
+/**
+ * The result of an enforcement action after it ran. On an
+ * `AgentRuntimeProtection`, every enforcement handler receives the same result
+ * the ARP writes to `enforcement.jsonl` for that decision.
+ */
 export interface EnforcementResult {
   action: EnforcementAction;
+  /**
+   * The PID a `pause` or `kill` signal was sent to, or attempted to. Absent
+   * when no signal was sent.
+   */
   targetPid?: number;
+  /**
+   * True only when the action was carried out: `log`, the result was recorded
+   * (on an `AgentRuntimeProtection`, written to `enforcement.jsonl`);
+   * `alert`, the alert was raised and the alert callback, when one is set,
+   * returned without throwing; `pause` or `kill`, `process.kill` delivered the
+   * signal to `targetPid` without throwing. False in every other case. Always
+   * equal to `outcome === 'executed'`.
+   */
   success: boolean;
+  /**
+   * How the action ended. Read this, not `reason`, to decide what to do next.
+   * Optional in the type for source compatibility; every result the SDK
+   * produces sets it.
+   */
+  outcome?: EnforcementOutcome;
+  /** Human-readable account of the result. Not a stable format. */
   reason: string;
   event: ARPEvent;
+}
+
+/**
+ * Carries out an enforcement action. `EnforcementEngine` implements it; an
+ * `EventEngine` constructed with one runs each matched rule's action through it
+ * before calling the enforcement handlers.
+ */
+export interface EnforcementExecutor {
+  execute(action: EnforcementAction, event: ARPEvent, targetPid?: number): Promise<EnforcementResult>;
 }
 
 // --- AI-Layer Configuration ---
