@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { sanitizeTerminalText, TERMINAL_TEXT_MAX_CHARS } from './sanitize';
+import { sanitizeTerminalLine, sanitizeTerminalText, TERMINAL_TEXT_MAX_CHARS } from './sanitize';
 
 function controlBytesIn(text: string): string[] {
   return [...text].filter(
@@ -58,5 +58,45 @@ describe('sanitizeTerminalText', () => {
 
   it('handles the empty string', () => {
     expect(sanitizeTerminalText('')).toBe('');
+  });
+});
+
+describe('sanitizeTerminalLine', () => {
+  const R = '�';
+
+  it('replaces every C0 character, newline, carriage return and tab included, with U+FFFD', () => {
+    expect(sanitizeTerminalLine('a\nb\rc\td\x00e\x1b[31mf')).toBe(`a${R}b${R}c${R}d${R}e${R}[31mf`);
+  });
+
+  it('replaces DEL and the C1 range, NEL and the single-byte CSI included', () => {
+    expect(sanitizeTerminalLine('a\x7fb\x85c\x9b31md')).toBe(`a${R}b${R}c${R}31md`);
+  });
+
+  it('replaces the bidirectional formatting characters', () => {
+    const bidi = ['؜', '‎', '‏', '‪', '‫', '‬', '‭', '‮', '⁦', '⁧', '⁨', '⁩'];
+    for (const ch of bidi) {
+      expect(sanitizeTerminalLine(`a${ch}b`), `U+${ch.codePointAt(0)!.toString(16)}`).toBe(`a${R}b`);
+    }
+  });
+
+  it('replaces a lone surrogate and keeps a character outside the BMP', () => {
+    expect(sanitizeTerminalLine('a\ud800b')).toBe(`a${R}b`);
+    expect(sanitizeTerminalLine('a\u{1F916}b')).toBe('a\u{1F916}b');
+  });
+
+  it('keeps letters of any script and ordinary punctuation', () => {
+    expect(sanitizeTerminalLine('HTTP 400: café — שלום 名前 (x/y?z#1%2.3:4)')).toBe(
+      'HTTP 400: café — שלום 名前 (x/y?z#1%2.3:4)',
+    );
+  });
+
+  it('caps the length in characters, with an explicit marker, without splitting a surrogate pair', () => {
+    expect(sanitizeTerminalLine('x'.repeat(TERMINAL_TEXT_MAX_CHARS))).toBe('x'.repeat(TERMINAL_TEXT_MAX_CHARS));
+    expect(sanitizeTerminalLine('x'.repeat(100_000))).toBe(`${'x'.repeat(TERMINAL_TEXT_MAX_CHARS)} [truncated]`);
+    expect(sanitizeTerminalLine('\u{1F916}'.repeat(5), 3)).toBe(`${'\u{1F916}'.repeat(3)} [truncated]`);
+  });
+
+  it('handles the empty string', () => {
+    expect(sanitizeTerminalLine('')).toBe('');
   });
 });

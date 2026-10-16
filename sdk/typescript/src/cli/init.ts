@@ -18,9 +18,12 @@
  *      reports (older servers report none, and it is derived from --url).
  *
  * The token is never printed, never logged, never written to disk and never
- * put in a URL. Server text is scrubbed of anything token-shaped before it is
- * shown. Redirects are not followed: a redirected request would carry the
- * token header to whatever host the redirect names.
+ * put in a URL. Server text is scrubbed of anything token-shaped and printed as
+ * one line, with control and bidirectional formatting characters replaced.
+ * The agent id, organization id and status in the answer are checked against
+ * the forms the server sends before they are saved or printed. Redirects are
+ * not followed: a redirected request would carry the token header to whatever
+ * host the redirect names.
  *
  * Everything the command touches (environment, home directory, fetch, output)
  * comes in through `InitDeps`, which is what tests drive.
@@ -30,6 +33,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, renameSync, unli
 import { homedir } from 'os';
 import { join } from 'path';
 import { generateKeyPair, toBase64 } from '../crypto/ed25519';
+import { sanitizeTerminalLine } from '../arp/telemetry/signature/sanitize';
 
 export const BOOTSTRAP_TOKEN_ENV = 'AIM_BOOTSTRAP_TOKEN';
 export const BOOTSTRAP_TOKEN_HEADER = 'X-AIM-Bootstrap-Token';
@@ -42,6 +46,14 @@ export const CREDENTIALS_SCHEMA_VERSION = '1.0';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const TOKEN_PATTERN = /aim_ob_[A-Za-z0-9_-]+/g;
+/**
+ * An agent or organization id this command saves and prints. The server sends
+ * a UUID; the pattern admits that and other short ids, and no character that
+ * changes how a terminal line or a dashboard path reads.
+ */
+const ANSWER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+/** An agent status this command saves and prints; any other value is `unknown`. */
+const ANSWER_STATUS_PATTERN = /^[a-z][a-z_-]{0,31}$/;
 
 export interface InitDeps {
   env?: NodeJS.ProcessEnv;
@@ -218,7 +230,7 @@ function readServerAnswer(body: unknown): ServerAnswer {
     | undefined;
   return {
     code: typeof b.code === 'string' ? b.code : undefined,
-    message: message ? scrubToken(message) : undefined,
+    message: message ? sanitizeTerminalLine(scrubToken(message)) : undefined,
   };
 }
 
@@ -385,7 +397,10 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
 
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get('location');
-    err(`Error: ${exchangeUrl} answered with a redirect (HTTP ${response.status})${location ? ` to ${scrubToken(location)}` : ''}.`);
+    err(
+      `Error: ${exchangeUrl} answered with a redirect (HTTP ${response.status})` +
+        `${location ? ` to ${sanitizeTerminalLine(scrubToken(location))}` : ''}.`,
+    );
     err('The token was not sent on to the new address. Pass the final server address with --url.');
     return 1;
   }
@@ -411,11 +426,21 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   }
 
   const agent = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
-  const agentId = typeof agent.agentId === 'string' ? agent.agentId : '';
-  if (!agentId) {
+  const answeredId = agent.agentId;
+  if (answeredId === undefined || answeredId === null || answeredId === '') {
     err(`Error: the server answered HTTP ${response.status} but returned no agent id; nothing was saved.`);
     return 1;
   }
+  if (typeof answeredId !== 'string' || !ANSWER_ID_PATTERN.test(answeredId)) {
+    const shown =
+      typeof answeredId === 'string'
+        ? JSON.stringify(sanitizeTerminalLine(answeredId, 128))
+        : `a JSON ${Array.isArray(answeredId) ? 'array' : typeof answeredId}`;
+    err(`Error: the server answered with an agent id this tool cannot use (${shown}); nothing was saved.`);
+    err('The agent may exist on the server: remove it from the dashboard, then run the command again with a new token.');
+    return 1;
+  }
+  const agentId = answeredId;
   if (typeof agent.publicKey === 'string' && agent.publicKey !== '' && agent.publicKey !== publicKey) {
     err('Error: the server registered a different public key than the one generated here; nothing was saved.');
     err(`Remove agent ${agentId} from the dashboard and run the command again with a new token.`);
@@ -427,9 +452,12 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     public_key: publicKey,
     private_key: privateKey,
     aim_url: aimUrl,
-    status: typeof agent.status === 'string' ? agent.status : 'unknown',
+    status: typeof agent.status === 'string' && ANSWER_STATUS_PATTERN.test(agent.status) ? agent.status : 'unknown',
     trust_score: null,
-    organization_id: typeof agent.organizationId === 'string' ? agent.organizationId : null,
+    organization_id:
+      typeof agent.organizationId === 'string' && ANSWER_ID_PATTERN.test(agent.organizationId)
+        ? agent.organizationId
+        : null,
     registered_at: new Date().toISOString(),
     schemaVersion: CREDENTIALS_SCHEMA_VERSION,
     type: 'agent',
@@ -445,7 +473,7 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     return 1;
   }
 
-  const dashboard = reportedDashboardUrl(agent.dashboardUrl, aimUrl) ?? dashboardUrlFor(aimUrl);
+  const dashboard = sanitizeTerminalLine(reportedDashboardUrl(agent.dashboardUrl, aimUrl) ?? dashboardUrlFor(aimUrl));
   out('');
   out(`Agent "${name}" is registered.`);
   out(`  Agent ID:     ${agentId}`);

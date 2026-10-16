@@ -528,3 +528,116 @@ describe('the shipped bin dispatches init', () => {
     expect(log.join('\n')).toContain('npx @opena2a/aim-sdk init');
   });
 });
+
+describe('the exchange answer: fields are checked and server text is printed as one plain line', () => {
+  const ESC = '\u001b';
+  const RLO = '‮';
+  const UUID = '550e8400-e29b-41d4-a716-446655440000';
+  const SECOND_LINE = 'SECOND LINE: text chosen by the server';
+
+  /** A fetch that answers the exchange once, echoing on a 201 the public key it was sent. */
+  function answering(status: number, fields: Record<string, unknown>, headers: Record<string, string> = {}) {
+    const calls: string[] = [];
+    const fetchStub = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(String(url));
+      const sent = JSON.parse(String(init?.body ?? '{}'));
+      const body = status === 201 ? { publicKey: sent.publicKey, ...fields } : fields;
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json', ...headers },
+      });
+    }) as typeof fetch;
+    return { fetchStub, calls };
+  }
+
+  function agentsDirEntries(): string[] {
+    const dir = join(home, '.aim', 'agents');
+    return existsSync(dir) ? readdirSync(dir) : [];
+  }
+
+  function outputLines(): string[] {
+    return allOutput().split('\n');
+  }
+
+  it('an agent id holding an escape sequence and a newline is refused and nothing is saved', async () => {
+    const { fetchStub, calls } = answering(201, {
+      agentId: `agt_9${ESC}[31mRED${ESC}[0m\n${SECOND_LINE}`,
+      status: 'pending',
+    });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub })).toBe(1);
+    expect(calls).toHaveLength(1);
+    expect(agentsDirEntries()).toEqual([]);
+    expect(allOutput()).not.toContain(ESC);
+    expect(outputLines()).not.toContain(SECOND_LINE);
+    const text = errLines.join('\n');
+    expect(text).toContain('agent id this tool cannot use');
+    expect(text).toContain('nothing was saved');
+    expect(text).toContain('remove it from the dashboard');
+  });
+
+  it('an agent id holding a right-to-left override is refused and nothing is saved', async () => {
+    const { fetchStub } = answering(201, { agentId: `agt_${RLO}9`, status: 'pending' });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub })).toBe(1);
+    expect(agentsDirEntries()).toEqual([]);
+    expect(allOutput()).not.toContain(RLO);
+  });
+
+  it('an agent id that is not a string is refused and nothing is saved', async () => {
+    for (const agentId of [['agt_1'], { id: 'agt_1' }, 7]) {
+      errLines = [];
+      const { fetchStub } = answering(201, { agentId, status: 'pending' });
+      expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub }), JSON.stringify(agentId)).toBe(1);
+      expect(agentsDirEntries()).toEqual([]);
+      expect(errLines.join('\n')).toContain('nothing was saved');
+    }
+  });
+
+  it('a status holding an escape sequence is saved and printed as unknown', async () => {
+    const { fetchStub } = answering(201, { agentId: UUID, status: `active${ESC}[2K` });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub })).toBe(0);
+    expect(JSON.parse(readFileSync(credentialsPath(), 'utf8')).status).toBe('unknown');
+    expect(outLines).toContain('  Status:       unknown');
+    expect(allOutput()).not.toContain(ESC);
+  });
+
+  it('an organization id holding an escape sequence is saved as null', async () => {
+    const { fetchStub } = answering(201, { agentId: UUID, organizationId: `org${ESC}[31m`, status: 'pending' });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub })).toBe(0);
+    expect(JSON.parse(readFileSync(credentialsPath(), 'utf8')).organization_id).toBeNull();
+  });
+
+  it('a refusal message holding an escape sequence, a newline and a bidi control is printed as one plain line', async () => {
+    const { fetchStub } = answering(400, {
+      error: `${ESC}[31mserver text${ESC}[0m\n${SECOND_LINE}${RLO}`,
+    });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub })).toBe(1);
+    expect(allOutput()).not.toContain(ESC);
+    expect(allOutput()).not.toContain(RLO);
+    expect(outputLines()).not.toContain(SECOND_LINE);
+    const refusal = errLines.filter((l) => l.includes('HTTP 400'));
+    expect(refusal).toHaveLength(1);
+    expect(refusal[0]).not.toContain('\n');
+    expect(refusal[0]).toContain('server text');
+    expect(refusal[0]).toContain(SECOND_LINE);
+  });
+
+  it('a redirect whose Location holds an escape sequence is printed without it', async () => {
+    const { fetchStub } = answering(302, {}, { Location: `https://elsewhere.example.test/${ESC}[31mx` });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub })).toBe(1);
+    expect(allOutput()).not.toContain(ESC);
+    expect(errLines.join('\n')).toContain('redirect');
+    expect(agentsDirEntries()).toEqual([]);
+  });
+
+  it('a canonical UUID agent id with status pending is saved and printed', async () => {
+    const { fetchStub } = answering(201, { agentId: UUID, organizationId: UUID, status: 'pending' });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: fetchStub }), allOutput()).toBe(0);
+    const creds = JSON.parse(readFileSync(credentialsPath(), 'utf8'));
+    expect(creds.agent_id).toBe(UUID);
+    expect(creds.organization_id).toBe(UUID);
+    expect(creds.status).toBe('pending');
+    expect(outLines).toContain(`  Agent ID:     ${UUID}`);
+    expect(outLines).toContain('  Status:       pending');
+    expect(allOutput()).toContain(`/dashboard/agents/${UUID}`);
+  });
+});

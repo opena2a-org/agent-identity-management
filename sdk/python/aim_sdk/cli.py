@@ -99,6 +99,42 @@ BOOTSTRAP_TOKEN_HEADER = "X-AIM-Bootstrap-Token"
 DEFAULT_INIT_AGENT_NAME = "my-first-agent"
 INIT_REQUEST_TIMEOUT_SECONDS = 30
 
+# An agent or organization ID `init` saves and prints. The server sends a UUID;
+# the pattern admits that and other short IDs, and no character that changes
+# how a terminal line or a dashboard path reads.
+_INIT_ANSWER_ID_PATTERN = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}')
+# An agent status `init` saves and prints; any other value is 'unknown'.
+_INIT_ANSWER_STATUS_PATTERN = re.compile(r'[a-z][a-z_-]{0,31}')
+
+# Server text printed inside one line of the CLI's own text: every C0
+# character (newline, carriage return and tab included), DEL, C1, the
+# bidirectional formatting characters and a lone surrogate (which has no UTF-8
+# form) are each replaced with U+FFFD, and text over the cap is cut with a
+# marker. The TypeScript SDK's `sanitizeTerminalLine` replaces the same set.
+TERMINAL_LINE_MAX_CHARS = 500
+_NOT_IN_A_LINE = re.compile(r'[\x00-\x1f\x7f-\x9f؜‎‏‪-‮⁦-⁩\ud800-\udfff]')
+
+
+def _terminal_line(text, max_chars=TERMINAL_LINE_MAX_CHARS):
+    """`text` as one terminal line: see _NOT_IN_A_LINE."""
+    text = _NOT_IN_A_LINE.sub('�', str(text))
+    if len(text) > max_chars:
+        text = text[:max_chars] + ' [truncated]'
+    return text
+
+
+def _json_type_name(value):
+    """The JSON type of a decoded value, named as JSON names it."""
+    if isinstance(value, bool):
+        return 'boolean'
+    if isinstance(value, (int, float)):
+        return 'number'
+    if isinstance(value, list):
+        return 'array'
+    if isinstance(value, dict):
+        return 'object'
+    return 'string' if isinstance(value, str) else 'null'
+
 
 def invalid_server_url_reason(aim_url):
     """
@@ -807,7 +843,8 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
     Returns:
         dict: the server's answer (agentId, organizationId, name, status,
         publicKey, aimUrl), or {'error': reason} with a bare reason the caller
-        prefixes. No returned string contains the token.
+        prefixes. No returned string contains the token, and server text in a
+        reason (its error message, a redirect address) is one terminal line.
     """
     import requests
     url = f"{aim_url}/api/v1/onboarding/bootstrap-tokens/exchange"
@@ -836,10 +873,10 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
 
     if 300 <= status_code < 400:
         location = response.headers.get('Location') or 'another address'
-        return {'error': (f"{url} answered with a redirect to {_redact_token(location, token)}. "
+        return {'error': (f"{url} answered with a redirect to {_terminal_line(_redact_token(location, token))}. "
                           f"The token was not sent on; pass the address the server redirects to as --url.")}
 
-    reason = _redact_token(_server_reason(response, ''), token)
+    reason = _terminal_line(_redact_token(_server_reason(response, ''), token))
     if status_code == 401:
         return {'error': reason or ("The bootstrap token is not valid. "
                                     "Generate a new one from the onboarding screen.")}
@@ -907,19 +944,34 @@ def init(args):
         return 1
 
     agent_id = result['agentId']
+    if not isinstance(agent_id, str) or not _INIT_ANSWER_ID_PATTERN.fullmatch(agent_id):
+        if isinstance(agent_id, str):
+            shown = json.dumps(_terminal_line(agent_id, 128), ensure_ascii=False)
+        else:
+            shown = f"a JSON {_json_type_name(agent_id)}"
+        print(f"\nError: the server answered with an agent ID this tool cannot use ({shown}). Nothing was saved.")
+        print("The agent may exist on the server: delete it in the dashboard, then run aim-sdk init again with a new token.")
+        return 1
     returned_key = result.get('publicKey')
     if returned_key and returned_key != public_key:
         print(f"\nError: the server registered agent {agent_id} with a public key this machine did not")
         print("generate, so the local private key cannot sign for it. Nothing was saved.")
         return 1
 
+    organization_id = result.get('organizationId')
+    if not isinstance(organization_id, str) or not _INIT_ANSWER_ID_PATTERN.fullmatch(organization_id):
+        organization_id = None
+    agent_status = result.get('status')
+    if not isinstance(agent_status, str) or not _INIT_ANSWER_STATUS_PATTERN.fullmatch(agent_status):
+        agent_status = 'unknown'
+
     saved = save_agent_credentials(name, {
         'agent_id': agent_id,
-        'organization_id': result.get('organizationId'),
+        'organization_id': organization_id,
         'public_key': public_key,
         'private_key': private_key,
         'aim_url': aim_url,
-        'status': result.get('status', 'unknown'),
+        'status': agent_status,
         'registered_at': datetime.now(timezone.utc).isoformat(),
     })
     if not saved:
@@ -934,9 +986,9 @@ def init(args):
     print()
     print("Agent registered.")
     print()
-    print(f"   Name:        {result.get('name') or name}")
+    print(f"   Name:        {name}")
     print(f"   Agent ID:    {agent_id}")
-    print(f"   Status:      {result.get('status', 'unknown')}")
+    print(f"   Status:      {agent_status}")
     print(f"   Credentials: {creds_path} (owner read/write only)")
     print()
     print(f"   Dashboard:   {dashboard_url}/dashboard/agents/{agent_id}")
