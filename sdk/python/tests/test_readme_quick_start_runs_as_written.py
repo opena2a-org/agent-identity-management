@@ -603,7 +603,40 @@ def test_quick_start_notes_say_when_the_sdk_prints_the_token_rotation_line():
     )
 
 
-ROTATION_KEY = "readme-rotation-test-signing-key-0123456789"
+CAPTURE_TEXT = REPO_ROOT / "docs" / "captures" / "quick-start.txt"
+
+
+def test_full_register_capture_shows_the_token_rotation_line_this_sdk_prints():
+    """The README links docs/captures/quick-start.txt as the register call's full output,
+    and the sidecar says that capture came from the SDK built from this repository, right
+    after `aim-sdk login`, on a server with Redis. Its token-rotation line, and the copy of
+    it the sidecar names as trimmed from the README, must be in the format this SDK prints;
+    a line the SDK no longer prints means the call has to be captured again."""
+    from aim_sdk import oauth as oauth_module
+
+    capture = register_capture()
+    rotation = printed_line_pattern(oauth_module, "Token rotated successfully")
+    shown = [line for line in capture["outputs"]["capture"].split("\n") if line.startswith("Token rotated")]
+    assert len(shown) == 1, "the sidecar's register capture must hold the one token-rotation line it was taken with"
+    assert re.fullmatch(rotation, shown[0]), (
+        f"the sidecar's register capture shows {shown[0]!r}, which is not the token-rotation line "
+        "this SDK prints; capture the register call again"
+    )
+    trimmed = [q for q in re.findall(r"`([^`]+)`", capture["trimmedInReadme"]) if q.startswith("Token rotated")]
+    assert trimmed == shown, "the sidecar must name the rotation line its capture shows as trimmed from the README"
+
+
+def test_full_output_text_holds_each_sidecar_capture_after_its_command():
+    """docs/captures/quick-start.txt is the session the sidecar records: each captured
+    command, typed at the prompt, followed by the output the sidecar keeps for it."""
+    session = CAPTURE_TEXT.read_text(encoding="utf-8")
+    for capture in json.loads(SIDECAR.read_text(encoding="utf-8"))["captures"]:
+        assert f">>> {capture['command']}\n{capture['outputs']['capture']}" in session, (
+            f"docs/captures/quick-start.txt does not show the sidecar's output for {capture['command']!r}"
+        )
+
+
+ROTATION_KEY ="readme-rotation-test-signing-key-0123456789"
 
 
 def _jwt(typ, ttl):

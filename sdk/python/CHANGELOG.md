@@ -173,12 +173,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the ones it printed before, with a full stop and a capital letter where the dash stood.
 - The line the SDK prints after a refresh that rotated its token reads `Token rotated successfully. Old
   refresh token revoked (new id: ...)`. The quick-start notes and the token rotation guide quote the new
-  form.
+  form. The register call's full output that the root README links, `docs/captures/quick-start.txt`, and
+  its record in `docs/captures/quick-start.json` were captured again on 2026-10-16 with the SDK and a
+  server with Redis built from this repository, and show the new form; the trust score and the lines the
+  README shows are the same as in the earlier capture.
 - Tests: `test_an_unexplained_answer_to_the_device_code_request_says_to_verify_the_url_in_two_sentences` in
   `tests/test_cli_login_server_unavailable.py`, and the server-with-redis case of
   `test_first_refresh_after_login_prints_the_rotation_line_only_when_the_server_rotates` in
   `tests/test_readme_quick_start_runs_as_written.py`. `test_rotation_print_says_old_token_revoked` in
   `tests/test_stale_creds_and_rotation.py` pins the new form of the rotation line.
+  `test_full_register_capture_shows_the_token_rotation_line_this_sdk_prints` holds the recorded capture's
+  rotation line to the line this SDK prints, and
+  `test_full_output_text_holds_each_sidecar_capture_after_its_command` holds `docs/captures/quick-start.txt`
+  to the record, both in `tests/test_readme_quick_start_runs_as_written.py`.
 
 ### Changed — the `sdk_credentials_lock` docstring says the lock does not serialize the Python SDK with the Java SDK on Linux (#722)
 
