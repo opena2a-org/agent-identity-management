@@ -37,6 +37,7 @@ const (
 	a2aInvalidBody
 	a2aInvalidTaskState
 	a2aCardSourceRequired
+	a2aCardDocumentRequired
 	a2aCardURLRefused
 	a2aClientAgentRequired
 	a2aClientAgentRequiredInBody
@@ -129,6 +130,7 @@ var a2aAnswers = map[a2aFailure]a2aAnswer{
 	a2aInvalidBody:                {status: fiber.StatusBadRequest, reason: "Invalid request body"},
 	a2aInvalidTaskState:           {status: fiber.StatusBadRequest, reason: "Invalid task state"},
 	a2aCardSourceRequired:         {status: fiber.StatusBadRequest, reason: "cardUrl or cardData is required"},
+	a2aCardDocumentRequired:       {status: fiber.StatusBadRequest, reason: cardDocumentRequiredMessage},
 	a2aCardURLRefused:             {status: fiber.StatusBadRequest, reason: agentCardURLRefusedMessage},
 	a2aClientAgentRequired:        {status: fiber.StatusBadRequest, reason: "Client agent ID required - provide in request body or context"},
 	a2aClientAgentRequiredInBody:  {status: fiber.StatusBadRequest, reason: "Client agent ID required"},
@@ -212,12 +214,21 @@ func respondA2ANoAgentForIntent(c fiber.Ctx, intent string) error {
 	return writeA2AFailure(c, a2aNoAgentForIntent, "", fiber.Map{"intent": intent, "alternatives": 0})
 }
 
-// respondAgentCardError answers a card registration error. A card URL the
-// server refuses by policy is a problem with the caller's input, so it is
-// answered with 400 and a fixed reason. Fetch, parse and storage failures are
-// answered with the fixed 5xx line. Both keep the card service's reason in the
-// server log only.
+// respondAgentCardError answers a card registration error. A body that carries
+// no card document, and a card URL the server refuses by policy, are problems
+// with the caller's input, so each is answered with 400: the first names the
+// members the body carried in place of a document, the second states a fixed
+// reason. Fetch, parse and storage failures are answered with the fixed 5xx
+// line. The card service's reason stays in the server log only.
 func respondAgentCardError(c fiber.Ctx, agentID uuid.UUID, err error) error {
+	var noDocument *cardDocumentRequiredError
+	if errors.As(err, &noDocument) {
+		var members fiber.Map
+		if len(noDocument.unread) > 0 {
+			members = fiber.Map{"unreadMembers": noDocument.unread}
+		}
+		return writeA2AFailure(c, a2aCardDocumentRequired, noDocument.reason(), members)
+	}
 	if errors.Is(err, application.ErrAgentCardURLRefused) {
 		log.Printf("a2a: agent card URL refused for agent %s: %v", agentID, err)
 		return respondA2AFailure(c, a2aCardURLRefused)
@@ -225,8 +236,10 @@ func respondAgentCardError(c fiber.Ctx, agentID uuid.UUID, err error) error {
 	return respondA2AFailureCause(c, a2aServerError, fmt.Errorf("agent %s: %w", agentID, err))
 }
 
-// writeA2AFailure writes kind's answer. reason, when set, states the reason a
-// kind without a fixed one carries; members join the body.
+// writeA2AFailure writes kind's answer. reason, when set, is the reason the
+// body states in place of kind's own: a kind without a fixed reason is always
+// answered with one, and a2aCardDocumentRequired adds the members the request
+// carried to its fixed reason. members join the body.
 func writeA2AFailure(c fiber.Ctx, kind a2aFailure, reason string, members fiber.Map) error {
 	answer, ok := a2aAnswers[kind]
 	if !ok {

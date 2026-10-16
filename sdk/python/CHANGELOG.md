@@ -412,18 +412,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an empty list when there is none.
 - Tests: `tests/test_a2a_task_and_security_routes.py`.
 
-### Fixed — `A2AClient.update_agent_card` sends `skills` as the list of skill identifiers the server binds
+### Changed — `A2AClient.update_agent_card` replaces the card document
 
-- `PUT /api/v1/a2a/cards/:id` binds `skills` as a list of strings. `update_agent_card` sends each skill as its
-  identifier: a string as it is, and a dictionary, the form the server answers a card's skills in, as its `id`. It
-  declared `skills` as a list of dictionaries and sent the list as given.
-- It raises `ValueError`, and sends no request, when `skills` is not a list or a skill in it is neither an identifier
-  nor a dictionary with an `id`.
-- Measured on a server built from this tree, as an organization's administrator on an agent of that organization: a
-  `PUT` whose `skills` holds an object is answered 400 `Invalid request body`, and one whose `skills` is `["s1"]` is
-  answered 200. The route answers with the card as stored: after a call that carries `name`, `description`,
-  `version` and `skills`, answered 200, the card read back holds none of the four values.
-- Test: `tests/test_a2a_update_agent_card_skills.py`.
+- `PUT /api/v1/a2a/cards/:id` reads `cardUrl` or `cardData` and replaces the agent's card document: the server
+  fetches the card from `cardUrl` or takes `cardData`, recomputes its hash, issues a new attestation and stores the
+  card in place of the previous one. `update_agent_card` takes the keyword arguments `card_url` and `card_data` (a
+  dictionary), sends them as `cardUrl` and `cardData`, and returns an `A2AAgentCard` with the stored card's
+  `card_id` and `card_url`, the identifiers of its skills, each as a dictionary with an `id`, and
+  `attestation_expires`.
+- `name`, `description`, `version` and `skills` are deprecated. The route read them and stored none of them: after a
+  call that carried all four, answered 200, the card read back held none of the four values. It now answers a body
+  that carries only them 400. Given one of them, `update_agent_card` raises `ValueError` naming it and sends no
+  request; without `card_url` or `card_data` the message is the server's answer, `cardUrl or cardData is required:
+  this route replaces the agent card document and does not edit fields`.
+- Test: `tests/test_a2a_update_agent_card_document.py`.
 
 ### Fixed — the JIT approval link opens the dashboard's JIT requests page (#701)
 

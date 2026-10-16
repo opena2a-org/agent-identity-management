@@ -1200,59 +1200,87 @@ class A2AClient:
             for c in response.get("cards", [])
         ]
 
-    @staticmethod
-    def _skill_identifier(skill: Union[str, Dict[str, Any]]) -> str:
-        """
-        The identifier of a skill given as one, or as a dictionary with an
-        `id`, the form the server answers a card's skills in.
-        """
-        identifier = skill.get("id") if isinstance(skill, dict) else skill
-        if not isinstance(identifier, str) or not identifier:
-            raise ValueError("each skill must be its identifier, or a dictionary with an `id`")
-        return identifier
+    # The server's answer to a card update that carries neither cardUrl nor
+    # cardData.
+    CARD_DOCUMENT_REQUIRED = (
+        "cardUrl or cardData is required: this route replaces the agent card "
+        "document and does not edit fields"
+    )
 
     def update_agent_card(
         self,
         name: Optional[str] = None,
         description: Optional[str] = None,
         version: Optional[str] = None,
-        skills: Optional[List[Union[str, Dict[str, Any]]]] = None
+        skills: Optional[List[Union[str, Dict[str, Any]]]] = None,
+        *,
+        card_url: Optional[str] = None,
+        card_data: Optional[Dict[str, Any]] = None,
     ) -> A2AAgentCard:
         """
-        Update the current agent's A2A card.
+        Replace the current agent's A2A card document.
+
+        The server fetches the card from `card_url` or takes `card_data`,
+        recomputes the card's hash, issues a new attestation and stores the
+        card in place of the previous one. The route does not edit a card
+        field by field.
 
         Args:
-            name: New name for the agent
-            description: New description
-            version: New version string
-            skills: Updated list of skills, each as its identifier. The server
-                reads `skills` as a list of identifiers; a dictionary, the
-                form it answers a card's skills in, is sent as its `id`.
+            name: Deprecated. The route does not read it; put it in card_data.
+            description: Deprecated, as name.
+            version: Deprecated, as name.
+            skills: Deprecated, as name.
+            card_url: URL of the card document, which the server fetches.
+            card_data: The card document itself, as a dictionary.
 
         Returns:
-            Updated A2AAgentCard
+            A2AAgentCard with the stored card's ID, its URL, the identifiers of
+            its skills (each as a dictionary with an `id`) and the expiry of the
+            new attestation
 
         Raises:
-            ValueError: skills is not a list, or a skill in it is neither an
-                identifier nor a dictionary with an `id`. No request is sent.
+            ValueError: neither card_url nor card_data is given, card_data is
+                not a dictionary, or name, description, version or skills is
+                given. The message names the arguments the route does not
+                read. No request is sent.
 
         Example:
-            >>> card = a2a.update_agent_card(
-            ...     name="My Updated Agent",
-            ...     description="Now with more capabilities"
-            ... )
+            >>> card = a2a.update_agent_card(card_data={
+            ...     "name": "My Updated Agent",
+            ...     "description": "Now with more capabilities",
+            ...     "url": "https://agent.example.com",
+            ...     "version": "1.1.0",
+            ...     "skills": [{"id": "summarize", "name": "Summarize"}],
+            ... })
         """
+        unread = [
+            member
+            for member, value in (
+                ("name", name),
+                ("description", description),
+                ("version", version),
+                ("skills", skills),
+            )
+            if value is not None
+        ]
+        if not card_url and card_data is None:
+            message = self.CARD_DOCUMENT_REQUIRED
+            if unread:
+                message += "; it does not read " + ", ".join(unread)
+            raise ValueError(message)
+        if unread:
+            raise ValueError(
+                "update_agent_card replaces the agent card document and does not edit fields; "
+                f"it does not read {', '.join(unread)}: put them in card_data"
+            )
+        if card_data is not None and not isinstance(card_data, dict):
+            raise ValueError("card_data must be the card document, as a dictionary")
+
         data: Dict[str, Any] = {}
-        if name is not None:
-            data["name"] = name
-        if description is not None:
-            data["description"] = description
-        if version is not None:
-            data["version"] = version
-        if skills is not None:
-            if not isinstance(skills, (list, tuple)):
-                raise ValueError("skills must be a list of skill identifiers")
-            data["skills"] = [self._skill_identifier(skill) for skill in skills]
+        if card_url:
+            data["cardUrl"] = card_url
+        if card_data is not None:
+            data["cardData"] = card_data
 
         response = self._make_request(
             "PUT",
@@ -1261,15 +1289,11 @@ class A2AClient:
         )
 
         return A2AAgentCard(
-            card_id=response.get("id", ""),
+            card_id=response.get("cardId", ""),
             agent_id=response.get("agentId", self.agent_id),
-            card_url=response.get("cardUrl", ""),
-            name=response.get("name", ""),
-            description=response.get("description", ""),
-            version=response.get("version", "1.0.0"),
-            skills=response.get("skills", []),
+            card_url=response.get("cardUrl", card_url or ""),
+            skills=[{"id": s} for s in response.get("skills", [])],
             attestation_expires=_parse_datetime(response.get("attestationExpires")),
-            aim_extensions=response.get("aimExtensions"),
         )
 
     # =========================================================================

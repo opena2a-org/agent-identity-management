@@ -2961,7 +2961,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/sdk-api/agents/:id/capability-requests",
         description:
-          "Request new capability for agent. Creates request pending admin approval.",
+          "Request a new capability for the agent. Creates a request pending admin approval. Optional metadata is a JSON object of context for the reviewing admin: it is stored with the request as sent and returned with it, here and on the admin capability-request routes. Metadata that is not a JSON object is answered 400.",
         summary: "SDK: Request capability",
         auth: "API Key (X-API-Key)",
         requiresAuth: true,
@@ -2969,15 +2969,21 @@ export const apiDocumentation: EndpointCategory[] = [
         requestSchema: {
           type: "object",
           properties: {
-            capability_type: {
+            capabilityType: {
               type: "string",
               description: "Capability type (e.g., write_database, send_email)",
               required: true,
             },
             reason: {
               type: "string",
-              description: "Business justification",
+              description: "Business justification, at least 10 characters",
               required: true,
+            },
+            metadata: {
+              type: "object",
+              description:
+                "Context for the reviewing admin, stored with the request as sent",
+              required: false,
             },
           },
         },
@@ -2985,22 +2991,31 @@ export const apiDocumentation: EndpointCategory[] = [
           type: "object",
           properties: {
             id: { type: "string", description: "Request ID" },
-            agent_id: { type: "string", description: "Agent ID" },
-            capability_type: {
+            agentId: { type: "string", description: "Agent ID" },
+            capabilityType: {
               type: "string",
               description: "Requested capability",
             },
+            reason: { type: "string", description: "Request reason" },
+            metadata: {
+              type: "object",
+              description: "The metadata sent with the request; absent when it was not sent or is empty",
+            },
             status: {
               type: "string",
-              description: "pending, approved, rejected",
+              description: "pending, approved, auto-approved, rejected",
             },
-            reason: { type: "string", description: "Request reason" },
-            created_at: { type: "string", description: "Creation timestamp" },
+            requestedAt: { type: "string", description: "Request timestamp" },
+            createdAt: { type: "string", description: "Creation timestamp" },
           },
         },
         example: `{
-  "capability_type": "write_database",
-  "reason": "Need to update user records for analytics"
+  "capabilityType": "write_database",
+  "reason": "Need to update user records for analytics",
+  "metadata": {
+    "tables": ["user_events"],
+    "schedule": "nightly"
+  }
 }`,
       },
       {
@@ -3516,6 +3531,70 @@ export const apiDocumentation: EndpointCategory[] = [
           },
         },
         example: "No request body required",
+      },
+    ],
+  },
+  {
+    category: "A2A Agent Cards",
+    description:
+      "Agent card documents for the A2A protocol, attested by the platform",
+    icon: "Plug",
+    endpoints: [
+      {
+        method: "PUT",
+        path: "/api/v1/a2a/cards/:id",
+        description:
+          "Replace the agent's A2A card document. Send cardUrl, a public http or https URL the server fetches the card from, or cardData, the card JSON itself; cardData is used when both are sent. The server recomputes the card hash, issues a new attestation and stores the card in place of the previous one, the same registration POST /api/v1/a2a/agents/:id/card performs. The route does not edit individual fields: a body with neither cardUrl nor cardData is answered 400, and the field-level members it carried (name, description, version, endpoint, skills) are named in unreadMembers. An agent credential may replace only its own card.",
+        summary: "Replace an agent card",
+        auth: "Ed25519 (Agent Signature), API Key (X-API-Key) or Bearer Token (JWT)",
+        requiresAuth: true,
+        tags: ["a2a", "agents"],
+        requestSchema: {
+          type: "object",
+          properties: {
+            cardUrl: {
+              type: "string",
+              description:
+                "Public http or https URL of the card document; required unless cardData is sent",
+              required: false,
+            },
+            cardData: {
+              type: "object",
+              description:
+                "The card document itself; required unless cardUrl is sent",
+              required: false,
+            },
+          },
+        },
+        responseSchema: {
+          type: "object",
+          properties: {
+            cardId: { type: "string", description: "Card ID" },
+            agentId: { type: "string", description: "Agent ID" },
+            cardUrl: {
+              type: "string",
+              description:
+                "The card URL, or inline://<agent id> for a card sent as cardData",
+            },
+            attestationExpires: {
+              type: "string",
+              description: "When the new attestation expires",
+            },
+            skills: {
+              type: "array",
+              description: "IDs of the card's skills that were stored",
+            },
+          },
+        },
+        example: `{
+  "cardData": {
+    "name": "report-agent",
+    "description": "Summarizes nightly reports",
+    "url": "https://agents.example.com/report-agent",
+    "version": "1.1.0",
+    "skills": [{ "id": "summarize", "name": "Summarize" }]
+  }
+}`,
       },
     ],
   },

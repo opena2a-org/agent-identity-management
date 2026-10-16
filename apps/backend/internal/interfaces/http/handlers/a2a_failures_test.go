@@ -745,9 +745,18 @@ func a2aFailureRoutes() []a2aFailureRoute {
 		},
 		{
 			method: "PUT", path: "/api/v1/a2a/cards/:id", target: "/api/v1/a2a/cards/" + A,
-			body:   `{"name":"billing-agent"}`,
+			body:   `{"cardData":{"name":"billing-agent","url":"https://agents.example.com/billing"}}`,
 			handle: func(h *A2AHandler) fiber.Handler { return h.UpdateAgentCard },
-			cells:  cells(one(a2aNoOrg(), a2aMalformed()), agentPath("/api/v1/a2a/cards/", ""), agentLoads),
+			cells: cells(
+				one(a2aNoOrg(), a2aMalformed()),
+				agentPath("/api/v1/a2a/cards/", ""),
+				agentLoads,
+				one(
+					a2aSends("neither cardUrl nor cardData", `{}`),
+					a2aSends("field members without a card document", `{"name":"billing-agent"}`),
+					a2aSends("card URL refused", `{"cardUrl":"http://127.0.0.1/card.json"}`),
+				),
+			),
 		},
 		{
 			method: "POST", path: "/api/v1/a2a/cards/:id/attestation", target: "/api/v1/a2a/cards/" + A + "/attestation",
@@ -1204,7 +1213,10 @@ var a2aFailureAnswers = map[string]string{
 	"PUT /api/v1/a2a/cards/:id | unknown agent":                                            `404 {"error":"not found"}`,
 	"PUT /api/v1/a2a/cards/:id | agent of another organization":                            `404 {"error":"not found"}`,
 	"PUT /api/v1/a2a/cards/:id | agent read fails":                                         `404 {"error":"not found"}`,
-	"PUT /api/v1/a2a/cards/:id | repository fails":                                         `404 {"error":"Agent card not found"}`,
+	"PUT /api/v1/a2a/cards/:id | repository fails":                                         `500 {"error":"An internal error occurred. Please try again later."}`,
+	"PUT /api/v1/a2a/cards/:id | neither cardUrl nor cardData":                             `400 {"error":"cardUrl or cardData is required: this route replaces the agent card document and does not edit fields"}`,
+	"PUT /api/v1/a2a/cards/:id | field members without a card document":                    `400 {"error":"cardUrl or cardData is required: this route replaces the agent card document and does not edit fields; it does not read name","unreadMembers":["name"]}`,
+	"PUT /api/v1/a2a/cards/:id | card URL refused":                                         `400 {"error":"cardUrl must be a public http or https URL"}`,
 	"POST /api/v1/a2a/cards/:id/attestation | no organization in context":                  `401 {"error":true,"message":"Organization ID not found in context"}`,
 	"POST /api/v1/a2a/cards/:id/attestation | id not UTF-8":                                `400 {"error":"Invalid agent ID"}`,
 	"POST /api/v1/a2a/cards/:id/attestation | unknown agent":                               `404 {"error":"Agent not found"}`,
