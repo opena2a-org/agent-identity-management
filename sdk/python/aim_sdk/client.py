@@ -3551,8 +3551,8 @@ class AIMClient:
               uptime, successRate, securityAlerts, compliance, age,
               driftDetection, userFeedback, executionIsolation
             - calculatedAt: str - ISO timestamp
-            - excludedFactors: List[str] - present only on a score calculated
-              for this response
+            - excludedFactors: List[str] - present when one or more factors
+              were excluded from the score
 
         Example:
             result = client.get_trust_score()

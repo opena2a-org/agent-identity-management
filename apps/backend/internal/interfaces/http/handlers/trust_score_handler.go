@@ -190,8 +190,9 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 		"factors":      score.Factors,
 		"calculatedAt": score.LastCalculated,
 	}
-	// Present on the calculated-on-the-fly path; stored scores predate the
-	// exclusion tracking and omit it.
+	// Present when one or more factors were excluded from the score, on a stored
+	// score as on one calculated here; a score stored before migration 103 reads
+	// back with no exclusions and omits it.
 	if len(score.ExcludedFactors) > 0 {
 		resp["excludedFactors"] = score.ExcludedFactors
 	}

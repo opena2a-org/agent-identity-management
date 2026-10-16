@@ -69,8 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added — `get_trust_score()` and `get_trust_score_history()`, and the SDK pages name only what the SDK has (#666)
 
 - `AIMClient.get_trust_score(agent_id=None)` reads `GET /api/v1/agents/{id}/trust-score` and returns the
-  server's answer: `agentId`, `agentName`, `score`, `factors`, `calculatedAt`, and `excludedFactors` on a score
-  calculated for that response.
+  server's answer: `agentId`, `agentName`, `score`, `factors`, `calculatedAt`, and `excludedFactors` when one or
+  more factors were excluded from the score.
 - `AIMClient.get_trust_score_history(agent_id=None, limit=None)` reads
   `GET /api/v1/agents/{id}/trust-score/history`, newest first; without `limit` the server returns up to 30
   entries. A `limit` that is not a positive integer raises `ConfigurationError`.
