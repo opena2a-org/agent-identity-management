@@ -40,14 +40,12 @@ import (
 // ceiling.
 var sdkRouteContractAllowList = map[string]string{
 	pyClient + " report_execution_status POST /api/v1/sdk-api/verifications/{verification_id}/execution-status member strictMode": "the server takes strict mode from the agent's organization on purpose and never from the request",
-	pyClient + " request_capability POST /api/v1/sdk-api/agents/{self_agent_id}/capability-requests member metadata":              "the capability request struct has no metadata field; whether the server keeps it is the server's decision",
 	pyClient + " _register_via_oauth POST /api/v1/agents member organizationDomain":                                               allowOrganizationDomain,
 	pyClient + " _register_via_api_key POST /api/v1/agents member organizationDomain":                                             allowOrganizationDomain,
 
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member agentId":        allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member aimAttestation": allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member capabilities":   allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member cardUrl":        allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member createdAt":      allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member displayName":    allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member id":             allowWholeAgentCard,
@@ -74,7 +72,7 @@ var sdkRouteContractAllowList = map[string]string{
 	a2aClient + " registerSkill POST /api/v1/a2a/skills member verifiedAt":       allowWholeSkill,
 }
 
-const sdkRouteContractAllowListCeiling = 28
+const sdkRouteContractAllowListCeiling = 26
 
 const (
 	pyClient  = "sdk/python/aim_sdk/client.py"

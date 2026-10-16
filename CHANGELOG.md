@@ -1410,6 +1410,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `a2a_failures_census_test.go` fails when the A2A handler builds a 4xx or 5xx response, or calls
   `respondServerError`, `respondResourceNotFound` or `fiber.NewError`, outside the mapping.
 
+### Changed — `PUT /api/v1/a2a/cards/:id` replaces the agent card document
+
+- The route takes the registration body, `cardUrl` or `cardData`, and runs the registration
+  `POST /api/v1/a2a/agents/:id/card` runs: it fetches the card from `cardUrl` or takes `cardData`,
+  recomputes `cardHash`, issues a new attestation, stores the card in place of the previous one and
+  answers the re-registered card with 200. The audit row's actor is the authenticated user, or the
+  calling agent when the caller has no user.
+- The route does not edit individual fields. A body with neither `cardUrl` nor `cardData` is answered
+  400 with `cardUrl or cardData is required: this route replaces the agent card document and does not
+  edit fields`, and the field-level members it carried (`name`, `description`, `version`, `endpoint`,
+  `skills`) are named in the message and in `unreadMembers`. Another organization's agent is answered
+  404 whatever the body carries.
+- The 400 is the failure kind `a2aCardDocumentRequired` of the A2A failure mapping. `a2a_failures_test.go`
+  sends this route a card document, and injects a body with neither member, one with field-level members
+  only, and a card URL the server refuses, which brings it to 260 cases.
+
+### Fixed — a capability request stores the metadata the agent sends
+
+- `POST /api/v1/sdk-api/agents/:id/capability-requests` reads `metadata`, a JSON object of context
+  for the reviewing admin, stores it with the request as sent and returns it with the request.
+  Metadata that is not a JSON object is answered 400 `invalid request body`.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the

@@ -63,10 +63,12 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Parse request body
+	// Parse request body. metadata is the context the agent supplies for the
+	// reviewing admin; it is stored as sent.
 	type RequestBody struct {
-		CapabilityType string `json:"capabilityType" validate:"required"`
-		Reason         string `json:"reason" validate:"required,min=10"`
+		CapabilityType string                 `json:"capabilityType" validate:"required"`
+		Reason         string                 `json:"reason" validate:"required,min=10"`
+		Metadata       map[string]interface{} `json:"metadata"`
 	}
 
 	var req RequestBody
@@ -95,6 +97,7 @@ func (h *CapabilityRequestHandlers) CreateCapabilityRequest(c fiber.Ctx) error {
 		AgentID:        agentID,
 		CapabilityType: req.CapabilityType,
 		Reason:         req.Reason,
+		Metadata:       domain.JSONBMap(req.Metadata),
 		RequestedBy:    agent.CreatedBy, // Using the agent's owner as the requester
 	}
 

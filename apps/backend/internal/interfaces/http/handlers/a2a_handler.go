@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -1835,8 +1837,43 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(card)
 }
 
-// UpdateAgentCard updates an existing agent card
+// cardFieldMembers are the members PUT /cards/:id once bound to edit a card
+// field by field. The route reads them only to name them when it refuses a
+// body that carries no card document.
+var cardFieldMembers = []string{"name", "description", "version", "endpoint", "skills"}
+
+// cardDocumentRequiredMessage answers a PUT /cards/:id body with neither
+// cardUrl nor cardData.
+const cardDocumentRequiredMessage = "cardUrl or cardData is required: this route replaces the agent card document and does not edit fields"
+
+// cardDocumentRequiredError refuses a PUT /cards/:id body with neither cardUrl
+// nor cardData. unread names the field-level members the body carried, which
+// the route does not read. respondAgentCardError answers it as
+// a2aCardDocumentRequired.
+type cardDocumentRequiredError struct {
+	unread []string
+}
+
+// reason is the stated line the refusal is answered with: the fixed message,
+// followed by the members from cardFieldMembers the body carried.
+func (e *cardDocumentRequiredError) reason() string {
+	if len(e.unread) == 0 {
+		return cardDocumentRequiredMessage
+	}
+	return fmt.Sprintf("%s; it does not read %s", cardDocumentRequiredMessage, strings.Join(e.unread, ", "))
+}
+
+func (e *cardDocumentRequiredError) Error() string { return e.reason() }
+
+// UpdateAgentCard replaces an agent's card document
 // PUT /api/v1/a2a/cards/:id
+//
+// The body is the registration body, cardUrl or cardData, and the route runs
+// the registration POST /agents/:id/card runs: it fetches the card from
+// cardUrl or takes cardData, recomputes cardHash, issues a new attestation and
+// stores the card in place of the old one. It answers the re-registered card.
+// A body with neither member is refused with 400, naming the field-level
+// members it carried, which this route does not read.
 func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -1844,18 +1881,23 @@ func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 	}
 
 	var req struct {
-		Name        string   `json:"name"`
-		Description string   `json:"description"`
-		Version     string   `json:"version"`
-		Endpoint    string   `json:"endpoint"`
-		Skills      []string `json:"skills"`
+		CardURL  string          `json:"cardUrl"`
+		CardData json.RawMessage `json:"cardData"`
+		// The field-level members, bound only to name them in the refusal.
+		Name        json.RawMessage `json:"name"`
+		Description json.RawMessage `json:"description"`
+		Version     json.RawMessage `json:"version"`
+		Endpoint    json.RawMessage `json:"endpoint"`
+		Skills      json.RawMessage `json:"skills"`
 	}
 	if err := c.Bind().JSON(&req); err != nil {
 		return respondA2AFailure(c, a2aInvalidBody)
 	}
 
 	// SECURITY (A3d-vii.a): tenant-scope the path agent. SDK alt
-	// route `PUT /a2a/cards/:id`. Placed AFTER body validation.
+	// route `PUT /a2a/cards/:id`. Placed after the body is decoded and
+	// before it is read, so another organization's agent is 404 whatever
+	// the body carries.
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
 		return err
@@ -1864,14 +1906,55 @@ func (h *A2AHandler) UpdateAgentCard(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Get existing card
-	card, err := h.a2aService.GetEnhancedAgentCard(c.Context(), agentID)
-	if err != nil {
-		return respondA2AFailure(c, a2aAgentCardNotFound)
+	if req.CardURL == "" && len(req.CardData) == 0 {
+		refusal := &cardDocumentRequiredError{}
+		for i, member := range [][]byte{req.Name, req.Description, req.Version, req.Endpoint, req.Skills} {
+			if len(member) > 0 {
+				refusal.unread = append(refusal.unread, cardFieldMembers[i])
+			}
+		}
+		return respondAgentCardError(c, agentID, refusal)
 	}
 
-	// Return the existing card (updates would require service method)
-	return c.JSON(card)
+	resp, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
+		AgentID:  agentID,
+		CardURL:  req.CardURL,
+		CardData: req.CardData,
+	})
+	if err != nil {
+		return respondAgentCardError(c, agentID, err)
+	}
+
+	h.recordCardReplaced(c, orgID, agentID, resp)
+	return c.JSON(resp)
+}
+
+// recordCardReplaced writes the audit row of a card replaced through
+// PUT /cards/:id. The actor is the authenticated principal: the user when the
+// caller is one, otherwise the calling agent, which has no user.
+func (h *A2AHandler) recordCardReplaced(c fiber.Ctx, orgID, agentID uuid.UUID, resp *application.RegisterAgentCardResponse) {
+	if h.auditService == nil {
+		return
+	}
+	metadata := map[string]interface{}{
+		"agentId": agentID,
+		"cardUrl": resp.CardURL,
+		"skills":  resp.Skills,
+	}
+	var err error
+	if userID, ok := GetUserID(c); ok && userID != uuid.Nil {
+		err = h.auditService.LogAction(c.Context(), orgID, userID, domain.AuditActionUpdate,
+			"a2a_agent_card", resp.CardID, c.IP(), c.Get("User-Agent"), metadata)
+	} else if callerID, idErr := h.getAgentIDFromContext(c); idErr == nil && callerID != uuid.Nil {
+		err = h.auditService.LogAgentAction(c.Context(), orgID, callerID, domain.AuditActionUpdate,
+			"a2a_agent_card", resp.CardID, c.IP(), c.Get("User-Agent"), metadata)
+	} else {
+		log.Printf("a2a: card of agent %s replaced by a caller with neither a user nor an agent identity", agentID)
+		return
+	}
+	if err != nil {
+		log.Printf("a2a: audit row for the replaced card of agent %s not written: %v", agentID, err)
+	}
 }
 
 // ListPeerTrusts returns all peer trust relationships for the authenticated agent
