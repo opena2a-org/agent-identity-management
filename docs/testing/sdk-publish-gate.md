@@ -121,3 +121,33 @@ describe block on `describe.skipIf(!hasCurl())`. The gate's runners
 executes in both gates**. It is not on the allowlist. On any runner
 without curl the checker refuses (a skip outside the allowlist) rather than
 silently passing, which is the intended fail-closed behavior.
+
+## Before the tag push: the hosted route preflight
+
+The gate above judges the package. It does not ask the hosted AIM service
+whether it serves the routes the package calls, and a published SDK whose
+first-run flow calls a route the hosted service does not serve fails that
+flow against the hosted service. Before pushing an `sdk-ts-v*` tag, run
+from `sdk/typescript`:
+
+```
+node scripts/hosted-route-preflight.mjs https://api.aim.opena2a.org
+```
+
+The script sends one `POST` with the body `{}` to each route the first-run
+flows call (`/api/v1/onboarding/bootstrap-tokens/exchange` for `init`,
+`/api/v1/agents` for `registerAgent`, `/api/v1/sdk-api/verifications` for
+`verifyAction`) and to two paths that cannot exist. No request carries an
+`Authorization` header, a bootstrap token or a cookie. A route counts as
+served when its status and body differ from the unknown paths' answer; the
+path a body repeats and the date-times a JSON body carries are set aside
+before comparing. It prints `served` or `not served` for each route and
+exits 0 when every route is served, 1 when one or more is not, and 2 when
+it judged nothing (a network error, which names the host, or two unknown
+paths that got different answers).
+
+A route that is not served stops the release until the hosted service
+serves it: the tag push is the publish, so the tag waits for the hosted
+deploy, not the other way round. The first release that carries `init`
+needs the onboarding routes deployed on the hosted service before its tag
+is pushed.
