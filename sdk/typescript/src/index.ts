@@ -124,6 +124,9 @@ export {
   type KeyPair,
 } from './crypto/ed25519';
 
+// Agent private key: the one decoder every signing path uses
+export { normalizePrivateKey, PrivateKeyError } from './crypto/private-key';
+
 // Agent request signing (agent-request-v1)
 export {
   createAgentRequestHeaders,

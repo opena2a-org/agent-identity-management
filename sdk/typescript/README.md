@@ -520,7 +520,7 @@ The SDK automatically reads from these environment variables:
 | `AIM_API_KEY` | API key for authentication |
 | `AIM_ORGANIZATION_ID` | Organization ID (required with the three agent variables below) |
 | `AIM_AGENT_ID` | Pre-registered agent ID |
-| `AIM_PRIVATE_KEY` | Ed25519 private key (base64) |
+| `AIM_PRIVATE_KEY` | Ed25519 private key: standard padded base64 of 32 bytes (the seed) or of the 64 bytes AIM issues (the seed, then its public key). Hex is refused |
 | `AIM_PUBLIC_KEY` | Ed25519 public key (base64) |
 | `AIM_DEBUG` | Enable debug logging (`true`/`false`) |
 

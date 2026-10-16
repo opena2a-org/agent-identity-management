@@ -50,6 +50,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   or matched text that L2 withholds from a vendor travelled in full, up to the 4,096-character cap, over the local
   socket. `event.description` is sent as before on both channels.
 
+- **One rule for an agent private key, on every path that signs with it.** `AIMClient` (credentials from the
+  environment or from `setCredentials`), `createAgentRequestHeaders`, `SecretsClient.resolve`, `createDelegation`,
+  `sign` and `createRequestSignature` decode the key with `normalizePrivateKey`, now exported. It accepts 32 bytes, or
+  the 64 bytes AIM issues (the seed, then its public key), given as bytes or as standard padded base64 that
+  re-encodes to itself. In the 64-byte form the last 32 bytes must be the public key derived from the first 32. Only
+  the 32-byte seed reaches the signer. Any other key throws `PrivateKeyError`, a `ConfigurationError` whose `fix`
+  says how to convert the key; the error carries no part of the key. Before this change `SecretsClient.resolve`
+  decoded the key leniently, so it signed with an unpadded or whitespace-wrapped key, and it threw
+  `Uint8Array expected` on the 64-byte form AIM issues. `sign` and `createDelegation` signed with a hex string passed
+  as the private key, and threw `Uint8Array expected` on the 64-byte form. Hex is accepted nowhere: convert a hex key
+  with `Buffer.from(key, 'hex').toString('base64')`.
+
 ### Changed
 
 - The npm "Homepage" link and the first link in this README go to the project page,

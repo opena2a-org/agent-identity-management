@@ -10,7 +10,8 @@
 import * as ed from '@noble/ed25519';
 import { ConfigurationError } from '../exceptions';
 import type { AgentCredentials } from '../types';
-import { fromBase64, toBase64 } from './ed25519';
+import { toBase64 } from './ed25519';
+import { decodePrivateKey, PrivateKeyError } from './private-key';
 
 /** The methods `createAgentRequestHeaders` signs, in the exact case sent. */
 export type AgentRequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -40,9 +41,6 @@ const AGENT_REQUEST_METHODS: ReadonlySet<string> = new Set([
   'DELETE',
 ]);
 
-/** Standard base64 with correct padding; canonical form is checked separately. */
-const STANDARD_BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
-
 const NOTHING_SIGNED = 'nothing was signed';
 
 /** The Fix for a key that does not belong to one registered agent. */
@@ -63,29 +61,15 @@ function refusal(line: string, stem: string, fix: string): ConfigurationError {
   return new ConfigurationError(`${line}; ${stem}\nFix: ${fix}`);
 }
 
-function decodeStandardBase64(encoded: string): Uint8Array | null {
-  if (!STANDARD_BASE64.test(encoded)) return null;
-  const bytes = fromBase64(encoded);
-  // Rejects non-zero padding bits, which decode to the same bytes as another
-  // string: only the one canonical encoding of the key is accepted.
-  return toBase64(bytes) === encoded ? bytes : null;
-}
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
 /**
- * The one decoder from a configured agent private key to signing bytes.
+ * A configured agent private key, as credentials carry it, decoded to signing
+ * bytes by the one decoder in `./private-key`.
  *
  * Accepts standard padded base64 of exactly 32 bytes (a seed) or 64 bytes
  * (AIM's issued form: the seed, then its public key). For 64 bytes, the public
  * key derived from the seed must equal the last 32 bytes. Returns the 32-byte
  * seed and the public key derived from it. Any other input throws
- * `ConfigurationError` naming the case; no error carries any part of the key.
+ * `PrivateKeyError` naming the case; no error carries any part of the key.
  *
  * @internal
  */
@@ -93,30 +77,10 @@ export async function decodeAgentPrivateKey(
   encoded: unknown,
   stem: string = NOTHING_SIGNED
 ): Promise<{ seed: Uint8Array; publicKey: Uint8Array }> {
-  if (typeof encoded !== 'string' || encoded.length === 0) {
-    throw refusal('no agent private key is configured', stem, CREDENTIALS_FIX);
+  if (typeof encoded !== 'string') {
+    throw new PrivateKeyError('no agent private key is configured', stem);
   }
-  const bytes = decodeStandardBase64(encoded);
-  if (bytes === null) {
-    throw refusal('the agent private key is not standard base64', stem, CREDENTIALS_FIX);
-  }
-  if (bytes.length !== 32 && bytes.length !== 64) {
-    throw refusal(
-      `the agent private key is ${bytes.length} bytes long, not 32 or 64`,
-      stem,
-      CREDENTIALS_FIX
-    );
-  }
-  const seed = bytes.slice(0, 32);
-  const publicKey = await ed.getPublicKeyAsync(seed);
-  if (bytes.length === 64 && !bytesEqual(publicKey, bytes.slice(32))) {
-    throw refusal(
-      'the agent private key is 64 bytes long, and its last 32 bytes are not its public key',
-      stem,
-      CREDENTIALS_FIX
-    );
-  }
-  return { seed, publicKey };
+  return decodePrivateKey(encoded, stem);
 }
 
 /**

@@ -4,6 +4,7 @@
  */
 
 import * as ed from '@noble/ed25519';
+import { normalizePrivateKey } from './private-key';
 
 /**
  * Key pair for Ed25519 signing
@@ -23,10 +24,12 @@ export async function generateKeyPair(): Promise<KeyPair> {
 }
 
 /**
- * Sign a message with Ed25519 private key
+ * Sign a message with Ed25519 private key: the 32-byte seed, or the 64 bytes
+ * AIM issues (the seed, then its public key). Any other key throws
+ * `PrivateKeyError`.
  */
 export async function sign(message: Uint8Array, privateKey: Uint8Array): Promise<Uint8Array> {
-  return await ed.signAsync(message, privateKey);
+  return await ed.signAsync(message, normalizePrivateKey(privateKey));
 }
 
 /**

@@ -11,6 +11,7 @@
 
 import * as ed from '@noble/ed25519';
 import { type KeyPair } from './ed25519';
+import { normalizePrivateKey } from './private-key';
 
 // --- Base58btc (used for did:key encoding) ---
 
@@ -260,7 +261,7 @@ export async function createDelegation(params: {
   }
 
   const payload = delegationSignablePayload(delegation);
-  const signatureBytes = await ed.signAsync(payload, params.delegatorKeyPair.privateKey);
+  const signatureBytes = await ed.signAsync(payload, normalizePrivateKey(params.delegatorKeyPair.privateKey));
 
   return {
     ...delegation,

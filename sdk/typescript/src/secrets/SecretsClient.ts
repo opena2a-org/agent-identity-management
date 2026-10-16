@@ -24,6 +24,7 @@
 
 import * as nodeCrypto from 'crypto';
 import { sign, toBase64, fromBase64 } from '../crypto/ed25519';
+import { normalizePrivateKey } from '../crypto/private-key';
 import { SecretsError } from '../exceptions';
 
 /** Result of a credential resolution. */
@@ -113,7 +114,9 @@ export class SecretsClient {
     const message = `${namespace}|${operation}|${nonce}`;
     const encoder = new TextEncoder();
     const messageBytes = encoder.encode(message);
-    const privateKey = fromBase64(privateKeyB64);
+    // The 32-byte seed of the 32- or 64-byte key; any other key is refused
+    // before a request is made.
+    const privateKey = normalizePrivateKey(privateKeyB64, 'no request was sent');
     const signatureBytes = await sign(messageBytes, privateKey);
     const signatureB64 = toBase64(signatureBytes);
 
