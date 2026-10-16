@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -63,10 +64,17 @@ func (r *issuanceUserRepo) UpdateLastLogin(id uuid.UUID, at time.Time) error {
 	return nil
 }
 
+// issuanceUser is an active account whose password is issuancePassword. The
+// hash is written at bcrypt's minimum cost: a verification reads the cost from
+// the hash, so the sign-in paths check it as they check a production hash, and
+// one bcrypt operation at the production cost takes seconds under -race, so a
+// route that verifies a password under a fiber.TestConfig timeout outran the
+// timeout on a loaded runner (fiber then reports "test: got empty response").
 func issuanceUser(t *testing.T, forceChange bool) *domain.User {
 	t.Helper()
-	hash, err := auth.NewPasswordHasher().HashPassword(issuancePassword)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(issuancePassword), bcrypt.MinCost)
 	require.NoError(t, err)
+	hash := string(hashed)
 	return &domain.User{
 		ID:                  uuid.New(),
 		OrganizationID:      uuid.New(),
