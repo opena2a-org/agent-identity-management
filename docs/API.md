@@ -137,7 +137,9 @@ Exchange a refresh token for a new access token. The refresh token travels in th
 
 A downloaded SDK's refresh token is refreshed the same way, into a new 90-day token each time, for at most `SDK_TOKEN_FAMILY_MAX_AGE` after the download (`8760h` by default). Past that the refresh is answered `401` `Invalid or expired refresh token` and the SDK is downloaded again with a sign-in. The access token such a refresh yields is a valid bearer, but it records no sign-in (it carries no `auth_time`), so `GET /api/v1/sdk/download`, `POST /api/v1/auth/sdk/recover`, `POST /api/v1/oauth/device/approve` and `POST /api/v1/api-keys` refuse it with `401`.
 
-`POST /api/v1/auth/sdk/recover` refuses a downloaded SDK's token whose family has ended, with `401` `Token has been revoked or is invalid`: the family ends when its live token is logged out, when one of its tokens is presented again after a rotation, or when one is refused past `SDK_TOKEN_FAMILY_MAX_AGE`, with or without a revocation store. A token retired by a rotation while its family is live is recovered.
+`POST /api/v1/auth/sdk/recover` refuses a downloaded SDK's token whose family has ended, with `401` `Token has been revoked or is invalid`: the family ends when any of its tokens is logged out, when one of its tokens is presented again after a rotation, or when one is refused past `SDK_TOKEN_FAMILY_MAX_AGE`, with or without a revocation store. A token retired by a rotation while its family is live is recovered.
+
+`POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body (`{"refreshToken": "..."}`) ends that token's family, whichever of the family's tokens it is: the presented token's `sdk_tokens` row is retired and every still-active row of the family is revoked with the reason `logout`, with or without a revocation store. The family's live token is then refused at `POST /api/v1/auth/refresh` with `401`, and no token of the family is recovered. The answer's `revoked.refreshToken` is `true` when those rows are revoked and, where a revocation store is configured, its writes succeeded too. Another token family of the same account stays live.
 
 ---
 

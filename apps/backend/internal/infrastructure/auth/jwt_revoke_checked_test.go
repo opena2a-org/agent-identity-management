@@ -56,3 +56,15 @@ func TestJWTService_RevokeTokenChecked(t *testing.T) {
 		assert.True(t, svc.IsRevoked(ctx, id))
 	})
 }
+
+// RevocationConfigured reports whether a revocation store is attached, so a
+// caller can tell a store that was not written from no store at all.
+func TestJWTService_RevocationConfigured(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-only-jwt-secret-not-a-real-value-0123456789")
+	var none *JWTService
+	assert.False(t, none.RevocationConfigured(), "a nil service")
+	svc := NewJWTService()
+	assert.False(t, svc.RevocationConfigured(), "no revoker attached")
+	svc.SetRevoker(NewTokenRevoker(&fakeRevocationStore{data: map[string]bool{}}, false))
+	assert.True(t, svc.RevocationConfigured(), "a revoker attached")
+}

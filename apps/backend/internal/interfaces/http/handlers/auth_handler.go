@@ -272,10 +272,14 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	if refreshToken != "" && h.jwtService != nil {
 		ok, _ := h.jwtService.RevokeSessionCheckedFrom(c.Context(), refreshToken, presenter(c))
 		// An SDK-download token is also tracked by row in sdk_tokens, which the
-		// dashboard lists; the answer claims the revocation only when the row
-		// is retired too.
+		// dashboard lists, and its family ends by row: the logout retires the
+		// presented row and revokes the family's still-active rows, with or
+		// without a revocation store. The answer claims the revocation only
+		// when those row writes succeeded and, where a store is configured,
+		// the store's writes did too.
 		if claims, err := h.jwtService.ValidateToken(refreshToken); err == nil && claims.Issuer == auth.IssuerSDK {
-			ok = h.retireSDKTokenRow(c.Context(), refreshToken, claims.ID) && ok
+			rowsEnded := h.retireSDKTokenRow(c.Context(), refreshToken, claims)
+			ok = rowsEnded && (ok || !h.jwtService.RevocationConfigured())
 		}
 		revoked["refreshToken"] = ok
 	}
@@ -322,24 +326,46 @@ func bearerToken(c fiber.Ctx) string {
 }
 
 // retireSDKTokenRow marks the sdk_tokens row of a logged-out SDK-download
-// token revoked. A row already retired (by rotation or an earlier logout) is
-// the state logout wants and is kept as it is. Reports false when no SDK token
-// service is wired, the token has no row, or the write failed.
-func (h *AuthHandler) retireSDKTokenRow(ctx context.Context, token, jti string) bool {
+// token revoked, then ends the token's family by row: every still-active row
+// of the family is revoked with the logout reason, as a reuse revokes them,
+// so a logout with any token of the family ends it. A presented row already
+// retired (by rotation or an earlier logout) is the state logout wants and is
+// kept as it is. Reports false when no SDK token service is wired, the token
+// has no row, or a write failed.
+func (h *AuthHandler) retireSDKTokenRow(ctx context.Context, token string, claims *auth.JWTClaims) bool {
 	if h.sdkTokenService == nil {
 		return false
 	}
 	sum := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(sum[:])
-	revokeErr := h.sdkTokenService.RevokeByTokenHash(ctx, tokenHash, sdkTokenLogoutReason)
-	if revokeErr == nil {
+	retired := true
+	if revokeErr := h.sdkTokenService.RevokeByTokenHash(ctx, tokenHash, sdkTokenLogoutReason); revokeErr != nil {
+		if row, err := h.sdkTokenService.GetByTokenHash(ctx, tokenHash); err != nil || row == nil || row.IsActive() {
+			log.Printf("⚠️  Logout: sdk_tokens row not revoked for token id %s: %v", claims.ID, revokeErr)
+			retired = false
+		}
+	}
+	return h.revokeSDKTokenFamily(ctx, claims) && retired
+}
+
+// revokeSDKTokenFamily revokes the still-active sdk_tokens rows of the
+// logged-out SDK-download token's family, the family named by its claims and
+// owned by their user; a token that names no family has none to end. Reports
+// false when the owner cannot be read from the claims or the write failed.
+func (h *AuthHandler) revokeSDKTokenFamily(ctx context.Context, claims *auth.JWTClaims) bool {
+	family := claims.FamilyID()
+	if family == "" {
 		return true
 	}
-	if row, err := h.sdkTokenService.GetByTokenHash(ctx, tokenHash); err == nil && row != nil && !row.IsActive() {
-		return true
+	userID, err := uuid.Parse(claims.UserID)
+	if err == nil {
+		err = h.sdkTokenService.RevokeFamily(ctx, userID, family, sdkTokenLogoutReason)
 	}
-	log.Printf("⚠️  Logout: sdk_tokens row not revoked for token id %s: %v", jti, revokeErr)
-	return false
+	if err != nil {
+		log.Printf("⚠️  Logout: sdk_tokens family %s not revoked for token id %s: %v", family, claims.ID, err)
+		return false
+	}
+	return true
 }
 
 // logoutPrincipal returns the claims the logout row is written from: the
