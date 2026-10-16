@@ -273,6 +273,9 @@ func (r *sdkTokenRepository) GetByUserID(userID uuid.UUID, includeRevoked bool) 
 
 		tokens = append(tokens, token)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to get SDK tokens by user ID: %w", err)
+	}
 
 	return tokens, nil
 }
@@ -334,6 +337,9 @@ func (r *sdkTokenRepository) GetByOrganizationID(organizationID uuid.UUID, inclu
 		}
 
 		tokens = append(tokens, token)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to get SDK tokens by organization ID: %w", err)
 	}
 
 	return tokens, nil
