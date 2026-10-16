@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — creating an API key requires a live sign-in session
+
+- `POST /api/v1/api-keys` creates a key only for an access token that records a sign-in (one carrying `auth_time`),
+  as `GET /api/v1/sdk/download`, `POST /api/v1/auth/sdk/recover` and `POST /api/v1/oauth/device/approve` do. An
+  access token minted by refreshing an SDK-download token is answered `401` `Token has been revoked or is invalid`
+  before the request body is read; no key is created, and the refusal is recorded once as a
+  `credential_mint_refused` audit row and one `SECURITY` line with `route` `api_key_create` and `cause` `noSignIn`.
+  An access token whose session was revoked is refused with `cause` `sessionRevoked`. A sign-in's access token, and
+  the ones its refreshes mint, create the key with `201`. An access token that carries no session is not checked.
+
 ### Changed — a downloaded SDK's credential ends `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token
 
 - Each refresh of an SDK-download token issues a new 90-day token. The chain now ends: `SDK_TOKEN_FAMILY_MAX_AGE`
@@ -35,10 +45,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   invalid` and recorded once as a `credential_mint_refused` audit row whose `cause` is `noSignIn`. A revoked
   session's refusal, at these three routes and at the API key, agent key, secret rotation and webhook routes that
   check the session, now records `cause` `sessionRevoked` on its row and its `SECURITY` line. A downloaded SDK's
-  credential therefore cannot download, recover or approve a new credential; that takes a sign-in. The API key,
-  agent key, secret rotation and webhook routes do not check for a sign-in. An access token minted before this
-  release carries no `auth_time` and is refused at the three routes until its sign-in is refreshed; an access
-  token lives `JWT_ACCESS_TTL` (`2h` by default).
+  credential therefore cannot download, recover or approve a new credential; that takes a sign-in. Creating an API
+  key takes one too (see the entry above). The agent key, secret rotation and webhook routes do not check for a
+  sign-in. An access token minted before this release carries no `auth_time` and is refused at the three routes
+  until its sign-in is refreshed; an access token lives `JWT_ACCESS_TTL` (`2h` by default).
 
 ### Added — `POST /api/v1/auth/reauth` re-authenticates a signed-in user with their password
 

@@ -31,8 +31,8 @@ const (
 	// key's creation, an agent's key read, rotated or replaced, a secret's
 	// rotation, a webhook's creation or update), or an access token minted
 	// from an SDK-download token, and so recording no sign-in, was refused at
-	// an SDK download, a device sign-in approval or an SDK credential
-	// recovery. The row's route names which, and its cause why
+	// an SDK download, a device sign-in approval, an SDK credential recovery
+	// or an API key's creation. The row's route names which, and its cause why
 	// (sessionRevoked or noSignIn).
 	AuditActionCredentialMintRefused AuditAction = "credential_mint_refused"
 	// AuditActionVerificationRefused: an agent signed a verification request

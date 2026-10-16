@@ -123,8 +123,10 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 		})
 	}
 
-	// A revoked session cannot create an API key with its still-valid access token.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "api_key_create") {
+	// Creating an API key requires a live sign-in session: an access token
+	// minted from an SDK-download token, or one whose session was revoked, is
+	// refused.
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.auditService, "api_key_create") {
 		return nil
 	}
 
