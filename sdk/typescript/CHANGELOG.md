@@ -166,6 +166,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   `X25519-ChaCha20-Poly1305`). They sent it as `encryptionAlgorithm`, a member those routes do not read. The option
   keeps its name.
 
+- `npx @opena2a/aim-sdk init` sends the bootstrap token over `http:` only when the server address's host is
+  `localhost`, `127.0.0.1` or `[::1]`, compared as written in the URL and never resolved. For an `http:` address on
+  any other host, from `--url` or `AIM_URL`, it exits 1 before the exchange request: no request is made, nothing is
+  saved and the token is not printed. The error names the host and prints `--url` with the `https:` address of that
+  host. `https:` addresses are accepted on any host. `invalidServerUrlReason`, which also checks the dashboard
+  address a server reports, is unchanged. Test: `src/cli/init-cleartext-url.test.ts`.
+
 - `AIMClient.verifyAction` posts the action to `POST /api/v1/sdk-api/verifications`, the route AIM serves action
   verification on, in the body that route reads (`agentId`, `capability`, `resource`, `context`, `timestamp`,
   `riskLevel`, `signature`, `publicKey`), signed with the agent's Ed25519 key over the message the server rebuilds
