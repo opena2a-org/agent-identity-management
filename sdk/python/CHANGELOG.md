@@ -114,6 +114,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `my-first-agent`. The token travels only in the `X-AIM-Bootstrap-Token` header, redirects are not followed, and the
   token is never printed. An existing credentials file for the name is kept and the token is not spent.
 
+### Fixed — `aim-sdk init` checks the agent ID, organization ID and status the server answers with, and prints server text as one line
+
+- `aim-sdk init` saves and prints the agent ID from the exchange answer only when it is a string of 1 to 128 letters,
+  digits, `-` and `_` that starts with a letter or digit, a form that admits the UUID the server sends. Any other
+  agent ID, a value that is not a string included, ends the command with exit status 1 and nothing saved, and the
+  message says that the agent may exist on the server and is to be deleted there before running the command again
+  with a new token. An organization ID outside the same form is saved as `null`, and a status that is not 1 to 32
+  lowercase letters, `-` and `_` starting with a letter is saved and printed as `unknown`.
+- The server's error message and a redirect's `Location` are printed as one line: each C0 character (newline,
+  carriage return and tab included), DEL, each C1 character, the bidirectional formatting characters U+061C, U+200E,
+  U+200F, U+202A-U+202E and U+2066-U+2069, and a lone surrogate are replaced with U+FFFD, and text over 500
+  characters is cut with ` [truncated]`. The `Name:` line prints the `--name` given, not the name in the answer.
+- Test: `tests/test_cli_init_bootstrap_token.py`.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

@@ -363,3 +363,143 @@ def test_help_documents_the_environment_variable(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert cli.BOOTSTRAP_TOKEN_ENV in out
     assert "--url" in out and "--name" in out
+
+
+# --- the exchange answer: fields are checked, server text is one plain line ------
+
+ESC = "\x1b"
+RLO = "‮"
+SECOND_LINE = "SECOND LINE: text chosen by the server"
+
+
+def answering(**fields):
+    """A 201 that echoes the sent public key, with `fields` over the usual answer."""
+    def answer(request):
+        status, body, extra = registered(request)
+        body.update(fields)
+        return status, body, extra
+    return answer
+
+
+def saved_files(agents_dir):
+    return sorted(p.name for p in agents_dir.iterdir()) if agents_dir.exists() else []
+
+
+def test_answer_agent_id_with_an_escape_sequence_and_a_newline_is_refused(fake_server, agents_dir, capsys):
+    server = fake_server(answering(agentId=f"agt_9{ESC}[31mRED{ESC}[0m\n{SECOND_LINE}"))
+
+    assert run_init(server.url, token=TOKEN) == 1
+
+    assert len(server.requests) == 1
+    assert saved_files(agents_dir) == []
+    out = capsys.readouterr()
+    assert ESC not in out.out + out.err
+    assert SECOND_LINE not in (out.out + out.err).splitlines()
+    assert "agent ID this tool cannot use" in out.out
+    assert "Nothing was saved" in out.out
+    assert "delete it in the dashboard" in out.out
+
+
+def test_answer_agent_id_with_a_right_to_left_override_is_refused(fake_server, agents_dir, capsys):
+    server = fake_server(answering(agentId=f"agt_{RLO}9"))
+
+    assert run_init(server.url, token=TOKEN) == 1
+
+    assert saved_files(agents_dir) == []
+    out = capsys.readouterr()
+    assert RLO not in out.out + out.err
+
+
+@pytest.mark.parametrize("agent_id", [["agt_1"], {"id": "agt_1"}, 7], ids=["list", "object", "number"])
+def test_answer_agent_id_that_is_not_a_string_is_refused(fake_server, agents_dir, capsys, agent_id):
+    server = fake_server(answering(agentId=agent_id))
+
+    assert run_init(server.url, token=TOKEN) == 1
+
+    assert saved_files(agents_dir) == []
+    assert "Nothing was saved" in capsys.readouterr().out
+
+
+def test_answer_status_with_an_escape_sequence_is_saved_and_printed_as_unknown(fake_server, agents_dir, capsys):
+    server = fake_server(answering(status=f"active{ESC}[2K"))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    saved = json.loads((agents_dir / "my-first-agent.json").read_text())
+    assert saved["status"] == "unknown"
+    out = capsys.readouterr()
+    assert "   Status:      unknown" in out.out.splitlines()
+    assert ESC not in out.out + out.err
+
+
+def test_answer_organization_id_with_an_escape_sequence_is_saved_as_null(fake_server, agents_dir):
+    server = fake_server(answering(organizationId=f"org{ESC}[31m"))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    saved = json.loads((agents_dir / "my-first-agent.json").read_text())
+    assert saved["organization_id"] is None
+
+
+def test_refusal_reason_with_control_and_bidi_characters_is_printed_as_one_plain_line(fake_server, agents_dir, capsys):
+    reason = f"{ESC}[31mserver text{ESC}[0m\n{SECOND_LINE}{RLO}"
+    server = fake_server(lambda r: (400, {"error": reason}, None))
+
+    assert run_init(server.url, token=TOKEN) == 1
+
+    out = capsys.readouterr()
+    printed = out.out + out.err
+    assert ESC not in printed
+    assert RLO not in printed
+    assert SECOND_LINE not in printed.splitlines()
+    refusal = [line for line in printed.splitlines() if "Could not register the agent" in line]
+    assert len(refusal) == 1
+    assert "server text" in refusal[0] and SECOND_LINE in refusal[0]
+
+
+def test_redirect_location_with_an_escape_sequence_is_printed_without_it(fake_server, agents_dir, capsys):
+    server = fake_server(lambda r: (302, {}, {"Location": f"https://elsewhere.example.test/{ESC}[31mx"}))
+
+    assert run_init(server.url, token=TOKEN) == 1
+
+    out = capsys.readouterr()
+    assert ESC not in out.out + out.err
+    assert "redirect" in out.out
+    assert saved_files(agents_dir) == []
+
+
+def test_printed_name_is_the_local_name_not_the_one_in_the_answer(fake_server, agents_dir, capsys):
+    server = fake_server(answering(name=f"other{ESC}[31m"))
+
+    assert run_init(server.url, token=TOKEN, name="billing-bot") == 0
+
+    out = capsys.readouterr()
+    assert "   Name:        billing-bot" in out.out.splitlines()
+    assert ESC not in out.out + out.err
+
+
+def test_answer_with_a_uuid_agent_id_and_status_pending_is_saved_and_printed(fake_server, agents_dir, capsys):
+    server = fake_server(answering(agentId=AGENT_ID, organizationId=ORG_ID, status="pending"))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    saved = json.loads((agents_dir / "my-first-agent.json").read_text())
+    assert saved["agent_id"] == AGENT_ID
+    assert saved["organization_id"] == ORG_ID
+    assert saved["status"] == "pending"
+    lines = capsys.readouterr().out.splitlines()
+    assert f"   Agent ID:    {AGENT_ID}" in lines
+    assert "   Status:      pending" in lines
+    assert f"   Dashboard:   {server.url}/dashboard/agents/{AGENT_ID}" in lines
+
+
+def test_terminal_line_replaces_control_and_bidi_characters_and_caps_the_length():
+    replaced = ["\x00", "\t", "\n", "\r", ESC, "\x7f", "\x85", "\x9b", "؜", "‎", "‏",
+                "‪", "‫", "‬", "‭", RLO, "⁦", "⁧", "⁨", "⁩", "\ud800"]
+    for ch in replaced:
+        assert cli._terminal_line(f"a{ch}b") == "a�b", repr(ch)
+    kept = "HTTP 400: café, שלום, 名前 (x/y?z#1%2.3:4) \U0001F916"
+    assert cli._terminal_line(kept) == kept
+    cap = cli.TERMINAL_LINE_MAX_CHARS
+    assert cli._terminal_line("x" * cap) == "x" * cap
+    assert cli._terminal_line("x" * (cap + 1)) == "x" * cap + " [truncated]"

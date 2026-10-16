@@ -123,6 +123,22 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   fails it names the directory and the error code (`ENOTDIR`, `EACCES`), says the token has not been used, and sends
   nothing. The README describes the command under Quick Start.
 
+### Fixed — `init` checks the agent ID, organization ID and status the server answers with, and prints server text as one line
+
+- `init` saves and prints the agent ID from the exchange answer only when it is a string of 1 to 128 letters, digits,
+  `-` and `_` that starts with a letter or digit, a form that admits the UUID the server sends. Any other agent ID,
+  a value that is not a string included, ends the command with exit status 1 and nothing saved, and the message says
+  that the agent may exist on the server and is to be removed there before running the command again with a new
+  token. An organization ID outside the same form is saved as `null`, and a status that is not 1 to 32 lowercase
+  letters, `-` and `_` starting with a letter is saved and printed as `unknown`.
+- The server's error message and a redirect's `Location` are printed as one line: each C0 character (newline,
+  carriage return and tab included), DEL, each C1 character, the bidirectional formatting characters U+061C, U+200E,
+  U+200F, U+202A-U+202E and U+2066-U+2069, and a lone surrogate are replaced with U+FFFD, and text over 500
+  characters is cut with ` [truncated]`. The dashboard address printed after registration passes through the same
+  replacement. The replacement is `sanitizeTerminalLine` in `src/arp/telemetry/signature/sanitize.ts`;
+  `sanitizeTerminalText` is unchanged.
+- Tests: `src/cli/init.test.ts`, `src/arp/telemetry/signature/sanitize.test.ts`.
+
 ### Tests
 
 - The signed-field enforcement harness now proves that the verifier compares each signed instant to the clock, not
