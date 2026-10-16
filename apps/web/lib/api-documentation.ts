@@ -915,7 +915,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "PUT",
         path: "/api/v1/agents/:id/mcp-servers",
         description:
-          'Add MCP servers to agent (bulk). Creates "talks_to" relationships. An addition is made only together with its audit record; when that record cannot be written, nothing is added and the route answers 503 with Retry-After (seconds) and reasonCode recordUnavailable.',
+          'Add MCP servers to agent (bulk). Creates "talks_to" relationships. On a server that writes an audit record for each addition, an addition is made only together with that record; when the record cannot be written, nothing is added and the route answers 503 with Retry-After (seconds) and reasonCode recordUnavailable. This version of the server writes no audit record for an addition, only an audit log entry, so it does not answer this 503.',
         summary: "Add MCP servers to agent",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,

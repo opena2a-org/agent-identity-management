@@ -1266,9 +1266,10 @@ func (h *AgentHandler) AddMCPServersToAgent(c fiber.Ctx) error {
 	}
 
 	// Add MCP servers to agent's talks_to list. An addition widens what the agent may
-	// reach, so it is made only together with its audit record: a refusal of the record
-	// path answers 503 with its reason and Retry-After, and its cause stays in the server
-	// log.
+	// reach: when the agent service has a transition recorder, it is made only together
+	// with its audit record, and a refusal of the record path answers 503 with its reason
+	// and Retry-After while its cause stays in the server log. The server sets no
+	// transition recorder, so an addition is made without that record.
 	updatedAgent, addedServers, err := h.agentService.AddMCPServers(
 		withTransitionActor(c),
 		agentID,
