@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -13,17 +12,12 @@ const statusRedisPingTimeout = 2 * time.Second
 
 // newStatusHandler builds GET /api/v1/status (no auth required). pingDB is
 // the database ping; a nil pingRedis means no Redis client is in use;
-// emailConfigured reports whether the email service started. The version is
+// emailConfigured reports whether the email service started; environment is
+// the ENVIRONMENT the server read at startup. The version is
 // the stamped build version, reported exactly as GET /health/ready reports
 // it (see reportedVersion), so the two routes never disagree.
-func newStatusHandler(pingDB func() error, pingRedis func(context.Context) error, emailConfigured bool, startTime time.Time) fiber.Handler {
+func newStatusHandler(pingDB func() error, pingRedis func(context.Context) error, emailConfigured bool, environment string, startTime time.Time) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Get environment (default to "development" if not set)
-		environment := os.Getenv("ENVIRONMENT")
-		if environment == "" {
-			environment = "development"
-		}
-
 		// Check database status
 		dbStatus := "healthy"
 		if err := pingDB(); err != nil {

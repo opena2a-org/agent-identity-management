@@ -142,7 +142,7 @@ func main() {
 	application.ReportPlatformAdminAllowlist()
 
 	// Seed the first administrator from ADMIN_PASSWORD; an existing account is never changed.
-	if err := seedAdminFromEnv(migrationDB); err != nil {
+	if err := seedAdmin(migrationDB, cfg.Admin); err != nil {
 		log.Printf("Failed to seed administrator from ADMIN_PASSWORD: %v", err)
 	}
 
@@ -166,7 +166,7 @@ func main() {
 	repos.MCPCapability.SetAlertRepository(repos.Alert)
 
 	// Forward every audit log entry to the SIEM the SIEM_* variables configure.
-	siemForwarder, err := startSIEMForwarding(repos.AuditLog, os.Getenv)
+	siemForwarder, err := startSIEMForwarding(repos.AuditLog, cfg.SIEM.Value)
 	if err != nil {
 		log.Fatal("SIEM forwarding: ", err)
 	}
@@ -182,14 +182,14 @@ func main() {
 	// available. Fails CLOSED on a store outage by default; set
 	// AUTH_REVOCATION_FAIL_OPEN=true to prefer availability over strict
 	// revocation. Without Redis, revocation is disabled (tokens still expire).
-	failOpen := strings.EqualFold(os.Getenv("AUTH_REVOCATION_FAIL_OPEN"), "true")
+	failOpen := cfg.Auth.RevocationFailOpen
 	if cacheService != nil {
 		jwtService.SetRevoker(auth.NewTokenRevoker(cacheService, failOpen))
 	}
 	log.Println(tokenRevocationStartupLine(cfg, redisClient, cacheService, failOpen))
 
 	// Initialize email service
-	emailService, err := initEmailService()
+	emailService, err := initEmailService(cfg.Email)
 	if err != nil {
 		log.Printf("Email service initialization failed: %v", err)
 		log.Println("AIM will continue without email notifications")
@@ -236,7 +236,7 @@ func main() {
 	// default) serves /metrics; this listener serves it only behind
 	// METRICS_AUTH_TOKEN. See metrics_wiring.go.
 	// CRITICAL: Must be wired BEFORE Prometheus middleware to avoid circular recording
-	metricsSrv, err := wireMetrics(app, ":"+cfg.Server.Port, metricsListenAddr(), cfg.Server.MetricsAuthToken)
+	metricsSrv, err := wireMetrics(app, ":"+cfg.Server.Port, cfg.Server.MetricsListenAddr, cfg.Server.MetricsAuthToken)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -250,18 +250,10 @@ func main() {
 	app.Use(middleware.AnalyticsTracking(db)) // Real-time API call tracking
 	// app.Use(middleware.RequestLoggerMiddleware())
 
-	// CORS with allowed origins from environment
-	// IMPORTANT: Frontend ALWAYS runs on port 3000, backend on port 8080
+	// CORS with allowed origins from ALLOWED_ORIGINS (comma-separated);
+	// http://localhost:3000, the dashboard in development, when it is unset.
 	// SECURITY: CORS origins are validated by CORSMiddleware to reject wildcards
-	allowedOrigins := []string{
-		"http://localhost:3000",
-	}
-	if customOrigins := os.Getenv("ALLOWED_ORIGINS"); customOrigins != "" {
-		// Support multiple comma-separated origins in environment variable
-		allowedOrigins = strings.Split(customOrigins, ",")
-	}
-	// CORSMiddleware will validate and sanitize these origins (rejecting wildcards)
-	app.Use(middleware.CORSMiddleware(allowedOrigins))
+	app.Use(middleware.CORSMiddleware(cfg.Server.AllowedOrigins))
 
 	// Health check (no auth required)
 	app.Get("/health", func(c fiber.Ctx) error {
@@ -282,7 +274,7 @@ func main() {
 	if redisClient != nil {
 		statusRedisPing = func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }
 	}
-	app.Get("/api/v1/status", newStatusHandler(db.Ping, statusRedisPing, emailService != nil, startTime))
+	app.Get("/api/v1/status", newStatusHandler(db.Ping, statusRedisPing, emailService != nil, cfg.Server.Environment, startTime))
 
 	// A2A Discovery endpoint at root (no auth required)
 	// Standard A2A protocol requires /.well-known/agent.json at the root
@@ -309,9 +301,9 @@ func main() {
 
 	// Start server
 	port := cfg.Server.Port
-	log.Printf("Agent Identity Management API starting on port %s", port)
-	log.Printf("Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port)
-	log.Print(redisStartupSummary(cfg, redisClient))
+	for _, line := range startupSummary(cfg, redisClient) {
+		log.Print(line)
+	}
 
 	// Start background job for automatic JIT access expiration
 	// This ensures expired verifications are marked as such even if not queried
@@ -522,6 +514,16 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 
 	log.Println("Redis connected")
 	return client, nil
+}
+
+// startupSummary is the summary the server logs before it listens: the port,
+// the database and the Redis lines.
+func startupSummary(cfg *config.Config, redisClient *redis.Client) []string {
+	return []string{
+		fmt.Sprintf("Agent Identity Management API starting on port %s", cfg.Server.Port),
+		fmt.Sprintf("Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port),
+		redisStartupSummary(cfg, redisClient),
+	}
 }
 
 // redisStartupSummary is the Redis line of the startup summary. With no
@@ -754,18 +756,12 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// Server signing keys: one per purpose (card attestation, ATC issuer), so
 	// a signature made for one purpose never verifies for another. Each key is either
 	// provisioned in AIM_SIGNING_KEY_<PURPOSE> or derived from KEYVAULT_MASTER_KEY.
-	signingKeys, err := crypto.LoadSigningKeyRing(keyVault, os.Getenv)
+	signingKeys, err := crypto.LoadSigningKeyRing(keyVault, cfg.SigningKeys.Value)
 	if err != nil {
 		log.Fatalf("Failed to load server signing keys: %v", err)
 	}
-	for _, key := range signingKeys.Keys() {
-		log.Printf("Signing key: purpose=%s kid=%s source=%s", key.Purpose, key.KeyID, key.Source)
-		for _, retired := range signingKeys.RetiredPublicKeys(key.Purpose) {
-			log.Printf("Signing key: purpose=%s kid=%s status=retired", key.Purpose, crypto.SigningKeyID(retired))
-		}
-		if key.Source == crypto.SigningKeySourceDerived && os.Getenv("ENVIRONMENT") == "production" {
-			log.Printf("Signing key for %s is derived from KEYVAULT_MASTER_KEY; production deployments should provision %s", key.Purpose, crypto.SigningKeyEnvVar(key.Purpose))
-		}
+	for _, line := range signingKeyStartupLines(signingKeys, cfg.Server.Environment) {
+		log.Print(line)
 	}
 
 	// ✅ Initialize Security Policy Service for policy-based enforcement
@@ -1056,12 +1052,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	)
 
 	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry
-	registryURL := os.Getenv("REGISTRY_BRIDGE_URL")
-	if registryURL == "" {
-		registryURL = "https://api.oa2a.org"
-	}
+	registryURL := cfg.Registry.BridgeURL
 	var registryBridgeService *application.RegistryBridgeService
-	if os.Getenv("REGISTRY_BRIDGE_ENABLED") == "true" {
+	if cfg.Registry.BridgeEnabled {
 		registryBridgeService = application.NewRegistryBridgeService(
 			repos.Organization,
 			repos.Agent,
@@ -1086,8 +1079,8 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	)
 
 	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
-	issuerURI := getEnvOrDefault("ATC_ISSUER_URI", "https://aim.opena2a.org")
-	crlEndpoint := getEnvOrDefault("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest")
+	issuerURI := cfg.Registry.ATCIssuerURI
+	crlEndpoint := cfg.Registry.ATCCRLEndpoint
 	crlClient, err := infraatc.NewCachedCRLClient(crlEndpoint)
 	if err != nil {
 		log.Fatalf("invalid CRL endpoint: %v", err)
@@ -1105,14 +1098,14 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 
 	// Register external secrets backends from environment config.
 	// HashiCorp Vault: enabled when VAULT_ADDR is set.
-	if vaultAddr := os.Getenv("VAULT_ADDR"); vaultAddr != "" {
+	if vaultAddr := cfg.Secrets.Vault.Addr; vaultAddr != "" {
 		vaultCfg := &infrasecrets.VaultConfig{
 			Address:   vaultAddr,
-			MountPath: getEnvOrDefault("VAULT_MOUNT_PATH", "secret"),
-			AuthPath:  getEnvOrDefault("VAULT_AUTH_PATH", "jwt"),
-			Role:      os.Getenv("VAULT_ROLE"),
-			Token:     os.Getenv("VAULT_TOKEN"),
-			Namespace: os.Getenv("VAULT_NAMESPACE"),
+			MountPath: cfg.Secrets.Vault.MountPath,
+			AuthPath:  cfg.Secrets.Vault.AuthPath,
+			Role:      cfg.Secrets.Vault.Role,
+			Token:     cfg.Secrets.Vault.Token,
+			Namespace: cfg.Secrets.Vault.Namespace,
 		}
 		vaultBackend, err := infrasecrets.NewHashiCorpVaultBackend(vaultCfg)
 		if err != nil {
@@ -1124,11 +1117,11 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	}
 
 	// AWS Secrets Manager: enabled when AWS_SECRETS_REGION is set.
-	if awsRegion := os.Getenv("AWS_SECRETS_REGION"); awsRegion != "" {
+	if awsRegion := cfg.Secrets.AWS.Region; awsRegion != "" {
 		awsCfg := &infrasecrets.AWSConfig{
 			Region:   awsRegion,
-			KMSKeyID: os.Getenv("AWS_SECRETS_KMS_KEY_ID"),
-			Prefix:   getEnvOrDefault("AWS_SECRETS_PREFIX", "aim-secrets/"),
+			KMSKeyID: cfg.Secrets.AWS.KMSKeyID,
+			Prefix:   cfg.Secrets.AWS.Prefix,
 		}
 		awsBackend, err := infrasecrets.NewAWSSecretsBackend(awsCfg)
 		if err != nil {
@@ -1140,7 +1133,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	}
 
 	// Azure Key Vault: enabled when AZURE_KEYVAULT_URL is set.
-	if azureVaultURL := os.Getenv("AZURE_KEYVAULT_URL"); azureVaultURL != "" {
+	if azureVaultURL := cfg.Secrets.AzureVaultURL; azureVaultURL != "" {
 		azureCfg := &infrasecrets.AzureKeyVaultConfig{
 			VaultURL: azureVaultURL,
 		}
@@ -1154,7 +1147,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	}
 
 	// GCP Secret Manager: enabled when GCP_SECRETS_PROJECT is set.
-	if gcpProject := os.Getenv("GCP_SECRETS_PROJECT"); gcpProject != "" {
+	if gcpProject := cfg.Secrets.GCPProject; gcpProject != "" {
 		gcpCfg := &infrasecrets.GCPSecretConfig{
 			ProjectID: gcpProject,
 		}
@@ -1168,11 +1161,11 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	}
 
 	// 1Password: enabled when OP_CONNECT_HOST is set.
-	if opHost := os.Getenv("OP_CONNECT_HOST"); opHost != "" {
+	if opHost := cfg.Secrets.OnePassword.ConnectHost; opHost != "" {
 		opCfg := &infrasecrets.OnePasswordConfig{
 			ConnectHost:  opHost,
-			ConnectToken: os.Getenv("OP_CONNECT_TOKEN"),
-			VaultUUID:    os.Getenv("OP_VAULT_UUID"),
+			ConnectToken: cfg.Secrets.OnePassword.ConnectToken,
+			VaultUUID:    cfg.Secrets.OnePassword.VaultUUID,
 		}
 		opBackend, err := infrasecrets.NewOnePasswordBackend(opCfg)
 		if err != nil {
@@ -1201,10 +1194,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// surface in Loki under {service_name="aim-backend"} alongside the
 	// fga.authorize trace tree in Tempo.
 	fgaEngine := application.NewFGAEngine(db, agentService, telemetry.Logger("aim-fga"))
-	if v := os.Getenv("FGA_DAEMON_URL"); v != "" {
+	if v := cfg.FGA.DaemonURL; v != "" {
 		fgaEngine.SetDaemonURL(v)
 	}
-	if v := os.Getenv("FGA_REGISTRY_ASC_URL"); v != "" {
+	if v := cfg.FGA.RegistryASCURL; v != "" {
 		fgaEngine.SetRegistryASCURL(v)
 	}
 
@@ -1523,7 +1516,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 	}
 }
 
-func initEmailService() (domain.EmailService, error) {
+func initEmailService(emailCfg config.EmailConfig) (domain.EmailService, error) {
 	// Initialize email service from environment variables
 	service, err := email.NewEmailService()
 	if err != nil {
@@ -1536,14 +1529,32 @@ func initEmailService() (domain.EmailService, error) {
 	}
 
 	// Log successful initialization
-	provider := os.Getenv("EMAIL_PROVIDER")
-	if provider == "" {
-		provider = "azure"
-	}
-	fromAddress := os.Getenv("EMAIL_FROM_ADDRESS")
-	log.Printf("Email service initialized (provider: %s, from: %s)", provider, fromAddress)
+	log.Print(emailStartupLine(emailCfg))
 
 	return service, nil
+}
+
+// emailStartupLine is the line the server logs once the email service has
+// started.
+func emailStartupLine(emailCfg config.EmailConfig) string {
+	return fmt.Sprintf("Email service initialized (provider: %s, from: %s)", emailCfg.Provider, emailCfg.FromAddress)
+}
+
+// signingKeyStartupLines are the lines the server logs for its signing keys:
+// each key's source, its retired keys, and, in production, each key that is
+// derived from KEYVAULT_MASTER_KEY rather than provisioned.
+func signingKeyStartupLines(signingKeys *crypto.SigningKeyRing, environment string) []string {
+	var lines []string
+	for _, key := range signingKeys.Keys() {
+		lines = append(lines, fmt.Sprintf("Signing key: purpose=%s kid=%s source=%s", key.Purpose, key.KeyID, key.Source))
+		for _, retired := range signingKeys.RetiredPublicKeys(key.Purpose) {
+			lines = append(lines, fmt.Sprintf("Signing key: purpose=%s kid=%s status=retired", key.Purpose, crypto.SigningKeyID(retired)))
+		}
+		if key.Source == crypto.SigningKeySourceDerived && environment == "production" {
+			lines = append(lines, fmt.Sprintf("Signing key for %s is derived from KEYVAULT_MASTER_KEY; production deployments should provision %s", key.Purpose, crypto.SigningKeyEnvVar(key.Purpose)))
+		}
+	}
+	return lines
 }
 
 // mountAPIRoutes registers every route under /api/v1, in the order the server

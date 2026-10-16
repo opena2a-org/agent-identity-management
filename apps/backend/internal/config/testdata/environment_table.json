@@ -1,0 +1,2762 @@
+{
+  "baseline": {
+    "JWT_SECRET": "fake-jwt-secret-for-the-environment-table-only",
+    "KEYVAULT_MASTER_KEY": "YWltLWVudmlyb25tZW50LXRhYmxlLXRlc3Qta2V5LTE=",
+    "POSTGRES_DB": "aim",
+    "POSTGRES_HOST": "localhost",
+    "POSTGRES_USER": "aim"
+  },
+  "rows": [
+    {
+      "variable": "APP_PORT",
+      "input": "unset",
+      "value": null,
+      "setting": "\"8080\"",
+      "line": "Agent Identity Management API starting on port 8080"
+    },
+    {
+      "variable": "APP_PORT",
+      "input": "empty",
+      "value": "",
+      "setting": "\"8080\"",
+      "line": "Agent Identity Management API starting on port 8080"
+    },
+    {
+      "variable": "APP_PORT",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Agent Identity Management API starting on port    "
+    },
+    {
+      "variable": "APP_PORT",
+      "input": "valid",
+      "value": "9090",
+      "setting": "\"9090\"",
+      "line": "Agent Identity Management API starting on port 9090"
+    },
+    {
+      "variable": "APP_PORT",
+      "input": "invalid",
+      "value": "not-a-port",
+      "setting": "\"not-a-port\"",
+      "line": "Agent Identity Management API starting on port not-a-port"
+    },
+    {
+      "variable": "ENVIRONMENT",
+      "input": "unset",
+      "value": null,
+      "setting": "\"development\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "ENVIRONMENT",
+      "input": "empty",
+      "value": "",
+      "setting": "\"development\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "ENVIRONMENT",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "ENVIRONMENT",
+      "input": "valid",
+      "value": "production",
+      "setting": "\"production\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key for card-attestation is derived from KEYVAULT_MASTER_KEY; production deployments should provision AIM_SIGNING_KEY_CARD_ATTESTATION\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived\nSigning key for atc-issuer is derived from KEYVAULT_MASTER_KEY; production deployments should provision AIM_SIGNING_KEY_ATC_ISSUER"
+    },
+    {
+      "variable": "ENVIRONMENT",
+      "input": "invalid",
+      "value": "Production",
+      "setting": "\"Production\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "LOG_LEVEL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"info\"",
+      "line": ""
+    },
+    {
+      "variable": "LOG_LEVEL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"info\"",
+      "line": ""
+    },
+    {
+      "variable": "LOG_LEVEL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "LOG_LEVEL",
+      "input": "valid",
+      "value": "debug",
+      "setting": "\"debug\"",
+      "line": ""
+    },
+    {
+      "variable": "LOG_LEVEL",
+      "input": "invalid",
+      "value": "verbose",
+      "setting": "\"verbose\"",
+      "line": ""
+    },
+    {
+      "variable": "FRONTEND_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"http://localhost:3000\"",
+      "line": ""
+    },
+    {
+      "variable": "FRONTEND_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"http://localhost:3000\"",
+      "line": ""
+    },
+    {
+      "variable": "FRONTEND_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "FRONTEND_URL",
+      "input": "valid",
+      "value": "https://aim.example.com",
+      "setting": "\"https://aim.example.com\"",
+      "line": ""
+    },
+    {
+      "variable": "FRONTEND_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "valid",
+      "value": "test-metrics-token-0123456789abcdef0123456789",
+      "setting": "\"test-metrics-token-0123456789abcdef0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "invalid",
+      "value": "short",
+      "setting": "\"short\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_AUTH_TOKEN",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_HOST",
+      "input": "unset",
+      "value": null,
+      "setting": "\"localhost\" configured=false disabled=false",
+      "line": "Redis: localhost:6379 (unavailable, running without caching)\nCache service skipped (Redis unavailable)\nToken revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
+    },
+    {
+      "variable": "REDIS_HOST",
+      "input": "empty",
+      "value": "",
+      "setting": "\"localhost\" configured=false disabled=true",
+      "line": "Redis: disabled (running without caching)\nCache service skipped (Redis disabled)\nToken revocation disabled (no Redis configured): refresh tokens are not rotated and logout cannot revoke"
+    },
+    {
+      "variable": "REDIS_HOST",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \" configured=true disabled=false",
+      "line": "Redis:    :6379 (unavailable, running without caching)\nCache service skipped (Redis unavailable)\nToken revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
+    },
+    {
+      "variable": "REDIS_HOST",
+      "input": "valid",
+      "value": "redis.internal",
+      "setting": "\"redis.internal\" configured=true disabled=false",
+      "line": "Redis: redis.internal:6379 (unavailable, running without caching)\nCache service skipped (Redis unavailable)\nToken revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
+    },
+    {
+      "variable": "REDIS_HOST",
+      "input": "invalid",
+      "value": "redis host",
+      "setting": "\"redis host\" configured=true disabled=false",
+      "line": "Redis: redis host:6379 (unavailable, running without caching)\nCache service skipped (Redis unavailable)\nToken revocation disabled (Redis unavailable): refresh tokens are not rotated and logout cannot revoke"
+    },
+    {
+      "variable": "REDIS_PORT",
+      "input": "unset",
+      "value": null,
+      "setting": "6379",
+      "line": "Redis: localhost:6379 (unavailable, running without caching)"
+    },
+    {
+      "variable": "REDIS_PORT",
+      "input": "empty",
+      "value": "",
+      "setting": "6379",
+      "line": "Redis: localhost:6379 (unavailable, running without caching)"
+    },
+    {
+      "variable": "REDIS_PORT",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "6379",
+      "line": "Redis: localhost:6379 (unavailable, running without caching)"
+    },
+    {
+      "variable": "REDIS_PORT",
+      "input": "valid",
+      "value": "6380",
+      "setting": "6380",
+      "line": "Redis: localhost:6380 (unavailable, running without caching)"
+    },
+    {
+      "variable": "REDIS_PORT",
+      "input": "invalid",
+      "value": "port",
+      "setting": "6379",
+      "line": "Redis: localhost:6379 (unavailable, running without caching)"
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "valid",
+      "value": "test-redis-password",
+      "setting": "\"test-redis-password\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_PASSWORD",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_DB",
+      "input": "unset",
+      "value": null,
+      "setting": "0",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_DB",
+      "input": "empty",
+      "value": "",
+      "setting": "0",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_DB",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "0",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_DB",
+      "input": "valid",
+      "value": "2",
+      "setting": "2",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_DB",
+      "input": "invalid",
+      "value": "two",
+      "setting": "0",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_USE_TLS",
+      "input": "unset",
+      "value": null,
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_USE_TLS",
+      "input": "empty",
+      "value": "",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_USE_TLS",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_USE_TLS",
+      "input": "valid",
+      "value": "true",
+      "setting": "true",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_USE_TLS",
+      "input": "invalid",
+      "value": "yes",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REDIS_USE_TLS",
+      "input": "uppercase",
+      "value": "TRUE",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "unset",
+      "value": null,
+      "setting": "panic: Required environment variable JWT_SECRET is not set",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "empty",
+      "value": "",
+      "setting": "panic: Required environment variable JWT_SECRET is not set",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "error: JWT_SECRET must be at least 32 characters",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "valid",
+      "value": "test-jwt-secret-valid-value-0123456789abcdef",
+      "setting": "\"test-jwt-secret-valid-value-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "invalid",
+      "value": "too-short",
+      "setting": "error: JWT_SECRET must be at least 32 characters",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "JWT_SECRET",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_ID",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_ID",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_ID",
+      "input": "valid",
+      "value": "test-client.apps.example.com",
+      "setting": "\"test-client.apps.example.com\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "valid",
+      "value": "test-google-client-secret",
+      "setting": "\"test-google-client-secret\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_CLIENT_SECRET",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_REDIRECT_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"http://localhost:8080/api/v1/auth/callback/google\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_REDIRECT_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"http://localhost:8080/api/v1/auth/callback/google\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_REDIRECT_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_REDIRECT_URL",
+      "input": "valid",
+      "value": "https://aim.example.com/api/v1/auth/callback/google",
+      "setting": "\"https://aim.example.com/api/v1/auth/callback/google\"",
+      "line": ""
+    },
+    {
+      "variable": "GOOGLE_REDIRECT_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_ID",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_ID",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_ID",
+      "input": "valid",
+      "value": "00000000-0000-0000-0000-000000000001",
+      "setting": "\"00000000-0000-0000-0000-000000000001\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "valid",
+      "value": "test-microsoft-client-secret",
+      "setting": "\"test-microsoft-client-secret\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_CLIENT_SECRET",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_REDIRECT_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"http://localhost:8080/api/v1/auth/callback/microsoft\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_REDIRECT_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"http://localhost:8080/api/v1/auth/callback/microsoft\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_REDIRECT_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_REDIRECT_URL",
+      "input": "valid",
+      "value": "https://aim.example.com/api/v1/auth/callback/microsoft",
+      "setting": "\"https://aim.example.com/api/v1/auth/callback/microsoft\"",
+      "line": ""
+    },
+    {
+      "variable": "MICROSOFT_REDIRECT_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_ID",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_ID",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_ID",
+      "input": "valid",
+      "value": "test-okta-client-id",
+      "setting": "\"test-okta-client-id\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "valid",
+      "value": "test-okta-client-secret",
+      "setting": "\"test-okta-client-secret\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_CLIENT_SECRET",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_DOMAIN",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_DOMAIN",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_DOMAIN",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_DOMAIN",
+      "input": "valid",
+      "value": "example.okta.com",
+      "setting": "\"example.okta.com\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_DOMAIN",
+      "input": "invalid",
+      "value": "not a domain",
+      "setting": "\"not a domain\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_REDIRECT_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"http://localhost:8080/api/v1/auth/callback/okta\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_REDIRECT_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"http://localhost:8080/api/v1/auth/callback/okta\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_REDIRECT_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_REDIRECT_URL",
+      "input": "valid",
+      "value": "https://aim.example.com/api/v1/auth/callback/okta",
+      "setting": "\"https://aim.example.com/api/v1/auth/callback/okta\"",
+      "line": ""
+    },
+    {
+      "variable": "OKTA_REDIRECT_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_HOST",
+      "input": "unset",
+      "value": null,
+      "setting": "error: required environment variable(s) not set: POSTGRES_HOST",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_HOST",
+      "input": "empty",
+      "value": "",
+      "setting": "error: required environment variable(s) not set: POSTGRES_HOST",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_HOST",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Database: aim@   :5432"
+    },
+    {
+      "variable": "POSTGRES_HOST",
+      "input": "valid",
+      "value": "db.internal",
+      "setting": "\"db.internal\"",
+      "line": "Database: aim@db.internal:5432"
+    },
+    {
+      "variable": "POSTGRES_HOST",
+      "input": "invalid",
+      "value": "db host",
+      "setting": "\"db host\"",
+      "line": "Database: aim@db host:5432"
+    },
+    {
+      "variable": "POSTGRES_PORT",
+      "input": "unset",
+      "value": null,
+      "setting": "5432",
+      "line": "Database: aim@localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_PORT",
+      "input": "empty",
+      "value": "",
+      "setting": "5432",
+      "line": "Database: aim@localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_PORT",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "5432",
+      "line": "Database: aim@localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_PORT",
+      "input": "valid",
+      "value": "5433",
+      "setting": "5433",
+      "line": "Database: aim@localhost:5433"
+    },
+    {
+      "variable": "POSTGRES_PORT",
+      "input": "invalid",
+      "value": "port",
+      "setting": "5432",
+      "line": "Database: aim@localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_USER",
+      "input": "unset",
+      "value": null,
+      "setting": "error: required environment variable(s) not set: POSTGRES_USER",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_USER",
+      "input": "empty",
+      "value": "",
+      "setting": "error: required environment variable(s) not set: POSTGRES_USER",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_USER",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Database:    @localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_USER",
+      "input": "valid",
+      "value": "aim_app",
+      "setting": "\"aim_app\"",
+      "line": "Database: aim_app@localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_USER",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": "Database: two\nlines@localhost:5432"
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "valid",
+      "value": "test-postgres-password",
+      "setting": "\"test-postgres-password\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_PASSWORD",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_DB",
+      "input": "unset",
+      "value": null,
+      "setting": "error: required environment variable(s) not set: POSTGRES_DB",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_DB",
+      "input": "empty",
+      "value": "",
+      "setting": "error: required environment variable(s) not set: POSTGRES_DB",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_DB",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_DB",
+      "input": "valid",
+      "value": "aim_prod",
+      "setting": "\"aim_prod\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_DB",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SSL_MODE",
+      "input": "unset",
+      "value": null,
+      "setting": "\"disable\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SSL_MODE",
+      "input": "empty",
+      "value": "",
+      "setting": "\"disable\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SSL_MODE",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SSL_MODE",
+      "input": "valid",
+      "value": "require",
+      "setting": "\"require\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SSL_MODE",
+      "input": "invalid",
+      "value": "sometimes",
+      "setting": "\"sometimes\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_MAX_CONNECTIONS",
+      "input": "unset",
+      "value": null,
+      "setting": "25",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_MAX_CONNECTIONS",
+      "input": "empty",
+      "value": "",
+      "setting": "25",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_MAX_CONNECTIONS",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "25",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_MAX_CONNECTIONS",
+      "input": "valid",
+      "value": "50",
+      "setting": "50",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_MAX_CONNECTIONS",
+      "input": "invalid",
+      "value": "many",
+      "setting": "25",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_CONN_MAX_LIFETIME",
+      "input": "unset",
+      "value": null,
+      "setting": "5m0s",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_CONN_MAX_LIFETIME",
+      "input": "empty",
+      "value": "",
+      "setting": "5m0s",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_CONN_MAX_LIFETIME",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "5m0s",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_CONN_MAX_LIFETIME",
+      "input": "valid",
+      "value": "10m",
+      "setting": "10m0s",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_CONN_MAX_LIFETIME",
+      "input": "invalid",
+      "value": "ten minutes",
+      "setting": "5m0s",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_POOL_ROLE",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_POOL_ROLE",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_POOL_ROLE",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_POOL_ROLE",
+      "input": "valid",
+      "value": "aim_app",
+      "setting": "\"aim_app\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_POOL_ROLE",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SCOPE_CENSUS",
+      "input": "unset",
+      "value": null,
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SCOPE_CENSUS",
+      "input": "empty",
+      "value": "",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SCOPE_CENSUS",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SCOPE_CENSUS",
+      "input": "valid",
+      "value": "on",
+      "setting": "true",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SCOPE_CENSUS",
+      "input": "invalid",
+      "value": "yes",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_SCOPE_CENSUS",
+      "input": "uppercase",
+      "value": "ON",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "unset",
+      "value": null,
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "empty",
+      "value": "",
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "valid",
+      "value": "dGVzdC1rZXl2YXVsdC1tYXN0ZXIta2V5LTAxMjM0NTY=",
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "invalid",
+      "value": "not-base64!",
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "KEYVAULT_MASTER_KEY",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "accepted",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "valid",
+      "value": "Environment-Table-Admin-Pass-42!",
+      "setting": "\"Environment-Table-Admin-Pass-42!\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_PASSWORD",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_EMAIL",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "ADMIN_PASSWORD": "fake-admin-password-for-the-table"
+      },
+      "setting": "\"admin@opena2a.org\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_EMAIL",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "ADMIN_PASSWORD": "fake-admin-password-for-the-table"
+      },
+      "setting": "\"admin@opena2a.org\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for admin@opena2a.org already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_EMAIL",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "ADMIN_PASSWORD": "fake-admin-password-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for     already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_EMAIL",
+      "input": "valid",
+      "value": "ops@example.com",
+      "with": {
+        "ADMIN_PASSWORD": "fake-admin-password-for-the-table"
+      },
+      "setting": "\"ops@example.com\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for ops@example.com already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_EMAIL",
+      "input": "invalid",
+      "value": "not-an-email",
+      "with": {
+        "ADMIN_PASSWORD": "fake-admin-password-for-the-table"
+      },
+      "setting": "\"not-an-email\"",
+      "line": "ADMIN_PASSWORD not applied: an administrator or an account for not-an-email already exists. It only seeds the first administrator; change passwords from the dashboard."
+    },
+    {
+      "variable": "ADMIN_NAME",
+      "input": "unset",
+      "value": null,
+      "setting": "\"System Administrator\"",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_NAME",
+      "input": "empty",
+      "value": "",
+      "setting": "\"System Administrator\"",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_NAME",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_NAME",
+      "input": "valid",
+      "value": "Ops Admin",
+      "setting": "\"Ops Admin\"",
+      "line": ""
+    },
+    {
+      "variable": "ADMIN_NAME",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "AUTH_REVOCATION_FAIL_OPEN",
+      "input": "unset",
+      "value": null,
+      "setting": "false",
+      "line": "Token revocation enabled (fail-open=false)"
+    },
+    {
+      "variable": "AUTH_REVOCATION_FAIL_OPEN",
+      "input": "empty",
+      "value": "",
+      "setting": "false",
+      "line": "Token revocation enabled (fail-open=false)"
+    },
+    {
+      "variable": "AUTH_REVOCATION_FAIL_OPEN",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "false",
+      "line": "Token revocation enabled (fail-open=false)"
+    },
+    {
+      "variable": "AUTH_REVOCATION_FAIL_OPEN",
+      "input": "valid",
+      "value": "true",
+      "setting": "true",
+      "line": "Token revocation enabled (fail-open=true)"
+    },
+    {
+      "variable": "AUTH_REVOCATION_FAIL_OPEN",
+      "input": "invalid",
+      "value": "yes",
+      "setting": "false",
+      "line": "Token revocation enabled (fail-open=false)"
+    },
+    {
+      "variable": "AUTH_REVOCATION_FAIL_OPEN",
+      "input": "uppercase",
+      "value": "TRUE",
+      "setting": "true",
+      "line": "Token revocation enabled (fail-open=true)"
+    },
+    {
+      "variable": "ALLOWED_ORIGINS",
+      "input": "unset",
+      "value": null,
+      "setting": "[\"http://localhost:3000\"]",
+      "line": ""
+    },
+    {
+      "variable": "ALLOWED_ORIGINS",
+      "input": "empty",
+      "value": "",
+      "setting": "[\"http://localhost:3000\"]",
+      "line": ""
+    },
+    {
+      "variable": "ALLOWED_ORIGINS",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "[\"   \"]",
+      "line": ""
+    },
+    {
+      "variable": "ALLOWED_ORIGINS",
+      "input": "valid",
+      "value": "https://a.example.com,https://b.example.com",
+      "setting": "[\"https://a.example.com\" \"https://b.example.com\"]",
+      "line": ""
+    },
+    {
+      "variable": "ALLOWED_ORIGINS",
+      "input": "invalid",
+      "value": "*",
+      "setting": "[\"*\"]",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"https://api.oa2a.org\"",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"https://api.oa2a.org\"",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_URL",
+      "input": "valid",
+      "value": "https://registry.example.com",
+      "setting": "\"https://registry.example.com\"",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_ENABLED",
+      "input": "unset",
+      "value": null,
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_ENABLED",
+      "input": "empty",
+      "value": "",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_ENABLED",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_ENABLED",
+      "input": "valid",
+      "value": "true",
+      "setting": "true",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_ENABLED",
+      "input": "invalid",
+      "value": "yes",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "REGISTRY_BRIDGE_ENABLED",
+      "input": "uppercase",
+      "value": "TRUE",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "ATC_ISSUER_URI",
+      "input": "unset",
+      "value": null,
+      "setting": "\"https://aim.opena2a.org\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_ISSUER_URI",
+      "input": "empty",
+      "value": "",
+      "setting": "\"https://aim.opena2a.org\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_ISSUER_URI",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_ISSUER_URI",
+      "input": "valid",
+      "value": "https://aim.example.com",
+      "setting": "\"https://aim.example.com\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_ISSUER_URI",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_CRL_ENDPOINT",
+      "input": "unset",
+      "value": null,
+      "setting": "\"https://registry.opena2a.org/api/v1/crl/latest\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_CRL_ENDPOINT",
+      "input": "empty",
+      "value": "",
+      "setting": "\"https://registry.opena2a.org/api/v1/crl/latest\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_CRL_ENDPOINT",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_CRL_ENDPOINT",
+      "input": "valid",
+      "value": "https://registry.example.com/api/v1/crl/latest",
+      "setting": "\"https://registry.example.com/api/v1/crl/latest\"",
+      "line": ""
+    },
+    {
+      "variable": "ATC_CRL_ENDPOINT",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ADDR",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ADDR",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ADDR",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ADDR",
+      "input": "valid",
+      "value": "https://vault.example.com:8200",
+      "setting": "\"https://vault.example.com:8200\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ADDR",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_MOUNT_PATH",
+      "input": "unset",
+      "value": null,
+      "setting": "\"secret\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_MOUNT_PATH",
+      "input": "empty",
+      "value": "",
+      "setting": "\"secret\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_MOUNT_PATH",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_MOUNT_PATH",
+      "input": "valid",
+      "value": "kv",
+      "setting": "\"kv\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_MOUNT_PATH",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_AUTH_PATH",
+      "input": "unset",
+      "value": null,
+      "setting": "\"jwt\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_AUTH_PATH",
+      "input": "empty",
+      "value": "",
+      "setting": "\"jwt\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_AUTH_PATH",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_AUTH_PATH",
+      "input": "valid",
+      "value": "kubernetes",
+      "setting": "\"kubernetes\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_AUTH_PATH",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ROLE",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ROLE",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ROLE",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ROLE",
+      "input": "valid",
+      "value": "aim",
+      "setting": "\"aim\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_ROLE",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "valid",
+      "value": "test-vault-token",
+      "setting": "\"test-vault-token\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_TOKEN",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_NAMESPACE",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_NAMESPACE",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_NAMESPACE",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_NAMESPACE",
+      "input": "valid",
+      "value": "admin",
+      "setting": "\"admin\"",
+      "line": ""
+    },
+    {
+      "variable": "VAULT_NAMESPACE",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_REGION",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_REGION",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_REGION",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_REGION",
+      "input": "valid",
+      "value": "us-east-1",
+      "setting": "\"us-east-1\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_REGION",
+      "input": "invalid",
+      "value": "not a region",
+      "setting": "\"not a region\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_KMS_KEY_ID",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_KMS_KEY_ID",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_KMS_KEY_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_KMS_KEY_ID",
+      "input": "valid",
+      "value": "alias/aim",
+      "setting": "\"alias/aim\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_KMS_KEY_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_PREFIX",
+      "input": "unset",
+      "value": null,
+      "setting": "\"aim-secrets/\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_PREFIX",
+      "input": "empty",
+      "value": "",
+      "setting": "\"aim-secrets/\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_PREFIX",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_PREFIX",
+      "input": "valid",
+      "value": "aim/",
+      "setting": "\"aim/\"",
+      "line": ""
+    },
+    {
+      "variable": "AWS_SECRETS_PREFIX",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "AZURE_KEYVAULT_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "AZURE_KEYVAULT_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "AZURE_KEYVAULT_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "AZURE_KEYVAULT_URL",
+      "input": "valid",
+      "value": "https://aim.vault.azure.net",
+      "setting": "\"https://aim.vault.azure.net\"",
+      "line": ""
+    },
+    {
+      "variable": "AZURE_KEYVAULT_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "GCP_SECRETS_PROJECT",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "GCP_SECRETS_PROJECT",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "GCP_SECRETS_PROJECT",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "GCP_SECRETS_PROJECT",
+      "input": "valid",
+      "value": "aim-project",
+      "setting": "\"aim-project\"",
+      "line": ""
+    },
+    {
+      "variable": "GCP_SECRETS_PROJECT",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_HOST",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_HOST",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_HOST",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_HOST",
+      "input": "valid",
+      "value": "https://op-connect.example.com",
+      "setting": "\"https://op-connect.example.com\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_HOST",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "valid",
+      "value": "test-op-connect-token",
+      "setting": "\"test-op-connect-token\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_CONNECT_TOKEN",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_VAULT_UUID",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_VAULT_UUID",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_VAULT_UUID",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "OP_VAULT_UUID",
+      "input": "valid",
+      "value": "abcdefghijklmnopqrstuvwxyz",
+      "setting": "\"abcdefghijklmnopqrstuvwxyz\"",
+      "line": ""
+    },
+    {
+      "variable": "OP_VAULT_UUID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_DAEMON_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_DAEMON_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_DAEMON_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_DAEMON_URL",
+      "input": "valid",
+      "value": "http://127.0.0.1:8181",
+      "setting": "\"http://127.0.0.1:8181\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_DAEMON_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_REGISTRY_ASC_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_REGISTRY_ASC_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_REGISTRY_ASC_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_REGISTRY_ASC_URL",
+      "input": "valid",
+      "value": "https://registry.example.com/asc",
+      "setting": "\"https://registry.example.com/asc\"",
+      "line": ""
+    },
+    {
+      "variable": "FGA_REGISTRY_ASC_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": ""
+    },
+    {
+      "variable": "EMAIL_PROVIDER",
+      "input": "unset",
+      "value": null,
+      "setting": "\"azure\"",
+      "line": "Email service initialized (provider: azure, from: )"
+    },
+    {
+      "variable": "EMAIL_PROVIDER",
+      "input": "empty",
+      "value": "",
+      "setting": "\"azure\"",
+      "line": "Email service initialized (provider: azure, from: )"
+    },
+    {
+      "variable": "EMAIL_PROVIDER",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Email service initialized (provider:    , from: )"
+    },
+    {
+      "variable": "EMAIL_PROVIDER",
+      "input": "valid",
+      "value": "smtp",
+      "setting": "\"smtp\"",
+      "line": "Email service initialized (provider: smtp, from: )"
+    },
+    {
+      "variable": "EMAIL_PROVIDER",
+      "input": "invalid",
+      "value": "carrier-pigeon",
+      "setting": "\"carrier-pigeon\"",
+      "line": "Email service initialized (provider: carrier-pigeon, from: )"
+    },
+    {
+      "variable": "EMAIL_FROM_ADDRESS",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Email service initialized (provider: azure, from: )"
+    },
+    {
+      "variable": "EMAIL_FROM_ADDRESS",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Email service initialized (provider: azure, from: )"
+    },
+    {
+      "variable": "EMAIL_FROM_ADDRESS",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Email service initialized (provider: azure, from:    )"
+    },
+    {
+      "variable": "EMAIL_FROM_ADDRESS",
+      "input": "valid",
+      "value": "aim@example.com",
+      "setting": "\"aim@example.com\"",
+      "line": "Email service initialized (provider: azure, from: aim@example.com)"
+    },
+    {
+      "variable": "EMAIL_FROM_ADDRESS",
+      "input": "invalid",
+      "value": "not-an-email",
+      "setting": "\"not-an-email\"",
+      "line": "Email service initialized (provider: azure, from: not-an-email)"
+    },
+    {
+      "variable": "METRICS_LISTEN_ADDR",
+      "input": "unset",
+      "value": null,
+      "setting": "\"127.0.0.1:9464\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_LISTEN_ADDR",
+      "input": "empty",
+      "value": "",
+      "setting": "\"127.0.0.1:9464\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_LISTEN_ADDR",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_LISTEN_ADDR",
+      "input": "valid",
+      "value": "127.0.0.1:9100",
+      "setting": "\"127.0.0.1:9100\"",
+      "line": ""
+    },
+    {
+      "variable": "METRICS_LISTEN_ADDR",
+      "input": "invalid",
+      "value": "not-an-address",
+      "setting": "\"not-an-address\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_USER",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_USER",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_USER",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_USER",
+      "input": "valid",
+      "value": "aim_app",
+      "setting": "\"aim_app\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_USER",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "valid",
+      "value": "test-app-password",
+      "setting": "\"test-app-password\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_APP_PASSWORD",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": ""
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_URL",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SPLUNK_HEC_TOKEN is set but SIEM_SPLUNK_HEC_URL is not; set both to forward to Splunk HEC"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_URL",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SPLUNK_HEC_TOKEN is set but SIEM_SPLUNK_HEC_URL is not; set both to forward to Splunk HEC"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SPLUNK_HEC_TOKEN is set but SIEM_SPLUNK_HEC_URL is not; set both to forward to Splunk HEC"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_URL",
+      "input": "valid",
+      "value": "https://splunk.example.com:8088/services/collector",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table"
+      },
+      "setting": "\"https://splunk.example.com:8088/services/collector\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_URL",
+      "input": "invalid",
+      "value": "http://splunk.example.com:8088/services/collector",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table"
+      },
+      "setting": "\"http://splunk.example.com:8088/services/collector\"",
+      "line": "error: SIEM_SPLUNK_HEC_URL must use https; http is accepted only for a loopback host"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SPLUNK_HEC_URL is set but SIEM_SPLUNK_HEC_TOKEN is not; set both to forward to Splunk HEC"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SPLUNK_HEC_URL is set but SIEM_SPLUNK_HEC_TOKEN is not; set both to forward to Splunk HEC"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SPLUNK_HEC_URL is set but SIEM_SPLUNK_HEC_TOKEN is not; set both to forward to Splunk HEC"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "valid",
+      "value": "test-hec-token-0123456789",
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"test-hec-token-0123456789\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_HEC_TOKEN",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "with": {
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_INDEX",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_INDEX",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_INDEX",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"   \"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_INDEX",
+      "input": "valid",
+      "value": "aim",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"aim\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_SPLUNK_INDEX",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_MIN_SEVERITY",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_MIN_SEVERITY",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"\"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_MIN_SEVERITY",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"   \"",
+      "line": "siem: forwarding audit log entries at severity info and above to splunk"
+    },
+    {
+      "variable": "SIEM_MIN_SEVERITY",
+      "input": "valid",
+      "value": "high",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"high\"",
+      "line": "siem: forwarding audit log entries at severity high and above to splunk"
+    },
+    {
+      "variable": "SIEM_MIN_SEVERITY",
+      "input": "invalid",
+      "value": "urgent",
+      "with": {
+        "SIEM_SPLUNK_HEC_TOKEN": "fake-hec-token-for-the-table",
+        "SIEM_SPLUNK_HEC_URL": "https://splunk.example.com:8088/services/collector"
+      },
+      "setting": "\"urgent\"",
+      "line": "error: SIEM_MIN_SEVERITY must be one of info, low, medium, high, critical"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION",
+      "input": "valid",
+      "value": "YWltLWVudmlyb25tZW50LXRhYmxlLXNlZWQtMDAwMSE=",
+      "setting": "\"YWltLWVudmlyb25tZW50LXRhYmxlLXNlZWQtMDAwMSE=\"",
+      "line": "Signing key: purpose=card-attestation kid=cb592e10d1b5a3581583b9fb43a6330918e41ecb0a5897e5534c14bca6eafafa source=provisioned\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION",
+      "input": "invalid",
+      "value": "not-a-seed",
+      "setting": "\"not-a-seed\"",
+      "line": "error: AIM_SIGNING_KEY_CARD_ATTESTATION must be a base64-encoded 32-byte Ed25519 seed"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED",
+      "input": "valid",
+      "value": "YWltLWVudmlyb25tZW50LXRhYmxlLXJldGlyZWQtazE=",
+      "setting": "\"YWltLWVudmlyb25tZW50LXRhYmxlLXJldGlyZWQtazE=\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=card-attestation kid=eeda695e11f08b25c9fed2a93cc9179b81a402758d1ceeb4fc82c7fb0d84430c status=retired\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED",
+      "input": "invalid",
+      "value": "not-a-key",
+      "setting": "\"not-a-key\"",
+      "line": "error: AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED must list base64-encoded 32-byte Ed25519 public keys"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER",
+      "input": "valid",
+      "value": "YWltLWVudmlyb25tZW50LXRhYmxlLXNlZWQtMDAwMSE=",
+      "setting": "\"YWltLWVudmlyb25tZW50LXRhYmxlLXNlZWQtMDAwMSE=\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=cb592e10d1b5a3581583b9fb43a6330918e41ecb0a5897e5534c14bca6eafafa source=provisioned"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER",
+      "input": "invalid",
+      "value": "not-a-seed",
+      "setting": "\"not-a-seed\"",
+      "line": "error: AIM_SIGNING_KEY_ATC_ISSUER must be a base64-encoded 32-byte Ed25519 seed"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED",
+      "input": "valid",
+      "value": "YWltLWVudmlyb25tZW50LXRhYmxlLXJldGlyZWQtazE=",
+      "setting": "\"YWltLWVudmlyb25tZW50LXRhYmxlLXJldGlyZWQtazE=\"",
+      "line": "Signing key: purpose=card-attestation kid=d4d0afc7e50897eb65e0b44df14c7782c6d303996ced3cc9267d711a8b1f3a3c source=derived\nSigning key: purpose=atc-issuer kid=8fab138815414d50794cee2b9746a23f69e42ef2c37126a4c4614b478e3b7cc1 source=derived\nSigning key: purpose=atc-issuer kid=eeda695e11f08b25c9fed2a93cc9179b81a402758d1ceeb4fc82c7fb0d84430c status=retired"
+    },
+    {
+      "variable": "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED",
+      "input": "invalid",
+      "value": "not-a-key",
+      "setting": "\"not-a-key\"",
+      "line": "error: AIM_SIGNING_KEY_ATC_ISSUER_RETIRED must list base64-encoded 32-byte Ed25519 public keys"
+    }
+  ]
+}

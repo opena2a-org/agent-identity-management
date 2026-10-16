@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -34,10 +33,6 @@ import (
 const (
 	metricsListenAddrEnv = "METRICS_LISTEN_ADDR"
 
-	// defaultMetricsListenAddr is loopback on the port the OpenTelemetry
-	// Prometheus exporter also defaults to; 9090 is Prometheus itself.
-	defaultMetricsListenAddr = "127.0.0.1:9464"
-
 	// metricsTokenMinLength is the shortest METRICS_AUTH_TOKEN accepted.
 	// `openssl rand -hex 32` yields 64 characters.
 	metricsTokenMinLength = 32
@@ -47,15 +42,6 @@ const (
 
 	metricsPath = "/metrics"
 )
-
-// metricsListenAddr returns METRICS_LISTEN_ADDR, or defaultMetricsListenAddr
-// when it is unset.
-func metricsListenAddr() string {
-	if v := os.Getenv(metricsListenAddrEnv); v != "" {
-		return v
-	}
-	return defaultMetricsListenAddr
-}
 
 // effectiveMetricsToken returns the configured token when it is at least
 // metricsTokenMinLength characters long, and "" (unset) otherwise. Every

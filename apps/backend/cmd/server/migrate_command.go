@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/lib/pq"
@@ -43,9 +42,9 @@ func runMigrateCommand() int {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	appUser := os.Getenv("POSTGRES_APP_USER")
+	appUser := database.AppUser
 	if appUser != "" {
-		if err := provisionAppRole(ctx, db, appUser, os.Getenv("POSTGRES_APP_PASSWORD")); err != nil {
+		if err := provisionAppRole(ctx, db, appUser, database.AppPassword); err != nil {
 			log.Printf("Application role %s: %v", appUser, err)
 			return 1
 		}

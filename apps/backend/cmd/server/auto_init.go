@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
@@ -14,18 +14,18 @@ import (
 // `aim-bootstrap --default` seeds its administrator into.
 const adminSeedOrgDomain = "admin.opena2a.org"
 
-// seedAdminFromEnv creates the first administrator from ADMIN_EMAIL and
-// ADMIN_PASSWORD when the database has no administrator and no account with
-// that email. It never changes an existing account, so a password changed in
-// the dashboard survives a restart with ADMIN_PASSWORD still set. Like
+// seedAdmin creates the first administrator from ADMIN_EMAIL and
+// ADMIN_PASSWORD (admin) when the database has no administrator and no account
+// with that email. It never changes an existing account, so a password changed
+// in the dashboard survives a restart with ADMIN_PASSWORD still set. Like
 // `aim-bootstrap --default`, the seeded password must be changed at first sign-in.
-func seedAdminFromEnv(db *sql.DB) error {
-	adminPassword := os.Getenv("ADMIN_PASSWORD")
+func seedAdmin(db *sql.DB, admin config.AdminSeedConfig) error {
+	adminPassword := admin.Password
 	if adminPassword == "" {
 		return nil
 	}
 
-	adminEmail := getEnvOrDefault("ADMIN_EMAIL", "admin@opena2a.org")
+	adminEmail := admin.Email
 
 	var exists bool
 	if err := db.QueryRow(
@@ -59,7 +59,7 @@ func seedAdminFromEnv(db *sql.DB) error {
 		)
 		ON CONFLICT (organization_id, email) DO NOTHING
 	`,
-		userID, orgID, adminEmail, getEnvOrDefault("ADMIN_NAME", "System Administrator"),
+		userID, orgID, adminEmail, admin.Name,
 		fmt.Sprintf("local-%s", userID), passwordHash,
 	)
 	if err != nil {
@@ -70,12 +70,4 @@ func seedAdminFromEnv(db *sql.DB) error {
 		log.Printf("Seeded administrator %s from ADMIN_PASSWORD (change the password at first sign-in)", adminEmail)
 	}
 	return nil
-}
-
-// getEnvOrDefault returns environment variable value or default
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
