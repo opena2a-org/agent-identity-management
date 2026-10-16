@@ -596,6 +596,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   [Trust Scoring](docs/sdk/trust-scoring.md#delegation-trust-attenuation), which said the server applies
   neither value, says where it applies both.
 
+### Fixed — login and logout audit rows record the client address a trusted proxy reports
+
+- The login audit row (written by the local login, public login, SDK token recovery and device
+  code routes) and the logout audit row record the same client address the refresh route's
+  reuse and refusal rows record: the connecting peer, or, when `TRUSTED_PROXIES` names the peer,
+  the address the proxy reports in `X-Real-IP` or `X-Forwarded-For`. A reported value that does
+  not parse as an address is not recorded; the row names the peer instead. Without
+  `TRUSTED_PROXIES` the headers are ignored and the row names the peer. Before this change, a
+  `POST /public/login` and a `POST /api/v1/auth/logout` sent through a trusted proxy with
+  `X-Real-IP` set recorded the proxy's address in their rows.
+- The refresh route's `sign-in past the maximum session age refused` log line writes the same
+  client address in its `ip=` field.
+
 ### Changed — the dashboard writes "MCP servers" in sentence case
 
 - The admin users page's link to the MCP page, the agent connection graph's server count and the
