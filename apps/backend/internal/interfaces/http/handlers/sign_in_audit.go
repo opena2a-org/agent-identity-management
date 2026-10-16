@@ -17,9 +17,11 @@ import (
 // refresh, a logout or a refusal resolves to the user and organization that
 // signed in. The user, organization and family are read from the issued
 // refresh token itself, so the row names exactly what was issued. meta holds
-// the route's own fields; the row carries identifiers only, never a token. A
-// row that cannot be written is logged and does not fail the sign-in. nil-safe
-// on the audit service for handlers built by struct literal.
+// the route's own fields; the row carries identifiers only, never a token. The
+// row's client address is recordedClientIP, the same address the refresh
+// route's reuse rows record. A row that cannot be written is logged and does
+// not fail the sign-in. nil-safe on the audit service for handlers built by
+// struct literal.
 func recordSignIn(c fiber.Ctx, audit *application.AuditService, jwtService *auth.JWTService, refreshToken string, meta fiber.Map) {
 	if audit == nil || jwtService == nil {
 		return
@@ -37,7 +39,7 @@ func recordSignIn(c fiber.Ctx, audit *application.AuditService, jwtService *auth
 	}
 	family := claims.FamilyID()
 	meta["familyId"] = family
-	if err := audit.LogAction(c.Context(), orgID, userID, domain.AuditActionLogin, "user", userID, c.IP(), c.Get("User-Agent"), meta); err != nil {
+	if err := audit.LogAction(c.Context(), orgID, userID, domain.AuditActionLogin, "user", userID, recordedClientIP(c), c.Get("User-Agent"), meta); err != nil {
 		log.Printf("Sign-in: audit row for family %s not written: %v", family, err)
 	}
 }

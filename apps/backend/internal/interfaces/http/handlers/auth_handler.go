@@ -244,7 +244,8 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	// own claims: the bearer access token, or the refresh token the client
 	// sends in the body. Cookies are not credentials here. One row per logout
 	// with a valid token; garbage tokens record nothing. The row carries
-	// identifiers only, never a token.
+	// identifiers only, never a token; its client address is recordedClientIP,
+	// the same address the sign-in row and the refresh route's rows record.
 	var req LogoutRequest
 	_ = c.Bind().JSON(&req)
 	refreshToken := req.RefreshToken
@@ -257,7 +258,7 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 				if family := claims.FamilyID(); family != "" {
 					meta["familyId"] = family
 				}
-				if err := h.auditService.LogAction(c.Context(), orgID, userID, domain.AuditActionLogout, "user", userID, c.IP(), c.Get("User-Agent"), meta); err != nil {
+				if err := h.auditService.LogAction(c.Context(), orgID, userID, domain.AuditActionLogout, "user", userID, recordedClientIP(c), c.Get("User-Agent"), meta); err != nil {
 					log.Printf("Logout: audit row not written: %v", err)
 				}
 			}

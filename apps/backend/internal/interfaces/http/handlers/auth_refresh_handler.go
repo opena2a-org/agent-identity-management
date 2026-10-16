@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -104,14 +103,7 @@ func (h *AuthRefreshHandler) recordRefusal(c fiber.Ctx, claims *auth.JWTClaims, 
 // the audit row's identifiers, extra the log line's.
 func (h *AuthRefreshHandler) recordRefusalWith(c fiber.Ctx, claims *auth.JWTClaims, action domain.AuditAction, meta map[string]interface{}, extra string) {
 	family, jti := claims.FamilyID(), claims.ID
-	client := presenter(c)
-	ip, ua := client.Address, client.UserAgent
-	// A trusted proxy's address header is recorded only when it parses as an
-	// address; otherwise the connecting address is, so a forwarded value can
-	// never add fields to the log line or overflow the audit column.
-	if net.ParseIP(ip) == nil {
-		ip = c.IP()
-	}
+	ip, ua := recordedClientIP(c), c.Get("User-Agent")
 	meta["familyId"] = family
 	meta["jti"] = jti
 	log.Printf("SECURITY %s user=%s org=%s family=%s jti=%s%s ip=%s ua=%q", action, claims.UserID, claims.OrganizationID, family, jti, extra, ip, ua)
@@ -390,7 +382,7 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 	now := time.Now()
 	if h.jwtService.SessionExpired(claims, now) {
 		log.Printf("Refresh: sign-in past the maximum session age refused user=%s org=%s family=%s signedIn=%s ip=%s ua=%q",
-			claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt().UTC().Format(time.RFC3339), c.IP(), c.Get("User-Agent"))
+			claims.UserID, claims.OrganizationID, claims.FamilyID(), claims.SignedInAt().UTC().Format(time.RFC3339), recordedClientIP(c), c.Get("User-Agent"))
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid or expired refresh token",
 		})
