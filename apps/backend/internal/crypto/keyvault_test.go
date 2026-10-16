@@ -225,7 +225,7 @@ func TestDecryptPrivateKey_CiphertextTooShort(t *testing.T) {
 	require.NoError(t, err)
 
 	// A v2 header followed by fewer bytes than a nonce and tag
-	shortCiphertext := base64.StdEncoding.EncodeToString([]byte{privateKeyFormatV2, currentStorageKeyID, 's', 'h', 'o', 'r', 't'})
+	shortCiphertext := base64.StdEncoding.EncodeToString([]byte{privateKeyFormatV2, defaultStorageKeyID, 's', 'h', 'o', 'r', 't'})
 	_, err = kv.DecryptPrivateKey(testAgentID, shortCiphertext)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "ciphertext too short")
@@ -401,7 +401,7 @@ func sealLegacyV1(t *testing.T, kv *KeyVault, plaintext string) string {
 
 func TestStorageAAD_Layout(t *testing.T) {
 	agentID := uuid.MustParse("6F1C2A3B-4D5E-4F60-8A7B-9C0D1E2F3A4B")
-	header := []byte{privateKeyFormatV2, currentStorageKeyID}
+	header := []byte{privateKeyFormatV2, defaultStorageKeyID}
 
 	got := storageAAD(agentPrivateKeyPurpose, header, agentID)
 
@@ -422,7 +422,7 @@ func TestEncryptPrivateKey_V2HeaderAndRowBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, len(raw), privateKeyHeaderSize)
 	assert.Equal(t, privateKeyFormatV2, raw[0], "version byte")
-	assert.Equal(t, currentStorageKeyID, raw[1], "storage key id")
+	assert.Equal(t, defaultStorageKeyID, raw[1], "storage key id")
 
 	// The ciphertext opens under exactly the documented additional data.
 	gcm, err := kv.newGCM()

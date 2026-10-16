@@ -158,6 +158,7 @@ func TestMain_StartupMigrationsRunOnTheMigrationHandle(t *testing.T) {
 		"runMigrations":               0,
 		"seedAdminFromEnv":            0,
 		"MigrateAgentPrivateKeysToV2": 1,
+		"RewrapAgentPrivateKeys":      1,
 	} {
 		calls := callsIn(main.Body, name)
 		require.Len(t, calls, 1, "main calls %s once", name)
@@ -178,6 +179,12 @@ func TestMain_StartupMigrationsRunOnTheMigrationHandle(t *testing.T) {
 	assert.Less(t, closedAt, listenAt, "the migration handle is closed before the server listens")
 	for _, call := range callsIn(main.Body, "MigrateAgentPrivateKeysToV2") {
 		assert.Less(t, call.Pos(), closedAt, "the key migration runs before the handle is closed")
+	}
+	for _, sweep := range callsIn(main.Body, "RewrapAgentPrivateKeys") {
+		assert.Less(t, sweep.Pos(), closedAt, "the key sweep runs before the handle is closed")
+		for _, migration := range callsIn(main.Body, "MigrateAgentPrivateKeysToV2") {
+			assert.Less(t, migration.Pos(), sweep.Pos(), "the key sweep runs after the conversion to v2: it counts a v1 row and leaves it as it is")
+		}
 	}
 
 	migrate := funcDecl(t, "migrate_command.go", "runMigrateCommand")

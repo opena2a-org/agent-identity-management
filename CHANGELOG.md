@@ -58,6 +58,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   states that the signing secret is not returned and that an unknown event name is accepted and never sent.
 - Tests: `apps/backend/cmd/server/integration_claims_docs_test.go`.
 
+### Added: `KEYVAULT_MASTER_KEY` can be rotated with a ring of master keys and a startup sweep
+
+- The backend reads a ring of master keys keyed by the storage key id in the header of each stored agent private key.
+  `KEYVAULT_MASTER_KEY` is the current key and `KEYVAULT_MASTER_KEY_ID` its id (1 when unset, the id of every v2 key
+  stored before this change); each `KEYVAULT_MASTER_KEY_<id>` adds another key under that id. The backend decrypts under any id
+  in the ring, encrypts only under the current id, and refuses a key stored under an id outside the ring. Before this
+  change the backend held one master key and refused every storage key id but 1, so a stored agent private key did
+  not decrypt once `KEYVAULT_MASTER_KEY` was changed.
+- At each start with more than one key in the ring, a sweep re-encrypts each stored agent private key under another
+  id in the ring to the current id, one row at a time with a compare-and-swap, so a stopped sweep continues at the
+  next start. It logs counts only, including, by id, how many stored keys are still under each other id; an older key
+  can leave the ring once that count reads 0. The procedure is in `docs/DEPLOYMENT.md`, "Rotating
+  `KEYVAULT_MASTER_KEY`".
+- Server signing keys that are derived rather than provisioned come from the current key, so a rotation moves them.
+- Tests: `apps/backend/internal/crypto/keyvault_ring_test.go`,
+  `apps/backend/internal/application/agent_private_key_rewrap_test.go`, and
+  `apps/backend/internal/application/agent_private_key_rewrap_integration_test.go`, which rotates twice on a scratch
+  database and decrypts every row before, during and after each sweep.
+
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
 - `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever

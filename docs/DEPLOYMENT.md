@@ -281,7 +281,33 @@ ENABLE_ALERTS=true
 ENABLE_COMPLIANCE_REPORTS=true
 ```
 
-`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, and each of the server's Ed25519 signing keys that is not provisioned is derived from it (see [Server Signing Keys](#server-signing-keys)). Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
+`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, and each of the server's Ed25519 signing keys that is not provisioned is derived from it (see [Server Signing Keys](#server-signing-keys)). Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. To replace it, follow [Rotating `KEYVAULT_MASTER_KEY`](#rotating-keyvault_master_key). With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
+
+### Rotating `KEYVAULT_MASTER_KEY`
+
+Each stored agent private key carries in its header the storage key id of the master key that encrypted it. The server holds a ring of master keys: it decrypts under any id in the ring, encrypts only under the current id, and refuses to decrypt a key stored under an id outside the ring (`unknown storage key id <id>`).
+
+| Variable | Holds |
+|----------|-------|
+| `KEYVAULT_MASTER_KEY` | The current master key. Every private key the server stores or re-encrypts is encrypted under it. |
+| `KEYVAULT_MASTER_KEY_ID` | The storage key id of `KEYVAULT_MASTER_KEY`, a number from 1 to 255. Unset, it is 1, the id of every key a release without the ring stored in format v2. |
+| `KEYVAULT_MASTER_KEY_<id>` | Another master key in the ring under that id, for example `KEYVAULT_MASTER_KEY_1`. The server decrypts under it and never encrypts under it. |
+
+The server refuses to start when `KEYVAULT_MASTER_KEY_ID` is not a number from 1 to 255, when a `KEYVAULT_MASTER_KEY_<id>` names the current id, when a `KEYVAULT_MASTER_KEY_<id>` is set without `KEYVAULT_MASTER_KEY`, when a key in the ring is malformed (the error names the variable), and when two ids hold the same key.
+
+To rotate from id 1 to id 2:
+
+1. Generate the new key with `openssl rand -base64 32` and store it beside the current one. Keep the current key.
+2. With more than one instance, first set `KEYVAULT_MASTER_KEY_2` to the new key on every instance and restart them, leaving `KEYVAULT_MASTER_KEY` and `KEYVAULT_MASTER_KEY_ID` as they are. Every instance can then read keys stored under id 2 before any instance stores one. A single instance can skip this step.
+3. Make the new key current: set `KEYVAULT_MASTER_KEY` to the new key, `KEYVAULT_MASTER_KEY_ID=2` and `KEYVAULT_MASTER_KEY_1` to the old key, remove `KEYVAULT_MASTER_KEY_2`, and restart. Derived signing keys come from `KEYVAULT_MASTER_KEY`, so this step moves them: read [Server Signing Keys](#server-signing-keys) first.
+4. At each start with more than one key in the ring, after the agent private key format conversion and before the server accepts requests, a sweep re-encrypts each stored private key under another id in the ring to the current id. Each row is rewritten on its own, so a sweep that stops part way continues at the next start. It logs one line of counts and no agent IDs or key material:
+
+   ```text
+   Agent private key sweep to storage key 2: alreadyCurrent=0 rewritten=3 failures=0 notV2=0 remaining=1:0
+   ```
+
+   `remaining` gives, for each other id in the ring and for each id outside the ring that a stored key was found under, how many stored keys are still under that id. `failures` counts keys under an older id in the ring that were not re-encrypted: unreadable for their agent row, changed since the sweep read them, or not written. They stay in `remaining` and are read again at the next start. `notV2` counts stored values with no storage key id.
+5. Remove `KEYVAULT_MASTER_KEY_1` once a start made after every instance runs the configuration of step 3 logs `remaining=1:0`. Disable the old key in your secret store rather than deleting it, and keep it until every database backup taken before the sweep has expired: restoring one of those backups needs it.
 
 ### Secrets Management
 

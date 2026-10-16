@@ -285,6 +285,18 @@ var agentKeyStartupWriters = []agentKeyStartupWriter{
 		columns:  []string{"encrypted_private_key"},
 		caller:   "cmd/server/main.go:main",
 	},
+	{
+		// Re-encrypts each stored private key under an older storage key id
+		// in the key ring to the current id, in place and still bound to its
+		// own row ID, with a compare-and-swap on the ciphertext it read. The
+		// key pair is unchanged: no key is generated, supplied or replaced,
+		// and the public key column is not written.
+		label:    "stored private key sweep to the current master key in the key ring",
+		file:     "internal/application/agent_private_key_rewrap.go",
+		function: "RewrapAgentPrivateKeys",
+		columns:  []string{"encrypted_private_key"},
+		caller:   "cmd/server/main.go:main",
+	},
 }
 
 // agentKeyFields are the domain.Agent fields stored in the agents table's key columns.
