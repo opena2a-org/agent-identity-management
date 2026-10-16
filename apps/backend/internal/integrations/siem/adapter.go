@@ -173,8 +173,8 @@ func (s *SplunkAdapter) SendBatch(ctx context.Context, events []*SIEMEvent) erro
 // ============================================================================
 
 // The server does not load this adapter. It posts to the Azure Monitor HTTP
-// Data Collector API, which Microsoft retired on 14 September 2026 in favour
-// of the Logs Ingestion API, and it sends no Authorization header.
+// Data Collector API, for which Microsoft ended support on 14 September 2026,
+// in favour of the Logs Ingestion API, and it sends no Authorization header.
 
 // SentinelConfig holds Microsoft Sentinel configuration.
 type SentinelConfig struct {

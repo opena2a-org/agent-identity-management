@@ -47,6 +47,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   organization, found or created there.
 - Tests: `apps/backend/internal/application/registration_tags_org_test.go`.
 
+### Fixed — the integration docs mark the CyberArk connector and the Microsoft Sentinel adapter as planned, and Splunk forwarding as self-hosted only
+
+- `README.md`, `docs/server-features.md` and `docs/DEPLOYMENT.md` name Splunk audit log forwarding, which runs in
+  self-hosted deployments only, and mark the CyberArk connector and a Sentinel adapter for the Logs Ingestion API as
+  planned. Sending session events to CyberArk Privileged Session Manager is under evaluation.
+- Microsoft ended support for the Azure Monitor HTTP Data Collector API on 14 September 2026; the docs and the
+  Sentinel adapter's comment now say that, where they said the API was retired.
+- The webhook request example in `docs/API.md` leaves out `secret`, which `CreateWebhookRequest` does not read, and
+  states that the signing secret is not returned and that an unknown event name is accepted and never sent.
+- Tests: `apps/backend/cmd/server/integration_claims_docs_test.go`.
+
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
 - `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever

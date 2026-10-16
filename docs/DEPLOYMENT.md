@@ -399,7 +399,7 @@ Delivery runs in the background, so a request that writes an entry never waits f
 
 To check delivery, search Splunk for `sourcetype="opena2a:aim"`.
 
-Microsoft Sentinel is not supported: the Azure Monitor HTTP Data Collector API that the source tree's Sentinel adapter targets was retired on 14 September 2026.
+Microsoft Sentinel is not supported: Microsoft ended support for the Azure Monitor HTTP Data Collector API, which the source tree's Sentinel adapter targets, on 14 September 2026. A Sentinel adapter for the Logs Ingestion API is planned.
 
 ### Database Migrations and the Application Role
 
