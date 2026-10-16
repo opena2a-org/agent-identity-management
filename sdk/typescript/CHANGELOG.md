@@ -246,6 +246,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   wrapped only a timeout, so the raw `TypeError: fetch failed` from `fetch` reached the
   caller, and `aimErrorHandler` passed it to Express's default handler, which answered
   500 with an HTML page carrying the stack trace (#450).
+- The type comment on the ARP `AlertRule.requireLlmConfirmation` says what the flag does. It read "Escalate to L2
+  LLM for confirmation before enforcement?". It now says that the rule's action is sent to enforcement as soon as
+  the rule matches, with or without the flag; that the flag only writes `_llmReviewRequested`, `_initialAction` and
+  `_matchedRule` onto `event.data` and starts no L2 assessment; and that L2, when switched on, assesses an event
+  before the rules are evaluated and can change its category and severity. The README's Runtime Protection section
+  gains a "Default rules" table with each default rule's name, condition, action and flag. It states that with L2
+  off, the default, a critical `threat` ends in `kill` from `critical-threat` at once; that with L2 on, an L2 answer
+  of `PAUSE` turns a critical threat into a high violation, which the defaults answer with `alert`; and that `rules`
+  in the ARP config replaces the list. It also states that a config from `loadConfig()`, which
+  `new AgentRuntimeProtection()` reads when given no argument or a config file path, carries `rules: []`, so ARP
+  built that way applies no rule until the config lists some. A test holds the table equal to the rules a
+  default-configured `EventEngine` applies.
 
 ### Changed
 
