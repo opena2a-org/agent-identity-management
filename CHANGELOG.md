@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
+
+- `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever
+  of the family's tokens is presented: the presented token's `sdk_tokens` row is retired, and every still-active row
+  of the family is revoked with the reason `logout`. The family's live token is then refused at
+  `POST /api/v1/auth/refresh` with `401`, and `POST /api/v1/auth/sdk/recover` refuses every token of the family.
+  The rows decide it, so no revocation store is needed; where one is configured, its family key ends the family as
+  well. Another token family of the same account stays live.
+- The answer's `revoked.refreshToken` is `true` when the presented row is retired and the family's rows are revoked,
+  and, where a revocation store is configured, its writes succeeded too. When one of those writes fails it is
+  `false`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/auth_logout_sdk_family_test.go`.
+
 ### Security — creating an API key requires a live sign-in session
 
 - `POST /api/v1/api-keys` creates a key only for an access token that records a sign-in (one carrying `auth_time`),
@@ -25,8 +38,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - `POST /api/v1/auth/sdk/recover` refuses an SDK-download token whose token family has ended: when any `sdk_tokens`
   row of the family carries the revoke reason `logout`, `token_family_revoked` or `family_max_age`, the route answers
-  `401` `{"error":"Token has been revoked or is invalid"}` and writes no row. A logout with the family's live token
-  ends recovery of every earlier token of that family, and so do a reuse and a refresh past
+  `401` `{"error":"Token has been revoked or is invalid"}` and writes no row. A logout with any token of the family
+  ends recovery of every token of that family, and so do a reuse and a refresh past
   `SDK_TOKEN_FAMILY_MAX_AGE`. The family's rows are the presented token's row, the rows its rotations grew from and
   the rows that grew from it, read from the owner's `sdk_tokens` rows, so the decision needs no revocation store;
   where a store is configured, its family key ends the family as well.

@@ -198,6 +198,12 @@ func (s *JWTService) SetRevoker(r *TokenRevoker) {
 	s.revoker = r
 }
 
+// RevocationConfigured reports whether a token-revocation store is attached.
+// Without one nothing is denylisted, and every checked revoke reports false.
+func (s *JWTService) RevocationConfigured() bool {
+	return s != nil && s.revoker != nil
+}
+
 // IsRevoked reports whether the token identified by jti has been revoked.
 func (s *JWTService) IsRevoked(ctx context.Context, jti string) bool {
 	return s.revoker.IsRevoked(ctx, jti)

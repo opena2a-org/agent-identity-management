@@ -116,7 +116,7 @@ Authorization: Bearer <access_token>
 }
 ```
 
-**Response:** `revoked` reports what was written to the server's denylist. A value is `true` only when that token was presented, validated, and its id was denylisted; it is `false` when the token was absent or invalid, or when revocation is not configured on the server (no Redis).
+**Response:** `revoked` reports what the server revoked. For the bearer and a sign-in's refresh token, a value is `true` only when that token was presented, validated, and its id was denylisted; it is `false` when the token was absent or invalid, or when revocation is not configured on the server (no Redis). A downloaded SDK's refresh token ends its whole token family by its `sdk_tokens` rows, whichever of the family's tokens is presented: for it, `refreshToken` is `true` when the presented row is retired and the family's still-active rows are revoked, and, where revocation is configured, its denylist writes succeeded too. Without Redis the rows alone decide it.
 ```json
 {
   "message": "Logged out successfully",
