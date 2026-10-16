@@ -6,6 +6,7 @@ import type {
   EventSeverity,
   EventCategory,
   EnforcementAction,
+  EnforcementExecutor,
   EnforcementResult,
 } from '../types';
 import { CorrelationEngine } from './correlation';
@@ -30,10 +31,17 @@ export class EventEngine {
   private eventBuffer: ARPEvent[] = [];
   private readonly maxBufferSize = 10000;
   private readonly correlation: CorrelationEngine;
+  private readonly executor?: EnforcementExecutor;
 
-  constructor(config: ARPConfig) {
+  /**
+   * @param executor Carries out each matched rule's action before the
+   *   enforcement handlers are called. Without one, a matched action is not
+   *   carried out and handlers receive `success: false`, `outcome: 'not-executed'`.
+   */
+  constructor(config: ARPConfig, executor?: EnforcementExecutor) {
     this.rules = config.rules ?? defaultRules();
     this.correlation = new CorrelationEngine();
+    this.executor = executor;
   }
 
   /** Register a handler for all events (for logging, reporting, etc.) */
@@ -41,7 +49,10 @@ export class EventEngine {
     this.handlers.push(handler);
   }
 
-  /** Register a handler for enforcement actions */
+  /**
+   * Register a handler for enforcement results: the outcome of each matched
+   * rule's action, after it ran. Every handler receives the same result object.
+   */
   onEnforcement(handler: EnforcementHandler): void {
     this.enforcementHandlers.push(handler);
   }
@@ -100,12 +111,7 @@ export class EventEngine {
         fullEvent.data._matchedRule = rule.name;
       }
 
-      const result: EnforcementResult = {
-        action: rule.action as EnforcementAction,
-        success: true,
-        reason: `Rule "${rule.name}" matched: ${fullEvent.description}`,
-        event: fullEvent,
-      };
+      const result = await this.enforce(rule, fullEvent);
 
       for (const handler of this.enforcementHandlers) {
         try {
@@ -151,6 +157,38 @@ export class EventEngine {
       if (source && e.source !== source) return false;
       return true;
     });
+  }
+
+  /** Carry out a matched rule's action once and return what happened. */
+  private async enforce(rule: AlertRule, event: ARPEvent): Promise<EnforcementResult> {
+    const action = rule.action as EnforcementAction;
+    if (!this.executor) {
+      return {
+        action,
+        success: false,
+        outcome: 'not-executed',
+        reason: `Rule "${rule.name}" matched: ${event.description} (not carried out: no enforcement executor is attached)`,
+        event,
+      };
+    }
+    let result: EnforcementResult;
+    try {
+      result = await this.executor.execute(action, event);
+    } catch (err) {
+      return {
+        action,
+        success: false,
+        outcome: 'failed',
+        reason: `Rule "${rule.name}" matched; the ${action} action threw: ${err instanceof Error ? err.message : String(err)}`,
+        event,
+      };
+    }
+    // A custom executor may leave `outcome` unset; derive it so `success` and
+    // `outcome` always agree for handlers.
+    if (result.outcome === undefined) {
+      return { ...result, outcome: result.success ? 'executed' : 'failed' };
+    }
+    return result;
   }
 
   private evaluateRules(event: ARPEvent): AlertRule[] {

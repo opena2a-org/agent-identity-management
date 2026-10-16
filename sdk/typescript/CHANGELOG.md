@@ -195,6 +195,28 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   drives both README examples with a real client against a fake AIM server and asserts the action is verified
   there (#449).
 
+- ARP enforcement handlers receive the result of each action after it ran. On an `AgentRuntimeProtection`, a handler
+  registered with `arp.onEnforcement` or `arp.getEngine().onEnforcement` is given the same result the ARP writes to
+  `enforcement.jsonl` for that decision, and the action runs once per matched rule. `EnforcementResult` carries
+  `outcome` (`executed`, `failed`, `no-target` or `not-executed`), and `success` is true only when `outcome` is
+  `executed`: a log written to `enforcement.jsonl`, an alert raised with the alert callback, when one is set, returning
+  without throwing, or a pause or kill signal delivered by `process.kill` without throwing. `targetPid` is the PID a pause or kill signalled
+  or tried to. A pause or kill with no PID still reaches every handler, as `success: false`, `outcome: 'no-target'`,
+  `reason: 'No PID to kill'` (or `'No PID to pause'`) and the event, so a handler can contain it another way. An alert
+  whose callback throws is `failed`, with a `reason` that names the callback's error. `enforcement.jsonl` lines carry
+  `outcome` too. `new EventEngine(config, executor)` takes the executor that carries out each action
+  (`EnforcementEngine` is one; the type is `EnforcementExecutor`, exported from `@opena2a/aim-sdk/arp` with
+  `EnforcementOutcome`); an `EventEngine` with no executor reports a matched action as `success: false`,
+  `outcome: 'not-executed'`. Run against the code before this change, under the default rules, a handler was given
+  `success: true` and no `targetPid` for a kill of a live child process, a kill of a PID no process holds, and a kill
+  whose event had no PID; a handler on an `EventEngine` with no executor, and one for an alert whose callback threw,
+  were given `success: true` as well.
+
+- `pause` and `kill` call `process.kill` only for a PID that is a positive integer. Any other value (absent, 0,
+  negative, fractional, or a string) is `outcome: 'no-target'` and no signal is sent. Unchanged and known: a kill
+  sends SIGKILL to the same PID 5 s after SIGTERM when that PID is still in use, without checking that it still names
+  the process it signalled.
+
 - `aim-arp telemetry log` and `telemetry status` no longer read a corrupt or unreadable audit log as an empty one.
   A log holding only unparseable lines printed "No telemetry has been sent yet" and "Sent: 0"; `log` now reports
   how many lines could not be read and how many records it shows, and `status` adds an `Unreadable:` line beside
