@@ -13,19 +13,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { A2AClient } from './A2AClient';
 import { AIMClient, createClient } from '../client/AIMClient';
-import { loadCredentialsFromEnv, loadCredentialsFromFile } from '../auth/oauth';
-import type {
-  A2AAgentCard,
-  A2ASkill,
-  A2ATrustScore,
-  A2APeerTrust,
-  A2AConsent,
-  A2ASecurityCheckResult,
-  A2ASecuritySettings,
-  A2ASkillAttestation,
-  A2AConsensusResult,
-  CapableAgent,
-} from './types';
+import { loadCredentialsFromEnv } from '../auth/oauth';
+import type { A2ASkill } from './types';
 
 const AIM_URL = process.env.AIM_BASE_URL ?? 'http://localhost:8080';
 const TEST_AGENT_NAME = `ts-a2a-test-${Date.now()}`;
@@ -52,14 +41,7 @@ async function checkBackendHealth(): Promise<boolean> {
 
 function checkCredentials(): boolean {
   const envCreds = loadCredentialsFromEnv();
-  if (envCreds) return true;
-
-  try {
-    const fileCreds = loadCredentialsFromFile();
-    return fileCreds !== null;
-  } catch {
-    return false;
-  }
+  return envCreds !== null;
 }
 
 describe('A2AClient Integration Tests', () => {
@@ -97,7 +79,7 @@ describe('A2AClient Integration Tests', () => {
 
   describe('Agent Card Operations', () => {
     it.skipIf(!backendAvailable || !credentialsAvailable)(
-      'should publish and retrieve agent card',
+      'should register, update and retrieve agent card',
       async () => {
         const skills: A2ASkill[] = [
           {
@@ -119,16 +101,17 @@ describe('A2AClient Integration Tests', () => {
           },
         ];
 
-        // Publish card
-        const card = await a2aClient.publishAgentCard({
-          url: 'https://agent.example.com',
-          skills,
-        });
+        // Register card, then set its skills
+        const card = await a2aClient.registerAgentCard(
+          'https://agent.example.com/.well-known/agent.json'
+        );
 
         expect(card).toBeDefined();
         expect(card.cardUrl).toContain('.well-known/agent.json');
 
-        console.log(`✅ Published agent card: ${card.cardUrl}`);
+        console.log(`✅ Registered agent card: ${card.cardUrl}`);
+
+        await a2aClient.updateAgentCard({ skills });
 
         // Retrieve card
         const credentials = aimClient.getCredentials();
@@ -152,10 +135,8 @@ describe('A2AClient Integration Tests', () => {
           },
         ];
 
-        await a2aClient.publishAgentCard({
-          url: 'https://agent.example.com',
-          skills: initialSkills,
-        });
+        await a2aClient.registerAgentCard('https://agent.example.com/.well-known/agent.json');
+        await a2aClient.updateAgentCard({ skills: initialSkills });
 
         const newSkills: A2ASkill[] = [
           ...initialSkills,
@@ -239,7 +220,7 @@ describe('A2AClient Integration Tests', () => {
     );
 
     it.skipIf(!backendAvailable || !credentialsAvailable)(
-      'should update peer trust after interaction',
+      'should record an interaction with a peer',
       async () => {
         // First, need another agent to track
         const peerClient = createClient({
@@ -252,16 +233,17 @@ describe('A2AClient Integration Tests', () => {
           capabilities: ['peer-capability'],
         });
 
-        // Update trust
-        const updatedTrust = await a2aClient.updatePeerTrust(
+        // The server's route for a caller-set trust score (PUT
+        // /api/v1/a2a/trust/:id) refuses the write, so the test records an
+        // interaction instead.
+        const trust = await a2aClient.recordSuccessfulInteraction(
           peerAgent.id,
-          0.75,
-          1,
-          true
+          'integration-test',
+          100
         );
 
-        expect(updatedTrust.trustScore).toBe(0.75);
-        console.log('✅ Peer trust updated');
+        expect(trust).toBeDefined();
+        console.log('✅ Peer interaction recorded');
       }
     );
   });

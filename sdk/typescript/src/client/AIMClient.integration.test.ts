@@ -3,20 +3,16 @@
  *
  * These tests require:
  * - AIM backend running at http://localhost:8080 (or AIM_BASE_URL)
- * - Valid SDK credentials in environment or ~/.aim/sdk_credentials.json
+ * - Valid SDK credentials in the environment
  *
  * Run with: npm test -- --testPathPattern="integration"
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { AIMClient, createClient, registerAgent } from './AIMClient';
 import { loadCredentialsFromEnv } from '../auth/oauth';
-import {
-  AIMError,
-  AuthenticationError,
-  ActionDeniedError,
-  NetworkError,
-} from '../exceptions';
+import { AuthenticationError, NetworkError } from '../exceptions';
+import { RiskLevel } from '../types';
 
 const AIM_URL = process.env.AIM_BASE_URL ?? 'http://localhost:8080';
 const TEST_AGENT_NAME = `ts-sdk-test-agent-${Date.now()}`;
@@ -66,13 +62,8 @@ describe('AIMClient Integration Tests', () => {
   });
 
   describe('Credential Loading', () => {
-    it.skipIf(!credentialsAvailable)('should load SDK credentials from environment or file', () => {
-      const envCreds = loadCredentialsFromEnv();
-      let creds = envCreds;
-
-      if (!creds) {
-        creds = loadCredentialsFromFile();
-      }
+    it.skipIf(!credentialsAvailable)('should load SDK credentials from environment', () => {
+      const creds = loadCredentialsFromEnv();
 
       expect(creds).not.toBeNull();
       if (creds) {
@@ -200,7 +191,7 @@ describe('AIMClient Integration Tests', () => {
             method: 'GET',
             endpoint: '/users',
           },
-          riskLevel: 'low',
+          riskLevel: RiskLevel.LOW,
         });
 
         expect(result).toBeDefined();
@@ -217,7 +208,7 @@ describe('AIMClient Integration Tests', () => {
         const lowRisk = await client.verifyAction({
           action: 'db:read',
           resource: 'public_data',
-          riskLevel: 'low',
+          riskLevel: RiskLevel.LOW,
         });
         expect(lowRisk.actionAllowed).toBe(true);
 
@@ -225,7 +216,7 @@ describe('AIMClient Integration Tests', () => {
         const mediumRisk = await client.verifyAction({
           action: 'db:write',
           resource: 'user_settings',
-          riskLevel: 'medium',
+          riskLevel: RiskLevel.MEDIUM,
         });
         expect(mediumRisk.riskLevel).toBe('medium');
 
@@ -258,9 +249,14 @@ describe('AIMClient Integration Tests', () => {
           return { id, data: 'test-data' };
         };
 
-        const verifiedFetch = client.createVerifiedAction('data:fetch', fetchData, {
-          resource: 'weather_api',
-        });
+        // createVerifiedAction's type parameter is constrained to
+        // (...args: unknown[]) => Promise<unknown>, which a function with a
+        // typed parameter does not satisfy.
+        const verifiedFetch = client.createVerifiedAction(
+          'data:fetch',
+          fetchData as (...args: unknown[]) => Promise<{ id: string; data: string }>,
+          { resource: 'weather_api' }
+        );
 
         const result = await verifiedFetch('123');
 
