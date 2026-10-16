@@ -31,7 +31,7 @@ import {
 } from '../telemetry/signature';
 import { homeReadError, opena2aHome } from '../telemetry/signature/paths';
 import type { SignatureTelemetryConfig } from '../types';
-import { SDK_VERSION } from '../../version';
+import { cliVersion } from '../../build-version';
 
 /** The install-facing invocation every user-visible citation uses. */
 export const SHIPPED_INVOCATION = 'aim-arp telemetry';
@@ -351,7 +351,7 @@ export async function runTelemetrySubcommand(
   // A version request in the subcommand slot is a question about the bin, not
   // a typo'd subcommand; answer it like the top-level flag does.
   if (sub === '--version' || sub === '-v') {
-    console.log(`aim-arp v${SDK_VERSION}`);
+    console.log(`aim-arp v${cliVersion()}`);
     return 0;
   }
   // A typo'd subcommand is reported as the error even when --help rides

@@ -9,14 +9,15 @@
  * and was answered with "Unknown command" + exit 1 (AIM-12 item 1).
  */
 
-import { SDK_VERSION } from '../../version';
+import { cliVersion } from '../../build-version';
 import { loadConfig } from '../index';
 import { runTelemetrySubcommand, TELEMETRY_SUBCOMMANDS } from './telemetry';
 import { runInit } from '../../cli/init';
 
 function showHelp(): void {
   console.log(`
-  aim-arp v${SDK_VERSION} — OpenA2A AIM SDK CLI
+  aim-arp v${cliVersion()}
+  OpenA2A AIM SDK CLI
 
   USAGE
     npx @opena2a/aim-sdk init [--url <url>] [--name <name>]
@@ -50,7 +51,7 @@ export async function runAimArp(argv: string[]): Promise<number> {
     case 'version':
     case '--version':
     case '-v':
-      console.log(`aim-arp v${SDK_VERSION}`);
+      console.log(`aim-arp v${cliVersion()}`);
       return 0;
     case 'help':
     case '--help':

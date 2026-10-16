@@ -67,6 +67,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - The npm "Homepage" link and the first link in this README go to the project page,
   https://opena2a.org/agent-identity-management. They pointed at the repository README and at the hosted sign-up
   page. The repository stays linked as the package's `repository`.
+- `aim-arp --version`, `aim-arp telemetry --version` and the first line of `aim-arp --help` print the version
+  followed by `+source (built from source; not the published <version>)` unless the package was built by the
+  release workflow on its `sdk-ts-v<version>` tag, which prints the bare version. A build of this repository printed
+  `aim-arp v1.3.1`, the line the published 1.3.1 prints, while it carried `init`, which 1.3.1 does not have. The
+  help header no longer has an em dash: the CLI's name is on its own line. `VERSION`, the package `version` and the
+  User-Agent are unchanged.
+- The README's `init` section says that 1.3.1 answers `npx @opena2a/aim-sdk init` with `Unknown command: init` and
+  shows how to run `init` from a source build. Its note on the L2 default named an unpublished version; it now reads
+  "Changed after 1.3.1", and a test holds every "Changed in X" or "Added in X" marker in the README to a release
+  heading in this file.
 
 ### Deprecated
 

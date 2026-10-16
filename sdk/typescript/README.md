@@ -65,6 +65,15 @@ The private key was generated on this machine and has not been sent anywhere.
 
 The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. Run `npx @opena2a/aim-sdk init --help` for every option.
 
+`init` is not in 1.3.1: there `npx @opena2a/aim-sdk init` answers `Unknown command: init`. While 1.3.1 is the published version, run `init` from a source build of this repository, which reports its version as `1.3.1+source`:
+
+```bash
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management/sdk/typescript
+npm ci && npm run build
+AIM_BOOTSTRAP_TOKEN=<token> node dist/arp/cli/aim-arp.js init --url https://aim.example.com
+```
+
 ## Features
 
 - **Full TypeScript Support**: Complete type definitions for all APIs
@@ -483,7 +492,7 @@ embed up to 100 characters of the child command line.
 If `enabled` is true but no `adapter` is set, L2 does not run and ARP says so
 once on startup; L0 and L1 are unaffected and still gate.
 
-> **Changed in 1.4.0.** Versions 1.0.0 through 1.3.1 defaulted to
+> **Changed after 1.3.1.** Versions 1.0.0 through 1.3.1 defaulted to
 > `enabled: true` with `adapter: 'agent-proxy'`, which picked a destination from
 > whichever model key was exported in the environment, so a default
 > installation on a machine with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set
