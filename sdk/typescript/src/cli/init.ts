@@ -230,10 +230,26 @@ const REFUSAL_FIX: Record<string, string> = {
   bootstrap_token_in_url: 'The bootstrap token was sent in a URL and has been revoked.',
 };
 
-function writeCredentialsFile(dir: string, file: string, content: string): void {
+function prepareCredentialsDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   // mkdir's mode applies only to directories it creates; tighten an existing one.
   chmodSync(dir, 0o700);
+}
+
+/**
+ * Prepare `dir` as writeCredentialsFile does and create and remove an
+ * owner-only file in it, so a home directory that cannot hold the key file is
+ * found before the single-use token is spent. Throws what the file system threw.
+ */
+function checkCredentialsDirWritable(dir: string): void {
+  prepareCredentialsDir(dir);
+  const probe = join(dir, `.${process.pid}.${Date.now()}.probe`);
+  closeSync(openSync(probe, 'wx', 0o600));
+  unlinkSync(probe);
+}
+
+function writeCredentialsFile(dir: string, file: string, content: string): void {
+  prepareCredentialsDir(dir);
   const tmp = join(dir, `.${process.pid}.${Date.now()}.tmp`);
   // Created 0600 from the first byte, then moved into place.
   const fd = openSync(tmp, 'wx', 0o600);
@@ -311,6 +327,14 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   if (existsSync(credentialsFile)) {
     err(`Error: credentials for an agent named "${name}" already exist at ${credentialsFile}.`);
     err('Pick another name with --name <name>; the token has not been used.');
+    return 1;
+  }
+  try {
+    checkCredentialsDirWritable(agentsDir);
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException | undefined)?.code ?? (e instanceof Error ? e.message : String(e));
+    err(`Error: cannot save the agent's key file in ${agentsDir} (${code}); the token has not been used.`);
+    err('Set HOME to a directory this user can write to, or fix the permissions of that directory, and run the command again.');
     return 1;
   }
 

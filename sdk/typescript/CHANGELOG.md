@@ -104,7 +104,10 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   (default `my-first-agent`) names the agent. The token is never printed
   or saved, server text is scrubbed of token-shaped strings, redirects are not followed (so the token header cannot
   be forwarded to another host), and existing credentials for the name are refused before the single-use token is
-  spent. The README describes the command under Quick Start.
+  spent. A home directory that cannot hold the key file is refused before the token is spent as well: before any
+  request, `init` creates `~/.aim/agents` (0700) and creates and removes an owner-only file in it, and when that
+  fails it names the directory and the error code (`ENOTDIR`, `EACCES`), says the token has not been used, and sends
+  nothing. The README describes the command under Quick Start.
 
 ### Tests
 
