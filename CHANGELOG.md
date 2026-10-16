@@ -608,6 +608,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `X-Real-IP` set recorded the proxy's address in their rows.
 - The refresh route's `sign-in past the maximum session age refused` log line writes the same
   client address in its `ip=` field.
+- The client address these rows and the refresh route's reuse and refusal rows record is copied
+  out of the request, not a view of the request buffer, which the server reuses for later
+  requests. The event SIEM forwarding queues from such a row is serialized after the request has
+  ended, and it names the address of the request that wrote the row.
 
 ### Changed — the dashboard writes "MCP servers" in sentence case
 

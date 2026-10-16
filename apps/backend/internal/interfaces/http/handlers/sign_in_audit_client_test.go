@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 )
 
 // The client address a login or logout audit row records is the same one the
@@ -106,4 +108,75 @@ func TestSignInAudit_RowsFallBackToThePeerWhenTheProxyValueIsNotAnAddress(t *tes
 	t.Setenv("TRUSTED_PROXIES", testPeer)
 	assert.Equal(t, testPeer, loginRowAddress(t, "not an address"))
 	assert.Equal(t, testPeer, logoutRowAddress(t, "not an address"))
+}
+
+// laterClientIP has the length of proxiedClientIP, so writing it over a
+// header value reuses that value's bytes.
+const laterClientIP = "192.0.2.111"
+
+// overwriteAfter writes value over the request's header in place once the
+// route has answered, as the next request served from the same request
+// buffer does.
+func overwriteAfter(header, value string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		err := c.Next()
+		c.Request().Header.Set(header, value)
+		return err
+	}
+}
+
+// The address recordedClientIP returns is a copy. A header value is a view of
+// the request buffer, which the server reuses for later requests, and an
+// audit row's address outlives the request: the event SIEM forwarding queues
+// from the row is serialized after the request has ended.
+func TestRecordedClientIP_IsACopyOfTheProxyValue(t *testing.T) {
+	t.Setenv("TRUSTED_PROXIES", testPeer)
+	for _, header := range []string{"X-Real-IP", "X-Forwarded-For"} {
+		t.Run(header, func(t *testing.T) {
+			var recorded string
+			app := fiber.New()
+			app.Use(overwriteAfter(header, laterClientIP))
+			app.Get("/", func(c fiber.Ctx) error {
+				recorded = recordedClientIP(c)
+				return c.SendStatus(fiber.StatusNoContent)
+			})
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set(header, proxiedClientIP)
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			require.Equal(t, fiber.StatusNoContent, resp.StatusCode)
+			assert.Equal(t, proxiedClientIP, recorded)
+		})
+	}
+}
+
+// Behind a trusted proxy the login and logout rows keep the address the
+// proxy reported after the request buffer is written over.
+func TestSignInAudit_RowsKeepTheProxyClientWhenTheRequestBufferIsReused(t *testing.T) {
+	t.Setenv("TRUSTED_PROXIES", testPeer)
+	t.Setenv("JWT_SECRET", "test-secret-key-for-unit-tests-32")
+
+	user := issuanceUser(t, false)
+	audit := &familyAuditRepo{}
+	login := NewAuthHandler(application.NewAuthService(&issuanceUserRepo{user: user}, nil, nil, nil, nil, nil), auth.NewJWTService(), nil, application.NewAuditService(audit), nil)
+	loginApp := fiber.New()
+	loginApp.Use(overwriteAfter("X-Real-IP", laterClientIP))
+	loginApp.Post("/auth/login/local", login.LocalLogin)
+	status, body := postProxied(t, loginApp, "/auth/login/local", signInLoginBody(), "", proxiedClientIP)
+	require.Equal(t, fiber.StatusOK, status, body)
+	logins := rowsWithAction(audit.rows, domain.AuditActionLogin)
+	require.Len(t, logins, 1, "exactly one login row")
+	assert.Equal(t, proxiedClientIP, logins[0].IPAddress, "login row")
+
+	h, svc, repo, userID, orgID := logoutAuditFixture(t)
+	access, refresh, err := svc.GenerateTokenPair(userID.String(), orgID.String(), "audit@example.com", "admin")
+	require.NoError(t, err)
+	logoutApp := fiber.New()
+	logoutApp.Use(overwriteAfter("X-Real-IP", laterClientIP))
+	logoutApp.Post("/api/v1/auth/logout", h.Logout)
+	status, body = postProxied(t, logoutApp, "/api/v1/auth/logout", `{"refreshToken":"`+refresh+`"}`, access, proxiedClientIP)
+	require.Equal(t, fiber.StatusOK, status, body)
+	logouts := rowsWithAction(repo.rows, domain.AuditActionLogout)
+	require.Len(t, logouts, 1, "exactly one logout row")
+	assert.Equal(t, proxiedClientIP, logouts[0].IPAddress, "logout row")
 }
