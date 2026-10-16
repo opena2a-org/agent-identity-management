@@ -1980,7 +1980,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "GET",
         path: "/api/v1/detection/agents/:id/capabilities/latest",
         description:
-          "Get latest capability detection report for agent. Shows most recent capability detection results.",
+          "Get latest capability detection report for agent. Shows most recent capability detection results. Answers 204 with no body when the agent has sent no capability report yet.",
         summary: "Get latest capability report",
         auth: "Ed25519 (Agent Signature) or Bearer Token (JWT)",
         requiresAuth: true,
@@ -1988,17 +1988,25 @@ export const apiDocumentation: EndpointCategory[] = [
         responseSchema: {
           type: "object",
           properties: {
-            capabilities: {
+            detectedAt: {
+              type: "string",
+              description: "When the report was detected (RFC 3339)",
+            },
+            environment: {
+              type: "object",
+              description: "The agent's runtime environment",
+            },
+            aiModels: {
               type: "array",
-              description: "Detected capabilities",
+              description: "AI models the agent uses",
             },
-            detected_at: {
-              type: "string",
-              description: "Detection timestamp",
+            capabilities: {
+              type: "object",
+              description: "Detected capabilities by area",
             },
-            detection_method: {
-              type: "string",
-              description: "Detection method used",
+            riskAssessment: {
+              type: "object",
+              description: "Risk score, risk level, trust impact and alerts",
             },
           },
         },

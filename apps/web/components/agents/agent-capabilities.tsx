@@ -154,11 +154,12 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
           setFetchedCapabilities(capabilityTypes)
         }
 
-        // Try to fetch latest capability report
+        // Try to fetch latest capability report. An agent that has sent none
+        // yet is answered 204, which the client returns as undefined.
         try {
           const report = await api.getLatestCapabilityReport(agentId)
           console.log('Latest capability report:', report)
-          setCapabilityReport(report)
+          setCapabilityReport(report ?? null)
         } catch (reportErr: any) {
           // If no report exists yet (404 or "no capability reports found"), that's fine - just show basic view
           if (
@@ -273,13 +274,13 @@ export function AgentCapabilities({ agentId, agentCapabilities }: AgentCapabilit
               <div className="space-y-2 mt-2">
                 <div className="bg-muted/50 rounded-md p-3">
                   <p className="font-medium text-sm mb-1">Option 1: Use decorators in your code</p>
-                  <code className="text-xs bg-background px-2 py-1 rounded block mt-1">
+                  <code className="text-xs bg-background px-2 py-1 rounded block mt-1 break-all">
                     @client.perform_action(capability="file:read")
                   </code>
                 </div>
                 <div className="bg-muted/50 rounded-md p-3">
                   <p className="font-medium text-sm mb-1">Option 2: Create a config file</p>
-                  <code className="text-xs bg-background px-2 py-1 rounded block mt-1">
+                  <code className="text-xs bg-background px-2 py-1 rounded block mt-1 break-all">
                     ~/.aim/capabilities.json
                   </code>
                 </div>

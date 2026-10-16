@@ -77,6 +77,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   to the `opena2a` GitHub account. `tests/repo-doc-lints.test.ts` checks that the guide names the three
   scripts and quotes the link lint's own message.
 
+### Changed — `GET /api/v1/detection/agents/:id/capabilities/latest` answers 204 for an agent that has sent no capability report
+
+- For an agent of the caller's organization that has no capability report yet, the route answers 204
+  with no body. Before this change it answered 404 `{"error":"no capability reports found for this
+  agent"}`, measured with the handler and the detection service over a sqlmock connection. The agent
+  page's Connections tab reads this route when it renders, and in Chromium each 404 answer printed
+  `Failed to load resource: the server responded with a status of 404 (Not Found)` in the console; with
+  the 204 the tab shows the same No Capabilities Detected panel and the console has no error.
+- An agent the caller's organization does not hold is still answered 404 `{"error":"agent not found"}`,
+  and an agent with a report 200 with its latest report. The dashboard's API reference lists the 204 and
+  the report's members (`detectedAt`, `environment`, `aiModels`, `capabilities`, `riskAssessment`).
+
+### Fixed — the agent page's Connections and Security tabs and the admin security policies page fit a 375px screen
+
+- Measured in Chromium at 375x812 with the API mocked (the routes of `apps/web/scripts/ux-sweep.mjs`,
+  with two violations and three policies): before this change the Connections tab of an agent without a
+  capability report ran 38px past the screen's right edge, from the
+  `@client.perform_action(capability="file:read")` code line, which has no space to wrap at; the Security
+  tab ran 12px past it, from the Refresh and Export CSV buttons beside the title; and
+  `/dashboard/admin/security-policies` ran 83px past it, from each policy card's 180px Enforcement Mode
+  column beside its text, the Monitoring switch beside the global enforcement description and, on the MCP
+  tab, the Create MCP Policy button beside the title. Each now measures 0px: the code lines break inside
+  their box, the violations header, the page header and the global enforcement row wrap, and below the
+  `sm` breakpoint a policy card stacks its enforcement controls under its text. At 1280x800 the same
+  views measure 0px and a policy card keeps the controls beside its text.
+
 ### Changed — a downloaded SDK's credential ends `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token
 
 - Each refresh of an SDK-download token issues a new 90-day token. The chain now ends: `SDK_TOKEN_FAMILY_MAX_AGE`

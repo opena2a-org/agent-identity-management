@@ -260,15 +260,19 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 
 // GetLatestCapabilityReport returns the latest capability report for an agent
 // GET /api/v1/detection/agents/:id/capabilities/latest
+// An agent that has sent no capability report yet (a new agent) is answered
+// 204 with no body, so the dashboard's agent page, which reads the latest
+// report on every load, gets no failed request for it.
 // @Summary Get latest capability report
-// @Description Get the most recent capability report for an agent
+// @Description Get the most recent capability report for an agent; 204 when the agent has sent none yet
 // @Tags detection
 // @Produce json
 // @Param id path string true "Agent ID"
 // @Success 200 {object} domain.AgentCapabilityReport
+// @Success 204 "The agent has sent no capability report yet"
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
 // @Failure 403 {object} ErrorResponse "Access denied"
-// @Failure 404 {object} ErrorResponse "Agent or report not found"
+// @Failure 404 {object} ErrorResponse "Agent not found"
 // @Router /detection/agents/{id}/capabilities/latest [get]
 func (h *DetectionHandler) GetLatestCapabilityReport(c fiber.Ctx) error {
 	// Get agent ID from URL
@@ -296,9 +300,7 @@ func (h *DetectionHandler) GetLatestCapabilityReport(c fiber.Ctx) error {
 				"error": "agent not found",
 			})
 		case "no capability reports found for this agent":
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "no capability reports found for this agent",
-			})
+			return c.SendStatus(fiber.StatusNoContent)
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
