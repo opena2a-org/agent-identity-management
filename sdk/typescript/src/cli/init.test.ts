@@ -7,13 +7,26 @@
  * never in the URL, the body, the output or the credentials file; the key pair
  * is generated locally and only its public half is sent; the credentials land
  * in ~/.aim/agents/<name>.json with 0600 (directory 0700) in the layout the
- * Python SDK reads; refusals leave nothing on disk; a redirect is not followed.
+ * Python SDK reads; refusals leave no credentials file on disk; a home
+ * directory that cannot hold the file is refused before the token is sent; a
+ * redirect is not followed.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import { AddressInfo } from 'net';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
+import { randomBytes } from 'crypto';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import * as ed from '@noble/ed25519';
@@ -306,6 +319,69 @@ describe('refusals before any request', () => {
     expect(seen).toHaveLength(0);
     expect(readFileSync(credentialsPath(), 'utf8')).toBe('{"agent_id":"existing"}');
     expect(errLines.join('\n')).toContain('--name');
+  });
+
+  describe('a home directory where the key file cannot be saved is refused and the token is not spent', () => {
+    // A stub that would register the agent, so a run that reaches it spends the token.
+    function countingFetch() {
+      const stub = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ agentId: 'agt_123', status: 'pending' }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      );
+      return stub as unknown as typeof fetch & { mock: { calls: unknown[] } };
+    }
+
+    function runWithHome(homeDir: string, stub: typeof fetch) {
+      const token = 'aim_ob_' + randomBytes(16).toString('hex');
+      return runInit(['--url', baseUrl, '--name', 'unw'], {
+        ...deps({ AIM_BOOTSTRAP_TOKEN: token }),
+        homeDir,
+        fetch: stub,
+      });
+    }
+
+    it('HOME under a regular file (ENOTDIR)', async () => {
+      const regularFile = join(home, 'not-a-directory');
+      writeFileSync(regularFile, '');
+      const homeDir = join(regularFile, 'home');
+      const stub = countingFetch();
+
+      expect(await runWithHome(homeDir, stub)).toBe(1);
+
+      expect(stub.mock.calls).toHaveLength(0);
+      expect(seen).toHaveLength(0);
+      const errText = errLines.join('\n');
+      expect(errText).toContain(
+        `Error: cannot save the agent's key file in ${join(homeDir, '.aim', 'agents')} (ENOTDIR); the token has not been used.`,
+      );
+      expect(errText).toContain('HOME');
+      expect(errText).not.toContain('was registered');
+      expect(outLines.join('\n')).not.toContain('Registering');
+    });
+
+    it.skipIf(process.getuid?.() === 0)('HOME inside a read-only directory (EACCES)', async () => {
+      const readOnly = join(home, 'read-only');
+      mkdirSync(readOnly);
+      chmodSync(readOnly, 0o500);
+      const homeDir = join(readOnly, 'home');
+      const stub = countingFetch();
+      try {
+        expect(await runWithHome(homeDir, stub)).toBe(1);
+      } finally {
+        chmodSync(readOnly, 0o700);
+      }
+
+      expect(stub.mock.calls).toHaveLength(0);
+      expect(seen).toHaveLength(0);
+      expect(errLines.join('\n')).toContain(
+        `Error: cannot save the agent's key file in ${join(homeDir, '.aim', 'agents')} (EACCES); the token has not been used.`,
+      );
+      expect(errLines.join('\n')).not.toContain('was registered');
+      expect(existsSync(homeDir)).toBe(false);
+    });
   });
 });
 
