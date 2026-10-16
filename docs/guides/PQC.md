@@ -237,7 +237,9 @@ curl -X POST https://aim.example.com/api/v1/agents/{id}/verify \
 
 `POST /api/v1/oauth/token`, `POST /api/v1/sdk-api/verifications` and `GET /api/v1/sdk-api/verifications/:id`
 verify an Ed25519 signature alone, so they refuse an agent in hybrid mode once that signature verifies: `401`
-with `"reasonCode": "hybridSignatureRequired"`.
+with `"reasonCode": "hybridSignatureRequired"`. `POST /api/v1/a2a/verify` checks the A2A request's Ed25519 signature
+alone too, and reports a request from an agent in hybrid mode whose signature verifies invalid: `401` with
+`"valid": false` and `"reasonCode": "hybridSignatureRequired"`.
 
 ## Security Recommendations
 
