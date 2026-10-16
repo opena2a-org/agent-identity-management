@@ -1,4 +1,4 @@
-# **AIM Platform Demo Script – EchoLeak Prevention**
+# **AIM Platform Demo Script: EchoLeak Prevention**
 
 ## **Real-World Attack Scenario (CVE-2025-32711)**
 
@@ -364,7 +364,7 @@ Result: Attack prevented, fully audited
    Trust increases as agents get verified and build positive history.
 
 2. **Zero-Friction Registration**
-   Agent registers with `api:call` capability — no admin approval needed for basic capabilities.
+   Agent registers with `api:call` capability, with no admin approval needed for basic capabilities.
 
 3. **Legitimate Use Works**
    Weather queries succeed because they match the agent's `api:call` capability.

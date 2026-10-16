@@ -178,18 +178,18 @@ What AIM does at MCP-server registration is a process check, not a vulnerability
 | SDK (agent-authenticated) | `verified` | `true` | `75` | `sdk_registration` |
 | Manual / dashboard | `pending` | `false` | `0` | `manual` (admin must click Verify) |
 
-The SDK-registration auto-verify is set in `mcp_service.go:208-239` and is not the result of an external scan — it is a trust assumption that the calling agent has already proved its own identity through OAuth. Manual registrations stay pending until an admin acts on them in the dashboard.
+The SDK-registration auto-verify is set in `mcp_service.go:208-239` and is not the result of an external scan. It is a trust assumption that the calling agent has already proved its own identity through OAuth. Manual registrations stay pending until an admin acts on them in the dashboard.
 
 ### What AIM does NOT do at registration time
 
 - It does NOT invoke HackMyAgent against the MCP server URL. There are zero `hackmyagent` / `HackMyAgent` references anywhere under `apps/backend/`.
 - It does NOT pull the MCP server's own SOUL.md / agent-card.json / capabilities.json for static review.
-- It does NOT block subsequent calls based on `mcp_servers.is_verified = false`. The FGA engine (`apps/backend/internal/application/fga_engine.go`) has zero references to MCP-side `is_verified` / `isVerified` / `IsVerified` — authorization decisions read the AGENT's `agent_security_contexts.scan_verdict`, not the MCP's verification status.
-- It does NOT populate a `scanSummary` field on the agent or the MCP. `scanSummary` exists in exactly one place — `apps/backend/internal/domain/registry_contribution.go:11`, where it is part of the payload AIM publishes UPSTREAM to the public Registry via `registry_bridge_service.go`. It is registry export telemetry, not a per-call gate.
+- It does NOT block subsequent calls based on `mcp_servers.is_verified = false`. The FGA engine (`apps/backend/internal/application/fga_engine.go`) has zero references to MCP-side `is_verified` / `isVerified` / `IsVerified`. Authorization decisions read the AGENT's `agent_security_contexts.scan_verdict`, not the MCP's verification status.
+- It does NOT populate a `scanSummary` field on the agent or the MCP. `scanSummary` exists in exactly one place: `apps/backend/internal/domain/registry_contribution.go:11`, where it is part of the payload AIM publishes UPSTREAM to the public Registry via `registry_bridge_service.go`. It is registry export telemetry, not a per-call gate.
 
 ### What "pre-connection" actually means in current AIM
 
-The closest current AIM gets to a pre-connection check is the cryptographic attestation flow described in [How Attestation Works](#how-attestation-works) — the agent proves it currently holds a private key that matches the MCP server's registered public key. That confirms the MCP is the same MCP, but it does not confirm anything about the MCP's own dependencies, vulnerabilities, or configuration.
+The closest current AIM gets to a pre-connection check is the cryptographic attestation flow described in [How Attestation Works](#how-attestation-works): the agent proves it currently holds a private key that matches the MCP server's registered public key. That confirms the MCP is the same MCP, but it does not confirm anything about the MCP's own dependencies, vulnerabilities, or configuration.
 
 If your operational requirement is "no agent talks to an MCP that has not been scanned by HackMyAgent within the last N days," that needs to be a separate primitive that:
 
@@ -425,7 +425,7 @@ The attestation lifecycle has three timeframes, none of which trigger an automat
 |---|---|---|
 | Attestation challenge nonce | 5 minutes | Rejected as `attestation expired` to prevent replay attacks (`mcp_attestation_service.go:483`) |
 | SDK MCP attestation record | 30 days from `verified_at` | Record stays in `mcp_attestations` for history; `is_valid` returns false; the server does NOT automatically queue a re-scan (`mcp_attestation_service.go:504`) |
-| Manual MCP attestation record | 90 days from `verified_at` | Same — history retained, `is_valid` false, no auto re-scan (`mcp_attestation_service.go:1247`) |
+| Manual MCP attestation record | 90 days from `verified_at` | Same: history retained, `is_valid` false, no auto re-scan (`mcp_attestation_service.go:1247`) |
 
 No background goroutine in `cmd/server/main.go` walks `mcp_attestations` to mark expired rows or to invoke a re-scan against HackMyAgent. The only periodic cleanup job (`startExpirationCleanupJob`, runs every 5 minutes) operates on `verification_events`, not MCP attestations.
 
@@ -439,9 +439,9 @@ A 7-day window does appear in the attestation code, but it is a **recency factor
 
 ### Vulnerability discovery is independent of the attestation lifecycle
 
-The attestation flow asserts that an agent currently holds a private key matching an MCP server's public key — it does not, by itself, scan the MCP server for new CVEs in its dependencies. CVE discovery against an MCP server is the job of HackMyAgent / the supply-chain scanner; the attestation lifecycle does not currently invoke it. Treat "re-attestation" and "re-scan" as separate primitives, not as the same cycle.
+The attestation flow asserts that an agent currently holds a private key matching an MCP server's public key. It does not, by itself, scan the MCP server for new CVEs in its dependencies. CVE discovery against an MCP server is the job of HackMyAgent / the supply-chain scanner; the attestation lifecycle does not currently invoke it. Treat "re-attestation" and "re-scan" as separate primitives, not as the same cycle.
 
-If your operational requirement is "every MCP server gets a fresh vulnerability scan every N days," that needs to be a separate scheduled job that calls into HackMyAgent — it is not implied by the attestation TTLs above.
+If your operational requirement is "every MCP server gets a fresh vulnerability scan every N days," that needs to be a separate scheduled job that calls into HackMyAgent. It is not implied by the attestation TTLs above.
 
 ---
 

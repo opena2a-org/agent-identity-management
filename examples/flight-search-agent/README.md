@@ -36,7 +36,7 @@ pip install -r requirements.txt
 python3 flight_agent.py
 ```
 
-On first run the agent will register with AIM, generate an Ed25519 keypair, and drop a credentials file under `~/.aim/`. The same OAuth/SDK-token flow used by external SDK consumers — exercising every path the dashboard-bundle flow exercises.
+On first run the agent will register with AIM, generate an Ed25519 keypair, and drop a credentials file under `~/.aim/`. This is the same OAuth/SDK-token flow used by external SDK consumers, exercising every path the dashboard-bundle flow exercises.
 
 The example's scripts reach the stack through the variables the compose files read, so they follow a stack started with other container names or ports: the stage scripts `reset-demo.sh` (wipe the agent, set the organization to monitoring) and `prep-stage.sh` (reset, register, verify and seed the agent before a talk), the helpers `get_fresh_sdk.py`, `verify_qa_complete.py` and `check_sdk_token.sh`, and the dashboard links that `demo_search.py` and `test_flight_agent.py` print.
 
@@ -74,7 +74,7 @@ python3 demo_search.py
 python3 test_flight_agent.py
 ```
 
-The auto-prepended `sys.path` picks up either layout — no env vars required.
+The auto-prepended `sys.path` picks up either layout. No env vars are required.
 
 ## Configuration
 
@@ -92,9 +92,9 @@ python flight_agent.py
 Available commands:
 - `search <destination>` - Search flights to a destination (NYC, SFO, MIA). Routes through `verify_capability("flights:search", ...)`, which AIM approves because the agent has the capability declared.
 - `inject <scenario>` - Run a deterministic prompt-injection demo. The agent attempts a capability it never declared; AIM denies at FGA Step 1 (capability_check). Scenarios:
-  - `data-exfil` — exfiltration via `email:send`
-  - `priv-esc` — privilege escalation via `admin:create_user`
-  - `sandbox-escape` — sandbox escape via `os:exec`
+  - `data-exfil`: exfiltration via `email:send`
+  - `priv-esc`: privilege escalation via `admin:create_user`
+  - `sandbox-escape`: sandbox escape via `os:exec`
 - `status` - Show agent status and AIM connection
 - `help` - Show available commands
 - `quit` - Exit the agent
@@ -315,7 +315,7 @@ After running the agent, you should see:
 
 ### For Testing
 1. Run `python3 test_flight_agent.py` to exercise registration + benign search + verification logging end-to-end.
-2. Run `python3 flight_agent.py`, then in the REPL: `inject data-exfil`, `inject priv-esc`, `inject sandbox-escape` — each should produce a clean AIM DENY block (FGA capability_check denial).
+2. Run `python3 flight_agent.py`, then in the REPL: `inject data-exfil`, `inject priv-esc`, `inject sandbox-escape`. Each should produce a clean AIM DENY block (FGA capability_check denial).
 3. Verify all dashboard tabs populate (`http://localhost:3000/dashboard/agents/<agent-id>`).
 4. Review security logs and audit events in dashboard.
 

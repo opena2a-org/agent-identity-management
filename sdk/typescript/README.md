@@ -72,7 +72,7 @@ The Ed25519 key pair is generated locally and only the public key is sent. The c
 - **OAuth 2.0**: Automatic token management with the JWT-bearer grant (RFC 7523): the SDK signs a short-lived assertion with the agent's Ed25519 key, and the server verifies it against the agent's registered public key
 - **Express Middleware**: Easy integration with Express.js applications
 - **Fastify Plugin**: First-class support for Fastify applications
-- **Typed HTTP Errors**: Failures surface as a typed error family (`RateLimitError` carries the server's `Retry-After`); the SDK does not retry automatically — retry policy stays with the caller
+- **Typed HTTP Errors**: Failures surface as a typed error family (`RateLimitError` carries the server's `Retry-After`); the SDK does not retry automatically: retry policy stays with the caller
 - **Local Credential Verification**: Verify signed ATX credentials offline against cached trust anchors, no per-action call to a central service
 - **Delegation Chains**: Create and verify Ed25519 delegation chains (cross-engine interop), with signature, identity, scope-narrowing, and expiry all enforced at verification time
 
@@ -148,11 +148,11 @@ cached public key in roughly a millisecond, the issuing node is never on the
 verification path, and revocation rides on an asynchronously-refreshed,
 short-lived cached list. When you configure `localVerification` with cached trust
 anchors, the client verifies a resolved credential offline and decides
-authorization from the credential's own signed claims — no per-action call to a
+authorization from the credential's own signed claims, with no per-action call to a
 central service. The remote `verifyAction` POST is retained as the fallback for
 when no local credential is available.
 
-The verifier is the shared, conformance-locked `@opena2a/atx-verify` — byte-for-byte
+The verifier is the shared, conformance-locked `@opena2a/atx-verify`, byte-for-byte
 interoperable with the Go (`opena2a-registry/pkg/atcverify`) and Python reference
 verifiers. The SDK adds the checks that package leaves out, as the Java SDK's
 verifier makes them: every ML-DSA-65 signature a credential declares must verify
@@ -191,13 +191,13 @@ Authorization is gated on *signed* capabilities. ATX v1.1 credentials carry
 capabilities under the signature, so they are trusted; v1.0 capabilities are
 forgeable by the holder and are refused by default. Passing
 `requireSignedCapabilities: false` to `LocalVerifier.authorize` overrides this,
-but then authorization runs on holder-forgeable capabilities — only do this for a
+but then authorization runs on holder-forgeable capabilities. Only do this for a
 closed, trusted v1.0 deployment, never across a trust boundary.
 
 > **Multi-issuer anchor sets.** Give each key a DID-URL `keyId` (e.g.
 > `did:opena2a:authority:opena2a.org#key-1`). `@opena2a/atx-verify` binds a key
 > to its controller DID, so a key may only verify credentials issued by that DID
-> (or, for v1.1, a signed `issuerChain` authority) — one trusted issuer cannot
+> (or, for v1.1, a signed `issuerChain` authority): one trusted issuer cannot
 > impersonate another. A key with no `keyId` fragment is unbound and eligible for
 > any issuer: fine for a single-issuer anchor set, unsafe for a multi-issuer one.
 
@@ -221,7 +221,7 @@ const result = await verifier!.verifyCredential(credentialJson); // string or Ui
 ```
 
 > Network is reserved for credential *resolution* (the AAP broker hands the agent
-> its ATX) and the periodic CRL refresh — never for a per-action decision.
+> its ATX) and the periodic CRL refresh, never for a per-action decision.
 
 ## Delegation Chains
 
@@ -303,17 +303,17 @@ signals around one verified action: the authorization outcome (an observed
 fact), the classified intent, and the injection cause (both inferences). The
 full **correlated record** is authoritative and stays on the machine; only an
 anonymized **shared indicator** is ever uploaded. This section covers the
-causal-denial channel only — the runtime-protection module ships a separate
+causal-denial channel only. The runtime-protection module ships a separate
 structural-signature channel that is also **off by default**; see the Runtime
 Protection section for its scope and how to turn it on.
 
 The causal-denial channel is **off by default** and gated by two independent
 opt-ins:
 
-1. **Capture** (`telemetry.enabled`) — mints a correlation ID per `verifyAction`,
+1. **Capture** (`telemetry.enabled`): mints a correlation ID per `verifyAction`,
    assembles records, and appends them to a local log at
    `~/.opena2a/correlated-events.jsonl`. Nothing leaves the machine.
-2. **Share** (`telemetry.relay.enabled`) — a best-effort relay reduces local
+2. **Share** (`telemetry.relay.enabled`): a best-effort relay reduces local
    records to anonymized indicators and uploads only `denied_injection_attempt`
    events to the public, count-only Registry endpoint
    (`POST /api/v1/telemetry/runtime`).
@@ -324,7 +324,7 @@ opt-ins:
    if malformed) and its source, a detection confidence, the coarse enforcement
    outcome (`deny`/`allow`), the integrator's self-declared `packageName`/
    `agentCategory`, `daySinceInstall`, `runtimeEnv`, `triggeredAt`, and a
-   `sensorToken` — a stable per-device pseudonym (`sha256(host+user+local salt)`)
+   `sensorToken`, a stable per-device pseudonym (`sha256(host+user+local salt)`)
    that lets the Registry de-duplicate without identifying you.
 
 ```typescript
@@ -380,10 +380,10 @@ exported for standalone use (e.g. draining the local log from a CLI).
 ## Runtime Protection (`@opena2a/aim-sdk/arp`)
 
 The SDK ships the ARP (Agent Runtime Protection) engine as a subpath module.
-It observes an agent process from the inside — monitors and interceptors for
+It observes an agent process from the inside with monitors and interceptors for
 process, network, filesystem, prompt, MCP, and A2A activity; a rule-based
 event engine (L0); a behavioral anomaly twin (L1); and an intelligence
-coordinator (L2) — and produces the detection inputs shown in the telemetry
+coordinator (L2). It produces the detection inputs shown in the telemetry
 section above.
 
 The boundary with the `hackmyagent` scanner: scan-time analysis (static
@@ -410,13 +410,13 @@ reads the same flag; leave it absent if you only want L2 off.
 
 `adapter` chooses where inference runs. `'ollama'` keeps it on the machine.
 `'anthropic'` and `'openai'` send event content to that vendor, authenticated
-with your own key and billed to your own account — choose them only if you
+with your own key and billed to your own account. Choose them only if you
 intend that.
 
 If you do choose a remote adapter, this is what leaves and what does not.
 `event.data` is allowlisted: identifiers and structural facts (pattern id,
 category, direction, tool name, peer agent ids, protocol, port, pid) travel,
-and everything else — matched text, command lines, arguments — is replaced by a
+and everything else (matched text, command lines, arguments) is replaced by a
 descriptor that buckets the length rather than reporting it: `<withheld: 9-16
 chars, lower+digit>`. At eight characters or fewer the descriptor is
 `<withheld: up to 8 chars>` and names no character classes, because an exact
@@ -431,7 +431,7 @@ once on startup; L0 and L1 are unaffected and still gate.
 
 > **Changed in 1.4.0.** Versions 1.0.0 through 1.3.1 defaulted to
 > `enabled: true` with `adapter: 'agent-proxy'`, which picked a destination from
-> whichever model key was exported in the environment — so a default
+> whichever model key was exported in the environment, so a default
 > installation on a machine with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set
 > sent event content to that vendor. `'agent-proxy'` now throws rather than
 > guessing. See the CHANGELOG for the upgrade note.
@@ -449,7 +449,7 @@ module registry (`require('fs')`, `require('child_process')`). Code that loads
 those builtins via `require` or an ESM namespace/default import
 (`import fs from 'fs'`) is observed. Code that captured **named** ESM bindings
 before the interceptor started (`import { readFileSync } from 'fs'`) bypasses
-them — ESM bindings are resolved at link time and cannot be patched. The
+them: ESM bindings are resolved at link time and cannot be patched. The
 monitors (which poll rather than intercept) are unaffected. Start interceptors
 as early as possible in the process, and treat them as one observation layer,
 not a sandbox.
@@ -458,7 +458,7 @@ Classification of runtime events is supplied through the injectable
 `ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`
 talks to the local NanoMind-Guard daemon over a Unix socket and only accepts
 signed classification results; when the daemon is absent the annotator degrades
-to "no classification" — it never fabricates a label and never blocks.
+to "no classification". It never fabricates a label and never blocks.
 
 **Invariant:** the runtime-protection module is a telemetry producer. Its
 detection outputs flow through the `telemetry.detection` seam into the
@@ -467,8 +467,8 @@ correlated record; they never enter `verifyAction`'s allow/deny decision.
 **Structural signature telemetry (off by default, opt-in).** Like the
 causal-denial channel above, the ARP engine shares nothing unless you turn it
 on. When enabled, and when a detection fires, the structural shape of the
-event sequence — technique identifier, event-type sequence, severity, and a
-one-way hash of structural tokens — is signed and reported to the OpenA2A
+event sequence (technique identifier, event-type sequence, severity, and a
+one-way hash of structural tokens) is signed and reported to the OpenA2A
 registry (`https://api.oa2a.org`), so an attack shape first seen at one
 deployment can protect others. Prompts, model responses, tool arguments, file
 contents or paths, command lines, environment values, secrets, IP addresses,
@@ -476,7 +476,7 @@ hostnames, and account, tool, agent, and model names never appear in a report.
 A report does carry a random per-install sensor id and a monthly-rotating org
 pseudonym alongside the structural fields. A one-time disclosure is printed
 before first collection, and every payload is appended to a local audit log
-(`~/.opena2a/telemetry-audit.log`, JSONL) before it is sent — review it with
+(`~/.opena2a/telemetry-audit.log`, JSONL) before it is sent. Review it with
 `aim-arp telemetry log` (or `npx @opena2a/aim-sdk telemetry log`).
 
 Turn it on with either of:
@@ -484,7 +484,7 @@ Turn it on with either of:
 - `AIM_TELEMETRY=1` in the environment, or
 - `signatureTelemetry: { enabled: true }` in your ARP config.
 
-Turn it off again — an opt-out always wins over an opt-in — with any one of:
+Turn it off again (an opt-out always wins over an opt-in) with any one of:
 
 - `OPENA2A_TELEMETRY=off` in the environment. This is the ecosystem-wide switch
   documented at [opena2a.org/privacy](https://opena2a.org/privacy), and it works
@@ -501,11 +501,11 @@ Turn it off again — an opt-out always wins over an opt-in — with any one of:
   `~/.opena2a/telemetry-optout` across processes.
 
 Any one of these is the runtime-protection module's master switch: it disables
-every telemetry channel the module can produce — structural signatures, the
-opt-in legacy GTIN runtime channel, and fleet behavioral gradients. The causal-denial channel above is
+every telemetry channel the module can produce (structural signatures, the
+opt-in legacy GTIN runtime channel, and fleet behavioral gradients). The causal-denial channel above is
 controlled solely by its own `telemetry` client config and is off unless you
 enabled it. To also delete signatures this sensor already shared, run
-`aim-arp telemetry purge` (or call `purgeRemoteSignatures()`) — right-to-delete;
+`aim-arp telemetry purge` (or call `purgeRemoteSignatures()`): right-to-delete;
 best-effort, never blocks the local opt-out.
 
 ## Configuration
@@ -616,8 +616,8 @@ client.setCredentials(saved);
 - `verifyActionLocally(options, atx?)` - Verify an action against a locally-held ATX credential, fully offline
 - `setLocalCredential(atx)` - Cache the resolved ATX credential for offline verification (pass `null` to clear)
 - `getLocalVerifier()` - The configured `LocalVerifier`, or `null` when local verification is not enabled
-- `getAgent()` - Get current agent info. Returns `null` — without making any
-  request — when no credentials are loaded, and `null` (rather than throwing)
+- `getAgent()` - Get current agent info. Returns `null` (without making any
+  request) when no credentials are loaded, and `null` (rather than throwing)
   when the lookup fails
 - `updateAgent(updates)` - Update agent metadata
 - `reportCapabilities(capabilities)` - Report agent capabilities

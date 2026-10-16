@@ -10,7 +10,7 @@ Part of [Agent Identity Management (AIM)](https://github.com/opena2a-org/agent-i
 
 ## Upgrading to 2.0.0: a denied action now stops
 
-In every published version before 2.0.0, an action AIM **denied** executed anyway. The denial was raised, fell through a `except Exception` handler, and the wrapped function ran. From 2.0.0 it raises `ActionDeniedError` and the function does not run — **in every enforcement mode, including monitoring, which is the default and which every existing organization was backfilled to.**
+In every published version before 2.0.0, an action AIM **denied** executed anyway. The denial was raised, fell through a `except Exception` handler, and the wrapped function ran. From 2.0.0 it raises `ActionDeniedError` and the function does not run, **in every enforcement mode, including monitoring, which is the default and which every existing organization was backfilled to.**
 
 Monitoring mode governs what happens when AIM cannot give an answer, not what happens when AIM says no.
 
@@ -105,13 +105,13 @@ After `secure()` registers the agent, the SDK installs no-op-on-failure hooks fo
 - OpenAI
 - Anthropic
 
-What the hooks record: with OpenAI, `chat.completions.create` calls, and with Anthropic, `messages.create` calls, each as one local security log event on the `aim.security` logger. That logger writes where `AIM_SECURITY_LOG_FILE` or `AIM_SECURITY_LOG_STDOUT` points it — `AIM_SECURITY_LOG_STDOUT` accepts `true`, `1`, `yes`, or `on` to enable the stdout handler and `false`, `0`, `no`, or `off` (or unset) to leave it off, case-insensitively with surrounding whitespace stripped, the same spellings as `AIM_STRICT_MODE` — and it propagates to your root logger, so any handler attached there receives the event whatever level that logger is set to. Under the SDK's own defaults (no logging environment variable set, no handler of your own attached), ERROR-severity security records — for example a failed agent registration — are written to stderr as JSON; WARNING-severity records and below are not written anywhere. With LangChain, a callback handler sends each tool run to AIM's verification route; with CrewAI, a task callback sends each task completion to it. Other client methods, including embeddings, are not recorded. The hooks never raise. A detected library whose hook cannot be installed is logged as a warning and left untouched; a recording failure inside an installed hook is swallowed and the wrapped call proceeds.
+What the hooks record: with OpenAI, `chat.completions.create` calls, and with Anthropic, `messages.create` calls, each as one local security log event on the `aim.security` logger. That logger writes where `AIM_SECURITY_LOG_FILE` or `AIM_SECURITY_LOG_STDOUT` points it. `AIM_SECURITY_LOG_STDOUT` accepts `true`, `1`, `yes`, or `on` to enable the stdout handler and `false`, `0`, `no`, or `off` (or unset) to leave it off, case-insensitively with surrounding whitespace stripped, the same spellings as `AIM_STRICT_MODE`. The logger propagates to your root logger, so any handler attached there receives the event whatever level that logger is set to. Under the SDK's own defaults (no logging environment variable set, no handler of your own attached), ERROR-severity security records (for example a failed agent registration) are written to stderr as JSON; WARNING-severity records and below are not written anywhere. With LangChain, a callback handler sends each tool run to AIM's verification route; with CrewAI, a task callback sends each task completion to it. Other client methods, including embeddings, are not recorded. The hooks never raise. A detected library whose hook cannot be installed is logged as a warning and left untouched; a recording failure inside an installed hook is swallowed and the wrapped call proceeds.
 
 Disable: `secure("my-agent", auto_hooks=False)`. The parameter is keyword-only and defaults to `True`; before 2.0.2 it did not exist and this call raised `TypeError`.
 
 ### Quieting SDK output
 
-`secure()` and auto-detection print progress lines to stdout. To silence them — in a library, a pipe, or any context where the SDK should not write to your streams:
+`secure()` and auto-detection print progress lines to stdout. To silence them (in a library, a pipe, or any context where the SDK should not write to your streams):
 
 ```python
 from aim_sdk import set_quiet
@@ -148,7 +148,7 @@ def process_refund(order_id, amount): ...                 # waits for admin appr
 
 ### JIT access
 
-`jit_access=True` pauses execution and creates an approval request in the AIM dashboard. The function returns only after a human approves. There is no dedicated timeout exception — a request that times out, cannot be verified, or is denied raises through the same enforcement rule as every other verification path: `VerificationUnavailableError` if AIM could not be reached or answer within `timeout_seconds`, `ActionDeniedError` if explicitly denied. Both subclass `AIMError`.
+`jit_access=True` pauses execution and creates an approval request in the AIM dashboard. The function returns only after a human approves. There is no dedicated timeout exception. A request that times out, cannot be verified, or is denied raises through the same enforcement rule as every other verification path: `VerificationUnavailableError` if AIM could not be reached or answer within `timeout_seconds`, `ActionDeniedError` if explicitly denied. Both subclass `AIMError`.
 
 ### Enforcement mode
 
@@ -156,14 +156,14 @@ The organization's enforcement mode (configured in dashboard Settings → Securi
 
 > Monitoring mode governs what happens when AIM cannot give an answer, not what happens when AIM says no. A verification that could not be completed is logged and the action proceeds; an explicit denial blocks in every mode, because it is a decision AIM already made with your organization's enforcement mode in hand.
 
-**An explicit denial raises `ActionDeniedError` and blocks the function, in every mode.** `ActionDeniedError` subclasses `PermissionError`, so `except PermissionError` catches it. AIM applies your enforcement mode server-side before it answers — under monitoring a policy refusal is converted to an approval and never reaches your process as a denial — so a denial that does reach the SDK is one the server declined to override while holding your organization's row.
+**An explicit denial raises `ActionDeniedError` and blocks the function, in every mode.** `ActionDeniedError` subclasses `PermissionError`, so `except PermissionError` catches it. AIM applies your enforcement mode server-side before it answers (under monitoring a policy refusal is converted to an approval and never reaches your process as a denial), so a denial that does reach the SDK is one the server declined to override while holding your organization's row.
 
-Where the mode does apply is the third case: AIM answered with no decision, or could not be reached at all. That raises `VerificationUnavailableError`, which deliberately does **not** subclass `VerificationError` or `PermissionError` — a handler written for "AIM said no" must not silently absorb "AIM was never asked".
+Where the mode does apply is the third case: AIM answered with no decision, or could not be reached at all. That raises `VerificationUnavailableError`, which deliberately does **not** subclass `VerificationError` or `PermissionError`: a handler written for "AIM said no" must not silently absorb "AIM was never asked".
 
-- **Monitoring** (default) — an unanswered verification logs a warning and the function executes anyway. For dev and gradual rollout.
-- **Strict** — an unanswered verification blocks. For production and compliance.
+- **Monitoring** (default): an unanswered verification logs a warning and the function executes anyway. For dev and gradual rollout.
+- **Strict**: an unanswered verification blocks. For production and compliance.
 
-If the mode cannot be resolved either, a server that answered still blocks, while an unreachable AIM currently runs and warns — that last case becomes a block in 3.0.0.
+If the mode cannot be resolved either, a server that answered still blocks, while an unreachable AIM currently runs and warns. That last case becomes a block in 3.0.0.
 
 `AIM_STRICT_MODE` is a **ratchet**: it can raise enforcement to strict but can never lower it. `AIM_STRICT_MODE=true|1|yes|on` forces strict mode locally, whatever the dashboard says; a false value is ignored with a warning. Use the dashboard to configure production, and the variable only to make a specific process stricter than its organization.
 
@@ -173,17 +173,17 @@ Everything the SDK enforces happens inside the agent's own process, so it is adv
 
 ### Cost of an unreachable AIM
 
-A server that refuses connections — down, wrong port, wrong host — fails in a single connection attempt per request, with no retry and no backoff, so a decorated call against an unreachable AIM makes at most two fast connection attempts (the verification request plus one fire-and-forget status report) and returns control in well under a second on a local network. A server that accepts connections but never answers is bounded by the request timeout instead: up to `timeout` seconds per attempt (default 30; the enforcement path is further capped by `enforcement_timeout`, default 5.0s), and timeouts on non-enforcement routes retry up to `max_retries` times (default 3) with 1+2+4s backoff. Tighten or disable with `AIMClient(timeout=..., enforcement_timeout=..., max_retries=..., auto_retry=False)`.
+A server that refuses connections (down, wrong port, wrong host) fails in a single connection attempt per request, with no retry and no backoff, so a decorated call against an unreachable AIM makes at most two fast connection attempts (the verification request plus one fire-and-forget status report) and returns control in well under a second on a local network. A server that accepts connections but never answers is bounded by the request timeout instead: up to `timeout` seconds per attempt (default 30; the enforcement path is further capped by `enforcement_timeout`, default 5.0s), and timeouts on non-enforcement routes retry up to `max_retries` times (default 3) with 1+2+4s backoff. Tighten or disable with `AIMClient(timeout=..., enforcement_timeout=..., max_retries=..., auto_retry=False)`.
 
 ## Capability declaration
 
 The SDK supports three ways to declare capabilities. Decorators are preferred.
 
-1. **Decorators** — `@agent.perform_action(capability="...")` in code. Most accurate.
-2. **Config file** — `~/.aim/capabilities.json` with `{"capabilities": ["db:read", ...]}`. For static declarations.
-3. **Explicit at registration** — `secure("my-agent", capabilities=["api:call", "db:read"])`.
+1. **Decorators**: `@agent.perform_action(capability="...")` in code. Most accurate.
+2. **Config file**: `~/.aim/capabilities.json` with `{"capabilities": ["db:read", ...]}`. For static declarations.
+3. **Explicit at registration**: `secure("my-agent", capabilities=["api:call", "db:read"])`.
 
-Auto-detection from `sys.modules` is disabled by default — it's noisy and misleading (almost every Python agent imports the same generic packages).
+Auto-detection from `sys.modules` is disabled by default: it's noisy and misleading (almost every Python agent imports the same generic packages).
 
 ### Request additional capabilities
 
@@ -280,7 +280,7 @@ For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime
 When a verification is denied, the SDK can join the injection cause, the
 classified intent, and the authorization outcome into one local correlated
 record so you can see **why** an action was blocked. It is OFF by default and
-best-effort -- it never changes a verdict and never adds latency to the
+best-effort: it never changes a verdict and never adds latency to the
 enforcement path. Two independent opt-ins gate it:
 
 ```python
@@ -316,8 +316,8 @@ client.close()  # stops the managed joiner/relay threads (or use a `with` block)
 
 **Two tiers, by design.** The full correlated record is authoritative and stays
 on the machine (`~/.opena2a/correlated-events.jsonl`). Only an anonymized
-**indicator** -- event type, Threat-Matrix technique ID, confidence, runtime,
-and an anonymous per-device sensor token -- may leave, and only when relay
+**indicator** (event type, Threat-Matrix technique ID, confidence, runtime,
+and an anonymous per-device sensor token) may leave, and only when relay
 sharing is opted in. Identifiers (agent ID, resource, capability, credential
 references, payloads, the correlation key) are never shared, and the relay
 egress-validates technique fields before transmission. Only
@@ -334,12 +334,12 @@ port (tracked in issue #441), ported schema-identical to the TypeScript
 reference in `sdk/typescript/src/telemetry` so both SDKs write the same
 `correlated-events.jsonl`. Stage 2 (the guard-socket client) and stage 3 (the
 engine port: event engine, runtime twin, coordinator, monitors, interceptors)
-are not part of this package -- see the module docstring for the boundary.
+are not part of this package. See the module docstring for the boundary.
 
 ## Manual mode (no OAuth)
 
 For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key.
-API key mode always requires `aim_url` — there is no default server and no environment-variable
+API key mode always requires `aim_url`. There is no default server and no environment-variable
 fallback, so `secure()` raises `ConfigurationError` if `api_key` is passed without it:
 
 ```python
@@ -407,17 +407,17 @@ import aim_sdk
 print(aim_sdk.__version__)
 ```
 
-The SDK and the backend platform are versioned and released independently — see [docs/VERSIONING.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/VERSIONING.md#backend-api-compatibility).
+The SDK and the backend platform are versioned and released independently. See [docs/VERSIONING.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/VERSIONING.md#backend-api-compatibility).
 
 See [CHANGELOG.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/CHANGELOG.md) for history, [docs/VERSIONING.md](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/python/docs/VERSIONING.md) for the support policy.
 
 ## Related
 
-- [Java SDK](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/java/README.md) — same API shape, AspectJ-based decoration
-- [TypeScript SDK](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/typescript/README.md) — local-or-server mode
-- [opena2a CLI](https://github.com/opena2a-org/opena2a) — codebase auditing, credential migration, runtime monitoring
-- [AIM backend](https://github.com/opena2a-org/agent-identity-management) — server, dashboard, deployment
-- [aicomply](https://github.com/opena2a-org/aicomply) — content-compliance companion (`pip install aicomply`); `@guard_io`/`@guard_output` scan the PII, credentials, and regulated data an agent reads and emits, complementing AIM's `@agent.perform_action` capability checks (AIM authorizes the action; aicomply inspects the content)
+- [Java SDK](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/java/README.md): same API shape, AspectJ-based decoration
+- [TypeScript SDK](https://github.com/opena2a-org/agent-identity-management/blob/main/sdk/typescript/README.md): local-or-server mode
+- [opena2a CLI](https://github.com/opena2a-org/opena2a): codebase auditing, credential migration, runtime monitoring
+- [AIM backend](https://github.com/opena2a-org/agent-identity-management): server, dashboard, deployment
+- [aicomply](https://github.com/opena2a-org/aicomply): content-compliance companion (`pip install aicomply`); `@guard_io`/`@guard_output` scan the PII, credentials, and regulated data an agent reads and emits, complementing AIM's `@agent.perform_action` capability checks (AIM authorizes the action; aicomply inspects the content)
 
 ## License
 

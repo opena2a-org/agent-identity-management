@@ -2,7 +2,8 @@
 
 Draft notes for the `platform-v1.1.0` tag of the AIM platform (backend and dashboard). They are written from
 `CHANGELOG.md`, section `[Unreleased]`, at commit `47432ed5`; an entry added after that commit is not in these notes.
-Each item names the [CHANGELOG.md](../../CHANGELOG.md) heading that carries its detail.
+Each item names the [CHANGELOG.md](../../CHANGELOG.md) heading that carries its detail, written as
+its kind, a colon and its text; the changelog itself separates the kind from the text with a dash.
 
 Three values exist only once the tag is published. They appear below as named placeholders:
 
@@ -41,22 +42,22 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
 - **Prometheus scrapes.** `/metrics` leaves the API port for its own listener at `METRICS_LISTEN_ADDR`, default
   `127.0.0.1:9464`. A scrape job that reads `/metrics` on port 8080, or through the dashboard without a token, stops
   receiving data. A listener on any address other than loopback requires `METRICS_AUTH_TOKEN`, and without it the
-  backend refuses to start. CHANGELOG: *Changed — breaking: `/metrics` moves off the API port to its own listener,
+  backend refuses to start. CHANGELOG: *Changed, breaking: `/metrics` moves off the API port to its own listener,
   loopback by default*.
 - **Secrets the server checks at start.** The API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT`
   is `development` or `test`, refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes, and refuses the `JWT_SECRET`
   placeholder from `.env.example`. Agent private keys are encrypted under `KEYVAULT_MASTER_KEY`, so set the value 1.0.0
   ran with. A 1.0.0 server that ran without the variable outside `production` generated a new key at every start, and
   agent keys stored under an earlier generated key cannot be decrypted; rotating those agents' credentials replaces
-  them. CHANGELOG: *Changed — the API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is
-  `development` or `test`*; *Security — the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes*; *Security — the
+  them. CHANGELOG: *Changed: the API refuses to start without `KEYVAULT_MASTER_KEY` unless `ENVIRONMENT` is
+  `development` or `test`*; *Security: the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes*; *Security: the
   server refuses to start with the `JWT_SECRET` placeholder from `.env.example`*.
 - **Rate limits in development.** The general and strict rate limits now apply when `ENVIRONMENT` is `development`.
-  CHANGELOG: *Security — the rate limits no longer loosen when ENVIRONMENT is development*.
+  CHANGELOG: *Security: the rate limits no longer loosen when ENVIRONMENT is development*.
 - **Stored agent private keys.** At its first start, 1.1.0 re-encrypts each stored agent private key bound to its own
   agent row, and the request path refuses the earlier format. Stop every 1.0.0 instance before the first 1.1.0
   instance starts. 1.0.0 cannot read the new format, so rolling back after that start leaves server-generated agent
-  keys unreadable until the agents' credentials are rotated; take a database backup first. CHANGELOG: *Security — a
+  keys unreadable until the agents' credentials are rotated; take a database backup first. CHANGELOG: *Security: a
   stored agent private key decrypts only in the agent row it was written for*, and
   [Database migrations and the application role](../DEPLOYMENT.md#database-migrations-and-the-application-role).
 - **Sessions and SDK credentials issued by 1.0.0.** 1.1.0 accepts only session and refresh tokens that carry a token
@@ -65,8 +66,8 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   carry a type".
 - **Sign-in through the `Authorization` header only.** Sign-in no longer sets `access_token` or `refresh_token`
   cookies, and the API no longer accepts them in place of the header. A sign-in ends 8 hours after it began by default
-  (`JWT_SESSION_MAX_AGE`), however often it is refreshed. CHANGELOG: *Security — the API no longer uses cookies for
-  sign-in*; *Security — the API accepts a sign-in only from the Authorization header*; *Security — a sign-in ends a
+  (`JWT_SESSION_MAX_AGE`), however often it is refreshed. CHANGELOG: *Security: the API no longer uses cookies for
+  sign-in*; *Security: the API accepts a sign-in only from the Authorization header*; *Security: a sign-in ends a
   fixed time after it began, however often it is refreshed*.
 - **Verification events are written by the server.** `POST /api/v1/verification-events` answers every authenticated
   member with 403 and the code `verificationEventWriteNotAccepted`. The server's own verification paths still record
@@ -74,35 +75,35 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   "`POST /api/v1/verification-events` accepted a verification outcome reported by the caller".
 - **Agent credentials.** A JWT is no longer accepted as an agent's ATC; the server accepts the CBOR ATC only. An agent
   credential acts only on its own agent ID on the SDK-API, detection and A2A agent and card write routes. CHANGELOG:
-  *Removed — a JWT is no longer accepted as an agent's ATC*; *Security — an agent credential acts only on its own
+  *Removed: a JWT is no longer accepted as an agent's ATC*; *Security: an agent credential acts only on its own
   agent ID on the SDK-API, detection and A2A agent and card write routes*.
 - **First administrator.** `ADMIN_PASSWORD` seeds the first administrator and no longer resets a password that was
-  changed. CHANGELOG: *Changed — `ADMIN_PASSWORD` seeds the first administrator and no longer resets a changed
+  changed. CHANGELOG: *Changed: `ADMIN_PASSWORD` seeds the first administrator and no longer resets a changed
   password*.
 - **Dashboard addresses.** Compliance is at `/dashboard/compliance`, and `/dashboard/admin/compliance` answers with a
-  308 redirect to it. API keys and SDK tokens are listed at `/dashboard/credentials`. CHANGELOG: *Changed — the
+  308 redirect to it. API keys and SDK tokens are listed at `/dashboard/credentials`. CHANGELOG: *Changed: the
   dashboard's Compliance and Credentials pages have new addresses*.
 
 ### Added for operators
 
 - `aim-server migrate` applies the pending migrations and exits, and can provision a database role for the server that
-  is not a superuser. CHANGELOG: *Added — `aim-server migrate` applies the migrations and can provision a role that is
+  is not a superuser. CHANGELOG: *Added: `aim-server migrate` applies the migrations and can provision a role that is
   not a superuser*.
 - Each server signing purpose has its own key, set by `AIM_SIGNING_KEY_CARD_ATTESTATION` and
   `AIM_SIGNING_KEY_ATC_ISSUER` or derived from `KEYVAULT_MASTER_KEY` when unset, and the public keys are published at
-  `/.well-known/jwks.json`. CHANGELOG: *Changed — each server signing purpose has its own key, and the public keys are
+  `/.well-known/jwks.json`. CHANGELOG: *Changed: each server signing purpose has its own key, and the public keys are
   published*.
 - Audit record chains: admins can read the state of their organization's chain, and `aim-breakglass chain status`
-  reads it for the operator. CHANGELOG: *Added — admins can read the state of their organization's audit record
-  chain*; *Added — `aim-breakglass chain status`, the operator's read of an organization's audit record chain*.
-- CHANGELOG: *Added — the server forwards every audit log entry it writes to a Splunk HTTP Event Collector (#657)*.
-- CHANGELOG: *Added — the agent and API key services send agent, trust score and API key webhook events (#672)*.
-- `GET /health/ready` reports the `version` and `commit` the image was built from. CHANGELOG: *Fixed — the backend
+  reads it for the operator. CHANGELOG: *Added: admins can read the state of their organization's audit record
+  chain*; *Added: `aim-breakglass chain status`, the operator's read of an organization's audit record chain*.
+- CHANGELOG: *Added: the server forwards every audit log entry it writes to a Splunk HTTP Event Collector (#657)*.
+- CHANGELOG: *Added: the agent and API key services send agent, trust score and API key webhook events (#672)*.
+- `GET /health/ready` reports the `version` and `commit` the image was built from. CHANGELOG: *Fixed: the backend
   image stamps the version and commit that `/health/ready` reports*.
 - With `POSTGRES_PASSWORD` empty, the server reads the database password from `PGPASSWORD` or the password file. An
-  empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off. CHANGELOG: *Fixed — with
+  empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off. CHANGELOG: *Fixed: with
   `POSTGRES_PASSWORD` empty, the server takes the database password from `PGPASSWORD` or the password file, as
-  `aim-bootstrap` does (#709)*; *Fixed — an empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off
+  `aim-bootstrap` does (#709)*; *Fixed: an empty `REDIS_HOST` or `OTEL_EXPORTER_OTLP_ENDPOINT` turns that client off
   (#688)*.
 
 The other `[Unreleased]` entries of `CHANGELOG.md` are fixes and documentation corrections that need no action.
@@ -121,26 +122,26 @@ this line when it is published.
 
 | `CHANGELOG.md` heading | Fixed in |
 |------------------------|----------|
-| Security — every dashboard page is served with a Content-Security-Policy | 1.1.0 |
-| Security — a stored agent private key decrypts only in the agent row it was written for | 1.1.0 |
-| Security — a check fails on token-shaped literals in tracked files | repository check at `platform-v1.1.0` |
-| Security — the rate limits no longer loosen when ENVIRONMENT is development | 1.1.0 |
-| Security — a reused SDK-download token ends the chain that grew from it | 1.1.0 |
-| Security — `/metrics` was readable without authentication on the API port and the dashboard origin | 1.1.0 |
-| Security — an agent credential acts only on its own agent ID on the SDK-API, detection and A2A agent and card write routes | 1.1.0 |
-| Security — agent-signature authentication reads an agent's status only after the signature verifies | 1.1.0 |
-| Security — the Java SDK and the Java A2A example use jackson 2.18.11 | `sdk/java` source at `platform-v1.1.0` |
-| Security — the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes | 1.1.0 |
-| Security — the server refuses to start with the `JWT_SECRET` placeholder from `.env.example` | 1.1.0 |
-| Security — MCP server and tag routes answer only for the caller's organization | 1.1.0 |
-| Security — a reused refresh token is recorded as the same client or a different one | 1.1.0 |
-| Security — the API no longer uses cookies for sign-in | 1.1.0 |
-| Security — the API accepts a sign-in only from the Authorization header | 1.1.0 |
-| Security — the SDK credential recovery route mints only for the account that is signed in | 1.1.0 |
-| Security — a revoked session cannot mint a new credential with its still-valid access token | 1.1.0 |
-| Security — two presentations of one refresh token in the same instant no longer both rotate | 1.1.0 |
-| Security — a sign-in ends a fixed time after it began, however often it is refreshed | 1.1.0 |
-| Security — a reused refresh token ends the sign-in, and logout ends the whole session | 1.1.0 |
+| Security: every dashboard page is served with a Content-Security-Policy | 1.1.0 |
+| Security: a stored agent private key decrypts only in the agent row it was written for | 1.1.0 |
+| Security: a check fails on token-shaped literals in tracked files | repository check at `platform-v1.1.0` |
+| Security: the rate limits no longer loosen when ENVIRONMENT is development | 1.1.0 |
+| Security: a reused SDK-download token ends the chain that grew from it | 1.1.0 |
+| Security: `/metrics` was readable without authentication on the API port and the dashboard origin | 1.1.0 |
+| Security: an agent credential acts only on its own agent ID on the SDK-API, detection and A2A agent and card write routes | 1.1.0 |
+| Security: agent-signature authentication reads an agent's status only after the signature verifies | 1.1.0 |
+| Security: the Java SDK and the Java A2A example use jackson 2.18.11 | `sdk/java` source at `platform-v1.1.0` |
+| Security: the server refuses a `KEYVAULT_MASTER_KEY` of 32 zero bytes | 1.1.0 |
+| Security: the server refuses to start with the `JWT_SECRET` placeholder from `.env.example` | 1.1.0 |
+| Security: MCP server and tag routes answer only for the caller's organization | 1.1.0 |
+| Security: a reused refresh token is recorded as the same client or a different one | 1.1.0 |
+| Security: the API no longer uses cookies for sign-in | 1.1.0 |
+| Security: the API accepts a sign-in only from the Authorization header | 1.1.0 |
+| Security: the SDK credential recovery route mints only for the account that is signed in | 1.1.0 |
+| Security: a revoked session cannot mint a new credential with its still-valid access token | 1.1.0 |
+| Security: two presentations of one refresh token in the same instant no longer both rotate | 1.1.0 |
+| Security: a sign-in ends a fixed time after it began, however often it is refreshed | 1.1.0 |
+| Security: a reused refresh token ends the sign-in, and logout ends the whole session | 1.1.0 |
 
 ### Entries in the `### Security` list
 
@@ -289,7 +290,7 @@ stored private key.
 
 The Java SDK is built from source in `sdk/java` and keeps the coordinates `org.opena2a:aim-sdk:1.0.0` in this release,
 so the version number does not tell a build from the 1.0.0 source from one from the 1.1.0 source. The 1.0.0 source
-sets `jackson.version` to 2.16.1, and the 1.1.0 source sets 2.18.11. CHANGELOG: *Security — the Java SDK and the Java
+sets `jackson.version` to 2.16.1, and the 1.1.0 source sets 2.18.11. CHANGELOG: *Security: the Java SDK and the Java
 A2A example use jackson 2.18.11*.
 
 Check the source you build from; this prints `2.18.11` for the 1.1.0 source:

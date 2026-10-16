@@ -5,7 +5,7 @@
 
 ## Problem
 
-Your agent performs actions -- reading databases, calling APIs, writing files -- but there is no record of what happened. When something goes wrong, you have no way to investigate.
+Your agent performs actions (reading databases, calling APIs, writing files), but there is no record of what happened. When something goes wrong, you have no way to investigate.
 
 ## Step 1: Log an Event
 
@@ -24,7 +24,7 @@ Event logged:
   Chain:     sha256:7d4e0a...1f8c (links to previous event)
 ```
 
-Each event is appended to `~/.opena2a/aim-core/audit.jsonl`. The hash chain means any tampering is detectable -- if someone modifies an earlier entry, every subsequent hash breaks.
+Each event is appended to `~/.opena2a/aim-core/audit.jsonl`. The hash chain means any tampering is detectable: if someone modifies an earlier entry, every subsequent hash breaks.
 
 ## Step 2: View the Audit Log
 
@@ -154,5 +154,5 @@ For centralized audit across a fleet of agents, see [Fleet governance](fleet-gov
 
 ## Next Steps
 
-- [Enforce capabilities](enforce-capabilities.md) -- restrict what your agent can do
-- [Fleet governance](fleet-governance.md) -- centralized audit across multiple agents
+- [Enforce capabilities](enforce-capabilities.md): restrict what your agent can do
+- [Fleet governance](fleet-governance.md): centralized audit across multiple agents

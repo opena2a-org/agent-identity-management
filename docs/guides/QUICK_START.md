@@ -76,7 +76,7 @@ Dashboard opens at [localhost:3000](http://localhost:3000).
 
 The default admin account is created when you run `aim-bootstrap --default`
 (post-B2 deploys). The bootstrap command prints the randomly-generated
-password once to stdout — capture it from the deploy log.
+password once to stdout. Capture it from the deploy log.
 
 - **Email:** `admin@opena2a.org`
 - **Password:** captured from `aim-bootstrap --default` stdout (pre-B2 stacks: `AIM2025!Secure`, must rotate)
@@ -222,10 +222,10 @@ See `.env.example` for all available configuration options.
 
 ## Next Steps
 
-- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart) -- Secure your first agent with the Python or Java SDK
-- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration) -- Connect and attest MCP servers
-- [Post-Quantum Cryptography](PQC.md) -- Enable ML-DSA signatures
-- [Deployment Guide](../../infrastructure/DEPLOYMENT.md) -- Production deployment on AWS, Azure, GCP, Kubernetes
+- [SDK Quickstart](https://opena2a.org/docs/tutorials/sdk-quickstart): Secure your first agent with the Python or Java SDK
+- [MCP Registration](https://opena2a.org/docs/tutorials/mcp-registration): Connect and attest MCP servers
+- [Post-Quantum Cryptography](PQC.md): Enable ML-DSA signatures
+- [Deployment Guide](../../infrastructure/DEPLOYMENT.md): Production deployment on AWS, Azure, GCP, Kubernetes
 
 ---
 

@@ -5,7 +5,7 @@ import { join } from 'path';
 
 /**
  * The repository's documentation lints pass on the repository, and the
- * tests of the two shell lints pass.
+ * tests of the two shell lints and of the docs prose check pass.
  *
  * Each of these scripts failed on the repository while nothing ran it:
  * scripts/check-public-wording.py found seven barred terms in six pages,
@@ -15,6 +15,11 @@ import { join } from 'path';
  * test, the Go SDK README the server generated and three Python files named
  * the opena2a GitHub account. Running them here keeps each one passing; a
  * failure prints the script's own report.
+ *
+ * scripts/check-docs-prose.mjs runs here for the same reason: the root lint
+ * script that also runs it is not a CI step, so a dash or a "Why this
+ * exists" section added to a tracked Markdown file would otherwise reach
+ * main unreported.
  *
  * The cases need git, bash and python3, and a git checkout: the link lint
  * asks git which files to read and stops in a tree without .git. The
@@ -31,9 +36,11 @@ interface Lint {
 const WORDING: Lint = { command: 'python3', script: 'scripts/check-public-wording.py' };
 const KEYVAULT: Lint = { command: 'bash', script: 'scripts/test-lint-docs-keyvault-master-key.sh' };
 const REPO_LINKS: Lint = { command: 'bash', script: 'scripts/test-lint-docs-repo-links.sh' };
+const DOCS_PROSE: Lint = { command: process.execPath, script: 'scripts/check-docs-prose.mjs' };
+const DOCS_PROSE_TESTS: Lint = { command: process.execPath, script: 'scripts/test-check-docs-prose.mjs' };
 
-function run(lint: Lint): { status: number | null; output: string } {
-  const result = spawnSync(lint.command, [lint.script], { cwd: REPO_ROOT, encoding: 'utf-8' });
+function run(lint: Lint, args: string[] = [lint.script]): { status: number | null; output: string } {
+  const result = spawnSync(lint.command, args, { cwd: REPO_ROOT, encoding: 'utf-8' });
   if (result.error) throw result.error;
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
@@ -55,6 +62,21 @@ describe('repository documentation lints', () => {
     const { status, output } = run(REPO_LINKS);
     expect(status, output).toBe(0);
     expect(output).toContain('test-lint-docs-repo-links: all checks passed');
+  }, 120_000);
+
+  it('scripts/check-docs-prose.mjs finds no dash or "Why this" section in the tracked Markdown', () => {
+    const { status, output } = run(DOCS_PROSE);
+    expect(status, output).toBe(0);
+    expect(output).toMatch(/^check-docs-prose: [1-9]\d* file\(s\) clean$/m);
+  });
+
+  it('scripts/test-check-docs-prose.mjs passes', () => {
+    const { status, output } = run(DOCS_PROSE_TESTS, ['--test', DOCS_PROSE_TESTS.script]);
+    expect(status, output).toBe(0);
+    // Node 20 prints TAP (`# fail 0`) when stdout is not a terminal, later
+    // releases print `ℹ fail 0`.
+    expect(output).toMatch(/^(?:#|ℹ) pass [1-9]\d*$/m);
+    expect(output).toMatch(/^(?:#|ℹ) fail 0$/m);
   }, 120_000);
 
   it('CONTRIBUTING.md names these lints and says they need git, bash, python3 and a git checkout', () => {

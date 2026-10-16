@@ -38,10 +38,10 @@ The main dashboard gives you a bird's eye view of your AI agent security:
 
 Navigate to **Agents** in the sidebar to:
 
-- **View all agents** — See name, status, trust score, and last active time
-- **Register new agent** — Click "Register Agent" to add one manually
-- **Agent details** — Click an agent to see full details, activity, and credentials
-- **Verify/Revoke** — Change agent status from pending → verified or revoke compromised agents
+- **View all agents**: See name, status, trust score, and last active time
+- **Register new agent**: Click "Register Agent" to add one manually
+- **Agent details**: Click an agent to see full details, activity, and credentials
+- **Verify/Revoke**: Change agent status from pending → verified or revoke compromised agents
 
 > **Pro tip:** Agents registered via SDK appear here automatically with status "pending" until verified.
 
@@ -51,10 +51,10 @@ Navigate to **Agents** in the sidebar to:
 
 Navigate to **MCP Servers** to manage Model Context Protocol servers:
 
-- **Register MCP Server** — Add servers your agents connect to
-- **Attestation Status** — See which servers are cryptographically verified
-- **Connected Agents** — View which agents are using each MCP server
-- **Capabilities** — Manage what capabilities each MCP server provides
+- **Register MCP Server**: Add servers your agents connect to
+- **Attestation Status**: See which servers are cryptographically verified
+- **Connected Agents**: View which agents are using each MCP server
+- **Capabilities**: Manage what capabilities each MCP server provides
 
 ---
 
@@ -62,10 +62,10 @@ Navigate to **MCP Servers** to manage Model Context Protocol servers:
 
 Navigate to **Security** for threat monitoring:
 
-- **Threats** — Active security threats detected by AIM
-- **Anomalies** — Behavioral anomalies in agent activity
-- **Alerts** — All security alerts with severity levels
-- **Bulk Acknowledge** — Acknowledge all alerts at once when resolved
+- **Threats**: Active security threats detected by AIM
+- **Anomalies**: Behavioral anomalies in agent activity
+- **Alerts**: All security alerts with severity levels
+- **Bulk Acknowledge**: Acknowledge all alerts at once when resolved
 
 ---
 
@@ -102,17 +102,17 @@ Navigate to **Settings** for configuration:
 
 ### Trust Score
 
-- **0.8 - 1.0** — Excellent (green)
-- **0.6 - 0.8** — Good (yellow)
-- **0.4 - 0.6** — Needs attention (orange)
-- **Below 0.4** — Critical (red)
+- **0.8 - 1.0**: Excellent (green)
+- **0.6 - 0.8**: Good (yellow)
+- **0.4 - 0.6**: Needs attention (orange)
+- **Below 0.4**: Critical (red)
 
 ### Alert Severity
 
-- **Critical** — Immediate action required
-- **High** — Address within hours
-- **Medium** — Address within days
-- **Low** — Informational
+- **Critical**: Immediate action required
+- **High**: Address within hours
+- **Medium**: Address within days
+- **Low**: Informational
 
 ---
 

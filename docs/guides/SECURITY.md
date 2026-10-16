@@ -51,9 +51,9 @@ Configure at **Settings → Security Policies → Global Enforcement Mode**:
 
 ### Policy Hierarchy
 
-1. **Agent Verification** — Always enforced (cryptographic identity required)
-2. **Global Enforcement Mode** — Determines if policies can block actions
-3. **Individual Security Policies** — Evaluated and logged, blocking based on mode
+1. **Agent Verification**: Always enforced (cryptographic identity required)
+2. **Global Enforcement Mode**: Determines if policies can block actions
+3. **Individual Security Policies**: Evaluated and logged, blocking based on mode
 
 ### Example: Capability Violation Detection
 
@@ -120,7 +120,7 @@ def write_data():
 SDK credentials are stored as JSON at `~/.aim/sdk_credentials.json`, and each
 registered agent's credentials at `~/.aim/agents/<agent-name>.json`. Each file is
 readable only by the owner (`0600`), and the SDK creates `~/.aim/agents/` as `0700`.
-These files are the single source of truth — there is **no** encrypted shadow file.
+These files are the single source of truth. There is **no** encrypted shadow file.
 An earlier `~/.aim/credentials.encrypted` scheme was removed; the SDK migrates
 away from any leftover encrypted file.
 

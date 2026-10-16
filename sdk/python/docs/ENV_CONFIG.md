@@ -54,20 +54,20 @@ def my_function():
 
 #### `AIM_STRICT_MODE` (Optional)
 **Description**: Raise enforcement to strict for this process, whatever the
-organization's enforcement mode says. It is a **ratchet** — it can only make
+organization's enforcement mode says. It is a **ratchet**: it can only make
 enforcement stricter, never looser.
 **Type**: Boolean
-**Default**: unset — the organization's enforcement mode governs (dashboard:
+**Default**: unset. The organization's enforcement mode governs (dashboard:
 Settings → Security → Policies)
 **Example**: `export AIM_STRICT_MODE="true"`
 **Values**:
-- `true`, `1`, `yes`, `on` (case-insensitive) — force strict mode: an action that
+- `true`, `1`, `yes`, `on` (case-insensitive): force strict mode. An action that
   is not permitted raises and does not execute
-- `false`, `0`, `no`, `off` — **ignored, with a warning.** These cannot put a
+- `false`, `0`, `no`, `off`: **ignored, with a warning.** These cannot put a
   strict-mode organization into monitoring mode. To run without enforcement, put
   the organization in monitoring mode; unset the variable to use whatever the
   organization configured.
-- anything else — ignored, with a warning
+- anything else: ignored, with a warning
 
 > Changed in 2.0.0. This variable previously accepted only the literal `true`,
 > and `false` was documented as "log warning and continue". Both are corrected

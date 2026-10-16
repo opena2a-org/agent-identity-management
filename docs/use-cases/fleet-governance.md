@@ -5,7 +5,7 @@
 
 ## Problem
 
-You have a team running multiple AI agents across different machines. Each agent needs its own identity, but you need centralized audit logging, policy management, and service tokens for agents -- not isolated local files on each developer's laptop.
+You have a team running multiple AI agents across different machines. Each agent needs its own identity, but you need centralized audit logging, policy management, and service tokens for agents, not isolated local files on each developer's laptop.
 
 ## Step 1: Deploy AIM Server
 
@@ -264,10 +264,10 @@ grep '^ADMIN_' .env
 
 At first sign-in the dashboard asks you to set a new password. The dashboard shows:
 
-- **Agent inventory** -- all registered agents with trust scores
-- **Audit timeline** -- real-time event stream across all agents
-- **Policy status** -- which agents have policies loaded, any violations
-- **Trust trends** -- score history per agent over time
+- **Agent inventory**: all registered agents with trust scores
+- **Audit timeline**: real-time event stream across all agents
+- **Policy status**: which agents have policies loaded, any violations
+- **Trust trends**: score history per agent over time
 
 ## Option B: SDK Approach
 
@@ -398,6 +398,6 @@ Developer A                    Developer B
 
 ## Next Steps
 
-- [Enforce capabilities](enforce-capabilities.md) -- define policies for each agent in the fleet
-- [Embed in my app](embed-in-my-app.md) -- connect your custom agents to the server programmatically
-- [Deployment guide](../../infrastructure/DEPLOYMENT.md) -- production deployment on AWS, Azure, GCP, and Kubernetes
+- [Enforce capabilities](enforce-capabilities.md): define policies for each agent in the fleet
+- [Embed in my app](embed-in-my-app.md): connect your custom agents to the server programmatically
+- [Deployment guide](../../infrastructure/DEPLOYMENT.md): production deployment on AWS, Azure, GCP, and Kubernetes
