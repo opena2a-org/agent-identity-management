@@ -21,6 +21,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   An access token whose session was revoked is refused with `cause` `sessionRevoked`. A sign-in's access token, and
   the ones its refreshes mint, create the key with `201`. An access token that carries no session is not checked.
 
+### Security — SDK credential recovery refuses a token family that has ended
+
+- `POST /api/v1/auth/sdk/recover` refuses an SDK-download token whose token family has ended: when any `sdk_tokens`
+  row of the family carries the revoke reason `logout`, `token_family_revoked` or `family_max_age`, the route answers
+  `401` `{"error":"Token has been revoked or is invalid"}` and writes no row. A logout with the family's live token
+  ends recovery of every earlier token of that family, and so do a reuse and a refresh past
+  `SDK_TOKEN_FAMILY_MAX_AGE`. The family's rows are the presented token's row, the rows its rotations grew from and
+  the rows that grew from it, read from the owner's `sdk_tokens` rows, so the decision needs no revocation store;
+  where a store is configured, its family key ends the family as well.
+- A token retired by a rotation while its family is live is recovered. An ended family of the same account does not
+  end another one.
+- When the family's rows cannot be read the route answers `500` `{"error":"Failed to read the token family"}` and
+  mints nothing.
+- Tests: `apps/backend/internal/interfaces/http/handlers/sdk_token_recovery_family_end_test.go` and
+  `apps/backend/internal/application/sdk_token_service_family_rows_test.go`.
+
 ### Changed — a downloaded SDK's credential ends `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token
 
 - Each refresh of an SDK-download token issues a new 90-day token. The chain now ends: `SDK_TOKEN_FAMILY_MAX_AGE`

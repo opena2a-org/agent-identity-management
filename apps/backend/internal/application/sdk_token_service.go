@@ -111,6 +111,58 @@ func (s *SDKTokenService) FamilyOf(ctx context.Context, row *domain.SDKToken) (s
 	}
 }
 
+// FamilyRows returns the rows of the row's token family that the repository
+// holds, revoked ones included: the row, the rows its rotation lineage grew
+// from, and every row that grew from those by rotation (each rotated row
+// names the row it replaced in its parent_token metadata). The family is read
+// from the owner's rows in one read. The walk toward the root ends at a
+// parent the repository no longer holds or an unreadable parent id; the rows
+// below that point are still read. A read that fails gives its error.
+func (s *SDKTokenService) FamilyRows(ctx context.Context, row *domain.SDKToken) ([]*domain.SDKToken, error) {
+	if row == nil {
+		return nil, ErrSDKTokenFamilyUnknown
+	}
+	owned, err := s.sdkTokenRepo.GetByUserID(row.UserID, true)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[uuid.UUID]*domain.SDKToken{}
+	children := map[string][]*domain.SDKToken{}
+	for _, r := range owned {
+		byID[r.ID] = r
+		if parent, _ := r.Metadata["parent_token"].(string); parent != "" {
+			children[parent] = append(children[parent], r)
+		}
+	}
+
+	root := row
+	seen := map[uuid.UUID]bool{row.ID: true}
+	for {
+		parent, _ := root.Metadata["parent_token"].(string)
+		parentID, parseErr := uuid.Parse(parent)
+		if parseErr != nil || seen[parentID] || byID[parentID] == nil {
+			break
+		}
+		seen[parentID] = true
+		root = byID[parentID]
+	}
+
+	family := []*domain.SDKToken{root}
+	inFamily := map[uuid.UUID]bool{root.ID: true}
+	for next := 0; next < len(family); next++ {
+		for _, child := range children[family[next].ID.String()] {
+			if !inFamily[child.ID] {
+				inFamily[child.ID] = true
+				family = append(family, child)
+			}
+		}
+	}
+	if !inFamily[row.ID] {
+		family = append(family, row)
+	}
+	return family, nil
+}
+
 // RevokeByTokenHash revokes a token using its hash (for token rotation)
 func (s *SDKTokenService) RevokeByTokenHash(ctx context.Context, tokenHash string, reason string) error {
 	return s.sdkTokenRepo.RevokeByTokenHash(tokenHash, reason)
