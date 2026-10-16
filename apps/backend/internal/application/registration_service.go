@@ -129,7 +129,7 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 		now := time.Now()
 		req.ReviewedAt = &now
 		req.ReviewedBy = nil // System auto-approval (platform admin allowlist)
-		fmt.Printf("Auto-approving platform admin: %s\n", email)
+		fmt.Printf("Auto-approving platform admin for registration request %s\n", req.ID)
 	}
 
 	// Save registration request
@@ -179,7 +179,7 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 			return nil, fmt.Errorf("failed to create auto-approved user: %w", err)
 		}
 
-		fmt.Printf("Auto-created admin user %s for new organization %s\n", email, emailDomain)
+		fmt.Printf("Auto-created admin user %s for registration request %s in organization %s\n", user.ID, req.ID, targetOrgID)
 	}
 
 	// Send registration confirmation email
@@ -400,18 +400,20 @@ func (s *RegistrationService) ApproveRegistrationRequest(
 
 	// Create user via repository
 	if err := s.userRepo.Create(user); err != nil {
-		// Log detailed error for debugging
+		// Log detailed error for debugging. The registration request id names the
+		// registrant; the address is not written, and neither is the provider ID,
+		// which is the address for an email/password registration. The database's
+		// error is redacted, since a constraint violation can echo the address.
 		fmt.Printf("CRITICAL ERROR: Failed to create user account after approval\n")
-		fmt.Printf("   Email: %s\n", user.Email)
+		fmt.Printf("   Registration request: %s\n", req.ID)
 		fmt.Printf("   Organization ID: %s\n", user.OrganizationID)
 		fmt.Printf("   Provider: %s\n", user.Provider)
-		fmt.Printf("   ProviderID: %s\n", user.ProviderID)
 		fmt.Printf("   Role: %s\n", user.Role)
 		fmt.Printf("   Status: %s\n", user.Status)
 		fmt.Printf("   Password Hash Present: %v\n", user.PasswordHash != nil && *user.PasswordHash != "")
-		fmt.Printf("   Error: %v\n", err)
+		fmt.Printf("   Error: %s\n", redactEmailAddresses(err.Error()))
 
-		return nil, fmt.Errorf("failed to create user '%s' in database: %w", user.Email, err)
+		return nil, fmt.Errorf("failed to create the user of registration request %s in database: %w", req.ID, err)
 	}
 
 	// Success logging
@@ -723,7 +725,9 @@ func (s *RegistrationService) ensureApproverExists(email string, autoApproved bo
 	}
 	if approvers == 0 {
 		// The client receives one message for every sub-case; the sub-case is operator-only.
-		log.Printf("registration refused for %s: 0 active administrators, %d valid AIM_PLATFORM_ADMINS entries, registrant listed=%t", email, len(platformAdminAllowlist()), isPlatformAdmin(email))
+		// The refusal comes before a registration request is stored, so there is no id to
+		// name, and the address is not written.
+		log.Printf("registration refused: 0 active administrators, %d valid AIM_PLATFORM_ADMINS entries, registrant listed=%t", len(platformAdminAllowlist()), isPlatformAdmin(email))
 		return ErrNoAdministrators
 	}
 	return nil

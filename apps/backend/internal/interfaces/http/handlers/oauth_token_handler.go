@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+// ed25519AloneHybridRequiredMessage refuses an agent in hybrid mode on a route
+// that verifies its Ed25519 signature alone: the token endpoint, legacy
+// verification creation and the SDK verification read. Ed25519AgentMiddleware
+// refuses it with the same words.
+const ed25519AloneHybridRequiredMessage = "Agent is in hybrid mode and this route verifies an Ed25519 signature alone"
+
 // OAuthTokenHandler handles the OAuth 2.0 token endpoint (RFC 6749)
 type OAuthTokenHandler struct {
 	jwtService *auth.JWTService
@@ -176,6 +182,18 @@ func (h *OAuthTokenHandler) processTokenRequest(c fiber.Ctx, grantType, clientID
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":             "invalid_client",
 			"error_description": agentauth.AssertionNotRecognizedDescription,
+		})
+	}
+
+	// SECURITY: an agent in hybrid mode is authenticated only by an Ed25519 and an
+	// ML-DSA signature together, and an assertion carries an Ed25519 signature alone.
+	// As in the signature middlewares, the flag is read after the signature verified
+	// and before the status.
+	if agentauth.RequiresHybrid(verified) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":             "invalid_client",
+			"error_description": ed25519AloneHybridRequiredMessage,
+			"reasonCode":        agentauth.HybridRequiredReason,
 		})
 	}
 

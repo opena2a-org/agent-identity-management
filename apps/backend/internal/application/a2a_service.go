@@ -1047,13 +1047,30 @@ func (s *A2AService) EvaluateA2APolicy(ctx context.Context, req EvaluateA2APolic
 		}, nil
 	}
 
-	// Get agent trust scores for policy evaluation
-	var clientTrust, remoteTrust float64
-	if clientScore, _ := s.trustScoreRepo.GetByAgentID(ctx, req.ClientAgentID); clientScore != nil && clientScore.A2ATrustScore != nil {
-		clientTrust = *clientScore.A2ATrustScore
+	// Get agent trust scores for policy evaluation. A score is read only for an
+	// agent of the organization whose policies are evaluated: another
+	// organization's agent is answered as an agent with no score, as an id with no
+	// agent is, so neither the decision nor its reason tells the caller anything
+	// about it. The lookup's query names the organization (GetByIDs), so the two
+	// cases are one empty result.
+	owned, err := s.agentRepo.GetByIDs(ctx, req.OrganizationID, []uuid.UUID{req.ClientAgentID, req.RemoteAgentID})
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the agents: %w", err)
 	}
-	if remoteScore, _ := s.trustScoreRepo.GetByAgentID(ctx, req.RemoteAgentID); remoteScore != nil && remoteScore.A2ATrustScore != nil {
-		remoteTrust = *remoteScore.A2ATrustScore
+	inOrganization := make(map[uuid.UUID]bool, len(owned))
+	for _, agent := range owned {
+		inOrganization[agent.ID] = true
+	}
+	var clientTrust, remoteTrust float64
+	if inOrganization[req.ClientAgentID] {
+		if clientScore, _ := s.trustScoreRepo.GetByAgentID(ctx, req.ClientAgentID); clientScore != nil && clientScore.A2ATrustScore != nil {
+			clientTrust = *clientScore.A2ATrustScore
+		}
+	}
+	if inOrganization[req.RemoteAgentID] {
+		if remoteScore, _ := s.trustScoreRepo.GetByAgentID(ctx, req.RemoteAgentID); remoteScore != nil && remoteScore.A2ATrustScore != nil {
+			remoteTrust = *remoteScore.A2ATrustScore
+		}
 	}
 
 	// Evaluate policies (simplified - in production would use CEL or OPA)

@@ -1599,7 +1599,8 @@ func TestRegistrationService_RefusalLogLine_ReportsWhetherTheRegistrantIsListed(
 
 	_, err := service.CreateAccessRequest(ctx, "ops@example.com", "Ops", "User", "needs a dashboard account", nil)
 	assert.Equal(t, ErrNoAdministrators, err)
-	assert.Contains(t, buf.String(), "registration refused for ops@example.com: 0 active administrators, 1 valid AIM_PLATFORM_ADMINS entries, registrant listed=true")
+	assert.Contains(t, buf.String(), "registration refused: 0 active administrators, 1 valid AIM_PLATFORM_ADMINS entries, registrant listed=true")
+	assert.NotContains(t, buf.String(), "ops@example.com", "the registrant's address is not logged")
 
 	buf.Reset()
 	_, err = service.CreateAccessRequest(ctx, "other@example.com", "Other", "User", "needs a dashboard account", nil)

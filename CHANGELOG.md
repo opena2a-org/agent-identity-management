@@ -103,6 +103,90 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `sm` breakpoint a policy card stacks its enforcement controls under its text. At 1280x800 the same
   views measure 0px and a policy card keeps the controls beside its text.
 
+### Security — the token endpoint and the SDK verification routes refuse an agent in hybrid mode that signs with Ed25519 alone (#740)
+
+- `POST /api/v1/oauth/token`, `POST /api/v1/sdk-api/verifications` and `GET /api/v1/sdk-api/verifications/:id`
+  verify the agent's Ed25519 signature in the handler, outside `PQCAgentMiddleware` and `Ed25519AgentMiddleware`.
+  Once that signature verifies, each refuses an agent whose hybrid mode is on with `401`: the two verification
+  routes with `{"error":"Agent is in hybrid mode and this route verifies an Ed25519 signature alone","reasonCode":"hybridSignatureRequired"}`,
+  the words and `reasonCode` of `Ed25519AgentMiddleware`, and the token endpoint with
+  `{"error":"invalid_client","error_description":"Agent is in hybrid mode and this route verifies an Ed25519 signature alone","reasonCode":"hybridSignatureRequired"}`.
+  Run against the handlers on the previous code, an agent in hybrid mode with status `verified` that signed with its
+  Ed25519 key alone was answered `200` with an access token by the token endpoint and `200` with the verification by
+  `GET /api/v1/sdk-api/verifications/:id`, and its `POST /api/v1/sdk-api/verifications` request reached the
+  capability check.
+- As in the middlewares, the flag is read after the signature verifies and before the agent's status: a signature
+  that does not verify gets the route's signature refusal, and a suspended agent in hybrid mode is told it needs both
+  signatures. A `POST /api/v1/sdk-api/verifications` body that names `signedBytes` was already refused for an agent
+  in hybrid mode. `docs/guides/PQC.md` names the three routes.
+- Tests: `apps/backend/internal/interfaces/http/handlers/hybrid_mode_handler_signature_test.go`.
+
+### Security — A2A policy evaluation reads no trust score of another organization's agent (#740)
+
+- `POST /api/v1/a2a/policies/evaluate` reads the A2A trust scores of the body's `clientAgentId` and `remoteAgentId`
+  only for agents of the caller's organization, which it looks up with one query that names the organization.
+  Another organization's agent is answered as an agent with no score, as an id with no agent is: a policy that
+  applies compares a score of 0, and a `DENY` reason states `0.00` for it. Run against the handler on the previous
+  code, with an active policy of the caller's organization that applies to every agent and two agents of another
+  organization whose stored A2A trust scores were 0.93 and 0.87, the answer was `ALLOW`, which told the caller both
+  were at or above the threshold.
+- A failed lookup of the agents is answered `500`, and no trust score is read.
+- Tests: `apps/backend/internal/interfaces/http/handlers/a2a_policy_evaluation_organization_test.go`.
+
+### Security — the downloaded Python SDK writes the agent's name and the server's URL as escaped Python strings (#740)
+
+- `GET /api/v1/agents/:id/sdk?lang=python` writes `AGENT_ID`, `PUBLIC_KEY`, `PRIVATE_KEY`, `AIM_URL`, `AGENT_NAME`
+  and `SDK_VERSION` into `aim_sdk/config.py` as escaped Python string literals, and the agent's name into
+  `example.py`'s docstring escaped the same way: a backslash, a double quote, a line break and the other characters
+  Go's `unicode.IsPrint` does not count as printable are written as escapes. A value with nothing to escape is
+  written as before. Run on the
+  previous code, an agent name made of `demo`, a double quote, a line break, `print("injected")`, a line break and
+  `#` put `print("injected")` into `config.py` on a line of its own.
+- Parsed with Python, the package generated for a name that holds a double quote, three double quotes, two `print`
+  calls on lines of their own and a trailing backslash has a `config.py` of its docstring and six assignments, whose
+  `AGENT_NAME` equals the name, and an `example.py` whose docstring holds the name.
+- Tests: `apps/backend/internal/sdkgen/python_generator_escaping_test.go`.
+
+### Security — a capability verification is denied when the organization's enforcement mode cannot be read (#740)
+
+- `AgentService.VerifyCapability` reads the enforcement mode of the agent's organization to decide whether a denial
+  is enforced (strict) or only logged (monitoring). When that read fails or finds no organization, the request is
+  denied with the reason `Action denied: the enforcement mode of the agent's organization could not be read`, the
+  read's error is returned, and no violation, alert or trust score change is recorded. This holds on each of the four
+  paths that read the mode: an agent that is not verified, an agent with no granted capability, a capability the
+  agent was not granted, and a granted capability whose definition names a minimum trust score.
+- Run on the previous code, an agent with trust score 0.40 holding `file:delete`, whose definition requires 0.50, was
+  allowed with `Action allowed by MONITORING mode: agent trust score 40% is below the 50% required for capability
+  'file:delete'`, both when the read failed and when it found no organization.
+- Tests: `apps/backend/internal/application/agent_service_enforcement_mode_unreadable_test.go`.
+
+### Security — four registration log lines name ids instead of the registrant's address (#740)
+
+- The server log names the registration request, user or organization by id where these lines wrote the
+  registrant's address: the approval of an address on `AIM_PLATFORM_ADMINS`
+  (`Auto-approving platform admin for registration request <id>`), the account and organization it creates
+  (`Auto-created admin user <user id> for registration request <id> in organization <organization id>`), and an
+  approval whose account cannot be created, whose lines name the registration request, write neither the address
+  nor the provider ID (the address, for an email/password registration) and redact addresses in the database's
+  error. The refusal of a registration no administrator could approve names no registrant:
+  `registration refused: 0 active administrators, <n> valid AIM_PLATFORM_ADMINS entries, registrant listed=<true|false>`.
+- The error that approval returns names the registration request instead of the address. Run on the previous code,
+  the output of each of these cases and that error carried the address.
+- Tests: `apps/backend/internal/application/registration_mail_log_privacy_test.go`.
+
+### Fixed — of two concurrent decisions on one capability request, the later one answers 409 (#740)
+
+- When the server has no transition recorder, `POST /api/v1/admin/capability-requests/:id/approve` and
+  `POST /api/v1/admin/capability-requests/:id/reject` write the new status with one statement that also requires
+  the request to be pending, so two decisions that both read the request as pending cannot both be written. The
+  later write changes nothing, and its decision answers `409` with `{"error": "capability request is not pending"}`
+  and grants nothing. A request with no row when the status is written is answered `404` with
+  `{"error": "capability request not found"}`. Before this change the statement's only condition was the request's
+  id (`WHERE id = $5`).
+- The undo of an approval whose grant fails writes `pending` only while the request is `approved`.
+- Tests: `apps/backend/internal/infrastructure/repository/capability_request_status_condition_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/capability_request_concurrent_decision_test.go`.
+
 ### Changed — a downloaded SDK's credential ends `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token
 
 - Each refresh of an SDK-download token issues a new 90-day token. The chain now ends: `SDK_TOKEN_FAMILY_MAX_AGE`
