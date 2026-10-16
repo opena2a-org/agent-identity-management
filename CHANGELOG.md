@@ -37,6 +37,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `apps/backend/internal/application/a2a_verify_hybrid_test.go`,
   `apps/backend/internal/interfaces/http/handlers/a2a_verify_hybrid_test.go`.
 
+### Security — registering an agent or an MCP server applies only tags of the caller's organization (#749)
+
+- `POST /api/v1/agents` and `POST /api/v1/mcp-servers` apply a `tagIds` entry that is a tag id only when that tag
+  belongs to the caller's organization. An id of another organization's tag, or an id that names no tag, is skipped
+  and the other entries are still applied, so the new agent or server is returned without the other organization's
+  tag key, value and description.
+- A `tagIds` entry on `POST /api/v1/agents` that is not a tag id is still read as a tag key of the caller's
+  organization, found or created there.
+- Tests: `apps/backend/internal/application/registration_tags_org_test.go`.
+
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
 - `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever
