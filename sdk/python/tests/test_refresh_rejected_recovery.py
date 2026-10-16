@@ -7,6 +7,12 @@ to give every user the download steps, led by `rm`, which is the wrong fix for a
 login credential. It also pointed at "Settings -> SDK Downloads", a dashboard path
 that no longer exists (the page is Developers, then SDK & docs).
 
+A downloaded credential also ends at the server's maximum age for a download
+(SDK_TOKEN_FAMILY_MAX_AGE), however often it is refreshed. The server answers that
+refusal as it answers an expired token, so the download banner names the maximum age
+among the causes. A refused token is presented to the refresh route only: the recovery
+route mints only for a sign-in's access token, which the SDK does not hold.
+
 NOT marked `integration` -- `pytest.ini` deselects that marker by default.
 """
 
@@ -28,6 +34,7 @@ from aim_sdk.credentials import (
     refresh_rejected_fix,
 )
 from aim_sdk.oauth import OAuthTokenManager
+from aim_sdk.security_logging import AuthnEventType
 
 SDK_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(os.path.dirname(SDK_ROOT))
@@ -220,3 +227,79 @@ def test_refused_refresh_prints_the_banner_for_the_stored_credential(capsys, mon
     assert "SDK REFRESH TOKEN REJECTED" in out
     assert expect in out
     assert reject not in out
+
+
+# --- a download past the server's maximum age -------------------------------------
+
+BACKEND_ROOT = os.path.join(REPO_ROOT, "apps", "backend", "internal")
+
+
+def _backend_source(*parts):
+    path = os.path.join(BACKEND_ROOT, *parts)
+    if not os.path.exists(path):
+        pytest.skip("backend source not present (SDK tested outside the repository)")
+    return open(path, encoding="utf-8").read()
+
+
+def _flat(text):
+    return " ".join(text.split())
+
+
+def test_download_banner_names_the_maximum_age_and_the_server_default(capsys):
+    out = _flat(_banner(capsys, DOWNLOAD_CREDS))
+    assert "The SDK download reached the server's maximum age (SDK_TOKEN_FAMILY_MAX_AGE, 365 days by default)." in out
+    assert "Refreshing does not extend it; a fresh download starts a new one." in out
+    assert "no longer the latest" not in out
+    jwt_go = _backend_source("infrastructure", "auth", "jwt.go")
+    assert 'getEnv("SDK_TOKEN_FAMILY_MAX_AGE", "8760h")' in jwt_go
+    assert "defaultSDKTokenFamilyMaxAge = 365 * 24 * time.Hour" in jwt_go
+
+
+def test_login_banner_does_not_name_the_download_maximum_age(capsys):
+    assert "SDK_TOKEN_FAMILY_MAX_AGE" not in _banner(capsys, LOGIN_CREDS)
+
+
+def test_the_server_answers_the_maximum_age_refusal_as_an_expired_token():
+    handler = _backend_source("interfaces", "http", "handlers", "auth_refresh_handler.go")
+    refusal = re.search(
+        r"if h\.familyPastMaxAge\([^)]*\) \{\s*return c\.Status\(fiber\.StatusUnauthorized\)\.JSON\(fiber\.Map\{\s*"
+        r'"error": "([^"]+)"',
+        handler,
+    )
+    assert refusal, "the maximum-age refusal's body was not found in auth_refresh_handler.go"
+    assert refusal.group(1) == "Invalid or expired refresh token"
+
+
+@pytest.mark.parametrize("body", ["Invalid or expired refresh token", "Token has been revoked or is invalid"])
+def test_a_refused_refresh_token_is_presented_once_and_the_banner_is_all_that_is_printed(
+    capsys, monkeypatch, tmp_path, body
+):
+    assert f'"error": "{body}"' in _backend_source("interfaces", "http", "handlers", "auth_refresh_handler.go")
+    monkeypatch.setattr("aim_sdk.credentials.SDK_CREDENTIALS_FILE", tmp_path / "sdk_credentials.json")
+    manager = OAuthTokenManager.__new__(OAuthTokenManager)
+    manager.credentials = dict(DOWNLOAD_CREDS)
+    manager.access_token = None
+    manager.access_token_expiry = None
+    posted = []
+
+    def fake_post(url, json=None, timeout=None, **kwargs):
+        posted.append((url, json))
+        return _Response(401, {"error": body})
+
+    logged = []
+
+    def fake_log(event_type, success=False, error=None, **kwargs):
+        logged.append((event_type, success, error))
+
+    monkeypatch.setattr("aim_sdk.oauth.requests.post", fake_post)
+    monkeypatch.setattr("aim_sdk.oauth.security_logger.log_authentication", fake_log)
+    assert manager._refresh_token() is None
+    assert posted == [(f"{AIM_URL}/api/v1/auth/refresh", {"refreshToken": "refresh"})]
+    assert logged == [(AuthnEventType.TOKEN_EXPIRED, False, "Refresh token refused")]
+    out = capsys.readouterr().out
+    assert out.lstrip().startswith("=" * 72)
+    assert out.rstrip().endswith("=" * 72)
+    assert "SDK REFRESH TOKEN REJECTED" in out
+    assert "SDK_TOKEN_FAMILY_MAX_AGE" in out
+    assert "Token was revoked" not in out
+    assert "recovery" not in out.lower()

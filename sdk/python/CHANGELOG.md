@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed: a refused refresh of a downloaded SDK's credential names the download's maximum age, and the token is presented to the refresh route only
+
+- The server ends a downloaded SDK's credential `SDK_TOKEN_FAMILY_MAX_AGE` after the download (365 days by default),
+  however often it is refreshed, and answers that refresh `401` `{"error":"Invalid or expired refresh token"}`. The
+  `SDK REFRESH TOKEN REJECTED` banner printed for a downloaded credential now lists that cause: "The SDK download
+  reached the server's maximum age (SDK_TOKEN_FAMILY_MAX_AGE, 365 days by default). Refreshing does not extend it; a
+  fresh download starts a new one." Its opening no longer says the local token is "no longer the latest", which did
+  not hold for a revoked or expired token. The banner for an `aim-sdk login` credential is unchanged.
+- A refresh the server answers `Invalid or expired refresh token` or `Token has been revoked or is invalid` is no
+  longer followed by `Token was revoked - attempting automatic recovery...` and a `POST /api/v1/auth/sdk/recover`
+  carrying the refused token. The SDK sent that request without an `Authorization` header, and the route's auth
+  middleware reads the session from that header only; the route also mints only for an access token that records a
+  sign-in, which the SDK does not hold. Unless errors are suppressed, the banner is all the refusal prints, and the
+  security log records one `TOKEN_EXPIRED` event, error `Refresh token refused`, where a `TOKEN_REVOKED` event came
+  first.
+- Test: in `tests/test_refresh_rejected_recovery.py`, the download banner names the maximum age and the default it
+  cites (`8760h` and `365 * 24 * time.Hour` in the backend's `jwt.go`); the login banner does not name it; the
+  server's maximum-age refusal body is `Invalid or expired refresh token`; and for both refusal bodies the token is
+  posted once, to `/api/v1/auth/refresh`, one `TOKEN_EXPIRED` event is logged and the output is the banner alone.
+
 ### Fixed — the README's Requirements name PyJWT and the optional rich extra (#627)
 
 - The Requirements section of `README.md` (the PyPI description) listed `requests`, `pynacl`, `cryptography` and

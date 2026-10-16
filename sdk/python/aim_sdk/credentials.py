@@ -807,7 +807,9 @@ def print_token_expired_error(
     ``aim-sdk login`` is renewed by signing in again, which overwrites the
     file. One bundled with a dashboard SDK download is replaced by a fresh
     download, after removing the stale home copy the SDK would otherwise
-    read first. Without ``credentials`` the download text is printed.
+    read first, and its causes include the server's maximum age for a
+    download, which refreshing does not extend. Without ``credentials`` the
+    download text is printed.
     """
     origin = detect_credential_origin(credentials)
     print()
@@ -834,16 +836,19 @@ def print_token_expired_error(
     else:
         print()
         print("WHAT HAPPENED:")
-        print("  The SDK rotates its refresh token on every successful refresh")
-        print("  and the server only honors the latest one. The token in your")
-        print("  local file is no longer the latest, which means one of these")
-        print("  happened:")
+        print("  The server no longer accepts the refresh token in your local")
+        print("  file. One of these happened:")
         print()
         print("  • Another SDK installation (different machine, different venv)")
-        print("    refreshed the token and now holds the current one.")
+        print("    refreshed the token and now holds the current one. The SDK")
+        print("    rotates its refresh token on every successful refresh and")
+        print("    the server only honors the latest one.")
         print("  • A previously bundled SDK download was used elsewhere.")
         print("  • The token was revoked manually from the dashboard.")
         print("  • The refresh token reached its 90-day expiry.")
+        print("  • The SDK download reached the server's maximum age")
+        print("    (SDK_TOKEN_FAMILY_MAX_AGE, 365 days by default). Refreshing")
+        print("    does not extend it; a fresh download starts a new one.")
         print()
         print("TO RECOVER:")
         print(f"  1. Remove the stale file:  rm {SDK_CREDENTIALS_FILE}")
