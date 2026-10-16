@@ -19,6 +19,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 )
 
 const (
@@ -96,6 +98,11 @@ func TestAPIListenerHasNoMetricsRouteWithoutToken(t *testing.T) {
 		assert.Equal(t, http.StatusOK, status)
 		assert.Contains(t, body, "aim_active_agents")
 	}
+}
+
+// metricsListenAddr is METRICS_LISTEN_ADDR as the server reads it at startup.
+func metricsListenAddr() string {
+	return config.LoadServer().MetricsListenAddr
 }
 
 func TestMetricsListenAddrDefaultsToLoopback(t *testing.T) {

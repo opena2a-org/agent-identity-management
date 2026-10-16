@@ -11,6 +11,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — the server reads every environment variable in one config package, and a recorded table pins each
+
+- `internal/config` reads all 70 variables the server process reads itself, each into a typed field of
+  `config.Config`: the 32 it read already and the 38 that `cmd/server` read on its own (the secrets
+  backends, the registry bridge, the ATC issuer and CRL endpoint, FGA, the email startup line, the first
+  administrator, `ALLOWED_ORIGINS`, `AUTH_REVOCATION_FAIL_OPEN`, `METRICS_LISTEN_ADDR`,
+  `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD`, and the `SIEM_*` and `AIM_SIGNING_KEY_*` variables,
+  which the SIEM settings and the signing key ring now read through `Config`). `cmd/server` reads the
+  `Config` value. Variables other packages read (token lifetimes, rate limits, email delivery,
+  telemetry, the key vault) are read where they were.
+- One rule, stated on `config.Load`: an empty value reads as unset and gives the default, and a value
+  is used as written, never trimmed. `REDIS_HOST` set and empty still turns Redis off; a number or a
+  duration that does not parse still gives the default; and a flag is still on only for its word:
+  `true` for `REDIS_USE_TLS` and `REGISTRY_BRIDGE_ENABLED`, `true` in any case for
+  `AUTH_REVOCATION_FAIL_OPEN`, and `on` for `POSTGRES_SCOPE_CENSUS`.
+- No default, accepted value or startup line changes. `internal/config/testdata/environment_table.json`
+  holds 380 rows: for each variable, unset, empty, whitespace only, a valid and an invalid value, and
+  a quote and a backslash for each password and token, with the setting and the startup line the
+  previous code resolved and logged. `internal/config` checks every setting against it and
+  `cmd/server` every line.
+- `GET /api/v1/status` reports the `ENVIRONMENT` the server read at startup. It read the variable on
+  each request before; for `ENVIRONMENT` unset, empty, whitespace only, `production` and `Production`,
+  the request-time value and the startup value were the same.
+- A test fails when a non-test file in `cmd/server` uses `os.Getenv`, `os.LookupEnv`, `os.Environ`,
+  `os.ExpandEnv`, `syscall.Getenv` or `syscall.Environ`, whether called or passed as a value.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each

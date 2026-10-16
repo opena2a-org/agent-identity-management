@@ -312,7 +312,7 @@ func TestTokenRotationGuideSaysWhichRefreshesRotate(t *testing.T) {
 		}
 	}
 	textHas(t, readBackendFile(t, "internal/config/config.go"), `"REDIS_HOST"`, "the server reads REDIS_HOST")
-	textHas(t, readBackendFile(t, "cmd/server/main.go"), `"AUTH_REVOCATION_FAIL_OPEN"`, "the server reads AUTH_REVOCATION_FAIL_OPEN")
+	textHas(t, readBackendFile(t, "internal/config/config.go"), `"AUTH_REVOCATION_FAIL_OPEN"`, "the server reads AUTH_REVOCATION_FAIL_OPEN")
 
 	// Every repository path the guide names is in the repository.
 	for _, path := range regexp.MustCompile("apps/backend/[A-Za-z0-9_./-]+[A-Za-z0-9_]").FindAllString(rotation, -1) {

@@ -22,6 +22,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 )
 
 const reportedVersionTestSha = "89abcdef0123456789abcdef0123456789abcdef"
@@ -72,7 +74,7 @@ func reportedVersionApp() *fiber.App {
 	app := fiber.New()
 	ok := func(context.Context) error { return nil }
 	app.Get("/health/ready", newHealthReadyHandler(ok, nil))
-	app.Get("/api/v1/status", newStatusHandler(func() error { return nil }, nil, false, time.Now()))
+	app.Get("/api/v1/status", newStatusHandler(func() error { return nil }, nil, false, config.LoadServer().Environment, time.Now()))
 	return app
 }
 

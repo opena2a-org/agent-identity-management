@@ -156,7 +156,7 @@ func TestMain_StartupMigrationsRunOnTheMigrationHandle(t *testing.T) {
 
 	for name, argument := range map[string]int{
 		"runMigrations":               0,
-		"seedAdminFromEnv":            0,
+		"seedAdmin":                   0,
 		"MigrateAgentPrivateKeysToV2": 1,
 		"RewrapAgentPrivateKeys":      1,
 	} {

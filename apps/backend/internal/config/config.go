@@ -53,13 +53,24 @@ func isKnownDevSecret(s string) bool {
 	return false
 }
 
-// Config holds all configuration for the application
+// Config holds all configuration for the application. Load reads every
+// environment variable the server process reads itself; the variables read by
+// other packages (sign-in token lifetimes, rate limits, email delivery,
+// telemetry, the key vault) are read there.
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	JWT      JWTConfig
-	OAuth    OAuthConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	Redis       RedisConfig
+	JWT         JWTConfig
+	OAuth       OAuthConfig
+	Auth        AuthConfig
+	Admin       AdminSeedConfig
+	Registry    RegistryConfig
+	Secrets     SecretsBackendsConfig
+	FGA         FGAConfig
+	Email       EmailConfig
+	SIEM        SIEMConfig
+	SigningKeys SigningKeysConfig
 }
 
 // ServerConfig holds server configuration
@@ -76,7 +87,21 @@ type ServerConfig struct {
 	// listener (METRICS_LISTEN_ADDR) serves it only on a loopback address.
 	// See issue #348.
 	MetricsAuthToken string
+	// MetricsListenAddr is the address of the dedicated metrics listener
+	// (METRICS_LISTEN_ADDR), DefaultMetricsListenAddr when it is unset.
+	MetricsListenAddr string
+	// AllowedOrigins are the CORS origins (ALLOWED_ORIGINS, comma-separated,
+	// split as written). The CORS middleware validates them.
+	AllowedOrigins []string
 }
+
+// DefaultMetricsListenAddr is loopback on the port the OpenTelemetry
+// Prometheus exporter also defaults to; 9090 is Prometheus itself.
+const DefaultMetricsListenAddr = "127.0.0.1:9464"
+
+// defaultAllowedOrigin is the dashboard's development origin, the only CORS
+// origin when ALLOWED_ORIGINS is unset.
+const defaultAllowedOrigin = "http://localhost:3000"
 
 // DatabaseConfig holds database configuration
 type DatabaseConfig struct {
@@ -94,6 +119,11 @@ type DatabaseConfig struct {
 	// ScopeCensus turns on the row security census of the request pool
 	// (POSTGRES_SCOPE_CENSUS=on). Off by default.
 	ScopeCensus bool
+	// AppUser is the login role `aim-server migrate` provisions for the
+	// server (POSTGRES_APP_USER); empty provisions none. AppPassword is its
+	// password (POSTGRES_APP_PASSWORD).
+	AppUser     string
+	AppPassword string
 }
 
 // RedisConfig holds Redis configuration
@@ -139,29 +169,167 @@ type OktaProvider struct {
 	RedirectURL  string
 }
 
-// Load loads configuration from environment variables
+// AuthConfig holds the token revocation setting.
+type AuthConfig struct {
+	// RevocationFailOpen lets a request through when the revocation store
+	// cannot be reached (AUTH_REVOCATION_FAIL_OPEN=true, in any case). Off by
+	// default: a store outage refuses the request.
+	RevocationFailOpen bool
+}
+
+// AdminSeedConfig holds the first administrator the server seeds at startup.
+type AdminSeedConfig struct {
+	// Password is ADMIN_PASSWORD; empty seeds no administrator.
+	Password string
+	// Email is ADMIN_EMAIL, admin@opena2a.org when it is unset.
+	Email string
+	// Name is ADMIN_NAME, "System Administrator" when it is unset.
+	Name string
+}
+
+// RegistryConfig holds the OpenA2A Registry settings.
+type RegistryConfig struct {
+	// BridgeURL is REGISTRY_BRIDGE_URL, https://api.oa2a.org when it is unset.
+	BridgeURL string
+	// BridgeEnabled turns on the attestation push (REGISTRY_BRIDGE_ENABLED,
+	// exactly "true").
+	BridgeEnabled bool
+	// ATCIssuerURI is ATC_ISSUER_URI, https://aim.opena2a.org when it is unset.
+	ATCIssuerURI string
+	// ATCCRLEndpoint is ATC_CRL_ENDPOINT, the Registry's latest CRL when it is
+	// unset.
+	ATCCRLEndpoint string
+}
+
+// SecretsBackendsConfig holds the external secrets backends. Each one is
+// turned on by its first variable: VAULT_ADDR, AWS_SECRETS_REGION,
+// AZURE_KEYVAULT_URL, GCP_SECRETS_PROJECT and OP_CONNECT_HOST.
+type SecretsBackendsConfig struct {
+	Vault         VaultConfig
+	AWS           AWSSecretsConfig
+	AzureVaultURL string
+	GCPProject    string
+	OnePassword   OnePasswordConfig
+}
+
+// VaultConfig holds the HashiCorp Vault backend settings (VAULT_*).
+type VaultConfig struct {
+	Addr      string
+	MountPath string
+	AuthPath  string
+	Role      string
+	Token     string
+	Namespace string
+}
+
+// AWSSecretsConfig holds the AWS Secrets Manager backend settings.
+type AWSSecretsConfig struct {
+	Region   string
+	KMSKeyID string
+	Prefix   string
+}
+
+// OnePasswordConfig holds the 1Password Connect backend settings.
+type OnePasswordConfig struct {
+	ConnectHost  string
+	ConnectToken string
+	VaultUUID    string
+}
+
+// FGAConfig holds the authorization engine's endpoints; empty keeps the
+// engine's own.
+type FGAConfig struct {
+	DaemonURL      string
+	RegistryASCURL string
+}
+
+// EmailConfig holds the email settings the startup line names. The email
+// package reads the same two variables, with the same rule, to choose the
+// provider and the sender.
+type EmailConfig struct {
+	// Provider is EMAIL_PROVIDER, azure when it is unset.
+	Provider    string
+	FromAddress string
+}
+
+// SIEMConfig holds the SIEM_* variables as set. siem.SettingsFromEnv reads
+// them through Value and validates them.
+type SIEMConfig struct {
+	SplunkHECURL   string
+	SplunkHECToken string
+	SplunkIndex    string
+	MinSeverity    string
+}
+
+// Value returns the named SIEM_* variable as Load read it, and "" for a name
+// SIEMConfig does not hold.
+func (s SIEMConfig) Value(name string) string {
+	switch name {
+	case "SIEM_SPLUNK_HEC_URL":
+		return s.SplunkHECURL
+	case "SIEM_SPLUNK_HEC_TOKEN":
+		return s.SplunkHECToken
+	case "SIEM_SPLUNK_INDEX":
+		return s.SplunkIndex
+	case "SIEM_MIN_SEVERITY":
+		return s.MinSeverity
+	}
+	return ""
+}
+
+// SigningKeysConfig holds the provisioned server signing keys, one
+// AIM_SIGNING_KEY_<PURPOSE> and one AIM_SIGNING_KEY_<PURPOSE>_RETIRED per
+// purpose, as set. crypto.LoadSigningKeyRing reads them through Value and
+// validates them.
+type SigningKeysConfig struct {
+	CardAttestation        string
+	CardAttestationRetired string
+	ATCIssuer              string
+	ATCIssuerRetired       string
+}
+
+// Value returns the named AIM_SIGNING_KEY_* variable as Load read it, and ""
+// for a name SigningKeysConfig does not hold.
+func (k SigningKeysConfig) Value(name string) string {
+	switch name {
+	case "AIM_SIGNING_KEY_CARD_ATTESTATION":
+		return k.CardAttestation
+	case "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED":
+		return k.CardAttestationRetired
+	case "AIM_SIGNING_KEY_ATC_ISSUER":
+		return k.ATCIssuer
+	case "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED":
+		return k.ATCIssuerRetired
+	}
+	return ""
+}
+
+// Load loads configuration from environment variables.
+//
+// One rule holds for every variable: an empty value is read as unset, so it
+// gives the default, and a value is used as written, never trimmed, so a
+// value of spaces is a value. REDIS_HOST is the one exception: set and empty,
+// it turns Redis off. A number or a duration that does not parse gives the
+// default. A flag is on only for its word: "true" for REDIS_USE_TLS and
+// REGISTRY_BRIDGE_ENABLED, "true" in any case for AUTH_REVOCATION_FAIL_OPEN,
+// and "on" for POSTGRES_SCOPE_CENSUS. JWT_SECRET, POSTGRES_HOST, POSTGRES_USER
+// and POSTGRES_DB are required.
 func Load() (*Config, error) {
 	database, err := LoadDatabase()
 	if err != nil {
 		return nil, err
 	}
 	config := &Config{
-		Server: ServerConfig{
-			Port:             getEnv("APP_PORT", "8080"),
-			Environment:      getEnv("ENVIRONMENT", "development"),
-			LogLevel:         getEnv("LOG_LEVEL", "info"),
-			FrontendURL:      getEnv("FRONTEND_URL", "http://localhost:3000"),
-			MetricsAuthToken: getEnv("METRICS_AUTH_TOKEN", ""),
-		},
+		Server:   LoadServer(),
 		Database: database,
 		Redis: RedisConfig{
 			Host:     getEnv("REDIS_HOST", "localhost"),
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""),
 			DB:       getEnvAsInt("REDIS_DB", 0),
-			UseTLS:   getEnv("REDIS_USE_TLS", "false") == "true",
+			UseTLS:   getEnvFlag("REDIS_USE_TLS", "true"),
 
-			Configured: os.Getenv("REDIS_HOST") != "",
+			Configured: getenv("REDIS_HOST") != "",
 			Disabled:   isSetAndEmpty("REDIS_HOST"),
 		},
 		JWT: JWTConfig{
@@ -185,6 +353,58 @@ func Load() (*Config, error) {
 				RedirectURL:  getEnv("OKTA_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback/okta"),
 			},
 		},
+		Auth: AuthConfig{
+			RevocationFailOpen: strings.EqualFold(getenv("AUTH_REVOCATION_FAIL_OPEN"), "true"),
+		},
+		Admin: LoadAdminSeed(),
+		Registry: RegistryConfig{
+			BridgeURL:      getEnv("REGISTRY_BRIDGE_URL", "https://api.oa2a.org"),
+			BridgeEnabled:  getEnvFlag("REGISTRY_BRIDGE_ENABLED", "true"),
+			ATCIssuerURI:   getEnv("ATC_ISSUER_URI", "https://aim.opena2a.org"),
+			ATCCRLEndpoint: getEnv("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest"),
+		},
+		Secrets: SecretsBackendsConfig{
+			Vault: VaultConfig{
+				Addr:      getEnv("VAULT_ADDR", ""),
+				MountPath: getEnv("VAULT_MOUNT_PATH", "secret"),
+				AuthPath:  getEnv("VAULT_AUTH_PATH", "jwt"),
+				Role:      getEnv("VAULT_ROLE", ""),
+				Token:     getEnv("VAULT_TOKEN", ""),
+				Namespace: getEnv("VAULT_NAMESPACE", ""),
+			},
+			AWS: AWSSecretsConfig{
+				Region:   getEnv("AWS_SECRETS_REGION", ""),
+				KMSKeyID: getEnv("AWS_SECRETS_KMS_KEY_ID", ""),
+				Prefix:   getEnv("AWS_SECRETS_PREFIX", "aim-secrets/"),
+			},
+			AzureVaultURL: getEnv("AZURE_KEYVAULT_URL", ""),
+			GCPProject:    getEnv("GCP_SECRETS_PROJECT", ""),
+			OnePassword: OnePasswordConfig{
+				ConnectHost:  getEnv("OP_CONNECT_HOST", ""),
+				ConnectToken: getEnv("OP_CONNECT_TOKEN", ""),
+				VaultUUID:    getEnv("OP_VAULT_UUID", ""),
+			},
+		},
+		FGA: FGAConfig{
+			DaemonURL:      getEnv("FGA_DAEMON_URL", ""),
+			RegistryASCURL: getEnv("FGA_REGISTRY_ASC_URL", ""),
+		},
+		Email: EmailConfig{
+			Provider:    getEnv("EMAIL_PROVIDER", "azure"),
+			FromAddress: getEnv("EMAIL_FROM_ADDRESS", ""),
+		},
+		SIEM: SIEMConfig{
+			SplunkHECURL:   getEnv("SIEM_SPLUNK_HEC_URL", ""),
+			SplunkHECToken: getEnv("SIEM_SPLUNK_HEC_TOKEN", ""),
+			SplunkIndex:    getEnv("SIEM_SPLUNK_INDEX", ""),
+			MinSeverity:    getEnv("SIEM_MIN_SEVERITY", ""),
+		},
+		SigningKeys: SigningKeysConfig{
+			CardAttestation:        getEnv("AIM_SIGNING_KEY_CARD_ATTESTATION", ""),
+			CardAttestationRetired: getEnv("AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED", ""),
+			ATCIssuer:              getEnv("AIM_SIGNING_KEY_ATC_ISSUER", ""),
+			ATCIssuerRetired:       getEnv("AIM_SIGNING_KEY_ATC_ISSUER_RETIRED", ""),
+		},
 	}
 
 	// Validate required fields
@@ -198,6 +418,34 @@ func Load() (*Config, error) {
 	return config, nil
 }
 
+// LoadServer reads the server settings, the same variables Load reads for
+// Config.Server.
+func LoadServer() ServerConfig {
+	allowedOrigins := []string{defaultAllowedOrigin}
+	if origins := getenv("ALLOWED_ORIGINS"); origins != "" {
+		allowedOrigins = strings.Split(origins, ",")
+	}
+	return ServerConfig{
+		Port:              getEnv("APP_PORT", "8080"),
+		Environment:       getEnv("ENVIRONMENT", "development"),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
+		FrontendURL:       getEnv("FRONTEND_URL", "http://localhost:3000"),
+		MetricsAuthToken:  getEnv("METRICS_AUTH_TOKEN", ""),
+		MetricsListenAddr: getEnv("METRICS_LISTEN_ADDR", DefaultMetricsListenAddr),
+		AllowedOrigins:    allowedOrigins,
+	}
+}
+
+// LoadAdminSeed reads the ADMIN_* variables, the same ones Load reads for
+// Config.Admin.
+func LoadAdminSeed() AdminSeedConfig {
+	return AdminSeedConfig{
+		Password: getEnv("ADMIN_PASSWORD", ""),
+		Email:    getEnv("ADMIN_EMAIL", "admin@opena2a.org"),
+		Name:     getEnv("ADMIN_NAME", "System Administrator"),
+	}
+}
+
 // LoadDatabase reads the database connection settings, the same POSTGRES_*
 // variables Load reads. `aim-server migrate` reads only these, so the
 // migration step needs no other secret in its environment. A missing
@@ -206,7 +454,7 @@ func Load() (*Config, error) {
 func LoadDatabase() (DatabaseConfig, error) {
 	var missing []string
 	required := func(key string) string {
-		value := os.Getenv(key)
+		value := getenv(key)
 		if value == "" {
 			missing = append(missing, key)
 		}
@@ -222,7 +470,9 @@ func LoadDatabase() (DatabaseConfig, error) {
 		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
 		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
 		PoolRole:        getEnv("POSTGRES_POOL_ROLE", ""),
-		ScopeCensus:     os.Getenv("POSTGRES_SCOPE_CENSUS") == "on",
+		ScopeCensus:     getEnvFlag("POSTGRES_SCOPE_CENSUS", "on"),
+		AppUser:         getEnv("POSTGRES_APP_USER", ""),
+		AppPassword:     getEnv("POSTGRES_APP_PASSWORD", ""),
 	}
 	if len(missing) > 0 {
 		return DatabaseConfig{}, fmt.Errorf("required environment variable(s) not set: %s", strings.Join(missing, ", "))
@@ -303,7 +553,7 @@ func (c *Config) Validate() error {
 		return insecureSecretError("JWT_SECRET", "openssl rand -hex 32")
 	}
 
-	if isKnownDevSecret(os.Getenv("KEYVAULT_MASTER_KEY")) {
+	if isKnownDevSecret(getenv("KEYVAULT_MASTER_KEY")) {
 		return insecureSecretError("KEYVAULT_MASTER_KEY", "openssl rand -base64 32")
 	}
 
@@ -338,24 +588,39 @@ func insecureSecretError(name, generator string) error {
 	)
 }
 
-// Helper functions
+// lookupEnv is the one place this package reads the environment; every
+// helper below reads through it.
+var lookupEnv = os.LookupEnv
+
+// getenv returns the value of key, "" when it is unset.
+func getenv(key string) string {
+	value, _ := lookupEnv(key)
+	return value
+}
+
+// getEnv returns the value of key, or defaultValue when it is unset or empty.
 func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
+	value := getenv(key)
 	if value == "" {
 		return defaultValue
 	}
 	return value
 }
 
+// getEnvFlag reports whether key is set to word, exactly.
+func getEnvFlag(key, word string) bool {
+	return getenv(key) == word
+}
+
 // isSetAndEmpty reports whether key is in the environment with an empty value,
 // which getEnv cannot tell apart from an unset key.
 func isSetAndEmpty(key string) bool {
-	value, set := os.LookupEnv(key)
+	value, set := lookupEnv(key)
 	return set && value == ""
 }
 
 func getEnvAsInt(key string, defaultValue int) int {
-	valueStr := os.Getenv(key)
+	valueStr := getenv(key)
 	if valueStr == "" {
 		return defaultValue
 	}
@@ -367,7 +632,7 @@ func getEnvAsInt(key string, defaultValue int) int {
 }
 
 func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
-	valueStr := os.Getenv(key)
+	valueStr := getenv(key)
 	if valueStr == "" {
 		return defaultValue
 	}
@@ -380,7 +645,7 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 
 // getEnvRequired gets environment variable and panics if not set
 func getEnvRequired(key string) string {
-	value := os.Getenv(key)
+	value := getenv(key)
 	if value == "" {
 		panic(fmt.Sprintf("Required environment variable %s is not set", key))
 	}

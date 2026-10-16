@@ -9,7 +9,15 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 )
+
+// seedAdminFromEnv seeds from the ADMIN_* variables as the server reads them
+// at startup.
+func seedAdminFromEnv(db *sql.DB) error {
+	return seedAdmin(db, config.LoadAdminSeed())
+}
 
 const seedTestPassword = "Seeded-Admin-Pass-42!"
 
