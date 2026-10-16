@@ -119,7 +119,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   administrator's update and a capability violation, including
   `POST /api/v1/agents/:id/trust-score/recalculate`; and an alert raised outside the alert service.
 
-### Security — an agent in hybrid mode is admitted only by a request signed with both Ed25519 and ML-DSA
+### Security — `PQCAgentMiddleware` admits an agent in hybrid mode only by a request signed with both Ed25519 and ML-DSA, and `Ed25519AgentMiddleware` refuses it
 
 - `PQCAgentMiddleware` refuses a request from an agent whose hybrid mode is on unless its `X-Algorithm`
   is `Ed25519+ML-DSA-44`, `Ed25519+ML-DSA-65` or `Ed25519+ML-DSA-87` and both signatures verify. The
