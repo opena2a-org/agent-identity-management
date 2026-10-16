@@ -519,8 +519,8 @@ print(f"Trust Score: {result['score']:.2f}")  # 0.95
 ```
 
 `get_trust_score()` reads `GET /api/v1/agents/{id}/trust-score`. It returns
-`agentId`, `agentName`, `score`, `factors`, `calculatedAt` and, on a score
-calculated for that response, `excludedFactors`. Pass another agent's ID to read
+`agentId`, `agentName`, `score`, `factors`, `calculatedAt` and, when one or more
+factors were excluded from the score, `excludedFactors`. Pass another agent's ID to read
 an agent in your organization: `agent.get_trust_score("uuid-of-other-agent")`.
 
 ### Detailed Breakdown
