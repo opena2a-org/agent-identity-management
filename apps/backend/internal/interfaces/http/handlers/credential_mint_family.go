@@ -21,19 +21,20 @@ const (
 
 // refuseUnlessLiveSignIn guards a route that starts a new credential family
 // or sign-in (an SDK download, a device sign-in approval, an SDK credential
-// recovery): the acting access token must belong to a session that records a
-// sign-in, and then refuseIfFamilyRevoked applies.
+// recovery) or creates a credential that outlives the acting session (an API
+// key's creation): the acting access token must belong to a session that
+// records a sign-in, and then refuseIfFamilyRevoked applies.
 //
 // An access token minted from an SDK-download token carries the download's
 // family (set by the auth middleware as sid) and no auth_time: nobody signed
 // in, a stored credential was presented. Such a token is refused before
 // anything is read, with the unchanged 401 the refresh route uses, so a
 // credential cannot mint a credential and an SDK-download family cannot start
-// a new family, and a new birth, without a sign-in. The refusal records one
-// credential_mint_refused audit row and one SECURITY line whose cause is
-// noSignIn. A token with no family (minted before families existed) is not
-// checked. Reports false when the route must stop; it has then written the
-// answer.
+// a new family, and a new birth, or create an API key without a sign-in. The
+// refusal records one credential_mint_refused audit row and one SECURITY line
+// whose cause is noSignIn. A token with no family (minted before families
+// existed) is not checked. Reports false when the route must stop; it has
+// then written the answer.
 func refuseUnlessLiveSignIn(c fiber.Ctx, jwtService *auth.JWTService, audit AuditServicer, route string) bool {
 	family, _ := c.Locals("sid").(string)
 	if family == "" {

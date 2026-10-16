@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"os"
@@ -202,4 +203,104 @@ func TestCredentialMint_RevokedSessionRecordsItsOwnCause(t *testing.T) {
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assertRefusedRow(t, f, "sdk_download")
 	assert.Equal(t, "sessionRevoked", f.audit.rows[0].Metadata["cause"])
+}
+
+// C1, C3: creating an API key takes a sign-in's access token, as the three
+// routes above do. An access token minted from an SDK-download token is
+// refused with the same 401 before the body is read: no agent is read, no key
+// is created, and the refusal is recorded once under api_key_create with the
+// cause noSignIn. A sign-in's access token creates the key. The route runs
+// behind the real auth and member middleware, as it is mounted.
+func TestCredentialMint_APIKeyCreationNeedsASignIn(t *testing.T) {
+	logs := captureLog(t)
+	f := newSignInMintFixture(t)
+	var calls []string
+	keys := &mintAPIKeyRepo{calls: &calls}
+	agents := mintAgentRepo(&mintFixture{orgID: f.orgID}, &calls)
+	h := NewAPIKeyHandler(application.NewAPIKeyService(keys, agents), application.NewAuditService(f.audit), keys, f.svc)
+	app := fiber.New()
+	app.Use(middleware.AuthMiddleware(f.svc))
+	app.Post("/api-keys", middleware.MemberMiddleware(), h.CreateAPIKey)
+	body := fmt.Sprintf(`{"agentId":%q,"name":"sign-in-key"}`, uuid.NewString())
+
+	t.Run("C1 an SDK-download token's access token is refused", func(t *testing.T) {
+		calls, f.audit.rows = nil, nil
+		logs.Reset()
+		status, resp := bearerRequest(t, app, "POST", "/api-keys", f.sdkAccess, body)
+		assert.Equal(t, fiber.StatusUnauthorized, status)
+		// the body is not printed: a route that was not refused answers with the key
+		assert.True(t, strings.Contains(resp, mintRefusal), "the body is the refresh route's refusal")
+		assert.Empty(t, calls, "no agent is read and no key is created")
+		refused := refusedRows(f.audit.rows)
+		require.Len(t, refused, 1, "one credential_mint_refused row")
+		assert.Equal(t, "noSignIn", refused[0].Metadata["cause"])
+		assert.Equal(t, "api_key_create", refused[0].Metadata["route"])
+		assert.Equal(t, f.sdkFamily, refused[0].Metadata["familyId"], "the row names the download's family")
+		require.NotNil(t, refused[0].UserID)
+		assert.Equal(t, f.userID, *refused[0].UserID)
+		logged := logs.String()
+		assert.Equal(t, 1, strings.Count(logged, "SECURITY credential_mint_refused route=api_key_create cause=noSignIn "))
+		assert.NotContains(t, logged, "eyJ", "no token in the log")
+	})
+
+	t.Run("C3 a sign-in's access token creates the key", func(t *testing.T) {
+		calls, f.audit.rows = nil, nil
+		status, _ := bearerRequest(t, app, "POST", "/api-keys", f.signInAccess, body)
+		assert.Equal(t, fiber.StatusCreated, status)
+		assert.Equal(t, 1, countOf(calls, "APIKeyRepository.Create"), "calls: %v", calls)
+		assert.Empty(t, refusedRows(f.audit.rows), "no refusal is recorded")
+	})
+
+	t.Run("an access token a sign-in's refresh mints creates the key", func(t *testing.T) {
+		_, refresh, err := f.svc.GenerateTokenPair(f.userID.String(), f.orgID.String(), "signin@example.com", "admin")
+		require.NoError(t, err)
+		refreshed, _, err := f.svc.RefreshTokenPair(refresh, "signin@example.com", "admin")
+		require.NoError(t, err)
+		calls, f.audit.rows = nil, nil
+		status, _ := bearerRequest(t, app, "POST", "/api-keys", refreshed, body)
+		assert.Equal(t, fiber.StatusCreated, status)
+		assert.Equal(t, 1, countOf(calls, "APIKeyRepository.Create"), "calls: %v", calls)
+		assert.Empty(t, refusedRows(f.audit.rows), "no refusal is recorded")
+	})
+}
+
+// A sign-in's access token whose session was revoked is refused at an API
+// key's creation with the cause sessionRevoked, so the two refusals stay apart
+// in the record; an access token that carries no session (and so no sign-in
+// time) is not checked and creates the key.
+func TestCredentialMint_APIKeyCreationRefusalCauses(t *testing.T) {
+	var cell sessionRoute
+	for _, r := range sessionRoutes() {
+		if r.label == "api_key_create" {
+			cell = r
+		}
+	}
+	require.Equal(t, "api_key_create", cell.label)
+
+	t.Run("a revoked session", func(t *testing.T) {
+		f := newMintFixture(t, &rotationStore{}, false)
+		f.revokeFamily()
+		var calls []string
+		status, _ := sendSessionRoute(t, f, f.family, cell, &calls)
+		assert.Equal(t, fiber.StatusUnauthorized, status)
+		assert.Empty(t, calls, "no agent is read and no key is created")
+		assertRefusedRow(t, f, "api_key_create")
+		assert.Equal(t, "sessionRevoked", f.audit.rows[0].Metadata["cause"])
+	})
+
+	t.Run("no session and no sign-in time", func(t *testing.T) {
+		f := newMintFixture(t, &rotationStore{}, false)
+		var calls []string
+		app := fiber.New()
+		app.Post("/api-keys", func(c fiber.Ctx) error {
+			c.Locals("user_id", f.userID)
+			c.Locals("organization_id", f.orgID)
+			c.Locals("role", "admin")
+			return cell.handler(f, &calls)(c)
+		})
+		status, _ := doRequest(t, app, "POST", "/api-keys", cell.body)
+		assert.Equal(t, fiber.StatusCreated, status)
+		assert.Equal(t, 1, countOf(calls, cell.mint), "calls: %v", calls)
+		assert.Empty(t, refusedRows(f.audit.rows))
+	})
 }
