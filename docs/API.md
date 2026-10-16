@@ -969,11 +969,13 @@ Create a webhook.
 **Request:**
 ```json
 {
+  "name": "aim-events",
   "url": "https://yourapp.com/webhooks/aim",
-  "events": ["agent.verified", "alert.created"],
-  "secret": "your-webhook-secret"
+  "events": ["agent.verified", "alert.created"]
 }
 ```
+
+The server generates the secret it signs `X-Webhook-Signature` with and does not return it, so a receiver cannot check that header yet; a `secret` field in the request is ignored. An event name outside the table below is accepted and never sent.
 
 ### Webhook Events
 

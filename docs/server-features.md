@@ -1,6 +1,6 @@
 # AIM server features
 
-What the AIM server adds over the SDKs' local checks: the authorization engine, the trust score, attestation of MCP servers, privileged access management, the CyberArk and SIEM integrations, and the web dashboard. Available in the self-hosted and AIM Cloud deployment modes.
+What the AIM server adds over the SDKs' local checks: the authorization engine, the trust score, attestation of MCP servers, privileged access management, audit log forwarding to Splunk, and the web dashboard. Available in the self-hosted and AIM Cloud deployment modes, except Splunk forwarding, which runs in self-hosted deployments only. A CyberArk connector and a Microsoft Sentinel adapter are planned.
 
 ## 5-step Fine-Grained Authorization
 
@@ -36,13 +36,13 @@ Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and report
 
 Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. Human approval gates, break-glass override, and certification campaigns.
 
-## CyberArk integration
+## CyberArk integration (planned)
 
-CCP for vaulted credential retrieval. PSM for privileged session recording.
+Not available yet. The `cyberark` package in the source tree is not connected to the server. A Central Credential Provider (CCP) connector for vaulted credential retrieval is planned for self-hosted deployments. Sending session events to Privileged Session Manager (PSM) is under evaluation: no CyberArk interface that accepts them has been identified.
 
 ## SIEM adapters
 
-Splunk HEC. Set `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` and every audit log entry the server writes is forwarded: buffered batch delivery, retry, severity filtering. See [SIEM Forwarding](DEPLOYMENT.md#siem-forwarding). The Microsoft Sentinel adapter is not loaded: the Data Collector API it targets was retired on 14 September 2026.
+Splunk HEC. Set `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` and every audit log entry the server writes is forwarded: buffered batch delivery, retry, severity filtering. See [SIEM Forwarding](DEPLOYMENT.md#siem-forwarding). The Microsoft Sentinel adapter is not loaded: Microsoft ended support for the HTTP Data Collector API it targets on 14 September 2026. A Sentinel adapter for the Logs Ingestion API is planned.
 
 ## Web dashboard
 
