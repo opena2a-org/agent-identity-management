@@ -46,6 +46,7 @@ export interface CreateNamespaceOptions {
 export interface StoreCredentialOptions {
   namespaceId: string;
   encryptedBlob: Uint8Array;
+  /** Sent as `encryptionAlg`, the member the server reads. Default `X25519-ChaCha20-Poly1305`. */
   encryptionAlgorithm?: string;
   ephemeralPublicKey?: Uint8Array;
 }
@@ -280,7 +281,7 @@ export class SecretsClient {
   async storeCredential(options: StoreCredentialOptions): Promise<Record<string, unknown>> {
     const payload: Record<string, string> = {
       encryptedBlob: toBase64(options.encryptedBlob),
-      encryptionAlgorithm: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
+      encryptionAlg: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
     };
     if (options.ephemeralPublicKey) {
       payload.ephemeralPublicKey = toBase64(options.ephemeralPublicKey);
@@ -295,7 +296,7 @@ export class SecretsClient {
   async rotateCredential(options: StoreCredentialOptions): Promise<Record<string, unknown>> {
     const payload: Record<string, string> = {
       encryptedBlob: toBase64(options.encryptedBlob),
-      encryptionAlgorithm: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
+      encryptionAlg: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
     };
     if (options.ephemeralPublicKey) {
       payload.ephemeralPublicKey = toBase64(options.ephemeralPublicKey);
