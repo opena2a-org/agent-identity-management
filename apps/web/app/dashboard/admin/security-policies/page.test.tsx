@@ -196,3 +196,35 @@ describe("Security policies page, trust score policy card", () => {
     expect(await trustThresholdLines("Block Capability Violations")).toEqual([]);
   });
 });
+
+// On a 375px screen the page ran 83px past the screen's edge: each policy card kept its
+// 180px Enforcement Mode column beside the text, 24px off it, and the global enforcement
+// row kept its Monitoring switch beside the description. Below the sm breakpoint a card
+// stacks the column under its text, and the page's rows wrap.
+describe("Security policies page on a narrow screen", () => {
+  it("stacks each policy card's enforcement controls under its text below sm", async () => {
+    api.getSecurityPolicies.mockResolvedValue([
+      agentPolicy("Block Capability Violations", "capability_violation", {}),
+      allowlistPolicy,
+    ]);
+    render(<SecurityPoliciesPage />);
+    await screen.findByText("Block Capability Violations");
+    const columns = screen.getAllByText("Enforcement Mode").map((label) => label.parentElement?.parentElement);
+    expect(columns).toHaveLength(2);
+    for (const column of columns) {
+      const card = column?.parentElement;
+      expect(card?.classList.contains("flex-col")).toBe(true);
+      expect(card?.classList.contains("sm:flex-row")).toBe(true);
+      expect(column?.classList.contains("ml-6")).toBe(false);
+      expect(column?.classList.contains("sm:ml-6")).toBe(true);
+    }
+  });
+
+  it("wraps the header and the global enforcement row", async () => {
+    render(<SecurityPoliciesPage />);
+    const title = await screen.findByRole("heading", { level: 1, name: /Security Policies/ });
+    expect(title.parentElement?.parentElement?.classList.contains("flex-wrap")).toBe(true);
+    const enforcement = screen.getByRole("heading", { name: "Global Enforcement Mode" });
+    expect(enforcement.closest(".justify-between")?.classList.contains("flex-wrap")).toBe(true);
+  });
+});

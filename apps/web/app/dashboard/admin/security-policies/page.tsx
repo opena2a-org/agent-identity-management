@@ -866,8 +866,8 @@ export default function SecurityPoliciesPage() {
             : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60"
         }`}
       >
-        <div className="flex items-start justify-between">
-          <div className="flex-1 space-y-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
             <div className="flex items-center gap-3">
               <div
                 className={`p-2 rounded-lg ${
@@ -939,7 +939,7 @@ export default function SecurityPoliciesPage() {
             )}
           </div>
 
-          <div className="flex flex-col gap-4 ml-6">
+          <div className="flex flex-col gap-4 sm:ml-6">
             {/* Enforcement Action Selector */}
             <div className="min-w-[180px]">
               <p className="text-xs text-muted-foreground mb-2">Enforcement Mode</p>
@@ -1015,8 +1015,8 @@ export default function SecurityPoliciesPage() {
             : "bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 opacity-60"
         }`}
       >
-        <div className="flex items-start justify-between">
-          <div className="flex-1 space-y-3">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${typeConfig.bgColor}`}>
                 <TypeIcon className={`h-5 w-5 ${typeConfig.color}`} />
@@ -1106,7 +1106,7 @@ export default function SecurityPoliciesPage() {
             )}
           </div>
 
-          <div className="flex flex-col gap-4 ml-6">
+          <div className="flex flex-col gap-4 sm:ml-6">
             {/* Enforcement Action Selector */}
             <div className="min-w-[180px]">
               <p className="text-xs text-muted-foreground mb-2">Enforcement Mode</p>
@@ -1208,7 +1208,7 @@ export default function SecurityPoliciesPage() {
     <AuthGuard>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-3">
               <Shield className="h-8 w-8 text-blue-600" />
@@ -1287,8 +1287,8 @@ export default function SecurityPoliciesPage() {
         {/* Global Enforcement Mode Toggle */}
         <Card className={`border-2 ${globalEnforcementMode === 'strict' ? 'border-red-300 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20' : 'border-blue-300 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20'}`}>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-4">
                 {globalEnforcementMode === 'strict' ? (
                   <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-xl">
                     <Lock className="h-6 w-6 text-red-600" />
@@ -1298,8 +1298,8 @@ export default function SecurityPoliciesPage() {
                     <Eye className="h-6 w-6 text-blue-600" />
                   </div>
                 )}
-                <div>
-                  <div className="flex items-center gap-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-xl font-semibold">Global Enforcement Mode</h3>
                     <Badge variant={globalEnforcementMode === 'strict' ? 'destructive' : 'secondary'}>
                       {globalEnforcementMode === 'strict' ? 'STRICT' : 'MONITORING'}

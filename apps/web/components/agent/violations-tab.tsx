@@ -113,7 +113,7 @@ export function ViolationsTab({ agentId }: ViolationsTabProps) {
 
   return (
     <Card className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <div>
           <h3 className="text-xl font-semibold">Capability Violations</h3>
           <p className="text-sm text-muted-foreground">
