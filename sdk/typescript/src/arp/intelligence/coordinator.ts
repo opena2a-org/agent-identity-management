@@ -570,14 +570,25 @@ function describeWithheld(value: unknown): string {
   return `<withheld: ${bucket}${classes.length ? ', ' + classes.join('+') : ''}>`;
 }
 
-/** Render `event.data` for an L2 prompt, allowlisted and shape-described. */
-function summarizeEventDataForL2(data: Record<string, unknown> | undefined): string {
-  if (!data) return '{}';
+/**
+ * The allowlisted view of `event.data`: allowlisted fields verbatim, every other
+ * field replaced with its shape descriptor. Every channel that sends event data out
+ * of the process builds from this view, so they all withhold the same keys.
+ */
+export function allowlistEventDataForL2(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  if (!data) return out;
   for (const [k, v] of Object.entries(data)) {
     out[k] = L2_ALLOWED_DATA_FIELDS.has(k) ? v : describeWithheld(v);
   }
-  return JSON.stringify(out).slice(0, 500);
+  return out;
+}
+
+/** Render `event.data` for an L2 prompt, allowlisted and shape-described. */
+function summarizeEventDataForL2(data: Record<string, unknown> | undefined): string {
+  return JSON.stringify(allowlistEventDataForL2(data)).slice(0, 500);
 }
 
 function buildMicroPrompt(agentContext: string, event: ARPEvent): string {

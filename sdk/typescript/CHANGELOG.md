@@ -44,6 +44,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   effective trust of NaN at each delegation, which no floor fails, and `rootTrustScore: 5` a valid chain at 5, 4
   and 3.2 (#695).
 
+- ARP's classification annotator sends the NanoMind-Guard socket the same allowlisted `event.data` the L2 prompt
+  sends: `pid`, `patternId` and the other allowlisted fields verbatim, and `command`, `matchedText` and every other
+  field as a withheld length-and-character-class descriptor. It sent `JSON.stringify(event.data)`, so a command line
+  or matched text that L2 withholds from a vendor travelled in full, up to the 4,096-character cap, over the local
+  socket. `event.description` is sent as before on both channels.
+
 ### Changed
 
 - The npm "Homepage" link and the first link in this README go to the project page,

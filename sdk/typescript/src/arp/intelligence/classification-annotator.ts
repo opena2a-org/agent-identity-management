@@ -43,6 +43,7 @@ import type {
   NanoMindGuardVerifyResult,
 } from '../types';
 import { applyVerifiedClassification } from './verify-classification';
+import { allowlistEventDataForL2 } from './coordinator';
 import {
   sendClassify,
   type ClassifyResponse,
@@ -68,13 +69,15 @@ const MAX_CLASSIFY_TEXT = 4096;
 /**
  * Build the text representation of an ARP event handed to the Guard. The Guard
  * classifies text; we give it the human description plus a bounded JSON of the
- * structured data, deterministically (sorted keys) so the same event yields
- * the same content hash.
+ * structured data, deterministically so the same event yields the same content
+ * hash. The structured data is the allowlisted view the L2 prompt sends, so the
+ * command line, matched text and other raw fields are withheld here exactly as
+ * they are there.
  */
 export function eventToClassifyText(event: ARPEvent): string {
   let dataStr = '';
   try {
-    dataStr = JSON.stringify(event.data ?? {});
+    dataStr = JSON.stringify(allowlistEventDataForL2(event.data));
   } catch {
     dataStr = '';
   }
