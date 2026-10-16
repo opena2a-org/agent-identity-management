@@ -22,6 +22,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   no organization and no admin with the guide's sample run, and checks the indentation of a `--default` re-run that
   finds the organization and the admin.
 
+### Security — `POST /api/v1/a2a/verify` reports a request from an agent in hybrid mode signed with Ed25519 alone invalid (#748)
+
+- An A2A verification request carries one Ed25519 signature. Once that signature verifies, `POST /api/v1/a2a/verify`
+  answers a request from an agent whose hybrid mode is on with `401` and
+  `{"valid":false,"error":"Agent is in hybrid mode and this route verifies an Ed25519 signature alone","reasonCode":"hybridSignatureRequired"}`,
+  the words and `reasonCode` of the token endpoint's and the SDK verification routes' refusal. Run against
+  `A2AService.VerifyA2ARequest` on the previous code, a request from an agent in hybrid mode with status `verified`
+  signed with its Ed25519 key alone was reported valid, with the agent's active grants as its capabilities.
+- As on those routes, the flag is read after the signature verifies and before the agent's status: a signature that
+  does not verify is answered `signature verification failed` with no `reasonCode`, and a suspended agent in hybrid
+  mode is told it needs both signatures. The refusal records no nonce and reads no grants. `docs/guides/PQC.md` names
+  the route.
+- Tests: `apps/backend/internal/application/a2a_verify_hybrid_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/a2a_verify_hybrid_test.go`.
+
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
 - `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever

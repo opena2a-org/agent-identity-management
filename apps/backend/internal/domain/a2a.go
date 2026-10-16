@@ -440,6 +440,10 @@ type A2ASignatureVerificationResult struct {
 	Capabilities     []string  `json:"capabilities,omitempty"`
 	AttestationValid bool      `json:"attestationValid"`
 	Error            string    `json:"error,omitempty"`
+	// ReasonCode names the refusal for a caller that branches on it, with the
+	// value the agent-signature routes answer for the same refusal. Empty when
+	// the refusal has none.
+	ReasonCode string `json:"reasonCode,omitempty"`
 }
 
 // ============================================================================

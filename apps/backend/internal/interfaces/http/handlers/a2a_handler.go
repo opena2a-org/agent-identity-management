@@ -337,10 +337,14 @@ func (h *A2AHandler) VerifyRequest(c fiber.Ctx) error {
 	}
 
 	if !result.Valid {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		body := fiber.Map{
 			"valid": false,
 			"error": result.Error,
-		})
+		}
+		if result.ReasonCode != "" {
+			body["reasonCode"] = result.ReasonCode
+		}
+		return c.Status(fiber.StatusUnauthorized).JSON(body)
 	}
 
 	return c.JSON(fiber.Map{

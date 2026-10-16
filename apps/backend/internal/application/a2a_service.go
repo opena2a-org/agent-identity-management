@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
@@ -57,6 +58,11 @@ var InvalidA2ANonceMessage = fmt.Sprintf("nonce must be 1 to %d characters of UT
 // characters, or one that is not UTF-8 text without a NUL character. It is a
 // malformed request, not a verdict on one.
 var ErrInvalidA2ANonce = errors.New(InvalidA2ANonceMessage)
+
+// a2aHybridRequiredMessage is the error VerifyA2ARequest reports for an agent in
+// hybrid mode whose request's Ed25519 signature verified: the words the
+// agent-signature routes that verify an Ed25519 signature alone answer it with.
+const a2aHybridRequiredMessage = "Agent is in hybrid mode and this route verifies an Ed25519 signature alone"
 
 // A2A Configuration Constants
 const (
@@ -600,6 +606,17 @@ func (s *A2AService) VerifyA2ARequest(
 
 	if !ed25519.Verify(publicKey, requestHashBytes, signature) {
 		result.Error = "signature verification failed"
+		return result, nil
+	}
+
+	// SECURITY: an agent in hybrid mode is authenticated only by an Ed25519 and an
+	// ML-DSA signature together, and this request carries an Ed25519 signature
+	// alone. Read after the signature verified and before the status, as in the
+	// agent-signature middlewares, with the words and reasonCode of
+	// Ed25519AgentMiddleware's refusal.
+	if agent.HybridModeEnabled {
+		result.Error = a2aHybridRequiredMessage
+		result.ReasonCode = agentauth.HybridRequiredReason
 		return result, nil
 	}
 
