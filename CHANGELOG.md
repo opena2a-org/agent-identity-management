@@ -1189,6 +1189,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Every word stays; only the punctuation changed. The dash the drift score card prints in place of a value it
   has no number for is unchanged. `apps/web/tests/sentences-carry-no-em-dash.test.ts` reads the three
   components and fails on an em dash in any other line.
+- `apps/web/tests/e2e/empty-state-sentences.spec.ts` checks the three sentences as Chromium renders them, at
+  375 and 1280 px wide: the overview with the agent list and count answered as empty, and a newly registered
+  agent's trust section with the execution isolation tooltip open. Each locator matches the whole sentence,
+  so the sentence with an em dash in it does not match.
 
 ### Changed — the README and the use-case guides say `@opena2a/aim-core` runs locally, not against a server
 
