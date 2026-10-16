@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
+
+- `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
+  step's result indented three spaces under it (`   Organization created`), as the sample run in
+  `docs/guides/BOOTSTRAP_GUIDE.md` shows. Before this change, for a run against a database with no organization and
+  no admin and for a `--default` re-run that finds both, the step lines read `1.Checking organization...`, and the
+  result lines other than `Creating organization '<name>'...` began at the first column.
+- Tests: `apps/backend/cmd/bootstrap/run_bootstrap_test.go` compares the step lines of a run against a database with
+  no organization and no admin with the guide's sample run, and checks the indentation of a `--default` re-run that
+  finds the organization and the admin.
+
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
 - `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever
