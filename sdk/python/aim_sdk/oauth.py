@@ -431,75 +431,16 @@ class OAuthTokenManager:
                 error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
                 error_msg = error_data.get('error', response.text)
 
-                # Check if token was revoked/expired - try automatic recovery
+                # A refused token is not presented anywhere else. The recovery
+                # route (POST /api/v1/auth/sdk/recover) mints only for a
+                # sign-in's access token, which the SDK does not hold, so the
+                # banner names how to replace the credential. It is shown only
+                # when suppress_errors is False (no fallback auth available).
                 if 'revoked' in error_msg.lower() or 'invalid' in error_msg.lower():
-                    security_logger.log_authentication(
-                        AuthnEventType.TOKEN_REVOKED,
-                        success=False,
-                        details={"token_id": token_id, "attempting_recovery": True}
-                    )
-                    if not suppress_errors:
-                        print("Token was revoked - attempting automatic recovery...")
-
-                    # Try token recovery endpoint (new feature - zero downtime!)
-                    recovery_url = f"{aim_url.rstrip('/')}/api/v1/auth/sdk/recover"
-                    try:
-                        recovery_response = requests.post(
-                            recovery_url,
-                            json={"oldRefreshToken": refresh_token},
-                            timeout=10
-                        )
-
-                        if recovery_response.status_code == 200:
-                            recovery_data = recovery_response.json()
-                            self.access_token = recovery_data.get('accessToken')
-                            new_refresh_token = recovery_data.get('refreshToken')
-
-                            if new_refresh_token:
-                                # Save recovered credentials
-                                self.credentials['refreshToken'] = new_refresh_token
-
-                                # Update sdkTokenId using PyJWT
-                                token_payload = decode_jwt_claims(new_refresh_token)
-                                if token_payload:
-                                    new_token_id = token_payload.get('jti')
-                                    if new_token_id:
-                                        self.credentials['sdkTokenId'] = new_token_id
-
-                                self._share_access_token()
-                                self.save_credentials(self.credentials)
-                                print("[OK] Token recovered automatically! SDK credentials updated.")
-                                print("No need to re-download the SDK - everything just works!")
-
-                                # Decode new access token expiry using PyJWT
-                                payload = decode_jwt_claims(self.access_token)
-                                if payload:
-                                    self.access_token_expiry = payload.get('exp')
-                                else:
-                                    self.access_token_expiry = time.time() + 3600
-
-                                security_logger.log_authentication(
-                                    AuthnEventType.TOKEN_RECOVERED,
-                                    success=True,
-                                    details={"token_id": token_id, "recovery": "automatic"}
-                                )
-                                return self.access_token
-
-                    except Exception as recovery_error:
-                        # Recovery failed - fall back to manual instructions
-                        security_logger.log_authentication(
-                            AuthnEventType.TOKEN_REFRESH_FAILED,
-                            success=False,
-                            error=f"Recovery failed: {recovery_error}",
-                            details={"token_id": token_id}
-                        )
-
-                    # If recovery failed, show manual instructions using centralized error
-                    # Only show if suppress_errors is False (i.e., no fallback auth available)
                     security_logger.log_authentication(
                         AuthnEventType.TOKEN_EXPIRED,
                         success=False,
-                        error="Token expired and recovery failed",
+                        error="Refresh token refused",
                         details={"token_id": token_id}
                     )
                     if not suppress_errors:
