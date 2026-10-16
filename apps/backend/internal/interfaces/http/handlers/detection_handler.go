@@ -25,7 +25,8 @@ func NewDetectionHandler(
 }
 
 // ReportDetection handles detection reports from SDKs or Direct API calls
-// POST /api/v1/agents/:id/detection/report
+// POST /api/v1/detection/agents/:id/report, and for SDK agents
+// POST /api/v1/sdk-api/agents/:id/detection/report
 // @Summary Report MCP detections
 // @Description Report detected MCP servers from SDK or Direct API
 // @Tags detection
@@ -37,7 +38,7 @@ func NewDetectionHandler(
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Failure 404 {object} ErrorResponse "Agent not found"
-// @Router /agents/{id}/detection/report [post]
+// @Router /detection/agents/{id}/report [post]
 func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 	// Get agent ID from URL
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -117,7 +118,7 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 }
 
 // GetDetectionStatus returns the current detection status for an agent
-// GET /api/v1/agents/:id/detection/status
+// GET /api/v1/detection/agents/:id/status
 // @Summary Get detection status
 // @Description Get current MCP detection status for an agent including SDK installation and detected MCPs
 // @Tags detection
@@ -127,7 +128,7 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Failure 404 {object} ErrorResponse "Agent not found"
-// @Router /agents/{id}/detection/status [get]
+// @Router /detection/agents/{id}/status [get]
 func (h *DetectionHandler) GetDetectionStatus(c fiber.Ctx) error {
 	// Get agent ID from URL
 	agentID, err := uuid.Parse(c.Params("id"))
@@ -155,7 +156,7 @@ func (h *DetectionHandler) GetDetectionStatus(c fiber.Ctx) error {
 }
 
 // ReportCapabilities handles agent capability detection reports from SDKs
-// POST /api/v1/agents/:id/capabilities/report
+// POST /api/v1/detection/agents/:id/capabilities/report
 // @Summary Report agent capabilities
 // @Description Report detected agent capabilities (file system, database, code execution, etc.)
 // @Tags detection
@@ -167,7 +168,7 @@ func (h *DetectionHandler) GetDetectionStatus(c fiber.Ctx) error {
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 403 {object} ErrorResponse "Access denied"
 // @Failure 404 {object} ErrorResponse "Agent not found"
-// @Router /agents/{id}/capabilities/report [post]
+// @Router /detection/agents/{id}/capabilities/report [post]
 func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 	// Get agent ID from URL
 	agentID, err := uuid.Parse(c.Params("id"))
