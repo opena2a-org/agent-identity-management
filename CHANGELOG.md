@@ -647,6 +647,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `secure('<name>', auto_detect_mcp=True)` finds the agent by name and sends
   `PUT /api/v1/agents/{id}/keys` with the new public key.
 
+### Security — a reused SDK-download token is recorded as the same client or a different one
+
+- A refresh token from an SDK download is retired by its `sdk_tokens` row, not by a denylist
+  entry, so a reuse of one carried no mark to compare with: its `refresh_token_reuse` audit row
+  and `SECURITY` log line recorded `clientMatch` as `unknown` in each case measured against the
+  refresh route (the client that rotated presenting the retired token again, with and without a
+  revocation store; a presentation from another address; one with another user agent; the loser
+  of two concurrent presentations). The reuse is now compared with the row the retiring rotation
+  created, which stores the address and user agent of the client that rotated, under the rule
+  the login family uses: `sameClient` when the address class (IPv4 exactly, IPv6 by its /64) and
+  the user agent match, `differentClient` otherwise, `unknown` when that row cannot be read or an
+  address does not parse. The token is refused and its family ends as before, whatever the
+  classification; the login family's comparison is unchanged.
+- The row a rotation creates stores the client address the route resolved through
+  `TRUSTED_PROXIES` (`X-Real-IP`, then `X-Forwarded-For`), which is what the comparison reads,
+  where it stored the connecting address; without `TRUSTED_PROXIES` the two are the same address.
+  A forwarded value that does not parse as an address is not stored; the connecting address is.
+- Tests: `apps/backend/internal/interfaces/http/handlers/auth_refresh_sdk_client_match_test.go`
+  pins the three outcomes on the row path and what the rotation row stores;
+  `TestCompareClients` in `apps/backend/internal/infrastructure/auth/client_mark_test.go` pins
+  the comparison rule.
+
 ### Fixed — the token rotation guide says how long a stolen token keeps working
 
 - `docs/security/token-rotation.md` said that token rotation "prevents attackers from using stolen tokens", that

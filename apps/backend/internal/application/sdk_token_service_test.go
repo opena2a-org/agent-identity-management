@@ -72,6 +72,23 @@ func (m *MockSDKTokenRepository) GetByTokenHash(tokenHash string) (*domain.SDKTo
 	return token, nil
 }
 
+func (m *MockSDKTokenRepository) GetByParentID(userID uuid.UUID, parentID uuid.UUID) (*domain.SDKToken, error) {
+	var found *domain.SDKToken
+	for _, token := range m.tokens {
+		parent, _ := token.Metadata["parent_token"].(string)
+		if token.UserID != userID || parent != parentID.String() {
+			continue
+		}
+		if found == nil || token.CreatedAt.Before(found.CreatedAt) {
+			found = token
+		}
+	}
+	if found == nil {
+		return nil, errors.New("token not found")
+	}
+	return found, nil
+}
+
 func (m *MockSDKTokenRepository) GetByUserID(userID uuid.UUID, includeRevoked bool) ([]*domain.SDKToken, error) {
 	var result []*domain.SDKToken
 	for _, token := range m.tokens {

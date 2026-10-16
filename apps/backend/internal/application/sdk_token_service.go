@@ -163,6 +163,24 @@ func (s *SDKTokenService) FamilyRows(ctx context.Context, row *domain.SDKToken) 
 	return family, nil
 }
 
+// SuccessorOf returns the row rotation created from row: the row that names
+// row in its parent_token metadata, which stores the client that rotated
+// (its address and user agent). A row with no such successor the repository
+// holds gives an error.
+func (s *SDKTokenService) SuccessorOf(ctx context.Context, row *domain.SDKToken) (*domain.SDKToken, error) {
+	if row == nil {
+		return nil, fmt.Errorf("no row to find a successor of")
+	}
+	next, err := s.sdkTokenRepo.GetByParentID(row.UserID, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	if next == nil {
+		return nil, fmt.Errorf("SDK token not found")
+	}
+	return next, nil
+}
+
 // RevokeByTokenHash revokes a token using its hash (for token rotation)
 func (s *SDKTokenService) RevokeByTokenHash(ctx context.Context, tokenHash string, reason string) error {
 	return s.sdkTokenRepo.RevokeByTokenHash(tokenHash, reason)

@@ -109,6 +109,12 @@ type SDKTokenRepository interface {
 	// GetByTokenHash retrieves a token by its hash
 	GetByTokenHash(tokenHash string) (*SDKToken, error)
 
+	// GetByParentID retrieves the row that rotation created from the user's
+	// row parentID: the row naming parentID in its parent_token metadata.
+	// Rotation retires a row once, so at most one row descends from it;
+	// where more than one does, the earliest created is returned
+	GetByParentID(userID uuid.UUID, parentID uuid.UUID) (*SDKToken, error)
+
 	// GetByUserID retrieves all tokens for a user
 	GetByUserID(userID uuid.UUID, includeRevoked bool) ([]*SDKToken, error)
 

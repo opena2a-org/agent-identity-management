@@ -61,6 +61,26 @@ func (r *sdkFamilyRepo) GetByTokenHash(hash string) (*domain.SDKToken, error) {
 	return &cp, nil
 }
 
+// GetByParentID returns a copy of the row rotation created from the user's
+// row parentID, the earliest created where more than one names it.
+func (r *sdkFamilyRepo) GetByParentID(userID uuid.UUID, parentID uuid.UUID) (*domain.SDKToken, error) {
+	var found *domain.SDKToken
+	for _, row := range r.rows {
+		parent, _ := row.Metadata["parent_token"].(string)
+		if row.UserID != userID || parent != parentID.String() {
+			continue
+		}
+		if found == nil || row.CreatedAt.Before(found.CreatedAt) {
+			found = row
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("SDK token not found")
+	}
+	cp := *found
+	return &cp, nil
+}
+
 func (r *sdkFamilyRepo) RecordUsage(string, string) error { return nil }
 
 func (r *sdkFamilyRepo) RevokeByTokenHash(hash, reason string) error {

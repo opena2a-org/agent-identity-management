@@ -33,6 +33,14 @@ func (m *MockSDKTokenRepository) GetByID(id uuid.UUID) (*domain.SDKToken, error)
 	return args.Get(0).(*domain.SDKToken), args.Error(1)
 }
 
+func (m *MockSDKTokenRepository) GetByParentID(userID uuid.UUID, parentID uuid.UUID) (*domain.SDKToken, error) {
+	args := m.Called(userID, parentID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.SDKToken), args.Error(1)
+}
+
 func (m *MockSDKTokenRepository) GetByTokenID(tokenID string) (*domain.SDKToken, error) {
 	args := m.Called(tokenID)
 	if args.Get(0) == nil {
