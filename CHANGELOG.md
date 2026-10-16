@@ -589,8 +589,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - An addition of MCP servers to an agent refused because its audit record could not be written answers `503` with
   `recordUnavailable` and `Retry-After`, and the Add MCP servers dialog says nothing changed and when to try again.
-- An addition widens what the agent may reach, an expansion, made only together with its audit record; when the record
-  path cannot be used the service refuses it whole and the agent's talks_to list is unchanged.
+- An addition widens what the agent may reach, an expansion. When the agent service has a transition recorder, an
+  addition is made only together with its audit record; when the record path cannot be used the service refuses it
+  whole and the agent's talks_to list is unchanged. The server does not set a transition recorder, so an addition
+  writes no audit record, only its audit log entry, and this refusal does not occur.
   `PUT /api/v1/agents/:id/mcp-servers` now answers that refusal as the agent delete does: `503`, `Retry-After: 300`
   and `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in
   the server log. Any other failure still answers as before.
