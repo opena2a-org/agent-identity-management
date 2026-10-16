@@ -235,6 +235,10 @@ curl -X POST https://aim.example.com/api/v1/agents/{id}/verify \
   }'
 ```
 
+`POST /api/v1/oauth/token`, `POST /api/v1/sdk-api/verifications` and `GET /api/v1/sdk-api/verifications/:id`
+verify an Ed25519 signature alone, so they refuse an agent in hybrid mode once that signature verifies: `401`
+with `"reasonCode": "hybridSignatureRequired"`.
+
 ## Security Recommendations
 
 ### 1. Use Hybrid Mode During Transition

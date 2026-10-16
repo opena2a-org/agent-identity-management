@@ -89,6 +89,9 @@ type CapabilityRequestRepository interface {
 	Create(req *CapabilityRequest) error
 	GetByID(id uuid.UUID) (*CapabilityRequestWithDetails, error)
 	List(filter CapabilityRequestFilter) ([]*CapabilityRequestWithDetails, error)
+	// UpdateStatus writes a decision (approved, auto-approved or rejected) only
+	// while the request is pending, and pending only while it is approved; a
+	// request in any other status is left as it is and an error is returned.
 	UpdateStatus(id uuid.UUID, status CapabilityRequestStatus, reviewedBy uuid.UUID) error
 	Delete(id uuid.UUID) error
 }

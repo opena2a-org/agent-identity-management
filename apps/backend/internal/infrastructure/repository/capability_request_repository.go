@@ -179,7 +179,19 @@ func (r *capabilityRequestRepository) List(filter domain.CapabilityRequestFilter
 	return requests, nil
 }
 
+// UpdateStatus moves a capability request to status in one statement that also
+// checks the status it moves from: a decision (approved, auto-approved or
+// rejected) is written only while the request is pending, and pending, the undo
+// of an approval whose grant failed, only while it is approved. Two decisions
+// that both read one request as pending therefore cannot both be written: the
+// later write leaves the request as the earlier one decided it, and its error
+// wraps ErrCapabilityRequestNotPending. An id with no row is
+// ErrCapabilityRequestNotFound.
 func (r *capabilityRequestRepository) UpdateStatus(id uuid.UUID, status domain.CapabilityRequestStatus, reviewedBy uuid.UUID) error {
+	from := domain.CapabilityRequestStatusPending
+	if status == domain.CapabilityRequestStatusPending {
+		from = domain.CapabilityRequestStatusApproved
+	}
 	query := `
 		UPDATE capability_requests
 		SET
@@ -187,11 +199,11 @@ func (r *capabilityRequestRepository) UpdateStatus(id uuid.UUID, status domain.C
 			reviewed_by = $2,
 			reviewed_at = $3,
 			updated_at = $4
-		WHERE id = $5
+		WHERE id = $5 AND status = $6
 	`
 
 	now := time.Now()
-	result, err := r.db.Exec(query, status, reviewedBy, now, now, id)
+	result, err := r.db.Exec(query, status, reviewedBy, now, now, id, from)
 	if err != nil {
 		return err
 	}
@@ -202,7 +214,17 @@ func (r *capabilityRequestRepository) UpdateStatus(id uuid.UUID, status domain.C
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("capability request not found")
+		var exists bool
+		if err := r.db.Get(&exists, `SELECT EXISTS (SELECT 1 FROM capability_requests WHERE id = $1)`, id); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrCapabilityRequestNotFound
+		}
+		if from != domain.CapabilityRequestStatusPending {
+			return fmt.Errorf("capability request %s is not %s", id, from)
+		}
+		return fmt.Errorf("decide capability request %s: %w", id, ErrCapabilityRequestNotPending)
 	}
 
 	return nil

@@ -1283,6 +1283,29 @@ func IsNoGrantedCapabilitiesDenial(reason string) bool {
 	return strings.HasPrefix(reason, noGrantedCapabilitiesDenial)
 }
 
+// enforcementModeUnreadableReason is VerifyCapability's denial when the
+// enforcement mode of the agent's organization cannot be read.
+const enforcementModeUnreadableReason = "Action denied: the enforcement mode of the agent's organization could not be read"
+
+// verificationEnforcementMode is the enforcement mode VerifyCapability applies
+// to an agent of orgID. A read that fails, or finds no organization, is an
+// error: the caller denies the request rather than applying MONITORING, which
+// would allow what STRICT mode denies. A service built without an organization
+// repository applies MONITORING.
+func (s *AgentService) verificationEnforcementMode(orgID uuid.UUID) (domain.EnforcementMode, error) {
+	if s.orgRepo == nil {
+		return domain.EnforcementModeMonitoring, nil
+	}
+	org, err := s.orgRepo.GetByID(orgID)
+	if err != nil {
+		return "", fmt.Errorf("read the enforcement mode of organization %s: %w", orgID, err)
+	}
+	if org == nil {
+		return "", fmt.Errorf("read the enforcement mode of organization %s: no organization", orgID)
+	}
+	return org.EnforcementMode, nil
+}
+
 // VerifyCapability verifies if an agent can use a capability
 // ✅ CRITICAL SECURITY FUNCTION - EchoLeak Prevention
 // This is the core defense mechanism that prevented CVE-2025-32711 (EchoLeak) attack
@@ -1318,12 +1341,9 @@ func (s *AgentService) VerifyCapability(
 	// 2. Check agent status - MUST be verified (unless MONITORING mode)
 	if agent.Status != domain.AgentStatusVerified {
 		// Check enforcement mode before blocking
-		enforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
-		if s.orgRepo != nil {
-			org, orgErr := s.orgRepo.GetByID(agent.OrganizationID)
-			if orgErr == nil && org != nil {
-				enforcementMode = org.EnforcementMode
-			}
+		enforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+		if modeErr != nil {
+			return false, enforcementModeUnreadableReason, auditID, modeErr
 		}
 
 		if enforcementMode == domain.EnforcementModeMonitoring {
@@ -1436,12 +1456,9 @@ func (s *AgentService) VerifyCapability(
 	// In STRICT mode: Block actions (require capabilities to be granted first)
 	if len(capabilityTypes) == 0 {
 		// 🔍 Get organization enforcement mode
-		enforcementMode := domain.EnforcementModeMonitoring // Default to monitoring (lenient)
-		if s.orgRepo != nil {
-			org, err := s.orgRepo.GetByID(agent.OrganizationID)
-			if err == nil && org != nil {
-				enforcementMode = org.EnforcementMode
-			}
+		enforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+		if modeErr != nil {
+			return false, enforcementModeUnreadableReason, auditID, modeErr
 		}
 
 		// 🛡️ Also check security policies for capability violations
@@ -1572,12 +1589,9 @@ func (s *AgentService) VerifyCapability(
 		// This prevents scope violations like EchoLeak's bulk email access
 
 		// 🔍 Get organization enforcement mode (check if MONITORING overrides)
-		orgEnforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
-		if s.orgRepo != nil {
-			org, err := s.orgRepo.GetByID(agent.OrganizationID)
-			if err == nil && org != nil {
-				orgEnforcementMode = org.EnforcementMode
-			}
+		orgEnforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+		if modeErr != nil {
+			return false, enforcementModeUnreadableReason, auditID, modeErr
 		}
 
 		// 🛡️ Evaluate security policies to determine enforcement action
@@ -1735,12 +1749,9 @@ func (s *AgentService) VerifyCapability(
 	// Even if agent has the capability, we still need to check other policy types
 
 	// 🔍 Get organization enforcement mode for policy overrides
-	policyEnforcementMode := domain.EnforcementModeMonitoring // Default to monitoring
-	if s.orgRepo != nil {
-		org, err := s.orgRepo.GetByID(agent.OrganizationID)
-		if err == nil && org != nil {
-			policyEnforcementMode = org.EnforcementMode
-		}
+	policyEnforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+	if modeErr != nil {
+		return false, enforcementModeUnreadableReason, auditID, modeErr
 	}
 
 	// 6.0 Per-capability trust threshold. The capability's definition (the

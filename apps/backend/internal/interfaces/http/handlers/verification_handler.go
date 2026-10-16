@@ -259,6 +259,14 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		})
 	}
 
+	// SECURITY: an agent in hybrid mode is authenticated only by an Ed25519 and an
+	// ML-DSA signature together, and this body carries an Ed25519 signature alone. Read
+	// after the signature verified and before the status, as in the signature
+	// middlewares.
+	if agentauth.RequiresHybrid(verified) {
+		return c.Status(fiber.StatusUnauthorized).JSON(agentauth.HybridRequiredBody(ed25519AloneHybridRequiredMessage))
+	}
+
 	// Verify agent is active. The shared predicate, after the signature verified: the
 	// status this names reaches only a caller holding the agent's key.
 	agent := agentauth.LoadVerifiedAgent(verified)
@@ -1144,6 +1152,13 @@ func (h *VerificationHandler) GetVerificationSDK(c fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "signature verification failed",
 		})
+	}
+
+	// SECURITY: an agent in hybrid mode is authenticated only by an Ed25519 and an
+	// ML-DSA signature together, and this read is signed with Ed25519 alone. Read after
+	// the signature verified and before the status, as in the signature middlewares.
+	if agentauth.RequiresHybrid(verified) {
+		return c.Status(fiber.StatusUnauthorized).JSON(agentauth.HybridRequiredBody(ed25519AloneHybridRequiredMessage))
 	}
 
 	// Revocation: a revoked or suspended agent stops reading its own verification
