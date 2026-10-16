@@ -10,19 +10,84 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 )
 
 // KeyVault handles secure storage and retrieval of private keys
 // Uses AES-256-GCM for encryption at rest, bound to the storing agent row
+//
+// It holds a ring of master keys keyed by storage-key id, the second byte of
+// the v2 header. It decrypts under any id in the ring, encrypts only under the
+// current id, and refuses an id outside the ring.
 type KeyVault struct {
-	masterKey []byte // AES-256 key (32 bytes)
+	masterKey []byte          // the current master key (AES-256, 32 bytes); derived signing keys come from it
+	currentID byte            // the storage-key id of masterKey; every new ciphertext carries it
+	ring      map[byte][]byte // every master key the vault decrypts under, by storage-key id, masterKey included
 }
 
-// NewKeyVault creates a new KeyVault instance
+// NewKeyVault creates a KeyVault holding one master key, under storage-key id 1
 // The master key should be stored securely (e.g., environment variable, secrets manager)
 func NewKeyVault(masterKeyBase64 string) (*KeyVault, error) {
+	masterKey, err := decodeMasterKey(masterKeyBase64)
+	if err != nil {
+		return nil, err
+	}
+	return newKeyVaultRing(defaultStorageKeyID, map[byte][]byte{defaultStorageKeyID: masterKey})
+}
+
+// NewKeyVaultRing creates a KeyVault that decrypts under every master key in
+// masterKeysBase64, keyed by storage-key id, and encrypts under the key at
+// currentID. Ids run from 1 to 255, and no two ids may hold the same key.
+func NewKeyVaultRing(currentID byte, masterKeysBase64 map[byte]string) (*KeyVault, error) {
+	keys := make(map[byte][]byte, len(masterKeysBase64))
+	for _, id := range sortedStorageKeyIDs(masterKeysBase64) {
+		masterKey, err := decodeMasterKey(masterKeysBase64[id])
+		if err != nil {
+			return nil, fmt.Errorf("storage key id %d: %w", id, err)
+		}
+		keys[id] = masterKey
+	}
+	return newKeyVaultRing(currentID, keys)
+}
+
+func newKeyVaultRing(currentID byte, keys map[byte][]byte) (*KeyVault, error) {
+	if currentID == 0 {
+		return nil, errStorageKeyIDRange
+	}
+	current, ok := keys[currentID]
+	if !ok {
+		return nil, fmt.Errorf("no master key is set for the current storage key id %d", currentID)
+	}
+
+	ids := sortedStorageKeyIDs(keys)
+	ring := make(map[byte][]byte, len(keys))
+	for i, id := range ids {
+		if id == 0 {
+			return nil, errStorageKeyIDRange
+		}
+		// One key under two ids is no rotation: the sweep would report the
+		// older id empty while the key it names is still in use.
+		for _, earlier := range ids[:i] {
+			if subtle.ConstantTimeCompare(keys[earlier], keys[id]) == 1 {
+				return nil, fmt.Errorf("storage key ids %d and %d hold the same master key; each id needs its own key", earlier, id)
+			}
+		}
+		ring[id] = keys[id]
+	}
+
+	return &KeyVault{
+		masterKey: current,
+		currentID: currentID,
+		ring:      ring,
+	}, nil
+}
+
+// decodeMasterKey decodes and checks one base64 master key.
+func decodeMasterKey(masterKeyBase64 string) ([]byte, error) {
 	if masterKeyBase64 == "" {
 		return nil, fmt.Errorf("master key is required")
 	}
@@ -42,9 +107,33 @@ func NewKeyVault(masterKeyBase64 string) (*KeyVault, error) {
 		return nil, fmt.Errorf("master key must not be all zero bytes; generate one with `openssl rand -base64 32`")
 	}
 
-	return &KeyVault{
-		masterKey: masterKey,
-	}, nil
+	return masterKey, nil
+}
+
+func sortedStorageKeyIDs[V any](keys map[byte]V) []byte {
+	ids := make([]byte, 0, len(keys))
+	for id := range keys {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// StorageKeyID returns the storage-key id that every new ciphertext carries.
+func (kv *KeyVault) StorageKeyID() byte {
+	return kv.currentID
+}
+
+// StorageKeyIDs returns every storage-key id the vault decrypts under, in
+// ascending order.
+func (kv *KeyVault) StorageKeyIDs() []byte {
+	return sortedStorageKeyIDs(kv.ring)
+}
+
+// HasStorageKeyID reports whether the vault decrypts under id.
+func (kv *KeyVault) HasStorageKeyID(id byte) bool {
+	_, ok := kv.ring[id]
+	return ok
 }
 
 // ephemeralKeyEnvironments are the ENVIRONMENT values that may run on a
@@ -55,11 +144,83 @@ var ephemeralKeyEnvironments = map[string]bool{
 	"test":        true,
 }
 
+const (
+	// MasterKeyEnvVar holds the current master key: every new ciphertext is
+	// encrypted under it.
+	MasterKeyEnvVar = "KEYVAULT_MASTER_KEY"
+	// MasterKeyIDEnvVar holds the storage-key id of MasterKeyEnvVar, a decimal
+	// number from 1 to 255. Unset, it is 1.
+	MasterKeyIDEnvVar = "KEYVAULT_MASTER_KEY_ID"
+)
+
+var errStorageKeyIDRange = errors.New("storage key id must be from 1 to 255")
+
+// RingMasterKeyEnvVar returns the variable that holds the master key for a
+// storage-key id other than the current one, for example KEYVAULT_MASTER_KEY_1.
+// The vault decrypts under it and never encrypts under it.
+func RingMasterKeyEnvVar(id byte) string {
+	return MasterKeyEnvVar + "_" + strconv.Itoa(int(id))
+}
+
+// parseStorageKeyID reads the value of MasterKeyIDEnvVar.
+func parseStorageKeyID(value string) (byte, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return defaultStorageKeyID, nil
+	}
+	id, err := strconv.ParseUint(value, 10, 8)
+	if err != nil || id == 0 {
+		return 0, fmt.Errorf("%s must be a storage key id from 1 to 255, got %q", MasterKeyIDEnvVar, value)
+	}
+	return byte(id), nil
+}
+
 // NewKeyVaultFromEnv creates a KeyVault using a master key from environment variable
 // SECURITY: Master key MUST be set everywhere except an explicit development or test environment
+//
+// KEYVAULT_MASTER_KEY is the current key and KEYVAULT_MASTER_KEY_ID its
+// storage-key id (1 when unset). Each KEYVAULT_MASTER_KEY_<id> adds the key
+// for another id, which the vault decrypts under and never encrypts under.
 func NewKeyVaultFromEnv() (*KeyVault, error) {
-	masterKeyBase64 := os.Getenv("KEYVAULT_MASTER_KEY")
-	environment := os.Getenv("ENVIRONMENT")
+	return newKeyVaultFromEnv(os.Getenv)
+}
+
+func newKeyVaultFromEnv(getenv func(string) string) (*KeyVault, error) {
+	masterKeyBase64 := getenv(MasterKeyEnvVar)
+	environment := getenv("ENVIRONMENT")
+
+	currentID, err := parseStorageKeyID(getenv(MasterKeyIDEnvVar))
+	if err != nil {
+		return nil, err
+	}
+
+	set := make(map[byte]string)
+	for n := 1; n <= 255; n++ {
+		if value := getenv(RingMasterKeyEnvVar(byte(n))); value != "" {
+			set[byte(n)] = value
+		}
+	}
+	ids := sortedStorageKeyIDs(set)
+
+	if masterKeyBase64 == "" && len(ids) > 0 {
+		// A generated current key would encrypt new rows under a key that is
+		// gone at the next start, while the older keys suggest a rotation.
+		return nil, fmt.Errorf("SECURITY ERROR: %s is required when %s holds an older master key", MasterKeyEnvVar, RingMasterKeyEnvVar(ids[0]))
+	}
+
+	keys := make(map[byte][]byte, len(ids)+1)
+	for _, id := range ids {
+		name := RingMasterKeyEnvVar(id)
+		if id == currentID {
+			return nil, fmt.Errorf("%s is set, but %d is the storage key id of %s (%s); set the current key only in %s",
+				name, id, MasterKeyEnvVar, MasterKeyIDEnvVar, MasterKeyEnvVar)
+		}
+		masterKey, err := decodeMasterKey(set[id])
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		keys[id] = masterKey
+	}
 
 	if masterKeyBase64 == "" {
 		// A generated key changes at every restart, which changes the server
@@ -88,7 +249,12 @@ func NewKeyVaultFromEnv() (*KeyVault, error) {
 		fmt.Println("   Generated ephemeral 256-bit AES key for this session.")
 	}
 
-	return NewKeyVault(masterKeyBase64)
+	current, err := decodeMasterKey(masterKeyBase64)
+	if err != nil {
+		return nil, err
+	}
+	keys[currentID] = current
+	return newKeyVaultRing(currentID, keys)
 }
 
 // Stored agent private keys use format v2:
@@ -103,14 +269,17 @@ func NewKeyVaultFromEnv() (*KeyVault, error) {
 //
 // A ciphertext copied from one agent row to another therefore fails to decrypt.
 // Callers pass the ID of the row they loaded, never an ID taken from a request.
+//
+// The storage-key id names the master key in the vault's ring that encrypted
+// the ciphertext; it is never 0.
 const (
 	agentPrivateKeyPurpose = "aim/agent-private-key"
 
 	privateKeyFormatV2 byte = 0x02
 
-	// currentStorageKeyID names the single master key in use. It becomes a
-	// lookup into a storage key ring when one exists.
-	currentStorageKeyID byte = 0x01
+	// defaultStorageKeyID is the storage-key id of a vault built from one
+	// master key, and of KEYVAULT_MASTER_KEY when KEYVAULT_MASTER_KEY_ID is unset.
+	defaultStorageKeyID byte = 0x01
 
 	privateKeyHeaderSize = 2
 )
@@ -119,8 +288,13 @@ const (
 // in format v2, including a v1 ciphertext that predates storage binding.
 var ErrUnsupportedPrivateKeyFormat = errors.New("unsupported private key format")
 
+// newGCM returns the AEAD for the current master key.
 func (kv *KeyVault) newGCM() (cipher.AEAD, error) {
-	block, err := aes.NewCipher(kv.masterKey)
+	return gcmFor(kv.masterKey)
+}
+
+func gcmFor(masterKey []byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(masterKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
@@ -155,7 +329,7 @@ func (kv *KeyVault) sealV2(purpose string, agentID uuid.UUID, plaintext []byte) 
 		return "", err
 	}
 
-	header := []byte{privateKeyFormatV2, currentStorageKeyID}
+	header := []byte{privateKeyFormatV2, kv.currentID}
 
 	// Generate a random nonce
 	nonce := make([]byte, gcm.NonceSize())
@@ -176,25 +350,19 @@ func (kv *KeyVault) openV2(purpose string, agentID uuid.UUID, encoded string) ([
 		return nil, fmt.Errorf("agent ID is required to decrypt a private key")
 	}
 
-	gcm, err := kv.newGCM()
+	data, err := decodeV2(encoded)
 	if err != nil {
 		return nil, err
 	}
-
-	data, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode ciphertext: %w", err)
-	}
-
-	if len(data) < privateKeyHeaderSize {
-		return nil, fmt.Errorf("ciphertext too short")
-	}
 	header := data[:privateKeyHeaderSize]
-	if header[0] != privateKeyFormatV2 {
-		return nil, ErrUnsupportedPrivateKeyFormat
-	}
-	if header[1] != currentStorageKeyID {
+	masterKey, ok := kv.ring[header[1]]
+	if !ok {
 		return nil, fmt.Errorf("unknown storage key id %d", header[1])
+	}
+
+	gcm, err := gcmFor(masterKey)
+	if err != nil {
+		return nil, err
 	}
 
 	rest := data[privateKeyHeaderSize:]
@@ -209,6 +377,58 @@ func (kv *KeyVault) openV2(purpose string, agentID uuid.UUID, encoded string) ([
 		return nil, fmt.Errorf("failed to decrypt: %w", err)
 	}
 	return plaintext, nil
+}
+
+// decodeV2 decodes a stored ciphertext and checks that it starts with a v2
+// header.
+func decodeV2(encoded string) ([]byte, error) {
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode ciphertext: %w", err)
+	}
+	if len(data) < privateKeyHeaderSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+	if data[0] != privateKeyFormatV2 {
+		return nil, ErrUnsupportedPrivateKeyFormat
+	}
+	return data, nil
+}
+
+// PrivateKeyStorageKeyID returns the storage-key id in the header of a stored
+// private key, without decrypting it. A value that is not in format v2 returns
+// ErrUnsupportedPrivateKeyFormat.
+func PrivateKeyStorageKeyID(encryptedPrivateKey string) (byte, error) {
+	data, err := decodeV2(encryptedPrivateKey)
+	if err != nil {
+		return 0, err
+	}
+	return data[1], nil
+}
+
+// RewrapPrivateKey re-encrypts the private key stored in the agent row with
+// the given ID under the current storage-key id, from any id in the ring. A
+// value already under the current id is returned unchanged with
+// rewrapped=false. The ciphertext stays bound to the same row, and the key
+// pair is unchanged.
+func (kv *KeyVault) RewrapPrivateKey(agentID uuid.UUID, encryptedPrivateKey string) (string, bool, error) {
+	id, err := PrivateKeyStorageKeyID(encryptedPrivateKey)
+	if err != nil {
+		return "", false, err
+	}
+	if id == kv.currentID {
+		return encryptedPrivateKey, false, nil
+	}
+
+	plaintext, err := kv.openV2(agentPrivateKeyPurpose, agentID, encryptedPrivateKey)
+	if err != nil {
+		return "", false, err
+	}
+	rewrapped, err := kv.sealV2(agentPrivateKeyPurpose, agentID, plaintext)
+	if err != nil {
+		return "", false, err
+	}
+	return rewrapped, true, nil
 }
 
 // EncryptPrivateKey encrypts a private key for storage in the agent row with
@@ -252,34 +472,50 @@ func (kv *KeyVault) MigrateLegacyPrivateKey(agentID uuid.UUID, encryptedPrivateK
 }
 
 // openLegacyV1 decrypts the v1 format: nonce || ciphertext with no additional
-// data. It is reachable only through MigrateLegacyPrivateKey.
+// data. It is reachable only through MigrateLegacyPrivateKey. v1 names no
+// storage-key id, so it tries the current key and then each other key in the
+// ring; the GCM tag refuses every key but the one that encrypted it.
 func (kv *KeyVault) openLegacyV1(encryptedPrivateKey string) ([]byte, error) {
-	gcm, err := kv.newGCM()
-	if err != nil {
-		return nil, err
-	}
-
 	ciphertext, err := base64.StdEncoding.DecodeString(encryptedPrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode ciphertext: %w", err)
 	}
 
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return nil, fmt.Errorf("ciphertext too short")
+	order := []byte{kv.currentID}
+	for _, id := range kv.StorageKeyIDs() {
+		if id != kv.currentID {
+			order = append(order, id)
+		}
 	}
 
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	var lastErr error
+	for _, id := range order {
+		gcm, err := gcmFor(kv.ring[id])
+		if err != nil {
+			return nil, err
+		}
 
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt: %w", err)
+		nonceSize := gcm.NonceSize()
+		if len(ciphertext) < nonceSize {
+			return nil, fmt.Errorf("ciphertext too short")
+		}
+
+		nonce, sealed := ciphertext[:nonceSize], ciphertext[nonceSize:]
+
+		plaintext, err := gcm.Open(nil, nonce, sealed, nil)
+		if err == nil {
+			return plaintext, nil
+		}
+		lastErr = err
 	}
-	return plaintext, nil
+	return nil, fmt.Errorf("failed to decrypt: %w", lastErr)
 }
 
 // RotatePrivateKey decrypts with old key, re-encrypts with new key. The
-// ciphertext stays bound to the same agent row.
+// ciphertext stays bound to the same agent row. The result carries the
+// storage-key id of a vault built from newMasterKeyBase64 alone (1). The
+// server rotates through its key ring instead: NewKeyVaultRing and
+// RewrapPrivateKey.
 func (kv *KeyVault) RotatePrivateKey(agentID uuid.UUID, encryptedPrivateKey string, newMasterKeyBase64 string) (string, error) {
 	// Decrypt with current master key
 	privateKeyBase64, err := kv.DecryptPrivateKey(agentID, encryptedPrivateKey)

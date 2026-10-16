@@ -220,6 +220,23 @@ func TestKeyVault_RejectedMasterKeyNeverReachesErrorOrOutput(t *testing.T) {
 			},
 		},
 		{
+			name: "KEYVAULT_MASTER_KEY_1",
+			prepare: func(t *testing.T, value string) func() error {
+				t.Setenv("KEYVAULT_MASTER_KEY", base64.StdEncoding.EncodeToString(fixedTestKey("current master key", 32)))
+				t.Setenv("KEYVAULT_MASTER_KEY_ID", "2")
+				t.Setenv("KEYVAULT_MASTER_KEY_1", value)
+				t.Setenv("ENVIRONMENT", "production")
+				return func() error { _, err := NewKeyVaultFromEnv(); return err }
+			},
+		},
+		{
+			name: "NewKeyVaultRing",
+			prepare: func(t *testing.T, value string) func() error {
+				current := base64.StdEncoding.EncodeToString(fixedTestKey("current master key", 32))
+				return func() error { _, err := NewKeyVaultRing(2, map[byte]string{1: value, 2: current}); return err }
+			},
+		},
+		{
 			name: "RotatePrivateKey",
 			prepare: func(t *testing.T, value string) func() error {
 				kv, err := NewKeyVault(base64.StdEncoding.EncodeToString(fixedTestKey("current master key", 32)))

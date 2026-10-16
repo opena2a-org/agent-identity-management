@@ -205,6 +205,12 @@ func main() {
 		log.Printf("Agent private key migration did not finish: %v", err)
 	}
 
+	// Re-encrypt stored agent private keys under an older storage key id in
+	// the key ring to the current one. With one key in the ring it reads nothing.
+	if _, err := application.RewrapAgentPrivateKeys(context.Background(), migrationDB, keyVault); err != nil {
+		log.Printf("Agent private key sweep did not finish: %v", err)
+	}
+
 	// Every startup migration has run: close the migration handle before the
 	// server listens.
 	if err := migrationDB.Close(); err != nil {
