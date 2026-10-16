@@ -482,7 +482,11 @@ describe('SecretsClient', () => {
       client = new SecretsClient(host);
     });
 
-    it('should store a credential', async () => {
+    // The store and rotate routes read the algorithm from encryptionAlg
+    // (storeCredentialRequest and rotateCredentialRequest in the backend's
+    // secrets handler). These bodies are compared whole, so the member names
+    // each method sends are pinned.
+    it('should store a credential with the default algorithm as encryptionAlg', async () => {
       host.request.mockResolvedValue({ version: 1 });
       const blob = new Uint8Array([1, 2, 3, 4]);
 
@@ -491,13 +495,11 @@ describe('SecretsClient', () => {
       expect(host.request).toHaveBeenCalledWith(
         'POST',
         '/api/v1/secrets/namespaces/ns-1/credentials',
-        expect.objectContaining({
-          encryptionAlgorithm: 'X25519-ChaCha20-Poly1305',
-        }),
+        { encryptedBlob: 'AQIDBA==', encryptionAlg: 'X25519-ChaCha20-Poly1305' },
       );
     });
 
-    it('should rotate a credential', async () => {
+    it('should rotate a credential with the default algorithm as encryptionAlg', async () => {
       host.request.mockResolvedValue({ version: 2 });
       const blob = new Uint8Array([5, 6, 7, 8]);
 
@@ -506,9 +508,33 @@ describe('SecretsClient', () => {
       expect(host.request).toHaveBeenCalledWith(
         'POST',
         '/api/v1/secrets/namespaces/ns-1/rotate',
-        expect.objectContaining({
-          encryptionAlgorithm: 'X25519-ChaCha20-Poly1305',
-        }),
+        { encryptedBlob: 'BQYHCA==', encryptionAlg: 'X25519-ChaCha20-Poly1305' },
+      );
+    });
+
+    it('should send the encryptionAlgorithm option as encryptionAlg when storing and rotating', async () => {
+      host.request.mockResolvedValue({ version: 1 });
+      const options = {
+        namespaceId: 'ns-1',
+        encryptedBlob: new Uint8Array([1, 2, 3]),
+        encryptionAlgorithm: 'X25519-AES-256-GCM',
+      };
+      const body = { encryptedBlob: 'AQID', encryptionAlg: 'X25519-AES-256-GCM' };
+
+      await client.storeCredential(options);
+      await client.rotateCredential(options);
+
+      expect(host.request).toHaveBeenNthCalledWith(
+        1,
+        'POST',
+        '/api/v1/secrets/namespaces/ns-1/credentials',
+        body,
+      );
+      expect(host.request).toHaveBeenNthCalledWith(
+        2,
+        'POST',
+        '/api/v1/secrets/namespaces/ns-1/rotate',
+        body,
       );
     });
 

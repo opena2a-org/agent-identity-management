@@ -130,6 +130,12 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `SecretsClient.storeCredential` and `SecretsClient.rotateCredential` send the algorithm as `encryptionAlg`, the
+  member `POST /api/v1/secrets/namespaces/{id}/credentials` and `POST /api/v1/secrets/namespaces/{id}/rotate` read,
+  so the server is given the algorithm passed in the `encryptionAlgorithm` option (default
+  `X25519-ChaCha20-Poly1305`). They sent it as `encryptionAlgorithm`, a member those routes do not read. The option
+  keeps its name.
+
 - `AIMClient.verifyAction` posts the action to `POST /api/v1/sdk-api/verifications`, the route AIM serves action
   verification on, in the body that route reads (`agentId`, `capability`, `resource`, `context`, `timestamp`,
   `riskLevel`, `signature`, `publicKey`), signed with the agent's Ed25519 key over the message the server rebuilds
