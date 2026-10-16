@@ -40,8 +40,9 @@ export class A2AProtocolInterceptor implements Monitor {
    * @param content - Message content
    */
   scanMessage(from: string, to: string, content: string): ScanResult {
-    if (!this.active) return { detected: false, matches: [] };
+    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'a2a', patternIds: [] } };
     const allMatches: ScanResult['matches'] = [];
+    const checkedIds = this.trustedAgents.size > 0 ? ['A2A-TRUST'] : [];
 
     // Check trusted agent list
     if (this.trustedAgents.size > 0 && !this.trustedAgents.has(from)) {
@@ -115,6 +116,16 @@ export class A2AProtocolInterceptor implements Monitor {
     return {
       detected: allMatches.length > 0,
       matches: allMatches,
+      truncated: Boolean(a2aResult.truncated || injectionResult.truncated),
+      scanned: true,
+      scope: {
+        set: 'a2a',
+        patternIds: [
+          ...checkedIds,
+          ...(a2aResult.scope?.patternIds ?? []),
+          ...(injectionResult.scope?.patternIds ?? []),
+        ],
+      },
     };
   }
 }

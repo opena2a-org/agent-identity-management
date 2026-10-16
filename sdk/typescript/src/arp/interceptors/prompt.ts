@@ -35,8 +35,8 @@ export class PromptInterceptor implements Monitor {
    * data exfiltration, and context manipulation attempts.
    */
   scanInput(content: string): ScanResult {
-    if (!this.active) return { detected: false, matches: [] };
-    const result = scanText(content, PATTERN_SETS.inputPatterns);
+    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'input', patternIds: [] } };
+    const result = scanText(content, PATTERN_SETS.inputPatterns, 'input');
 
     if (result.detected) {
       for (const match of result.matches) {
@@ -63,8 +63,8 @@ export class PromptInterceptor implements Monitor {
    * Scan LLM output for leaked secrets, PII, and system prompt disclosure.
    */
   scanOutput(content: string): ScanResult {
-    if (!this.active) return { detected: false, matches: [] };
-    const result = scanText(content, PATTERN_SETS.outputPatterns);
+    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'output', patternIds: [] } };
+    const result = scanText(content, PATTERN_SETS.outputPatterns, 'output');
 
     if (result.detected) {
       for (const match of result.matches) {
