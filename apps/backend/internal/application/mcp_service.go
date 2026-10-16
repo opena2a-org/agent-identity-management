@@ -377,25 +377,7 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	// This ensures proper security review before servers are trusted
 
 	// ✅ AUTO-APPLY TAGS: Apply tags during registration (no separate API call needed)
-	if len(req.TagIds) > 0 && s.tagRepo != nil {
-		tagUUIDs := make([]uuid.UUID, 0, len(req.TagIds))
-		for _, tagIDStr := range req.TagIds {
-			tagID, err := uuid.Parse(tagIDStr)
-			if err != nil {
-				fmt.Printf("Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
-				continue
-			}
-			tagUUIDs = append(tagUUIDs, tagID)
-		}
-
-		if len(tagUUIDs) > 0 {
-			if err := s.tagRepo.AddTagsToMCPServer(ctx, server.ID, tagUUIDs); err != nil {
-				fmt.Printf("Warning: failed to apply tags to MCP server %s: %v\n", server.Name, err)
-			} else {
-				fmt.Printf("Applied %d tags to MCP server %s\n", len(tagUUIDs), server.Name)
-			}
-		}
-	}
+	s.applyRegistrationTags(ctx, server, req.TagIds, orgID)
 
 	// Score the server from its real inputs. This runs last, after the
 	// capability rows and the agent-MCP connection have been written, because
@@ -408,6 +390,36 @@ func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRe
 	s.scoreServer(ctx, server, "registration")
 
 	return server, nil
+}
+
+// applyRegistrationTags applies the tag ids named at registration to a new
+// MCP server. An id is applied only when it names a tag of the caller's
+// organization.
+func (s *MCPService) applyRegistrationTags(ctx context.Context, server *domain.MCPServer, tagIDs []string, orgID uuid.UUID) {
+	if len(tagIDs) == 0 || s.tagRepo == nil {
+		return
+	}
+	tagUUIDs := make([]uuid.UUID, 0, len(tagIDs))
+	for _, tagIDStr := range tagIDs {
+		tagID, err := uuid.Parse(tagIDStr)
+		if err != nil {
+			fmt.Printf("Warning: invalid tag ID '%s': %v\n", tagIDStr, err)
+			continue
+		}
+		if !isOrganizationTag(ctx, s.tagRepo, orgID, tagID) {
+			fmt.Printf("Warning: tag %s is not a tag of this organization, not applied to MCP server %s\n", tagID, server.Name)
+			continue
+		}
+		tagUUIDs = append(tagUUIDs, tagID)
+	}
+
+	if len(tagUUIDs) > 0 {
+		if err := s.tagRepo.AddTagsToMCPServer(ctx, server.ID, tagUUIDs); err != nil {
+			fmt.Printf("Warning: failed to apply tags to MCP server %s: %v\n", server.Name, err)
+		} else {
+			fmt.Printf("Applied %d tags to MCP server %s\n", len(tagUUIDs), server.Name)
+		}
+	}
 }
 
 // GetMCPServer retrieves an MCP server by ID

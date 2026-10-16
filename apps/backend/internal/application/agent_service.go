@@ -614,6 +614,17 @@ func (s *AgentService) createAutoVerificationEvent(ctx context.Context, orgID uu
 	}
 }
 
+// isOrganizationTag reports whether tagID names a tag of orgID. Registration
+// applies a tag id only when it does: an id of another organization's tag,
+// or one that names no tag, is skipped.
+func isOrganizationTag(ctx context.Context, tagRepo domain.TagRepository, orgID, tagID uuid.UUID) bool {
+	tag, err := tagRepo.GetByID(ctx, tagID)
+	if err != nil || tag == nil {
+		return false
+	}
+	return tag.OrganizationID == orgID
+}
+
 // applyRegistrationTags applies the tags named at registration to a new
 // agent.
 func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.Agent, tagIDs []string, orgID, userID uuid.UUID) {
@@ -626,7 +637,12 @@ func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.
 			// Try to parse as UUID first
 			tagID, err := uuid.Parse(tagIDStr)
 			if err == nil {
-				// It's a valid UUID, use it directly
+				// It's a valid UUID: apply it only when it names a tag of
+				// the caller's organization.
+				if !isOrganizationTag(ctx, s.tagRepo, orgID, tagID) {
+					fmt.Printf("Warning: tag %s is not a tag of this organization, not applied to agent %s\n", tagID, agent.Name)
+					continue
+				}
 				tagUUIDs = append(tagUUIDs, tagID)
 				continue
 			}
