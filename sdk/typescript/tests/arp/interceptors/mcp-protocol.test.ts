@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MCPProtocolInterceptor } from '../../../src/arp/interceptors/mcp-protocol';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
+import { PATTERN_SETS } from '../../../src/arp/patterns/ai-threats';
 import type { ARPEvent } from '../../../src/arp/types';
 
 describe('MCPProtocolInterceptor', () => {
@@ -88,6 +89,41 @@ describe('MCPProtocolInterceptor', () => {
         arg: 'safe value',
       });
       expect(result.detected).toBe(false);
+    });
+  });
+
+  describe('result scope (which patterns ran)', () => {
+    const mcpIds = PATTERN_SETS.mcpPatterns.map((p) => p.id);
+
+    it('names the mcp set and lists its pattern ids', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('readFile', { path: '/home/user/report.txt' });
+      expect(result.scanned).toBe(true);
+      expect(result.scope).toEqual({ set: 'mcp', patternIds: mcpIds });
+    });
+
+    it('lists the allowlist check before the set when an allowlist is configured', async () => {
+      const interceptor = await createInterceptor(['readFile']);
+      const result = interceptor.scanToolCall('readFile', { path: '/app/data/config.json' });
+      expect(result.detected).toBe(false);
+      expect(result.scope).toEqual({ set: 'mcp', patternIds: ['MCP-ALLOWLIST', ...mcpIds] });
+    });
+
+    it('an allowlist refusal lists only the allowlist check, because the arguments were not scanned', async () => {
+      const interceptor = await createInterceptor(['readFile']);
+      const result = interceptor.scanToolCall('executeShell', { command: 'ls; cat /etc/passwd' });
+      expect(result.detected).toBe(true);
+      expect(result.scanned).toBe(true);
+      expect(result.scope).toEqual({ set: 'mcp', patternIds: ['MCP-ALLOWLIST'] });
+    });
+
+    it('an interceptor that is not started says it did not scan', () => {
+      const idle = new MCPProtocolInterceptor(engine);
+      const result = idle.scanToolCall('execute', { command: 'ls; cat /etc/passwd' });
+      expect(result.detected).toBe(false);
+      expect(result.scanned).toBe(false);
+      expect(result.scope).toEqual({ set: 'mcp', patternIds: [] });
+      expect(emittedEvents).toHaveLength(0);
     });
   });
 

@@ -36,7 +36,8 @@ export class MCPProtocolInterceptor implements Monitor {
    * Checks tool name against allowlist and scans all parameter values.
    */
   scanToolCall(toolName: string, args: Record<string, unknown>): ScanResult {
-    if (!this.active) return { detected: false, matches: [] };
+    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'mcp', patternIds: [] } };
+    const checkedIds = this.allowedTools.size > 0 ? ['MCP-ALLOWLIST'] : [];
     // Check tool allowlist
     if (this.allowedTools.size > 0 && !this.allowedTools.has(toolName)) {
       this.engine.emit({
@@ -63,12 +64,16 @@ export class MCPProtocolInterceptor implements Monitor {
           },
           matchedText: toolName,
         }],
+        // The allowlist check ran; the arguments were not scanned, so no MCP-* pattern id is listed
+        scanned: true,
+        scope: { set: 'mcp', patternIds: checkedIds },
       };
     }
 
     // Flatten all parameter values into a single string for scanning
     const paramText = flattenArgs(args);
-    const result = scanText(paramText, PATTERN_SETS.mcpPatterns);
+    const result = scanText(paramText, PATTERN_SETS.mcpPatterns, 'mcp');
+    result.scope = { set: 'mcp', patternIds: [...checkedIds, ...(result.scope?.patternIds ?? [])] };
 
     if (result.detected) {
       for (const match of result.matches) {

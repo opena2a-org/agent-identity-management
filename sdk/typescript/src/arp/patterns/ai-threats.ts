@@ -232,14 +232,40 @@ export interface ScanResult {
   }>;
   /** True if input was truncated before scanning */
   truncated?: boolean;
+  /**
+   * False when the analyzer is not started and evaluated nothing; its
+   * `detected: false` is then not a verdict on the content. True on every
+   * result from `scanText` and from a started analyzer.
+   */
+  scanned?: boolean;
+  /**
+   * What was evaluated. `set` names the analyzer's pattern set: 'input'
+   * (`PromptInterceptor.scanInput`), 'output' (`scanOutput`), 'mcp'
+   * (`MCPProtocolInterceptor.scanToolCall`), 'a2a'
+   * (`A2AProtocolInterceptor.scanMessage`), or 'custom' (`scanText` called
+   * directly). `patternIds` lists the id of every check that ran, in order,
+   * matched or not; `MCP-ALLOWLIST` or `A2A-TRUST` comes first when an
+   * allowlist or trusted-agent list is configured, and the list is empty when
+   * nothing ran. A pattern whose id is absent was not evaluated, so
+   * `detected: false` says nothing about it.
+   */
+  scope?: {
+    set: 'input' | 'output' | 'mcp' | 'a2a' | 'custom';
+    patternIds: string[];
+  };
 }
 
 /**
  * Scan text against a set of threat patterns.
  * Returns all matches (not just first) for comprehensive reporting.
  * Input is truncated to MAX_SCAN_LENGTH to prevent ReDoS.
+ * The result's `scope` lists the ids of `patterns` under `set`.
  */
-export function scanText(text: string, patterns: readonly ThreatPattern[]): ScanResult {
+export function scanText(
+  text: string,
+  patterns: readonly ThreatPattern[],
+  set: NonNullable<ScanResult['scope']>['set'] = 'custom',
+): ScanResult {
   const truncated = text.length > MAX_SCAN_LENGTH;
   const scannable = truncated ? text.slice(0, MAX_SCAN_LENGTH) : text;
   const matches: ScanResult['matches'] = [];
@@ -258,5 +284,7 @@ export function scanText(text: string, patterns: readonly ThreatPattern[]): Scan
     detected: matches.length > 0,
     matches,
     truncated,
+    scanned: true,
+    scope: { set, patternIds: patterns.map((p) => p.id) },
   };
 }

@@ -508,6 +508,27 @@ monitors (which poll rather than intercept) are unaffected. Start interceptors
 as early as possible in the process, and treat them as one observation layer,
 not a sandbox.
 
+**The pattern analyzers are not interchangeable.** Each one runs its own
+pattern set, and its `detected: false` covers that set only. Every result
+names the set in `scope.set` and lists the id of every check that ran, matched
+or not, in `scope.patternIds`; a pattern whose id is absent was not evaluated.
+
+| Analyzer | `scope.set` | Checks that run | `detected: false` means |
+|---|---|---|---|
+| `PromptInterceptor.scanInput(content)` | `input` | `PI-*`, `JB-*`, `DE-*`, `CM-*` (`PATTERN_SETS.inputPatterns`) | no prompt-injection, jailbreak, data-exfiltration or context-manipulation pattern matched |
+| `PromptInterceptor.scanOutput(content)` | `output` | `OL-*` (`PATTERN_SETS.outputPatterns`) | no API-key, PII or system-prompt pattern matched |
+| `MCPProtocolInterceptor.scanToolCall(name, args)` | `mcp` | `MCP-ALLOWLIST` when an allowlist is set, then `MCP-*` (`PATTERN_SETS.mcpPatterns`) over the flattened argument values | the tool is on the allowlist, if one is set, and no path-traversal, command-injection, SSRF or tool-registration pattern matched |
+| `A2AProtocolInterceptor.scanMessage(from, to, content)` | `a2a` | `A2A-TRUST` when a trusted-agent list is set, then `A2A-*` (`PATTERN_SETS.a2aPatterns`) and `PI-*` (`PATTERN_SETS.promptInjection`) | the sender is on the trusted-agent list, if one is set, and no spoofing, delegation-abuse or prompt-injection pattern matched |
+| `scanText(text, patterns)` | `custom` | the ids of `patterns` | none of those patterns matched |
+
+For example, `scanInput` does not run the MCP command-injection pattern
+(`MCP-002`), so a clean `scanInput` result on a file with shell one-liners is
+not a clean verdict on the file. After an allowlist refusal, `scanToolCall`
+lists only `MCP-ALLOWLIST`, because it did not scan the arguments. A result
+with `truncated: true` covers only the first 64 KB of the text. An analyzer
+that is not started returns `scanned: false` and an empty `patternIds`: it
+evaluated nothing, and its `detected: false` is not a verdict.
+
 Classification of runtime events is supplied through the injectable
 `ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`
 talks to the local NanoMind-Guard daemon over a Unix socket and only accepts

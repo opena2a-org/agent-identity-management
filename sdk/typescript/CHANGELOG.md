@@ -77,6 +77,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- An ARP analyzer's result says what it evaluated. `ScanResult` gains two optional fields: `scope`, which names the
+  pattern set (`input` for `PromptInterceptor.scanInput`, `output` for `scanOutput`, `mcp` for
+  `MCPProtocolInterceptor.scanToolCall`, `a2a` for `A2AProtocolInterceptor.scanMessage`, `custom` for `scanText`)
+  and lists in `patternIds` the id of every check that ran, matched or not; and `scanned`, which is `false` when the
+  analyzer is not started and evaluated nothing, so that result is no longer the value a clean scan returns. A
+  configured allowlist or trusted-agent list adds `MCP-ALLOWLIST` or `A2A-TRUST` ahead of the set's ids, and after an
+  allowlist refusal `scanToolCall` lists only `MCP-ALLOWLIST`, because it does not scan the arguments then.
+  `scanText` takes an optional third argument naming the set (default `custom`). `scanMessage` lists the ids of both
+  sets it runs (`A2A-*` and `PI-*`) and now sets `truncated`, which it left out before this change, also on content
+  longer than 64 KB. `detected`, `matches` and `truncated` are otherwise unchanged. The README's Runtime Protection
+  section has a table of each analyzer, the checks it runs and what its `detected: false` covers: `scanInput` does not
+  run the MCP command-injection pattern, so a clean `scanInput` result on a file with shell one-liners is not a clean
+  verdict on the file.
+
 - `createAgentRequestHeaders` signs a request as an agent with `agent-request-v1`, the Ed25519 request signature AIM
   verifies, and returns the four headers to send with it: `X-Agent-ID`, `X-Timestamp`, `X-Signature` and
   `X-Public-Key`. The signed bytes are the method, the path and query string of the URL, `X-Timestamp`, and, when the
