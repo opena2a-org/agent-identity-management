@@ -108,9 +108,13 @@ function isAuditRecord(v: unknown): v is AuditRecord {
 
 /** What a read of the audit log found, including what it could not use. */
 export interface AuditLogRead {
-  /** Audit records from the examined tail, oldest first. */
+  /** The last `limit` audit records, oldest first (all of them when the log holds fewer). */
   records: AuditRecord[];
-  /** Non-empty lines in the examined tail that are not audit records. */
+  /**
+   * Non-empty lines that are not audit records, among the lines read to find
+   * `records`: those after the oldest record returned, or every line of a log
+   * that holds fewer than `limit` records.
+   */
   unparseable: number;
   /**
    * Set when the log exists but could not be read (the error code, e.g.
@@ -120,11 +124,15 @@ export interface AuditLogRead {
 }
 
 /**
- * Read the last `limit` lines of the audit log (default 100) and say what they
- * held. The audit log is the surface the disclosure tells users to trust, so a
- * corrupt or unreadable log must be reported as such: collapsing it to "no
- * records" made `telemetry log` say nothing had been sent and `status` say
- * "Sent: 0" over a log that held lines it could not parse (#416).
+ * Read the last `limit` audit records of the audit log (default 100) and say
+ * what else the lines read to find them held. The log is read back from its
+ * end until `limit` records are found, so a line that is not a record does not
+ * take a record's place: counting lines made `telemetry log 2` show no record
+ * when the last two lines were corrupt. The audit log is the surface the
+ * disclosure tells users to trust, so a corrupt or unreadable log must be
+ * reported as such: collapsing it to "no records" made `telemetry log` say
+ * nothing had been sent and `status` say "Sent: 0" over a log that held lines
+ * it could not parse (#416).
  */
 export async function readAuditLog(limit = 100): Promise<AuditLogRead> {
   const p = homePath(AUDIT_LOG_FILE);
@@ -137,13 +145,12 @@ export async function readAuditLog(limit = 100): Promise<AuditLogRead> {
     return { records: [], unparseable: 0, readError: code || 'unreadable' };
   }
   const lines = content.split('\n').filter((l) => l.trim().length > 0);
-  const tail = lines.slice(-limit);
   const records: AuditRecord[] = [];
   let unparseable = 0;
-  for (const line of tail) {
+  for (let i = lines.length - 1; i >= 0 && records.length < limit; i--) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(line);
+      parsed = JSON.parse(lines[i]);
     } catch {
       unparseable++;
       continue;
@@ -151,6 +158,7 @@ export async function readAuditLog(limit = 100): Promise<AuditLogRead> {
     if (isAuditRecord(parsed)) records.push(parsed);
     else unparseable++;
   }
+  records.reverse();
   return { records, unparseable };
 }
 

@@ -149,6 +149,39 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   `sanitizeTerminalText` is unchanged.
 - Tests: `src/cli/init.test.ts`, `src/arp/telemetry/signature/sanitize.test.ts`.
 
+### Fixed — `aim-arp telemetry log` and `status` exit 1 on an audit log they cannot read, `log N` counts records, and `init` names an unexpected argument and why it could not connect
+
+- `aim-arp telemetry log` and `aim-arp telemetry status` exit with status 1 when the audit log exists but cannot be
+  read. On a build of the code before this change, with the audit log at mode 000, `log` printed `Could not read the
+  audit log (EACCES), so what was sent cannot be shown.`, `status` showed the Sent count as `unknown (audit log could
+  not be read: EACCES)`, and both exited 0: `telemetryLog` set `process.exitCode` to 1, and the bin then set it to
+  the 0 the dispatch returned. `telemetryLog` and `telemetryStatus` now return the exit code, and the dispatch passes it
+  on (#755).
+- `aim-arp telemetry log N` shows the last N audit records. It showed the records among the last N lines, so a line
+  that is not a record took a record's place: on a log of five records followed by a line that is not JSON and a
+  record with an unknown phase, `log 2` printed `2 line(s) could not be read as audit records; showing 0 record(s).`
+  and `log 1` printed the same with `1 line(s)`. `log 2` now shows the last two records, after `2 line(s) could not
+  be read as audit records; showing 2 record(s).` The count of unreadable lines covers the lines after the oldest
+  record shown, or every line of a log that holds fewer than N records. `telemetry status` counts that log as it
+  did before: Sent 2, Failed 1, Dropped 1 and Unreadable 2 (#755).
+- `readAuditRecords(limit)`, exported from `@opena2a/aim-sdk/arp`, reads the log the same way and returns the last
+  `limit` records, as its documentation says. On a log of three records followed by two lines that are not
+  records, it returned no record for a `limit` of 1 or 2 and one record for 3; it now returns one, two and three.
+  `readAuditRecords(0)` returns no records; on that log it returned all three before this change (#755).
+- `aim-arp init` names an unexpected positional argument: `aim-arp init --url http://127.0.0.1:9 extra-positional`
+  printed `Error: Unknown option: a positional argument` and now prints `Error: unexpected argument:
+  extra-positional`. A bootstrap token given as a positional is shown as `aim_ob_[REDACTED]` and an empty one as
+  `""`, and the argument is printed as one line through `sanitizeTerminalLine`, cut at 128 characters with
+  ` [truncated]` (#755).
+- When `init` cannot connect, the reason in parentheses says why. Where `localhost` resolves to `::1` and
+  `127.0.0.1`, `aim-arp init --url http://localhost:59321` with nothing listening on that port printed `Error: could
+  not reach the AIM server at http://localhost:59321 ().`, and `--url http://localhost:/` printed the same with
+  `http://localhost:`: fetch fails there with an `AggregateError` cause whose own message is empty. `init` now
+  prints the per-address messages, `(connect ECONNREFUSED ::1:59321; connect ECONNREFUSED 127.0.0.1:59321)`, and
+  names a cause with no message and no per-address errors by its error code. The reason passes through
+  `sanitizeTerminalLine`, as the server's error message does (#755).
+- Tests: `src/arp/cli/telemetry-audit-log-corrupt.test.ts`, `src/cli/init.test.ts`.
+
 ### Tests
 
 - The signed-field enforcement harness now proves that the verifier compares each signed instant to the clock, not

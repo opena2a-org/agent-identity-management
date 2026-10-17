@@ -104,7 +104,13 @@ export function telemetrySubcommandHelp(sub: TelemetrySubcommand): string {
   return out.join('\n');
 }
 
-export async function telemetryLog(countArg?: string): Promise<void> {
+/**
+ * Print the last N audit records. Returns the exit code: 1 when the log exists
+ * but cannot be read, so a script does not take "cannot be shown" for success.
+ * The code is returned, not set on `process.exitCode`: the bin entry sets that
+ * from the dispatch's return value, which overwrote a 1 set here.
+ */
+export async function telemetryLog(countArg?: string): Promise<number> {
   const n = parseInt(countArg ?? '', 10) || 20;
   const { records, unparseable, readError } = await readAuditLog(n);
   console.log(`\n  Telemetry audit log: ${auditLogPath()}`);
@@ -114,8 +120,7 @@ export async function telemetryLog(countArg?: string): Promise<void> {
   if (readError) {
     console.log(`  Could not read the audit log (${readError}), so what was sent cannot be shown.`);
     console.log(`  Check the file's permissions: ls -l ${auditLogPath()}\n`);
-    process.exitCode = 1;
-    return;
+    return 1;
   }
   if (unparseable > 0) {
     console.log(
@@ -128,7 +133,7 @@ export async function telemetryLog(countArg?: string): Promise<void> {
         ? '  No readable records in the examined lines; this does not mean nothing was sent.\n'
         : '  No telemetry has been sent yet (or the log is empty).\n',
     );
-    return;
+    return 0;
   }
   console.log(
     `  Last ${records.length} record(s), audited before any send (phase shows whether each was sent):\n`,
@@ -143,9 +148,14 @@ export async function telemetryLog(countArg?: string): Promise<void> {
   console.log('  prompts, tool args, paths, file contents, or secrets are present by');
   console.log('  design; the only identifiers are the sensor id and the rotating org');
   console.log('  pseudonym in the payload.\n');
+  return 0;
 }
 
-export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<void> {
+/**
+ * Print the telemetry state. Returns the exit code: 1 when the audit log exists
+ * but cannot be read, because the send counts are then unknown.
+ */
+export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<number> {
   const enabled = signatureTelemetryEnabled(tcfg);
   const optedOut = isOptedOut(tcfg);
   const audit = await readAuditLog(100000);
@@ -217,6 +227,7 @@ export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<
   // The footer cites the bin name, which a local (non-global) install does not
   // put on PATH; name the form that works there once rather than on every line.
   console.log('  Not on your PATH? Run any of these as: npx @opena2a/aim-sdk telemetry <subcommand>\n');
+  return audit.readError ? 1 : 0;
 }
 
 export function telemetryDisclosure(tcfg?: SignatureTelemetryConfig): void {
@@ -456,11 +467,9 @@ async function dispatchTelemetrySubcommand(
 ): Promise<number> {
   switch (sub) {
     case 'log':
-      await telemetryLog(positionals[0]);
-      return 0;
+      return telemetryLog(positionals[0]);
     case 'status':
-      await telemetryStatus(tcfg);
-      return 0;
+      return telemetryStatus(tcfg);
     case 'disclosure':
       telemetryDisclosure(tcfg);
       return 0;
