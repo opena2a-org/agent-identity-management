@@ -7,7 +7,8 @@ import { HOSTED_DEPLOYMENT } from "@/lib/deployment";
  * the NavEntry key, and walked by lib/navigation-edge.test.ts exactly like the
  * sidebar entries and the mobile tabs — a tab the edge gate blocks for a role
  * cannot render for that role. Every href is an existing route: Stage 1 of the
- * IA consolidation moves no pages.
+ * IA consolidation moves no pages, and lib/navigation-routes.test.ts checks
+ * each href against the page files in app/.
  */
 export interface HubTab {
   name: string;
