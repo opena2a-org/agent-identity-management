@@ -27,6 +27,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   server's maximum-age refusal body is `Invalid or expired refresh token`; and for both refusal bodies the token is
   posted once, to `/api/v1/auth/refresh`, one `TOKEN_EXPIRED` event is logged and the output is the banner alone.
 
+### Fixed — `aim-sdk login` opens no browser when its output is not a terminal, and prints the page and the code before it waits
+
+- `aim-sdk login` opens a browser on the approval page only when standard output is a terminal and the new
+  `--no-browser` flag is not passed. Otherwise it prints one more line after the page and the code: `No browser was
+  opened (standard output is not a terminal): open the page above and approve the code. This command waits up to
+  <n> seconds for the approval and exits 1 if the code is not approved in that time.`, where the reason reads
+  `--no-browser was passed` for the flag and `<n>` is the lesser of the code's lifetime the server states and 900.
+  Before, it handed the page to `webbrowser.open` with a terminal and without one.
+- The page, the code and the waiting line are flushed to standard output before the first token poll. Against a
+  loopback server that answers every poll `authorization_pending`,
+  `aim-sdk login --url http://127.0.0.1:<port> </dev/null | cat` printed nothing in 20 seconds while the server
+  received the device-code request and three token polls; it now prints the page, the code and both lines at once.
+- A login without a terminal still waits for the approval: the wait stays bounded as before, and the exit codes 0, 1,
+  2 and 75 are unchanged. `aim-sdk login --help` names `--no-browser`, the terminal rule and the maximum wait.
+- Test: `tests/test_cli_login_no_tty_no_browser.py`. The login tests in `tests/test_cli_device_login.py`,
+  `tests/test_cli_login_server_unavailable.py` and `tests/test_release_202_p2_findings.py` run with an output that
+  reports a terminal, so their browser assertions still test the device grant and the outage paths.
+
 ### Fixed — the README's Requirements name PyJWT and the optional rich extra (#627)
 
 - The Requirements section of `README.md` (the PyPI description) listed `requests`, `pynacl`, `cryptography` and

@@ -89,8 +89,17 @@ def stack(monkeypatch):
     return s
 
 
+class _Terminal(io.StringIO):
+    """Captured output that reports a terminal: the CLI opens a browser only at
+    one, so the browser assertions here test the device grant and not the
+    no-terminal rule (tests/test_cli_login_no_tty_no_browser.py)."""
+
+    def isatty(self):
+        return True
+
+
 def _login(stack):
-    buf = io.StringIO()
+    buf = _Terminal()
     with redirect_stdout(buf):
         rc = cli.login(SimpleNamespace(url=AIM, force=True))
     return rc, buf.getvalue()

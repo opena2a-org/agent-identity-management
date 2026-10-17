@@ -273,6 +273,10 @@ denied or expired, or the server refused the request), and 75 when the AIM serve
 it answered HTTP 502, 503 or 504, or gave no HTTP answer. On 75 nothing is retried or stored, so a
 script can run the same command again later. `aim-sdk login --help` lists the codes.
 
+`aim-sdk login` opens a browser only when its output is a terminal and `--no-browser` is not passed (otherwise it
+prints the page and the code and says that no browser was opened), and it waits for the approval for up to the lesser
+of the code's lifetime the server states and 900 seconds, exiting 1 if the code is not approved in that time.
+
 For SecOps workflows (scanning a codebase, hardening configs, monitoring runtime), see the separate [opena2a CLI](https://github.com/opena2a-org/opena2a).
 
 ## Causal-denial telemetry (opt-in)
