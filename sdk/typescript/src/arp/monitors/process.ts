@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 import type { Monitor, MonitorType } from '../types';
@@ -20,6 +20,16 @@ const SUSPICIOUS_BINARIES = [
   'socat', 'telnet', 'ftp', 'rsync',
 ];
 
+/** Arguments of the one `ps` call that reads the process table. `command=` is
+ *  last because it holds spaces. Valid for both macOS and Linux (procps) `ps`. */
+const LISTING_ARGS = ['-ax', '-o', 'pid=,ppid=,user=,%cpu=,%mem=,command='];
+
+/** The command line `ps` prints in the row for the listing process itself. */
+const LISTING_COMMAND = ['ps', ...LISTING_ARGS].join(' ');
+
+/** One row of the listing: pid, ppid, user, %cpu, %mem, then the command. */
+const LISTING_ROW = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+?)\s*$/;
+
 /**
  * Process monitor — tracks agent lifecycle, child processes, and resource usage.
  * Uses `ps` polling (cross-platform, no root required).
@@ -39,7 +49,8 @@ export class ProcessMonitor implements Monitor {
 
   async start(): Promise<void> {
     this.agentPid = process.pid; // Monitor children of the current (agent) process
-    this.knownPids = new Set(this.getDescendantPids(this.agentPid));
+    const table = this.readProcessTable();
+    this.knownPids = new Set(table ? this.getDescendants(table).map((info) => info.pid) : []);
 
     this.timer = setInterval(() => this.poll(), this.intervalMs);
     if (this.timer.unref) this.timer.unref();
@@ -58,26 +69,26 @@ export class ProcessMonitor implements Monitor {
 
   private poll(): void {
     try {
-      const currentPids = this.getDescendantPids(this.agentPid);
-      const currentSet = new Set(currentPids);
+      const table = this.readProcessTable();
+      if (!table) return; // ps command failed — skip this cycle
+      const current = this.getDescendants(table);
+      const currentSet = new Set(current.map((info) => info.pid));
 
       // Detect new child processes
-      for (const pid of currentPids) {
+      for (const info of current) {
+        const pid = info.pid;
         if (!this.knownPids.has(pid)) {
-          const info = this.getProcessInfo(pid);
-          if (info) {
-            this.engine.emit({
-              source: 'process',
-              category: 'normal',
-              severity: 'info',
-              description: `New child process: PID ${pid} — ${info.command.slice(0, 100)}`,
-              data: { pid, command: info.command, user: info.user, cpu: info.cpu, mem: info.mem },
-            });
-          }
+          this.engine.emit({
+            source: 'process',
+            category: 'normal',
+            severity: 'info',
+            description: `New child process: PID ${pid} — ${info.command.slice(0, 100)}`,
+            data: { pid, command: info.command, user: info.user, cpu: info.cpu, mem: info.mem },
+          });
         }
       }
 
-      // Detect terminated processes
+      // Detect terminated processes: only pids present at start() or announced above
       for (const pid of this.knownPids) {
         if (!currentSet.has(pid)) {
           this.engine.emit({
@@ -91,9 +102,8 @@ export class ProcessMonitor implements Monitor {
       }
 
       // Check for suspicious processes (binaries, high CPU, unexpected users)
-      for (const pid of currentPids) {
-        const info = this.getProcessInfo(pid);
-        if (!info) continue;
+      for (const info of current) {
+        const pid = info.pid;
 
         // Suspicious binary detection
         const binaryName = path.basename(info.command.split(/\s+/)[0]);
@@ -132,66 +142,60 @@ export class ProcessMonitor implements Monitor {
 
       this.knownPids = currentSet;
     } catch {
-      // ps command failed — skip this cycle
+      // skip this cycle
     }
   }
 
-  /** Walk the full process tree to find all descendants of parentPid.
-   *  Uses `ps -ax -o pid=,ppid=` which works on both macOS and Linux. */
-  private getDescendantPids(parentPid?: number): number[] {
-    if (!parentPid) return [];
-    try {
-      const output = execSync('ps -ax -o pid=,ppid=', { encoding: 'utf-8', timeout: 5000 });
-      const childMap = new Map<number, number[]>();
+  /** Read the whole process table with one `ps` call, run without a shell, and
+   *  parse it into rows. That `ps` is a child of the agent while it prints, so
+   *  its own row is in the listing: it is left out, matched by the pid
+   *  spawnSync reports, the agent as parent and its exact command line.
+   *  Returns null when `ps` fails. */
+  private readProcessTable(): ProcessInfo[] | null {
+    const result = spawnSync('ps', LISTING_ARGS, {
+      encoding: 'utf-8',
+      timeout: 5000,
+      // The command column makes the listing large; the 1 MiB default cuts it off on a busy host.
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (result.error || result.status !== 0 || typeof result.stdout !== 'string') return null;
 
-      for (const line of output.trim().split('\n')) {
-        const parts = line.trim().split(/\s+/);
-        const pid = parseInt(parts[0]);
-        const ppid = parseInt(parts[1]);
-        if (isNaN(pid) || isNaN(ppid)) continue;
-        if (!childMap.has(ppid)) childMap.set(ppid, []);
-        childMap.get(ppid)!.push(pid);
-      }
-
-      // BFS from parentPid
-      const result: number[] = [];
-      const queue = [parentPid];
-      while (queue.length > 0) {
-        const current = queue.shift()!;
-        for (const child of childMap.get(current) ?? []) {
-          result.push(child);
-          queue.push(child);
-        }
-      }
-
-      return result;
-    } catch {
-      return [];
-    }
-  }
-
-  private getProcessInfo(pid: number): ProcessInfo | null {
-    try {
-      const output = execSync(
-        `ps -o pid=,ppid=,user=,%cpu=,%mem=,command= -p ${pid}`,
-        { encoding: 'utf-8', timeout: 5000 },
-      );
-      const line = output.trim();
-      if (!line) return null;
-
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 6) return null;
-
-      return {
-        pid: parseInt(parts[0]),
-        ppid: parseInt(parts[1]),
-        user: parts[2],
-        cpu: parseFloat(parts[3]),
-        mem: parseFloat(parts[4]),
-        command: parts.slice(5).join(' '),
+    const rows: ProcessInfo[] = [];
+    for (const line of result.stdout.split('\n')) {
+      const match = LISTING_ROW.exec(line);
+      if (!match) continue;
+      const row: ProcessInfo = {
+        pid: parseInt(match[1]),
+        ppid: parseInt(match[2]),
+        user: match[3],
+        cpu: parseFloat(match[4]),
+        mem: parseFloat(match[5]),
+        command: match[6],
       };
-    } catch {
-      return null;
+      if (row.pid === result.pid && row.ppid === this.agentPid && row.command === LISTING_COMMAND) continue;
+      rows.push(row);
     }
+    return rows;
+  }
+
+  /** Walk the process tree in `table` to find all descendants of the agent, breadth first. */
+  private getDescendants(table: ProcessInfo[]): ProcessInfo[] {
+    if (!this.agentPid) return [];
+    const childMap = new Map<number, ProcessInfo[]>();
+    for (const row of table) {
+      if (!childMap.has(row.ppid)) childMap.set(row.ppid, []);
+      childMap.get(row.ppid)!.push(row);
+    }
+
+    const result: ProcessInfo[] = [];
+    const queue = [this.agentPid];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const child of childMap.get(current) ?? []) {
+        result.push(child);
+        queue.push(child.pid);
+      }
+    }
+    return result;
   }
 }
