@@ -1,14 +1,15 @@
 package secrets
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
 
 	"os"
 
-	vault "github.com/hashicorp/vault/api"
 	"github.com/google/uuid"
+	vault "github.com/hashicorp/vault/api"
 
 	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 )
@@ -169,7 +170,7 @@ func (b *HashiCorpVaultBackend) Retrieve(namespaceID uuid.UUID) (*domainsecrets.
 		return nil, fmt.Errorf("unexpected vault data format for namespace %s", namespaceID)
 	}
 
-	blob, err := interfaceToBytes(data["blob"])
+	blob, err := vaultBlobBytes(data["blob"])
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode blob: %w", err)
 	}
@@ -233,14 +234,24 @@ func (b *HashiCorpVaultBackend) Type() domainsecrets.BackendType {
 	return domainsecrets.BackendTypeVault
 }
 
+// vaultBlobBytes decodes the blob of a KV v2 entry. Store and Rotate pass the
+// blob as []byte, which the client's JSON encoding sends as a standard base64
+// string; Vault stores that string and returns it as it is.
+func vaultBlobBytes(v interface{}) ([]byte, error) {
+	if s, ok := v.(string); ok {
+		return base64.StdEncoding.DecodeString(s)
+	}
+	return interfaceToBytes(v)
+}
+
 // interfaceToBytes converts various vault response types to []byte.
 func interfaceToBytes(v interface{}) ([]byte, error) {
 	switch val := v.(type) {
 	case []byte:
 		return val, nil
 	case string:
-		// Vault KV v2 stores byte arrays as base64 strings in JSON responses.
-		// The vault/api client auto-decodes, but we handle the string case.
+		// The vault/api client does not decode base64; Retrieve decodes a
+		// blob string in vaultBlobBytes before it reaches here.
 		return []byte(val), nil
 	case []interface{}:
 		result := make([]byte, len(val))
