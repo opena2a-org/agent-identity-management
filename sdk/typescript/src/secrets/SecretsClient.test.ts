@@ -14,9 +14,16 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as nodeCrypto from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { SecretsClient, edwardsToMontgomeryPrivate } from './SecretsClient';
 import type { SecretsClientHost } from './SecretsClient';
 import { SecretsError } from '../exceptions';
+
+const SECRETS_HANDLER = join(
+  __dirname, '..', '..', '..', '..',
+  'apps', 'backend', 'internal', 'interfaces', 'http', 'handlers', 'secrets_handler.go',
+);
 
 // ---------------------------------------------------------------------------
 // Test helpers: simulate server-side encryption
@@ -538,24 +545,33 @@ describe('SecretsClient', () => {
       );
     });
 
-    it('should include ephemeral public key when provided', async () => {
+    // The store and rotate bodies carry exactly the members the backend's
+    // storeCredentialRequest and rotateCredentialRequest declare, read from
+    // the backend source. Neither declares ephemeralPublicKey, so the
+    // deprecated option of that name is not sent.
+    it('should send the members the server reads, and not ephemeralPublicKey, when storing and rotating', async () => {
       host.request.mockResolvedValue({ version: 1 });
-      const blob = new Uint8Array([1, 2, 3]);
-      const epk = new Uint8Array([10, 20, 30]);
-
-      await client.storeCredential({
+      const options = {
         namespaceId: 'ns-1',
-        encryptedBlob: blob,
-        ephemeralPublicKey: epk,
-      });
+        encryptedBlob: new Uint8Array([1, 2, 3]),
+        ephemeralPublicKey: new Uint8Array([10, 20, 30]),
+      };
 
-      expect(host.request).toHaveBeenCalledWith(
-        'POST',
-        '/api/v1/secrets/namespaces/ns-1/credentials',
-        expect.objectContaining({
-          ephemeralPublicKey: expect.any(String),
-        }),
-      );
+      await client.storeCredential(options);
+      await client.rotateCredential(options);
+
+      const handler = readFileSync(SECRETS_HANDLER, 'utf8');
+      for (const [call, struct] of [
+        [1, 'storeCredentialRequest'],
+        [2, 'rotateCredentialRequest'],
+      ] as const) {
+        const block = new RegExp(`type ${struct} struct \\{([\\s\\S]*?)\\n\\}`).exec(handler);
+        expect(block, `${struct} is not declared in ${SECRETS_HANDLER}`).not.toBeNull();
+        const serverMembers = [...block![1].matchAll(/`json:"([^",`]+)/g)].map((m) => m[1]).sort();
+        expect(serverMembers).toContain('encryptedBlob');
+        const body = host.request.mock.calls[call - 1][2] as Record<string, unknown>;
+        expect(Object.keys(body).sort()).toEqual(serverMembers);
+      }
     });
   });
 
@@ -590,8 +606,34 @@ describe('SecretsClient', () => {
 
       expect(host.request).toHaveBeenCalledWith(
         'GET',
-        '/api/v1/secrets/audit?agentId=a1&limit=10&offset=5&since=2026-01-01T00:00:00Z',
+        '/api/v1/secrets/audit?agentId=a1&limit=10&offset=5&since=2026-01-01T00%3A00%3A00Z',
       );
+    });
+
+    // The server decodes the query as a form does, so a `+` sent as is reads
+    // as a space: since=2026-10-16T10:00:00+02:00 reached the handler as
+    // "2026-10-16T10:00:00 02:00", which time.Parse(time.RFC3339, ...) refuses.
+    // Decoding the path the same way gives back each value the caller passed.
+    it('should encode each query value so the server reads what the caller passed', async () => {
+      const host = createMockHost();
+      host.request.mockResolvedValue({ entries: [] });
+      const client = new SecretsClient(host);
+      const since = '2026-10-16T10:00:00+02:00';
+      const agentId = 'a1&limit=1#x y';
+
+      await client.getAuditLog({ agentId, since });
+      await client.listNamespaces(agentId);
+
+      const audit = new URL(host.request.mock.calls[0][1] as string, 'http://aim.test');
+      expect(audit.pathname).toBe('/api/v1/secrets/audit');
+      expect(audit.searchParams.getAll('since')).toEqual([since]);
+      expect(audit.searchParams.getAll('agentId')).toEqual([agentId]);
+      expect(audit.searchParams.getAll('limit')).toEqual(['50']);
+      expect(audit.searchParams.getAll('offset')).toEqual(['0']);
+
+      const list = new URL(host.request.mock.calls[1][1] as string, 'http://aim.test');
+      expect(list.pathname).toBe('/api/v1/secrets/namespaces');
+      expect(list.searchParams.getAll('agentId')).toEqual([agentId]);
     });
 
     it('should return empty array when no entries', async () => {

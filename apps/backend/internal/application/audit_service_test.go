@@ -3,9 +3,11 @@ package application
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/stretchr/testify/assert"
@@ -265,6 +267,56 @@ func TestAuditService_LogAgentAction(t *testing.T) {
 	assert.Nil(t, log.UserID)
 	assert.Equal(t, &agentID, log.AgentID)
 	assert.Equal(t, domain.AuditActionAttest, log.Action)
+}
+
+// LogAction and LogAgentAction keep their own copy of the client address and
+// user agent. A handler passes request header values, which are views of the
+// request buffer the server reuses for later requests, and the entry outlives
+// the request once SIEM forwarding queues it.
+func TestAuditService_LogActionsCopyTheRequestValues(t *testing.T) {
+	const (
+		userAgent, laterUserAgent = "mint-cell/1", "QQQQQQQQQQQ"
+		address, laterAddress     = "203.0.113.9", "192.0.2.111"
+	)
+	logs := map[string]func(s *AuditService, c fiber.Ctx) error{
+		"LogAction": func(s *AuditService, c fiber.Ctx) error {
+			return s.LogAction(c.Context(), uuid.New(), uuid.New(), domain.AuditActionLogin, "user", uuid.New(), c.Get("X-Real-IP"), c.Get("User-Agent"), nil)
+		},
+		"LogAgentAction": func(s *AuditService, c fiber.Ctx) error {
+			return s.LogAgentAction(c.Context(), uuid.New(), uuid.New(), domain.AuditActionAttest, "mcp_server", uuid.New(), c.Get("X-Real-IP"), c.Get("User-Agent"), nil)
+		},
+	}
+	for name, logFn := range logs {
+		t.Run(name, func(t *testing.T) {
+			repo := NewMockAuditLogRepository()
+			service := NewAuditService(repo)
+			app := fiber.New()
+			app.Use(func(c fiber.Ctx) error {
+				err := c.Next()
+				// The next request served from the same buffer writes over
+				// both values in place.
+				c.Request().Header.Set("User-Agent", laterUserAgent)
+				c.Request().Header.Set("X-Real-IP", laterAddress)
+				return err
+			})
+			app.Get("/", func(c fiber.Ctx) error {
+				if err := logFn(service, c); err != nil {
+					return err
+				}
+				return c.SendStatus(fiber.StatusNoContent)
+			})
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("User-Agent", userAgent)
+			req.Header.Set("X-Real-IP", address)
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			require.Equal(t, fiber.StatusNoContent, resp.StatusCode)
+
+			require.Len(t, repo.logs, 1)
+			assert.Equal(t, userAgent, repo.logs[0].UserAgent)
+			assert.Equal(t, address, repo.logs[0].IPAddress)
+		})
+	}
 }
 
 func TestAuditService_GetLogs(t *testing.T) {

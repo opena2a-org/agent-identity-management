@@ -48,6 +48,10 @@ export interface StoreCredentialOptions {
   encryptedBlob: Uint8Array;
   /** Sent as `encryptionAlg`, the member the server reads. Default `X25519-ChaCha20-Poly1305`. */
   encryptionAlgorithm?: string;
+  /**
+   * @deprecated Not sent: the store and rotate routes read `encryptedBlob` and
+   * `encryptionAlg` only.
+   */
   ephemeralPublicKey?: Uint8Array;
 }
 
@@ -261,7 +265,7 @@ export class SecretsClient {
   async listNamespaces(agentId: string): Promise<Record<string, unknown>[]> {
     const result = await this.host.request<{ namespaces?: Record<string, unknown>[] }>(
       'GET',
-      `/api/v1/secrets/namespaces?agentId=${agentId}`,
+      `/api/v1/secrets/namespaces?${new URLSearchParams({ agentId })}`,
     );
     return result.namespaces ?? [];
   }
@@ -279,32 +283,18 @@ export class SecretsClient {
   // ---------------------------------------------------------------------------
 
   async storeCredential(options: StoreCredentialOptions): Promise<Record<string, unknown>> {
-    const payload: Record<string, string> = {
-      encryptedBlob: toBase64(options.encryptedBlob),
-      encryptionAlg: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
-    };
-    if (options.ephemeralPublicKey) {
-      payload.ephemeralPublicKey = toBase64(options.ephemeralPublicKey);
-    }
     return this.host.request(
       'POST',
       `/api/v1/secrets/namespaces/${options.namespaceId}/credentials`,
-      payload,
+      credentialBody(options),
     );
   }
 
   async rotateCredential(options: StoreCredentialOptions): Promise<Record<string, unknown>> {
-    const payload: Record<string, string> = {
-      encryptedBlob: toBase64(options.encryptedBlob),
-      encryptionAlg: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
-    };
-    if (options.ephemeralPublicKey) {
-      payload.ephemeralPublicKey = toBase64(options.ephemeralPublicKey);
-    }
     return this.host.request(
       'POST',
       `/api/v1/secrets/namespaces/${options.namespaceId}/rotate`,
-      payload,
+      credentialBody(options),
     );
   }
 
@@ -314,9 +304,11 @@ export class SecretsClient {
 
   async getAuditLog(options: AuditLogOptions): Promise<Record<string, unknown>[]> {
     const { agentId, since, limit = 50, offset = 0 } = options;
-    let params = `agentId=${agentId}&limit=${limit}&offset=${offset}`;
+    // Each value is encoded: the server decodes the query, so a `+` sent as is
+    // in `since` (a timestamp with a positive UTC offset) reaches it as a space.
+    const params = new URLSearchParams({ agentId, limit: String(limit), offset: String(offset) });
     if (since) {
-      params += `&since=${since}`;
+      params.set('since', since);
     }
     const result = await this.host.request<{ entries?: Record<string, unknown>[] }>(
       'GET',
@@ -324,6 +316,17 @@ export class SecretsClient {
     );
     return result.entries ?? [];
   }
+}
+
+/**
+ * The body of a store or rotate request: the members the server's
+ * storeCredentialRequest and rotateCredentialRequest read.
+ */
+function credentialBody(options: StoreCredentialOptions): Record<string, string> {
+  return {
+    encryptedBlob: toBase64(options.encryptedBlob),
+    encryptionAlg: options.encryptionAlgorithm ?? 'X25519-ChaCha20-Poly1305',
+  };
 }
 
 // ---------------------------------------------------------------------------

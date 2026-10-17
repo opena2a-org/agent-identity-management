@@ -11,6 +11,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — audit rows keep the user agent and client address of the request that wrote them (#751)
+
+- `AuditService.LogAction` and `AuditService.LogAgentAction` copy the client address and user agent into the row.
+  The handlers pass `c.Get("User-Agent")`, which is a view of the request buffer, since the fiber app does not set
+  `Immutable`, and the server reuses that buffer for later requests. With the request's `User-Agent` written over in
+  place after the route answered, the login row of `POST /public/login`, the logout row and the refresh route's
+  `refresh_token_reuse` and `refresh_session_revoked` rows read the value written over it on the previous code.
+- `siem.EventFromAuditLog` copies the action and resource type into the event as well, as it copies the client
+  address and user agent, so an entry a route builds from request values does not change the queued event.
+- Tests: `apps/backend/internal/interfaces/http/handlers/audit_user_agent_test.go`,
+  `apps/backend/internal/application/audit_service_test.go`, `apps/backend/internal/integrations/siem/audit_test.go`.
+
+### Changed — CI runs the compiled-executable lint, and the contributing guide names every script the TypeScript SDK's tests run (#751)
+
+- `scripts/lint-no-executable-blobs.py` and its tests, `scripts/test-lint-no-executable-blobs.sh`, run in the
+  TypeScript SDK's test suite, from `sdk/typescript/tests/repo-executable-blobs.test.ts`, which CI runs on every pull
+  request to `main`. Before this change no workflow, package script or test ran either script. The suite runs both
+  without the variables git reads to find a repository (`git rev-parse --local-env-vars`): run with the `GIT_DIR` a
+  hook started from a linked worktree exports, the lint's tests fail and write `core.bare = true` into the config the
+  main checkout shares.
+- `CONTRIBUTING.md` said the TypeScript SDK's `npm test` runs three of the repository's documentation lints while it
+  runs five scripts; it now names all five, `scripts/check-docs-prose.mjs` and `scripts/test-check-docs-prose.mjs`
+  with `node` among them, and the executable lint and its tests. `sdk/typescript/tests/repo-doc-lints.test.ts`
+  checks that the guide names every script its cases run and states their number.
+
 ### Fixed: a SIEM event copies the client address and user agent out of the request it reports
 
 - The `ipAddress` and `userAgent` of an `aim.audit.*` or `aim.auth.signin_failed` event are copied when the event is

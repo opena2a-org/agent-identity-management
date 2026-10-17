@@ -38,14 +38,16 @@ func AuditSeverity(action domain.AuditAction) string {
 
 // EventFromAuditLog is the SIEM event of an audit log entry. The entry's
 // metadata is encoded when the event is made, so a later change to the
-// entry's map does not change the event.
+// entry's map does not change the event. The action and resource type are
+// copied, as the address and user agent are below: a route can build them
+// from views of the request buffer too.
 func EventFromAuditLog(entry *domain.AuditLog) *SIEMEvent {
 	details := map[string]interface{}{
 		"auditLogId":     entry.ID.String(),
 		"organizationId": entry.OrganizationID.String(),
-		"action":         string(entry.Action),
+		"action":         strings.Clone(string(entry.Action)),
 		"actorType":      string(entry.ActorType()),
-		"resourceType":   entry.ResourceType,
+		"resourceType":   strings.Clone(entry.ResourceType),
 		"resourceId":     entry.ResourceID.String(),
 	}
 	if entry.UserID != nil && *entry.UserID != uuid.Nil {
