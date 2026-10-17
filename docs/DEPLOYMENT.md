@@ -526,7 +526,7 @@ Forwarding loses events within a stated bound and keeps no copy of its own. A ba
 |-------|-------------------------|
 | Audit log entry (`aim.audit.<action>`) | The entry stays in the audit log: it is forwarded only after it is written. |
 | Alert (`aim.alert.created`) | The alert stays in the `alerts` table: it is forwarded only after it is written. |
-| Failed sign-in (`aim.auth.signin_failed`) | On `POST /api/v1/auth/login/local`, the reasons `unknown_email`, `account_deactivated` and `password_mismatch` also write an `auth_failures` row, which the lockout count reads and the next successful sign-in with that email deletes. The reasons `account_locked` and `password_not_set`, and every refused `POST /api/v1/public/login`, are not stored by AIM outside the SIEM stream. |
+| Failed sign-in (`aim.auth.signin_failed`) | On `POST /api/v1/auth/login/local`, the reasons `unknown_email`, `account_deactivated` and `password_mismatch` also write an `auth_failures` row, which the lockout count reads and a later successful `POST /api/v1/auth/login/local` or `POST /api/v1/auth/reauth` with that email deletes; a successful `POST /api/v1/public/login` does not delete it. The reasons `account_locked` and `password_not_set`, and every refused `POST /api/v1/public/login`, are not stored by AIM outside the SIEM stream. |
 | FGA denial (`aim.fga.denied`) | When an FGA policy covers the agent and capability, the denial also writes an `access_attestations` row with its outcome. A denial without a policy, and an `ERROR` outcome, are not stored by AIM outside the SIEM stream. |
 
 The loss shows in three places:
