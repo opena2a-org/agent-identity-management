@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { navigationBase } from "@/lib/navigation";
-import { HUB_TABS } from "@/lib/hub-tabs";
+import { HUB_TABS, type HubTab } from "@/lib/hub-tabs";
+import { HOSTED_DEPLOYMENT } from "@/lib/deployment";
 import { ROUTE_MOVES, type RouteMove } from "@/lib/redirects";
 
 /**
@@ -13,9 +14,17 @@ import { ROUTE_MOVES, type RouteMove } from "@/lib/redirects";
  * app/ of this checkout. A link passes when a page file serves exactly its path, or when its
  * path is the source of a lib/redirects.ts row whose destination a page file serves.
  *
- * An ossOnly tab is checked like the rest. If a hosted tree drops the page behind one, exempt
- * that href by name on that tree, never the ossOnly flag as a whole.
+ * An ossOnly tab is checked like the rest. If a hosted tree drops the page behind one, add
+ * that href to HOSTED_EXEMPT_HREFS below, never a skip of the ossOnly flag as a whole.
  */
+
+// Hosted exemptions, one href per row. A row names the href of an ossOnly hub tab whose page a
+// hosted tree does not ship: visibleHubTabs, which the tab strip lists its tabs through, drops
+// an ossOnly tab where HOSTED_DEPLOYMENT is true. A row takes effect only where
+// HOSTED_DEPLOYMENT is true, and only for ossOnly tabs with that href; the open-source tree
+// checks every link. The flag comes from lib/deployment.ts, which each tree keeps its own copy
+// of; the rows are written here, so both trees carry the same list.
+const HOSTED_EXEMPT_HREFS: readonly string[] = [];
 
 // Every page file under app/, keyed by the path Next.js serves it at. A route group folder
 // ("(marketing)") adds no path segment, and a private folder ("_components") serves nothing.
@@ -39,6 +48,7 @@ function pageFiles(dir: string, segments: string[] = [], rel = "app", out = new 
 interface NavLink {
   label: string;
   href: string;
+  ossOnly?: boolean;
 }
 
 function navigationLinks(): NavLink[] {
@@ -50,9 +60,26 @@ function navigationLinks(): NavLink[] {
     }
   }
   for (const [hub, tabs] of Object.entries(HUB_TABS)) {
-    for (const tab of tabs) links.push({ label: `${hub} tab ${tab.name}`, href: tab.href });
+    for (const tab of tabs) links.push({ label: `${hub} tab ${tab.name}`, href: tab.href, ossOnly: tab.ossOnly });
   }
   return links;
+}
+
+// The links to check on this tree. On a hosted tree, an ossOnly tab whose href has a row in
+// the exemption list is left out. A sidebar entry or a tab without the flag is kept, even with
+// an exempted href, and the open-source tree keeps every link.
+function linksToCheck(links: NavLink[], hosted: boolean, exempt: readonly string[]): NavLink[] {
+  if (!hosted) return links;
+  return links.filter((l) => !(l.ossOnly && exempt.includes(l.href)));
+}
+
+// One line per exemption row that names no ossOnly hub tab: a row may only exempt a tab the
+// hosted build never renders.
+function exemptionProblems(exempt: readonly string[], hubTabs: Record<string, HubTab[]>): string[] {
+  const ossOnly = new Set(Object.values(hubTabs).flat().filter((t) => t.ossOnly).map((t) => t.href));
+  return exempt
+    .filter((href) => !ossOnly.has(href))
+    .map((href) => `hosted exemption ${href} names no ossOnly hub tab: only a tab the hosted build hides may be exempt`);
 }
 
 // One line per link no page serves, naming the href and the page file it needs. The path is
@@ -97,7 +124,44 @@ describe("every navigation link opens a page on this tree", () => {
   });
 
   it("every link resolves to a page file, directly or through one redirect row", () => {
-    expect(problems(links, pages, ROUTE_MOVES)).toEqual([]);
+    expect(problems(linksToCheck(links, HOSTED_DEPLOYMENT, HOSTED_EXEMPT_HREFS), pages, ROUTE_MOVES)).toEqual([]);
+  });
+
+  it("each hosted exemption names an ossOnly hub tab", () => {
+    expect(exemptionProblems(HOSTED_EXEMPT_HREFS, HUB_TABS)).toEqual([]);
+  });
+});
+
+describe("a hosted exemption", () => {
+  const links: NavLink[] = [
+    { label: "nav entry Organization for admin", href: "/admin/registrations" },
+    { label: "organization tab Registrations", href: "/admin/registrations", ossOnly: true },
+    { label: "organization tab Invitations", href: "/admin/invitations", ossOnly: true },
+    { label: "organization tab Audit log", href: "/dashboard/admin/audit-logs" },
+  ];
+  const labels = (kept: NavLink[]) => kept.map((l) => l.label);
+
+  it("leaves every link checked on the open-source tree", () => {
+    expect(linksToCheck(links, false, ["/admin/registrations"])).toEqual(links);
+  });
+
+  it("leaves out only the ossOnly tab it names on a hosted tree", () => {
+    expect(labels(linksToCheck(links, true, ["/admin/registrations"]))).toEqual([
+      "nav entry Organization for admin",
+      "organization tab Invitations",
+      "organization tab Audit log",
+    ]);
+  });
+
+  it("never leaves out a link without the ossOnly flag", () => {
+    expect(linksToCheck(links, true, ["/dashboard/admin/audit-logs"])).toEqual(links);
+  });
+
+  it("rejects a row that names a tab shown on both builds, or no tab", () => {
+    expect(exemptionProblems(["/admin/registrations", "/dashboard/admin/audit-logs", "/dashboard/gone"], HUB_TABS)).toEqual([
+      "hosted exemption /dashboard/admin/audit-logs names no ossOnly hub tab: only a tab the hosted build hides may be exempt",
+      "hosted exemption /dashboard/gone names no ossOnly hub tab: only a tab the hosted build hides may be exempt",
+    ]);
   });
 });
 
