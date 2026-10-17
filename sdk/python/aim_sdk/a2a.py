@@ -31,6 +31,7 @@ import hashlib
 import json
 import time
 import uuid
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, timezone
@@ -39,6 +40,14 @@ from urllib.parse import urlencode
 import requests
 from nacl.signing import SigningKey
 from nacl.encoding import Base64Encoder
+
+
+# The reason the server answers PUT /api/v1/a2a/trust/:id with 405, word for
+# word: there is no write for the A2A trust score.
+A2A_TRUST_SCORE_NOT_ASSERTED = (
+    "the A2A trust score is measured from recorded interactions, not asserted; "
+    "there is no write for it"
+)
 
 
 @dataclass
@@ -1308,51 +1317,24 @@ class A2AClient:
         factors: Optional[Dict[str, float]] = None
     ) -> A2ATrustScore:
         """
-        Deprecated: the server refuses this write with 405. The A2A trust score is
-        measured from recorded interactions (record_interaction, the task path) and
-        recomputed by the server; it is not asserted by a caller. Kept so existing
-        code still imports; it now raises the server's refusal instead of returning
-        a score that ignored its input.
+        Deprecated, and removed at the next major version: the A2A trust score
+        is measured from recorded interactions and recomputed by the server; it
+        is not asserted by a caller, and the server answers a write to it with
+        405. The method sends nothing and raises A2ATrustScoreWriteRefused,
+        which names the route that reads the score and the one that records an
+        interaction (record_successful_interaction, record_failed_interaction).
+        Kept until then so existing code still imports.
 
         Args:
-            target_agent_id: ID of the agent to update trust for
-            score: New trust score (0.0-1.0)
-            confidence: Confidence in the score (0.0-1.0)
-            factors: Optional breakdown of trust factors
+            target_agent_id: ID of the agent the caller meant to score
+            score: Ignored
+            confidence: Ignored
+            factors: Ignored
 
-        Returns:
-            Updated A2ATrustScore
-
-        Example:
-            >>> score = a2a.update_trust_score(
-            ...     target_agent_id="other-agent",
-            ...     score=0.85,
-            ...     confidence=0.9
-            ... )
+        Raises:
+            A2ATrustScoreWriteRefused: always. No request is sent.
         """
-        data = {
-            "score": score,
-            "confidence": confidence,
-        }
-        if factors:
-            data["factors"] = factors
-
-        response = self._make_request(
-            "PUT",
-            f"/api/v1/a2a/trust/{target_agent_id}",
-            data=data
-        )
-
-        return A2ATrustScore(
-            agent_id=target_agent_id,
-            a2a_trust_score=response.get("a2aTrustScore"),
-            score_status=response.get("scoreStatus", "unscored"),
-            peer_trust_average=response.get("peerTrustAverage"),
-            unique_peers_count=response.get("uniquePeersCount", 0),
-            tasks_completed=response.get("tasksCompleted", 0),
-            tasks_failed=response.get("tasksFailed", 0),
-            computed_at=_parse_datetime(response.get("computedAt")),
-        )
+        raise A2ATrustScoreWriteRefused(target_agent_id)
 
     def record_successful_interaction(
         self,
@@ -1486,7 +1468,11 @@ class A2AClient:
         description: str,
         input_schema: Optional[Dict[str, Any]] = None,
         output_schema: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
+        *,
+        input_modes: Optional[List[str]] = None,
+        output_modes: Optional[List[str]] = None,
+        examples: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Register a new skill for the current agent.
@@ -1494,9 +1480,16 @@ class A2AClient:
         Args:
             name: Skill name
             description: Skill description
-            input_schema: JSON schema for skill input
-            output_schema: JSON schema for skill output
+            input_schema, output_schema: Deprecated and not sent; passing
+                either emits a DeprecationWarning. The server reads no schema:
+                it reads a skill's input and output modes (input_modes,
+                output_modes).
             tags: Optional tags for discovery
+            input_modes: The A2A input modes of the skill, the media types it
+                accepts, e.g. ["text/plain"]
+            output_modes: The A2A output modes of the skill, the media types
+                it answers in
+            examples: Example prompts for the skill, as strings
 
         Returns:
             Created skill details
@@ -1505,20 +1498,33 @@ class A2AClient:
             >>> skill = a2a.register_skill(
             ...     name="analyze_code",
             ...     description="Analyzes code for quality issues",
-            ...     tags=["code", "analysis"]
+            ...     tags=["code", "analysis"],
+            ...     input_modes=["text/plain"],
+            ...     output_modes=["application/json"]
             ... )
         """
+        if input_schema is not None or output_schema is not None:
+            warnings.warn(
+                "The input_schema and output_schema arguments of register_skill() are "
+                "deprecated and are not sent: the server reads no schema, only a skill's "
+                "input and output modes. Pass input_modes and output_modes.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+
         data: Dict[str, Any] = {
             "agentId": self.agent_id,
             "name": name,
             "description": description,
         }
-        if input_schema:
-            data["inputSchema"] = input_schema
-        if output_schema:
-            data["outputSchema"] = output_schema
         if tags:
             data["tags"] = tags
+        if input_modes:
+            data["inputModes"] = input_modes
+        if output_modes:
+            data["outputModes"] = output_modes
+        if examples:
+            data["examples"] = examples
 
         return self._make_request("POST", "/api/v1/a2a/skills", data=data)
 
@@ -1649,6 +1655,29 @@ class A2AError(Exception):
     def __init__(self, message: str, status_code: Optional[int] = None):
         super().__init__(message)
         self.status_code = status_code
+
+
+class A2ATrustScoreWriteRefused(A2AError):
+    """
+    Raised by update_trust_score without a request: the A2A trust score has
+    no write. status_code is 405, the status the server answers such a write
+    with; reason is the server's reason; read_route and record_route are the
+    routes it names instead.
+    """
+
+    reason = A2A_TRUST_SCORE_NOT_ASSERTED
+    read_route = "GET /api/v1/a2a/trust/:id"
+    record_route = "POST /api/v1/a2a/trust/:id/interaction"
+
+    def __init__(self, target_agent_id: str):
+        super().__init__(
+            f"{self.reason}. Read the score of {target_agent_id} with "
+            f"{self.read_route}, and record an interaction with it with "
+            f"{self.record_route} (record_successful_interaction, "
+            "record_failed_interaction). No request was sent.",
+            status_code=405,
+        )
+        self.target_agent_id = target_agent_id
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:

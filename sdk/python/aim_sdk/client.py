@@ -2238,7 +2238,9 @@ class AIMClient:
         Args:
             verification_id: ID from verify_capability response
             executed: Whether the decorated function was actually executed
-            strict_mode: Whether SDK was in strict mode (AIM_STRICT_MODE env var)
+            strict_mode: Whether SDK was in strict mode (AIM_STRICT_MODE env var).
+                Not sent: the server takes the enforcement mode from the agent's
+                organization, and the request it binds has no member for it.
             execution_error: Error message if execution failed
 
         Note:
@@ -2270,7 +2272,6 @@ class AIMClient:
 
             payload = {
                 "executed": executed,
-                "strictMode": strict_mode,
                 "executedAt": datetime.now(timezone.utc).isoformat()
             }
 
@@ -4816,7 +4817,9 @@ def register_agent(
         version: Agent version (default: "1.0.0")
         repository_url: GitHub/GitLab repository URL
         documentation_url: Documentation URL
-        organization_domain: Organization domain for auto-approval
+        organization_domain: Deprecated and ignored; passing it emits a DeprecationWarning.
+            It is not sent: POST /api/v1/agents registers the agent in the organization of
+            the credential the request authenticates with, and reads no domain from the body.
         mcp_servers: MCP servers this agent communicates with (must be configured in Claude Desktop).
             - Simple names: ["github", "filesystem"]
             - With description: [{"name": "github", "description": "GitHub API for code operations"}]
@@ -4904,6 +4907,16 @@ def register_agent(
         ConfigurationError: If registration fails or required credentials missing
         AuthenticationError: If authentication fails
     """
+    if organization_domain is not None:
+        warnings.warn(
+            "The 'organization_domain' parameter of register_agent() is deprecated and is "
+            "ignored: the agent is registered in the organization of the credential it "
+            "authenticates with, and the server reads no domain from the registration.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+    del organization_domain
+
     # 1. Check for existing credentials (unless force_new)
     if not force_new:
         existing_creds = _load_credentials(name)
@@ -5091,7 +5104,6 @@ def register_agent(
 
     # 2.5. Handle backward compatibility: merge talks_to into mcp_servers
     if talks_to is not None:
-        import warnings
         warnings.warn(
             "The 'talks_to' parameter is deprecated. Use 'mcp_servers' instead.",
             DeprecationWarning,
@@ -5166,8 +5178,6 @@ def register_agent(
         registration_data["repositoryUrl"] = repository_url
     if documentation_url:
         registration_data["documentationUrl"] = documentation_url
-    if organization_domain:
-        registration_data["organizationDomain"] = organization_domain
 
     # Process MCP servers: extract names for talksTo
     # URL is NOT accepted - SDK derives it from Claude Desktop config

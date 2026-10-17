@@ -381,21 +381,57 @@ class TestCredentialStorage:
             result = client.secrets.store_credential("ns-123", blob)
 
         assert result["message"] == "Credential stored"
-        call_data = mock_req.call_args[1]["data"]
-        assert call_data["encryptedBlob"] == base64.b64encode(blob).decode("utf-8")
-        assert call_data["encryptionAlgorithm"] == "X25519-ChaCha20-Poly1305"
+        # The server reads the algorithm as encryptionAlg.
+        mock_req.assert_called_once_with(
+            "POST",
+            "/api/v1/secrets/namespaces/ns-123/credentials",
+            data={
+                "encryptedBlob": base64.b64encode(blob).decode("utf-8"),
+                "encryptionAlg": "X25519-ChaCha20-Poly1305",
+            },
+        )
+
+    def test_store_credential_with_an_ephemeral_key(self):
+        client, _ = make_test_client()
+        blob = b"encrypted-data"
+        ephemeral = bytes(range(32))
+
+        with patch.object(client, "_make_request", return_value={}) as mock_req:
+            with pytest.warns(DeprecationWarning, match="ephemeral_public_key"):
+                client.secrets.store_credential("ns-123", blob, encryption_alg="AES-256-GCM", ephemeral_public_key=ephemeral)
+
+        # The store route reads encryptedBlob and encryptionAlg only, so the
+        # deprecated ephemeral key is not sent.
+        mock_req.assert_called_once_with(
+            "POST",
+            "/api/v1/secrets/namespaces/ns-123/credentials",
+            data={
+                "encryptedBlob": base64.b64encode(blob).decode("utf-8"),
+                "encryptionAlg": "AES-256-GCM",
+            },
+        )
 
     def test_rotate_credential(self):
         client, _ = make_test_client()
         mock_resp = {"message": "Credential rotated"}
         blob = b"new-encrypted-data"
+        ephemeral = bytes(range(32, 64))
 
         with patch.object(client, "_make_request", return_value=mock_resp) as mock_req:
-            result = client.secrets.rotate_credential("ns-123", blob)
+            with pytest.warns(DeprecationWarning, match="ephemeral_public_key"):
+                result = client.secrets.rotate_credential("ns-123", blob, ephemeral_public_key=ephemeral)
 
         assert result["message"] == "Credential rotated"
-        mock_req.assert_called_once()
-        assert "/rotate" in mock_req.call_args[0][1]
+        # The server reads the algorithm as encryptionAlg, and the rotate route
+        # reads no ephemeral key.
+        mock_req.assert_called_once_with(
+            "POST",
+            "/api/v1/secrets/namespaces/ns-123/rotate",
+            data={
+                "encryptedBlob": base64.b64encode(blob).decode("utf-8"),
+                "encryptionAlg": "X25519-ChaCha20-Poly1305",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
