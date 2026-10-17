@@ -39,7 +39,10 @@ const SCRIPTS = [
   'test_flight_agent.py',
 ];
 
-/** Records each call; the refresh answers 401, so get_fresh_sdk.py prints the manual login steps. */
+/**
+ * Records each call. A POST answers 401, or, with STUB_POST_OK set, 200 and a
+ * new token pair, the answer a refresh of a live credential gets.
+ */
 const FAKE_REQUESTS = `import json, os
 
 
@@ -60,6 +63,8 @@ def _record(method, url):
 
 def post(url, **kwargs):
     _record('POST', url)
+    if os.environ.get('STUB_POST_OK'):
+        return _Response(200, {'access_token': 'not-a-real-access-token', 'refresh_token': 'not-a-real-new-token'})
     return _Response(401, {})
 
 
@@ -132,6 +137,8 @@ interface Run {
   status: number | null;
   output: string;
   calls: string[];
+  /** ~/.aim/credentials.json after the run, or null when there is none. */
+  credentialsAfter: string | null;
 }
 
 let scratch = '';
@@ -156,11 +163,11 @@ afterAll(() => {
 
 /**
  * Runs one command in a fresh scratch tree. With fakeAgent, flight_agent.py is
- * the stand-in above instead of the real one.
+ * the stand-in above instead of the real one; with postOk, a POST answers 200.
  */
 function run(
   argv: string[],
-  opts: { stack?: Stack; credentials?: Record<string, string>; fakeAgent?: boolean } = {},
+  opts: { stack?: Stack; credentials?: Record<string, string>; fakeAgent?: boolean; postOk?: boolean } = {},
 ): Run {
   const root = join(scratch, `case-${++caseCount}`);
   const demo = join(root, 'examples', 'flight-search-agent');
@@ -178,7 +185,8 @@ function run(
   if (opts.fakeAgent) writeFileSync(join(demo, 'flight_agent.py'), FAKE_AGENT);
   writeFileSync(join(demo, 'requests.py'), FAKE_REQUESTS);
   for (const [name, text] of Object.entries(FAKE_SDK)) writeFileSync(join(sdk, name), text);
-  if (opts.credentials) writeFileSync(join(home, '.aim', 'credentials.json'), JSON.stringify(opts.credentials));
+  const credentialsPath = join(home, '.aim', 'credentials.json');
+  if (opts.credentials) writeFileSync(credentialsPath, JSON.stringify(opts.credentials));
   if (opts.stack?.dotenv !== undefined) writeFileSync(join(root, '.env'), opts.stack.dotenv);
   const log = join(root, 'calls.log');
   writeFileSync(log, '');
@@ -194,6 +202,7 @@ function run(
       PYTHONDONTWRITEBYTECODE: '1',
       STUB_LOG: log,
       STUB_TOKEN_ID: 'tok-1',
+      ...(opts.postOk ? { STUB_POST_OK: '1' } : {}),
       ...(opts.stack?.env ?? {}),
     },
   });
@@ -202,6 +211,7 @@ function run(
     status: result.status,
     output: `${result.stdout}${result.stderr}`,
     calls: readFileSync(log, 'utf-8').split('\n').filter((l) => l !== ''),
+    credentialsAfter: existsSync(credentialsPath) ? readFileSync(credentialsPath, 'utf-8') : null,
   };
 }
 
@@ -214,10 +224,10 @@ describe.each(STACKS)('the flight-search demo helpers with $name', (stack) => {
   const backend = `http://localhost:${stack.backend}`;
   const frontend = `http://localhost:${stack.frontend}`;
 
-  it('get_fresh_sdk.py refreshes at the backend port and sends the operator to the dashboard port', () => {
+  it('get_fresh_sdk.py sends the operator to sign in and download at the dashboard port, and calls nothing', () => {
     const r = run(['python3', 'get_fresh_sdk.py'], { stack, credentials: { refresh_token: 'not-a-real-token' } });
     expect(r.status, r.output).toBe(0);
-    expect(r.calls).toEqual([`POST ${backend}/api/v1/auth/refresh`]);
+    expect(r.calls).toEqual([]);
     expect(r.output).toContain(`${frontend}/auth/login`);
     expect(r.output).toContain(`${frontend}/dashboard/sdk`);
     for (const port of localhostPorts(r.output)) expect(port).toBe(stack.frontend);
@@ -258,6 +268,26 @@ describe.each(STACKS)('the flight-search demo helpers with $name', (stack) => {
     expect(r.calls).toEqual([
       `psql -h localhost -p ${stack.postgres} -U postgres -d identity -v sdk_token_id=tok-1`,
     ]);
+  });
+});
+
+/**
+ * GET /api/v1/sdk/download mints a credential only for an access token from a
+ * sign-in; an access token minted by refreshing an SDK-download token is
+ * refused there. get_fresh_sdk.py refreshed the stored credential, wrote the
+ * new refresh token back and posted to /api/v1/sdk/download/python, a path the
+ * backend does not register, with the access token the refresh returned.
+ */
+describe('get_fresh_sdk.py', () => {
+  it('neither refreshes nor rewrites a stored credential the backend would refresh', () => {
+    const credentials = { refresh_token: 'not-a-real-token' };
+    const r = run(['python3', 'get_fresh_sdk.py'], { credentials, postOk: true });
+    expect(r.status, r.output).toBe(0);
+    expect(r.calls).toEqual([]);
+    expect(r.credentialsAfter).toBe(JSON.stringify(credentials));
+    expect(r.output).toContain('http://localhost:3000/auth/login');
+    expect(r.output).toContain('http://localhost:3000/dashboard/sdk');
+    expect(r.output).toContain('Download Python SDK');
   });
 });
 
