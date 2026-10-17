@@ -829,10 +829,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   requests. The event SIEM forwarding queues from such a row is serialized after the request has
   ended, and it names the address of the request that wrote the row.
 
-### Fixed — an A2A request that fails is no longer answered 2xx, and every A2A failure is answered through one mapping
+### Fixed — an A2A request that fails is no longer answered 2xx, and every failure response the A2A handler builds comes from one mapping
 
-- Each failure response of the A2A handler names one failure kind, and `a2a_failures.go` holds the status and
-  reason every kind is answered with. The handler builds only its success responses.
+- Each failure response the A2A handler builds names one failure kind, and `a2a_failures.go` holds the status and
+  reason every kind is answered with; the handler itself builds no other failure response. Two refusals come from
+  shared helpers the handler calls and keep the answers they had: an agent that is unknown or belongs to another
+  organization is answered 404 `{"error":"not found"}` by the tenant-scope helper, and a request with no organization
+  in its context is answered 401 by the application's error handler.
 - `a2a_failures_test.go` injects each failure an A2A route can meet on each of the 48 routes the A2A handler
   serves, 257 cases in all: malformed JSON, a path or query value that is not UTF-8 text or holds a NUL
   character, no organization in context, a policy evaluation that names another organization, an unknown,
