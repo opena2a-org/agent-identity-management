@@ -21,7 +21,7 @@
 # What it does, in order:
 #   1. Pre-flight: docker, curl, jq, go, openssl, psql, pg_isready on PATH.
 #   2. Throwaway Postgres (aim-listsmoke-postgres) on $SMOKE_POSTGRES_PORT.
-#   3. Build + run the backend on $SMOKE_BACKEND_PORT, its metrics listener
+#   3. Build + run the backend on 127.0.0.1:$SMOKE_BACKEND_PORT, its metrics listener
 #      on 127.0.0.1:$SMOKE_METRICS_PORT, with Redis and OpenTelemetry off
 #      (REDIS_HOST and OTEL_EXPORTER_OTLP_ENDPOINT set to the empty string).
 #      Wait on /health.
@@ -76,7 +76,7 @@ JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 API="http://localhost:${SMOKE_BACKEND_PORT}/api/v1"
 
 echo "==> AIM REST list-endpoints smoke (hermetic)"
-echo "    Backend  : localhost:${SMOKE_BACKEND_PORT}"
+echo "    Backend  : 127.0.0.1:${SMOKE_BACKEND_PORT}"
 echo "    Metrics  : 127.0.0.1:${SMOKE_METRICS_PORT}"
 echo "    Postgres : localhost:${SMOKE_POSTGRES_PORT} (container ${SMOKE_PG_CONTAINER})"
 
@@ -137,6 +137,7 @@ echo "==> [3/6] Build + run backend (no OTel)"
 (
     cd "$BACKEND_DIR"
     env \
+        HOST="127.0.0.1" \
         APP_PORT="$SMOKE_BACKEND_PORT" \
         ENVIRONMENT="development" \
         POSTGRES_HOST="localhost" \

@@ -21,7 +21,7 @@
 #      Grafana) from the existing docker-compose.yml under this run's own
 #      compose project. Wait on /ready.
 #   4. Build the backend binary and run it in the background on
-#      $SMOKE_BACKEND_PORT (default 18080), with its metrics listener on
+#      127.0.0.1:$SMOKE_BACKEND_PORT (default 18080), with its metrics listener on
 #      127.0.0.1:$SMOKE_METRICS_PORT (default 19464), pointing at the
 #      throwaway Postgres + OTLP collector. Wait on /health.
 #   5. Reset force_password_change=FALSE on the default admin (migration 013
@@ -107,7 +107,7 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-AIM2025!Smoke}"
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 
 echo "==> AIM real-backend smoke (hermetic)"
-echo "    Backend     : localhost:${SMOKE_BACKEND_PORT}"
+echo "    Backend     : 127.0.0.1:${SMOKE_BACKEND_PORT}"
 echo "    Metrics     : 127.0.0.1:${SMOKE_METRICS_PORT}"
 echo "    Postgres    : localhost:${SMOKE_POSTGRES_PORT} (container ${SMOKE_PG_CONTAINER})"
 echo "    OTLP gRPC   : localhost:${OTEL_GRPC_PORT}"
@@ -216,6 +216,7 @@ echo "==> [4/8] Build + run backend"
 (
     cd "$BACKEND_DIR"
     env \
+        HOST="127.0.0.1" \
         APP_PORT="$SMOKE_BACKEND_PORT" \
         ENVIRONMENT="development" \
         POSTGRES_HOST="localhost" \

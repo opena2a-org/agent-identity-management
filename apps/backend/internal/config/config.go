@@ -75,6 +75,10 @@ type Config struct {
 
 // ServerConfig holds server configuration
 type ServerConfig struct {
+	// Host is the address the API listener binds, read by ListenHost: HOST
+	// when it is set and not empty, otherwise 0.0.0.0 in a container and
+	// 127.0.0.1 outside one. See issue #757.
+	Host        string
 	Port        string
 	Environment string
 	LogLevel    string
@@ -426,6 +430,7 @@ func LoadServer() ServerConfig {
 		allowedOrigins = strings.Split(origins, ",")
 	}
 	return ServerConfig{
+		Host:              ListenHost(RunningInContainer),
 		Port:              getEnv("APP_PORT", "8080"),
 		Environment:       getEnv("ENVIRONMENT", "development"),
 		LogLevel:          getEnv("LOG_LEVEL", "info"),
@@ -586,6 +591,41 @@ func insecureSecretError(name, generator string) error {
 			"See scripts/gen-dev-secrets.sh for the local-dev helper.",
 		name, generator,
 	)
+}
+
+// containerMarkerFiles are files a container runtime writes into the root of
+// a container's file system: /.dockerenv (Docker) and /run/.containerenv
+// (Podman).
+var containerMarkerFiles = []string{"/.dockerenv", "/run/.containerenv"}
+
+// RunningInContainer reports whether KUBERNETES_SERVICE_HOST (set by
+// Kubernetes in a pod's containers) is non-empty or one of
+// containerMarkerFiles exists.
+func RunningInContainer() bool {
+	if getenv("KUBERNETES_SERVICE_HOST") != "" {
+		return true
+	}
+	for _, path := range containerMarkerFiles {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ListenHost returns the address the API listener binds: HOST when it is set
+// and not empty. Otherwise it returns 0.0.0.0 when inContainer reports true,
+// so a published container port reaches the listener, and 127.0.0.1 when it
+// reports false, so a run on a workstation accepts no connection from its
+// network.
+func ListenHost(inContainer func() bool) string {
+	if host := getenv("HOST"); host != "" {
+		return host
+	}
+	if inContainer() {
+		return "0.0.0.0"
+	}
+	return "127.0.0.1"
 }
 
 // lookupEnv is the one place this package reads the environment; every

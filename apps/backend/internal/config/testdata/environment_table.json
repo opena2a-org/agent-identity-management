@@ -8,6 +8,76 @@
   },
   "rows": [
     {
+      "variable": "HOST",
+      "input": "unset",
+      "value": null,
+      "setting": "\"127.0.0.1\"",
+      "line": ""
+    },
+    {
+      "variable": "HOST",
+      "input": "empty",
+      "value": "",
+      "setting": "\"127.0.0.1\"",
+      "line": ""
+    },
+    {
+      "variable": "HOST",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "HOST",
+      "input": "valid",
+      "value": "0.0.0.0",
+      "setting": "\"0.0.0.0\"",
+      "line": ""
+    },
+    {
+      "variable": "HOST",
+      "input": "invalid",
+      "value": "not-an-address",
+      "setting": "\"not-an-address\"",
+      "line": ""
+    },
+    {
+      "variable": "KUBERNETES_SERVICE_HOST",
+      "input": "unset",
+      "value": null,
+      "setting": "\"127.0.0.1\"",
+      "line": ""
+    },
+    {
+      "variable": "KUBERNETES_SERVICE_HOST",
+      "input": "empty",
+      "value": "",
+      "setting": "\"127.0.0.1\"",
+      "line": ""
+    },
+    {
+      "variable": "KUBERNETES_SERVICE_HOST",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"0.0.0.0\"",
+      "line": ""
+    },
+    {
+      "variable": "KUBERNETES_SERVICE_HOST",
+      "input": "valid",
+      "value": "10.96.0.1",
+      "setting": "\"0.0.0.0\"",
+      "line": ""
+    },
+    {
+      "variable": "KUBERNETES_SERVICE_HOST",
+      "input": "invalid",
+      "value": "not-an-address",
+      "setting": "\"0.0.0.0\"",
+      "line": ""
+    },
+    {
       "variable": "APP_PORT",
       "input": "unset",
       "value": null,
