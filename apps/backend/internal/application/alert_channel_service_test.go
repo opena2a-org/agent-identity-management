@@ -134,7 +134,7 @@ func (s *fakeAlertChannelStore) recorded() []recordedDelivery {
 // newTestAlertChannelService returns a service on store that accepts every
 // Slack URL without a lookup and does not wait between attempts.
 func newTestAlertChannelService(store AlertChannelStore) *AlertChannelService {
-	s := NewAlertChannelService(store, "https://aim.example.test")
+	s := NewAlertChannelService(store, "https://aim.example.test", nil)
 	s.checkURL = func(string) error { return nil }
 	s.retryDelays = []time.Duration{0, 0, 0}
 	return s

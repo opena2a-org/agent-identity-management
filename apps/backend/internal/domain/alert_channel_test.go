@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaskAlertChannelSecret(t *testing.T) {
@@ -125,4 +126,76 @@ func TestAlertChannel_ViewMasksEachConfigValue(t *testing.T) {
 	assert.Equal(t, channel.LastDeliveryAt, view.LastDeliveryAt)
 	assert.Equal(t, channel.CreatedAt, view.CreatedAt)
 	assert.Equal(t, channel.UpdatedAt, view.UpdatedAt)
+}
+
+func TestAlertChannel_ViewGivesRecipientsUnmasked(t *testing.T) {
+	channel := &AlertChannel{
+		Kind:       AlertChannelEmail,
+		Config:     map[string]string{},
+		Recipients: []string{"oncall@example.com", "security@example.com"},
+	}
+
+	view := channel.View()
+
+	assert.Len(t, view.Config, 1)
+	assert.Equal(t, []string{"oncall@example.com", "security@example.com"}, view.Config[AlertChannelConfigRecipients])
+
+	// The view carries a copy: changing it leaves the channel's recipients as
+	// they were.
+	recipients, ok := view.Config[AlertChannelConfigRecipients].([]string)
+	require.True(t, ok)
+	recipients[0] = "changed@example.com"
+	assert.Equal(t, "oncall@example.com", channel.Recipients[0])
+}
+
+func TestAlertChannel_ConfigJSON(t *testing.T) {
+	// Without recipients the column holds Config alone.
+	pagerDuty := &AlertChannel{
+		Kind:   AlertChannelPagerDuty,
+		Config: map[string]string{AlertChannelConfigRoutingKey: "FAKE-KEY-5678"},
+	}
+	raw, err := pagerDuty.ConfigJSON()
+	require.NoError(t, err)
+	assert.Equal(t, `{"routingKey":"FAKE-KEY-5678"}`, string(raw))
+
+	// Recipients are added as the array "recipients" beside Config's values.
+	withRecipients := &AlertChannel{
+		Config:     map[string]string{AlertChannelConfigWebhookURL: "FAKE-URL-1234"},
+		Recipients: []string{"oncall@example.com", "security@example.com"},
+	}
+	raw, err = withRecipients.ConfigJSON()
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"webhookUrl":"FAKE-URL-1234","recipients":["oncall@example.com","security@example.com"]}`, string(raw))
+}
+
+func TestAlertChannel_SetConfigJSON(t *testing.T) {
+	// SetConfigJSON reads back what ConfigJSON wrote.
+	for _, written := range []*AlertChannel{
+		{Kind: AlertChannelSlack, Config: map[string]string{AlertChannelConfigWebhookURL: "FAKE-URL-1234"}},
+		{Kind: AlertChannelEmail, Config: map[string]string{}, Recipients: []string{"oncall@example.com", "security@example.com"}},
+	} {
+		raw, err := written.ConfigJSON()
+		require.NoError(t, err)
+
+		var read AlertChannel
+		require.NoError(t, read.SetConfigJSON(raw))
+		assert.Equal(t, written.Config, read.Config, "%s", raw)
+		assert.Equal(t, written.Recipients, read.Recipients, "%s", raw)
+	}
+
+	// A read replaces what the channel held.
+	channel := &AlertChannel{
+		Config:     map[string]string{AlertChannelConfigWebhookURL: "FAKE-URL-1234"},
+		Recipients: []string{"oncall@example.com"},
+	}
+	require.NoError(t, channel.SetConfigJSON([]byte(`{"routingKey":"FAKE-KEY-5678"}`)))
+	assert.Equal(t, map[string]string{AlertChannelConfigRoutingKey: "FAKE-KEY-5678"}, channel.Config)
+	assert.Nil(t, channel.Recipients)
+
+	// A value of another type names its field, and a column that is not an
+	// object is refused.
+	var read AlertChannel
+	assert.ErrorContains(t, read.SetConfigJSON([]byte(`{"routingKey":5678}`)), "config.routingKey: ")
+	assert.ErrorContains(t, read.SetConfigJSON([]byte(`{"recipients":"oncall@example.com"}`)), "config.recipients: ")
+	assert.Error(t, read.SetConfigJSON([]byte(`["oncall@example.com"]`)))
 }

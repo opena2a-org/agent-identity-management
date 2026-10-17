@@ -28,7 +28,8 @@ type AlertChannelServicer interface {
 }
 
 // AlertChannelHandler serves /api/v1/alert-channels. Answers carry each
-// channel with its destination masked to the last four characters.
+// channel with its destination masked to the last four characters; an email
+// channel's recipients, which are not credentials, are answered as stored.
 type AlertChannelHandler struct {
 	service AlertChannelServicer
 	audit   AuditServicer
@@ -112,7 +113,7 @@ func (h *AlertChannelHandler) logAudit(c fiber.Ctx, orgID uuid.UUID, action doma
 
 // CreateAlertChannel creates an alert channel
 // @Summary Create alert channel
-// @Description Send the organization's alerts of a severity floor or above to Slack or PagerDuty
+// @Description Send the organization's alerts of a severity floor or above to Slack, PagerDuty, a Microsoft Teams workflow or email addresses
 // @Tags alert-channels
 // @Accept json
 // @Produce json
@@ -250,7 +251,7 @@ func (h *AlertChannelHandler) DeleteAlertChannel(c fiber.Ctx) error {
 
 // TestAlertChannel sends one test message through an alert channel
 // @Summary Send a test message through an alert channel
-// @Description One attempt, no retry. A PagerDuty test triggers an incident on the PagerDuty service.
+// @Description One attempt, no retry. A PagerDuty test triggers an incident on the PagerDuty service; an email test is sent to each recipient.
 // @Tags alert-channels
 // @Produce json
 // @Param id path string true "Alert channel ID"

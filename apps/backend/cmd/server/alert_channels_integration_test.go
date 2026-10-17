@@ -212,19 +212,33 @@ func dialByHost(routes map[string]string, certs ...*x509.Certificate) func(time.
 	}
 }
 
-// An organization's alerts reach its Slack and PagerDuty alert channels in
-// each vendor's published format, through the server's route table against a
-// migrated database. Three channels are created through the API: Slack A with
-// the floor warning, Slack B with the floor high, and PagerDuty with the
-// floor info. One warning alert, raised by an agent's verification, reaches
-// Slack A and PagerDuty, which answers 500 once and accepts the retry, and
-// does not reach Slack B. No answer carries a webhook URL or routing key;
-// a test message, the role and organization checks and the request checks
-// are driven through the same routes.
-//
-//	TEST_DATABASE_URL=postgres://... go test -tags=integration \
-//	  -run TestAlertChannelsRoundTrip ./cmd/server/
-func TestAlertChannelsRoundTrip(t *testing.T) {
+// alertChannelsRig is a migrated database seeded with two organizations, a
+// manager and a viewer in the first and a manager in the second, and one
+// agent of the first, served through the real route table with the alert
+// channel service the server builds. Its cleanup removes every seeded row.
+type alertChannelsRig struct {
+	t   *testing.T
+	db  *sql.DB
+	ctx context.Context
+
+	name                      string
+	org, otherOrg             uuid.UUID
+	manager, viewer           uuid.UUID
+	managerToken, viewerToken string
+	otherToken                string
+	agentID                   uuid.UUID
+	agentDisplay              string
+	agentPub                  ed25519.PublicKey
+	agentKey                  ed25519.PrivateKey
+	channels                  *application.AlertChannelService
+	app                       *fiber.App
+}
+
+// newAlertChannelsRig seeds the rig and starts the alert channel service with
+// frontendURL and emailService, as startAlertChannels does for the server. It
+// skips the test when TEST_DATABASE_URL is not set.
+func newAlertChannelsRig(t *testing.T, frontendURL string, emailService domain.EmailService) *alertChannelsRig {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping alert channel integration test")
@@ -285,17 +299,9 @@ func TestAlertChannelsRoundTrip(t *testing.T) {
 		agentID, org, name+"-agent", agentDisplay, base64.StdEncoding.EncodeToString(pub), manager)
 	require.NoError(t, err)
 
-	slack := newSlackReceiver(t)
-	pagerDuty := newPagerDutyReceiver(t, 1)
-
 	repos, _ := initRepositories(db)
-	const frontendURL = "https://aim.example.test"
-	channels := startAlertChannels(repos, frontendURL)
+	channels := startAlertChannels(repos, frontendURL, emailService)
 	t.Cleanup(channels.Stop)
-	channels.SetDeliveryClientForIntegrationTest(dialByHost(map[string]string{
-		"hooks.slack.com:443":      slack.Listener.Addr().String(),
-		"events.pagerduty.com:443": pagerDuty.Listener.Addr().String(),
-	}, slack.Certificate(), pagerDuty.Certificate()))
 	channels.SetRetryDelaysForIntegrationTest([]time.Duration{20 * time.Millisecond, 20 * time.Millisecond, 20 * time.Millisecond})
 
 	// The services the verification route reaches, built as initServices
@@ -337,38 +343,151 @@ func TestAlertChannelsRoundTrip(t *testing.T) {
 	app.Use(middleware.RecoveryMiddleware())
 	mountAPIRoutes(app, h, services, jwtService, nil, db)
 
-	do := func(method, path, bearer string, body interface{}) (int, string) {
-		t.Helper()
-		var reader io.Reader
-		if body != nil {
-			raw, err := json.Marshal(body)
-			require.NoError(t, err)
-			reader = strings.NewReader(string(raw))
-		}
-		req := httptest.NewRequest(method, path, reader)
-		if body != nil {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		req.Header.Set("User-Agent", "alert-channels-round-trip-test/1.0")
-		if bearer != "" {
-			req.Header.Set("Authorization", "Bearer "+bearer)
-		}
-		resp, err := app.Test(req, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		answer, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		return resp.StatusCode, string(answer)
-	}
 	token := func(user, orgID uuid.UUID, email string, role domain.UserRole) string {
 		t.Helper()
 		tok, err := jwtService.GenerateAccessToken(user.String(), orgID.String(), email, string(role))
 		require.NoError(t, err)
 		return tok
 	}
-	managerToken := token(manager, org, managerEmail, domain.RoleManager)
-	viewerToken := token(viewer, org, viewerEmail, domain.RoleViewer)
-	otherToken := token(otherManager, otherOrg, otherEmail, domain.RoleManager)
+	return &alertChannelsRig{
+		t:            t,
+		db:           db,
+		ctx:          ctx,
+		name:         name,
+		org:          org,
+		otherOrg:     otherOrg,
+		manager:      manager,
+		viewer:       viewer,
+		managerToken: token(manager, org, managerEmail, domain.RoleManager),
+		viewerToken:  token(viewer, org, viewerEmail, domain.RoleViewer),
+		otherToken:   token(otherManager, otherOrg, otherEmail, domain.RoleManager),
+		agentID:      agentID,
+		agentDisplay: agentDisplay,
+		agentPub:     pub,
+		agentKey:     agentKey,
+		channels:     channels,
+		app:          app,
+	}
+}
+
+// do sends one request through the route table and returns its status and
+// body.
+func (r *alertChannelsRig) do(method, path, bearer string, body interface{}) (int, string) {
+	r.t.Helper()
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		require.NoError(r.t, err)
+		reader = strings.NewReader(string(raw))
+	}
+	req := httptest.NewRequest(method, path, reader)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("User-Agent", "alert-channels-round-trip-test/1.0")
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	resp, err := r.app.Test(req, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
+	require.NoError(r.t, err)
+	defer resp.Body.Close()
+	answer, err := io.ReadAll(resp.Body)
+	require.NoError(r.t, err)
+	return resp.StatusCode, string(answer)
+}
+
+// channelView is an alert channel as the routes answer it.
+type channelView struct {
+	ID                 uuid.UUID              `json:"id"`
+	Name               string                 `json:"name"`
+	Kind               string                 `json:"kind"`
+	MinSeverity        string                 `json:"minSeverity"`
+	IsActive           bool                   `json:"isActive"`
+	Config             map[string]interface{} `json:"config"`
+	LastDeliveryStatus *string                `json:"lastDeliveryStatus"`
+	LastDeliveryCode   *int                   `json:"lastDeliveryCode"`
+	LastDeliveryAt     *time.Time             `json:"lastDeliveryAt"`
+}
+
+// create creates a channel as the manager and returns the answer, which must
+// be 201.
+func (r *alertChannelsRig) create(channelName, kind string, config interface{}, floor string) channelView {
+	r.t.Helper()
+	status, body := r.do(fiber.MethodPost, "/api/v1/alert-channels", r.managerToken, map[string]interface{}{
+		"name": channelName, "kind": kind, "config": config, "minSeverity": floor,
+	})
+	require.Equal(r.t, fiber.StatusCreated, status, body)
+	var view channelView
+	require.NoError(r.t, json.Unmarshal([]byte(body), &view))
+	require.NotEqual(r.t, uuid.Nil, view.ID, body)
+	return view
+}
+
+// get reads a channel as the manager.
+func (r *alertChannelsRig) get(id uuid.UUID) (int, string, channelView) {
+	r.t.Helper()
+	status, body := r.do(fiber.MethodGet, "/api/v1/alert-channels/"+id.String(), r.managerToken, nil)
+	var view channelView
+	if status == fiber.StatusOK {
+		require.NoError(r.t, json.Unmarshal([]byte(body), &view), body)
+	}
+	return status, body, view
+}
+
+// raiseWarningAlert has the agent, which holds no capability, ask for one
+// through the verification route, which raises one warning alert in the
+// organization. It returns the alert's id and title.
+func (r *alertChannelsRig) raiseWarningAlert() (uuid.UUID, string) {
+	r.t.Helper()
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000") + "Z"
+	message := fmt.Sprintf(`{"action_type": "%s", "agent_id": "%s", "context": {}, "resource": null, "timestamp": "%s"}`,
+		"db:read", r.agentID, timestamp)
+	status, body := r.do(fiber.MethodPost, "/api/v1/sdk-api/verifications", "", map[string]interface{}{
+		"agentId":    r.agentID.String(),
+		"capability": "db:read",
+		"resource":   nil,
+		"context":    map[string]interface{}{},
+		"timestamp":  timestamp,
+		"signature":  base64.StdEncoding.EncodeToString(ed25519.Sign(r.agentKey, []byte(message))),
+		"publicKey":  base64.StdEncoding.EncodeToString(r.agentPub),
+	})
+	require.Less(r.t, status, 300, body)
+
+	var alertID uuid.UUID
+	var alertTitle, alertSeverity string
+	require.NoError(r.t, r.db.QueryRowContext(r.ctx, `SELECT id, title, severity FROM alerts WHERE organization_id = $1`, r.org).
+		Scan(&alertID, &alertTitle, &alertSeverity), "the verification raised exactly one alert")
+	require.Equal(r.t, "warning", alertSeverity)
+	return alertID, alertTitle
+}
+
+// An organization's alerts reach its Slack and PagerDuty alert channels in
+// each vendor's published format, through the server's route table against a
+// migrated database. Three channels are created through the API: Slack A with
+// the floor warning, Slack B with the floor high, and PagerDuty with the
+// floor info. One warning alert, raised by an agent's verification, reaches
+// Slack A and PagerDuty, which answers 500 once and accepts the retry, and
+// does not reach Slack B. No answer carries a webhook URL or routing key;
+// a test message, the role and organization checks and the request checks
+// are driven through the same routes.
+//
+//	TEST_DATABASE_URL=postgres://... go test -tags=integration \
+//	  -run TestAlertChannelsRoundTrip ./cmd/server/
+func TestAlertChannelsRoundTrip(t *testing.T) {
+	const frontendURL = "https://aim.example.test"
+	r := newAlertChannelsRig(t, frontendURL, nil)
+	db, ctx, org, manager := r.db, r.ctx, r.org, r.manager
+	managerToken, viewerToken, otherToken := r.managerToken, r.viewerToken, r.otherToken
+	agentID, agentDisplay := r.agentID, r.agentDisplay
+	do, get := r.do, r.get
+	var err error
+
+	slack := newSlackReceiver(t)
+	pagerDuty := newPagerDutyReceiver(t, 1)
+	r.channels.SetDeliveryClientForIntegrationTest(dialByHost(map[string]string{
+		"hooks.slack.com:443":      slack.Listener.Addr().String(),
+		"events.pagerduty.com:443": pagerDuty.Listener.Addr().String(),
+	}, slack.Certificate(), pagerDuty.Certificate()))
 
 	// Destinations built here from fragments: two Slack webhook URLs and a
 	// 32-character routing key.
@@ -380,27 +499,9 @@ func TestAlertChannelsRoundTrip(t *testing.T) {
 	require.Len(t, routingKey, 32)
 	secrets := []string{slackURLA, slackURLB, slackPathA, slackPathB, routingKey}
 
-	type channelView struct {
-		ID                 uuid.UUID         `json:"id"`
-		Name               string            `json:"name"`
-		Kind               string            `json:"kind"`
-		MinSeverity        string            `json:"minSeverity"`
-		IsActive           bool              `json:"isActive"`
-		Config             map[string]string `json:"config"`
-		LastDeliveryStatus *string           `json:"lastDeliveryStatus"`
-		LastDeliveryCode   *int              `json:"lastDeliveryCode"`
-		LastDeliveryAt     *time.Time        `json:"lastDeliveryAt"`
-	}
 	create := func(channelName, kind string, config map[string]string, floor string) channelView {
 		t.Helper()
-		status, body := do(fiber.MethodPost, "/api/v1/alert-channels", managerToken, map[string]interface{}{
-			"name": channelName, "kind": kind, "config": config, "minSeverity": floor,
-		})
-		require.Equal(t, fiber.StatusCreated, status, body)
-		var view channelView
-		require.NoError(t, json.Unmarshal([]byte(body), &view))
-		require.NotEqual(t, uuid.Nil, view.ID, body)
-		return view
+		return r.create(channelName, kind, config, floor)
 	}
 
 	// A viewer cannot create a channel.
@@ -417,35 +518,7 @@ func TestAlertChannelsRoundTrip(t *testing.T) {
 	assert.True(t, slackA.IsActive)
 
 	// The alert: a verification by the agent, which holds no capability.
-	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000000") + "Z"
-	message := fmt.Sprintf(`{"action_type": "%s", "agent_id": "%s", "context": {}, "resource": null, "timestamp": "%s"}`,
-		"db:read", agentID, timestamp)
-	status, body = do(fiber.MethodPost, "/api/v1/sdk-api/verifications", "", map[string]interface{}{
-		"agentId":    agentID.String(),
-		"capability": "db:read",
-		"resource":   nil,
-		"context":    map[string]interface{}{},
-		"timestamp":  timestamp,
-		"signature":  base64.StdEncoding.EncodeToString(ed25519.Sign(agentKey, []byte(message))),
-		"publicKey":  base64.StdEncoding.EncodeToString(pub),
-	})
-	require.Less(t, status, 300, body)
-
-	var alertID uuid.UUID
-	var alertTitle, alertSeverity string
-	require.NoError(t, db.QueryRowContext(ctx, `SELECT id, title, severity FROM alerts WHERE organization_id = $1`, org).
-		Scan(&alertID, &alertTitle, &alertSeverity), "the verification raised exactly one alert")
-	require.Equal(t, "warning", alertSeverity)
-
-	get := func(id uuid.UUID) (int, string, channelView) {
-		t.Helper()
-		status, body := do(fiber.MethodGet, "/api/v1/alert-channels/"+id.String(), managerToken, nil)
-		var view channelView
-		if status == fiber.StatusOK {
-			require.NoError(t, json.Unmarshal([]byte(body), &view), body)
-		}
-		return status, body, view
-	}
+	alertID, alertTitle := r.raiseWarningAlert()
 
 	// Wait for both deliveries to be recorded.
 	deadline := time.Now().Add(15 * time.Second)

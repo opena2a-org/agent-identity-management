@@ -48,6 +48,32 @@ func TestAlertChannelRepository_CreateStoresTheConfigAsJSON(t *testing.T) {
 	assert.False(t, channel.CreatedAt.IsZero())
 }
 
+// An email channel's recipients are stored as the config's "recipients"
+// array, and read back into Recipients.
+func TestAlertChannelRepository_EmailRecipientsRoundTrip(t *testing.T) {
+	repo, mock := newAlertChannelRepo(t)
+	org, id := uuid.New(), uuid.New()
+	channel := &domain.AlertChannel{ID: id, OrganizationID: org, Name: "mail", Kind: domain.AlertChannelEmail,
+		Config: map[string]string{}, Recipients: []string{"ops@example.com", "sec@example.com"}, MinSeverity: domain.AlertSeverityInfo, IsActive: true}
+
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO alert_channels")).
+		WithArgs(id, org, "mail", "email", []byte(`{"recipients":["ops@example.com","sec@example.com"]}`), "info", true, nil,
+			sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	require.NoError(t, repo.Create(context.Background(), channel))
+
+	at := time.Date(2026, 10, 16, 1, 2, 3, 0, time.UTC)
+	mock.ExpectQuery(regexp.QuoteMeta("FROM alert_channels WHERE id = $1 AND organization_id = $2")).
+		WithArgs(id, org).
+		WillReturnRows(sqlmock.NewRows(alertChannelRowColumns).
+			AddRow(id, org, "mail", "email", `{"recipients": ["ops@example.com", "sec@example.com"]}`, "info", true, nil, nil, nil, nil, at, at))
+	got, err := repo.GetByID(context.Background(), org, id)
+	require.NoError(t, err)
+	assert.Equal(t, domain.AlertChannelEmail, got.Kind)
+	assert.Equal(t, []string{"ops@example.com", "sec@example.com"}, got.Recipients)
+	assert.Empty(t, got.Config)
+}
+
 func TestAlertChannelRepository_ANameInUseIsNameTaken(t *testing.T) {
 	repo, mock := newAlertChannelRepo(t)
 	channel := &domain.AlertChannel{ID: uuid.New(), OrganizationID: uuid.New(), Name: "ops", Kind: domain.AlertChannelSlack,

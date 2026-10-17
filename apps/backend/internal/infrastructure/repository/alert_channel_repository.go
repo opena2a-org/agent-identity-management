@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -46,7 +45,7 @@ func alertChannelWriteError(err error) error {
 // Create inserts channel. A name another channel of the organization has is
 // refused with domain.ErrAlertChannelNameTaken.
 func (r *AlertChannelRepository) Create(ctx context.Context, channel *domain.AlertChannel) error {
-	config, err := json.Marshal(channel.Config)
+	config, err := channel.ConfigJSON()
 	if err != nil {
 		return fmt.Errorf("encode alert channel config: %w", err)
 	}
@@ -103,7 +102,7 @@ func (r *AlertChannelRepository) ListActiveForFloors(ctx context.Context, orgID 
 // that is not the organization's is domain.ErrAlertChannelNotFound, and a name
 // another channel of the organization has is domain.ErrAlertChannelNameTaken.
 func (r *AlertChannelRepository) Update(ctx context.Context, channel *domain.AlertChannel) error {
-	config, err := json.Marshal(channel.Config)
+	config, err := channel.ConfigJSON()
 	if err != nil {
 		return fmt.Errorf("encode alert channel config: %w", err)
 	}
@@ -175,7 +174,7 @@ func scanAlertChannel(row alertChannelScanner) (*domain.AlertChannel, error) {
 	}
 	channel.Kind = domain.AlertChannelKind(kind)
 	channel.MinSeverity = domain.AlertSeverity(floor)
-	if err := json.Unmarshal([]byte(config), &channel.Config); err != nil {
+	if err := channel.SetConfigJSON([]byte(config)); err != nil {
 		return nil, fmt.Errorf("decode the config of alert channel %s: %w", channel.ID, err)
 	}
 	if status.Valid {

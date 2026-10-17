@@ -25,10 +25,14 @@ import (
 // PagerDuty is out of the term list: an organization's alerts reach it through
 // the Events API v2, proved by TestAlertChannelsRoundTrip
 // (alert_channels_integration_test.go, integration tag).
+//
+// Microsoft Teams is out of the term list: an organization's alerts reach a
+// Teams workflow, proved by TestAlertChannelsTeamsEmailRoundTrip
+// (alert_channels_teams_email_integration_test.go, integration tag).
 
 // unshippedIntegration matches the name of an integration the server does not
 // ship.
-var unshippedIntegration = regexp.MustCompile(`(?i)cyberark|sentinel|microsoft teams`)
+var unshippedIntegration = regexp.MustCompile(`(?i)cyberark|sentinel`)
 
 // integrationStatus matches the words that state such an integration's status.
 var integrationStatus = regexp.MustCompile(`(?i)\b(planned|under evaluation|not available|not loaded|not supported)\b`)
@@ -154,8 +158,8 @@ func TestUnshippedIntegrationsCarryAStatusInTheDocs(t *testing.T) {
 }
 
 // Slack is not in the term list: the example guides post to Slack from the
-// agent's own code, not through the server. PagerDuty is not in it either: the
-// server ships it.
+// agent's own code, not through the server. PagerDuty and Microsoft Teams are
+// not in it either: the server ships them.
 func TestUnshippedIntegrationFindings(t *testing.T) {
 	sample := strings.Join([]string{
 		"CCP for vaulted credential retrieval through CyberArk.",
