@@ -1681,7 +1681,8 @@ class APIClient {
     return this.request(`/api/v1/analytics/activity?days=${days}`);
   }
 
-  // Webhooks
+  // Webhooks. No answer but createWebhook's and rotateWebhookSecret's carries
+  // the webhook's signing secret.
   async listWebhooks(): Promise<
     Array<{
       id: string;
@@ -1690,9 +1691,8 @@ class APIClient {
       url: string;
       events: string[];
       isActive: boolean;
-      secret: string;
       createdAt: string;
-      lastTriggeredAt?: string;
+      lastTriggered?: string;
       successCount: number;
       failureCount: number;
     }>
@@ -1703,6 +1703,8 @@ class APIClient {
     return response.webhooks || [];
   }
 
+  // The answer carries the secret deliveries are signed with, this once: the
+  // one given in data, or the one the server generated.
   async createWebhook(data: {
     name: string;
     url: string;
@@ -1731,19 +1733,10 @@ class APIClient {
     url: string;
     events: string[];
     isActive: boolean;
-    secret: string;
     createdAt: string;
-    lastTriggeredAt?: string;
+    lastTriggered?: string;
     successCount: number;
     failureCount: number;
-    deliveries: Array<{
-      id: string;
-      event: string;
-      status: "success" | "failure";
-      responseCode: number;
-      timestamp: string;
-      errorMessage?: string;
-    }>;
   }> {
     return this.request(`/api/v1/webhooks/${id}`);
   }
@@ -1752,12 +1745,25 @@ class APIClient {
     return this.request(`/api/v1/webhooks/${id}`, { method: "DELETE" });
   }
 
+  // Replaces the webhook's secret with a new generated one, answered this
+  // once. Deliveries queued after it are signed with the new secret only.
+  async rotateWebhookSecret(id: string): Promise<{
+    id: string;
+    secret: string;
+  }> {
+    return this.request(`/api/v1/webhooks/${id}/rotate-secret`, {
+      method: "POST",
+    });
+  }
+
+  // The server sets the name, URL and events from the body, so each update
+  // sends all three.
   async updateWebhook(
     id: string,
     data: {
-      name?: string;
-      url?: string;
-      events?: string[];
+      name: string;
+      url: string;
+      events: string[];
       isActive?: boolean;
     }
   ): Promise<{

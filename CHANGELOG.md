@@ -303,6 +303,44 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Changed — a webhook's signing secret reaches its owner once, can be rotated, and a subscription to an unknown event or with an unknown field is refused
+
+- `POST /api/v1/webhooks` takes an optional `secret` of 32 to 255 characters and stores it as given; a shorter one is
+  answered `400 {"error":"secret must be at least 32 characters"}` and a longer one
+  `400 {"error":"secret must be at most 255 characters"}`. Without `secret`, the server generates a 64-character hex
+  secret. The `201` answer carries the webhook and its `secret` once, with `Cache-Control: no-store`;
+  `GET /api/v1/webhooks`, `GET /api/v1/webhooks/:id` and `PUT /api/v1/webhooks/:id` never return it.
+- `POST /api/v1/webhooks/:id/rotate-secret`, behind the member check and the organization checks of the update route,
+  stores a new generated secret and answers `200 {"id": ..., "secret": ...}` once. There is no overlap period:
+  deliveries queued after it are signed with the new secret only, and a delivery queued before it, retries included,
+  keeps its signature. It writes an `update` audit row for the `webhook` with `rotatedSecret: true` and
+  without the secret, and refuses a revoked session as create and update do.
+- Create and update refuse a body key they do not take with `400 {"error":"unknown field: <key>"}`
+  (`unknown fields: <a>, <b>` for several; an update does not take `secret`), and an event outside the server's list
+  with `400 {"error":"unsupported event: <name>"}`. The five names `docs/API.md` lists as accepted and never sent stay
+  accepted. A create with `isActive: false` stores the webhook inactive.
+- Measured through the server's route table against a migrated database on the commit before this change: a create
+  answered `201` without `secret`, both with no `secret` and with a 40-character one; a create answered `201` for a
+  31-character `secret`, for `events` containing `auth.failed`, and for a body with a `headers` key; an update with a
+  `headers` key answered `200`; and `POST /api/v1/webhooks/:id/rotate-secret` answered `404`.
+- Dashboard: the create dialog offers the eleven events the server sends, with the descriptions `docs/API.md` gives
+  them, checks a chosen secret's length, and after a create shows the returned secret once with a copy control and a
+  line saying it will not be shown again. The details dialog no longer shows a secret field or a delivery history tab,
+  neither of which the webhook read carries, and offers "Rotate secret", which after a confirmation shows the new
+  secret once. `apps/web/lib/api.ts` adds `rotateWebhookSecret`, reads `lastTriggered`, the name the server sends, in
+  place of `lastTriggeredAt`, drops `secret` and `deliveries` from the read types, and requires `name`, `url` and
+  `events` in an update, which sets all three from the body.
+- `docs/API.md` § Webhooks documents the create fields, the one-time `secret`, the update body, the rotate route and
+  the `400` answers. It no longer says that the signing secret is not returned, that a `secret` in the request is
+  ignored, or that an event name outside the table is accepted and never sent;
+  `apps/backend/cmd/server/integration_claims_docs_test.go` holds the new statements.
+- Tests: `apps/backend/cmd/server/webhook_secret_integration_test.go` (`TestWebhookSecretRoundTrip`, integration
+  tag), `apps/backend/internal/application/webhook_secret_test.go`,
+  `apps/backend/internal/application/webhook_delivery_client_integration_build_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/webhook_secret_handler_test.go`, the rotate row of
+  `credential_routes_family_test.go`, and in `apps/web` `components/webhook/webhook-create-modal.test.tsx`,
+  `components/webhook/webhook-detail-modal.test.tsx` and `lib/api.webhooks.test.ts`.
+
 ### Added — a refused or unreachable SIEM shows in `/health/ready` and `/metrics`, and the loss bound is stated
 
 - `GET /health/ready` carries `dependencies.siem` with `required: false`. It is `notConfigured` when no SIEM is

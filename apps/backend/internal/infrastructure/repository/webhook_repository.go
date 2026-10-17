@@ -184,6 +184,27 @@ func (r *WebhookRepository) Update(webhook *domain.Webhook) error {
 	return err
 }
 
+// UpdateSecret replaces the signing secret of the organization's webhook id.
+// It returns sql.ErrNoRows when the organization has no such webhook.
+func (r *WebhookRepository) UpdateSecret(id, organizationID uuid.UUID, secret string) error {
+	result, err := r.db.Exec(
+		`UPDATE webhooks SET secret = $1, updated_at = $2
+		 WHERE id = $3 AND organization_id = $4 AND deleted_at IS NULL`,
+		secret, time.Now().UTC(), id, organizationID,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (r *WebhookRepository) Delete(id uuid.UUID) error {
 	// Soft delete
 	query := `UPDATE webhooks SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`

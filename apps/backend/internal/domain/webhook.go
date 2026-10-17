@@ -59,6 +59,17 @@ func AllWebhookEvents() []WebhookEvent {
 	}
 }
 
+// IsKnownWebhookEvent reports whether a webhook can subscribe to event: it is
+// one of AllWebhookEvents.
+func IsKnownWebhookEvent(event WebhookEvent) bool {
+	for _, known := range AllWebhookEvents() {
+		if event == known {
+			return true
+		}
+	}
+	return false
+}
+
 // WebhookStatus represents the status of a webhook endpoint
 type WebhookStatus string
 
@@ -120,13 +131,13 @@ type WebhookDelivery struct {
 	Status         WebhookDeliveryStatus `json:"status"`
 
 	// Delivery details
-	AttemptCount   int        `json:"attemptCount"`
-	LastAttemptAt  *time.Time `json:"lastAttemptAt,omitempty"`
-	NextRetryAt    *time.Time `json:"nextRetryAt,omitempty"`
-	StatusCode     int        `json:"statusCode,omitempty"`
-	ResponseBody   string     `json:"responseBody,omitempty"`
-	ErrorMessage   string     `json:"errorMessage,omitempty"`
-	DurationMs     int64      `json:"durationMs,omitempty"`
+	AttemptCount  int        `json:"attemptCount"`
+	LastAttemptAt *time.Time `json:"lastAttemptAt,omitempty"`
+	NextRetryAt   *time.Time `json:"nextRetryAt,omitempty"`
+	StatusCode    int        `json:"statusCode,omitempty"`
+	ResponseBody  string     `json:"responseBody,omitempty"`
+	ErrorMessage  string     `json:"errorMessage,omitempty"`
+	DurationMs    int64      `json:"durationMs,omitempty"`
 
 	// Legacy field
 	Success bool `json:"success"`

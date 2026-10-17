@@ -1,9 +1,14 @@
 package handlers
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
+	"sort"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -71,8 +76,10 @@ const webhookURLRefusedMessage = "url must be a public http or https URL"
 
 // respondWebhookServiceError answers a webhook create or update error. A URL
 // the server refuses is a problem with the caller's input, so it is answered
-// with 400 and a fixed reason; any other error is answered by
-// respondServerError. Both keep the service's reason in the server log only.
+// with 400 and a fixed reason, and the service's reason stays in the server
+// log. An event or secret the service refuses is answered with 400 and the
+// service's reason, which names the event or the secret's length. Any other
+// error is answered by respondServerError.
 func respondWebhookServiceError(c fiber.Ctx, err error) error {
 	if errors.Is(err, application.ErrWebhookURLRefused) {
 		log.Printf("webhook: URL refused: %v", err)
@@ -80,7 +87,86 @@ func respondWebhookServiceError(c fiber.Ctx, err error) error {
 			"error": webhookURLRefusedMessage,
 		})
 	}
+	var invalid *application.WebhookRequestError
+	if errors.As(err, &invalid) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": invalid.Reason,
+		})
+	}
 	return respondServerError(c, fiber.StatusInternalServerError, err)
+}
+
+// webhookCreateFields are the keys a webhook create body may carry: the JSON
+// names of application.CreateWebhookRequest. webhookUpdateFields are the same
+// without secret, which only rotate-secret changes.
+var (
+	webhookCreateFields = jsonFieldNames(reflect.TypeOf(application.CreateWebhookRequest{}))
+	webhookUpdateFields = withoutField(webhookCreateFields, "secret")
+)
+
+// jsonFieldNames returns the JSON names of a struct type's fields.
+func jsonFieldNames(t reflect.Type) map[string]bool {
+	names := make(map[string]bool, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			names[name] = true
+		}
+	}
+	return names
+}
+
+func withoutField(fields map[string]bool, field string) map[string]bool {
+	out := make(map[string]bool, len(fields))
+	for name := range fields {
+		if name != field {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// decodeWebhookBody decodes a webhook create or update body into req. A key
+// that is not one of fields is refused by name rather than dropped, so a
+// setting the server does not store is never accepted without a word. It
+// returns the reason for a 400, or "" when req holds the body.
+func decodeWebhookBody(body []byte, fields map[string]bool, req *application.CreateWebhookRequest) string {
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(body, &keys); err != nil || keys == nil {
+		return "Invalid request body"
+	}
+	unknown := make([]string, 0)
+	for key := range keys {
+		if !fields[key] {
+			unknown = append(unknown, key)
+		}
+	}
+	if len(unknown) == 1 {
+		return "unknown field: " + unknown[0]
+	}
+	if len(unknown) > 1 {
+		sort.Strings(unknown)
+		return "unknown fields: " + strings.Join(unknown, ", ")
+	}
+	if err := json.Unmarshal(body, req); err != nil {
+		return "Invalid request body"
+	}
+	return ""
+}
+
+// WebhookCreatedResponse is the answer to a webhook create: the webhook and,
+// this once, the secret its deliveries are signed with. No other answer
+// carries the secret.
+type WebhookCreatedResponse struct {
+	*domain.Webhook
+	Secret string `json:"secret"`
+}
+
+// WebhookSecretResponse is the answer to a secret rotation: the webhook's id
+// and, this once, its new secret.
+type WebhookSecretResponse struct {
+	ID     uuid.UUID `json:"id"`
+	Secret string    `json:"secret"`
 }
 
 // CreateWebhook creates a new webhook subscription
@@ -90,7 +176,7 @@ func respondWebhookServiceError(c fiber.Ctx, err error) error {
 // @Accept json
 // @Produce json
 // @Param request body application.CreateWebhookRequest true "Webhook details"
-// @Success 201 {object} domain.Webhook
+// @Success 201 {object} WebhookCreatedResponse
 // @Failure 400 {object} map[string]interface{}
 // @Router /api/v1/webhooks [post]
 func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
@@ -106,9 +192,9 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 	}
 
 	var req application.CreateWebhookRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	if reason := decodeWebhookBody(c.Body(), webhookCreateFields, &req); reason != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
+			"error": reason,
 		})
 	}
 
@@ -133,7 +219,8 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 		},
 	)
 
-	return c.Status(fiber.StatusCreated).JSON(webhook)
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	return c.Status(fiber.StatusCreated).JSON(WebhookCreatedResponse{Webhook: webhook, Secret: webhook.Secret})
 }
 
 // ListWebhooks lists all webhooks for the organization
@@ -303,9 +390,9 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	}
 
 	var req application.CreateWebhookRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	if reason := decodeWebhookBody(c.Body(), webhookUpdateFields, &req); reason != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
+			"error": reason,
 		})
 	}
 
@@ -332,6 +419,77 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	)
 
 	return c.JSON(webhook)
+}
+
+// RotateWebhookSecret replaces a webhook's signing secret
+// @Summary Rotate webhook secret
+// @Description Replace the webhook's signing secret with a new generated one, returned once. Deliveries queued after it are signed with the new secret only.
+// @Tags webhooks
+// @Produce json
+// @Param id path string true "Webhook ID"
+// @Success 200 {object} WebhookSecretResponse
+// @Failure 404 {object} map[string]interface{}
+// @Router /api/v1/webhooks/{id}/rotate-secret [post]
+func (h *WebhookHandler) RotateWebhookSecret(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	// A revoked session cannot obtain a secret that signs the organization's events.
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), "webhook_rotate_secret") {
+		return nil
+	}
+
+	webhookID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid webhook ID",
+		})
+	}
+
+	// Verify webhook belongs to organization
+	webhook, err := h.getWebhookService().GetWebhook(c.Context(), webhookID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Webhook not found",
+		})
+	}
+	if webhook.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	secret, err := h.getWebhookService().RotateWebhookSecret(c.Context(), webhookID, orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Webhook not found",
+		})
+	}
+	if err != nil {
+		return respondServerError(c, fiber.StatusInternalServerError, err)
+	}
+
+	// Log audit. The secret is never written to the audit log.
+	h.getAuditService().LogAction(
+		c.Context(),
+		orgID,
+		userID,
+		domain.AuditActionUpdate,
+		"webhook",
+		webhookID,
+		c.IP(),
+		c.Get("User-Agent"),
+		map[string]interface{}{
+			"webhookName":   webhook.Name,
+			"rotatedSecret": true,
+		},
+	)
+
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	return c.JSON(WebhookSecretResponse{ID: webhookID, Secret: secret})
 }
 
 // TestWebhook sends a test payload to a webhook

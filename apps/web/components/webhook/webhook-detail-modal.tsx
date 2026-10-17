@@ -11,26 +11,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   CheckCircle,
-  XCircle,
-  Clock,
   ExternalLink,
   Copy,
-  Eye,
-  EyeOff,
   RefreshCw,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
@@ -43,6 +32,8 @@ interface WebhookDetailModalProps {
   onRefresh: () => void;
 }
 
+// The webhook as GET /api/v1/webhooks/:id answers it. The answer never carries
+// the signing secret.
 interface WebhookDetail {
   id: string;
   organizationId: string;
@@ -50,19 +41,10 @@ interface WebhookDetail {
   url: string;
   events: string[];
   isActive: boolean;
-  secret: string;
   createdAt: string;
-  lastTriggeredAt?: string;
+  lastTriggered?: string;
   successCount: number;
   failureCount: number;
-  deliveries: Array<{
-    id: string;
-    event: string;
-    status: 'success' | 'failure';
-    responseCode: number;
-    timestamp: string;
-    errorMessage?: string;
-  }>;
 }
 
 export function WebhookDetailModal({
@@ -74,7 +56,12 @@ export function WebhookDetailModal({
   const [webhook, setWebhook] = useState<WebhookDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showSecret, setShowSecret] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  // The secret the rotation answered with. It is shown once, here, and the
+  // server does not return it again.
+  const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchWebhookDetails = async () => {
@@ -82,7 +69,7 @@ export function WebhookDetailModal({
     setError(null);
     try {
       const data = await api.getWebhook(webhookId);
-      setWebhook(data as WebhookDetail);
+      setWebhook(data);
     } catch (err: any) {
       console.error('Failed to fetch webhook details:', err);
       setError(err.message || 'Failed to load webhook details');
@@ -97,13 +84,33 @@ export function WebhookDetailModal({
     }
   }, [isOpen, webhookId]);
 
-  const handleCopySecret = () => {
-    if (webhook) {
-      navigator.clipboard.writeText(webhook.secret);
+  const handleRotateSecret = async () => {
+    setRotating(true);
+    setRotateError(null);
+    try {
+      // The list is not reloaded here: the page replaces itself, and this
+      // modal with it, while it loads, and the new secret would be lost.
+      const rotation = await api.rotateWebhookSecret(webhookId);
+      setRotatedSecret(rotation.secret);
+      setConfirmRotate(false);
+    } catch (err: any) {
+      console.error('Failed to rotate webhook secret:', err);
+      setRotateError(err.message || 'Failed to rotate the webhook secret');
+    } finally {
+      setRotating(false);
+    }
+  };
+
+  const handleCopySecret = async () => {
+    if (!rotatedSecret) return;
+    try {
+      await navigator.clipboard.writeText(rotatedSecret);
       toast({
         title: 'Secret copied',
         description: 'Webhook secret has been copied to clipboard',
       });
+    } catch (err) {
+      console.error('Failed to copy webhook secret:', err);
     }
   };
 
@@ -167,17 +174,14 @@ export function WebhookDetailModal({
         <DialogHeader>
           <DialogTitle>{webhook.name}</DialogTitle>
           <DialogDescription>
-            Webhook configuration and delivery history
+            Webhook configuration and subscribed events
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="py-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="events">Events</TabsTrigger>
-            <TabsTrigger value="deliveries">
-              Delivery History ({webhook.deliveries?.length || 0})
-            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -252,28 +256,64 @@ export function WebhookDetailModal({
 
                 <div className="space-y-2">
                   <Label>Webhook Secret</Label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono">
-                      {showSecret ? webhook.secret : '•'.repeat(40)}
-                    </code>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowSecret(!showSecret)}
-                    >
-                      {showSecret ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleCopySecret}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Use this secret to verify webhook signatures in your endpoint
-                  </p>
+                  {rotatedSecret !== null ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <code
+                          data-testid="webhook-rotated-secret"
+                          className="flex-1 break-all bg-muted px-3 py-2 rounded text-sm font-mono"
+                        >
+                          {rotatedSecret}
+                        </code>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCopySecret}
+                          aria-label="Copy secret"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        This secret will not be shown again. Deliveries queued from now on are
+                        signed with it.
+                      </p>
+                    </>
+                  ) : confirmRotate ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        Rotating replaces the secret at once. Deliveries queued after it are signed
+                        with the new secret, so your endpoint must switch to it to keep verifying
+                        them.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={handleRotateSecret} disabled={rotating}>
+                          {rotating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Confirm rotation
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmRotate(false)}
+                          disabled={rotating}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        The secret is shown only when the webhook is created or its secret is
+                        rotated.
+                      </p>
+                      <Button variant="outline" size="sm" onClick={() => setConfirmRotate(true)}>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Rotate secret
+                      </Button>
+                    </div>
+                  )}
+                  {rotateError && <p className="text-sm text-red-600">{rotateError}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -284,12 +324,12 @@ export function WebhookDetailModal({
                   </p>
                 </div>
 
-                {webhook.lastTriggeredAt && (
+                {webhook.lastTriggered && (
                   <div className="space-y-2">
                     <Label>Last Triggered</Label>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(webhook.lastTriggeredAt).toLocaleString()} (
-                      {formatDistanceToNow(new Date(webhook.lastTriggeredAt), {
+                      {new Date(webhook.lastTriggered).toLocaleString()} (
+                      {formatDistanceToNow(new Date(webhook.lastTriggered), {
                         addSuffix: true,
                       })}
                       )
@@ -321,88 +361,6 @@ export function WebhookDetailModal({
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Deliveries Tab */}
-          <TabsContent value="deliveries">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl">Delivery History</CardTitle>
-                    <CardDescription>
-                      Recent webhook delivery attempts and their outcomes
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={fetchWebhookDetails}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {(webhook.deliveries?.length || 0) === 0 ? (
-                  <div className="text-center py-12">
-                    <Clock className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">No deliveries yet</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Deliveries will appear here once events are triggered
-                    </p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Event</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Response Code</TableHead>
-                        <TableHead>Timestamp</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {webhook.deliveries?.map((delivery) => (
-                        <TableRow key={delivery.id}>
-                          <TableCell>
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {delivery.event}
-                            </code>
-                          </TableCell>
-                          <TableCell>
-                            {delivery.status === 'success' ? (
-                              <Badge className="bg-green-100 text-green-800 border-green-200">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Success
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-red-100 text-red-800 border-red-200">
-                                <XCircle className="h-3 w-3 mr-1" />
-                                Failed
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span
-                              className={`font-mono text-sm ${
-                                delivery.responseCode >= 200 && delivery.responseCode < 300
-                                  ? 'text-green-600'
-                                  : 'text-red-600'
-                              }`}
-                            >
-                              {delivery.responseCode}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatDistanceToNow(new Date(delivery.timestamp), {
-                              addSuffix: true,
-                            })}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
               </CardContent>
             </Card>
           </TabsContent>

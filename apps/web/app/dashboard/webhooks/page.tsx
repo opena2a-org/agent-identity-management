@@ -54,9 +54,8 @@ interface WebhookItem {
   url: string;
   events: string[];
   isActive: boolean;
-  secret: string;
   createdAt: string;
-  lastTriggeredAt?: string;
+  lastTriggered?: string;
   successCount: number;
   failureCount: number;
 }
@@ -457,10 +456,10 @@ export default function WebhooksPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {webhook.lastTriggeredAt ? (
+                          {webhook.lastTriggered ? (
                             <div className="flex items-center gap-1 text-sm text-muted-foreground">
                               <Clock className="h-3 w-3" />
-                              {formatDistanceToNow(new Date(webhook.lastTriggeredAt), {
+                              {formatDistanceToNow(new Date(webhook.lastTriggered), {
                                 addSuffix: true,
                               })}
                             </div>
