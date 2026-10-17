@@ -15,7 +15,7 @@ import path from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { inScope, run, scanMarkdown } from './check-docs-prose.mjs';
+import { gitEnv, inScope, run, scanMarkdown } from './check-docs-prose.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, 'check-docs-prose.mjs');
@@ -40,20 +40,25 @@ function rules(text) {
   return scanMarkdown(text).map((f) => `${f.line}:${f.rule}`);
 }
 
-// A git repository whose index holds `files`.
+// A git repository whose index holds `files`. Every child runs without git's
+// repository-local variables, so it uses the repository in `dir` even when
+// the cells run inside a git hook.
 function repoWith(files) {
   const dir = tempDir('docs-prose-');
-  spawnSync('git', ['init', '-q'], { cwd: dir });
+  spawnSync('git', ['init', '-q'], { cwd: dir, env: gitEnv() });
   for (const [rel, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
     fs.writeFileSync(path.join(dir, rel), text);
   }
-  spawnSync('git', ['add', '--', ...Object.keys(files)], { cwd: dir });
+  spawnSync('git', ['add', '--', ...Object.keys(files)], { cwd: dir, env: gitEnv() });
   return dir;
 }
 
 function cli(root) {
-  return spawnSync(process.execPath, [SCRIPT, '--root', root], { encoding: 'utf8' });
+  return spawnSync(process.execPath, [SCRIPT, '--root', root], {
+    encoding: 'utf8',
+    env: gitEnv(),
+  });
 }
 
 test('the tracked documents of this repository are clean', () => {
@@ -206,4 +211,55 @@ test('the command exits 2 when the tree cannot be enumerated', () => {
     env: { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) },
   });
   assert.equal(res.status, 2, res.stdout + res.stderr);
+});
+
+// git in `cwd` with a scratch identity, finding its repository from `cwd`.
+function git(cwd, ...args) {
+  return spawnSync(
+    'git',
+    ['-c', 'user.name=docs-prose', '-c', 'user.email=docs-prose@example.invalid', ...args],
+    { cwd, encoding: 'utf8', env: gitEnv() },
+  );
+}
+
+test('a GIT_DIR exported by a hook in a linked worktree reaches no repository', () => {
+  // A pre-push hook started from a linked worktree runs with GIT_DIR set to
+  // the worktree's gitdir under the main checkout's .git/worktrees/.
+  const base = tempDir('docs-prose-hook-');
+  const main = path.join(base, 'main');
+  const linked = path.join(base, 'linked');
+  for (const args of [
+    ['init', '-q', main],
+    ['-C', main, 'commit', '-q', '--no-verify', '--no-gpg-sign', '--allow-empty', '-m', 'init'],
+    ['-C', main, 'worktree', 'add', '-q', '--detach', linked],
+  ]) {
+    const res = git(base, ...args);
+    assert.equal(res.status, 0, res.stderr);
+  }
+  const gitdir = git(linked, 'rev-parse', '--absolute-git-dir').stdout.trim();
+  assert.equal(gitdir, path.join(main, '.git', 'worktrees', 'linked'));
+
+  const saved = process.env.GIT_DIR;
+  process.env.GIT_DIR = gitdir;
+  let res;
+  let direct;
+  try {
+    const dir = repoWith({ 'README.md': `A dash ${EM} here.\n` });
+    res = cli(dir);
+    direct = run(dir);
+  } finally {
+    if (saved === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = saved;
+  }
+
+  assert.deepEqual(
+    {
+      bare: git(main, 'config', '--get', 'core.bare').stdout.trim(),
+      staged: git(linked, 'diff', '--cached', '--name-only').stdout,
+    },
+    { bare: 'false', staged: '' },
+  );
+  assert.equal(res.status, 1, res.stderr);
+  assert.equal(res.stdout.trim(), 'README.md:1: em-dash');
+  assert.deepEqual(direct.findings, [{ path: 'README.md', line: 1, rule: 'em-dash' }]);
 });
