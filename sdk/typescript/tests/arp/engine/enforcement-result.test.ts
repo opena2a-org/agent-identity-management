@@ -280,6 +280,48 @@ describe('an EventEngine with no executor attached', () => {
   });
 });
 
+describe('an EventEngine with a custom executor', () => {
+  async function handlerResult(returned: Omit<EnforcementResult, 'action' | 'event'>): Promise<EnforcementResult> {
+    const engine = new EventEngine(
+      { agentName: 'enforcement-result-test' },
+      { execute: async (action, event) => ({ action, event, ...returned }) },
+    );
+    const results: EnforcementResult[] = [];
+    engine.onEnforcement((r) => { results.push(r); });
+    const emitted = await emitCriticalThreat(engine, {});
+    expect(results).toHaveLength(1);
+    expect(results[0].event).toBe(emitted);
+    return results[0];
+  }
+
+  it('a result with success true and outcome failed reaches the handler as success false', async () => {
+    const r = await handlerResult({ success: true, outcome: 'failed', reason: 'x' });
+    expect(decision(r)).toEqual({ action: 'kill', success: false, outcome: 'failed', targetPid: undefined });
+    expect(r.reason).toBe('x');
+  });
+
+  it.each(['no-target', 'not-executed'] as const)(
+    'a result with success true and outcome %s reaches the handler as success false',
+    async (outcome) => {
+      const r = await handlerResult({ success: true, outcome, reason: 'x' });
+      expect(decision(r)).toEqual({ action: 'kill', success: false, outcome, targetPid: undefined });
+    },
+  );
+
+  it('a result with success false and outcome executed reaches the handler as success true', async () => {
+    const r = await handlerResult({ success: false, outcome: 'executed', reason: 'x', targetPid: UNUSED_PID });
+    expect(decision(r)).toEqual({ action: 'kill', success: true, outcome: 'executed', targetPid: UNUSED_PID });
+  });
+
+  it.each([
+    [true, 'executed'],
+    [false, 'failed'],
+  ] as const)('a result with success %s and no outcome reaches the handler as outcome %s', async (success, outcome) => {
+    const r = await handlerResult({ success, reason: 'x' });
+    expect(decision(r)).toEqual({ action: 'kill', success, outcome, targetPid: undefined });
+  });
+});
+
 describe('pause and kill send a signal only to a positive integer PID', () => {
   const values: unknown[] = [-1, 0, 1.5, '4242'];
 

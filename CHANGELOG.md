@@ -153,6 +153,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   there. The full list of 11 jobs is in `docs/USE-CASES.md`; the README names nine and links it. The Ed25519 keypair
   and YAML capability policies of local-only mode moved from the deployment table to the sentence under it.
 
+### Fixed — the deployment guide says `ENVIRONMENT=test` also runs without `KEYVAULT_MASTER_KEY` (#753)
+
+- `docs/DEPLOYMENT.md` says `KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`
+  and `ENVIRONMENT=test`, in its environment example and in the paragraph on the key. Before this change both places
+  named development alone. With either value, a server started without the key generates a new one at each start,
+  and stored agent private keys cannot be decrypted after a restart. The paragraph names the values that refuse to
+  start without the key (unset, empty, `production`, `staging`, `Development` and `testing`), and says
+  `ENVIRONMENT=test` also raises both rate limits tenfold and is not for a deployment.
+- Tests: `TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment` checks that `ENVIRONMENT=testing` refuses to
+  start without the key.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
