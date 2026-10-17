@@ -134,11 +134,14 @@ Run `make -C tests coverage` to generate current coverage reports.
 
 ## Backend integration tests
 
-The Go suite in `apps/backend/tests/integration/` sends HTTP requests to a running backend.
+The Go suite in `apps/backend/tests/integration/` sends HTTP requests to a running backend, at the address
+`BACKEND_URL` names. With neither `BACKEND_URL` nor `TEST_BASE_URL` set, the tests that need a running backend are
+skipped before they send a request, whatever listens on `localhost:8080`, such as a development instance with an admin
+password of its own.
 
 | Variable | Default | Read as |
 |---|---|---|
-| `BACKEND_URL` | `http://localhost:8080` | The address of the backend under test, for every test in the suite. |
+| `BACKEND_URL` | none | The address of the backend under test, for every test in the suite. |
 | `TEST_BASE_URL` | none | Deprecated. Read only when `BACKEND_URL` is unset, with a note on standard error; set `BACKEND_URL` instead. |
 | `TEST_ADMIN_PASSWORD` | the legacy seed password in `test_helper.go` | The password of `admin@opena2a.org`, the account the suite signs in with. |
 | `TEST_CROSS_ORG_EMAIL` | none | An address on the backend's `AIM_PLATFORM_ADMINS` allowlist, in a domain other than `opena2a.org`. `TestMCPServer_CrossOrganizationAccessDenied` registers it to get a user in a second organization, and is skipped when the variable is unset: the backend approves a registration into an organization of its own only for an allowlisted address. A later run against the same database signs in to the account the first run created. |

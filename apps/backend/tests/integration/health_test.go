@@ -40,27 +40,10 @@ func TestHealthEndpointWithInvalidMethod(t *testing.T) {
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode, "Health endpoint should only accept GET")
 }
 
-// ensureAIMBackendRunning checks if the AIM backend is running on the expected port
-// This prevents false failures when other services (like Jenkins) occupy the port
+// ensureAIMBackendRunning skips t unless BACKEND_URL or TEST_BASE_URL names an
+// AIM backend that answers (skipUnlessAIMBackend), so neither an unset address
+// nor another service on the port (like Jenkins) fails a test.
 func ensureAIMBackendRunning(t *testing.T) {
-	baseURL := getBaseURL()
-	resp, err := http.Get(baseURL + "/health")
-	if err != nil {
-		t.Skipf("AIM backend not reachable at %s: %v (is the backend running?)", baseURL, err)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Check if it's actually the AIM backend by verifying the response
-	var healthResp map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
-		t.Skipf("AIM backend not responding correctly at %s: response is not valid JSON (another service may be running on this port)", baseURL)
-		return
-	}
-
-	// AIM health endpoint returns {"status": "healthy", "service": "agent-identity-management"}
-	if healthResp["service"] != "agent-identity-management" {
-		t.Skipf("AIM backend not running at %s: got service=%v (expected 'agent-identity-management'). Another service may be running on this port.", baseURL, healthResp["service"])
-		return
-	}
+	t.Helper()
+	skipUnlessAIMBackend(t, http.DefaultClient, getBaseURL())
 }
