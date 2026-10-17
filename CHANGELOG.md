@@ -292,6 +292,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `app/dashboard/layout.role.test.tsx`) passed, 47 of 47, and the new test failed with the line above. With the page
   restored, it passed.
 
+### Security: the startup refusal for a missing `KEYVAULT_MASTER_KEY` names only the key
+
+- When `KEYVAULT_MASTER_KEY` is unset or empty and `ENVIRONMENT` is not exactly `development` or `test`, the API
+  refuses to start. Before this change the refusal also offered `ENVIRONMENT=development`, which starts the API on a
+  key generated at every start, as a way out. It now names one remedy, the key: `SECURITY ERROR: KEYVAULT_MASTER_KEY
+  is required when ENVIRONMENT="<value read>"; set KEYVAULT_MASTER_KEY to the base64 encoding of 32 random bytes
+  (generate one with: openssl rand -base64 32) and keep it across restarts`.
+- Tests: `apps/backend/internal/crypto/keyvault_test.go` checks, for an unset `ENVIRONMENT` and for `""`, `prod`,
+  `production`, `staging` and `Development`, that the refusal contains `KEYVAULT_MASTER_KEY is required` and
+  `openssl rand -base64 32` and contains neither `ENVIRONMENT=development` nor `ENVIRONMENT=test`.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
